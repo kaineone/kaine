@@ -32,7 +32,7 @@ async def bus():
     await bus.close()
 
 
-def _event(source="soma", type_="soma.report", salience=0.9, eid="e1") -> tuple[str, Event]:
+def _event(source="interoception", type_="interoception.report", salience=0.9, eid="e1") -> tuple[str, Event]:
     return eid, Event(
         source=source,
         type=type_,
@@ -47,7 +47,7 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
 
 
 async def _read(bus: AsyncBus, type_: str):
-    entries = await bus.read("nous.out", last_id="0")
+    entries = await bus.read("planning.out", last_id="0")
     return [e for _, e in entries if e.type == type_]
 
 
@@ -70,7 +70,7 @@ async def test_policy_event_publishes_configured_horizon(bus: AsyncBus):
             action=fake.actions[1],
         )
         await planning._publish_policy(result)
-        events = await _read(bus, "nous.policy")
+        events = await _read(bus, "planning.policy")
         assert len(events) == 1
         assert events[0].payload["horizon"] == 2
     finally:
@@ -85,7 +85,7 @@ async def test_empty_snapshot_is_noop(bus: AsyncBus):
     try:
         await planning.on_workspace(_snapshot())
         assert fake.steps_called == 0
-        entries = await bus.read("nous.out", last_id="0")
+        entries = await bus.read("planning.out", last_id="0")
         assert entries == []
     finally:
         await planning.shutdown()
@@ -104,7 +104,7 @@ async def test_broadcast_publishes_preserved_belief_shape(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        beliefs = await _read(bus, "nous.belief")
+        beliefs = await _read(bus, "planning.belief")
         assert len(beliefs) == 1
         payload = beliefs[0].payload
         # PRESERVED contract shape.
@@ -125,7 +125,7 @@ async def test_broadcast_publishes_policy_event(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        policies = await _read(bus, "nous.policy")
+        policies = await _read(bus, "planning.policy")
         assert len(policies) == 1
         payload = policies[0].payload
         assert "expected_free_energy" in payload
@@ -143,7 +143,7 @@ async def test_epistemic_action_emitted_as_proposal(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert len(proposals) == 1
         payload = proposals[0].payload
         assert payload["kind"] == "think"
@@ -152,7 +152,7 @@ async def test_epistemic_action_emitted_as_proposal(bus: AsyncBus):
         assert "step" in payload
         assert 0.0 <= payload["preference"] <= 1.0
         # The source is the planning module; it published a proposal, not a direct effector call.
-        assert proposals[0].source == "nous"
+        assert proposals[0].source == "planning"
         intents = await _read(bus, "intent.act")
         assert intents == []
     finally:
@@ -167,9 +167,9 @@ async def test_no_op_emits_no_proposal(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert proposals == []
-        assert len(await _read(bus, "nous.belief")) == 1
+        assert len(await _read(bus, "planning.belief")) == 1
     finally:
         await planning.shutdown()
 
@@ -181,11 +181,11 @@ async def test_timeout_publishes_planning_timeout(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        timeouts = await _read(bus, "nous.timeout")
+        timeouts = await _read(bus, "planning.timeout")
         assert len(timeouts) == 1
         assert timeouts[0].salience == pytest.approx(0.3)
         # Even on timeout it still publishes a belief from the last posterior.
-        assert len(await _read(bus, "nous.belief")) == 1
+        assert len(await _read(bus, "planning.belief")) == 1
     finally:
         await planning.shutdown()
 
@@ -245,26 +245,26 @@ async def test_real_pymdp_module_publishes_belief_and_policy(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event(salience=0.95)]))
-        assert len(await _read(bus, "nous.belief")) == 1
-        assert len(await _read(bus, "nous.policy")) == 1
+        assert len(await _read(bus, "planning.belief")) == 1
+        assert len(await _read(bus, "planning.policy")) == 1
     finally:
         await planning.shutdown()
 
 
 # --------------------------------------------------------------------------
-# H1: inference crash → nous.error published; no fabricated belief/policy
+# H1: inference crash → planning.error published; no fabricated belief/policy
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_inference_crash_publishes_planning_error(bus: AsyncBus):
-    """On a non-timeout engine crash, nous.error is published."""
+    """On a non-timeout engine crash, planning.error is published."""
     fake = FakeEngine(error_on=0)
     planning = Planning(bus, engine=fake)
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        errors = await _read(bus, "nous.error")
+        errors = await _read(bus, "planning.error")
         assert len(errors) == 1
         payload = errors[0].payload
         assert "error_reason" in payload
@@ -283,10 +283,10 @@ async def test_inference_crash_suppresses_belief_and_policy(bus: AsyncBus):
     try:
         await planning.on_workspace(_snapshot([_event()]))
         # No fabricated belief or policy this cycle.
-        assert await _read(bus, "nous.belief") == []
-        assert await _read(bus, "nous.policy") == []
+        assert await _read(bus, "planning.belief") == []
+        assert await _read(bus, "planning.policy") == []
         # The diagnostic IS emitted.
-        assert len(await _read(bus, "nous.error")) == 1
+        assert len(await _read(bus, "planning.error")) == 1
     finally:
         await planning.shutdown()
 
@@ -301,11 +301,11 @@ async def test_inference_crash_after_good_cycle_does_not_republish_stale(bus: As
     try:
         # Cycle 0: good.
         await planning.on_workspace(_snapshot([_event()]))
-        assert len(await _read(bus, "nous.belief")) == 1
-        # Cycle 1: crash — should add a nous.error but NOT a second belief.
+        assert len(await _read(bus, "planning.belief")) == 1
+        # Cycle 1: crash — should add a planning.error but NOT a second belief.
         await planning.on_workspace(_snapshot([_event()]))
-        beliefs = await _read(bus, "nous.belief")
-        errors = await _read(bus, "nous.error")
+        beliefs = await _read(bus, "planning.belief")
+        errors = await _read(bus, "planning.error")
         assert len(beliefs) == 1   # still only the one from cycle 0
         assert len(errors) == 1    # the crash diagnostic
     finally:
@@ -315,17 +315,17 @@ async def test_inference_crash_after_good_cycle_does_not_republish_stale(bus: As
 @pytest.mark.asyncio
 async def test_timeout_still_publishes_belief_not_error(bus: AsyncBus):
     """Timeout is a planned degradation: belief/policy still published; no
-    nous.error event."""
+    planning.error event."""
     fake = FakeEngine(timeout_on=0)
     planning = Planning(bus, engine=fake)
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        # Timeout: nous.timeout + belief + policy; but no error.
-        assert len(await _read(bus, "nous.timeout")) == 1
-        assert len(await _read(bus, "nous.belief")) == 1
-        assert len(await _read(bus, "nous.policy")) == 1
-        assert await _read(bus, "nous.error") == []
+        # Timeout: planning.timeout + belief + policy; but no error.
+        assert len(await _read(bus, "planning.timeout")) == 1
+        assert len(await _read(bus, "planning.belief")) == 1
+        assert len(await _read(bus, "planning.policy")) == 1
+        assert await _read(bus, "planning.error") == []
     finally:
         await planning.shutdown()
 

@@ -106,7 +106,7 @@ class FailingReadBus:
     async def publish(self, event):
         return await self._real.publish(event)
 
-    async def publish_workspace(self, snapshot, source="syneidesis"):
+    async def publish_workspace(self, snapshot, source="workspace"):
         return await self._real.publish_workspace(snapshot, source=source)
 
     async def close(self):

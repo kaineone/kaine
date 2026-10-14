@@ -202,7 +202,7 @@ async def test_unreachable_server_degrades(bus, tmp_path, caplog):
         assert "cannot list the voices" in vocal._tts_unavailable
         failures = backend_failures()
         assert any(
-            f.module == "vox"
+            f.module == "vocal"
             and f.backend == "chatterbox"
             and "cannot list the voices" in f.reason
             for f in failures
@@ -214,7 +214,7 @@ async def test_unreachable_server_degrades(bus, tmp_path, caplog):
         assert vocal._player.played == []
         assert not any(r[0] == "POST" and r[1] == "/tts" for r in requests)
 
-        entries = await bus.client.xrange("vox.out", "-", "+")
+        entries = await bus.client.xrange("vocal.out", "-", "+")
         event = _last_payload(entries)
         assert event["success"] is False
         assert "no voice" in event["error"]
@@ -229,7 +229,7 @@ async def test_empty_list_degrades(bus, tmp_path, caplog):
     vocal = await _open_vocal(bus, client, tmp_path)
     try:
         assert vocal._tts_unavailable is not None
-        assert any("[vox].predefined_voice_id" in r.message for r in caplog.records)
+        assert any("[vocal].predefined_voice_id" in r.message for r in caplog.records)
         assert not any(r[0] == "POST" and r[1] == "/tts" for r in requests)
         result = await vocal.synthesize_text("hello")
         assert result.bytes_produced == 0
@@ -249,9 +249,9 @@ async def test_unknown_default_voice_degrades(bus, tmp_path, caplog):
         assert vocal._tts_unavailable is not None
         failures = backend_failures()
         assert any(
-            f.module == "vox"
+            f.module == "vocal"
             and f.backend == "chatterbox"
-            and "[vox].default_voice" in f.reason
+            and "[vocal].default_voice" in f.reason
             for f in failures
         )
         assert not any(r[0] == "POST" and r[1] == "/tts" for r in requests)
@@ -325,7 +325,7 @@ async def test_kokoro_fake_speaker_table(bus, monkeypatch):
     assert vocal is None
     failures = backend_failures()
     assert any(
-        f.module == "vox"
+        f.module == "vocal"
         and f.backend == "sherpa_onnx"
         and "voice_gender" in f.reason
         for f in failures
@@ -363,13 +363,13 @@ def test_vocal_stays_off_in_research_configs():
         load_kaine_config(
             profile="thesis_test",
             operator_path="/nonexistent-operator-for-tests.toml",
-        )["modules"]["vox"]
+        )["modules"]["vocal"]
         is False
     )
     assert (
         load_kaine_config(
             operator_path="/nonexistent-operator-for-tests.toml",
-        )["modules"]["vox"]
+        )["modules"]["vocal"]
         is False
     )
 
@@ -378,7 +378,7 @@ def test_vocal_stays_off_in_research_configs():
     )
     with shipped_path.open("rb") as f:
         raw = tomllib.load(f)
-    assert raw["modules"]["vox"] is False
-    vocal_table = raw.get("vox", {})
+    assert raw["modules"]["vocal"] is False
+    vocal_table = raw.get("vocal", {})
     assert "predefined_voice_id" not in vocal_table
     assert "default_voice" not in vocal_table

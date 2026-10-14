@@ -26,23 +26,23 @@ from tests.test_ignition_study_runner import (
 @pytest.fixture
 def known_modules(monkeypatch):
     names = [
-        "echo",
-        "soma",
-        "chronos",
-        "topos",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
-        "vox",
+        "recorder",
+        "interoception",
+        "sequence",
+        "vision",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
+        "vocal",
         "audition",
-        "hypnos",
-        "empatheia",
-        "phantasia",
-        "perception",
-        "mundus",
+        "sleep",
+        "social_cognition",
+        "world_model",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
@@ -65,8 +65,8 @@ def _make_plan(tmp_path: Path, base_url: str = "redis://127.0.0.1:6479") -> dict
     (cfg / "kaine.toml").write_text(
         '[modules]\n'
         'echo = false\n'
-        'soma = false\n'
-        '[topos]\n'
+        'interoception = false\n'
+        '[vision]\n'
         'encoder_local_dir = "state/models"\n'
     )
     manifest = repo_root / "programme.toml"

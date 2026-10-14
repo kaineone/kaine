@@ -514,7 +514,7 @@ async def test_dispatch_organ_adapter_missing_dir(tmp_path):
 
 class _FakeRegistry:
     def __init__(self, language, sleep):
-        self._mods = {"lingua": language, "hypnos": sleep}
+        self._mods = {"language": language, "sleep": sleep}
 
     def __contains__(self, key):
         return key in self._mods
@@ -533,7 +533,7 @@ class _FakeLanguage:
 
 def _make_wiring_config(tmp_path, mode, shared=False):
     cfg = {
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "enabled": True,
                 "hot_swap_mode": mode,
@@ -542,7 +542,7 @@ def _make_wiring_config(tmp_path, mode, shared=False):
                 "organ_url": "http://organ/v1",
             }
         },
-        "lingua": {"chat_url": "http://chat/v1", "api_key": "secret"},
+        "language": {"chat_url": "http://chat/v1", "api_key": "secret"},
     }
     if shared:
         cfg["services"] = {"model_server": {"shared": True}}

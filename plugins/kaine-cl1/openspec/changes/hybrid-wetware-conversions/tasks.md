@@ -25,7 +25,7 @@
 
 - [ ] 4.1 `WetwareAffect` reading valence/arousal from population dynamics, in
       `kaine_cl1/backends/affect.py`.
-- [ ] 4.2 Gate: requires explicit `[backends.hybrid].thymos_reviewed = true`
+- [ ] 4.2 Gate: requires explicit `[backends.hybrid].affect_reviewed = true`
       even in the simulator; never drives outward action.
 - [ ] 4.3 Gate: arousal read-out tracks injected global-excitability changes.
 

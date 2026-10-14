@@ -73,4 +73,4 @@ def test_quadlet_wrapper_enforces_sleep_idle_seconds(env_value, expected, rc):
 def test_config_has_model_server_sleep_idle_seconds():
     with (REPO / "config" / "kaine.toml").open("rb") as f:
         config = tomllib.load(f)
-    assert config["lingua"]["model_server_sleep_idle_seconds"] == 600
+    assert config["language"]["model_server_sleep_idle_seconds"] == 600

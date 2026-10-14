@@ -19,42 +19,42 @@ from kaine.bus.schema import WORKSPACE_STREAM, module_stream
 #: Tick, rate and time-scale events from the cycle engine.
 CYCLE_STREAM = "cycle.out"
 #: Intents chosen by the action selection module.
-ACTION_SELECTION_STREAM = module_stream("volition")
+ACTION_SELECTION_STREAM = module_stream("action_selection")
 #: Outcomes reported back to the action selection module by the effectors module.
-ACTION_SELECTION_FEEDBACK_STREAM = "volition_feedback.out"
+ACTION_SELECTION_FEEDBACK_STREAM = "action_selection_feedback.out"
 
 # --- The language module's speech channels ---------------------------------------------
 
 #: Speech addressed to the world (the vocal module reads it).
-LANGUAGE_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "language.external"
 #: Inner speech (the self-model module reads it; the vocal module never does).
-LANGUAGE_INTERNAL_STREAM = "lingua.internal"
+LANGUAGE_INTERNAL_STREAM = "language.internal"
 
 # --- Module output streams (one per module under kaine/modules/) ----------
 
 AUDITION_STREAM = module_stream("audition")
-SEQUENCE_STREAM = module_stream("chronos")
-RECORDER_STREAM = module_stream("echo")
-SELF_MODEL_STREAM = module_stream("eidolon")
-SOCIAL_COGNITION_STREAM = module_stream("empatheia")
-SLEEP_STREAM = module_stream("hypnos")
+SEQUENCE_STREAM = module_stream("sequence")
+RECORDER_STREAM = module_stream("recorder")
+SELF_MODEL_STREAM = module_stream("self_model")
+SOCIAL_COGNITION_STREAM = module_stream("social_cognition")
+SLEEP_STREAM = module_stream("sleep")
 #: The language module's aggregate stream: a copy of every utterance on either channel.
-LANGUAGE_STREAM = module_stream("lingua")
-EPISODIC_MEMORY_STREAM = module_stream("mnemos")
-EMBODIMENT_STREAM = module_stream("mundus")
-PLANNING_STREAM = module_stream("nous")
-PERCEPTUAL_LOCUS_STREAM = module_stream("perception")
-WORLD_MODEL_STREAM = module_stream("phantasia")
-EFFECTORS_STREAM = module_stream("praxis")
-INTEROCEPTION_STREAM = module_stream("soma")
-AFFECT_STREAM = module_stream("thymos")
-VISION_STREAM = module_stream("topos")
-VOCAL_STREAM = module_stream("vox")
+LANGUAGE_STREAM = module_stream("language")
+EPISODIC_MEMORY_STREAM = module_stream("episodic_memory")
+EMBODIMENT_STREAM = module_stream("embodiment")
+PLANNING_STREAM = module_stream("planning")
+PERCEPTUAL_LOCUS_STREAM = module_stream("perceptual_locus")
+WORLD_MODEL_STREAM = module_stream("world_model")
+EFFECTORS_STREAM = module_stream("effectors")
+INTEROCEPTION_STREAM = module_stream("interoception")
+AFFECT_STREAM = module_stream("affect")
+VISION_STREAM = module_stream("vision")
+VOCAL_STREAM = module_stream("vocal")
 
 # --- Cycle-layer and lifecycle producers -----------------------------------
 
 #: The stimulus source rhythm, readiness readouts and presence, written during the developmental phase.
-DEVELOPMENT_STREAM = "gestation.out"
+DEVELOPMENT_STREAM = "development.out"
 #: The developmental owner's bus source. It is derived from the stream so the two
 #: always agree; the stored stage value of the same spelling is a different name.
 DEVELOPMENT_SOURCE = DEVELOPMENT_STREAM.removesuffix(".out")
@@ -71,7 +71,7 @@ LIFECYCLE_STREAM = module_stream("lifecycle")
 #: Preservation events from the divergence and welfare monitors.
 PRESERVATION_STREAM = module_stream("preservation")
 #: The supervisor module-supervisor incidents (kaine.cycle.supervisor).
-SUPERVISOR_STREAM = module_stream("spot")
+SUPERVISOR_STREAM = module_stream("supervisor")
 #: Welfare-protective responses (kaine.cycle.preservation_monitor).
 WELFARE_STREAM = module_stream("welfare")
 

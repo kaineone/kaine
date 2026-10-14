@@ -101,9 +101,9 @@ METRICS_ONLY_GLOBS: tuple[str, ...] = tuple(
 DENY_PATTERNS: tuple[str, ...] = (
     "intent_expression",
     "intent_log",
-    *legacy_aliases.name_forms("mnemos"),
+    *legacy_aliases.name_forms("episodic_memory"),
     "qdrant",
-    *legacy_aliases.name_forms("eidolon"),
+    *legacy_aliases.name_forms("self_model"),
     "conversation",
     "replay",
 )

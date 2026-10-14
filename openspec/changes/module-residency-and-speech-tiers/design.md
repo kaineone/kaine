@@ -9,7 +9,7 @@ The design targets a **host class**, not a machine. The motivating host — an 8
 Two verified findings anchor everything below:
 
 - **Unified memory inverts the swap-cost model.** With no PCIe hop, "loading onto the GPU" is making pages resident. Against mmap'd weights on NVMe, reload cost is dominated by page-cache warmth, so time multiplexing is *cheaper* on this class of host than on discrete-GPU machines — and published work streaming a 26B MoE's routed experts off SSD on an 8 GB board with bit-identical logits shows the same scheduling scales up as well as down.
-- **Do not rebuild the LLM tier.** llama-swap (OpenAI-compatible proxy; per-model TTL; `POST /api/models/unload` and `POST /api/models/unload/<model>`; exclusive groups) and llama-server's built-in router mode already solve dynamic model swapping behind exactly the endpoint KAINE's `[lingua].chat_url` already abstracts.
+- **Do not rebuild the LLM tier.** llama-swap (OpenAI-compatible proxy; per-model TTL; `POST /api/models/unload` and `POST /api/models/unload/<model>`; exclusive groups) and llama-server's built-in router mode already solve dynamic model swapping behind exactly the endpoint KAINE's `[language].chat_url` already abstracts.
 
 ## What this builds on
 
@@ -63,7 +63,7 @@ Four host-local pieces:
 1. **Residency manager** — one per host. Owns the budget ledger, admission control, eviction, TTL expiry, the pin, and the pressure valve. Every model residency change in KAINE goes through it.
 2. **Work scheduler** — two lanes (interactive, background) with deadlines and a preemption contract.
 3. **Rung catalogue** — per organ, an ordered ladder of `(backend, model id)` rungs with calibrated peak footprints from the footprint catalogue, whether the weights are mapped, and licences.
-4. **LLM delegation** — llama-swap or llama-server router mode behind the existing `[lingua].chat_url`; the residency manager reconciles, never owns, LLM processes.
+4. **LLM delegation** — llama-swap or llama-server router mode behind the existing `[language].chat_url`; the residency manager reconciles, never owns, LLM processes.
 
 ## Residency manager
 
@@ -121,7 +121,7 @@ Eviction is demand-driven: the manager never speculatively unloads anything exce
 
 ### Pinning the always-hot organ
 
-Exactly one organ may be pinned (`[residency].pin`, default `lingua`; `none` allowed). The pinned rung is admitted first at startup, its TTL is disabled, and it is excluded from eviction sweeps — the model every cognitive cycle needs must never pay a reload per turn. The pin is a preference, not an invariant: if a latency-critical job cannot be admitted and the pin is the sole eviction candidate, the manager unloads it, admits the job, surfaces the forced unpin with its reason, and queues an automatic background reload. If the pinned rung cannot fit alongside the reserve at startup, KAINE says so with numbers and proposes a lighter chat rung instead of silently running unpinned.
+Exactly one organ may be pinned (`[residency].pin`, default `language`; `none` allowed). The pinned rung is admitted first at startup, its TTL is disabled, and it is excluded from eviction sweeps — the model every cognitive cycle needs must never pay a reload per turn. The pin is a preference, not an invariant: if a latency-critical job cannot be admitted and the pin is the sole eviction candidate, the manager unloads it, admits the job, surfaces the forced unpin with its reason, and queues an automatic background reload. If the pinned rung cannot fit alongside the reserve at startup, KAINE says so with numbers and proposes a lighter chat rung instead of silently running unpinned.
 
 ### When a request cannot be admitted
 
@@ -187,7 +187,7 @@ A quantization change is a model change: a Q4 organ and a Q8 organ are different
 
 The ladder uses the backends and models that exist today (`runtime-backends`, `sherpa-onnx-speech`). A rung is a `(backend, model id)` pair:
 
-**TTS (`[vox].backend`), heaviest to lightest:**
+**TTS (`[vocal].backend`), heaviest to lightest:**
 
 | Rung | Backend | Model | Notes |
 |---|---|---|---|
@@ -223,12 +223,12 @@ Targets for the reference budget class — 8 GB unified memory, the `sherpa_onnx
 
 The warm TTFA budget composes: 300 ms STT + 800 ms first token + 150 ms first chunk ≈ 1.25 s ≤ 1.5 s. It works because TTS is fed sentence-by-sentence from the streaming LLM, so TTFA does not wait for full generation, and because Moonshine's variable-length segments mean STT latency tracks the utterance rather than a fixed 30-second chunk. These are targets, not guarantees: every turn is measured into a breakdown `{queue_wait, preempt_wait, load, stt, llm_first_token, tts_first_chunk}`, cold-path turns are recorded separately from warm-path turns, and persistent misses surface as degradation reports naming the offending segment.
 
-## LLM tier: llama-swap or llama-server router behind `[lingua].chat_url`
+## LLM tier: llama-swap or llama-server router behind `[language].chat_url`
 
 The language organ is already reached over an OpenAI-compatible endpoint; that contract does not change. Adoption is delegation, not construction:
 
 - **`[residency].llm_proxy = none` (default).** Today's behaviour exactly: one server behind `chat_url`, no dynamic swap, no reconciliation calls. This is the non-regression path for the workstation and every existing backend.
-- **`llama-swap`.** KAINE generates the proxy config from the rung catalogue: each LLM rung maps to its upstream command; per-model TTLs come from `[residency]`; the chat rung and any batch LLM rung share an exclusive group so at most one LLM is resident and requesting one unloads the other. `[lingua].chat_url` points at the proxy; modules select a rung via the request's `model` name. The residency manager **reconciles**: it queries the proxy's loaded-model status before admission decisions, holds the loaded model's calibrated footprint in the ledger, and calls `POST /api/models/unload/<model>` when admission needs the footprint and the TTL policy agrees. Batch LLM jobs are submitted as chunked, resumable requests under the batch model name, so a mid-job swap costs one chunk, not the job.
+- **`llama-swap`.** KAINE generates the proxy config from the rung catalogue: each LLM rung maps to its upstream command; per-model TTLs come from `[residency]`; the chat rung and any batch LLM rung share an exclusive group so at most one LLM is resident and requesting one unloads the other. `[language].chat_url` points at the proxy; modules select a rung via the request's `model` name. The residency manager **reconciles**: it queries the proxy's loaded-model status before admission decisions, holds the loaded model's calibrated footprint in the ledger, and calls `POST /api/models/unload/<model>` when admission needs the footprint and the TTL policy agrees. Batch LLM jobs are submitted as chunked, resumable requests under the batch model name, so a mid-job swap costs one chunk, not the job.
 - **`llama-server` router mode.** Same shape against llama-server's built-in router (dynamic model switching without restarts): `chat_url` points at it; the manager uses its load/unload API for reconciliation.
 
 Illustrative generated shape (exact keys follow llama-swap's documented schema):
@@ -291,7 +291,7 @@ The effect: a host that keeps swapping models runs at a lower `time_scale`, so s
    - the interoception module reads the real body: CPU, RAM, GPU temperature and cycle latency. Those readings differ between an all-resident run and a multiplexed run by nature, because multiplexing really does change the host's load.
    - In lockstep, the interoception module samples the real body once per tick at `cycle.tick_start`. Lockstep fixes **when** the interoception module samples, not **what** it reads.
    - The 9.3 invariant is therefore defined for **scripted interoception only**. The test harness feeds the interoception module a recorded interoception trace, a test fixture that never reaches a live entity.
-   - Feeding a scripted body to a real entity would be a pretend process, and it would change the entity's interoception, which is the thesis variable. Boot refuses `[soma].interoception_source = "scripted"` unless `[soma].scripted_interoception_operator_opt_in = true`. No shipped or study profile sets either.
+   - Feeding a scripted body to a real entity would be a pretend process, and it would change the entity's interoception, which is the thesis variable. Boot refuses `[interoception].interoception_source = "scripted"` unless `[interoception].scripted_interoception_operator_opt_in = true`. No shipped or study profile sets either.
    - The run identity records `interoception_source` (`"body"` or `"scripted"`) for every run.
 10. **Speech is admitted at a fixed logical offset.** If the language module's generation were an ordinary tracked task, the whole mind's logical time would halt while it composed a reply: thought would stop while it speaks. People keep thinking while they plan and produce speech. So speech is a **deferred participant** instead:
     - A generation started while handling tick k is due at tick `k + N`. Its output events are stamped `tick = k + N − 1`, so they enter the intake of tick k + N.

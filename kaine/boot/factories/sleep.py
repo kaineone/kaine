@@ -36,13 +36,13 @@ log = logging.getLogger(__name__)
 def _parse_train_precision(raw: Any) -> str:
     if not isinstance(raw, str):
         raise VoiceAlignmentConfigError(
-            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"[sleep.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
             f"got {type(raw).__name__}: {raw!r}"
         )
     value = raw.strip()
     if value not in {"bf16", "4bit"}:
         raise VoiceAlignmentConfigError(
-            f"[hypnos.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
+            f"[sleep.voice_alignment].train_precision must be one of 'bf16', '4bit'; "
             f"got {value!r}"
         )
     return value
@@ -52,7 +52,7 @@ def voice_alignment_config_from_section(
     voice_cfg_section: dict[str, Any],
     kaine_config: Optional[dict[str, Any]] = None,
 ) -> Optional["VoiceAlignmentConfig"]:
-    """Parse [hypnos.voice_alignment] into a VoiceAlignmentConfig (None when the table is empty)."""
+    """Parse [sleep.voice_alignment] into a VoiceAlignmentConfig (None when the table is empty)."""
     from kaine.modules.sleep.voice_alignment import PREFERENCE_SOURCES, VoiceAlignmentConfig
 
     voice_config: Optional[VoiceAlignmentConfig] = None
@@ -71,12 +71,12 @@ def voice_alignment_config_from_section(
             corpus_ceiling_gb = float(voice_cfg_section.get("corpus_ceiling_gb", 10.0))
         except (TypeError, ValueError) as exc:
             raise VoiceAlignmentConfigError(
-                "[hypnos.voice_alignment].corpus_ceiling_gb must be a number; "
+                "[sleep.voice_alignment].corpus_ceiling_gb must be a number; "
                 f"got {voice_cfg_section.get('corpus_ceiling_gb')!r}"
             ) from exc
         if not corpus_ceiling_gb >= 0:
             raise VoiceAlignmentConfigError(
-                "[hypnos.voice_alignment].corpus_ceiling_gb must be non-negative; "
+                "[sleep.voice_alignment].corpus_ceiling_gb must be non-negative; "
                 f"got {corpus_ceiling_gb}"
             )
         try:
@@ -85,25 +85,25 @@ def voice_alignment_config_from_section(
             )
         except (TypeError, ValueError) as exc:
             raise VoiceAlignmentConfigError(
-                "[hypnos.voice_alignment].distinctiveness_threshold must be a "
+                "[sleep.voice_alignment].distinctiveness_threshold must be a "
                 f"number; got {voice_cfg_section.get('distinctiveness_threshold')!r}"
             ) from exc
         if not math.isfinite(distinctiveness_threshold) or distinctiveness_threshold < 0:
             raise VoiceAlignmentConfigError(
-                "[hypnos.voice_alignment].distinctiveness_threshold must be a "
+                "[sleep.voice_alignment].distinctiveness_threshold must be a "
                 f"finite, non-negative float; got {distinctiveness_threshold}"
             )
         preference_source_raw = voice_cfg_section.get("preference_source", "none")
         if not isinstance(preference_source_raw, str):
             raise VoiceAlignmentConfigError(
-                f"[hypnos.voice_alignment].preference_source must be one of "
+                f"[sleep.voice_alignment].preference_source must be one of "
                 f"{sorted(PREFERENCE_SOURCES)}; got {type(preference_source_raw).__name__}: "
                 f"{preference_source_raw!r}"
             )
         preference_source = preference_source_raw.strip()
         if preference_source not in PREFERENCE_SOURCES:
             raise VoiceAlignmentConfigError(
-                f"[hypnos.voice_alignment].preference_source={preference_source!r} is unknown; "
+                f"[sleep.voice_alignment].preference_source={preference_source!r} is unknown; "
                 f"known sources: {sorted(PREFERENCE_SOURCES)}"
             )
         voice_config = VoiceAlignmentConfig(
@@ -158,7 +158,7 @@ def voice_alignment_config_from_section(
             organ_url=str(
                 str(voice_cfg_section.get("organ_url", "")).strip()
                 or (
-                    ((kaine_config or {}).get("lingua") or {}).get("chat_url", "")
+                    ((kaine_config or {}).get("language") or {}).get("chat_url", "")
                     or ""
                 )
             ),
@@ -193,9 +193,9 @@ def make_sleep(
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
-    retired = {"nous_step_burst"}
+    retired = {"planning_step_burst"}
     _require_keys(section, allowed | retired)
-    _warn_retired_keys(section, retired, "[hypnos]")
+    _warn_retired_keys(section, retired, "[sleep]")
     voice_cfg_section = section.get("voice_alignment") or {}
     voice_config: Optional[VoiceAlignmentConfig] = voice_alignment_config_from_section(
         voice_cfg_section, kaine_config
@@ -232,15 +232,15 @@ def make_sleep(
             or raw_interval <= 0
         ):
             raise ValueError(
-                "[hypnos].requested_rest_min_interval_s must be a number greater than 0"
+                "[sleep].requested_rest_min_interval_s must be a number greater than 0"
             )
         kwargs["requested_rest_min_interval_s"] = float(raw_interval)
-    # [hypnos.consolidation] sub-table: fatigue_triggered, replay_window_s.
+    # [sleep.consolidation] sub-table: fatigue_triggered, replay_window_s.
     # interval_seconds remains the max-interval safety net.
     consolidation = section.get("consolidation") or {}
     if "downscale_factor" in consolidation:
         raise ConfigurationError(
-            "[hypnos.consolidation].downscale_factor is removed: sleep downscales trace strengths by [mnemos.strength].retention_per_day (paper A.10)"
+            "[sleep.consolidation].downscale_factor is removed: sleep downscales trace strengths by [episodic_memory.strength].retention_per_day (paper A.10)"
         )
     consolidation_allowed = {
         "fatigue_triggered",
@@ -254,7 +254,7 @@ def make_sleep(
         kwargs["replay_window_s"] = float(consolidation["replay_window_s"])
 
     # Voice-measures arm needs the path of the organ GGUF so it can look up
-    # the correct base voice profile. Prefer an explicit [lingua].model_gguf_path;
+    # the correct base voice profile. Prefer an explicit [language].model_gguf_path;
     # otherwise fall back to the deterministic served-GGUF path.
     organ_gguf_path: Optional[Path] = None
     try:
@@ -265,7 +265,7 @@ def make_sleep(
         organ_gguf_path = None
     if kaine_config:
         raw_gguf = (
-            ((kaine_config.get("lingua") or {}).get("model_gguf_path") or "")
+            ((kaine_config.get("language") or {}).get("model_gguf_path") or "")
         ).strip()
         if raw_gguf:
             organ_gguf_path = resolve(Path(raw_gguf))
@@ -299,11 +299,11 @@ def make_sleep(
             kwargs["organ_window_runner"] = runner
     sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:
-        kwargs[parameter_for_config_key("mnemos", sleep_params)] = episodic_memory
+        kwargs[parameter_for_config_key("episodic_memory", sleep_params)] = episodic_memory
     if affect is not None:
-        kwargs[parameter_for_config_key("thymos", sleep_params)] = affect
+        kwargs[parameter_for_config_key("affect", sleep_params)] = affect
     if world_model is not None:
-        kwargs[parameter_for_config_key("phantasia", sleep_params)] = world_model
+        kwargs[parameter_for_config_key("world_model", sleep_params)] = world_model
     # Shared playlist clock (playlist-sleep-pause): boot stashes the SAME
     # instance used by both playlist feeds under the [perception_feed] section;
     # pass it to the sleep module so sleep suspends/resumes playback at the same seam as
@@ -324,7 +324,7 @@ def _validate_backend_pairing(voice_config: "VoiceAlignmentConfig") -> None:
     mode = (voice_config.hot_swap_mode or "manual").strip()
     if mode == "organ_adapter" and backend != "job_queue":
         raise VoiceAlignmentConfigError(
-            "[hypnos.voice_alignment].hot_swap_mode = \"organ_adapter\" needs "
+            "[sleep.voice_alignment].hot_swap_mode = \"organ_adapter\" needs "
             "trainer_backend = \"job_queue\": only the trainer service converts an "
             f"accepted adapter to the GGUF form the organ loads (got {backend!r})."
         )
@@ -360,7 +360,7 @@ def _resolve_trainer(
     backend = (voice_config.trainer_backend or "in_process").strip()
     if backend not in ("in_process", "subprocess", "job_queue"):
         raise VoiceAlignmentConfigError(
-            f"[hypnos.voice_alignment].trainer_backend must be 'in_process', "
+            f"[sleep.voice_alignment].trainer_backend must be 'in_process', "
             f"'subprocess' or 'job_queue', got {backend!r}."
         )
 
@@ -438,7 +438,7 @@ def _require_non_empty_capability_probes(
     probes = load_probes(probe_path)
     if not probes:
         raise EmptyCapabilityProbeSetError(
-            f"[hypnos.voice_alignment].capability_probe_path has no usable "
+            f"[sleep.voice_alignment].capability_probe_path has no usable "
             f"capability probe: {probe_path}. The capability-loss veto cannot run "
             'on an empty probe set; point it at a JSONL file of {"prompt", '
             '"expected"} lines, or leave it empty for the bundled set.'
@@ -464,7 +464,7 @@ def _resolve_subprocess_trainer(
     if not trainer_python:
         raise VoiceAlignmentConfigError(
             "voice_alignment is enabled with trainer_backend = 'subprocess' but "
-            "[hypnos.voice_alignment].trainer_python is empty. Set it to the "
+            "[sleep.voice_alignment].trainer_python is empty. Set it to the "
             "external trainer interpreter (e.g. the Unsloth Studio python at "
             "~/.unsloth/studio/.../bin/python), or use trainer_backend = "
             "'in_process', or disable voice_alignment."
@@ -508,11 +508,11 @@ def _resolve_job_queue_trainer(
     timeout_s = voice_config.trainer_timeout_s
     if timeout_s <= 0:
         raise VoiceAlignmentConfigError(
-            f"[hypnos.voice_alignment].trainer_timeout_s must be > 0, got "
+            f"[sleep.voice_alignment].trainer_timeout_s must be > 0, got "
             f"{timeout_s!r}."
         )
 
-    language = (kaine_config or {}).get("lingua") or {}
+    language = (kaine_config or {}).get("language") or {}
     chat_url = language_section_chat_url(language)
     api_key = language_section_api_key(language) or ""
 
@@ -558,7 +558,7 @@ def _make_organ_window_runner(
         gpu_cfg = GpuPreflightConfig.from_section(config.get("gpu_preflight") or {})
         if not gpu_cfg.enabled:
             return True
-        language = config.get("lingua") or {}
+        language = config.get("language") or {}
         keep = [m for m in [language.get("model_id")] if m]
         return bool(
             run_preflight(

@@ -10,7 +10,7 @@ voice-alignment adapters) against the base organ across two surfaces:
     scored locally — needs the ``[training]`` extras (unsloth) and the
     safetensors repo (``kaineone/Qwen3.5-4B-abliterated``).
   * served (runtime): the GGUF actually answering, probed over the configured
-    OpenAI-compatible chat endpoint (``[lingua].chat_url`` / ``model_id``) — needs
+    OpenAI-compatible chat endpoint (``[language].chat_url`` / ``model_id``) — needs
     the model server running.
 
 Exit code is 0 only when every REQUESTED surface ran and passed. A requested
@@ -41,7 +41,7 @@ from kaine.organ_server.served import ORGAN_SAFETENSORS_REPO
 
 
 def _resolve(config: dict[str, Any]) -> dict[str, Any]:
-    language = config.get("lingua") or {}
+    language = config.get("language") or {}
     api_key = language.get("api_key") or os.environ.get("KAINE_MODEL_SERVER_API_KEY")
     return {
         "chat_url": str(language.get("chat_url", "http://127.0.0.1:11434/v1")),
@@ -65,7 +65,7 @@ async def _run(args: argparse.Namespace) -> int:
 
     if want_served and not model_id:
         print(
-            "served surface requested but no [lingua].model_id is configured; "
+            "served surface requested but no [language].model_id is configured; "
             "pass --model-id or --safetensors-only."
         )
         return 2
@@ -102,8 +102,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=None,
         help=f"HF repo / local path of the base weights (default: {ORGAN_SAFETENSORS_REPO})",
     )
-    parser.add_argument("--chat-url", default=None, help="override [lingua].chat_url")
-    parser.add_argument("--model-id", default=None, help="override [lingua].model_id")
+    parser.add_argument("--chat-url", default=None, help="override [language].chat_url")
+    parser.add_argument("--model-id", default=None, help="override [language].model_id")
     parser.add_argument(
         "--probe-path",
         type=Path,

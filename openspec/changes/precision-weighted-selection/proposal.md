@@ -11,15 +11,15 @@ What the literature establishes (citations checked against the sources on 2026-1
 
 - **Per-source precision.** The workspace keeps, for each event source, an exponential running mean and variance of the intensities that source publishes (one update per candidate, weight `precision_sample_weight`, default 0.02, about 50 events). The source's precision is `1 / (v + v0)`, with `v0 = 1e-4`. Its weight is `P = sqrt(pi / pi_ref)`, with `pi_ref` the geometric mean of the precisions of all warmed sources, clipped to `precision_bounds` (default `[0.5, 1.5]`). The weight is 1.0 for every source until at least three sources have `precision_warmup_samples` (default 20) events. A source whose surprise signal alerts habitually has a high variance and a weight below 1; a source whose alerts are rare and informative has a weight above 1. Each candidate's weight is computed from the statistics before its own update. The priority is `p = clip(I * N * G * P)`, and precision is what can now change the ranking.
 - **Arousal contrast.** The arousal factor keeps its level effect `T(a) = 0.2 + 0.8a` and adds adaptive gain: the score is `S = T(a) * C_g(p)`, where `C_g` is the logistic `sigmoid(g (p - 0.5))` rescaled to map 0 to 0 and 1 to 1, and `g = arousal_contrast_gain * clip((a - a0) / (1 - a0), 0, 1)` with `a0` the baseline arousal. At or below baseline arousal `g = 0` and `C_g(p) = p`, so the score is exactly the previous one times `P`. Above baseline, priorities above one half are amplified and those below suppressed. `C_g` is monotone, so arousal changes contrast and ignition, not ranking.
-- **Configuration.** `[syneidesis]` gains `precision_weighting` (default `true`), `precision_sample_weight`, `precision_warmup_samples`, `precision_bounds`, and `arousal_contrast_gain` (default 8.0; 0 disables the contrast). A `RuleBasedSalience` built without a precision tracker (the offline harnesses) is neutral, so the ablation arms are unchanged.
+- **Configuration.** `[workspace]` gains `precision_weighting` (default `true`), `precision_sample_weight`, `precision_warmup_samples`, `precision_bounds`, and `arousal_contrast_gain` (default 8.0; 0 disables the contrast). A `RuleBasedSalience` built without a precision tracker (the offline harnesses) is neutral, so the ablation arms are unchanged.
 - **The repository rule on the precision term.** `thymos-active-inference-affect` says the precision term must not change before the workspace-mediation ablation has run, because the change alters what every experiment tests. No live experiment has run, so no result is invalidated; the operator chose the change on 2026-10-08, and the planned ablation will test this selector. That design note is amended to record the decision.
 
 ## Capabilities
 
 ### Modified Capabilities
 
-- `syneidesis`: precision-weighted priority and arousal contrast in the v1 salience strategy.
-- `thymos`: the modulator's contrast gain.
+- `workspace`: precision-weighted priority and arousal contrast in the v1 salience strategy.
+- `affect`: the modulator's contrast gain.
 
 ## Impact
 

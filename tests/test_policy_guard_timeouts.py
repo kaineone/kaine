@@ -31,15 +31,15 @@ def _event(
 
 
 def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
-    return ("s1", _event("soma", "soma.report", {"wellness": value}))
+    return ("s1", _event("interoception", "interoception.report", {"wellness": value}))
 
 
 def _own_speech() -> tuple[str, Event]:
-    return ("e2", _event("lingua", "external_speech", {"text": "I said this"}))
+    return ("e2", _event("language", "external_speech", {"text": "I said this"}))
 
 
 def _own_internal_speech() -> tuple[str, Event]:
-    return ("i1", _event("lingua", "internal_speech", {"text": "monologue"}))
+    return ("i1", _event("language", "internal_speech", {"text": "monologue"}))
 
 
 def _proposal(
@@ -53,8 +53,8 @@ def _proposal(
     return (
         "p-" + proposal_id,
         _event(
-            "nous",
-            "nous.proposal",
+            "planning",
+            "planning.proposal",
             {
                 "proposal_id": proposal_id,
                 "action": action,
@@ -247,7 +247,7 @@ def test_report_speak_refractory_uses_subjective_clock():
     wall.advance(1000.0)
     sub.advance(1.0)
 
-    high_interoception = ("s2", _event("soma", "soma.report", {"wellness": 1.0}, salience=1.0))
+    high_interoception = ("s2", _event("interoception", "interoception.report", {"wellness": 1.0}, salience=1.0))
     snap_before = _snapshot([high_interoception])
     # The speak refractory holds; the report policy may still think instead.
     assert SPEAK not in [i.kind for i in p(snap_before)]

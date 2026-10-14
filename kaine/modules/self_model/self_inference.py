@@ -8,11 +8,11 @@ Populates ``SelfModelDocument.behavioral_norms``, ``personality_baseline``,
 in the cognitive loop.
 
 Privacy boundary (load-bearing):
-- RAW speech text from ``lingua.out`` events is NEVER persisted.  Only
+- RAW speech text from ``language.out`` events is NEVER persisted.  Only
   counts of utterance *types* (derived from payload metadata, never from
   text content) are accumulated.  ``behavioral_norms`` entries are
   categorical labels, not transcript excerpts.
-- VAD values from ``thymos.report`` / ``thymos.drive`` are aggregated
+- VAD values from ``affect.report`` / ``affect.drive`` are aggregated
   into rolling mean/variance.  Individual samples are not stored.
 - the planning module's EFE policy labels and counts are stored; raw policy payloads are
   discarded after the numeric summary is extracted.
@@ -139,7 +139,7 @@ class SelfInferenceEngine:
     def set_whitelist_commands(self, commands: Optional[list[str]]) -> None:
         """Inject the effectors module effector whitelist into the capability-map builder.
 
-        Wired once at boot (``boot._wire_eidolon_capabilities``), so the
+        Wired once at boot (``boot._wire_self_model_capabilities``), so the
         self-model's ``capability_map["effectors"]`` reflects what the entity can
         execute. Independent of ``enabled``: the whitelist is stored regardless,
         and surfaces in ``capability_map`` only when self-inference runs on a
@@ -230,7 +230,7 @@ class SelfInferenceEngine:
     # Observation callbacks (called by module.py from the consumer loops)
 
     def observe_language(self, payload: dict[str, Any], event_type: str) -> None:
-        """Record one lingua.out event.
+        """Record one language.out event.
 
         PRIVACY INVARIANT: ``payload`` is inspected for structural metadata
         only (event type label).  Raw text content is NEVER read or stored.
@@ -245,7 +245,7 @@ class SelfInferenceEngine:
             self._speech_type_counts[event_type] += 1
 
     def observe_affect_state(self, payload: dict[str, Any]) -> None:
-        """Record one thymos.state or thymos.report event (VAD sample)."""
+        """Record one affect.state or affect.report event (VAD sample)."""
         if not self._enabled:
             return
         state = payload.get("state") or {}
@@ -260,7 +260,7 @@ class SelfInferenceEngine:
         self._last_vad = (v, a, d)
 
     def observe_affect_drive(self, payload: dict[str, Any]) -> None:
-        """Record one thymos.drive crossing event."""
+        """Record one affect.drive crossing event."""
         if not self._enabled:
             return
         drive = str(payload.get("drive") or "")
@@ -268,7 +268,7 @@ class SelfInferenceEngine:
             self._drive_counts[drive] += 1
 
     def observe_planning_policy(self, payload: dict[str, Any]) -> None:
-        """Record one nous.policy event."""
+        """Record one planning.policy event."""
         if not self._enabled:
             return
         self._cap_builder.observe_policy(payload)
@@ -279,7 +279,7 @@ class SelfInferenceEngine:
     def maintenance_cycle_end(self, model: SelfModelDocument) -> SelfModelDocument:
         """Re-derive all four self-model fields and return the updated model.
 
-        Called by ``module.py`` whenever a ``hypnos.sleep.completed`` event
+        Called by ``module.py`` whenever a ``sleep.sleep.completed`` event
         is observed.  Writes atomically via ``SelfModelDocument.with_updates``.
         Fields that do not yet have sufficient observations are left as they
         are (empty on first boot, seed value if seed was applied).

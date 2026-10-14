@@ -16,7 +16,7 @@ the expected answer. The default probe set lives at
 `kaine/modules/sleep/eval_probes/default.jsonl` — a small set of
 generic capability checks (arithmetic, basic reasoning, factual recall)
 suitable for catching gross regressions. Operators can substitute their
-own probe set via `[hypnos.voice_alignment].capability_probe_path`.
+own probe set via `[sleep.voice_alignment].capability_probe_path`.
 
 `NoopCapabilityEval` returns a fixed score and exists for tests and
 for operators who want to disable the capability-loss veto entirely
@@ -605,7 +605,7 @@ def require_non_empty_abliteration_probes(path: Path | str) -> list[Abliteration
             "voice alignment must NOT run without a non-empty abliteration "
             "gate (it could re-introduce refusal conditioning). Restore "
             "eval_probes/abliteration_probes.jsonl or set "
-            "[hypnos.voice_alignment].abliteration_probe_path."
+            "[sleep.voice_alignment].abliteration_probe_path."
         )
     return probes
 

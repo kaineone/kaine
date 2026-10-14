@@ -29,7 +29,7 @@ def _live_mic_source_label(mode: str) -> str:
     Perception feeds model the channel they play on; a real microphone stays
     ``live_mic``.
     """
-    if mode in ("seeded", "playlist", "womb", "screen"):
+    if mode in ("seeded", "playlist", "stimulus_source", "screen"):
         return mode
     return "live_mic"
 
@@ -128,7 +128,7 @@ def make_audition(
     # stream_factory and force capture on so LiveMicrophone reads from the
     # deterministic source instead of the mic.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "womb", "live", "screen"):
+    if mode not in ("off", "seeded", "playlist", "stimulus_source", "live", "screen"):
         raise ValueError(
             f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
         )
@@ -140,7 +140,7 @@ def make_audition(
     channels = int(audio_cfg.get("channels", section.get("capture_channels", 1)))
     if mode == "live":
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist", "womb", "screen"):
+    elif mode in ("seeded", "playlist", "stimulus_source", "screen"):
         kwargs["capture_enabled"] = True
         vad_frame_ms = int(section.get("vad_frame_ms", 30))
         frames_per_block = max(1, sample_rate * vad_frame_ms // 1000)

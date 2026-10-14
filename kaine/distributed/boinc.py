@@ -240,7 +240,7 @@ def quorum_validate(
     at least ``min_quorum`` admissible returns agree on the same digest. This is
     BOINC's homogeneous-redundancy quorum, and it genuinely validates a bit-exact
     deterministic return. It is NOT applicable to non-deterministic kinds
-    (QLoRA/abliterate/consolidate/forked-being): quorum cannot verify a
+    (QLoRA/abliterate/consolidate/forked-entity): quorum cannot verify a
     non-deterministic step and is Sybil-vulnerable — those go through the
     trusted-side re-verification gate instead.
     """

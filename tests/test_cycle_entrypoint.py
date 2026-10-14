@@ -297,17 +297,17 @@ def test_unattended_refusal_ignores_overrides(monkeypatch):
 
 
 _KAINE_TOML_QDRANT = """\
-[mnemos]
+[episodic_memory]
 backend = "qdrant"
 
-[mnemos.qdrant]
+[episodic_memory.qdrant]
 host = "127.0.0.1"
 port = 6533
 
-[empatheia]
+[social_cognition]
 backend = "qdrant"
 
-[empatheia.qdrant]
+[social_cognition.qdrant]
 host = "127.0.0.1"
 port = 6533
 """
@@ -323,8 +323,8 @@ def test_qdrant_key_from_secrets_file_is_merged(tmp_path: Path):
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
     cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # Both qdrant-backed consumers receive the shared key.
-    assert cfg["mnemos"]["qdrant"]["api_key"] == "from-secrets"
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "from-secrets"
+    assert cfg["episodic_memory"]["qdrant"]["api_key"] == "from-secrets"
+    assert cfg["social_cognition"]["qdrant"]["api_key"] == "from-secrets"
 
 
 def test_qdrant_env_overrides_secrets_file(tmp_path: Path):
@@ -333,8 +333,8 @@ def test_qdrant_env_overrides_secrets_file(tmp_path: Path):
     cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=secrets, env={"KAINE_QDRANT_API_KEY": "from-env"}
     )
-    assert cfg["mnemos"]["qdrant"]["api_key"] == "from-env"
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "from-env"
+    assert cfg["episodic_memory"]["qdrant"]["api_key"] == "from-env"
+    assert cfg["social_cognition"]["qdrant"]["api_key"] == "from-env"
 
 
 def test_qdrant_key_from_env_when_secrets_file_missing(tmp_path: Path):
@@ -343,8 +343,8 @@ def test_qdrant_key_from_env_when_secrets_file_missing(tmp_path: Path):
     cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=missing, env={"KAINE_QDRANT_API_KEY": "env-only"}
     )
-    assert cfg["mnemos"]["qdrant"]["api_key"] == "env-only"
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "env-only"
+    assert cfg["episodic_memory"]["qdrant"]["api_key"] == "env-only"
+    assert cfg["social_cognition"]["qdrant"]["api_key"] == "env-only"
 
 
 def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
@@ -353,35 +353,35 @@ def test_qdrant_key_absent_everywhere_injects_nothing(tmp_path: Path):
     cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
     # No empty key injected -> each module surfaces its own explicit error
     # (covered by tests/test_episodic_memory_module.py / test_social_cognition_module.py).
-    assert "api_key" not in cfg["mnemos"]["qdrant"]
-    assert "api_key" not in cfg["empatheia"]["qdrant"]
+    assert "api_key" not in cfg["episodic_memory"]["qdrant"]
+    assert "api_key" not in cfg["social_cognition"]["qdrant"]
 
 
 def test_existing_kaine_toml_qdrant_key_left_intact(tmp_path: Path):
     # The episodic memory module has an explicit key; the social cognition module does not. The explicit key wins for
     # the episodic memory module, while the social cognition module still receives the resolved key.
     toml = _KAINE_TOML_QDRANT.replace(
-        '[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
-        '[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 6533\napi_key = "in-file"\n',
+        '[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
+        '[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 6533\napi_key = "in-file"\n',
     )
     kaine = _write(tmp_path / "kaine.toml", toml)
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
     cfg = cycle_main._load_kaine_config(
         path=kaine, secrets_path=secrets, env={"KAINE_QDRANT_API_KEY": "from-env"}
     )
-    assert cfg["mnemos"]["qdrant"]["api_key"] == "in-file"
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "from-env"
+    assert cfg["episodic_memory"]["qdrant"]["api_key"] == "in-file"
+    assert cfg["social_cognition"]["qdrant"]["api_key"] == "from-env"
 
 
 def test_social_cognition_only_qdrant_consumer_still_gets_key(tmp_path: Path):
     # The social cognition module enabled without the episodic memory module: the merge must still reach it.
     kaine = _write(
         tmp_path / "kaine.toml",
-        '[empatheia]\nbackend = "qdrant"\n\n[empatheia.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
+        '[social_cognition]\nbackend = "qdrant"\n\n[social_cognition.qdrant]\nhost = "127.0.0.1"\nport = 6533\n',
     )
     secrets = _write(tmp_path / "secrets.toml", '[qdrant]\napi_key = "from-secrets"\n')
     cfg = cycle_main._load_kaine_config(path=kaine, secrets_path=secrets, env={})
-    assert cfg["empatheia"]["qdrant"]["api_key"] == "from-secrets"
+    assert cfg["social_cognition"]["qdrant"]["api_key"] == "from-secrets"
 
 
 class _FakeRegistry:
@@ -415,7 +415,7 @@ def test_eval_provider_factories_present_with_episodic_memory():
     _memory_source_factory = cycle_main._memory_source_factory
     from kaine.evaluation.config import EvaluationConfig
 
-    reg = _FakeRegistry({"mnemos": _FakeEpisodicMemory()})
+    reg = _FakeRegistry({"episodic_memory": _FakeEpisodicMemory()})
     ms = _memory_source_factory(reg)
     cq = _cognitive_query_client_factory(reg, EvaluationConfig())
     assert hasattr(ms, "sample_old_memory")

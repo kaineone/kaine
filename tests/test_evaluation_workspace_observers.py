@@ -70,9 +70,9 @@ async def _drain(observer, sink, n_expected, timeout=2.0):
 @pytest.mark.asyncio
 async def test_trajectory_writes_one_row_per_broadcast():
     broadcasts = [
-        ("1-0", _snapshot(1, ["soma", "thymos"])),
-        ("2-0", _snapshot(2, ["chronos"])),
-        ("3-0", _snapshot(3, ["mnemos", "nous", "soma"])),
+        ("1-0", _snapshot(1, ["interoception", "affect"])),
+        ("2-0", _snapshot(2, ["sequence"])),
+        ("3-0", _snapshot(3, ["episodic_memory", "planning", "interoception"])),
     ]
     sink = FakeSink()
     rec = TrajectoryRecorder(FakeWorkspaceBus(broadcasts), sink)
@@ -80,15 +80,15 @@ async def test_trajectory_writes_one_row_per_broadcast():
     assert len(sink.rows) == 3
     assert [r["tick_index"] for r in sink.rows] == [1, 2, 3]
     # The decoded snapshot's selected/salience made it into the row.
-    assert sink.rows[2]["salience_scores"] == {"mnemos": 0.5, "nous": 0.5, "soma": 0.5}
-    assert {item["source"] for item in sink.rows[0]["selected"]} == {"soma", "thymos"}
+    assert sink.rows[2]["salience_scores"] == {"episodic_memory": 0.5, "planning": 0.5, "interoception": 0.5}
+    assert {item["source"] for item in sink.rows[0]["selected"]} == {"interoception", "affect"}
 
 
 @pytest.mark.asyncio
 async def test_trajectory_rows_carry_no_affect_state():
     sink = FakeSink()
     rec = TrajectoryRecorder(
-        FakeWorkspaceBus([("1-0", _snapshot(1, ["soma"]))]),
+        FakeWorkspaceBus([("1-0", _snapshot(1, ["interoception"]))]),
         sink,
     )
     await _drain(rec, sink, n_expected=1)
@@ -101,21 +101,21 @@ async def test_trajectory_rows_carry_no_affect_state():
 @pytest.mark.asyncio
 async def test_attribution_tallies_sources_and_flushes_on_stop():
     broadcasts = [
-        ("1-0", _snapshot(1, ["soma", "thymos"])),
-        ("2-0", _snapshot(2, ["soma"])),
-        ("3-0", _snapshot(3, ["soma", "nous"])),
+        ("1-0", _snapshot(1, ["interoception", "affect"])),
+        ("2-0", _snapshot(2, ["interoception"])),
+        ("3-0", _snapshot(3, ["interoception", "planning"])),
     ]
     sink = FakeSink()
     rec = attr_mod.AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
     await rec.start()
     for _ in range(200):
         await asyncio.sleep(0.01)
-        if rec.running_total.get("soma") == 3:
+        if rec.running_total.get("interoception") == 3:
             break
-    assert rec.running_total == {"soma": 3, "thymos": 1, "nous": 1}
+    assert rec.running_total == {"interoception": 3, "affect": 1, "planning": 1}
     await rec.stop()  # flushes the partial current hour
     assert sink.rows, "stop() should flush a partial-hour rollup"
-    assert sink.rows[-1]["counts"].get("soma") == 3
+    assert sink.rows[-1]["counts"].get("interoception") == 3
     assert sink.rows[-1].get("partial") is True
 
 
@@ -134,7 +134,7 @@ async def bus():
 @pytest.mark.asyncio
 async def test_trajectory_records_real_broadcast_and_event_decode_reads_it(bus):
     # Publish exactly as the workspace does — {snapshot:<json>,...}.
-    await bus.publish_workspace(_snapshot(7, ["soma", "eidolon"]), source="syneidesis")
+    await bus.publish_workspace(_snapshot(7, ["interoception", "self_model"]), source="workspace")
     sink = FakeSink()
     rec = TrajectoryRecorder(bus, sink)
     rec._start_id = "0"  # read the backlog deterministically (no $-resolve race)
@@ -158,7 +158,7 @@ async def test_trajectory_records_real_broadcast_and_event_decode_reads_it(bus):
     if isinstance(event, (tuple, list)):
         event = event[1]
     assert event.type == "workspace.broadcast"
-    assert event.source == "syneidesis"
+    assert event.source == "workspace"
 
 
 @pytest.mark.asyncio
@@ -168,7 +168,7 @@ async def test_trajectory_records_multiple_sequential_broadcasts(bus):
     rec._start_id = "0"
     await rec.start()
     for tick in (10, 11, 12):
-        await bus.publish_workspace(_snapshot(tick, ["soma"]), source="syneidesis")
+        await bus.publish_workspace(_snapshot(tick, ["interoception"]), source="workspace")
     for _ in range(300):
         await asyncio.sleep(0.01)
         if len(sink.rows) >= 3:
@@ -182,9 +182,9 @@ async def test_subscribe_workspace_skips_a_corrupt_broadcast(bus):
     # A truncated/corrupt snapshot field must not kill the subscription.
     await bus._client.xadd(
         "workspace.broadcast",
-        {"snapshot": "{not valid json", "timestamp": "t", "source": "syneidesis"},
+        {"snapshot": "{not valid json", "timestamp": "t", "source": "workspace"},
     )
-    await bus.publish_workspace(_snapshot(5, ["nous"]), source="syneidesis")
+    await bus.publish_workspace(_snapshot(5, ["planning"]), source="workspace")
     sink = FakeSink()
     rec = TrajectoryRecorder(bus, sink)
     rec._start_id = "0"
@@ -221,12 +221,12 @@ async def test_trajectory_filters_content_from_selected_entries():
         "tick_index": 1,
         "is_experiential": True,
         "inhibited": False,
-        "salience_scores": {"topos": 0.9},
+        "salience_scores": {"vision": 0.9},
         "selected": [
             {
                 "entry_id": "1-0",
-                "source": "topos",
-                "type": "topos.report",
+                "source": "vision",
+                "type": "vision.report",
                 "salience": 0.9,
                 "timestamp": "2026-10-03T00:00:00+00:00",
                 "causal_parent": "0-0",
@@ -245,8 +245,8 @@ async def test_trajectory_filters_content_from_selected_entries():
     assert "payload" not in selected[0]
     assert selected[0] == {
         "entry_id": "1-0",
-        "source": "topos",
-        "type": "topos.report",
+        "source": "vision",
+        "type": "vision.report",
         "salience": 0.9,
         "timestamp": "2026-10-03T00:00:00+00:00",
         "causal_parent": "0-0",
@@ -270,16 +270,16 @@ async def test_attribution_stop_while_idle_is_prompt_and_flushless():
 
 @pytest.mark.asyncio
 async def test_attribution_skips_non_dict_selected_items():
-    broadcasts = [("1-0", {"selected": [None, "not-a-dict", {"source": "soma"}]})]
+    broadcasts = [("1-0", {"selected": [None, "not-a-dict", {"source": "interoception"}]})]
     sink = FakeSink()
     rec = attr_mod.AttributionRecorder(FakeWorkspaceBus(broadcasts), sink)
     await rec.start()
     for _ in range(200):
         await asyncio.sleep(0.01)
-        if rec.running_total.get("soma") == 1:
+        if rec.running_total.get("interoception") == 1:
             break
     await rec.stop()
-    assert rec.running_total == {"soma": 1}  # non-dicts silently discarded
+    assert rec.running_total == {"interoception": 1}  # non-dicts silently discarded
 
 
 @pytest.mark.asyncio
@@ -301,15 +301,15 @@ async def test_attribution_flushes_non_partial_row_on_hour_boundary(monkeypatch)
     sink = FakeSink()
     rec = attr_mod.AttributionRecorder(FakeWorkspaceBus([]), sink)
 
-    await rec.handle("1-0", {"selected": [{"source": "soma"}]})  # hour A
-    assert rec.current_hour_counts == {"soma": 1}
+    await rec.handle("1-0", {"selected": [{"source": "interoception"}]})  # hour A
+    assert rec.current_hour_counts == {"interoception": 1}
     assert sink.rows == []
 
     idx[0] = 1  # cross the hour boundary
-    await rec.handle("2-0", {"selected": [{"source": "thymos"}]})  # hour B
+    await rec.handle("2-0", {"selected": [{"source": "affect"}]})  # hour B
     assert len(sink.rows) == 1
     assert sink.rows[0]["hour"] == "2026-06-03T10"
-    assert sink.rows[0]["counts"] == {"soma": 1}
+    assert sink.rows[0]["counts"] == {"interoception": 1}
     assert "partial" not in sink.rows[0]  # mid-session flush is final, not partial
-    assert rec.current_hour_counts == {"thymos": 1}
-    assert rec.running_total == {"soma": 1, "thymos": 1}
+    assert rec.current_hour_counts == {"affect": 1}
+    assert rec.running_total == {"interoception": 1, "affect": 1}

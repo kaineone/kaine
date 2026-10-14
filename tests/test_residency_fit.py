@@ -23,7 +23,7 @@ def test_co_resides():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
         Need(component="audition", domain="system", footprint_bytes=2 * GIB, interactive=False, rung="audition-rung"),
     )
     report = fit_report((budget,), needs)
@@ -43,14 +43,14 @@ def test_multiplex_respects_pin():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
         Need(component="audition", domain="system", footprint_bytes=2 * GIB, interactive=False, rung="audition-rung"),
-        Need(component="vox", domain="system", footprint_bytes=2 * GIB, interactive=True, rung="vox-rung"),
+        Need(component="vocal", domain="system", footprint_bytes=2 * GIB, interactive=True, rung="vox-rung"),
     )
     report = fit_report((budget,), needs)
     assert not report.co_resides
     assert report.domains[0].status == "multiplex"
-    assert report.domains[0].pinned == "lingua"
+    assert report.domains[0].pinned == "language"
     assert report.domains[0].shortfall_bytes == 1 * GIB
     assert f"{report.domains[0].pinned} stays loaded" in report.domains[0].feel
 
@@ -67,11 +67,11 @@ def test_multiplex_pin_not_in_domain_uses_largest_interactive():
     )
     needs = (
         Need(component="audition", domain="system", footprint_bytes=2 * GIB, interactive=True, rung="audition-rung"),
-        Need(component="vox", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="vox-rung"),
+        Need(component="vocal", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="vox-rung"),
         Need(component="batch", domain="system", footprint_bytes=2 * GIB, interactive=False, rung="batch-rung"),
     )
-    report = fit_report((budget,), needs, pin="lingua")
-    assert report.domains[0].pinned == "vox"  # largest interactive that fits
+    report = fit_report((budget,), needs, pin="language")
+    assert report.domains[0].pinned == "vocal"  # largest interactive that fits
     assert report.domains[0].status == "multiplex"
     assert f"{report.domains[0].pinned} stays loaded" in report.domains[0].feel
 
@@ -87,7 +87,7 @@ def test_does_not_fit():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
         Need(component="audition", domain="system", footprint_bytes=3 * GIB, interactive=False, rung="audition-rung"),
     )
     report = fit_report((budget,), needs)
@@ -108,12 +108,12 @@ def test_uncalibrated_with_estimate():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
-        Need(component="vox", domain="system", footprint_bytes=None, estimate_bytes=2 * GIB, interactive=False, rung="vox-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="vocal", domain="system", footprint_bytes=None, estimate_bytes=2 * GIB, interactive=False, rung="vox-rung"),
     )
     report = fit_report((budget,), needs)
     assert report.co_resides
-    assert report.uncalibrated == ("vox",)
+    assert report.uncalibrated == ("vocal",)
 
 
 def test_uncalibrated_without_estimate_unknown_budget():
@@ -127,14 +127,14 @@ def test_uncalibrated_without_estimate_unknown_budget():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
-        Need(component="vox", domain="system", footprint_bytes=None, estimate_bytes=None, interactive=False, rung="vox-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="vocal", domain="system", footprint_bytes=None, estimate_bytes=None, interactive=False, rung="vox-rung"),
     )
     report = fit_report((budget,), needs)
     assert report.domains[0].status == "unknown-budget"
     assert "cannot plan" in report.domains[0].feel
-    assert "vox" in report.domains[0].feel
-    assert report.uncalibrated == ("vox",)
+    assert "vocal" in report.domains[0].feel
+    assert report.uncalibrated == ("vocal",)
 
 
 def test_lines_contains_shortfall_gib():
@@ -148,7 +148,7 @@ def test_lines_contains_shortfall_gib():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="language", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="lingua-rung"),
         Need(component="audition", domain="system", footprint_bytes=3 * GIB, interactive=False, rung="audition-rung"),
     )
     report = fit_report((budget,), needs)
@@ -167,7 +167,7 @@ def test_to_dict_json_serialisable():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
+        Need(component="language", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="lingua-rung"),
         Need(component="audition", domain="system", footprint_bytes=2 * GIB, interactive=False, rung="audition-rung"),
     )
     report = fit_report((budget,), needs)
@@ -189,7 +189,7 @@ def test_each_fits_alone_but_no_pin_leaves_room():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="l"),
+        Need(component="language", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="l"),
         Need(component="audition", domain="system", footprint_bytes=3 * GIB, interactive=True, rung="a"),
     )
     fit = fit_report((budget,), needs).domains[0]
@@ -209,8 +209,8 @@ def test_does_not_fit_reports_largest_single_shortfall():
         derivation="test",
     )
     needs = (
-        Need(component="lingua", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="l"),
-        Need(component="vox", domain="system", footprint_bytes=1 * GIB, interactive=True, rung="v"),
+        Need(component="language", domain="system", footprint_bytes=5 * GIB, interactive=True, rung="l"),
+        Need(component="vocal", domain="system", footprint_bytes=1 * GIB, interactive=True, rung="v"),
     )
     fit = fit_report((budget,), needs).domains[0]
     assert fit.status == "does-not-fit"

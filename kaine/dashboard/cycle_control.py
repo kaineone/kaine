@@ -8,7 +8,7 @@ Three routes under /diagnostics/cycle:
   GET  /diagnostics/cycle/control.json   — current freeze state (includes active holders)
   GET  /diagnostics/cycle/control        — current freeze state
   POST /diagnostics/cycle/freeze         — operator freeze / resume (resume releases only operator entries)
-  POST /diagnostics/cycle/override       — named override of welfare/gestation/programme_end freezes
+  POST /diagnostics/cycle/override       — named override of welfare/development/programme_end freezes
 
 The router only mutates `state/cycle/control.json`; the cycle entrypoint's
 freeze-watch task polls that file and pauses/resumes the experiential loop.

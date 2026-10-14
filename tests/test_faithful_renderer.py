@@ -8,7 +8,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful import FaithfulRenderer
 
 
-def _event(source="soma", type_="soma.report", payload=None) -> Event:
+def _event(source="interoception", type_="interoception.report", payload=None) -> Event:
     return Event(
         source=source,
         type=type_,
@@ -46,8 +46,8 @@ def test_snapshot_renders_each_event_on_its_own_line():
     snap = WorkspaceSnapshot(
         tick_index=0,
         selected_events=[
-            ("e1", _event(source="soma", payload={"wellness": 0.5, "alerts": []})),
-            ("e2", _event(source="chronos", type_="chronos.report",
+            ("e1", _event(source="interoception", payload={"wellness": 0.5, "alerts": []})),
+            ("e2", _event(source="sequence", type_="sequence.report",
                           payload={"anomaly_score": 0.1, "habituation_score": 0.2,
                                    "rumination_detected": False})),
         ],

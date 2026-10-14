@@ -25,6 +25,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
+# 2: the configuration uses the functional module names; absent in a run manifest means 1
+CONFIG_KEY_SCHEME = 2
+
 
 def _utc_iso() -> str:
     """Current UTC time as an ISO-8601 string.
@@ -46,6 +49,7 @@ class RunContext:
     git_sha: Optional[str]
     model_ids: dict[str, str] = field(default_factory=dict)
     config_digest: str = ""
+    config_key_scheme: int = CONFIG_KEY_SCHEME
     kaine_version: str = ""
     # Reproducible perceptual-feed descriptor (reproducible-perception-feed):
     # {"mode": "off"|"seeded"|"playlist"|"camera", ...}. For seeded the seed +
@@ -201,6 +205,7 @@ def set_run_context(ctx: Optional[RunContext]) -> None:
 
 __all__ = [
     "RunContext",
+    "CONFIG_KEY_SCHEME",
     "_utc_iso",
     "compute_git_sha",
     "compute_config_digest",

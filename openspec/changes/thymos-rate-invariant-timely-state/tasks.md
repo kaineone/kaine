@@ -1,7 +1,7 @@
 ## 1. Rate-invariant appraisal
 
 - [x] 1.1 `_appraise_snapshot` scales the valence and arousal nudges by `min(4, dt / appraisal_reference_interval_s)`, `dt` from the preceding `_tick`.
-- [x] 1.2 Config key `[thymos].appraisal_reference_interval_s` (default 0.3), allowed and validated positive.
+- [x] 1.2 Config key `[affect].appraisal_reference_interval_s` (default 0.3), allowed and validated positive.
 
 ## 2. Timer-driven state
 

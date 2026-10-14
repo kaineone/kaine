@@ -12,7 +12,7 @@ from kaine.bus.errors import BusSecurityError
 from kaine.bus.schema import WORKSPACE_STREAM
 
 
-def _event(source: str = "soma", salience: float = 0.42, **payload) -> Event:
+def _event(source: str = "interoception", salience: float = 0.42, **payload) -> Event:
     return Event(
         source=source,
         type="test.event",
@@ -28,10 +28,10 @@ async def test_publish_then_read_returns_event(fake_async_bus: AsyncBus):
     entry_id = await fake_async_bus.publish(ev)
     assert entry_id
 
-    entries = await fake_async_bus.read("soma.out", last_id="0", count=10)
+    entries = await fake_async_bus.read("interoception.out", last_id="0", count=10)
     assert len(entries) == 1
     _, got = entries[0]
-    assert got.source == "soma"
+    assert got.source == "interoception"
     assert got.type == "test.event"
     assert got.salience == 0.7
     assert got.payload == {"x": 1}
@@ -41,14 +41,14 @@ async def test_publish_then_read_returns_event(fake_async_bus: AsyncBus):
 async def test_nested_payload_roundtrips(fake_async_bus: AsyncBus):
     payload = {"a": [1, 2, {"b": True, "c": None}], "d": "kaine"}
     ev = Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload=payload,
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     await fake_async_bus.publish(ev)
-    entries = await fake_async_bus.read("soma.out")
+    entries = await fake_async_bus.read("interoception.out")
     _, got = entries[0]
     assert got.payload == payload
 
@@ -57,20 +57,20 @@ async def test_nested_payload_roundtrips(fake_async_bus: AsyncBus):
 async def test_float_salience_full_precision(fake_async_bus: AsyncBus):
     target = 0.30000000000000004
     ev = Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload={},
         salience=target,
         timestamp=datetime.now(timezone.utc),
     )
     await fake_async_bus.publish(ev)
-    _, got = (await fake_async_bus.read("soma.out"))[0]
+    _, got = (await fake_async_bus.read("interoception.out"))[0]
     assert got.salience == target
 
 
 def _raw(salience: str = "0.5", timestamp: str = "2026-01-01T00:00:00+00:00") -> dict:
     return {
-        "source": "soma",
+        "source": "interoception",
         "type": "legacy.event",
         "salience": salience,
         "timestamp": timestamp,
@@ -82,7 +82,7 @@ def _raw(salience: str = "0.5", timestamp: str = "2026-01-01T00:00:00+00:00") ->
 def test_decode_event_tolerates_empty_salience():
     ev = _decode_event(_raw(salience=""))
     assert ev.salience == 0.0
-    assert ev.source == "soma"
+    assert ev.source == "interoception"
 
 
 def test_decode_event_keeps_valid_salience():
@@ -100,7 +100,7 @@ def test_decode_entry_skips_undecodable():
 
 @pytest.mark.asyncio
 async def test_read_tolerates_empty_salience_entry(fake_async_bus: AsyncBus):
-    stream = "soma.out"
+    stream = "interoception.out"
     # Inject a legacy entry with empty salience directly (bypassing publish
     # validation), then a normal published event after it.
     await fake_async_bus._client.xadd(stream, _raw(salience=""))
@@ -113,7 +113,7 @@ async def test_read_tolerates_empty_salience_entry(fake_async_bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_read_skips_poison_entry_without_wedging(fake_async_bus: AsyncBus):
-    stream = "soma.out"
+    stream = "interoception.out"
     # An undecodable (bad timestamp) entry followed by a valid one.
     await fake_async_bus._client.xadd(stream, _raw(timestamp="not-a-timestamp"))
     await fake_async_bus.publish(_event(salience=0.6))
@@ -128,7 +128,7 @@ async def test_read_skips_poison_entry_without_wedging(fake_async_bus: AsyncBus)
 async def test_read_entries_reports_last_scanned_for_all_poison_batch(
     fake_async_bus: AsyncBus,
 ):
-    stream = "soma.out"
+    stream = "interoception.out"
     # An entire batch of undecodable entries (bad timestamps) and nothing
     # decodable: read returns no events, but read_entries still reports the
     # last scanned id so a cursor-advancing consumer can move past them
@@ -145,12 +145,12 @@ async def test_read_entries_reports_last_scanned_for_all_poison_batch(
 @pytest.mark.asyncio
 async def test_workspace_stream_reserved_for_workspace(fake_async_bus: AsyncBus):
     with pytest.raises(ReservedStreamError):
-        await fake_async_bus.publish_workspace({"x": 1}, source="soma")
+        await fake_async_bus.publish_workspace({"x": 1}, source="interoception")
 
 
 @pytest.mark.asyncio
 async def test_workspace_publish_workspace(fake_async_bus: AsyncBus):
-    entry_id = await fake_async_bus.publish_workspace({"focus": "soma", "k": 5})
+    entry_id = await fake_async_bus.publish_workspace({"focus": "interoception", "k": 5})
     assert entry_id
     length = await fake_async_bus.length(WORKSPACE_STREAM)
     assert length == 1
@@ -170,7 +170,7 @@ async def test_maxlen_trim_approximate(monkeypatch, bus_config_with_password):
     try:
         for i in range(500):
             await bus.publish(_event(salience=(i % 100) / 100.0))
-        length = await bus.length("soma.out")
+        length = await bus.length("interoception.out")
         assert length <= 100, f"expected <=100 after trim, got {length}"
         assert length >= 40, f"expected at least near cap, got {length}"
     finally:

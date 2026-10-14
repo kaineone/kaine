@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Live oscillatory ablation: Syneidesis.select_dual + selection_delta.
+"""Live oscillatory ablation: Workspace.select_dual + selection_delta.
 
 The load-bearing invariants: on an experiential tick the dual-path pass returns
 (primary, counterfactual) where the primary is BYTE-IDENTICAL to what
@@ -56,7 +56,7 @@ def _scorer() -> CoherenceScorer:
 
 def _batch(seed: int = 7):
     rng = random.Random(seed)
-    sources = ["soma", "chronos", "topos", "thymos"]
+    sources = ["interoception", "sequence", "vision", "affect"]
     events = [
         _ev(round(rng.uniform(0.1, 0.95), 4), f"e{i}", sources[i]) for i in range(4)
     ]
@@ -286,8 +286,8 @@ def _coherence_registry_and_syn():
         osc_interoception.step(0.5)
         osc_sequence.step(0.5)
     registry = _PhaseRegistry(
-        modules=[_PhaseModule("soma", osc_interoception), _PhaseModule("chronos", osc_sequence)],
-        streams=["soma.out", "chronos.out"],
+        modules=[_PhaseModule("interoception", osc_interoception), _PhaseModule("sequence", osc_sequence)],
+        streams=["interoception.out", "sequence.out"],
     )
     syn = Workspace(
         strategy=_strategy(), top_k=5, publication_threshold=0.0, coherence=_scorer()
@@ -299,8 +299,8 @@ def _coherence_registry_and_syn():
 async def test_cycle_invokes_recorder_with_paired_snapshots():
     bus = await _make_bus()
     try:
-        await _publish(bus, "soma", "a", 0.9)
-        await _publish(bus, "chronos", "b", 0.8)
+        await _publish(bus, "interoception", "a", 0.9)
+        await _publish(bus, "sequence", "b", 0.8)
         registry, syn = _coherence_registry_and_syn()
         captured: list[tuple[WorkspaceSnapshot, WorkspaceSnapshot]] = []
         cycle = CognitiveCycle(
@@ -331,8 +331,8 @@ async def test_recorder_does_not_change_the_broadcast():
     async def run(with_recorder: bool) -> dict:
         bus = await _make_bus()
         try:
-            await _publish(bus, "soma", "a", 0.9)
-            await _publish(bus, "chronos", "b", 0.8)
+            await _publish(bus, "interoception", "a", 0.9)
+            await _publish(bus, "sequence", "b", 0.8)
             registry, syn = _coherence_registry_and_syn()
             kw = {"ablation_recorder": (lambda on, off: None)} if with_recorder else {}
             cycle = CognitiveCycle(
@@ -368,8 +368,8 @@ async def test_set_ablation_recorder_attaches_after_construction():
     registry is built after the cycle) and it drives on the next experiential tick."""
     bus = await _make_bus()
     try:
-        await _publish(bus, "soma", "a", 0.9)
-        await _publish(bus, "chronos", "b", 0.8)
+        await _publish(bus, "interoception", "a", 0.9)
+        await _publish(bus, "sequence", "b", 0.8)
         registry, syn = _coherence_registry_and_syn()
         captured: list[tuple[WorkspaceSnapshot, WorkspaceSnapshot]] = []
         cycle = CognitiveCycle(

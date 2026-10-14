@@ -152,7 +152,7 @@ def _seed_backup_state(state_root: Path) -> None:
 def _seed_fork(fork_root: Path) -> None:
     from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 
-    snap = ForkSnapshot(label="root", modules={"soma": {"wellness": 0.9}})
+    snap = ForkSnapshot(label="root", modules={"interoception": {"wellness": 0.9}})
     save_snapshot(fork_root, snap)
 
 
@@ -247,7 +247,7 @@ def test_capture_backup_plaintext_includes_corpus(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),
@@ -272,7 +272,7 @@ def test_capture_backup_encrypted_includes_corpus(monkeypatch, tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=out_root,
         entity_name="Kaine Nova",
         assessment=_assessment(),

@@ -123,25 +123,25 @@ async def test_external_utterance_log_only_records_external_speech_text():
     )
 
     # Inner-speech events must never be written, regardless of stream.
-    inner = _event("lingua", "internal_speech", {"text": "inner thought"})
-    await observer.handle("lingua.internal", "1-0", inner)
-    await observer.handle("lingua.out", "2-0", inner)
+    inner = _event("language", "internal_speech", {"text": "inner thought"})
+    await observer.handle("language.internal", "1-0", inner)
+    await observer.handle("language.out", "2-0", inner)
 
     # External speech records text but drops user_input (bystander speech).
     external = _event(
-        "lingua",
+        "language",
         "external_speech",
         {"text": "hello world", "user_input": "user said this"},
     )
-    await observer.handle("lingua.external", "3-0", external)
+    await observer.handle("language.external", "3-0", external)
 
     # External speech with an explicit run_id carries it through.
     external_run = _event(
-        "lingua",
+        "language",
         "external_speech",
         {"text": "with run", "run_id": "run-42"},
     )
-    await observer.handle("lingua.external", "4-0", external_run)
+    await observer.handle("language.external", "4-0", external_run)
 
     assert len(sink.rows) == 2
 
@@ -164,9 +164,9 @@ async def test_external_utterance_log_writes_even_when_text_missing():
     )
 
     bystander_only = _event(
-        "lingua", "external_speech", {"user_input": "bystander only"}
+        "language", "external_speech", {"user_input": "bystander only"}
     )
-    await observer.handle("lingua.external", "1-0", bystander_only)
+    await observer.handle("language.external", "1-0", bystander_only)
 
     assert len(sink.rows) == 1
     assert sink.rows[0]["type"] == "external_speech"
@@ -179,12 +179,12 @@ def test_external_utterance_log_stream_list_and_source_guard():
     eul_src = (pkg_root / "external_utterance_log.py").read_text()
     nr_src = (pkg_root / "dashboard_record.py").read_text()
 
-    forbidden = ("lingua.internal", "lingua.out", "internal_speech")
+    forbidden = ("language.internal", "language.out", "internal_speech")
     for token in forbidden:
         assert token not in eul_src, token
         assert token not in nr_src, token
 
-    assert ExternalUtteranceLog.streams == ("lingua.external",)
+    assert ExternalUtteranceLog.streams == ("language.external",)
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +199,11 @@ async def test_dashboard_record_writes_filtered_payload():
     observer = DashboardRecord(bus, sink, DashboardRecordConfig(enabled=True))
 
     event = _event(
-        "lingua",
+        "language",
         "external_speech",
-        {"text": "hello world", "salience": 0.9, "agent_label": "lingua"},
+        {"text": "hello world", "salience": 0.9, "agent_label": "language"},
     )
-    await observer.handle("lingua.out", "1-0", event)
+    await observer.handle("language.out", "1-0", event)
 
     assert len(sink.rows) == 1
     record = sink.rows[0]
@@ -211,13 +211,13 @@ async def test_dashboard_record_writes_filtered_payload():
         event, surface="diagnostics"
     )
 
-    assert record["stream"] == "lingua.out"
+    assert record["stream"] == "language.out"
     assert record["entry_id"] == "1-0"
     assert record["source"] == event.source
     assert record["type"] == event.type
     assert record["payload"] == dict(filtered.payload or {})
     assert "text" not in record["payload"]
-    assert record["payload"].get("agent_label") == "lingua"
+    assert record["payload"].get("agent_label") == "language"
 
 
 @pytest.mark.asyncio
@@ -227,8 +227,8 @@ async def test_dashboard_record_of_vision_report_holds_no_vector():
     observer = DashboardRecord(bus, sink, DashboardRecordConfig(enabled=True))
 
     event = _event(
-        "topos",
-        "topos.report",
+        "vision",
+        "vision.report",
         {
             "latent": [0.1] * 768,
             "peripheral": [0.2] * 768,
@@ -237,11 +237,11 @@ async def test_dashboard_record_of_vision_report_holds_no_vector():
             "alert": True,
         },
     )
-    await observer.handle("topos.out", "1-0", event)
+    await observer.handle("vision.out", "1-0", event)
 
     assert len(sink.rows) == 1
     record = sink.rows[0]
-    assert record["stream"] == "topos.out"
+    assert record["stream"] == "vision.out"
     assert record["entry_id"] == "1-0"
     assert record["source"] == event.source
     assert record["type"] == event.type
@@ -261,13 +261,13 @@ async def test_dashboard_record_drops_event_when_filter_fails():
     # A filter failure must drop the event, never write it unfiltered.
     observer._privacy = _BrokenFilter()
     event = Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload={"text": "must not be written"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
-    await observer.handle("lingua.out", "1-0", event)
+    await observer.handle("language.out", "1-0", event)
 
     assert sink.rows == []
 
@@ -301,7 +301,7 @@ def test_run_recording_configs_parse_enabled_values():
                 "log_dir": "state/research/external_utterances",
                 "retention_days": 7,
             },
-            "nexus_record": {
+            "dashboard_record": {
                 "enabled": True,
                 "log_dir": "data/nexus_record",
                 "retention_days": 14,

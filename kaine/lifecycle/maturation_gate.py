@@ -4,11 +4,11 @@
 """The maturation gate — `developmental-maturation-gate`.
 
 A readiness predicate evaluated on a cadence during the developmental phase. It advances the
-developmental stage ``gestation -> embodied`` only when ALL of three conditions
+developmental stage ``development -> embodied`` only when ALL of three conditions
 hold, and it treats any missing or stale evidence as NOT ready (**fail-closed**):
 
   C1  Regulation baseline met — every marker on the stimulus source change's
-      ``gestation.readiness`` readout crosses its configured threshold.
+      ``development.readiness`` readout crosses its configured threshold.
   C2  A reality model consolidated over several sleep cycles, required only
       when the matching faculties are present — sleep cycles are checked iff
       the sleep module is present and consolidation is checked iff both the sleep module and
@@ -56,13 +56,13 @@ from typing import Any, Mapping
 LIFECYCLE_SOURCE = "lifecycle"
 LIFECYCLE_STREAM = "lifecycle.out"
 
-STAGE_DEVELOPMENT_STARTED = "stage.gestation.started"
-STAGE_DEVELOPMENT_NO_STIMULUS = "stage.gestation.no_stimulus"
-STAGE_MATURATION_READY = "stage.birth.ready"
-STAGE_MATURATION = "stage.birth"
+STAGE_DEVELOPMENT_STARTED = "stage.development.started"
+STAGE_DEVELOPMENT_NO_STIMULUS = "stage.development.no_stimulus"
+STAGE_MATURATION_READY = "stage.maturation.ready"
+STAGE_MATURATION = "stage.maturation"
 
 # Maturation-decision actions.
-ACTION_DEVELOPING = "gestating"
+ACTION_DEVELOPING = "developing"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
 ACTION_MATURATION = "birth"
@@ -75,7 +75,7 @@ REASON_BORN_INTO_PERCEPTUAL_WORLD = "born_into_perceptual_world"
 
 @dataclass(frozen=True)
 class RegulationThresholds:
-    """Thresholds the ``gestation.readiness`` markers must cross for C1.
+    """Thresholds the ``development.readiness`` markers must cross for C1.
 
     This change owns the *thresholds and the decision*; the stimulus source change
     (``gestational-womb-stimulus``) owns the *measurement* of the markers.
@@ -103,7 +103,7 @@ class RegulationThresholds:
             ),
             stimulus_source_prediction_error_ceiling=float(
                 d.get(
-                    "womb_prediction_error_ceiling",
+                    "stimulus_source_prediction_error_ceiling",
                     base.stimulus_source_prediction_error_ceiling,
                 )
             ),
@@ -159,25 +159,25 @@ class MaturationConfig:
             ),
             require_operator_ack_for_maturation=bool(
                 d.get(
-                    "require_operator_ack_for_birth",
+                    "require_operator_ack_for_maturation",
                     base.require_operator_ack_for_maturation,
                 )
             ),
             stimulus_source_ready_retry_seconds=float(
-                d.get("womb_ready_retry_seconds", base.stimulus_source_ready_retry_seconds)
+                d.get("stimulus_source_ready_retry_seconds", base.stimulus_source_ready_retry_seconds)
             ),
             stimulus_source_check_seconds=float(
-                d.get("womb_check_seconds", base.stimulus_source_check_seconds)
+                d.get("stimulus_source_check_seconds", base.stimulus_source_check_seconds)
             ),
             stimulus_source_loss_after_seconds=float(
-                d.get("womb_loss_after_seconds", base.stimulus_source_loss_after_seconds)
+                d.get("stimulus_source_loss_after_seconds", base.stimulus_source_loss_after_seconds)
             ),
             stimulus_source_arm_timeout_seconds=float(
-                d.get("womb_arm_timeout_seconds", base.stimulus_source_arm_timeout_seconds)
+                d.get("stimulus_source_arm_timeout_seconds", base.stimulus_source_arm_timeout_seconds)
             ),
             stimulus_source_presence_window_seconds=float(
                 d.get(
-                    "womb_presence_window_seconds",
+                    "stimulus_source_presence_window_seconds",
                     base.stimulus_source_presence_window_seconds,
                 )
             ),
@@ -379,7 +379,7 @@ def embodiment_available(
     *, embodiment_enabled: bool, operator_approved: bool, reachable: bool
 ) -> bool:
     """Whether the entity can actually be born into an embodied world: the embodiment module's
-    existing two-layer gate (``[mundus].enabled`` config layer AND
+    existing two-layer gate (``[embodiment].enabled`` config layer AND
     ``KAINE_MUNDUS_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
     is READ as a precondition; the gate never flips the embodiment module on."""
     return bool(embodiment_enabled) and bool(operator_approved) and bool(reachable)
@@ -415,7 +415,7 @@ def decide_maturation(
 
     - not developmentally ready               -> keep gestating (report unmet Cn);
     - with the embodiment module: ready but embodiment unavailable -> HOLD in the stimulus source, loud
-      repeated ``stage.birth.ready{awaiting_embodiment}`` (never born into an
+      repeated ``stage.maturation.ready{awaiting_embodiment}`` (never born into an
       absent world, never a silent stall);
     - without the embodiment module: ready skips the embodiment guard and matures into the
       perceptual world (``born_into_perceptual_world``);

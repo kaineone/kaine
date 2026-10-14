@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Fatigue observer — records soma.fatigue and soma.report history.
+"""Fatigue observer — records interoception.fatigue and interoception.report history.
 
-Subscribes to ``soma.out`` and logs:
-- Every ``soma.fatigue`` event (threshold crossing) with the current
+Subscribes to ``interoception.out`` and logs:
+- Every ``interoception.fatigue`` event (threshold crossing) with the current
   value and threshold.
-- Every ``soma.report`` event's fatigue fields (fatigue_value,
+- Every ``interoception.report`` event's fatigue fields (fatigue_value,
   fatigue_threshold) at low priority (written but no alert).
 
 This provides a continuous fatigue trajectory plus explicit threshold
@@ -24,11 +24,11 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_INTEROCEPTION_STREAM = "soma.out"
+_INTEROCEPTION_STREAM = "interoception.out"
 
 
 class FatigueObserver(StreamSubscriberObserver):
-    """Logs soma.fatigue threshold crossings and periodic fatigue reports."""
+    """Logs interoception.fatigue threshold crossings and periodic fatigue reports."""
 
     name = "fatigue"
     streams = (_INTEROCEPTION_STREAM,)
@@ -38,7 +38,7 @@ class FatigueObserver(StreamSubscriberObserver):
         self._sink = sink
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if event.type == "soma.fatigue":
+        if event.type == "interoception.fatigue":
             payload = event.payload or {}
             await self._sink.write(
                 {
@@ -50,7 +50,7 @@ class FatigueObserver(StreamSubscriberObserver):
                     "crossed": payload.get("crossed", True),
                 }
             )
-        elif event.type == "soma.report":
+        elif event.type == "interoception.report":
             payload = event.payload or {}
             await self._sink.write(
                 {

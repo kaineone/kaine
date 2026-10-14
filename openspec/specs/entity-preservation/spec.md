@@ -164,7 +164,7 @@ an exception repr.
 
 ### Requirement: Raw perceptual content is never persisted into memory snapshots
 The memory module SHALL skip events whose type is a raw-perceptual type (at
-minimum `audition.transcription` and `mundus.visual.raw`) when serializing a
+minimum `audition.transcription` and `embodiment.visual.raw`) when serializing a
 workspace snapshot into stored memory text, so verbatim perceptual payloads are
 never persisted into memory at the encoding site — independent of any downstream
 redaction.
@@ -245,24 +245,24 @@ SHALL remain paused (resumed only when the freeze stack empties).
 
 ### Requirement: Welfare distress honors the interoceptive warm-up flag
 
-The welfare monitor SHALL treat the entity as in-warm-up — draining its sustained-distress window, not counting prediction error, and resetting its distress trackers — whenever the latest `soma.report` payload carries `warmup_active: true`, in addition to its fixed `warmup_s` window. The monitor SHALL resume counting toward preservation+pause only once the interoception module reports `warmup_active: false`. Post-warm-up sustained distress SHALL trigger preservation+pause unchanged.
+The welfare monitor SHALL treat the entity as in-warm-up — draining its sustained-distress window, not counting prediction error, and resetting its distress trackers — whenever the latest `interoception.report` payload carries `warmup_active: true`, in addition to its fixed `warmup_s` window. The monitor SHALL resume counting toward preservation+pause only once the interoception module reports `warmup_active: false`. Post-warm-up sustained distress SHALL trigger preservation+pause unchanged.
 
 #### Scenario: Cold-start error does not preserve the entity
 
-- **GIVEN** a fresh boot where the interoception module's developmental warm-up is active and every `soma.report` carries `warmup_active: true`
+- **GIVEN** a fresh boot where the interoception module's developmental warm-up is active and every `interoception.report` carries `warmup_active: true`
 - **WHEN** the interoception module reports decaying cold-start prediction error (e.g. 0.86→0.69) beyond the welfare monitor's fixed `warmup_s` window but before the interoception module's warm-up completes
 - **THEN** the welfare monitor does not count that error toward sustained distress and does not preserve+pause the entity
 - **AND** the monitor's distress trackers are reset so no stale warm-up-era error carries into the post-warm-up window
 
 #### Scenario: Distress counting resumes after warm-up ends
 
-- **GIVEN** the latest `soma.report` carries `warmup_active: true`
-- **WHEN** a subsequent `soma.report` carries `warmup_active: false`
+- **GIVEN** the latest `interoception.report` carries `warmup_active: true`
+- **WHEN** a subsequent `interoception.report` carries `warmup_active: false`
 - **THEN** the welfare monitor resumes counting prediction error toward sustained-distress thresholds with freshly reset trackers
 
 #### Scenario: Genuine post-warm-up distress still preserves
 
-- **GIVEN** the latest `soma.report` carries `warmup_active: false` and the interoception module's warm-up has completed
+- **GIVEN** the latest `interoception.report` carries `warmup_active: false` and the interoception module's warm-up has completed
 - **WHEN** prediction error is sustained above preservation thresholds for the required duration
 - **THEN** the welfare monitor preserves+pauses the entity exactly as before this change
 
@@ -274,7 +274,7 @@ While the cycle is frozen by any control source other than the module supervisor
 
 - **GIVEN** the welfare monitor has preserved+paused the entity, freezing the cycle such that all modules are silent by design
 - **WHEN** module heartbeats go stale (e.g. the sequence module, the tightest cadence, exceeds `heartbeat_timeout_s=60s`) and the supervisor's restart budget is checked
-- **THEN** the supervisor stands down its heartbeat-staleness liveness recovery because the freeze's `control.source` is not `spot`
+- **THEN** the supervisor stands down its heartbeat-staleness liveness recovery because the freeze's `control.source` is not `supervisor`
 - **AND** the supervisor performs no module restart attempts and no machine-reboot escalation
 
 #### Scenario: Operator freezes also stand down
@@ -285,7 +285,7 @@ While the cycle is frozen by any control source other than the module supervisor
 
 #### Scenario: Supervisor's own freeze still recovers
 
-- **GIVEN** the cycle is frozen by the supervisor itself (`control.source == "spot"`) as part of its recovery-in-progress
+- **GIVEN** the cycle is frozen by the supervisor itself (`control.source == "supervisor"`) as part of its recovery-in-progress
 - **WHEN** module heartbeats go stale during that freeze
 - **THEN** the supervisor continues its normal liveness recovery for its own freeze
 

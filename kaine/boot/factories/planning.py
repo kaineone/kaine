@@ -27,7 +27,7 @@ def make_planning(
 ) -> BaseModule:
     from kaine.modules.planning.module import Planning
 
-    injected = _check_injections("nous", injections, {"engine", "engine_wrapper"})
+    injected = _check_injections("planning", injections, {"engine", "engine_wrapper"})
 
     if "engine" in injected and "engine_wrapper" in injected:
         raise ConfigurationError(
@@ -110,7 +110,7 @@ def make_planning(
             model, efe_timeout_ms=efe_timeout_ms, policy_len=horizon
         )
 
-    # The wrapper receives the engine KAINE built from [nous], so a plugin can
+    # The wrapper receives the engine KAINE built from [planning], so a plugin can
     # add to it without seeing the settings.
     if "engine_wrapper" in injected:
         wrapped = injected["engine_wrapper"](engine)

@@ -140,8 +140,8 @@ async def _entity(bus: AsyncBus, tmp_path: Path, *, name="Aria"):
 async def _push_interoception_report(bus: AsyncBus, prediction_error: float):
     await bus.publish(
         validate_event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"prediction_error": prediction_error},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -204,7 +204,7 @@ async def test_welfare_notify_cursor_advances_to_end_after_one_poll(
     for _ in range(20):
         await _push_interoception_report(bus, 0.9)
 
-    stream_ids = await bus.client.xrange("soma.out")
+    stream_ids = await bus.client.xrange("interoception.out")
     last_id = _str_id(stream_ids[-1][0])
 
     observed: list[float] = []
@@ -296,13 +296,13 @@ async def test_sleep_audit_drain_continues_past_undecodable_entries(bus, tmp_pat
     )
 
     for _ in range(70):
-        await bus.client.xadd("volition.out", {"junk": "x"})
+        await bus.client.xadd("action_selection.out", {"junk": "x"})
 
     await bus.client.xadd(
-        "volition.out",
+        "action_selection.out",
         {
-            "source": "volition",
-            "type": "volition.choice",
+            "source": "action_selection",
+            "type": "action_selection.choice",
             "salience": "0.5",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "causal_parent": "",
@@ -310,9 +310,9 @@ async def test_sleep_audit_drain_continues_past_undecodable_entries(bus, tmp_pat
         },
     )
 
-    events = await sleep._drain_audit_stream("volition.out")
+    events = await sleep._drain_audit_stream("action_selection.out")
     assert len(events) == 1
-    assert events[0][1].type == "volition.choice"
+    assert events[0][1].type == "action_selection.choice"
 
 
 # ---------------------------------------------------------------------------

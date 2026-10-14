@@ -113,7 +113,7 @@ address that persists across changes to the host's private-network address.
 #### Scenario: Proxy provides reachability without widening the bind
 - **WHEN** the operator enables dashboard reachability through the private-network proxy
 - **THEN** the dashboard is reachable at a stable HTTPS address from other devices on the
-  operator's private network while the `[nexus]` host setting and the container's
+  operator's private network while the `[dashboard]` host setting and the container's
   `PublishPort` still bind only to loopback on the host
 
 #### Scenario: Widening the bind is rejected
@@ -130,14 +130,14 @@ address that persists across changes to the host's private-network address.
 
 ### Requirement: Dashboard exposure preserves the privacy boundary
 Exposing the dashboard over the private network SHALL NOT change its content boundary:
-`[nexus] dev_content_override` SHALL remain `false` (it gates raw message text, beliefs, memory
+`[dashboard] dev_content_override` SHALL remain `false` (it gates raw message text, beliefs, memory
 bodies, internal speech, and affect reasons), and `conversation_enabled` SHALL remain `false`
 unless the operator deliberately changes it, because a dashboard served over the private
 network is reachable from every device on that network.
 
 #### Scenario: Boundary flags unchanged by exposure
 - **WHEN** the operator completes the dashboard-exposure procedure
-- **THEN** `[nexus] dev_content_override` is still `false` and `conversation_enabled` is still
+- **THEN** `[dashboard] dev_content_override` is still `false` and `conversation_enabled` is still
   `false`, and the runbook states this is required because the dashboard is now reachable from
   every device on the private network
 

@@ -141,7 +141,7 @@ async def _build_synthetic_entity(
 ) -> tuple[ModuleRegistry, Path]:
     """A synthetic-but-REAL entity: self-model + episodic memory(in-memory) + world model.
 
-    Returns (registry, phantasia_checkpoint_path).
+    Returns (registry, world_model_checkpoint_path).
     """
     reg = ModuleRegistry()
 
@@ -330,7 +330,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
     # S5: entity-interior content is tarred (encryption disabled here → plaintext
     # bundle.tar); only the non-sensitive manifest stays loose. The loose
-    # snapshot.json / phantasia/ originals are removed after tarring.
+    # snapshot.json / world_model/ originals are removed after tarring.
     assert (bundle / "manifest.json").is_file()
     assert (bundle / "bundle.tar").is_file()
     assert not (bundle / "snapshot.json").exists()
@@ -344,7 +344,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     assert legacy_aliases.map_bundle_member("phantasia/wm.ckpt") in _names
 
     # The live entity is untouched (read-only) and nothing was deleted.
-    assert reg.get("eidolon").model.name == "Aria"
+    assert reg.get("self_model").model.name == "Aria"
     assert list((tmp_path / "forks").iterdir())  # snapshot persisted
 
     # --- Revive into a FRESH registry ----------------------------------
@@ -370,8 +370,8 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     await fm.revive(bundle, reg2)
 
     # Continuity: self-model identity + values match.
-    assert reg2.get("eidolon").model.name == "Aria"
-    assert reg2.get("eidolon").model.values == ["honesty", "curiosity"]
+    assert reg2.get("self_model").model.name == "Aria"
+    assert reg2.get("self_model").model.values == ["honesty", "curiosity"]
 
     # Continuity: planted memories are recallable.
     st_results, _ = await episodic_memory2.core.recall("I remember the blue door", collection="short_term")
@@ -876,7 +876,7 @@ async def test_preserve_live_bundle_encrypted_at_rest(
         await ph2.initialize()
         reg2.register(ph2)
         await fm.revive(bundle, reg2)
-        assert reg2.get("eidolon").model.values == ["honesty", "curiosity"]
+        assert reg2.get("self_model").model.values == ["honesty", "curiosity"]
         await eid2.shutdown()
         await m2.shutdown()
         await ph2.shutdown()
@@ -900,7 +900,7 @@ async def test_preserve_live_records_world_model_not_captured_honestly(
         assert result.ok
         assert result.world_model_captured is False
         snap = fm.load(result.snapshot_id)
-        rec = snap.modules["phantasia"]["world_model_capture"]
+        rec = snap.modules["world_model"]["world_model_capture"]
         assert rec["captured"] is False
         assert "nothing learned" in rec["reason"]
     finally:
@@ -1014,7 +1014,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
     but the world model module's checkpoint is missing from the tar. Revive must raise
     ReviveError ("…absent…") — never silently revive a world-model-less lesser
     individual. (Bundles are now tar; we rewrite bundle.tar to drop the
-    phantasia/ member while keeping snapshot.json's captured=True record.)"""
+    world_model/ member while keeping snapshot.json's captured=True record.)"""
     import tarfile
 
     reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=True)
@@ -1133,7 +1133,7 @@ async def test_revive_fails_loud_on_corrupt_bundle(bus: AsyncBus, tmp_path: Path
         with pytest.raises(ReviveError):
             await fm.revive(bundle, reg2)
         # The fresh entity was NOT silently populated from an empty revive.
-        assert reg2.get("eidolon").model.name != "Aria"
+        assert reg2.get("self_model").model.name != "Aria"
         await eid2.shutdown()
         await m2.shutdown()
     finally:
@@ -1192,7 +1192,7 @@ async def test_preservation_manifest_fields_match_result(
         assert manifest["modules"] == sorted(
             m.name for m in reg.all_modules()
         )
-        assert set(manifest["modules"]) == {"eidolon", "mnemos", "phantasia"}
+        assert set(manifest["modules"]) == {"self_model", "episodic_memory", "world_model"}
         assert manifest["kind"] == "preservation"
         assert manifest["entity_name"] == "aria"
     finally:

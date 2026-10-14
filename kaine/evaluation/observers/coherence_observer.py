@@ -7,7 +7,7 @@ JSONL.
 
 The PLV values are produced by the oscillatory-layer change and are stored
 as a nested dict in the workspace broadcast's metadata field, keyed as
-``"coherence"``.  Each entry maps a pair label (e.g. ``"soma|thymos"``) to
+``"coherence"``.  Each entry maps a pair label (e.g. ``"interoception|affect"``) to
 a float PLV in [0, 1].
 
 When the oscillatory layer is disabled or no coherence metadata is present

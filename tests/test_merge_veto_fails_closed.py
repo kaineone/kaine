@@ -86,7 +86,7 @@ def _make_fork_manager(tmp_path: Path, merger) -> ForkManager:
 
 def test_merge_rejected_raises_before_writing(tmp_path: Path):
     mgr = _make_fork_manager(tmp_path, _RejectedMerger())
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["adapters/a"])
     b = mgr.snapshot(reg, adapters=["adapters/b"])
 
@@ -105,7 +105,7 @@ def test_merge_rejected_raises_before_writing(tmp_path: Path):
 
 def test_merge_failed_raises_before_writing(tmp_path: Path):
     mgr = _make_fork_manager(tmp_path, _FailedMerger())
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["adapters/a"])
     b = mgr.snapshot(reg, adapters=["adapters/b"])
 
@@ -124,7 +124,7 @@ def test_merge_failed_raises_before_writing(tmp_path: Path):
 
 def test_merge_rejected_allowed_keeps_parents_uncombined(tmp_path: Path):
     mgr = _make_fork_manager(tmp_path, _RejectedMerger())
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["adapters/a"])
     b = mgr.snapshot(reg, adapters=["adapters/b"])
 
@@ -229,7 +229,7 @@ async def test_merge_handler_runs_merge_in_thread(tmp_path: Path):
             return ([], {})
 
     mgr = _make_fork_manager(tmp_path, _ThreadSafeMerger())
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=[])
     b = mgr.snapshot(reg, adapters=[])
 
@@ -254,7 +254,7 @@ async def test_merge_handler_runs_merge_in_thread(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_merge_handler_reports_rejected_merge(tmp_path: Path):
     mgr = _make_fork_manager(tmp_path, _RejectedMerger())
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["adapters/a"])
     b = mgr.snapshot(reg, adapters=["adapters/b"])
 

@@ -10,7 +10,7 @@ First boot is operator-supervised by default. The shipped `config/kaine.toml` tu
 
 Read the operator-responsibility items in [Security and privacy](../13-security-and-privacy.md) before proceeding.
 
-The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[nexus].access` is `"open"`, so anyone who can reach the dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_NEXUS_ACCESS`. Decide whether those defaults are appropriate for your deployment.
+The shipped `config/kaine.toml` has `[security.state_encryption] enabled = true`. If no encryption key is present, the cycle refuses to boot. The shipped `[dashboard].access` is `"open"`, so anyone who can reach the dashboard can view and control the entity without signing in; setting `access = "token"` restores the operator token and session sign-in. You can override the access mode at runtime with `KAINE_NEXUS_ACCESS`. Decide whether those defaults are appropriate for your deployment.
 
 ### Verify preconditions
 
@@ -37,7 +37,7 @@ KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=thesis_test python -m kaine.cycle
 # or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile thesis_test
 ```
 
-`thesis_test` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the output-only language organ with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[volition].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
+`thesis_test` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the output-only language organ with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[action_selection].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
 
 For the full overlay, see `config/profiles/thesis_test.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
 
@@ -45,23 +45,23 @@ The equivalent hand-written `[modules]` block in `config/kaine.operator.toml`, i
 
 ```toml
 [modules]
-soma       = true   # interoception
-chronos    = true   # temporal awareness
-topos      = true   # foveated vision; [vision] extra required
+interoception       = true   # interoception
+sequence    = true   # temporal awareness
+vision      = true   # foveated vision; [vision] extra required
 audition   = true   # raw sound as prediction error; [audio] extra required; transcription off
-thymos     = true   # affective core
-lingua     = true   # output-only language organ; the model server must be serving
-praxis     = false  # no effectors on first boot
-vox        = false  # TTS not part of the base-thesis voice path
-eidolon    = false  # held module
-mnemos     = false  # held module
-nous       = false  # held module
-hypnos     = true   # sleep analog; voice alignment stays off
-empatheia  = false  # held module
-phantasia  = false  # held module
+affect     = true   # affective core
+language     = true   # output-only language organ; the model server must be serving
+effectors     = false  # no effectors on first boot
+vocal        = false  # TTS not part of the base-thesis voice path
+self_model    = false  # held module
+episodic_memory     = false  # held module
+planning       = false  # held module
+sleep     = true   # sleep analog; voice alignment stays off
+social_cognition  = false  # held module
+world_model  = false  # held module
 perception = false  # held module (embodiment)
-mundus     = false  # held module (embodiment)
-echo       = false  # test infrastructure; off by default
+embodiment     = false  # held module (embodiment)
+recorder       = false  # test infrastructure; off by default
 ```
 
 The project keeps the held modules off until the base-thesis test has a result, and the effectors module has no effector on first boot. An operator who wants to explore a held module can enable it individually (see [Day-to-day operation](../06-operation/README.md)), as a deliberate departure from the project default.
@@ -78,7 +78,7 @@ python -m kaine.dashboard
 
 The dashboard starts on `http://127.0.0.1:8088/diagnostics/`. With the cycle not yet up, the page reports `cycle_status: not running`.
 
-The shipped `[nexus].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_NEXUS_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_NEXUS_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_NEXUS_EXTRA_HOSTS`. To require an operator token or to serve the dashboard over your tailnet, see [opening the dashboard](../05-dashboard.md).
+The shipped `[dashboard].access` is `"open"`, so no sign-in is needed. You can override the access mode with `KAINE_NEXUS_ACCESS` (`open` or `token`), make the dashboard read-only with `KAINE_NEXUS_READ_ONLY=1`, or add Tailscale hostnames with `KAINE_NEXUS_EXTRA_HOSTS`. To require an operator token or to serve the dashboard over your tailnet, see [opening the dashboard](../05-dashboard.md).
 
 If no Redis password is configured yet, the dashboard exits with a message naming `bash scripts/redis-bootstrap.sh` instead of starting.
 

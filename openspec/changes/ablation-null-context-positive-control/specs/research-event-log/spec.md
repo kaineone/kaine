@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The research log carries the paired evaluations
-The curated research log SHALL copy `null_prediction_error` and `mean_prediction_error` from `topos.report`, `soma.report` and `audition.perception`, and the post-run range sweep SHALL require both to be non-negative.
+The curated research log SHALL copy `null_prediction_error` and `mean_prediction_error` from `vision.report`, `interoception.report` and `audition.perception`, and the post-run range sweep SHALL require both to be non-negative.
 
 #### Scenario: A processor report is logged with its paired evaluations
 - **WHEN** the interoception module publishes a report with `context_gain` -0.05, `null_prediction_error` 0.5 and `mean_prediction_error` 0.8

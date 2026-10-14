@@ -44,7 +44,7 @@ def _snap():
         def __init__(self, events: list):
             self.selected_events = [(str(i), e) for i, e in enumerate(events)]
 
-    return _Snap([_Ev("soma", {}, 0.9)])
+    return _Snap([_Ev("interoception", {}, 0.9)])
 
 
 def _make_sleep(bus: AsyncBus, tmp_path: Path, *, scheduler: RestScheduler | None = None):
@@ -297,7 +297,7 @@ async def test_affect_restore_does_not_publish_goal_events(bus: AsyncBus):
     affect2.publish = fake_publish  # type: ignore[method-assign]
     affect2.deserialize(snapshot)
 
-    goal_events = [e for e in published if e[0].startswith("thymos.goal")]
+    goal_events = [e for e in published if e[0].startswith("affect.goal")]
     assert goal_events == []
 
 

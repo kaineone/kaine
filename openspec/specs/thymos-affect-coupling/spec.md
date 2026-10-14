@@ -6,10 +6,10 @@ This capability controls how the affect module couples perceived speaker emotion
 ### Requirement: Graceful degradation and opt-out
 The affect module SHALL use `coupling_base` as the contribution weight when no familiarity
 is known for the speaker, and SHALL add no perceived-emotion contribution to
-appraisal when `[thymos.coupling].enabled` is false.
+appraisal when `[affect.coupling].enabled` is false.
 
 #### Scenario: No Social cognition model uses base weight
-- **WHEN** an `audition.emotion` arrives with no prior `empatheia.agent_model`
+- **WHEN** an `audition.emotion` arrives with no prior `social_cognition.agent_model`
 - **THEN** the appraisal contribution uses `coupling_base`
 
 #### Scenario: Disabled coupling does nothing
@@ -29,7 +29,7 @@ is not cold-reset after a fork restore.
 ### Requirement: Appraisal-routed perceived emotion
 A detected speaker emotion (`audition.emotion`) SHALL be folded into the affect module's
 own Scherer appraisal as a perceptual input, weighted by `familiarity` from the
-latest `empatheia.agent_model`, and SHALL NOT be written directly to the
+latest `social_cognition.agent_model`, and SHALL NOT be written directly to the
 dimensional (valence/arousal/dominance) state. The entity's own appraisal —
 together with its goal significance, coping, and novelty — SHALL determine the
 classified emotion and the resulting bounded state change. The contribution

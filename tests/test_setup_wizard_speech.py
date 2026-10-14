@@ -84,16 +84,16 @@ def _run_wizard(
 @pytest.mark.parametrize(
     ("modules", "shipped", "expected"),
     [
-        ({"nous": True}, {"nous": {"backend": "pymdp"}}, ["reasoning"]),
-        ({"nous": True}, {"nous": {"backend": "numpy"}}, []),
+        ({"planning": True}, {"planning": {"backend": "pymdp"}}, ["reasoning"]),
+        ({"planning": True}, {"planning": {"backend": "numpy"}}, []),
         (
-            {"phantasia": True},
-            {"phantasia": {"backend": "dreamerv3", "engine": "jax"}},
+            {"world_model": True},
+            {"world_model": {"backend": "dreamerv3", "engine": "jax"}},
             ["worldmodel"],
         ),
         (
-            {"phantasia": True},
-            {"phantasia": {"backend": "dreamerv3", "engine": "numpy"}},
+            {"world_model": True},
+            {"world_model": {"backend": "dreamerv3", "engine": "numpy"}},
             [],
         ),
         (
@@ -116,16 +116,16 @@ def _run_wizard(
             },
             [],
         ),
-        ({"vox": True}, {"vox": {"backend": "sherpa_onnx"}}, ["speech-edge"]),
-        ({"vox": True}, {"vox": {"backend": "chatterbox"}}, []),
+        ({"vocal": True}, {"vocal": {"backend": "sherpa_onnx"}}, ["speech-edge"]),
+        ({"vocal": True}, {"vocal": {"backend": "chatterbox"}}, []),
         (
-            {"audition": True, "vox": True},
+            {"audition": True, "vocal": True},
             {
                 "audition": {
                     "backend": "sherpa_onnx",
                     "transcription_enabled": True,
                 },
-                "vox": {"backend": "sherpa_onnx"},
+                "vocal": {"backend": "sherpa_onnx"},
             },
             ["speech-edge"],
         ),
@@ -143,11 +143,11 @@ def test_vocal_sherpa_onnx_skips_chatterbox_voice_prompt(
     monkeypatch.setattr(
         wizard_core,
         "base_thesis_modules",
-        lambda profiles_dir=None: {m: m == "vox" for m in wizard.MODULE_ORDER},
+        lambda profiles_dir=None: {m: m == "vocal" for m in wizard.MODULE_ORDER},
     )
     shipped = _shipped()
-    shipped.setdefault("vox", {})["backend"] = "sherpa_onnx"
-    shipped["vox"].pop("predefined_voice_id", None)
+    shipped.setdefault("vocal", {})["backend"] = "sherpa_onnx"
+    shipped["vocal"].pop("predefined_voice_id", None)
 
     config, prompts, lines = _run_wizard(
         host=_host(),
@@ -155,9 +155,9 @@ def test_vocal_sherpa_onnx_skips_chatterbox_voice_prompt(
         defaults=True,
     )
 
-    assert config["modules"]["vox"] is True
+    assert config["modules"]["vocal"] is True
     combined = "\n".join(prompts + lines)
-    assert "[vox].predefined_voice_id" not in combined
+    assert "[vocal].predefined_voice_id" not in combined
     assert "no Chatterbox voice needed" in combined
 
 

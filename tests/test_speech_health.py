@@ -497,7 +497,7 @@ def test_dependency_specs_unknown_vocal_backend(_patch_speech_models):
     row = _spec_named(specs, "Vox backend 'whisper'")
     status, detail = asyncio.run(row.probe())
     assert status == probes_mod.DEGRADED
-    assert "unknown [vox].backend" in detail
+    assert "unknown [vocal].backend" in detail
 
 
 def test_tier1_profile_uses_sherpa_onnx_speech():
@@ -507,7 +507,7 @@ def test_tier1_profile_uses_sherpa_onnx_speech():
     data = tomllib.loads(profile)
     assert data["tier"]["unsupported_modules"] == []
     assert data["audition"]["backend"] == "sherpa_onnx"
-    assert data["vox"]["backend"] == "sherpa_onnx"
+    assert data["vocal"]["backend"] == "sherpa_onnx"
     assert not any(".wav" in str(v) for v in _all_string_values(data))
 
 

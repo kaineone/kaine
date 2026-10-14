@@ -154,7 +154,7 @@ async def test_module_shutdown_with_swallowing_client():
 
 def _valid_event():
     return Event(
-        source="soma",
+        source="interoception",
         type="wellness.update",
         payload={},
         salience=0.3,
@@ -193,7 +193,7 @@ async def test_cleanup_after_caught_cancel_still_uses_bus():
         assert task.cancelled()
         assert len(results) == 1
         assert results[0]
-        assert await bus.client.xlen(module_stream("soma")) == 1
+        assert await bus.client.xlen(module_stream("interoception")) == 1
     finally:
         await bus.close()
 

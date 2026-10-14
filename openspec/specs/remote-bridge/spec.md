@@ -16,7 +16,7 @@ Remote video frames SHALL be decoded to in-memory images and passed to
 reach `Audition.process_audio` with `source_label = "remote"`; generated
 speech SHALL be tapped from the vocal module via a composed `Player` without disabling
 local playback; transcript events SHALL be forwarded from the
-`lingua.external` and `audition.out` streams. When a shared-secret token is
+`language.external` and `audition.out` streams. When a shared-secret token is
 configured, connections without it SHALL be rejected.
 
 #### Scenario: Shipped config does not run the bridge
@@ -39,7 +39,7 @@ configured, connections without it SHALL be rejected.
 - **THEN** the client receives the WAV bytes and local playback still occurs
 
 #### Scenario: Transcript forwarding
-- **WHEN** an entity utterance lands on `lingua.external` or a transcription
+- **WHEN** an entity utterance lands on `language.external` or a transcription
   on `audition.out` while a `/transcript` client is connected
 - **THEN** the client receives a JSON message carrying the role, text, and
   timestamp

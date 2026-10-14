@@ -30,6 +30,6 @@ Paper §6.3 and Appendix A.8 require a positive control before the live runs: fo
 
 ## Impact
 
-- `kaine/modules/{topos,audition,soma}/forward.py` and `module.py`, new `kaine/modules/positive_control.py`, `kaine/boot/factories/{topos,audition,soma}.py`, `kaine/boot/registry.py`, `kaine/evaluation/stream_registry.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, new `kaine/experiment/positive_control.py`, `config/kaine.toml`, docs, tests.
+- `kaine/modules/{vision,audition,interoception}/forward.py` and `module.py`, new `kaine/modules/positive_control.py`, `kaine/boot/factories/{vision,audition,interoception}.py`, `kaine/boot/registry.py`, `kaine/evaluation/stream_registry.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, new `kaine/experiment/positive_control.py`, `config/kaine.toml`, docs, tests.
 - With the section disabled (the default) no shadow is built and no code path changes.
 - Open: the paper excludes an initial learning period from IG_j. The control counts every awake report from the start, which includes the shadow's own learning of the component and so makes the control conservative. A learning-period setting can be added when that period is fixed with the other settings.

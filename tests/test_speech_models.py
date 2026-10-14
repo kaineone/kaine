@@ -304,13 +304,13 @@ def test_extract_rejects_absolute_paths(monkeypatch: pytest.MonkeyPatch, tmp_pat
             [DEFAULT_STT],
         ),
         (
-            {"vox": {"backend": "sherpa_onnx"}},
+            {"vocal": {"backend": "sherpa_onnx"}},
             [DEFAULT_TTS],
         ),
         (
             {
                 "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
-                "vox": {"backend": "sherpa_onnx"},
+                "vocal": {"backend": "sherpa_onnx"},
             },
             [DEFAULT_STT, DEFAULT_TTS],
         ),
@@ -321,7 +321,7 @@ def test_extract_rejects_absolute_paths(monkeypatch: pytest.MonkeyPatch, tmp_pat
         (
             {
                 "audition": {"backend": " SHERPA_ONNX ", "transcription_enabled": True},
-                "vox": {"backend": "Sherpa_ONNX"},
+                "vocal": {"backend": "Sherpa_ONNX"},
             },
             [DEFAULT_STT, DEFAULT_TTS],
         ),
@@ -358,7 +358,7 @@ def test_required_speech_models_custom_ids(monkeypatch: pytest.MonkeyPatch) -> N
 def test_required_speech_models_unknown_tts_warns(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.warns(UserWarning, match="skipping unknown speech model id"):
         assert required_speech_models(
-            {"vox": {"backend": "sherpa_onnx", "sherpa_model_id": "not-in-manifest"}}
+            {"vocal": {"backend": "sherpa_onnx", "sherpa_model_id": "not-in-manifest"}}
         ) == []
 
 

@@ -1,0 +1,222 @@
+# Self-model Specification
+
+## Purpose
+The self-model module is the module that persists a structured `SelfModelDocument` to JSON at a configurable path, updates its drift detector from workspace broadcasts, records drift as episodes, keeps an unbounded identity history by default, and saves periodically and at shutdown.
+
+## Requirements
+
+### Requirement: SelfModelDocument structure and empty defaults
+The self-model module SHALL define a `SelfModelDocument` data type carrying at minimum:
+`values` (list of strings), `behavioral_norms` (list of strings),
+`capability_map` (dict), `personality_baseline` (dict mapping trait
+names to floats), `identity_history` (list of dated snapshots), and
+`internal_speech_count` (int). On a fresh deployment every field
+SHALL be empty / zero — the self-model module prescribes no identity.
+
+#### Scenario: Fresh SelfModelDocument is empty
+- **WHEN** `SelfModelDocument()` is constructed with no arguments
+- **THEN** `values == []`, `behavioral_norms == []`,
+  `capability_map == {}`, `personality_baseline == {}`,
+  `identity_history == []`, and `internal_speech_count == 0`
+
+### Requirement: JSON persistence at a configurable path
+The self-model module SHALL persist its SelfModelDocument to a JSON file at a configurable
+path (default `state/self_model/self_model.json`). Writes SHALL be
+atomic — the self-model module writes to a temporary file first and renames it
+into place, so a crash mid-save SHALL NOT corrupt the persisted
+document. On startup, an existing file at the configured path SHALL
+be loaded; absent file means a fresh empty SelfModelDocument is used.
+
+#### Scenario: Existing file is loaded on init
+- **WHEN** a `self_model.json` with `values = ["honesty"]` exists at
+  the configured path
+- **THEN** the self-model module after `initialize` has a SelfModelDocument
+  whose `values == ["honesty"]`
+
+#### Scenario: Save is atomic
+- **WHEN** the self-model module writes the SelfModelDocument and is interrupted partway
+  through
+- **THEN** the on-disk JSON file is either fully the prior version
+  or fully the new version, never half-written
+
+### Requirement: Workspace broadcasts update the drift detector
+The self-model module SHALL subscribe to `workspace.broadcast` and update its
+`DriftDetector` with each observed broadcast. The default
+`SourceDistributionDrift` SHALL track two histograms of event-source
+frequencies — a recent window (default 100 broadcasts) and all-time
+cumulative.
+
+#### Scenario: Recent window respects size cap
+- **WHEN** 150 broadcasts have been observed with default window 100
+- **THEN** the recent histogram counts the last 100 only, while the
+  cumulative histogram counts all 150
+
+### Requirement: Drift score elevation publishes a diagnostics event
+The self-model module SHALL compute the symmetric KL divergence between the recent
+and cumulative histograms (smoothed with a small epsilon). When the
+score exceeds the configured threshold, the self-model module SHALL publish an
+`self_model.drift` event whose payload contains `score`, `recent_count`,
+`historical_count`, and `top_drifted_sources` (a list of source names
+without any payload content). The salience SHALL escalate to the
+configured `alert_salience` when the threshold is crossed.
+
+#### Scenario: Drift above threshold publishes alert
+- **WHEN** drift score crosses the configured threshold
+- **THEN** an `self_model.drift` event is published with salience equal
+  to `alert_salience` and a payload containing only the documented
+  diagnostics keys
+
+#### Scenario: Drift event carries no contents
+- **WHEN** any `self_model.drift` event is published
+- **THEN** its payload contains no keys named `text`, `payload`,
+  `value`, `belief`, or any other field that could leak module
+  contents
+
+### Requirement: Internal-speech subscription increments counter
+The self-model module SHALL subscribe to a configurable internal-speech stream
+(default `language.internal`). For each event observed on that stream
+the module SHALL increment `SelfModelDocument.internal_speech_count`.
+The self-model module SHALL NOT record the content of internal speech in the
+SelfModelDocument — only the count and bounded hash fingerprints.
+
+#### Scenario: Counter increments per internal-speech event
+- **WHEN** three events arrive on the configured internal-speech
+  stream while the self-model module is running
+- **THEN** `SelfModelDocument.internal_speech_count` after the third event
+  equals the prior count plus three
+
+### Requirement: Periodic save and final-save-on-shutdown
+The self-model module SHALL persist the SelfModelDocument to disk every `save_interval_s`
+seconds (default 30) while running. `shutdown()` SHALL force a final
+save regardless of how recently the periodic save fired.
+
+#### Scenario: Shutdown forces a final save
+- **WHEN** `SelfModel.shutdown()` is awaited
+- **THEN** the on-disk file reflects the current in-memory SelfModelDocument
+
+### Requirement: Default Self-model config and disabled-by-default
+The repository SHALL ship an `[self_model]` block in `config/kaine.toml`
+with default values for `persistence_path`, `drift_window`,
+`drift_threshold`, `save_interval_s`, `internal_speech_stream`,
+`identity_history_cap`, `baseline_salience`, and `alert_salience`.
+`[modules].self_model = false` SHALL keep first boot from auto-registering
+the self-model module.
+
+#### Scenario: kaine.toml carries defaults
+- **WHEN** an operator inspects `config/kaine.toml`
+- **THEN** they find an `[self_model]` section with the documented keys
+  and `[modules].self_model == false`
+
+### Requirement: The self-model observes the developing voice on both channels
+
+The self-model module SHALL observe both internal and external speech and record the
+developing voice in the self-model as lightweight per-utterance features. For
+each observed utterance it SHALL record `{timestamp, channel, length,
+word_count}` (channel is `internal` or `external`) into the
+`voice_observations` buffer, and SHALL maintain an `external_speech_count`
+alongside the existing `internal_speech_count`. The self-model module SHALL NOT persist the
+raw utterance text in the self-model (only derived features). The buffer is the
+entity's memory of its developing voice: `[self_model].voice_observations_cap`
+SHALL ship as `0`, meaning no observation is ever dropped; a positive value
+SHALL keep the most recent N entries; a negative value SHALL be rejected at
+construction. The `voice_observations` buffer SHALL round-trip through the
+self-model's JSON serialization with safe defaults for models saved before this
+change.
+
+#### Scenario: Internal and external utterances are observed with features
+
+- **WHEN** an internal-speech utterance and an external-speech utterance are
+  published
+- **THEN** the self-model gains one `voice_observations` entry per utterance
+  with its channel, length, and word_count
+- **AND** `internal_speech_count` and `external_speech_count` each increase
+
+#### Scenario: Raw text is not persisted
+
+- **WHEN** a speech utterance is observed
+- **THEN** the recorded observation contains derived features only (no raw
+  utterance text)
+
+#### Scenario: The voice buffer is capped
+
+- **WHEN** a positive `voice_observations_cap` is set and more utterances are
+  observed than the cap
+- **THEN** `voice_observations` retains only the most recent cap entries
+
+#### Scenario: The voice buffer is unbounded by default
+
+- **WHEN** the self-model module runs with `voice_observations_cap = 0` and observes more
+  than 256 utterances
+- **THEN** `voice_observations` holds every observation
+
+#### Scenario: A negative voice cap is rejected
+
+- **WHEN** the self-model module is constructed with `voice_observations_cap = -1`
+- **THEN** construction raises `ValueError`
+
+#### Scenario: Older self-models still load
+
+- **WHEN** a self-model persisted before this change (no voice fields) is loaded
+- **THEN** it loads with `external_speech_count = 0` and an empty
+  `voice_observations`
+
+### Requirement: Drift is recorded as episodes
+
+The self-model module SHALL record drift in `identity_history` as episodes. An episode is one
+contiguous run of broadcasts whose drift score is at or above the threshold,
+and its entry SHALL summarise every alert in the run: `kind =
+"drift_episode"`, `onset`, `end`, `peak_score`, `count` (alerts in the run),
+`sources` (how often each source was among the top drifted sources) and
+`top_sources`, plus `timestamp` (the onset) and `score` (the peak) for readers
+of the older per-alert entries. The first broadcast below the threshold SHALL
+close the episode. The self-model module SHALL update the list in place rather than copying
+it per alert, and SHALL save the self-model as compact JSON with the C encoder.
+Self-models saved earlier, with indentation or per-alert entries, SHALL load
+unchanged.
+
+#### Scenario: A sustained drift is one episode
+
+- **WHEN** N consecutive broadcasts alert
+- **THEN** `identity_history` gains one episode with `count = N` and the peak
+  score of the run
+
+#### Scenario: A quiet broadcast closes the episode
+
+- **WHEN** runs of 3 alerting broadcasts are separated by one broadcast below
+  the threshold, four times
+- **THEN** `identity_history` holds four episodes with `count = 3`
+
+#### Scenario: Save size stays bounded under sustained drift
+
+- **WHEN** 20000 consecutive broadcasts alert and the self-model is saved after
+  every 5000
+- **THEN** the saved file stays the same size, within a few bytes
+
+#### Scenario: Older per-alert history still loads
+
+- **WHEN** a self-model saved with indentation and per-alert entries is loaded
+- **THEN** those entries are kept unchanged and the next alert starts a new
+  episode after them
+
+### Requirement: Identity history is unbounded by default
+
+`[self_model].identity_history_cap` SHALL ship as `0`, and `0` SHALL mean that no
+drift episode is ever dropped. A positive value SHALL keep the most recent N
+episodes. A negative value SHALL be rejected at construction.
+
+#### Scenario: Cap 0 keeps every entry
+
+- **WHEN** the self-model module runs with `identity_history_cap = 0` and records more than 256
+  drift episodes
+- **THEN** `identity_history` holds every episode
+
+#### Scenario: A positive cap keeps the most recent entries
+
+- **WHEN** the self-model module runs with `identity_history_cap = 4` and records 10 drift
+  episodes
+- **THEN** `identity_history` holds the 4 most recent episodes
+
+#### Scenario: A negative cap is rejected
+
+- **WHEN** the self-model module is constructed with `identity_history_cap = -1`
+- **THEN** construction raises `ValueError`

@@ -458,14 +458,14 @@ def test_no_route_or_job_starts_cycle(tmp_path):
     operator_path = app.state.setup.operator_path
     full_config = {
         "modules": {
-            "lingua": True,
-            "mnemos": True,
-            "empatheia": True,
+            "language": True,
+            "episodic_memory": True,
+            "social_cognition": True,
             "audition": True,
-            "vox": True,
-            "hypnos": True,
+            "vocal": True,
+            "sleep": True,
         },
-        "nexus": {"port": 1234},
+        "dashboard": {"port": 1234},
     }
     specs = build_job_specs(
         full_config,
@@ -581,7 +581,7 @@ def test_organ_cli_download_yes(tmp_path, monkeypatch, capsys):
     ]
 
     def fake_load_kaine_config(shipped, operator_path=None):
-        return {"modules": {"lingua": True}}
+        return {"modules": {"language": True}}
 
     monkeypatch.setattr("kaine.config.load_kaine_config", fake_load_kaine_config)
     monkeypatch.setattr("kaine.hardware.describe_host", lambda: {"backend": "cpu"})
@@ -833,18 +833,18 @@ def test_default_specs_no_cycle_and_dashboard_port_from_config(tmp_path, monkeyp
     config_dir = repo_root / "config"
     config_dir.mkdir(parents=True)
     shipped_config_path = config_dir / "kaine.toml"
-    shipped_config_path.write_text("[nexus]\nport = 9123\n")
+    shipped_config_path.write_text("[dashboard]\nport = 9123\n")
     operator_path = config_dir / "kaine.operator.toml"
     operator_path.write_text("")
 
     full_config = {
         "modules": {
-            "lingua": True,
-            "mnemos": True,
-            "empatheia": True,
+            "language": True,
+            "episodic_memory": True,
+            "social_cognition": True,
             "audition": True,
-            "vox": True,
-            "hypnos": True,
+            "vocal": True,
+            "sleep": True,
         },
     }
 
@@ -873,7 +873,7 @@ def test_default_specs_no_cycle_and_dashboard_port_from_config(tmp_path, monkeyp
     idx = argv.index("--operator-config")
     assert argv[idx + 1] == str(operator_path)
 
-    dashboard_spec = next(s for s in specs if s.name == "nexus")
+    dashboard_spec = next(s for s in specs if s.name == "dashboard")
     assert dashboard_spec.ready_probe is not None
     dashboard_spec.ready_probe()
     assert recorded_ports == [9123]
@@ -1511,7 +1511,7 @@ def test_main_no_revision_prints_no_rerun_warning(capsys, monkeypatch, tmp_path)
     monkeypatch.setattr(organ, "write_revision_state", lambda *_a, **_kw: None)
     monkeypatch.setattr(
         "kaine.config.load_kaine_config",
-        lambda *_a, **_kw: {"modules": {"lingua": True}},
+        lambda *_a, **_kw: {"modules": {"language": True}},
     )
 
     rc = organ.main(
@@ -1658,7 +1658,7 @@ def test_build_job_specs_malformed_operator_toml_returns_no_dashboard(tmp_path):
         operator_path=operator,
         state_dir=tmp_path / "state",
     )
-    assert not any(s.name == "nexus" for s in specs)
+    assert not any(s.name == "dashboard" for s in specs)
 
 
 def test_unsaved_session_cannot_start_or_list_jobs(tmp_path, monkeypatch):

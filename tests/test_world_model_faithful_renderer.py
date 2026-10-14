@@ -22,7 +22,7 @@ _BANNED_PHRASES = (
 
 def _event(type_: str, payload) -> Event:
     return Event(
-        source="phantasia",
+        source="world_model",
         type=type_,
         payload=payload,
         salience=0.4,
@@ -33,10 +33,10 @@ def _event(type_: str, payload) -> Event:
 def test_world_error_renders_via_named_template():
     renderer = FaithfulRenderer()
     payload = {"world_error": 0.42, "salience": 0.35, "tick_index": 17}
-    ev = _event("phantasia.world_error", payload)
+    ev = _event("world_model.world_error", payload)
     out = renderer.render_event(ev)
     # Not the generic key=value fallback.
-    assert out != fallback_template("phantasia", "phantasia.world_error", payload)
+    assert out != fallback_template("world_model", "world_model.world_error", payload)
     assert out.startswith("[Phantasia] ")
     assert "error" in out.lower()
     assert "0.42" in out
@@ -52,9 +52,9 @@ def test_scenario_renders_via_named_template():
         "trajectory_drift": 0.05,
         "encoder_version": "phantasia-encoder-v1",
     }
-    ev = _event("phantasia.scenario", payload)
+    ev = _event("world_model.scenario", payload)
     out = renderer.render_event(ev)
-    assert out != fallback_template("phantasia", "phantasia.scenario", payload)
+    assert out != fallback_template("world_model", "world_model.scenario", payload)
     assert out.startswith("[Phantasia] ")
     assert "scenario" in out.lower()
     assert "8" in out  # horizon summary
@@ -63,10 +63,10 @@ def test_scenario_renders_via_named_template():
 def test_world_model_templates_avoid_banned_phrases():
     renderer = FaithfulRenderer()
     we = renderer.render_event(
-        _event("phantasia.world_error", {"world_error": 0.1, "salience": 0.2, "tick_index": 1})
+        _event("world_model.world_error", {"world_error": 0.1, "salience": 0.2, "tick_index": 1})
     ).lower()
     sc = renderer.render_event(
-        _event("phantasia.scenario", {"seed_memory_id": "x", "horizon": 4, "trajectory_drift": 0.0})
+        _event("world_model.scenario", {"seed_memory_id": "x", "horizon": 4, "trajectory_drift": 0.0})
     ).lower()
     for banned in _BANNED_PHRASES:
         assert banned not in we

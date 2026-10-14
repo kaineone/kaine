@@ -9,7 +9,7 @@ from kaine.dashboard.privacy import CONTENT_FIELDS, PrivacyFilter
 
 def _event(payload):
     return Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload=payload,
         salience=0.5,
@@ -104,7 +104,7 @@ def test_description_and_statement_are_content_fields():
 
 
 def test_novel_affect_goal_description_is_scrubbed_at_top_level_and_nested():
-    """A thymos.goal-shaped event's `description` is stripped whether it sits at
+    """A affect.goal-shaped event's `description` is stripped whether it sits at
     the payload top level, nested in a dict, or embedded in a list (the recursion
     that also protects workspace.broadcast's embedded payloads)."""
     pf = PrivacyFilter()
@@ -152,7 +152,7 @@ _CONTENT_SUSPECT_TOKENS = (
 _REVIEWED_OPERATIONAL_KEYS = frozenset(
     {
         "agent_label",     # social cognition module: modeled-agent familiarity label (metric)
-        "name",            # self-model name on eidolon.out + module/metric names — operational identity, not cognition content
+        "name",            # self-model name on self_model.out + module/metric names — operational identity, not cognition content
         "error_detail",    # episodic memory module: exception detail string
         "error_reason",    # planning module: exception reason string
         "reason",          # sleep/world model/perception/preservation modules: short reason enum (consumer-read)
@@ -336,8 +336,8 @@ def test_self_model_self_model_text_is_scrubbed():
     }
 
     event = Event(
-        source="eidolon",
-        type="eidolon.self_model",
+        source="self_model",
+        type="self_model.document",
         payload=base_payload.copy(),
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
@@ -351,8 +351,8 @@ def test_self_model_self_model_text_is_scrubbed():
 
     nested = {"selected": [{"payload": base_payload.copy()}]}
     nested_event = Event(
-        source="eidolon",
-        type="eidolon.self_model",
+        source="self_model",
+        type="self_model.document",
         payload=nested,
         salience=0.5,
         timestamp=datetime.now(timezone.utc),

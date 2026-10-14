@@ -245,9 +245,9 @@ def test_build_registry_injects_one_shared_clock(monkeypatch):
     )
     config = {
         "cycle": {"time_scale": 2.0},
-        "modules": {"soma": True, "thymos": True, "perception": True},
+        "modules": {"interoception": True, "affect": True, "perceptual_locus": True},
         # inmemory backends so no external services are needed
-        "mnemos": {"backend": "inmemory"},
+        "episodic_memory": {"backend": "inmemory"},
     }
     registry = build_registry(bus, config)
 
@@ -256,10 +256,10 @@ def test_build_registry_injects_one_shared_clock(monkeypatch):
     assert clock.scale == pytest.approx(2.0)
 
     # Every cognitive module holds the SAME instance (identity, not a copy).
-    assert registry.get("soma")._clock is clock
-    assert registry.get("perception")._clock is clock
+    assert registry.get("interoception")._clock is clock
+    assert registry.get("perceptual_locus")._clock is clock
     # The affect module stores clock.now (a bound method of the shared instance).
-    assert registry.get("thymos")._clock == clock.now
+    assert registry.get("affect")._clock == clock.now
 
 
 def test_build_registry_accepts_an_external_clock():
@@ -280,9 +280,9 @@ def test_build_registry_accepts_an_external_clock():
     external = EntityClock(scale=0.5)
     registry = build_registry(
         bus,
-        {"modules": {"soma": True}, "cycle": {"time_scale": 9.9}},
+        {"modules": {"interoception": True}, "cycle": {"time_scale": 9.9}},
         entity_clock=external,
     )
     # The injected clock wins over [cycle].time_scale.
     assert registry.entity_clock is external
-    assert registry.get("soma")._clock is external
+    assert registry.get("interoception")._clock is external

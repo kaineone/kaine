@@ -196,9 +196,9 @@ def test_boot_passes_registry_entity_clock_to_sequence_and_vocal():
 
         try:
             sequence = construct_module(
-                "chronos",
+                "sequence",
                 bus,
-                {"chronos": {}},
+                {"sequence": {}},
                 registry={},
                 entity_clock=clock,
             )
@@ -207,9 +207,9 @@ def test_boot_passes_registry_entity_clock_to_sequence_and_vocal():
             assert sequence._featurizer._clock() == clock.now()
 
             vocal = construct_module(
-                "vox",
+                "vocal",
                 bus,
-                {"vox": {}},
+                {"vocal": {}},
                 registry={},
                 entity_clock=clock,
             )

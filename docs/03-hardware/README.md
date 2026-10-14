@@ -22,7 +22,7 @@ KAINE picks devices dynamically. `resolve_device()` in [`kaine/hardware.py`](../
 
 - `KAINE_FORCE_DEVICE=<device>` overrides every module's device at once, including the allowed-device set below (with a logged warning).
 - `[hardware].allowed_devices` and `[hardware].cpu_threads` limit which devices KAINE may use and how many CPU threads the torch stack may claim. The first-run wizard writes them to `config/kaine.operator.toml`. The shipped base config has no `[hardware]` table.
-- `[hardware.devices]` holds `organ` and `vision` keys that record `[hypnos.voice_alignment].training_device` and `[topos].device`. It assigns nothing itself. The first-run wizard's `device_step` in [`kaine/setup/hardware_steps.py`](../../kaine/setup/hardware_steps.py) proposes the values.
+- `[hardware.devices]` holds `organ` and `vision` keys that record `[sleep.voice_alignment].training_device` and `[vision].device`. It assigns nothing itself. The first-run wizard's `device_step` in [`kaine/setup/hardware_steps.py`](../../kaine/setup/hardware_steps.py) proposes the values.
 
 On a two-GPU host the secondary GPU can run vision or other non-organ work. On a single-GPU host `resolve_device()` promotes those workloads onto the primary GPU, so the organ plus any enabled vision encoder must fit together.
 
@@ -72,7 +72,7 @@ The gate classifies each host's accelerator memory as known-discrete, known-unif
 
 ### Organ idle unload
 
-The model server can unload the organ after it has been idle for `[lingua].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. Unloading frees the organ's VRAM until the next request. The setting is passed to the model server as `--sleep-idle-seconds`. Natively KAINE passes it from the config; compose and Quadlet read `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
+The model server can unload the organ after it has been idle for `[language].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. Unloading frees the organ's VRAM until the next request. The setting is passed to the model server as `--sleep-idle-seconds`. Natively KAINE passes it from the config; compose and Quadlet read `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
 
 ## Supporting services and their footprint (Path B)
 
@@ -88,7 +88,7 @@ A live boot expects these local services. Voice services are only needed when th
 
 > Speaches STT must run on CPU with the configured `medium.en` model (`[audition].stt_model`). Running it on GPU triggers a cuDNN crash when the secondary GPU is also serving Chatterbox; a missing model returns HTTP 404 that breaks the voice loop. See [Getting started](../04-getting-started/README.md) and [Troubleshooting](../06-operation/troubleshooting.md).
 
-As an alternative to Speaches and Chatterbox, the audition and vocal modules can use sherpa-onnx. Set `[audition].backend = "sherpa_onnx"` and `[vox].backend = "sherpa_onnx"`, and run `python -m kaine.setup.speech_models` to fetch the models.
+As an alternative to Speaches and Chatterbox, the audition and vocal modules can use sherpa-onnx. Set `[audition].backend = "sherpa_onnx"` and `[vocal].backend = "sherpa_onnx"`, and run `python -m kaine.setup.speech_models` to fetch the models.
 
 If a service is shared with another entity or managed outside KAINE, set `[services.<name>].shared = true`. The pre-flight in [`kaine/cycle/preflight.py`](../../kaine/cycle/preflight.py) respects that flag and does not demand an exclusive instance.
 
@@ -108,7 +108,7 @@ The optional sleep-cycle voice-alignment trainer (the sleep module) runs unsloth
 
 On native hosts the trainer is driven with `trainer_backend = "subprocess"` and a `trainer_python` path. On container hosts use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service. `trainer_backend` defaults to `"in_process"` and the default `hot_swap_mode` is `"manual"`; it is forced to manual when a model server is shared. See [`config/kaine.toml`](../../config/kaine.toml). For details see [Voice alignment](../10-sleep/voice-alignment.md).
 
-The first-run wizard (`python -m kaine.setup`) surfaces the trainer as an optional Stage-2 step. It reads the detected backend, prints vendor-appropriate guidance, and probes the candidate interpreter with `import unsloth`. It never auto-installs the multi-GB trainer env and never records an interpreter the probe could not verify. When a usable interpreter is found, it offers to set `[hypnos.voice_alignment].trainer_python` and `trainer_backend = "subprocess"` in `config/kaine.operator.toml`.
+The first-run wizard (`python -m kaine.setup`) surfaces the trainer as an optional Stage-2 step. It reads the detected backend, prints vendor-appropriate guidance, and probes the candidate interpreter with `import unsloth`. It never auto-installs the multi-GB trainer env and never records an interpreter the probe could not verify. When a usable interpreter is found, it offers to set `[sleep.voice_alignment].trainer_python` and `trainer_backend = "subprocess"` in `config/kaine.operator.toml`.
 
 ### Qwen3.5 trainer prerequisites
 

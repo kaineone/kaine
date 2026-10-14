@@ -169,7 +169,7 @@ class VoiceAlignmentConfig:
     organ_adapters_dir: str = "/organ-adapters"
     # URL of the served organ. Used by the "organ_adapter" hot-swap mode to
     # wait for the organ to report ready after activation. Empty defaults to
-    # [lingua].chat_url from kaine_config.
+    # [language].chat_url from kaine_config.
     organ_url: str = ""
     # Stage 0 source selector. Only "none" is valid until Stage 2 adds a
     # validated preference source together with the validation gate (D9).

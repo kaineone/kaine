@@ -36,7 +36,7 @@ class _Snap:
 
 
 def _snap():
-    return _Snap([_Ev("soma", {}, 0.9)])
+    return _Snap([_Ev("interoception", {}, 0.9)])
 
 
 def _overrunning(engine):

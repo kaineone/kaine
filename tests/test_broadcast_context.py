@@ -28,10 +28,10 @@ def _ev(source, type_, salience, **payload):
 
 def test_featurize_matches_sequence_featurizer():
     events = [
-        ("topos", "topos.report", 0.7),
+        ("vision", "vision.report", 0.7),
         ("audition", "audition.perception", 0.6),
-        ("hypnos", "hypnos.sleep", 0.1),
-        ("soma", "soma.report", 0.3),
+        ("sleep", "sleep.sleep", 0.1),
+        ("interoception", "interoception.report", 0.3),
     ]
     ctx_vec = featurize_events(events, age_s=0.0)
 
@@ -58,7 +58,7 @@ def test_inhibited_broadcast_is_not_adopted():
 
     accessed = WorkspaceSnapshot(
         tick_index=0,
-        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        selected_events=[("1-0", _ev("vision", "vision.report", 0.5))],
         inhibited=False,
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.35},
@@ -68,7 +68,7 @@ def test_inhibited_broadcast_is_not_adopted():
 
     inhibited = WorkspaceSnapshot(
         tick_index=1,
-        selected_events=[("2-0", _ev("soma", "soma.report", 0.9))],
+        selected_events=[("2-0", _ev("interoception", "interoception.report", 0.9))],
         inhibited=True,
         salience_scores={"2-0": 0.9},
         metadata={"access_threshold": 0.35},
@@ -87,8 +87,8 @@ def test_riders_below_threshold_are_excluded():
     snapshot = WorkspaceSnapshot(
         tick_index=0,
         selected_events=[
-            ("1-0", _ev("topos", "topos.report", 0.5)),
-            ("2-0", _ev("thymos", "thymos.report", 0.1)),
+            ("1-0", _ev("vision", "vision.report", 0.5)),
+            ("2-0", _ev("affect", "affect.report", 0.1)),
         ],
         inhibited=False,
         salience_scores={"1-0": 0.5, "2-0": 0.1},
@@ -113,8 +113,8 @@ def test_null_vector_keeps_kept_share_and_averages_the_rest():
     first = WorkspaceSnapshot(
         tick_index=0,
         selected_events=[
-            ("1-0", _ev("topos", "topos.report", 0.7)),
-            ("2-0", _ev("soma", "soma.report", 0.3)),
+            ("1-0", _ev("vision", "vision.report", 0.7)),
+            ("2-0", _ev("interoception", "interoception.report", 0.3)),
         ],
         inhibited=False,
         salience_scores={"1-0": 0.7, "2-0": 0.3},
@@ -127,8 +127,8 @@ def test_null_vector_keeps_kept_share_and_averages_the_rest():
     second = WorkspaceSnapshot(
         tick_index=1,
         selected_events=[
-            ("3-0", _ev("topos", "topos.report", 0.5)),
-            ("4-0", _ev("soma", "soma.report", 0.9)),
+            ("3-0", _ev("vision", "vision.report", 0.5)),
+            ("4-0", _ev("interoception", "interoception.report", 0.9)),
         ],
         inhibited=False,
         salience_scores={"3-0": 0.5, "4-0": 0.9},
@@ -138,7 +138,7 @@ def test_null_vector_keeps_kept_share_and_averages_the_rest():
     clock[0] = 2.0
     assert ctx.observe(second) is True
 
-    null = ctx.null_vector(kept_sources={"topos"})
+    null = ctx.null_vector(kept_sources={"vision"})
     assert null is not None
 
     # Kept source uses the current context's share.
@@ -164,7 +164,7 @@ def test_age_grows_with_the_clock():
     ctx = BroadcastContext(clock=tick)
     snapshot = WorkspaceSnapshot(
         tick_index=0,
-        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        selected_events=[("1-0", _ev("vision", "vision.report", 0.5))],
         inhibited=False,
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.0},
@@ -186,7 +186,7 @@ def test_age_counts_from_publication():
     ctx = BroadcastContext(clock=tick)
     snapshot = WorkspaceSnapshot(
         tick_index=0,
-        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        selected_events=[("1-0", _ev("vision", "vision.report", 0.5))],
         inhibited=False,
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.0},
@@ -207,7 +207,7 @@ def test_age_falls_back_to_receipt_without_publication_time():
     ctx = BroadcastContext(clock=tick)
     snapshot = WorkspaceSnapshot(
         tick_index=0,
-        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        selected_events=[("1-0", _ev("vision", "vision.report", 0.5))],
         inhibited=False,
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.0},
@@ -229,7 +229,7 @@ def test_age_is_never_negative():
     ctx = BroadcastContext(clock=tick)
     snapshot = WorkspaceSnapshot(
         tick_index=0,
-        selected_events=[("1-0", _ev("topos", "topos.report", 0.5))],
+        selected_events=[("1-0", _ev("vision", "vision.report", 0.5))],
         inhibited=False,
         salience_scores={"1-0": 0.5},
         metadata={"access_threshold": 0.0},
@@ -244,7 +244,7 @@ def test_no_context_before_first_adoption():
     ctx = BroadcastContext(clock=lambda: 0.0)
     assert ctx.has_context is False
     assert ctx.vector() is None
-    assert ctx.null_vector({"topos"}) is None
+    assert ctx.null_vector({"vision"}) is None
     assert ctx.age_s() is None
 
 
@@ -259,23 +259,23 @@ def test_null_replaces_only_other_sources_by_their_running_mean():
 
     broadcasts = [
         [
-            ("topos", "topos.report", 0.5),
-            ("soma", "soma.report", 0.125),
+            ("vision", "vision.report", 0.5),
+            ("interoception", "interoception.report", 0.125),
             ("audition", "audition.report", 0.25),
-            ("lingua", "lingua.report", 0.375),
+            ("language", "language.report", 0.375),
         ],
         [
-            ("topos", "topos.report", 0.75),
-            ("soma", "soma.report", 0.875),
+            ("vision", "vision.report", 0.75),
+            ("interoception", "interoception.report", 0.875),
             ("audition", "audition.report", 0.5),
-            ("praxis", "praxis.report", 0.625),
+            ("effectors", "effectors.report", 0.625),
         ],
         [
-            ("topos", "topos.report", 0.25),
-            ("soma", "soma.report", 0.5),
-            ("soma", "soma.report", 0.625),
+            ("vision", "vision.report", 0.25),
+            ("interoception", "interoception.report", 0.5),
+            ("interoception", "interoception.report", 0.625),
             ("audition", "audition.report", 0.125),
-            ("lingua", "lingua.report", 0.375),
+            ("language", "language.report", 0.375),
         ],
     ]
 
@@ -298,16 +298,16 @@ def test_null_replaces_only_other_sources_by_their_running_mean():
     for idx, members in enumerate(broadcasts):
         assert ctx.observe(_snapshot(idx, members)) is True
 
-    b, null = ctx.context_and_null({"topos"})
+    b, null = ctx.context_and_null({"vision"})
     assert null is not b
 
     vision_current = featurize_events(
-        [(s, t, w) for (s, t, w) in broadcasts[2] if s == "topos"], 0.0
+        [(s, t, w) for (s, t, w) in broadcasts[2] if s == "vision"], 0.0
     )
     non_vision_means = [
         sum(
             featurize_events(
-                [(s, t, w) for (s, t, w) in broadcast if s != "topos"], 0.0
+                [(s, t, w) for (s, t, w) in broadcast if s != "vision"], 0.0
             )[i]
             for broadcast in broadcasts
         ) / len(broadcasts)
@@ -329,14 +329,14 @@ def test_null_replaces_only_other_sources_by_their_running_mean():
     for i in (20, 21, 22):
         assert null[i] == b[i]
 
-    b2, null2 = ctx.context_and_null({"soma", "lingua"})
+    b2, null2 = ctx.context_and_null({"interoception", "language"})
     kept_current = featurize_events(
-        [(s, t, w) for (s, t, w) in broadcasts[2] if s in {"soma", "lingua"}], 0.0
+        [(s, t, w) for (s, t, w) in broadcasts[2] if s in {"interoception", "language"}], 0.0
     )
     non_kept_means = [
         sum(
             featurize_events(
-                [(s, t, w) for (s, t, w) in broadcast if s not in {"soma", "lingua"}], 0.0
+                [(s, t, w) for (s, t, w) in broadcast if s not in {"interoception", "language"}], 0.0
             )[i]
             for broadcast in broadcasts
         ) / len(broadcasts)
@@ -360,8 +360,8 @@ def test_null_equals_context_when_other_sources_never_vary():
     ctx = BroadcastContext(clock=tick)
 
     members = [
-        ("topos", "topos.report", 0.5),
-        ("soma", "soma.report", 0.25),
+        ("vision", "vision.report", 0.5),
+        ("interoception", "interoception.report", 0.25),
         ("audition", "audition.report", 0.75),
     ]
 
@@ -384,10 +384,10 @@ def test_null_equals_context_when_other_sources_never_vary():
     for i in range(3):
         assert ctx.observe(_snapshot(i, members)) is True
 
-    b, null = ctx.context_and_null({"topos"})
+    b, null = ctx.context_and_null({"vision"})
     assert null == b
 
 
 def test_context_and_null_before_adoption():
     ctx = BroadcastContext(clock=lambda: 0.0)
-    assert ctx.context_and_null({"topos"}) == (None, None)
+    assert ctx.context_and_null({"vision"}) == (None, None)

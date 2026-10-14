@@ -44,7 +44,7 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     )
 
 
-def _event(source="soma", type_="wellness.update", salience=0.5, eid="e1"):
+def _event(source="interoception", type_="wellness.update", salience=0.5, eid="e1"):
     return eid, Event(
         source=source,
         type=type_,
@@ -107,10 +107,10 @@ async def test_recall_publishes_diagnostics_only(bus: AsyncBus):
         )
         results = await episodic_memory.recall("fire", collection="episodic")
         assert len(results) == 1
-        entries = await bus.read("mnemos.out", last_id="0")
+        entries = await bus.read("episodic_memory.out", last_id="0")
         assert len(entries) == 1
         _, event = entries[0]
-        assert event.type == "mnemos.recall"
+        assert event.type == "episodic_memory.recall"
         payload = event.payload
         assert set(payload.keys()) >= {
             "count",
@@ -138,7 +138,7 @@ async def test_recall_with_high_affect_uses_alert_salience(bus: AsyncBus):
             collection="episodic",
         )
         await episodic_memory.recall("intense", collection="episodic")
-        entries = await bus.read("mnemos.out", last_id="0")
+        entries = await bus.read("episodic_memory.out", last_id="0")
         _, event = entries[0]
         assert event.salience == pytest.approx(episodic_memory._alert_salience)
     finally:
@@ -186,21 +186,21 @@ async def test_serialize_yields_state(bus: AsyncBus):
 
 
 async def _recall_events(bus: AsyncBus) -> list:
-    entries = await bus.read("mnemos.out", last_id="0")
-    return [e for _, e in entries if e.type == "mnemos.recall"]
+    entries = await bus.read("episodic_memory.out", last_id="0")
+    return [e for _, e in entries if e.type == "episodic_memory.recall"]
 
 
 @pytest.mark.asyncio
 async def test_cued_tick_with_cooldown_elapsed_triggers_recall(bus: AsyncBus):
     # Scenario: A cued experiential tick (cooldown elapsed) triggers recall and
-    # publishes exactly one mnemos.recall event.
+    # publishes exactly one episodic_memory.recall event.
     episodic_memory = await _new_episodic_memory(bus, recall_cooldown_s=0.0)
     await episodic_memory.initialize()
     try:
         await episodic_memory.on_workspace(_snapshot([_event()]))
         recalls = await _recall_events(bus)
         assert len(recalls) == 1
-        assert recalls[0].type == "mnemos.recall"
+        assert recalls[0].type == "episodic_memory.recall"
     finally:
         await episodic_memory.shutdown()
 
@@ -261,15 +261,15 @@ def test_serialize_snapshot_omits_raw_perceptual_payload():
     visual = (
         "e_vis",
         Event(
-            source="mundus",
-            type="mundus.visual.raw",
+            source="embodiment",
+            type="embodiment.visual.raw",
             payload={"frame_b64": "RAWPIXELS"},
             salience=0.9,
             timestamp=datetime.now(timezone.utc),
         ),
     )
     # A non-perceptual event still has its payload serialized as before.
-    ordinary = _event(source="soma", type_="soma.report", eid="e_soma")
+    ordinary = _event(source="interoception", type_="interoception.report", eid="e_interoception")
     text = episodic_memory_module._serialize_snapshot(_snapshot([transcription, visual, ordinary]))
     assert secret not in text
     assert "RAWPIXELS" not in text
@@ -277,19 +277,19 @@ def test_serialize_snapshot_omits_raw_perceptual_payload():
     # The metadata (source:type) is still recorded for both perceptual events,
     # but the bus entry IDs and tick index are omitted from the memory text.
     assert "audition:audition.transcription" in text
-    assert "mundus:mundus.visual.raw" in text
+    assert "embodiment:embodiment.visual.raw" in text
     assert "tick=" not in text
     assert "@" not in text
     # The ordinary event's payload survives.
-    assert "soma:soma.report={'x': 1}" in text
+    assert "interoception:interoception.report={'x': 1}" in text
 
 
 def test_serialize_snapshot_records_replay_without_its_text():
     replay = (
         "e_rep",
         Event(
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={
                 "memory_id": "abc123",
                 "text": "an old trace with SECRET words",
@@ -303,11 +303,11 @@ def test_serialize_snapshot_records_replay_without_its_text():
         ),
     )
     text = episodic_memory_module._serialize_snapshot(
-        _snapshot([replay, _event(source="soma", type_="soma.report", eid="e_soma")])
+        _snapshot([replay, _event(source="interoception", type_="interoception.report", eid="e_interoception")])
     )
     assert "SECRET" not in text
-    assert "mnemos:mnemos.replay=<replay of abc123>" in text
-    assert "soma:soma.report" in text
+    assert "episodic_memory:episodic_memory.replay=<replay of abc123>" in text
+    assert "interoception:interoception.report" in text
 
 
 @pytest.mark.asyncio
@@ -370,7 +370,7 @@ async def test_store_happens_every_tick_regardless_of_recall(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_recall_on_workspace_false_is_store_only(bus: AsyncBus):
     # Scenario: recall_on_workspace=False -> store-only, matching prior behavior
-    # (no recall, no mnemos.recall events, snapshot still stored each tick).
+    # (no recall, no episodic_memory.recall events, snapshot still stored each tick).
     episodic_memory = await _new_episodic_memory(bus, recall_on_workspace=False, recall_cooldown_s=0.0)
     await episodic_memory.initialize()
     try:
@@ -453,11 +453,11 @@ async def test_explicit_episodic_recall_still_embeds(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_stored_traces_carry_affect_tag_from_affect_state(bus: AsyncBus):
-    """Scenario: stored trace carries current affect — intensity + VAD from thymos.state."""
+    """Scenario: stored trace carries current affect — intensity + VAD from affect.state."""
     episodic_memory = await _new_episodic_memory(bus)
     await episodic_memory.initialize()
     try:
-        # Simulate a thymos.state arriving on the bus by directly calling the
+        # Simulate a affect.state arriving on the bus by directly calling the
         # internal handler (unit-style — avoids spinning up the affect module and a real bus
         # while still exercising the tagging path through the actual handler).
         from datetime import datetime, timezone
@@ -465,8 +465,8 @@ async def test_stored_traces_carry_affect_tag_from_affect_state(bus: AsyncBus):
         from kaine.bus.schema import Event as BusEvent
 
         fake_event = BusEvent(
-            source="thymos",
-            type="thymos.state",
+            source="affect",
+            type="affect.state",
             payload={
                 "state": {"valence": 0.5, "arousal": 0.8, "dominance": 0.2},
                 "drives": {},
@@ -495,7 +495,7 @@ async def test_stored_traces_carry_affect_tag_from_affect_state(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_stored_trace_has_no_affect_tag_before_affect_state(bus: AsyncBus):
-    """Without a thymos.state event, stored traces have affect=None."""
+    """Without a affect.state event, stored traces have affect=None."""
     episodic_memory = await _new_episodic_memory(bus)
     await episodic_memory.initialize()
     try:
@@ -509,7 +509,7 @@ async def test_stored_trace_has_no_affect_tag_before_affect_state(bus: AsyncBus)
 
 @pytest.mark.asyncio
 async def test_affect_tag_updates_on_new_affect_state(bus: AsyncBus):
-    """A second thymos.state event replaces the cached affect."""
+    """A second affect.state event replaces the cached affect."""
     episodic_memory = await _new_episodic_memory(bus)
     await episodic_memory.initialize()
     try:
@@ -519,8 +519,8 @@ async def test_affect_tag_updates_on_new_affect_state(bus: AsyncBus):
 
         def _affect_event(arousal: float, valence: float) -> BusEvent:
             return BusEvent(
-                source="thymos",
-                type="thymos.state",
+                source="affect",
+                type="affect.state",
                 payload={
                     "state": {"valence": valence, "arousal": arousal, "dominance": 0.0},
                     "drives": {},
@@ -552,9 +552,9 @@ async def test_recall_affect_bias_intact(bus: AsyncBus):
             collection="episodic",
         )
         await episodic_memory.recall("intense event", collection="episodic")
-        entries = await bus.read("mnemos.out", last_id="0")
+        entries = await bus.read("episodic_memory.out", last_id="0")
         _, ev = entries[0]
-        assert ev.type == "mnemos.recall"
+        assert ev.type == "episodic_memory.recall"
         assert ev.salience == pytest.approx(episodic_memory._alert_salience)
     finally:
         await episodic_memory.shutdown()
@@ -573,8 +573,8 @@ async def test_sleep_owns_the_replay_window(bus: AsyncBus):
         assert not episodic_memory.replay_engine.window_active
 
         started = BusEvent(
-            source="hypnos",
-            type="hypnos.sleep.started",
+            source="sleep",
+            type="sleep.sleep.started",
             payload={"started_at": 0.0},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -586,8 +586,8 @@ async def test_sleep_owns_the_replay_window(bus: AsyncBus):
         assert episodic_memory.replay_engine.window_active
 
         completed = BusEvent(
-            source="hypnos",
-            type="hypnos.sleep.completed",
+            source="sleep",
+            type="sleep.sleep.completed",
             payload={},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),

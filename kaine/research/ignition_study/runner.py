@@ -47,7 +47,7 @@ STUDY_OWNER_KEY = "kaine:study:owner"
 CHILD_FILE = ".study_child.json"
 
 #: The longest maturation bloom the stimulus source accepts (``StimulusSourceParams`` and
-#: ``StimulusSourceClock.begin_birth`` both bound ``birth_transition_seconds`` to (0, 30]).
+#: ``StimulusSourceClock.begin_maturation`` both bound ``maturation_transition_seconds`` to (0, 30]).
 MATURATION_BLOOM_MAX_SECONDS = 30.0
 
 
@@ -288,7 +288,7 @@ class StudyRunner:
         )
 
     def _read_maturation_bloom_deadline(self, line_dir: Path) -> float | None:
-        """``birth_bloom_ends_at`` from the step's stage file, as a wall-clock
+        """``maturation_bloom_ends_at`` from the step's stage file, as a wall-clock
         timestamp, or ``None`` when the file or the field is absent or bad."""
         path = line_dir / "state" / "lifecycle" / "stage.json"
         try:
@@ -315,7 +315,7 @@ class StudyRunner:
         self, line_dir: Path, first_embodied_wall: float, fallback_seconds: float
     ) -> bool:
         """Whether the maturation bloom has ended: at the stage file's
-        ``birth_bloom_ends_at`` when it has one, else ``fallback_seconds``
+        ``maturation_bloom_ends_at`` when it has one, else ``fallback_seconds``
         after the runner first saw the embodied stage."""
         now = self.wall_clock()
         deadline = self._read_maturation_bloom_deadline(line_dir)
@@ -326,7 +326,7 @@ class StudyRunner:
     def _maturation_bloom_fallback_seconds(self, line_dir: Path, env: Mapping[str, str]) -> float:
         """How long to wait after the embodied stage when the stage file does
         not name the bloom's end: the child's own
-        ``[perception_feed.womb].birth_transition_seconds`` (loaded exactly as
+        ``[perception_feed.stimulus_source].maturation_transition_seconds`` (loaded exactly as
         the cycle loads it from the step's working directory) plus the margin.
         When that value cannot be resolved, the longest bloom the stimulus source accepts
         plus the margin, so the seed is never preserved mid-bloom."""
@@ -418,7 +418,7 @@ class StudyRunner:
             return None
         outcome = "complete"
         world_model_captured: bool | None = None
-        if "phantasia" in modules_set:
+        if "world_model" in modules_set:
             extra_outcome, world_model_captured = _check_world_model_manifest(bundle)
             if extra_outcome:
                 outcome = extra_outcome
@@ -827,7 +827,7 @@ class StudyRunner:
                     exc_info=True,
                 )
         world_model_captured: bool | None = None
-        if "phantasia" in modules_set:
+        if "world_model" in modules_set:
             world_model_captured = False
             if outcome == "complete" and bundle:
                 extra_outcome, captured = _check_world_model_manifest(bundle)

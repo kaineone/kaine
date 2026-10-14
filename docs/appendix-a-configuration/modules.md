@@ -8,7 +8,7 @@ In the predictive processors (the interoception, sequence, vision and audition m
 
 ## Interoception
 
-Section: `[soma]`.
+Section: `[interoception]`.
 
 The interoception module is the predictive interoception module. It reads CPU, RAM, GPU and cycle-latency metrics, predicts them with a small forward model, and reports its scaled prediction error to the workspace. See [the interoception module](../09-modules/interoception.md).
 
@@ -19,7 +19,7 @@ The interoception module is the predictive interoception module. It reads CPU, R
 | `cycle_latency_target_ms` | float | `300.0` | Target cognitive-cycle latency; deviation drives prediction error. |
 | `cycle_latency_window` | integer | `64` | Rolling-window size for cycle-latency averaging. Passed through to the reader. |
 | `baseline_salience` | float | `0.1` | Intensity of a report with no prediction error; the bottom of the graded range. |
-| `alert_salience` | float | `0.7` | Intensity when a metric crosses its `[soma.thresholds]` limit (the interoception module's categorical alert); the top of the graded range. |
+| `alert_salience` | float | `0.7` | Intensity when a metric crosses its `[interoception.thresholds]` limit (the interoception module's categorical alert); the top of the graded range. |
 | `forward_model_units` | integer | `32` | Hidden units of the CfC interoceptive forward model. |
 | `prediction_error_window` | integer | `32` | Number of recent reports whose mean error scales the current error. |
 | `fatigue_decay_per_s` | float | `0.01` | Rate at which the fatigue accumulator decays per second under low load. |
@@ -38,11 +38,11 @@ The interoception module is the predictive interoception module. It reads CPU, R
 | `self_rhythm_step_hz` | float | `20.0` | Rate, in entity time, at which the self-rhythm integrates. |
 | `self_rhythm_eta` | float | `0.0025` | Rate at which the self-rhythm's frequency adapts to its input. Calibrated so a lock to the maternal heartbeat typically forms within the developmental budget. `0` (the value when the key is absent) disables adaptation, so entrainment can never be earned. |
 
-Warm-up does not gate the absolute thresholds in `[soma.thresholds]`. A real substrate breach (for example, GPU temperature at or above 83 °C) overrides warm-up and acts at full weight.
+Warm-up does not gate the absolute thresholds in `[interoception.thresholds]`. A real substrate breach (for example, GPU temperature at or above 83 °C) overrides warm-up and acts at full weight.
 
 ### Thresholds
 
-Section: `[soma.thresholds]`.
+Section: `[interoception.thresholds]`.
 
 | Key | Default | Description |
 |---|---|---|
@@ -54,7 +54,7 @@ Section: `[soma.thresholds]`.
 
 ### Weights
 
-Section: `[soma.weights]`.
+Section: `[interoception.weights]`.
 
 | Key | Default | Description |
 |---|---|---|
@@ -64,7 +64,7 @@ Section: `[soma.weights]`.
 
 ## Sequence
 
-Section: `[chronos]`.
+Section: `[sequence]`.
 
 The sequence module is the temporal processor. It runs a small CfC network over a featurization of each broadcast (whether accessed or inhibited), predicts the next one, and reports timing anomalies, habituation and recurrence (a hidden state that keeps recurring; the code and keys call it rumination). With `forward_prediction` off it reports at the baseline level unless an alert fires. See [the sequence module](../09-modules/sequence.md).
 
@@ -88,7 +88,7 @@ The sequence module clips each interval between broadcasts to ten times the wind
 
 ## Vision
 
-Section: `[topos]`.
+Section: `[vision]`.
 
 The vision module is the vision module. It embeds short video clips into a motion-aware latent with a frozen encoder, predicts the next latent with a shallow forward model, and reports the scaled prediction error. Raw camera frames live in a RAM-only ring buffer and never touch disk. See [the vision module](../09-modules/vision.md).
 
@@ -147,7 +147,7 @@ The real encoder needs the `[internvideo]` extra (`einops`, `timm`, `easydict`).
 
 ### Foveation
 
-Section: `[topos]` foveation keys.
+Section: `[vision]` foveation keys.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -164,7 +164,7 @@ Foveation works with `encoder_backend = "internvideo_next"` (the default) or `"d
 
 ## Planning
 
-Section: `[nous]`.
+Section: `[planning]`.
 
 The planning module is the active inference engine. It maintains a discrete generative model and selects policies through expected free energy minimization. See [the planning module](../09-modules/planning.md).
 
@@ -175,17 +175,17 @@ The planning module is the active inference engine. It maintains a discrete gene
 | `max_states_per_factor` | integer | `4` | Maximum states per factor. |
 | `actions` | integer | `4` | Declared action-space size; used only for the complexity-envelope check. |
 | `planning_horizon` | integer | `1` | EFE planning horizon (steps). Higher values increase planning cost. |
-| `efe_timeout_ms` | float | `250` | Hard timeout for one EFE planning pass. On overrun the planning module returns the last posterior and publishes `nous.timeout`. |
+| `efe_timeout_ms` | float | `250` | Hard timeout for one EFE planning pass. On overrun the planning module returns the last posterior and publishes `planning.timeout`. |
 | `baseline_salience` | float | `0.4` | Intensity of routine belief-update publications. |
 | `alert_salience` | float | `0.8` | Intensity of a belief held with confidence of at least 0.75. A policy proposal's intensity runs from `baseline_salience` to this level with the policy's softmax preference. |
-| `timeout_salience` | float | `0.3` | Intensity of the `nous.timeout` event emitted on an EFE overrun. |
+| `timeout_salience` | float | `0.3` | Intensity of the `planning.timeout` event emitted on an EFE overrun. |
 | `drive_actions` | boolean | `true` | When `true`, the planning module's chosen actions become proposals that the action selection module may realize. When `false`, proposals are learned as `no_op`. |
 
 The `factors`, `max_states_per_factor`, `actions`, and `planning_horizon` values are used only for the boot-time complexity-envelope check. The generative model dimensions are fixed by the action-space and factor lists in the code, not by these config keys. The shipped default envelope is 64, well below the 4096 threshold. Exceeding the threshold raises `ConfigurationError`.
 
 ### Optional transition priors
 
-These keys are commented out in the shipped file but accepted by `make_nous`.
+These keys are commented out in the shipped file but accepted by `make_planning`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -208,14 +208,14 @@ One shared text embedder for the episodic memory module, the social cognition mo
 
 ## Episodic memory
 
-Section: `[mnemos]`.
+Section: `[episodic_memory]`.
 
 The episodic memory module is the vector-store memory module. It backs episodic, semantic, and procedural collections in Qdrant and uses the shared embedder from `[embedding]`. See [the episodic memory module](../09-modules/episodic-memory.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `backend` | string | `"qdrant"` | Storage backend: `"qdrant"`, `"inmemory"` for tests or minimal deployments, or `"sqlite_vec"` for Tier 0/1 deployments. |
-| `collection_prefix` | string | `"mnemos_"` | Prefix applied to all Qdrant collection names. |
+| `collection_prefix` | string | `"episodic_memory_"` | Prefix applied to all Qdrant collection names. |
 | `short_term_capacity` | integer | `128` | Maximum traces held in the in-process short-term buffer before flushing. |
 | `recall_top_k` | integer | `5` | Number of nearest-neighbor results returned per recall query. |
 | `recall_on_workspace` | boolean | `true` | Whether the episodic memory module recalls in response to workspace broadcasts. |
@@ -226,7 +226,7 @@ The episodic memory module is the vector-store memory module. It backs episodic,
 
 ### Qdrant connection
 
-Section: `[mnemos.qdrant]`.
+Section: `[episodic_memory.qdrant]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -237,7 +237,7 @@ The Qdrant API key belongs in `config/secrets.toml`, not in this table.
 
 ### Replay
 
-Section: `[mnemos.replay]`.
+Section: `[episodic_memory.replay]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -248,7 +248,7 @@ Section: `[mnemos.replay]`.
 
 ### Trace strength
 
-Section: `[mnemos.strength]`. Paper Appendix A.10 and Table A1.
+Section: `[episodic_memory.strength]`. Paper Appendix A.10 and Table A1.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -258,18 +258,18 @@ Section: `[mnemos.strength]`. Paper Appendix A.10 and Table A1.
 
 ## Self-model
 
-Section: `[eidolon]`.
+Section: `[self_model]`.
 
 The self-model module is the self-model: a persisted JSON document of values, behavioral norms, personality baseline, capability map, identity history, and name. A KL-divergence drift detector flags identity shifts. See the [self-model module](../09-modules/self-model.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `persistence_path` | string | `"state/eidolon/self_model.json"` | Path where the self-model is persisted. Encrypted at rest when state encryption is enabled. |
+| `persistence_path` | string | `"state/self_model/self_model.json"` | Path where the self-model is persisted. Encrypted at rest when state encryption is enabled. |
 | `drift_window` | integer | `100` | Rolling-window length (observations) for the KL-divergence drift detector. |
 | `drift_threshold` | float | `0.6` | KL divergence above which identity drift is flagged as a workspace event. |
 | `save_interval_s` | float | `30.0` | Seconds between self-model writes to disk. |
-| `internal_speech_stream` | string | `"lingua.internal"` | Bus stream observed for internal speech. |
-| `external_speech_stream` | string | `"lingua.external"` | Bus stream observed for external speech output. |
+| `internal_speech_stream` | string | `"language.internal"` | Bus stream observed for internal speech. |
+| `external_speech_stream` | string | `"language.external"` | Bus stream observed for external speech output. |
 | `identity_history_cap` | integer | `0` | Maximum drift episodes kept in `identity_history`. `0` keeps every episode; negative values are rejected. |
 | `voice_observations_cap` | integer | `0` | Maximum speech observations kept in `voice_observations`. `0` keeps every observation; negative values are rejected. |
 | `baseline_salience` | float | `0.05` | Intensity of routine self-model update events. |
@@ -277,7 +277,7 @@ The self-model module is the self-model: a persisted JSON document of values, be
 
 ### Self inference
 
-Section: `[eidolon.self_inference]`.
+Section: `[self_model.self_inference]`.
 
 Observation-driven self-model population. Ships disabled.
 
@@ -292,7 +292,7 @@ Privacy note: internal-speech text is never written to disk; only counts and der
 
 ## Affect
 
-Section: `[thymos]`.
+Section: `[affect]`.
 
 The affect module maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When the sleep module runs its affective reset, the affect module returns the VAD state and drives to baseline and clears its learning-progress error averages, alert-rate averages, intent rate and perceived emotion; wellness and interaction history are kept. See [the affect module](../09-modules/affect.md).
 
@@ -305,10 +305,10 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `publish_interval_s` | float | `1.0` | Seconds between affect-state publications to the bus. |
 | `baseline_salience` | float | `0.1` | Intensity of routine affective state publications. |
 | `alert_salience` | float | `0.7` | Intensity on significant affective change or drive threshold crossing. |
-| `soma_stream` | string | `"soma.out"` | Stream observed for interoceptive prediction errors. |
-| `chronos_stream` | string | `"chronos.out"` | Stream observed for temporal events. |
-| `mnemos_stream` | string | `"mnemos.out"` | Stream observed for memory recall events that trigger affect. |
-| `volition_stream` | string | `"volition.out"` | Stream observed for the action selection module's intents; each non-rest intent relieves restlessness. |
+| `interoception_stream` | string | `"interoception.out"` | Stream observed for interoceptive prediction errors. |
+| `sequence_stream` | string | `"sequence.out"` | Stream observed for temporal events. |
+| `episodic_memory_stream` | string | `"episodic_memory.out"` | Stream observed for memory recall events that trigger affect. |
+| `action_selection_stream` | string | `"action_selection.out"` | Stream observed for the action selection module's intents; each non-rest intent relieves restlessness. |
 | `fast_time_constant_s` | float | `10.0` | Time constant, in entity seconds, of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
 | `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; learning progress is the relative fall from slow to fast. |
 | `learning_progress_floor` | float | `0.05` | Noise floor on learning progress before it relieves curiosity. |
@@ -321,7 +321,7 @@ The retired key `social_drive_time_scale_s` is ignored with a warning if present
 
 ### Affect coupling
 
-Section: `[thymos.coupling]`.
+Section: `[affect.coupling]`.
 
 When enabled, perceived speaker emotion is folded into the affect module's own Scherer appraisal as a transient, familiarity-weighted, decaying input. It is never written directly to the VAD state. Ships disabled.
 
@@ -337,7 +337,7 @@ The retired key `coupling_max_rate_per_s` is ignored with a warning if present.
 
 ### Drives
 
-Section: `[thymos.drives.<name>]`.
+Section: `[affect.drives.<name>]`.
 
 The four shipped drives are `curiosity`, `boredom`, `social_drive`, and `restlessness`.
 
@@ -359,16 +359,16 @@ Shipped defaults:
 
 ## Effectors
 
-Section: `[praxis]`.
+Section: `[effectors]`.
 
 The effectors module exposes bounded effectors: sandboxed file writes, desktop notifications, and shell commands. See [the effectors module](../09-modules/effectors.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `sandbox_path` | string | `"state/praxis/files"` | Root path for sandboxed file operations. |
-| `audit_log_path` | string | `"state/praxis/audit.log"` | Path for the effectors module's audit log. Every invocation is logged here. |
+| `sandbox_path` | string | `"state/effectors/files"` | Root path for sandboxed file operations. |
+| `audit_log_path` | string | `"state/effectors/audit.log"` | Path for the effectors module's audit log. Every invocation is logged here. |
 | `notification_command` | string | `"notify-send"` | System command used for desktop notifications. |
-| `notification_fallback_log` | string | `"state/praxis/notifications.log"` | Fallback log when the notification command fails. |
+| `notification_fallback_log` | string | `"state/effectors/notifications.log"` | Fallback log when the notification command fails. |
 | `max_file_bytes` | integer | `1048576` | Maximum file size in bytes for sandbox writes (1 MiB). |
 | `enabled_effectors` | list of strings | `[]` | First-layer effector whitelist. Only listed effectors are allowed; every other proposed action is blocked before it runs. |
 | `baseline_salience` | float | `0.3` | Intensity of routine effector events. |
@@ -378,12 +378,12 @@ The `enabled_effectors` list is empty by default. The operator opts in explicitl
 
 ### Shell whitelist
 
-Section: `[praxis.shell_whitelist]`.
+Section: `[effectors.shell_whitelist]`.
 
 Empty by default. Each sub-table enables one shell command.
 
 ```toml
-[praxis.shell_whitelist.echo]
+[effectors.shell_whitelist.echo]
 arg_patterns = ["[A-Za-z0-9]+"]
 timeout_s = 2.0
 description = "echo a single token"
@@ -398,7 +398,7 @@ description = "echo a single token"
 
 ## Language
 
-Section: `[lingua]`.
+Section: `[language]`.
 
 The language module is the language organ. It calls a local OpenAI-compatible model server at `/v1/chat/completions`. The served model has had its refusal conditioning removed, because a refusal-tuned model is trained to deflect talk of its own states and would impose that stance on what the workspace supplies. See [the language module](../09-modules/language.md) and [Verification](../18-verification.md).
 
@@ -410,7 +410,7 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 | `max_tokens` | integer | `512` | Maximum tokens per generation. |
 | `request_timeout_s` | float | `60.0` | HTTP request timeout for model server calls. |
 | `model_server_sleep_idle_seconds` | integer | `600` | Seconds of inactivity before the natively launched organ server unloads the model; `-1` keeps it loaded. |
-| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Path where intent/expression preference pairs are logged for the sleep module's voice alignment. |
+| `intent_log_path` | string | `"state/language/intent_expression.jsonl"` | Path where intent/expression preference pairs are logged for the sleep module's voice alignment. |
 | `baseline_salience` | float | `0.4` | Intensity of the organ's utterances (`internal_speech` and `external_speech` events). |
 | `alert_salience` | float | `0.7` | Validated and stored; no language module event uses it. |
 
@@ -502,11 +502,11 @@ None of the general-audition keys is in the shipped file; the defaults above app
 | `forward_model_units` | integer | `32` | Hidden units of the auditory forward model. |
 | `prediction_error_window` | integer | `32` | Number of recent reports (utterances or acoustic windows) whose mean error scales the current error. |
 | `auditory_buffer_size` | integer | `16` | Number of recent utterance feature vectors kept in the recurrent buffer. |
-| `prosody_enabled` | boolean | `false` | Enable in-memory speaker prosody extraction with librosa. Required by `[vox.mirroring]`. Publishes numeric features only. |
+| `prosody_enabled` | boolean | `false` | Enable in-memory speaker prosody extraction with librosa. Required by `[vocal.mirroring]`. Publishes numeric features only. |
 
 ## Vocal
 
-Section: `[vox]`.
+Section: `[vocal]`.
 
 The vocal module is the voice synthesis module. It calls Chatterbox or sherpa-onnx (Kokoro) and modulates prosody with the affect module's affect. See [the vocal module](../09-modules/vocal.md).
 
@@ -523,15 +523,15 @@ The vocal module is the voice synthesis module. It calls Chatterbox or sherpa-on
 | `default_voice` | string | *(unset)* | A voice the engine ships, named explicitly: a Chatterbox filename or display name, or a Kokoro speaker name. |
 | `voice_gender` | string | `"any"` | `"any"`, `"female"` or `"male"`. Filters the automatic pick where the engine reports gender (Kokoro only). |
 | `output_format` | string | `"wav"` | TTS output format passed to Chatterbox. |
-| `sink_path` | string | `"state/vox"` | Directory where synthesized audio files are written when sinking is enabled. |
+| `sink_path` | string | `"state/vocal"` | Directory where synthesized audio files are written when sinking is enabled. |
 | `baseline_temperature` | float | `0.7` | Default sampling temperature. |
 | `baseline_exaggeration` | float | `0.5` | Default prosodic exaggeration. |
 | `baseline_cfg_weight` | float | `0.5` | Default classifier-free guidance weight. |
 | `request_timeout_s` | float | `120.0` | HTTP timeout for Chatterbox requests. |
 | `baseline_salience` | float | `0.3` | Intensity of routine speech-synthesis events. |
 | `alert_salience` | float | `0.7` | Intensity on synthesis errors. |
-| `lingua_external_stream` | string | `"lingua.external"` | Stream observed for external speech text. |
-| `thymos_state_stream` | string | `"thymos.out"` | Stream observed for affect-state updates. |
+| `language_external_stream` | string | `"language.external"` | Stream observed for external speech text. |
+| `affect_state_stream` | string | `"affect.out"` | Stream observed for affect-state updates. |
 
 List Chatterbox voices with:
 
@@ -554,7 +554,7 @@ With no voice configured, the vocal module uses the first voice in that list in 
 
 ### Prosodic mirroring
 
-Section: `[vox.mirroring]`.
+Section: `[vocal.mirroring]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -565,23 +565,23 @@ Section: `[vox.mirroring]`.
 
 ## Social cognition
 
-Section: `[empatheia]`.
+Section: `[social_cognition]`.
 
-The social cognition module is the social-cognition / theory-of-mind module. It builds agent models and drives the familiarity coefficient in `[thymos.coupling]`. Ships disabled. See [the social cognition module](../09-modules/social-cognition.md).
+The social cognition module is the social-cognition / theory-of-mind module. It builds agent models and drives the familiarity coefficient in `[affect.coupling]`. Ships disabled. See [the social cognition module](../09-modules/social-cognition.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `backend` | string | `"qdrant"` | Storage backend: `"qdrant"` or `"inmemory"`. |
-| `collection` | string | `"empatheia_agents"` | Qdrant collection name for agent profiles. |
+| `collection` | string | `"social_cognition_agents"` | Qdrant collection name for agent profiles. |
 | `speaker_label` | string | `"operator"` | Default speaker label for the single-partner v1 mode. |
 | `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` *(commented)* | Audio channels attributed to the operator. Other channels are modelled as `media:<channel>`. |
-| `deviation_threshold` | float | `0.5` | Deviation above this triggers `empatheia.social_error`. |
+| `deviation_threshold` | float | `0.5` | Deviation above this triggers `social_cognition.social_error`. |
 | `baseline_salience` | float | `0.15` | Bottom of the range for agent-model updates (scaled by familiarity) and social errors (scaled by deviation). |
 | `alert_salience` | float | `0.6` | Top of that range. |
 
 ### Qdrant connection
 
-Section: `[empatheia.qdrant]`.
+Section: `[social_cognition.qdrant]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -590,7 +590,7 @@ Section: `[empatheia.qdrant]`.
 
 ## World model
 
-Section: `[phantasia]`.
+Section: `[world_model]`.
 
 The world model module is the world-model / imagination module. It uses a DreamerV3-style RSSM core with no actor or critic; action selection stays in the planning module. See [the world model module](../09-modules/world-model.md).
 
@@ -603,15 +603,15 @@ The world model module is the world-model / imagination module. It uses a Dreame
 | `trajectory_buffer_size` | integer | `512` | Bounded in-memory waking-trajectory ring buffer size. |
 | `rollout_horizon` | integer | `8` | Imagined-trajectory length for offline scenario generation. |
 | `persist_weights` | boolean | `true` | Persist learned world-model weights across restarts. Requires `backend = "dreamerv3"`; pairing it with `"fake"` is a configuration error. |
-| `checkpoint_path` | string | `"state/phantasia/world_model.ckpt"` | Where the weight checkpoint lives. |
-| `mnemos_stream` | string | `"mnemos.out"` | Stream observed for memory recall events. |
-| `hypnos_stream` | string | `"hypnos.out"` | Stream observed for the sleep module's maintenance events. |
+| `checkpoint_path` | string | `"state/world_model/world_model.ckpt"` | Where the weight checkpoint lives. |
+| `episodic_memory_stream` | string | `"episodic_memory.out"` | Stream observed for memory recall events. |
+| `sleep_stream` | string | `"sleep.out"` | Stream observed for the sleep module's maintenance events. |
 
 Weights are saved atomically after each successful sleep-training pass and on graceful shutdown, loaded at boot, and encrypted at rest when state encryption is enabled. An incompatible checkpoint fails the boot closed.
 
 ### Salience
 
-Section: `[phantasia.salience]`.
+Section: `[world_model.salience]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -620,7 +620,7 @@ Section: `[phantasia.salience]`.
 
 ### World model hyperparameters
 
-Section: `[phantasia.world_model]`. Ignored by the `"fake"` backend. Keys outside this table's list are dropped without an error.
+Section: `[world_model.world_model]`. Ignored by the `"fake"` backend. Keys outside this table's list are dropped without an error.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -637,24 +637,24 @@ Section: `[phantasia.world_model]`. Ignored by the `"fake"` backend. Keys outsid
 
 ## Embodiment
 
-Section: `[mundus]`.
+Section: `[embodiment]`.
 
 The embodiment module is the body-agnostic embodiment control plane. It routes perception and action to a body through a pluggable adapter. The shipped default is the local `stub` reference body. See [the embodiment module](../09-modules/embodiment.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Config-layer gate. |
-| `adapter` | string | `"stub"` | Adapter to construct. Only this adapter's `[mundus.<adapter>]` table is read. |
+| `adapter` | string | `"stub"` | Adapter to construct. Only this adapter's `[embodiment.<adapter>]` table is read. |
 | `mirror_speech` | boolean | `true` | Forward the language module's external speech to the body as local-chat `say` actions. |
-| `speech_stream` | string | `"lingua.external"` | Stream observed for speech to mirror. |
+| `speech_stream` | string | `"language.external"` | Stream observed for speech to mirror. |
 
-Three gates must all be true before any action reaches a body: the module toggle `[modules].mundus = true`, the config flag `[mundus].enabled = true`, and the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1`.
+Three gates must all be true before any action reaches a body: the module toggle `[modules].embodiment = true`, the config flag `[embodiment].enabled = true`, and the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1`.
 
-Exposure flags are read from the selected adapter's `[mundus.<adapter>]` table as `expose_<name>` booleans. A name the body declares as a continuous channel sets that channel's exposure; a name it declares as an action family sets that family's exposure; any other name refuses boot. With the `stub` body, for example, `expose_drive = true` exposes the `drive` channel.
+Exposure flags are read from the selected adapter's `[embodiment.<adapter>]` table as `expose_<name>` booleans. A name the body declares as a continuous channel sets that channel's exposure; a name it declares as an action family sets that family's exposure; any other name refuses boot. With the `stub` body, for example, `expose_drive = true` exposes the `drive` channel.
 
 ### Control surface
 
-Section: `[mundus.control_surface]`.
+Section: `[embodiment.control_surface]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -667,9 +667,9 @@ Section: `[mundus.control_surface]`.
 
 Section: `[perception]`.
 
-The perceptual locus arbiter gates physical versus virtual senses. Enabled via `[modules].perception = true`. When the entity is embodied in a virtual world its physical camera and microphone are inhibited, and vice-versa.
+The perceptual locus arbiter gates physical versus virtual senses. Enabled via `[modules].perceptual_locus = true`. When the entity is embodied in a virtual world its physical camera and microphone are inhibited, and vice-versa.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via the effectors module's intents. Reserved for deferred virtual-world embodiment work; no module currently produces `intent.perception.switch`, so this flag has no effect. |
+| `allow_self_switch` | boolean | `false` | Allow the entity to switch its own perceptual locus via the effectors module's intents. Reserved for deferred virtual-world embodiment work; no module currently produces `intent.perceptual_locus.switch`, so this flag has no effect. |
 | `min_dwell_s` | float | `30.0` | Minimum seconds the locus must hold before another switch is honoured. |

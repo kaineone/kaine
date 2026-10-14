@@ -1,6 +1,6 @@
 ## Context
 
-The vocal module has two speech backends. `chatterbox` posts to the `/tts` endpoint of the Chatterbox TTS server (devnen/Chatterbox-TTS-Server, the API `kaine/modules/vocal/client.py` is written against: `voice_mode`, `predefined_voice_id`, `split_text`). `sherpa_onnx` runs Kokoro English in-process through sherpa-onnx and picks a preset speaker by integer id (`[vox].sherpa_speaker_id`, default 0).
+The vocal module has two speech backends. `chatterbox` posts to the `/tts` endpoint of the Chatterbox TTS server (devnen/Chatterbox-TTS-Server, the API `kaine/modules/vocal/client.py` is written against: `voice_mode`, `predefined_voice_id`, `split_text`). `sherpa_onnx` runs Kokoro English in-process through sherpa-onnx and picks a preset speaker by integer id (`[vocal].sherpa_speaker_id`, default 0).
 
 The shipped configuration leaves `predefined_voice_id` unset because a voice filename is operator-local. With the Chatterbox backend the module then cannot speak. The operator asked for the module to pick a voice the engine itself ships, with an optional gender preference, and never to add voice files to the repository.
 
@@ -79,7 +79,7 @@ The rule lives in one pure module, `kaine/modules/vocal/voices.py`, so both back
 ### D5. Logging and failure
 
 - On success the module logs the chosen voice once at startup, with the reason (configured, named in `default_voice`, or picked from N shipped voices with the preference applied or not applicable).
-- On failure (list unreachable, list empty, `default_voice` not shipped, or no voice of the requested gender) the module logs one warning line that names the problem and the key to set, records a backend failure (`record_backend_failure("vox", backend, reason)`) so the dashboard health surface shows it, and marks speech unavailable. The existing muted path then publishes a `vox.synthesized` failure event at most once every 60 s and plays nothing. The consumer loop keeps running, and no exception leaves `initialize()`.
+- On failure (list unreachable, list empty, `default_voice` not shipped, or no voice of the requested gender) the module logs one warning line that names the problem and the key to set, records a backend failure (`record_backend_failure("vocal", backend, reason)`) so the dashboard health surface shows it, and marks speech unavailable. The existing muted path then publishes a `vocal.synthesized` failure event at most once every 60 s and plays nothing. The consumer loop keeps running, and no exception leaves `initialize()`.
 - A Chatterbox server that is down at startup leaves the module silent until it is restarted. The compose service has a health check on `/get_predefined_voices`, so a compose deployment starts the module after the server answers.
 
 ### D6. Setup wizard

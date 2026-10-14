@@ -27,9 +27,9 @@ async def test_make_interoception_builds_self_rhythm_with_stimulus_source_drive(
     section = {
         "self_rhythm_enabled": True,
         "perception_feed": {
-            "mode": "womb",
+            "mode": "stimulus_source",
             "seed": 3,
-            "womb": {"external_drive_to_self_rhythm": True},
+            "stimulus_source": {"external_drive_to_self_rhythm": True},
         },
     }
     interoception = make_interoception(bus, section)
@@ -69,16 +69,16 @@ def test_construct_module_injects_perception_feed_for_interoception(monkeypatch)
         captured["injections"] = injections
         return object()
 
-    monkeypatch.setitem(SIMPLE_FACTORIES, "soma", recorder)
+    monkeypatch.setitem(SIMPLE_FACTORIES, "interoception", recorder)
 
     bus = types.SimpleNamespace()
     config = {
-        "soma": {},
-        "perception_feed": {"mode": "womb", "seed": 7},
+        "interoception": {},
+        "perception_feed": {"mode": "stimulus_source", "seed": 7},
     }
     registry = types.SimpleNamespace(get=lambda name: None)
     result = construct_module(
-        "soma", bus, config, registry=registry, entity_clock=object()
+        "interoception", bus, config, registry=registry, entity_clock=object()
     )
 
     assert result is captured["section"] is not None or result is not None
@@ -98,7 +98,7 @@ async def test_maternal_drive_starts_at_the_usual_drive_never_the_bound():
         bus,
         {
             "self_rhythm_enabled": True,
-            "perception_feed": {"mode": "womb", "seed": 3},
+            "perception_feed": {"mode": "stimulus_source", "seed": 3},
         },
     )
     assert default._maternal_drive.scale == 0.5
@@ -107,9 +107,9 @@ async def test_maternal_drive_starts_at_the_usual_drive_never_the_bound():
         {
             "self_rhythm_enabled": True,
             "perception_feed": {
-                "mode": "womb",
+                "mode": "stimulus_source",
                 "seed": 3,
-                "womb": {"readout": {"baseline_drive_fraction": 0.3}},
+                "stimulus_source": {"readout": {"baseline_drive_fraction": 0.3}},
             },
         },
     )
@@ -120,9 +120,9 @@ async def test_maternal_drive_starts_at_the_usual_drive_never_the_bound():
             {
                 "self_rhythm_enabled": True,
                 "perception_feed": {
-                    "mode": "womb",
+                    "mode": "stimulus_source",
                     "seed": 3,
-                    "womb": {"readout": {"withdrawal_seconds": 99}},
+                    "stimulus_source": {"readout": {"withdrawal_seconds": 99}},
                 },
             },
         )

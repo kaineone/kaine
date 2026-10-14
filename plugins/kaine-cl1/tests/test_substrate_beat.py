@@ -194,16 +194,16 @@ def test_plugin_follows_kaines_cycle_through_the_loader(monkeypatch):
         from kaine.plugins import load_plugins
 
         cfg = {
-            "modules": {"chronos": True},
+            "modules": {"sequence": True},
             "plugins": {
                 "enabled": ["cl1"],
                 "cl1": {
                     "substrate": {
                         "target": "simulator",
                         "accelerated_time": True,
-                        "territories": {"chronos": 8},
+                        "territories": {"sequence": 8},
                     },
-                    "backends": {"chronos": "cl1"},
+                    "backends": {"sequence": "cl1"},
                 },
             },
         }
@@ -213,7 +213,7 @@ def test_plugin_follows_kaines_cycle_through_the_loader(monkeypatch):
         observer = plugins.cycle_observer()
         assert observer is not None
         plugin_obj = plugins._plugins["cl1"]["plugin"]
-        plugin_obj.injections("chronos", cfg["plugins"]["cl1"])
+        plugin_obj.injections("sequence", cfg["plugins"]["cl1"])
         counter = _count_windows(monkeypatch, plugin_obj._broker)
         try:
             # Real ticks are a processing period apart, so wait for each window before

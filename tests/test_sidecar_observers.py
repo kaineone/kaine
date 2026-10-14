@@ -142,11 +142,11 @@ async def test_coherence_observer_records_plv(tmp_path):
     bus.push(
         "workspace.broadcast",
         _event(
-            "syneidesis",
+            "workspace",
             "workspace.broadcast",
             {
                 "tick_index": 10,
-                "metadata": {"coherence": {"soma|thymos": 0.82, "soma|nous": 0.61}},
+                "metadata": {"coherence": {"interoception|affect": 0.82, "interoception|planning": 0.61}},
             },
         ),
     )
@@ -157,8 +157,8 @@ async def test_coherence_observer_records_plv(tmp_path):
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
     assert line["tick_index"] == 10
-    assert line["coherence"]["soma|thymos"] == pytest.approx(0.82)
-    assert line["coherence"]["soma|nous"] == pytest.approx(0.61)
+    assert line["coherence"]["interoception|affect"] == pytest.approx(0.82)
+    assert line["coherence"]["interoception|planning"] == pytest.approx(0.61)
     assert bus.published == [], "coherence observer must not publish to the bus"
 
 
@@ -170,7 +170,7 @@ async def test_coherence_observer_noop_when_no_coherence_metadata(tmp_path):
     obs = CoherenceObserver(bus, sink)
     bus.push(
         "workspace.broadcast",
-        _event("syneidesis", "workspace.broadcast", {"tick_index": 1, "metadata": {}}),
+        _event("workspace", "workspace.broadcast", {"tick_index": 1, "metadata": {}}),
     )
     await sink.start()
     await _run_observer(obs, bus)
@@ -205,10 +205,10 @@ async def test_replay_observer_redact_true_no_text(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="replay", flush_interval_s=0.05)
     obs = ReplayObserver(bus, sink, redact_content=True)
     bus.push(
-        "mnemos.out",
+        "episodic_memory.out",
         _event(
-            "mnemos",
-            "mnemos.replay",
+            "episodic_memory",
+            "episodic_memory.replay",
             {
                 "memory_id": "mem-001",
                 "text": "this is sensitive memory content",
@@ -237,10 +237,10 @@ async def test_replay_observer_redact_false_includes_text(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="replay", flush_interval_s=0.05)
     obs = ReplayObserver(bus, sink, redact_content=False)
     bus.push(
-        "mnemos.out",
+        "episodic_memory.out",
         _event(
-            "mnemos",
-            "mnemos.replay",
+            "episodic_memory",
+            "episodic_memory.replay",
             {
                 "memory_id": "mem-002",
                 "text": "the rain in Spain",
@@ -261,15 +261,15 @@ async def test_replay_observer_redact_false_includes_text(tmp_path):
 
 @pytest.mark.asyncio
 async def test_replay_observer_logs_world_model_scenario(tmp_path):
-    """task 5.1 — phantasia.scenario events are also captured."""
+    """task 5.1 — world_model.scenario events are also captured."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="replay", flush_interval_s=0.05)
     obs = ReplayObserver(bus, sink, redact_content=True)
     bus.push(
-        "phantasia.out",
+        "world_model.out",
         _event(
-            "phantasia",
-            "phantasia.scenario",
+            "world_model",
+            "world_model.scenario",
             {"seed_memory_id": "mem-003", "scenario_index": 0},
         ),
     )
@@ -279,14 +279,14 @@ async def test_replay_observer_logs_world_model_scenario(tmp_path):
     files = list(tmp_path.glob("replay-*.jsonl"))
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
-    assert line["type"] == "phantasia.scenario"
+    assert line["type"] == "world_model.scenario"
     assert line["payload"]["seed_memory_id"] == "mem-003"
     assert bus.published == []
 
 
 @pytest.mark.asyncio
 async def test_replay_observer_noop_when_stream_absent(tmp_path):
-    """task 5.2 — no mnemos.replay or phantasia.scenario events → no output."""
+    """task 5.2 — no episodic_memory.replay or world_model.scenario events → no output."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="replay", flush_interval_s=0.05)
     obs = ReplayObserver(bus, sink, redact_content=True)
@@ -299,7 +299,7 @@ async def test_replay_observer_noop_when_stream_absent(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 3. empatheia_observer
+# 3. social_cognition_observer
 # ---------------------------------------------------------------------------
 
 
@@ -310,10 +310,10 @@ async def test_social_cognition_observer_computes_accuracy(tmp_path):
     sink = FakeSink()
     obs = SocialCognitionObserver(bus, sink)
     bus.push(
-        "empatheia.out",
+        "social_cognition.out",
         _event(
-            "empatheia",
-            "empatheia.agent_model",
+            "social_cognition",
+            "social_cognition.agent_model",
             {
                 "agent_id": "operator",
                 "reliability": 0.8,
@@ -365,10 +365,10 @@ async def test_voice_alignment_divergence_observer_records_cycle(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
     bus.push(
-        "hypnos.out",
+        "sleep.out",
         _event(
-            "hypnos",
-            "hypnos.sleep.completed",
+            "sleep",
+            "sleep.sleep.completed",
             {
                 "pairs_processed": 8,
                 "pairs_above_threshold": 3,
@@ -418,10 +418,10 @@ async def test_voice_alignment_divergence_skips_gated_sleep(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
     bus.push(
-        "hypnos.out",
+        "sleep.out",
         _event(
-            "hypnos",
-            "hypnos.sleep.completed",
+            "sleep",
+            "sleep.sleep.completed",
             {
                 "pairs_processed": 0,
                 "pairs_above_threshold": 0,
@@ -462,10 +462,10 @@ async def test_voice_alignment_divergence_records_no_pairs_sleep(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
     bus.push(
-        "hypnos.out",
+        "sleep.out",
         _event(
-            "hypnos",
-            "hypnos.sleep.completed",
+            "sleep",
+            "sleep.sleep.completed",
             {
                 "pairs_processed": 0,
                 "pairs_above_threshold": 0,
@@ -510,8 +510,8 @@ async def test_voice_alignment_divergence_noop_when_no_va_field(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="vad", flush_interval_s=0.05)
     obs = VoiceAlignmentDivergenceObserver(bus, sink)
     bus.push(
-        "hypnos.out",
-        _event("hypnos", "hypnos.sleep.completed", {"consolidation": True}),
+        "sleep.out",
+        _event("sleep", "sleep.sleep.completed", {"consolidation": True}),
     )
     await sink.start()
     await _run_observer(obs, bus)
@@ -542,15 +542,15 @@ async def test_voice_alignment_divergence_noop_when_stream_absent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_fatigue_observer_logs_threshold_crossing(tmp_path):
-    """task 5.1 — soma.fatigue event logged as threshold_crossing."""
+    """task 5.1 — interoception.fatigue event logged as threshold_crossing."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="fatigue", flush_interval_s=0.05)
     obs = FatigueObserver(bus, sink)
     bus.push(
-        "soma.out",
+        "interoception.out",
         _event(
-            "soma",
-            "soma.fatigue",
+            "interoception",
+            "interoception.fatigue",
             {"value": 105.3, "threshold": 100.0, "crossed": True},
         ),
     )
@@ -568,15 +568,15 @@ async def test_fatigue_observer_logs_threshold_crossing(tmp_path):
 
 @pytest.mark.asyncio
 async def test_fatigue_observer_logs_interoception_report(tmp_path):
-    """task 5.1 — soma.report fatigue fields are also logged."""
+    """task 5.1 — interoception.report fatigue fields are also logged."""
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path, name="fatigue", flush_interval_s=0.05)
     obs = FatigueObserver(bus, sink)
     bus.push(
-        "soma.out",
+        "interoception.out",
         _event(
-            "soma",
-            "soma.report",
+            "interoception",
+            "interoception.report",
             {
                 "fatigue_value": 45.2,
                 "fatigue_threshold": 100.0,
@@ -622,26 +622,26 @@ async def test_prediction_error_observer_computes_statistics(tmp_path):
     obs = PredictionErrorObserver(
         bus, sink, window_size=16, flush_interval_s=0.1, poll_interval_s=0.05
     )
-    # Push some soma.report events.
+    # Push some interoception.report events.
     for val in [0.1, 0.2, 0.3, 0.4, 0.5]:
         bus.push(
-            "soma.out",
-            _event("soma", "soma.report", {"prediction_error": val, "fatigue_value": 0}),
+            "interoception.out",
+            _event("interoception", "interoception.report", {"prediction_error": val, "fatigue_value": 0}),
         )
-    # Push a chronos.report event.
+    # Push a sequence.report event.
     bus.push(
-        "chronos.out",
-        _event("chronos", "chronos.report", {"temporal_prediction_error": 0.6}),
+        "sequence.out",
+        _event("sequence", "sequence.report", {"temporal_prediction_error": 0.6}),
     )
     await _run_observer(obs, bus, delay=0.4)
     assert sink.rows, "expected at least one flush"
     row = sink.rows[-1]
-    interoception_stats = row["sources"]["soma.out"]
+    interoception_stats = row["sources"]["interoception.out"]
     assert interoception_stats["n"] == 5
     assert interoception_stats["mean"] == pytest.approx(0.3, abs=0.01)
     assert interoception_stats["p95"] is not None
     assert interoception_stats["p99"] is not None
-    sequence_stats = row["sources"]["chronos.out"]
+    sequence_stats = row["sources"]["sequence.out"]
     assert sequence_stats["n"] == 1
     assert bus.published == []
 
@@ -668,7 +668,7 @@ async def test_prediction_error_observer_noop_when_streams_absent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_welfare_observer_flags_unmaintained_fatigue():
-    """task 5.4 (a) — soma.fatigue with no subsequent maintenance → count."""
+    """task 5.4 (a) — interoception.fatigue with no subsequent maintenance → count."""
     bus = FakeBus()
     sink = FakeSink()
     # Very short window so the test doesn't have to wait 15 minutes.
@@ -683,10 +683,10 @@ async def test_welfare_observer_flags_unmaintained_fatigue():
         poll_interval_s=0.02,
     )
     bus.push(
-        "soma.out",
-        _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
+        "interoception.out",
+        _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0}),
     )
-    # No hypnos.sleep.completed follows — fatigue is unmaintained.
+    # No sleep.sleep.completed follows — fatigue is unmaintained.
     await _run_observer(obs, bus, delay=0.3)
     assert obs.unmaintained_fatigue_count >= 1
     assert any(
@@ -713,11 +713,11 @@ async def test_welfare_observer_flags_sustained_extreme_vad():
         replay_rate_threshold=9999,
         poll_interval_s=0.02,
     )
-    # Publish thymos.state with extreme VAD (|valence|=0.9, arousal=0.9).
+    # Publish affect.state with extreme VAD (|valence|=0.9, arousal=0.9).
     for _ in range(3):
         bus.push(
-            "thymos.out",
-            _event("thymos", "thymos.state", {"state": {"valence": -0.9, "arousal": 0.9}}),
+            "affect.out",
+            _event("affect", "affect.state", {"state": {"valence": -0.9, "arousal": 0.9}}),
         )
     await _run_observer(obs, bus, delay=0.4)
     assert obs.sustained_extreme_vad_count >= 1
@@ -745,11 +745,11 @@ async def test_welfare_observer_flags_replay_overload():
         replay_rate_threshold=3,     # >3 events triggers alert
         poll_interval_s=0.02,
     )
-    # Push 5 mnemos.replay events (> threshold of 3).
+    # Push 5 episodic_memory.replay events (> threshold of 3).
     for i in range(5):
         bus.push(
-            "mnemos.out",
-            _event("mnemos", "mnemos.replay", {"memory_id": f"mem-{i}", "text": "x"}),
+            "episodic_memory.out",
+            _event("episodic_memory", "episodic_memory.replay", {"memory_id": f"mem-{i}", "text": "x"}),
         )
     await _run_observer(obs, bus, delay=0.3)
     assert obs.replay_overload_count >= 1
@@ -806,12 +806,12 @@ async def test_welfare_observer_maintenance_clears_fatigue_alarm():
         poll_interval_s=0.02,
     )
     bus.push(
-        "soma.out",
-        _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
+        "interoception.out",
+        _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0}),
     )
     bus.push(
-        "hypnos.out",
-        _event("hypnos", "hypnos.sleep.completed", {}),
+        "sleep.out",
+        _event("sleep", "sleep.sleep.completed", {}),
     )
     await _run_observer(obs, bus, delay=0.3)
     # Maintenance arrived well within 5 s → no unmaintained-fatigue alert.
@@ -826,7 +826,7 @@ async def test_welfare_observer_maintenance_clears_fatigue_alarm():
 
 @pytest.mark.asyncio
 async def test_welfare_observer_flags_sustained_interoceptive_distress():
-    """task 4.1 — soma.report PE ≥ threshold for ≥ duration → one event."""
+    """task 4.1 — interoception.report PE ≥ threshold for ≥ duration → one event."""
     bus = FakeBus()
     sink = FakeSink()
     obs = WelfareObserver(
@@ -841,11 +841,11 @@ async def test_welfare_observer_flags_sustained_interoceptive_distress():
         interoceptive_distress_duration_s=0.05,  # 50 ms
         poll_interval_s=0.02,
     )
-    # Push several soma.report events with prediction_error above threshold.
+    # Push several interoception.report events with prediction_error above threshold.
     for _ in range(4):
         bus.push(
-            "soma.out",
-            _event("soma", "soma.report", {"prediction_error": 0.9, "fatigue_value": 0}),
+            "interoception.out",
+            _event("interoception", "interoception.report", {"prediction_error": 0.9, "fatigue_value": 0}),
         )
     await _run_observer(obs, bus, delay=0.4)
     assert obs.sustained_interoceptive_distress_count >= 1
@@ -888,12 +888,12 @@ async def test_welfare_observer_transient_interoceptive_spike_does_not_fire():
     )
     # Push one high-PE event followed immediately by a low one.
     bus.push(
-        "soma.out",
-        _event("soma", "soma.report", {"prediction_error": 0.9, "fatigue_value": 0}),
+        "interoception.out",
+        _event("interoception", "interoception.report", {"prediction_error": 0.9, "fatigue_value": 0}),
     )
     bus.push(
-        "soma.out",
-        _event("soma", "soma.report", {"prediction_error": 0.1, "fatigue_value": 0}),
+        "interoception.out",
+        _event("interoception", "interoception.report", {"prediction_error": 0.1, "fatigue_value": 0}),
     )
     await _run_observer(obs, bus, delay=0.3)
     assert obs.sustained_interoceptive_distress_count == 0
@@ -932,23 +932,23 @@ async def test_welfare_observer_interoceptive_distress_two_episodes():
         # check to fire (>50 ms sustain duration).
         for _ in range(3):
             bus.push(
-                "soma.out",
-                _event("soma", "soma.report", {"prediction_error": 0.9, "fatigue_value": 0}),
+                "interoception.out",
+                _event("interoception", "interoception.report", {"prediction_error": 0.9, "fatigue_value": 0}),
             )
         await asyncio.sleep(0.2)  # let episode 1 fire
 
         # Recovery: PE drops below threshold — timer resets.
         bus.push(
-            "soma.out",
-            _event("soma", "soma.report", {"prediction_error": 0.1, "fatigue_value": 0}),
+            "interoception.out",
+            _event("interoception", "interoception.report", {"prediction_error": 0.1, "fatigue_value": 0}),
         )
         await asyncio.sleep(0.05)
 
         # Episode 2: another sustained high PE.
         for _ in range(3):
             bus.push(
-                "soma.out",
-                _event("soma", "soma.report", {"prediction_error": 0.9, "fatigue_value": 0}),
+                "interoception.out",
+                _event("interoception", "interoception.report", {"prediction_error": 0.9, "fatigue_value": 0}),
             )
         await asyncio.sleep(0.2)  # let episode 2 fire
     finally:
@@ -996,20 +996,20 @@ async def test_welfare_observer_interoceptive_defaults_preserve_abc():
     )
     # (a) Fatigue crossing — no maintenance.
     bus.push(
-        "soma.out",
-        _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
+        "interoception.out",
+        _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0}),
     )
     # (b) Extreme VAD.
     for _ in range(3):
         bus.push(
-            "thymos.out",
-            _event("thymos", "thymos.state", {"state": {"valence": -0.9, "arousal": 0.9}}),
+            "affect.out",
+            _event("affect", "affect.state", {"state": {"valence": -0.9, "arousal": 0.9}}),
         )
     # (c) Replay overload (3 events > threshold 2).
     for i in range(3):
         bus.push(
-            "mnemos.out",
-            _event("mnemos", "mnemos.replay", {"memory_id": f"m{i}", "text": "x"}),
+            "episodic_memory.out",
+            _event("episodic_memory", "episodic_memory.replay", {"memory_id": f"m{i}", "text": "x"}),
         )
     await _run_observer(obs, bus, delay=0.5)
     assert obs.unmaintained_fatigue_count >= 1
@@ -1030,22 +1030,22 @@ async def test_welfare_observer_interoceptive_defaults_preserve_abc():
 
 
 # ---------------------------------------------------------------------------
-# 8. nous_policy_observer
+# 8. planning_policy_observer
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
-    """task 5.1 — nous.policy event → JSONL with EFE, horizon, policy."""
+    """task 5.1 — planning.policy event → JSONL with EFE, horizon, policy."""
     bus = FakeBus()
     name = "nous_policy"
     sink = AsyncJsonlSink(tmp_path, name=name, flush_interval_s=0.05)
     obs = PlanningPolicyObserver(bus, sink)
     bus.push(
-        "nous.out",
+        "planning.out",
         _event(
-            "nous",
-            "nous.policy",
+            "planning",
+            "planning.policy",
             {"expected_free_energy": -2.35, "horizon": 1, "policy": "request_speak"},
         ),
     )
@@ -1070,7 +1070,7 @@ async def test_planning_policy_observer_noop_when_stream_absent(tmp_path):
     await sink.start()
     await _run_observer(obs, bus, delay=0.1)
     await sink.stop()
-    files = list(tmp_path.glob("nous_policy-*.jsonl"))
+    files = list(tmp_path.glob("planning_policy-*.jsonl"))
     assert not files or files[0].read_text().strip() == ""
     assert bus.published == []
 

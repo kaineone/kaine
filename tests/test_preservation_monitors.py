@@ -242,7 +242,7 @@ async def test_divergence_rising_edge_preserves_once(bus, tmp_path, monkeypatch)
     assert len(fm.calls) == 2
     assert all(c["reason"] == "individuation" for c in fm.calls)
     # Read-only: the live entity identity is untouched.
-    assert reg.get("eidolon").model.name == "Aria"
+    assert reg.get("self_model").model.name == "Aria"
     await eid.shutdown()
 
 
@@ -324,7 +324,7 @@ async def test_divergence_preserve_failure_recorded_and_monitor_continues(
     assert failed[0].payload.get("transition") == "preserve_failed"
     assert "capture blew up" in failed[0].payload.get("error", "")
     # Live entity untouched.
-    assert reg.get("eidolon").model.name == "Aria"
+    assert reg.get("self_model").model.name == "Aria"
     await eid.shutdown()
 
 
@@ -351,7 +351,7 @@ async def test_divergence_preserve_is_read_only_real_forkmanager(bus, tmp_path, 
     assert (backups[0] / "manifest.json").is_file()
     assert (backups[0] / "bundle.tar").is_file()
     # Read-only: identity intact, nothing deleted.
-    assert reg.get("eidolon").model.name == "Iris"
+    assert reg.get("self_model").model.name == "Iris"
     await eid.shutdown()
 
 
@@ -368,8 +368,8 @@ async def test_divergence_preserve_is_read_only_real_forkmanager(bus, tmp_path, 
 async def _push_interoception_report(bus: AsyncBus, prediction_error: float):
     await bus.publish(
         validate_event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"prediction_error": prediction_error},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),

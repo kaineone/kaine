@@ -6,7 +6,7 @@ For the selection algorithm, see [The global workspace](./global-workspace.md). 
 
 ## How a boot runs
 
-The cycle entrypoint in `kaine/cycle/__main__.py` boots by running the phases in `_BOOT_PHASES` in order: `stage`, `preconditions`, `run_identity`, `gates`, `bus`, `womb_hold`, `registry`, `maturation_gate`, `workspace`, `volition`, `cycle`, `supervision`, `runtime_state`, `sidecar`, `ignition_log`, `preview`, `remote_bridge`, `signals`, `spot`, `safety_net`, `launch`, `birth`, `womb_watch`, `caretaker`, `gestation`, `watchers`.
+The cycle entrypoint in `kaine/cycle/__main__.py` boots by running the phases in `_BOOT_PHASES` in order: `stage`, `preconditions`, `run_identity`, `gates`, `bus`, `stimulus_source_hold`, `registry`, `maturation_gate`, `workspace`, `action_selection`, `cycle`, `supervision`, `runtime_state`, `sidecar`, `ignition_log`, `preview`, `remote_bridge`, `signals`, `supervisor`, `safety_net`, `launch`, `maturation`, `stimulus_source_watch`, `caretaker`, `development`, `watchers`.
 
 Every phase reads and writes one shared `BootContext`, a slotted dataclass in `kaine/cycle/boot_context.py`. Its repr shows no field, because it holds the effectors module's intent secret.
 
@@ -40,7 +40,7 @@ The config and `cycle.set_rates` accept any positive value. Only the [interocept
 `experiential_rate_hz` is the resting rate. With `[cycle.access_rate].enabled`, the shipped default, the cycle recomputes the access rate for each tick from an access drive between 0 and 1.
 
 - **Tonic** drive: [affect](../09-modules/affect.md) arousal above its baseline, scaled to the range 0 to 1. This follows the exploratory, high-tonic mode of the adaptive-gain account of the locus coeruleus.
-- **Phasic** drive: the highest intensity among the tick's categorical alerts (events whose payload carries `alert: true`: a predictive processor's report that meets its alert criterion, or an event another module publishes at its alert level, such as an affect drive crossing, an interoception fatigue or regulation event, or a failed sleep), above `salience_floor` (0.5) and scaled to the range 0 to 1, held as a peak that decays with time constant `phasic_decay_s` (1 entity second). Graded reports without an alert do not count, so with no alert and arousal at baseline the rate stays at its resting value. Events from `cycle` and `syneidesis` never count. Raising the rate after an alert is a design choice modeled on the phasic locus coeruleus response; the affect-gain ablation is planned to test the opposite direction too.
+- **Phasic** drive: the highest intensity among the tick's categorical alerts (events whose payload carries `alert: true`: a predictive processor's report that meets its alert criterion, or an event another module publishes at its alert level, such as an affect drive crossing, an interoception fatigue or regulation event, or a failed sleep), above `salience_floor` (0.5) and scaled to the range 0 to 1, held as a peak that decays with time constant `phasic_decay_s` (1 entity second). Graded reports without an alert do not count, so with no alert and arousal at baseline the rate stays at its resting value. Events from `cycle` and `workspace` never count. Raising the rate after an alert is a design choice modeled on the phasic locus coeruleus response; the affect-gain ablation is planned to test the opposite direction too.
 
 The drive is the larger of the two, and the tick's access rate is `resting + (processing − resting) × drive`: the resting rate when calm, one broadcast per processing tick at full drive. The drive is computed before the tick's broadcast decision, so an alert can make its own tick a broadcast tick. When the resting rate is below the processing rate, the adaptive rate stays between them; when it is not, the rate equals the resting rate. The operator's rate control and fork timing profiles set the resting rate.
 
@@ -83,7 +83,7 @@ The interoception module's `reduce_rate` regulation still lowers the processing 
 ```mermaid
 flowchart TD
     A[Start tick] --> B[Drain cycle.control events]
-    B --> C[Drain soma.out regulation]
+    B --> C[Drain interoception.out regulation]
     C --> D[Read active module streams]
     D --> E["Sort events by source, type, entry_id, then name each stream:entry_id"]
     E --> F[Refresh affect observer and access rate]
@@ -92,8 +92,8 @@ flowchart TD
     H -- no --> O[Publish cycle.tick latency]
     H -- yes --> I[Publish workspace.broadcast]
     I --> J[ActionSelection.select snapshot]
-    J --> K[Publish intents on volition.out]
-    K --> L[Publish volition.proposal_outcome on volition_feedback.out]
+    J --> K[Publish intents on action_selection.out]
+    K --> L[Publish action_selection.proposal_outcome on action_selection_feedback.out]
     L --> O
     O --> P[Sleep remaining budget]
     P --> A
@@ -105,13 +105,13 @@ The run loop drains these two streams before each tick. `consume_control_events(
 
 ### Drain interoception regulation
 
-`consume_soma_regulation()` reads up to 32 `soma.regulation` events from `soma.out`.
+`consume_interoception_regulation()` reads up to 32 `interoception.regulation` events from `interoception.out`.
 
 | Action | Effect |
 |---|---|
 | `reduce_rate` | Multiply `processing_rate` by 0.8, clamped to [0.5, 20.0] Hz |
 | `shed_module` | Call `registry.request_shed_low_priority()` if available |
-| `request_maintenance` | Latch `cycle.maintenance_requested = True` as an advisory signal. Sleep observes the `request_maintenance` regulation event directly on `soma.out`; nothing else reads this flag to drive behaviour. |
+| `request_maintenance` | Latch `cycle.maintenance_requested = True` as an advisory signal. Sleep observes the `request_maintenance` regulation event directly on `interoception.out`; nothing else reads this flag to drive behaviour. |
 
 Unknown action values are silently ignored. All advisories are advisory only: the cycle acts within safe bounds, logs, and continues.
 
@@ -123,23 +123,23 @@ On a production boot the entrypoint constructs the cycle with `seed_cursors_to_t
 
 ### Selection
 
-`syneidesis.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases`, a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by source, type and bus entry id (compared as the number pair milliseconds, sequence, so `x-2` comes before `x-10`), with the stream as a final tie-break, and each is named `<stream>:<entry_id>`, because a bus entry id is unique only within its stream. Then the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`. Selection runs on every processing tick; on a tick that is not a broadcast tick the result is discarded. See [The global workspace](./global-workspace.md) for the scoring and the access rule.
+`workspace.select(events, context)` receives the event list plus a context dict containing `tick_index`, `is_experiential`, and (when the oscillatory layer is enabled) `phases`, a dict mapping module names to their current oscillator phase. Before selection, the events are sorted by source, type and bus entry id (compared as the number pair milliseconds, sequence, so `x-2` comes before `x-10`), with the stream as a final tie-break, and each is named `<stream>:<entry_id>`, because a bus entry id is unique only within its stream. Then the affect observer refreshes, and the access rate updates. The function returns a `WorkspaceSnapshot`. Selection runs on every processing tick; on a tick that is not a broadcast tick the result is discarded. See [The global workspace](./global-workspace.md) for the scoring and the access rule.
 
 ### Broadcast
 
 On a broadcast tick, if selection succeeded, the cycle calls `bus.publish_workspace(payload)` on `workspace.broadcast`. It publishes accessed, inhibited and empty snapshots alike. The payload mirrors the `WorkspaceSnapshot`: tick index, the `inhibited` flag, `is_experiential`, `time_scale`, the score of every candidate of the tick, the selected events (with `entry_id`, `source`, `type`, `salience`, `payload`, `timestamp` and `causal_parent`), and metadata holding `access_threshold` and, when the oscillatory layer is on, `coherence`.
 
-Only `source="syneidesis"` may call `publish_workspace`. Any other source raises `ReservedStreamError`.
+Only `source="workspace"` may call `publish_workspace`. Any other source raises `ReservedStreamError`.
 
 ### Action selection and proposal outcomes
 
 After a successful broadcast, inhibited or not, the cycle calls `ActionSelection.select(snapshot)`. The action selection module checks the inhibition flag first and returns no intents for an inhibited broadcast. It is never called on a tick that is not a broadcast tick.
 
-Each returned intent is published to `volition.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `volition_feedback.out` as `volition.proposal_outcome` events.
+Each returned intent is published to `action_selection.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `action_selection_feedback.out` as `action_selection.proposal_outcome` events.
 
-Proposal outcomes are generated only when the action-selection policy includes the `PlanningProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `nous = false`, so no proposal outcomes are produced by default.
+Proposal outcomes are generated only when the action-selection policy includes the `PlanningProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `planning = false`, so no proposal outcomes are produced by default.
 
-The cycle never invokes effectors directly. The [language module](../09-modules/language.md), [effectors module](../09-modules/effectors.md), [perceptual locus module](../09-modules/perceptual-locus.md), [embodiment module](../09-modules/embodiment.md), and [sleep module](../09-modules/sleep.md) subscribe to `volition.out` and realize intents independently. The sleep module accepts `intent.rest` as a request to rest.
+The cycle never invokes effectors directly. The [language module](../09-modules/language.md), [effectors module](../09-modules/effectors.md), [perceptual locus module](../09-modules/perceptual-locus.md), [embodiment module](../09-modules/embodiment.md), and [sleep module](../09-modules/sleep.md) subscribe to `action_selection.out` and realize intents independently. The sleep module accepts `intent.rest` as a request to rest.
 
 ### Latency telemetry
 
@@ -185,7 +185,7 @@ A freeze-watch task in the cycle entrypoint polls this file and calls `cycle.pau
 
 A freeze stops the entity clock while operators repair infrastructure. It is not a shutdown. The file contains only operational fields: freeze entries with ISO timestamps and optional reason strings. It never contains sensory content.
 
-The dashboard `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `gestation` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
+The dashboard `POST /diagnostics/cycle/freeze` endpoint writes this file: freezing pushes an `operator` entry and resuming removes `operator` entries only (`stand_down(source="operator")`). `POST /diagnostics/cycle/override` lifts named `welfare`, `development` or `programme_end` entries (`override()`). The `unfreeze` function, used only by the cycle's own clean boot, replaces the file with a `CycleControl()` whose fields are `frozen:false`, `frozen_at:null`, `reason:null`, `source:"operator"`, and `stack:[]`.
 
 ```mermaid
 stateDiagram-v2

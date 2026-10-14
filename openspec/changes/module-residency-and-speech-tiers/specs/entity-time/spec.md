@@ -41,13 +41,13 @@ Boot SHALL refuse lockstep when any enabled module lacks lockstep support, namin
 - **THEN** the cycle is frozen with the operator-releasable freeze, an incident names the module and tick, the run is marked inadmissible, and the entity's state is intact
 
 ### Requirement: Lockstep keeps the real body and lets thought run while speech is prepared
-In lockstep, the interoception module SHALL sample the real body once per tick. A scripted interoception source SHALL be refused at boot unless `[soma].scripted_interoception_operator_opt_in = true`, and the run identity SHALL record `interoception_source`. A generation started while handling tick k SHALL be due at tick `k + N`, where N is `[cycle].lockstep_speech_offset_ticks`, fixed before launch and recorded in the run identity. Its output SHALL be stamped `tick = k + N - 1`. The barrier SHALL wait for it only when the engine reaches tick `k + N - 1` and it has not finished. Plugin modules SHALL declare lockstep support, and boot's refusal SHALL name unsupported plugins.
+In lockstep, the interoception module SHALL sample the real body once per tick. A scripted interoception source SHALL be refused at boot unless `[interoception].scripted_interoception_operator_opt_in = true`, and the run identity SHALL record `interoception_source`. A generation started while handling tick k SHALL be due at tick `k + N`, where N is `[cycle].lockstep_speech_offset_ticks`, fixed before launch and recorded in the run identity. Its output SHALL be stamped `tick = k + N - 1`. The barrier SHALL wait for it only when the engine reaches tick `k + N - 1` and it has not finished. Plugin modules SHALL declare lockstep support, and boot's refusal SHALL name unsupported plugins.
 
 #### Scenario: Thought continues while a reply is composed
 - **WHEN** the language module starts a generation at tick k and N is 20
 - **THEN** ticks k+1 to k+19 complete without waiting for it, and its output enters the intake of tick k+20
 
 #### Scenario: A scripted body is refused for a real entity
-- **WHEN** a cycle boots with `[soma].interoception_source = "scripted"` and no operator opt-in
+- **WHEN** a cycle boots with `[interoception].interoception_source = "scripted"` and no operator opt-in
 - **THEN** boot refuses with a configuration error
 

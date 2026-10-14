@@ -15,7 +15,7 @@ alongside the supervisor and the freeze-watch loop:
   deletes; rate-limited.
 
 * :class:`WelfareProtectiveMonitor` — watches the interoception module's interoceptive-distress
-  signal (``soma.report`` ``prediction_error`` on ``soma.out``) and, on a
+  signal (``interoception.report`` ``prediction_error`` on ``interoception.out``) and, on a
   sustained-distress threshold crossing (or repeated distress episodes within a
   window), takes a humane protective action: preserve the entity FIRST, then
   pause (default), end, or notify per configuration.
@@ -69,7 +69,7 @@ from kaine.storage import resolve
 log = logging.getLogger(__name__)
 
 _MONITOR_OUT_SALIENCE = 0.5
-_INTEROCEPTION_STREAM = "soma.out"
+_INTEROCEPTION_STREAM = "interoception.out"
 _WELFARE_STREAM = "welfare.out"
 
 
@@ -175,7 +175,7 @@ class WelfareResponseConfig:
     # mistaken for sustained welfare problems. Short relative to "sustained" —
     # genuine sustained distress re-accrues immediately once warm-up ends.
     warmup_s: float = 120.0
-    # Ceiling on how long ``soma.report.warmup_active`` may extend the gating
+    # Ceiling on how long ``interoception.report.warmup_active`` may extend the gating
     # past ``warmup_s`` — MUST exceed the interoception module's own developmental warm-up
     # (``regulation_warmup_min_seconds`` = 1200s), with margin. Bounds trust in
     # a single external flag: if it is ever stuck True (an interoception module bug, or the interoception module
@@ -626,8 +626,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
     Two crossing arms, both feeding the same preserve-then-act response:
 
-    * **Sustained interoceptive distress.** Reads ``soma.report``
-      ``prediction_error`` off ``soma.out`` directly and applies the SAME
+    * **Sustained interoceptive distress.** Reads ``interoception.report``
+      ``prediction_error`` off ``interoception.out`` directly and applies the SAME
       sustained-distress rule as the sidecar welfare observer via the shared
       :class:`SustainedThresholdTracker` — so the cycle-layer action arm never
       imports ``kaine.evaluation`` yet never diverges from it.
@@ -637,7 +637,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
       welfare observer — replay_overload, unmaintained_fatigue,
       sustained_extreme_vad, sustained_interoceptive_distress) and feeds EACH into
       the windowed-repeat counter. Previously this arm only saw sustained
-      interoceptive distress (read off ``soma.out``); it now covers all four
+      interoceptive distress (read off ``interoception.out``); it now covers all four
       categories, closing the honest limitation noted at merge. The cross-stream
       coupling is bus-only — no ``kaine.evaluation`` import.
 
@@ -701,7 +701,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Separate cursor for the welfare.out gray-zone stream (repeat arm).
         self._welfare_cursor = "0"
         # interoception-module-reported warm-up: the mind's own signal (warmup_active in the
-        # latest soma.report) that gating should continue even past the fixed
+        # latest interoception.report) that gating should continue even past the fixed
         # cold-start window.
         self._interoception_warmup_active = False
         self._distress = SustainedThresholdTracker(
@@ -763,9 +763,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 continue
             for entry_id, event in entries:
                 setattr(self, cursor_attr, entry_id)
-                if stream == _INTEROCEPTION_STREAM and event.type == "soma.report":
+                if stream == _INTEROCEPTION_STREAM and event.type == "interoception.report":
                     # Track the mind's own warm-up signal from every
-                    # soma.report observed during warm-up.
+                    # interoception.report observed during warm-up.
                     self._interoception_warmup_active = bool(
                         (event.payload or {}).get("warmup_active", False)
                     )
@@ -834,18 +834,18 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         if self._in_warmup(u_now, now) or interoception_gate:
             await self._drain_during_warmup(u_now)
             return
-        # Drain soma.out, feeding the distress tracker.
+        # Drain interoception.out, feeding the distress tracker.
         try:
             entries, last_scanned = await self._bus.read_entries(
                 _INTEROCEPTION_STREAM, last_id=self._cursor, count=128, block_ms=0
             )
         except Exception:
-            log.warning("welfare monitor: soma.out read failed", exc_info=True)
+            log.warning("welfare monitor: interoception.out read failed", exc_info=True)
             entries, last_scanned = [], None
         reasons: list[str] = []
         for entry_id, event in entries:
             self._cursor = entry_id
-            if event.type != "soma.report":
+            if event.type != "interoception.report":
                 continue
             payload = event.payload or {}
             self._interoception_warmup_active = bool(payload.get("warmup_active", False))

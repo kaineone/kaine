@@ -66,13 +66,13 @@ When a playlist programme runs past its last item while not paused, the cycle SH
 - **THEN** the entity is frozen under the `programme_end` holder, a critical log line names the error, and the caretaker is notified when configured
 
 ### Requirement: A viewing after maturation opens with the stimulus-source-to-world transition
-When `[perception_feed].transition_seconds` is above zero, the mode is `playlist`, the entity's stage is embodied with `womb_t_at_birth`, the stimulus source seed and the stimulus source parameter digest recorded, and the configured stimulus source parameters have the recorded digest, the feed SHALL open with a crossfade lasting `transition_seconds` of perceived time:
-- video: from the stimulus source's bloom-peak field rendered at `womb_t_at_birth` to the programme's first frame, held still, at the film's native resolution;
+When `[perception_feed].transition_seconds` is above zero, the mode is `playlist`, the entity's stage is embodied with `stimulus_source_t_at_maturation`, the stimulus source seed and the stimulus source parameter digest recorded, and the configured stimulus source parameters have the recorded digest, the feed SHALL open with a crossfade lasting `transition_seconds` of perceived time:
+- video: from the stimulus source's bloom-peak field rendered at `stimulus_source_t_at_maturation` to the programme's first frame, held still, at the film's native resolution;
 - audio: silence for the whole crossfade, as the bloom ended in silence; once programme time starts, the programme's sound fades in linearly over `[perception_feed].transition_audio_fade_seconds` (0 means no fade).
 
-The crossfade SHALL be a deterministic function of the stimulus source seed, the stimulus source parameters, `womb_t_at_birth`, the entity's lived time and the fade curve. No transition frame or sample SHALL be written to storage.
+The crossfade SHALL be a deterministic function of the stimulus source seed, the stimulus source parameters, `stimulus_source_t_at_maturation`, the entity's lived time and the fade curve. No transition frame or sample SHALL be written to storage.
 
-The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `hypnos`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever the vision module is present; the audio surface SHALL start it only when it is the only surface.
+The crossfade SHALL advance only while it is perceived: not while another holder (such as `freeze` or `sleep`) pauses the playlist clock, not while the cycle is frozen, and not while the primary surface is unwanted in the desired perception state. The video surface SHALL start the crossfade whenever the vision module is present; the audio surface SHALL start it only when it is the only surface.
 
 The playlist clock SHALL be paused under the holder `transition` before either surface reads it. The holder SHALL be released exactly once, when the perceived crossfade reaches `transition_seconds`, even when no surface is reading, so programme time zero is the end of the transition.
 
@@ -99,5 +99,5 @@ The run manifest SHALL record `transition_seconds`, `transition_audio_fade_secon
 - **AND** when programme time starts, the sound rises from silence to full level over `transition_audio_fade_seconds`
 
 #### Scenario: No recorded maturation state
-- **WHEN** a playlist viewing starts for an entity without `womb_t_at_birth`, or whose stimulus source parameters no longer match the recorded digest
+- **WHEN** a playlist viewing starts for an entity without `stimulus_source_t_at_maturation`, or whose stimulus source parameters no longer match the recorded digest
 - **THEN** no transition is rendered, the programme starts as before, and the boot log says why

@@ -88,7 +88,7 @@ class RateControlBody(BaseModel):
 # against) — the orphan-guard test in tests/test_dashboard_observability.py asserts
 # this set stays in sync with snapshot().
 HEALTH_BLOCK_KEYS: tuple[str, ...] = (
-    "spot",
+    "supervisor",
     "entity_care",
     "research",
     "preservation",
@@ -124,7 +124,7 @@ async def push_snapshots_periodically(
 
     This is what retires the client-side ``NexusVitals``/``NexusMetrics``/
     ``NexusSpot`` polling loops (task 2.2, completing the single-stream
-    refactor of task 1.1): the browser now RECEIVES a ``nexus.snapshot``
+    refactor of task 1.1): the browser now RECEIVES a ``dashboard.snapshot``
     event instead of fetching ``/diagnostics/metrics.json`` +
     ``/diagnostics/health.json`` on its own timer. The push cadence defaults
     to the health cache TTL (never faster — see
@@ -153,8 +153,8 @@ async def push_snapshots_periodically(
                 log.warning("snapshot pusher: health_prober raised", exc_info=True)
         try:
             await bridge.publish_synthetic(
-                source="nexus",
-                type="nexus.snapshot",
+                source="dashboard",
+                type="dashboard.snapshot",
                 payload={"metrics": metrics, "health": health},
             )
         except Exception:

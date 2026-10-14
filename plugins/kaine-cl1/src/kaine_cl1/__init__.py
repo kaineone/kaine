@@ -7,8 +7,8 @@ simulator (`cl-sdk`, installed separately by the operator).
 Core KAINE never imports this package. KAINE loads it through the `cl1` entry
 point in the `kaine.plugins` group, and only when `[plugins].enabled` names it.
 Each converted module keeps its `name`, bus subscriptions and published event
-shapes; only the object behind a declared seam (`chronos.network`,
-`soma.forward_model`) changes. See `plugins/kaine-cl1/README.md` and
+shapes; only the object behind a declared seam (`sequence.network`,
+`interoception.forward_model`) changes. See `plugins/kaine-cl1/README.md` and
 `docs/19-plugins-and-cl1.md`.
 """
 

@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Condition nine: individuation wired
-An unattended boot SHALL require the research safety net's individuation check: `[individuation].enabled` is true, the `[individuation]` section is valid, and the `lingua` module is enabled. The predicate SHALL be the research net's own, so the entity's protection does not rest on the secondary divergence signals alone while nobody is present. The condition SHALL check that the individuation producer will run; it SHALL NOT require that the entity has individuated. Conditions 6–8 SHALL keep their numbers.
+An unattended boot SHALL require the research safety net's individuation check: `[individuation].enabled` is true, the `[individuation]` section is valid, and the `language` module is enabled. The predicate SHALL be the research net's own, so the entity's protection does not rest on the secondary divergence signals alone while nobody is present. The condition SHALL check that the individuation producer will run; it SHALL NOT require that the entity has individuated. Conditions 6–8 SHALL keep their numbers.
 
 #### Scenario: Individuation disabled
-- **WHEN** an unattended boot finds `[individuation].enabled = false`, an invalid `[individuation]` section, or the `lingua` module disabled
+- **WHEN** an unattended boot finds `[individuation].enabled = false`, an invalid `[individuation]` section, or the `language` module disabled
 - **THEN** condition 9 fails naming those keys, the caretaker is not sent a start notice, and the boot refuses with exit code `6`
 
 #### Scenario: Not yet individuated

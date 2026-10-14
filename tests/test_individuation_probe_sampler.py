@@ -385,7 +385,7 @@ async def test_probe_run_does_not_contaminate(bus: AsyncBus, tmp_path: Path):
 
     intent_path = Path(getattr(language.intent_log, "path", language.intent_log._path))
     size_before = intent_path.stat().st_size if intent_path.exists() else 0
-    out_before = await bus.client.xlen("lingua.out")
+    out_before = await bus.client.xlen("language.out")
     ext_before = await bus.client.xlen(EXTERNAL_STREAM)
     int_before = await bus.client.xlen(INTERNAL_STREAM)
 
@@ -396,7 +396,7 @@ async def test_probe_run_does_not_contaminate(bus: AsyncBus, tmp_path: Path):
 
     size_after = intent_path.stat().st_size if intent_path.exists() else 0
     assert size_before == size_after
-    assert await bus.client.xlen("lingua.out") == out_before
+    assert await bus.client.xlen("language.out") == out_before
     assert await bus.client.xlen(EXTERNAL_STREAM) == ext_before
     assert await bus.client.xlen(INTERNAL_STREAM) == int_before
     assert all(isinstance(r, ProbeSample) for r in results)

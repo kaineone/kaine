@@ -100,11 +100,11 @@ TOOL_VERSION = "1"
 ARMS = ("competitive", "matched", "pooled")
 CONTROLS = ("matched", "pooled")
 TONE = "tone"
-PROCESSORS = ("topos", "audition", "soma")
+PROCESSORS = ("vision", "audition", "interoception")
 REPORT_TYPES = {
-    "topos": "topos.report",
+    "vision": "vision.report",
     "audition": "audition.perception",
-    "soma": "soma.report",
+    "interoception": "interoception.report",
 }
 PRELIMINARY_STUDY = "workspace_mediation_preliminary"
 PILOT_STUDIES = {

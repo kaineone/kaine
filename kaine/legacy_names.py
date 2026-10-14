@@ -15,7 +15,7 @@ SCOPES = ("prose", "identifiers", "keys", "operator", "persisted")
 SCOPE_STATUS = {
     "prose": "pending",
     "identifiers": "done",
-    "keys": "pending",
+    "keys": "done",
     "operator": "pending",
     "persisted": "pending",
 }
@@ -1122,6 +1122,10 @@ EXCLUDED_GLOBS = (
     "tests/test_legacy_keys_readers.py",
     "tests/test_legacy_reader_sites.py",
     "tests/test_legacy_reader_state.py",
+    # 6b: the old-stream cleanup and the dry boot of old-named files use old names
+    # on purpose.
+    "tests/test_legacy_streams_cleanup.py",
+    "tests/test_keys_flip_dry_boot.py",
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
@@ -1249,6 +1253,19 @@ ACCEPTED_COLLISIONS = [
     ("tests/test_research_event_log.py", "self_model"),
     ("tests/test_setup_device_map.py", "vision"),
     ("tests/test_setup_wizard.py", "vision"),
+
+    # Step 6b (keys). The decommission registry and its tests name locations by
+    # functional keys ("language", "self_model", "world_model",
+    # "episodic_memory.sqlite") and bundle directories ("locations/world_model");
+    # the renamed config tables meet those strings only as different roles (a
+    # dotted config key or a module-name list), never in one mapping.
+    ("kaine/lifecycle/decommission_locations.py", "language"),
+    ("kaine/lifecycle/decommission_locations.py", "self_model"),
+    ("kaine/lifecycle/decommission_locations.py", "world_model"),
+    ("tests/test_decommission_coverage.py", "episodic_memory"),
+    ("tests/test_decommission_end_to_end.py", "episodic_memory"),
+    ("tests/test_decommission_locations.py", "episodic_memory"),
+    ("tests/test_world_model_persistence.py", "world_model"),
 ]
 
 SURVEY_EXTRA = (

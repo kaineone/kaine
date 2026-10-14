@@ -25,7 +25,7 @@ class VoiceTrackingObserver(StreamSubscriberObserver):
         self._sink = sink
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if event.type != "hypnos.sleep.completed":
+        if event.type != "sleep.sleep.completed":
             return
         payload = event.payload or {}
         await self._sink.write(

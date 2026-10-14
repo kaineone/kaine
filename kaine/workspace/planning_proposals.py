@@ -4,10 +4,10 @@
 """The planning module proposal realization for the action selection module.
 
 This module implements the action selection module's side of ``nous-drives-action``: a policy
-wrapper that considers the most salient ``nous.proposal`` in the accessed
-coalition and, when appropriate, emits an intent with ``origin: "nous"``. For
+wrapper that considers the most salient ``planning.proposal`` in the accessed
+coalition and, when appropriate, emits an intent with ``origin: "planning"``. For
 every proposal it sees it records a content-free outcome payload that the action selection module
-publishes to ``volition_feedback.out`` so the planning module can learn from what actually
+publishes to ``action_selection_feedback.out`` so the planning module can learn from what actually
 happened.
 """
 from __future__ import annotations
@@ -35,13 +35,13 @@ from kaine.workspace.action_selection import (
 log = logging.getLogger(__name__)
 
 # The planning module → the action selection module event contract.
-PLANNING_SOURCE = "nous"
-PLANNING_PROPOSAL_TYPE = "nous.proposal"
+PLANNING_SOURCE = "planning"
+PLANNING_PROPOSAL_TYPE = "planning.proposal"
 
 # Drive summary helpers are mirrored here so this module stays independent of
 # kaine.workspace.drive_policy (the drive policy already imports from the action selection module).
-AFFECT_DRIVE_SOURCE = "thymos"
-AFFECT_DRIVE_TYPE = "thymos.drive"
+AFFECT_DRIVE_SOURCE = "affect"
+AFFECT_DRIVE_TYPE = "affect.drive"
 
 
 class PlanningProposalSource:
@@ -339,7 +339,7 @@ class PlanningProposalSource:
             self._record_outcome(proposal_event, "realized", realized=True)
             return inner_intents + [
                 Intent(
-                    kind=kind, about=about, entry_id=entry_id, origin="nous",
+                    kind=kind, about=about, entry_id=entry_id, origin="planning",
                     about_kind=about_kind,
                 )
             ]
@@ -353,7 +353,7 @@ class PlanningProposalSource:
             self._last_at[REST] = rest_now
             self._record_outcome(proposal_event, "forwarded", realized=False)
             return inner_intents + [
-                Intent(kind=REST, about="rest", origin="nous", proposal_id=proposal_id)
+                Intent(kind=REST, about="rest", origin="planning", proposal_id=proposal_id)
             ]
 
         # Unknown proposal kind: treat as disabled.

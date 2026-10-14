@@ -165,8 +165,8 @@ def test_duplicate_entry_ids_in_one_broadcast_raise():
     records[1]["entries"].append(
         {
             "entry_id": "audition.out:0-0",
-            "source": "topos",
-            "type": "topos.report",
+            "source": "vision",
+            "type": "vision.report",
             "salience": 0.5,
         }
     )

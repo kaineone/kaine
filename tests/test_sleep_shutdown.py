@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for Hypnos.shutdown cleaning up the in-flight sleep and held tasks.
+"""Tests for Sleep.shutdown cleaning up the in-flight sleep and held tasks.
 """
 
 import asyncio
@@ -106,8 +106,8 @@ def _make_sleep(bus, tmp_path, *, episodic_memory, affect, associative=False):
 
 
 async def _completed_events(bus) -> list[dict]:
-    entries = await bus.read("hypnos.out", last_id="0")
-    return [e.payload for _, e in entries if e.type == "hypnos.sleep.completed"]
+    entries = await bus.read("sleep.out", last_id="0")
+    return [e.payload for _, e in entries if e.type == "sleep.sleep.completed"]
 
 
 @pytest.mark.asyncio
@@ -120,8 +120,8 @@ async def test_shutdown_during_a_sleep_resets_and_reports(bus, tmp_path):
     await sleep.initialize()
     await bus.publish(
         Event(
-            source="soma",
-            type="soma.fatigue",
+            source="interoception",
+            type="interoception.fatigue",
             payload={"crossed": True},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),

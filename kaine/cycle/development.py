@@ -5,7 +5,7 @@
 
 This component measures the readiness of an entity in its developmental phase for maturation. It does not
 actuate the entity, push it toward any target, or change lifecycle stage.
-The probe protocol is bounded (hard maxima), disclosed via ``gestation.probe``
+The probe protocol is bounded (hard maxima), disclosed via ``development.probe``
 events, and never runs while the cycle is frozen (which covers a welfare
 response, since the welfare net freezes) or in the first readout period after
 boot. The schedule is intentionally jittered and the perturbation is a bounded
@@ -23,7 +23,7 @@ Markers and their research sites:
     Duecker 2021).
   * ``hrv_variability`` — coefficient of variation of self-rhythm wrap
     intervals (Feldman & Eidelman 2003).
-  * ``womb_prediction_error`` — the vision module's raw prediction-error ratio across
+  * ``stimulus_source_prediction_error`` — the vision module's raw prediction-error ratio across
     the developmental phase (Ciaunica 2021).
   * ``return_to_baseline_seconds`` — the interoception module's interoceptive surprise recovery after
     perturbation (Feldman 2012).
@@ -52,8 +52,8 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-READINESS_TYPE = "gestation.readiness"
-PROBE_TYPE = "gestation.probe"
+READINESS_TYPE = "development.readiness"
+PROBE_TYPE = "development.probe"
 SOURCE = DEVELOPMENT_SOURCE
 WITHDRAWAL_MAX_SECONDS = 30.0
 PERTURBATION_MAX_SECONDS = 10.0
@@ -97,7 +97,7 @@ class DevelopmentReadoutConfig:
 
     @classmethod
     def from_dict(cls, data) -> "DevelopmentReadoutConfig":
-        # An absent [perception_feed.womb.readout] table means the defaults.
+        # An absent [perception_feed.stimulus_source.readout] table means the defaults.
         if data is None:
             data = {}
         if not isinstance(data, dict):
@@ -795,14 +795,14 @@ class DevelopmentOwner:
     async def _ensure_cursors(self) -> None:
         if self._vision_cursor is None:
             try:
-                latest = await self._bus.latest("topos.out")
+                latest = await self._bus.latest("vision.out")
                 self._vision_cursor = latest[0] if latest else "0"
             except Exception:
                 log.warning("gestation: failed to initialise topos cursor", exc_info=True)
                 self._vision_cursor = "0"
         if self._interoception_cursor is None:
             try:
-                latest = await self._bus.latest("soma.out")
+                latest = await self._bus.latest("interoception.out")
                 self._interoception_cursor = latest[0] if latest else "0"
             except Exception:
                 log.warning("gestation: failed to initialise soma cursor", exc_info=True)
@@ -1230,7 +1230,7 @@ class DevelopmentOwner:
                     )
                 event = Event(
                     source=SOURCE,
-                    type="gestation.viability",
+                    type="development.viability",
                     payload=verdict,
                     salience=0.1,
                     timestamp=datetime.now(timezone.utc),
@@ -1255,11 +1255,11 @@ class DevelopmentOwner:
 
         try:
             entries, last_scanned = await self._bus.read_entries(
-                "soma.out", last_id=self._interoception_cursor, count=1000
+                "interoception.out", last_id=self._interoception_cursor, count=1000
             )
             for entry_id, event in entries:
                 self._interoception_cursor = entry_id
-                if event.type != "soma.report":
+                if event.type != "interoception.report":
                     continue
                 err = (
                     event.payload.get("prediction_error")
@@ -1286,7 +1286,7 @@ class DevelopmentOwner:
             return []
         try:
             entries, last_scanned = await self._bus.read_entries(
-                "topos.out", last_id=self._vision_cursor, count=1000
+                "vision.out", last_id=self._vision_cursor, count=1000
             )
         except Exception:
             log.warning("gestation: failed to read topos reports", exc_info=True)
@@ -1295,7 +1295,7 @@ class DevelopmentOwner:
         errors: list[float] = []
         for entry_id, event in entries:
             self._vision_cursor = entry_id
-            if event.type != "topos.report":
+            if event.type != "vision.report":
                 continue
             err = (
                 event.payload.get("prediction_error")

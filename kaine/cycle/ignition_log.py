@@ -55,7 +55,7 @@ class IgnitionLogConfig:
 
 # ``(item_idx, order, title, offset_s, paused[, paused_by])``: ``paused_by`` is
 # the sorted names of the clock's pause holders (``transition``, ``freeze``,
-# ``hypnos``, ...), so analysis can tell the stimulus-source-to-world crossfade from sleep
+# ``sleep``, ...), so analysis can tell the stimulus-source-to-world crossfade from sleep
 # or a freeze. A provider without it yields a record with ``paused_by: None``.
 PositionProvider = Callable[[], tuple[Any, ...] | None]
 AudioPositionProvider = Callable[[], tuple[int, float] | None]

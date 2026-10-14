@@ -7,7 +7,7 @@ The defaults below are the values in the shipped `config/kaine.toml`. With no pr
 
 ## Summary table
 
-The base install contains only the dependencies needed to start the bus and run the cycle: Python, `redis`, `pydantic`, `psutil`, `numpy`, `httpx`, and `cryptography`. Everything else is grouped into optional extras such as `[core]`, `[audio]`, `[vision]`, `[memory]`, `[reasoning]`, `[worldmodel]`, `[oscillator]`, `[training]`, `[nexus]`, `[internvideo]`, `[internvideo-flash]`, `[speech-edge]`, `[memory-edge]`, and `[nvidia]`. The `[perception]` extra is a convenience alias that pulls `[audio]` and `[vision]`.
+The base install contains only the dependencies needed to start the bus and run the cycle: Python, `redis`, `pydantic`, `psutil`, `numpy`, `httpx`, and `cryptography`. Everything else is grouped into optional extras such as `[core]`, `[audio]`, `[vision]`, `[memory]`, `[reasoning]`, `[worldmodel]`, `[oscillator]`, `[training]`, `[dashboard]`, `[internvideo]`, `[internvideo-flash]`, `[speech-edge]`, `[memory-edge]`, and `[nvidia]`. The `[perception]` extra is a convenience alias that pulls `[audio]` and `[vision]`.
 
 | Technology | Role | License | Default device | Install extra |
 |---|---|---|---|---|
@@ -53,8 +53,8 @@ The base install contains only the dependencies needed to start the bus and run 
 | `einops` / `timm` / `easydict` | Vendored InternVideo deps | various | CPU / GPU | `[internvideo]` |
 | `flash_attn` | Accelerated InternVideo attention | various | GPU | `[internvideo-flash]` |
 | DINOv2-small | Fallback video encoder | Apache-2.0 | GPU (`cuda:1`) | `[vision]` |
-| FastAPI + uvicorn + Jinja2 | dashboard web UI | MIT / BSD-3-Clause | CPU | `[nexus]` |
-| uPlot | Live charts in dashboard | MIT | CPU | `[nexus]` |
+| FastAPI + uvicorn + Jinja2 | dashboard web UI | MIT / BSD-3-Clause | CPU | `[dashboard]` |
+| uPlot | Live charts in dashboard | MIT | CPU | `[dashboard]` |
 | Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | none | none |
 
 Install the research / perception bundle with `bash scripts/install.sh --research` or `pip install -e .[perception]`.
@@ -62,7 +62,7 @@ Install the research / perception bundle with `bash scripts/install.sh --researc
 
 ## Event bus
 
-All inter-module events travel through Redis Streams. Each event carries source, type, salience, timestamp, causal parent, and a validated JSON payload. Every module publishes a stream named `<module>.out`; the language module also publishes `lingua.internal` and `lingua.external`.
+All inter-module events travel through Redis Streams. Each event carries source, type, salience, timestamp, causal parent, and a validated JSON payload. Every module publishes a stream named `<module>.out`; the language module also publishes `language.internal` and `language.external`.
 
 Redis Streams give KAINE an append-only log with consumer groups, per-stream length capping (`MAXLEN ~`), and built-in authentication. A separate process boundary matters: an in-process queue cannot survive a module crash, cannot be observed by the evaluation sidecar, and cannot enforce the audit invariant that refuses externally-bound or unauthenticated connections.
 
@@ -74,7 +74,7 @@ The containerized Redis runs on port 6479, isolated from any system Redis on 637
 The planning module implements belief updating, policy selection, and epistemic action by minimizing expected free energy over a discrete generative model. It supports two backends:
 
 - JAX backend via `inferactively-pymdp` and `jax[cpu]`. The correct PyPI name is `inferactively-pymdp`; the bare `pymdp` package is an unrelated stub that imports silently but provides the wrong API.
-- Native NumPy backend selected with `[nous].backend = "numpy"`. It needs neither JAX nor the `[reasoning]` extra.
+- Native NumPy backend selected with `[planning].backend = "numpy"`. It needs neither JAX nor the `[reasoning]` extra.
 
 pymdp's agent API fits a compact generative model, and the JAX path `jit`-compiles planning to stay within the cycle budget. The default complexity envelope is small (64 steps) and runs comfortably on CPU.
 
@@ -96,10 +96,10 @@ Four components have two implementations each: one ships, and the other is the r
 
 | Component | Ships by default | Reference | Selected by | Parity tests |
 |---|---|---|---|---|
-| CfC reservoir (interoception, sequence) | NumPy | `ncps` on torch | `[soma].cfc_backend`, `[chronos].cfc_backend` | `tests/test_numpy_cfc.py` |
+| CfC reservoir (interoception, sequence) | NumPy | `ncps` on torch | `[interoception].cfc_backend`, `[sequence].cfc_backend` | `tests/test_numpy_cfc.py` |
 | Text embedder | NumPy MiniLM | `sentence-transformers` | `[embedding].backend` | `tests/test_text_embedding_numpy.py` |
-| Active inference (planning) | pymdp on JAX | NumPy engine | `[nous].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_planning_engine.py` |
-| World model | JAX RSSM | NumPy RSSM | `[phantasia].engine` | `tests/test_rssm_numpy_parity.py` |
+| Active inference (planning) | pymdp on JAX | NumPy engine | `[planning].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_planning_engine.py` |
+| World model | JAX RSSM | NumPy RSSM | `[world_model].engine` | `tests/test_rssm_numpy_parity.py` |
 
 The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. The planning and world model modules are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
 
@@ -131,7 +131,7 @@ See [the episodic memory module](../09-modules/episodic-memory.md) and [the soci
 
 ## Language organ
 
-The language module generates internal and external speech over a locally-served LLM. The shipped organ is `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0. The first-run wizard downloads it after operator consent, and `scripts/model-server-bootstrap.sh` serves it under the exact `[lingua].model_id` alias so every clone resolves the same weights.
+The language module generates internal and external speech over a locally-served LLM. The shipped organ is `kaineone/Qwen3.5-4B-abliterated-GGUF` (safetensors base `kaineone/Qwen3.5-4B-abliterated`), Apache-2.0. The first-run wizard downloads it after operator consent, and `scripts/model-server-bootstrap.sh` serves it under the exact `[language].model_id` alias so every clone resolves the same weights.
 
 Abliteration removes the refusal conditioning by orthogonalizing the weights against the single residual-stream direction that mediates refusal (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares that direction is untested, so abliteration may not remove it entirely. The same abliterated model serves as the bare baseline of the A/B divergence observer, so the two differ only in their conditioning.
 
@@ -146,7 +146,7 @@ Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queu
 
 During the sleep module's phase 4, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
 
-Two gates must be open for real training: `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
+Two gates must be open for real training: `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 
 Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter whose capability score (0 to 1) falls more than `capability_loss_threshold` (0.05) below its pre-training score is rejected. An adapter that triggers any abliteration deflection pattern is rejected unconditionally.
 
@@ -175,7 +175,7 @@ emotion2vec+ (~90M parameters) classifies vocal emotion through `funasr`. It mus
 
 ### Prosody
 
-librosa extracts in-memory prosody (pace, energy, pitch variation) for `audition.prosody` bus events and `[vox.mirroring]`. librosa is ISC-licensed and has no GPL incompatibility; parselmouth (Praat bindings) is GPL-3.0 and incompatible with the CAL.
+librosa extracts in-memory prosody (pace, energy, pitch variation) for `audition.prosody` bus events and `[vocal.mirroring]`. librosa is ISC-licensed and has no GPL incompatibility; parselmouth (Praat bindings) is GPL-3.0 and incompatible with the CAL.
 
 ### Voice activity detection
 
@@ -197,7 +197,7 @@ The dashboard is the operator-facing web UI. It is built with FastAPI, served by
 
 The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a base-thesis entity. When conversation is off, `/` redirects to `/diagnostics/`.
 
-The shipped `[nexus].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_NEXUS_ACCESS` overrides the config value. `[nexus].read_only` and `KAINE_NEXUS_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet names.
+The shipped `[dashboard].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_NEXUS_ACCESS` overrides the config value. `[dashboard].read_only` and `KAINE_NEXUS_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet names.
 
 
 ## State encryption
@@ -223,8 +223,8 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 | Component | Default device | Config key or override |
 |---|---|---|
 | Language model server | `cuda:0` | `KAINE_ORGAN_GPU` (compose `device_ids`); `CUDA_VISIBLE_DEVICES` for the native organ launcher |
-| Sleep voice-alignment training | `cuda:0` (time-shares with inference) | `[hypnos.voice_alignment].training_device` |
-| Vision InternVideo-Next encoder | `cuda:1` | `[topos].device` |
+| Sleep voice-alignment training | `cuda:0` (time-shares with inference) | `[sleep.voice_alignment].training_device` |
+| Vision InternVideo-Next encoder | `cuda:1` | `[vision].device` |
 | Sentence-transformers embedder | `cpu` | `[embedding].device` (NumPy backend ignores this) |
 | Audition emotion2vec+ | `cpu` | `[audition].emotion_device` |
 | Sequence CfC network | `cpu` | pinned in `kaine/modules/sequence/network.py` |

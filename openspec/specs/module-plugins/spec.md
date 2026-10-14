@@ -24,22 +24,22 @@ If a plugin named in `[plugins].enabled` has no entry point, is exported by more
 - **THEN** boot raises `PluginError` naming `missing` before any module is constructed
 
 ### Requirement: Plugins fill only declared seams
-A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill only seams KAINE declares: `chronos.network`, `soma.forward_model`, `nous.engine`, and `oscillator.<module>`. A plugin declaring an unknown seam, two plugins declaring the same seam, or a plugin returning a seam it did not declare SHALL cause boot to raise `PluginError`. Seam validation and conflict detection SHALL happen before any module is constructed. A plugin SHALL NOT be able to enable or disable modules, switch on the oscillator layer, or change configuration.
+A plugin SHALL declare its seams when it is loaded, and SHALL be able to fill only seams KAINE declares: `sequence.network`, `interoception.forward_model`, `planning.engine`, and `oscillator.<module>`. A plugin declaring an unknown seam, two plugins declaring the same seam, or a plugin returning a seam it did not declare SHALL cause boot to raise `PluginError`. Seam validation and conflict detection SHALL happen before any module is constructed. A plugin SHALL NOT be able to enable or disable modules, switch on the oscillator layer, or change configuration.
 
 #### Scenario: Unknown seam
-- **WHEN** a plugin declares `chronos.cfc_units`
+- **WHEN** a plugin declares `sequence.cfc_units`
 - **THEN** boot raises `PluginError` naming the plugin and the seam before any module is constructed
 
 #### Scenario: Returned seam was not declared
-- **WHEN** a plugin declared only `chronos.network` and its `injections` for the interoception module returns `{"forward_model": model}`
+- **WHEN** a plugin declared only `sequence.network` and its `injections` for the interoception module returns `{"forward_model": model}`
 - **THEN** boot raises `PluginError` naming the plugin, the module and the key
 
 #### Scenario: Two plugins claim one seam
-- **WHEN** two enabled plugins both declare `chronos.network`
+- **WHEN** two enabled plugins both declare `sequence.network`
 - **THEN** boot raises `PluginError` naming both plugins before any module is constructed
 
 #### Scenario: Oscillator seam with the layer off
-- **WHEN** a plugin declares `oscillator.chronos` and `[oscillator].enabled` is false
+- **WHEN** a plugin declares `oscillator.sequence` and `[oscillator].enabled` is false
 - **THEN** boot raises `PluginError` naming the plugin and the seam
 
 #### Scenario: Declared seam is honoured
@@ -57,8 +57,8 @@ When the supervisor rebuilds a module on its heavy-restart path, the rebuilt mod
 Boot SHALL log each filled seam at WARNING level, and the run manifest SHALL record, for each enabled plugin, its name, the distribution name and version from package metadata, and its declared seams. The manifest entry SHALL be complete when the manifest is written, which happens before modules are constructed.
 
 #### Scenario: Manifest of a substituted run
-- **WHEN** a run boots with a plugin that fills `chronos.network`
-- **THEN** the run manifest's `plugins` entry lists that plugin's name, its distribution and version, and `chronos.network`
+- **WHEN** a run boots with a plugin that fills `sequence.network`
+- **THEN** the run manifest's `plugins` entry lists that plugin's name, its distribution and version, and `sequence.network`
 
 ### Requirement: Plugin configuration is namespaced
 Each plugin SHALL receive only its own `[plugins.<name>]` table. Configuration shape validation SHALL reject a `plugins.enabled` value that is not a list of strings.
@@ -68,10 +68,10 @@ Each plugin SHALL receive only its own `[plugins.<name>]` table. Configuration s
 - **THEN** configuration validation raises `ConfigShapeError` naming `plugins.enabled`
 
 ### Requirement: Planning's engine can be wrapped
-A plugin SHALL be able to declare `nous.engine_wrapper` and supply a callable. When the planning module is constructed with a wrapper, KAINE SHALL build the default engine from `[nous]` as it does without plugins, call the wrapper with that engine, and use the returned engine. The returned object SHALL satisfy `ActiveInferenceEngine`; otherwise construction SHALL fail with an error naming the plugin.
+A plugin SHALL be able to declare `planning.engine_wrapper` and supply a callable. When the planning module is constructed with a wrapper, KAINE SHALL build the default engine from `[planning]` as it does without plugins, call the wrapper with that engine, and use the returned engine. The returned object SHALL satisfy `ActiveInferenceEngine`; otherwise construction SHALL fail with an error naming the plugin.
 
 #### Scenario: Wrapper receives the default engine
-- **WHEN** a plugin supplies a wrapper for the planning module and `[nous]` sets `planning_horizon = 2`
+- **WHEN** a plugin supplies a wrapper for the planning module and `[planning]` sets `planning_horizon = 2`
 - **THEN** the wrapper is called with a `PymdpEngine` built with that horizon, and the planning module uses the wrapper's return value
 
 #### Scenario: Wrapper returns something that is not an engine
@@ -79,10 +79,10 @@ A plugin SHALL be able to declare `nous.engine_wrapper` and supply a callable. W
 - **THEN** construction fails with an error naming the plugin
 
 ### Requirement: Replacement and wrapper are exclusive
-Filling both `nous.engine` and `nous.engine_wrapper`, whether by one plugin or by two, SHALL stop the boot with an error naming the plugins involved.
+Filling both `planning.engine` and `planning.engine_wrapper`, whether by one plugin or by two, SHALL stop the boot with an error naming the plugins involved.
 
 #### Scenario: Both seams declared
-- **WHEN** one plugin declares `nous.engine` and another declares `nous.engine_wrapper`
+- **WHEN** one plugin declares `planning.engine` and another declares `planning.engine_wrapper`
 - **THEN** loading the plugins raises an error naming both
 
 ### Requirement: Plugins may observe cycle ticks

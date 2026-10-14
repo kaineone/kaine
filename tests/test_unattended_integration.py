@@ -49,15 +49,15 @@ def _make_config(port: int) -> dict[str, Any]:
             "require_encryption": False,
         },
         "evaluation": {"enabled": True},
-        "spot": {"enabled": True},
+        "supervisor": {"enabled": True},
         "caretaker": {
             "channels": [{"kind": "http", "url": f"http://127.0.0.1:{port}/notify"}]
         },
         "perception_feed": {"mode": "seeded", "seed": 0},
         # Condition 9 needs the individuation producer wired, which needs the language module.
         "individuation": {"enabled": True},
-        "modules": {"topos": True, "lingua": True},
-        "topos": {"capture_width": 64, "capture_height": 48},
+        "modules": {"vision": True, "language": True},
+        "vision": {"capture_width": 64, "capture_height": 48},
     }
 
 
@@ -166,7 +166,7 @@ def test_unattended_gate_healthy(
         (["preservation", "divergence_monitor", "enabled"], False, 1),
         (["preservation", "welfare_response", "enabled"], False, 2),
         (["evaluation", "enabled"], False, 3),
-        (["spot", "enabled"], False, 6),
+        (["supervisor", "enabled"], False, 6),
         (["perception_feed", "mode"], "off", 8),
         (["individuation", "enabled"], False, 9),
     ],

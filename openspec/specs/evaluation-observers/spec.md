@@ -34,8 +34,8 @@ full content is logged.
 - **THEN** JSONL entries include text content
 
 ### Requirement: Prediction-error observer with sliding-window statistics
-The `prediction_error_observer` SHALL subscribe to `soma.out`, `chronos.out`,
-`topos.out`, `audition.out`, and `phantasia.out`; maintain a sliding-window
+The `prediction_error_observer` SHALL subscribe to `interoception.out`, `sequence.out`,
+`vision.out`, `audition.out`, and `world_model.out`; maintain a sliding-window
 mean/p95/p99 of prediction error; and surface counts on dashboard diagnostics.
 
 #### Scenario: Prediction error statistics computed over window
@@ -53,7 +53,7 @@ duration. Each event type SHALL surface as a count on dashboard diagnostics and
 SHALL write a record to the sink.
 
 For condition (d): the observer SHALL read the interoceptive prediction-error
-magnitude carried by `soma.report` events on `soma.out`. The sustain timer
+magnitude carried by `interoception.report` events on `interoception.out`. The sustain timer
 SHALL reset when the magnitude drops below the threshold, so a single sustained
 episode produces a single event rather than one per tick. Absent explicit
 configuration, condition (d) SHALL operate at safe defaults without altering
@@ -73,24 +73,24 @@ the behavior of conditions (a)–(c).
 - **THEN** the welfare observer increments the replay-overload count
 
 #### Scenario: Sustained interoceptive distress is flagged
-- **WHEN** `soma.report` interoceptive prediction-error magnitude stays at or
+- **WHEN** `interoception.report` interoceptive prediction-error magnitude stays at or
   above the configured `interoceptive_distress_threshold` continuously for at
   least `interoceptive_distress_duration_s`
 - **THEN** the welfare observer increments the sustained-interoceptive-distress count
 - **AND** writes a record of the event to the sink
 
 #### Scenario: A transient interoceptive spike does not fire
-- **WHEN** `soma.report` interoceptive prediction-error magnitude exceeds the
+- **WHEN** `interoception.report` interoceptive prediction-error magnitude exceeds the
   threshold only briefly and drops below it before the configured duration elapses
 - **THEN** the welfare observer does NOT increment the sustained-interoceptive-distress count
 - **AND** the sustain timer resets so a later sustained episode can fire independently
 
 ### Requirement: Planning policy observer
-The `nous_policy_observer` SHALL log `nous.policy` events containing EFE value,
+The `planning_policy_observer` SHALL log `planning.policy` events containing EFE value,
 planning horizon, and selected action ID to daily-rotated JSONL.
 
 #### Scenario: Policy log records EFE and action
-- **WHEN** a `nous.policy` event is observed
+- **WHEN** a `planning.policy` event is observed
 - **THEN** the JSONL entry contains the EFE value, horizon, and selected action ID
 
 ### Requirement: Observers degrade gracefully
@@ -241,7 +241,7 @@ non-recall mechanism distinguishes "memory absent → said so" from "memory abse
   between the sentinel text and the memory text
 
 ### Requirement: The voice-alignment observer reads the summary as Sleep writes it
-The voice-alignment divergence observer SHALL take the gate outcome (`accepted`, `capability_loss`, `samples_used`, and an outcome category derived from `reason`) from the `voice_alignment` sub-dictionary of `hypnos.sleep.completed`, and the training metrics (`dpo_loss`, `capability_score_before`, `capability_score_after`, `mean_intent_expression_similarity_before`, `mean_intent_expression_similarity_after`) from the top level of the same summary. The outcome SHALL be recorded as one of `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`, never as the free-text reason, because the observer's records are eligible for the metrics-only research bundle and reasons can carry exception text and local paths. It SHALL write no record for a sleep whose `voice_alignment` phase was skipped by the configuration or operator-approval gate, and SHALL write a record when the phase ran, including when it found no usable pairs.
+The voice-alignment divergence observer SHALL take the gate outcome (`accepted`, `capability_loss`, `samples_used`, and an outcome category derived from `reason`) from the `voice_alignment` sub-dictionary of `sleep.sleep.completed`, and the training metrics (`dpo_loss`, `capability_score_before`, `capability_score_after`, `mean_intent_expression_similarity_before`, `mean_intent_expression_similarity_after`) from the top level of the same summary. The outcome SHALL be recorded as one of `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`, never as the free-text reason, because the observer's records are eligible for the metrics-only research bundle and reasons can carry exception text and local paths. It SHALL write no record for a sleep whose `voice_alignment` phase was skipped by the configuration or operator-approval gate, and SHALL write a record when the phase ran, including when it found no usable pairs.
 
 #### Scenario: A training sleep produces a complete record
 - **WHEN** a sleep ran voice-alignment training and the sleep module published its summary

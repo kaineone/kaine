@@ -44,14 +44,14 @@ returning a fixed/centre fovea.
       foveal crop (array slice → native patch); release frames as they age out
       (zero-persistence guard stays green). *Native-resolution delivery from the
       capture layer is wired in 1.6/benchmark below.*
-- [x] 1.5 Encode both views; extend `topos.report` to carry peripheral + foveal
+- [x] 1.5 Encode both views; extend `vision.report` to carry peripheral + foveal
       latents + content-free fovea location `(x, y, size)`; keep whole-frame salience
       as a diagnostic and as the fallback when foveation is off.
-- [x] 1.6 Config: a foveation toggle under `[topos]` (`foveation`, off by default)
+- [x] 1.6 Config: a foveation toggle under `[vision]` (`foveation`, off by default)
       + tile grid, dwell/hysteresis, arousal→size range, peripheral/foveal geometry;
       and a `[perception_feed.screen].native` grab (detected via xrandr on X11, with
       an honest fallback + logged note when undetectable). Arousal seam wired at the
-      composition root (`_wire_topos_arousal`); the top-down seam is built and tested
+      composition root (`_wire_vision_arousal`); the top-down seam is built and tested
       but stays unwired until a real workspace region-of-interest signal exists (no
       pretend source).
 - [x] 1.7 Host-benchmark (`scripts/bench_foveation.py`) of the two-encode +
@@ -105,10 +105,10 @@ returning a fixed/centre fovea.
 ## 5. Docs / paper
 
 - [x] 5.1 Update `docs/09-modules/vision.md` with the foveation path once implemented.
-      (New "Attention-driven foveation (topos-foveation)" section documenting the
+      (New "Attention-driven foveation (vision-foveation)" section documenting the
       per-tick pipeline, the injected top-down/arousal seams, the attention schema,
-      and the report fields; plus `[topos]` config rows, the `foveation.py` key-file
-      entry, the foveated-`topos.report` payload note, and the two foveation test
+      and the report fields; plus `[vision]` config rows, the `foveation.py` key-file
+      entry, the foveated-`vision.report` payload note, and the two foveation test
       rows.)
 - [x] 5.2 Note the attention-schema realization and active-vision framing for the
       paper's future-work / §5 indicator update (paper change, not code).

@@ -319,15 +319,15 @@ async def test_watch_sleep(tmp_path: Path):
     runtime = build(tmp_path)
     now = datetime.now(timezone.utc)
     start_ev = Event(
-        source="hypnos",
-        type="hypnos.sleep.started",
+        source="sleep",
+        type="sleep.sleep.started",
         payload={},
         salience=0.5,
         timestamp=now,
     )
     end_ev = Event(
-        source="hypnos",
-        type="hypnos.sleep.completed",
+        source="sleep",
+        type="sleep.sleep.completed",
         payload={},
         salience=0.5,
         timestamp=now,

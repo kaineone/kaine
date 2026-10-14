@@ -7,7 +7,7 @@ SHALL read `kaine/modules/sleep/eval_probes/default.jsonl` and
 compute `correct / total` against the model. The operator MAY
 substitute their own evaluator by passing one explicitly or by
 overriding the probe-set path via
-`[hypnos.voice_alignment].capability_probe_path`.
+`[sleep.voice_alignment].capability_probe_path`.
 
 A probe SHALL count as correct only when its normalised expected answer occurs as a
 whole token sequence in the normalised response, cut before the first later line

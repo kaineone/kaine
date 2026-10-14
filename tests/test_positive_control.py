@@ -124,7 +124,7 @@ def test_settings_ladder_needs_preliminary_run(tmp_path):
 def test_settings_ladder_loads_principal_components(tmp_path):
     run_id = "prelim"
     shas = {}
-    for processor in ("topos", "audition", "soma"):
+    for processor in ("vision", "audition", "interoception"):
         pc = _pc(processor, 4)
         path = principal_component_path(tmp_path, run_id, processor)
         write_principal_component(pc, path)
@@ -135,19 +135,19 @@ def test_settings_ladder_loads_principal_components(tmp_path):
         pc_root=tmp_path,
     )
     assert settings.mode == "ladder"
-    for processor in ("topos", "audition", "soma"):
+    for processor in ("vision", "audition", "interoception"):
         assert settings.principal_components[processor].processor == processor
         assert settings.pc_sha256[processor] == shas[processor]
 
 
 def test_settings_ladder_missing_file(tmp_path):
     run_id = "prelim"
-    for processor in ("topos", "audition"):
+    for processor in ("vision", "audition"):
         write_principal_component(
             _pc(processor, 4), principal_component_path(tmp_path, run_id, processor)
         )
 
-    with pytest.raises(ValueError, match=str(principal_component_path(tmp_path, run_id, "soma"))):
+    with pytest.raises(ValueError, match=str(principal_component_path(tmp_path, run_id, "interoception"))):
         PositiveControlSettings.from_config(
             {"enabled": True, "mode": "ladder", "principal_components_run": run_id},
             pc_root=tmp_path,
@@ -165,7 +165,7 @@ def _write_settings_record(tmp_path, complete=True):
     from kaine.experiment import calibration_rules as rules
     run_id = "prelim"
     pc_refs = {}
-    for processor in ("topos", "audition", "soma"):
+    for processor in ("vision", "audition", "interoception"):
         pc = _pc(processor, 4)
         path = principal_component_path(tmp_path, run_id, processor)
         write_principal_component(pc, path)
@@ -221,7 +221,7 @@ def _write_settings_record(tmp_path, complete=True):
             "n_not_exercised": 0,
             "n_counted": rules.N_CAL,
             "n_exact": rules.N_EXACT,
-            "snr": {"topos": 4.0, "audition": 4.0, "soma": 4.0},
+            "snr": {"vision": 4.0, "audition": 4.0, "interoception": 4.0},
             "min_effect_tone": 0.05,
             "min_effect_tone_adjusted": 0.04,
             "tone_bins": [0.5, 0.8, 1.1, 1.6],
@@ -247,9 +247,9 @@ def test_settings_control_loads_record(tmp_path):
     assert settings.t_learn_s == 120.0
     assert settings.min_effect == 0.01
     assert settings.min_reports == 500
-    assert settings.snr == {"topos": 4.0, "audition": 4.0, "soma": 4.0}
+    assert settings.snr == {"vision": 4.0, "audition": 4.0, "interoception": 4.0}
     assert settings.settings_sha256 is not None
-    for processor in ("topos", "audition", "soma"):
+    for processor in ("vision", "audition", "interoception"):
         assert processor in settings.principal_components
         assert settings.pc_sha256[processor] == file_sha256(
             principal_component_path(tmp_path, "prelim", processor)
@@ -270,10 +270,10 @@ def test_informative_component_follows_principal_direction():
     dim = 8
     v = rng.standard_normal(dim)
     v /= np.linalg.norm(v)
-    pc = _pc("topos", dim, direction=v)
+    pc = _pc("vision", dim, direction=v)
 
     src = ComponentSource(
-        informative=True, snr=1e6, seed=1, processor="topos", slot=0, pc=pc
+        informative=True, snr=1e6, seed=1, processor="vision", slot=0, pc=pc
     )
     inputs = rng.standard_normal((200, dim))
     projections = np.array([pc.project(x) for x in inputs])
@@ -281,16 +281,16 @@ def test_informative_component_follows_principal_direction():
     assert np.corrcoef(outputs[2:], projections[2:])[0, 1] > 0.999
 
     src_noise = ComponentSource(
-        informative=False, snr=1e6, seed=1, processor="topos", slot=0, pc=pc
+        informative=False, snr=1e6, seed=1, processor="vision", slot=0, pc=pc
     )
     noise_outputs = np.array([src_noise.next(x) for x in inputs])
     assert abs(np.corrcoef(noise_outputs[2:], projections[2:])[0, 1]) < 0.2
 
 
 def test_component_source_rejects_wrong_input_length():
-    pc = _pc("topos", 3)
+    pc = _pc("vision", 3)
     src = ComponentSource(
-        informative=True, snr=1.0, seed=0, processor="topos", slot=0, pc=pc
+        informative=True, snr=1.0, seed=0, processor="vision", slot=0, pc=pc
     )
     with pytest.raises(PrincipalComponentError):
         src.next([1.0, 2.0])
@@ -325,9 +325,9 @@ def test_null_uses_the_component_mean_before_this_step():
             informative=True,
             snr=1.0,
             seed=0,
-            processor="topos",
+            processor="vision",
             slot=1,
-            pc=_pc("topos", 4),
+            pc=_pc("vision", 4),
         )
     )
     probe._source = StubSource()
@@ -345,20 +345,20 @@ def test_null_uses_the_component_mean_before_this_step():
 
 
 def test_prepare_builds_the_shadows():
-    pc = _pc("topos", 2)
+    pc = _pc("vision", 2)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 1.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 1.0},
         min_effect=0.1,
         min_reports=1,
         t_learn_s=0.0,
     )
     live = LatentForwardModel(2, 4, context_dim=8, seed=0)
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     control.prepare(live)
     assert control._probes[0]._shadow is not None
     assert control._probes[1]._shadow is not None
@@ -377,25 +377,25 @@ def test_prepare_builds_the_shadows():
 
 
 def test_component_source():
-    pc = _pc("topos", 4, direction=np.array([1.0, 0.0, 0.0, 0.0]))
+    pc = _pc("vision", 4, direction=np.array([1.0, 0.0, 0.0, 0.0]))
     rng = np.random.default_rng(3)
     inputs = rng.standard_normal((2000, 4))
 
     src_a = ComponentSource(
-        informative=True, snr=100.0, seed=0, processor="topos", slot=0, pc=pc
+        informative=True, snr=100.0, seed=0, processor="vision", slot=0, pc=pc
     )
     src_b = ComponentSource(
-        informative=True, snr=100.0, seed=0, processor="topos", slot=0, pc=pc
+        informative=True, snr=100.0, seed=0, processor="vision", slot=0, pc=pc
     )
     out_a = np.array([src_a.next(v) for v in inputs])
     out_b = np.array([src_b.next(v) for v in inputs])
     assert np.allclose(out_a, out_b)
 
     src_n1 = ComponentSource(
-        informative=False, snr=100.0, seed=0, processor="topos", slot=0, pc=pc
+        informative=False, snr=100.0, seed=0, processor="vision", slot=0, pc=pc
     )
     src_n2 = ComponentSource(
-        informative=False, snr=100.0, seed=0, processor="topos", slot=0, pc=pc
+        informative=False, snr=100.0, seed=0, processor="vision", slot=0, pc=pc
     )
     out_n1 = np.array([src_n1.next(v) for v in inputs])
     out_n2 = np.array([src_n2.next(v) for v in inputs])
@@ -409,19 +409,19 @@ def test_component_source():
 
 
 def _run_vision_detection(min_effect, min_reports=500):
-    pc = _pc("topos", 4, direction=np.array([1.0, 0.0, 0.0, 0.0]))
+    pc = _pc("vision", 4, direction=np.array([1.0, 0.0, 0.0, 0.0]))
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 100.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 100.0},
         min_effect=min_effect,
         min_reports=min_reports,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     live = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=1, lr=0.05
     )
@@ -454,7 +454,7 @@ def _run_vision_detection(min_effect, min_reports=500):
 
 def test_detection_end_to_end():
     result = _run_vision_detection(min_effect=0.02)
-    assert result["processor"] == "topos"
+    assert result["processor"] == "vision"
     assert result["mode"] == "control"
     assert result["n_reports"] > 900
     assert result["detected"] is True
@@ -486,19 +486,19 @@ def _assert_state_equal(a, b):
 
 
 def test_live_model_untouched():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 100.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 100.0},
         min_effect=0.02,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
 
     live_with = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=2, lr=0.05
@@ -534,19 +534,19 @@ def test_live_model_untouched():
 
 
 def test_asleep_reports_do_not_count():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 100.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 100.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     live = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=3, lr=0.05
     )
@@ -573,7 +573,7 @@ def test_asleep_reports_do_not_count():
 async def test_publish_result(bus):
     ladder_record = {
         "record": "ladder",
-        "processor": "topos",
+        "processor": "vision",
         "entity_time_s": 1.0,
         "gain": 0.1,
         "gain_with": [0.1] * len(SNR_LADDER),
@@ -593,7 +593,7 @@ async def test_publish_result(bus):
 
     result = {
         "record": "result",
-        "processor": "topos",
+        "processor": "vision",
         "mode": "control",
         "n_reports": 10,
         "ig_with": 0.1,
@@ -625,14 +625,14 @@ async def test_publish_result(bus):
 
 
 def test_constructor_rejects_unknown_processor():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
@@ -644,40 +644,40 @@ def test_constructor_rejects_unknown_processor():
 def test_constructor_rejects_disabled():
     settings = PositiveControlSettings(enabled=False)
     with pytest.raises(ValueError, match="disabled"):
-        PositiveControl("topos", settings)
+        PositiveControl("vision", settings)
 
 
 def test_after_report_requires_model_methods():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
 
     class NoMethods:
         pass
 
-    with pytest.raises(TypeError, match="topos"):
+    with pytest.raises(TypeError, match="vision"):
         control.after_report(
             NoMethods(), [0.0], None, None, None, None, awake=True, entity_time_s=0.0
         )
 
 
 def test_non_informative_value_ignores_the_current_input():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     source_a = ComponentSource(
-        informative=False, snr=10.0, seed=7, processor="topos", slot=1, pc=pc
+        informative=False, snr=10.0, seed=7, processor="vision", slot=1, pc=pc
     )
     source_b = ComponentSource(
-        informative=False, snr=10.0, seed=7, processor="topos", slot=1, pc=pc
+        informative=False, snr=10.0, seed=7, processor="vision", slot=1, pc=pc
     )
     shared = [[float(i), float(i + 1), float(i + 2), float(i + 3)] for i in range(20)]
     for x in shared:
@@ -699,7 +699,7 @@ def test_noise_depends_on_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     from kaine.modules.positive_control import ComponentSource, PositiveControl
 
-    pc = _pc("soma", 3)
+    pc = _pc("interoception", 3)
 
     rng = np.random.default_rng(4)
     xs = rng.normal(size=(20, 3))
@@ -708,7 +708,7 @@ def test_noise_depends_on_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
         informative=False,
         snr=1.0,
         seed=0,
-        processor="soma",
+        processor="interoception",
         slot=0,
         pc=pc,
         run_seed=1,
@@ -717,7 +717,7 @@ def test_noise_depends_on_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
         informative=False,
         snr=1.0,
         seed=0,
-        processor="soma",
+        processor="interoception",
         slot=0,
         pc=pc,
         run_seed=1,
@@ -726,7 +726,7 @@ def test_noise_depends_on_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
         informative=False,
         snr=1.0,
         seed=0,
-        processor="soma",
+        processor="interoception",
         slot=0,
         pc=pc,
         run_seed=2,
@@ -748,38 +748,38 @@ def test_noise_depends_on_run_seed(monkeypatch: pytest.MonkeyPatch) -> None:
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"soma": pc},
-        pc_sha256={"soma": "sha"},
-        snr={"soma": 10.0},
+        principal_components={"interoception": pc},
+        pc_sha256={"interoception": "sha"},
+        snr={"interoception": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("soma", settings)
+    control = PositiveControl("interoception", settings)
     assert control._run_seed == 7
 
     monkeypatch.setattr(
         "kaine.modules.positive_control.get_run_context",
         lambda: None,
     )
-    control = PositiveControl("soma", settings)
+    control = PositiveControl("interoception", settings)
     assert control._run_seed == 0
 
 
 def test_gains_share_the_live_denominator():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     control._probes[0].step = lambda *args, **kwargs: 0.2
     control._probes[1].step = lambda *args, **kwargs: 0.0
 
@@ -800,19 +800,19 @@ def test_gains_share_the_live_denominator():
 
 
 def test_non_finite_gains_are_not_counted():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     control._probes[0].step = lambda *args, **kwargs: 0.2
     control._probes[1].step = lambda *args, **kwargs: 0.0
 
@@ -841,19 +841,19 @@ def test_non_finite_gains_are_not_counted():
 
 
 def test_final_and_failure_results():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     final = control.final_result()
     assert final["final"] is True
     assert final["failed"] is False
@@ -864,19 +864,19 @@ def test_final_and_failure_results():
 
 
 def test_non_finite_input_does_not_poison_the_control():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 100.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 100.0},
         min_effect=0.02,
         min_reports=100,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     live = LatentForwardModel(
         latent_dim=4, units=16, context_dim=24, seed=1, lr=0.05
     )
@@ -923,19 +923,19 @@ def test_non_finite_input_does_not_poison_the_control():
 
 
 def test_failure_result_cannot_pass():
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 10.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 10.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=0.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     assert control.result()["failed"] is False
     failed = control.failure_result()
     assert failed["failed"] is True
@@ -946,7 +946,7 @@ def test_failure_result_cannot_pass():
 def test_informative_noise_scale_ignores_the_current_input():
     snr = 10.0
     seed = 7
-    processor = "topos"
+    processor = "vision"
     pc = _pc(processor, 4, direction=np.array([1.0, 1.0, 1.0, 1.0]))
     shared = [[float(i), float(i + 1), float(i + 2), float(i + 3)] for i in range(20)]
     a = [1.0, 2.0, 3.0, 4.0]
@@ -1000,19 +1000,19 @@ def test_t_learn_counts_only_after_initial_period():
         def hindsight_step(self, *args, **kwargs):
             raise AssertionError("the live model is never stepped in hindsight")
 
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="control",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
-        snr={"topos": 100.0},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
+        snr={"vision": 100.0},
         min_effect=0.01,
         min_reports=1,
         t_learn_s=50.0,
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     live = StubLive()
     control.prepare(live)
 
@@ -1057,15 +1057,15 @@ def test_ladder_returns_gains_for_every_rung():
         def hindsight_step(self, *args, **kwargs):
             raise AssertionError("the live model is never stepped in hindsight")
 
-    pc = _pc("topos", 4)
+    pc = _pc("vision", 4)
     settings = PositiveControlSettings(
         enabled=True,
         mode="ladder",
         seed=0,
-        principal_components={"topos": pc},
-        pc_sha256={"topos": "sha"},
+        principal_components={"vision": pc},
+        pc_sha256={"vision": "sha"},
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     live = StubLive()
     control.prepare(live)
 
@@ -1097,7 +1097,7 @@ def test_ladder_returns_gains_for_every_rung():
         entity_time_s=2.0,
     )
     assert record["record"] == "ladder"
-    assert record["processor"] == "topos"
+    assert record["processor"] == "vision"
     assert record["entity_time_s"] == 2.0
     assert len(record["gain_with"]) == len(SNR_LADDER)
     assert len(record["gain_noise"]) == len(SNR_LADDER)
@@ -1126,7 +1126,7 @@ def test_estimate_pc_records_principal_component(tmp_path, monkeypatch):
         seed=0,
         pc_root=str(tmp_path),
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
 
     for i in range(500):
         z = rng.standard_normal()
@@ -1164,7 +1164,7 @@ def test_estimate_pc_records_principal_component(tmp_path, monkeypatch):
     assert result["n_reports"] == 500
     assert result["final"] is True
 
-    written_path = principal_component_path(tmp_path, "prelim", "topos")
+    written_path = principal_component_path(tmp_path, "prelim", "vision")
     assert result["pc_sha256"] == file_sha256(written_path)
 
     loaded = load_principal_component(
@@ -1178,7 +1178,7 @@ def test_estimate_pc_requires_run_context():
     settings = PositiveControlSettings(
         enabled=True, mode="estimate_pc", seed=0
     )
-    control = PositiveControl("topos", settings)
+    control = PositiveControl("vision", settings)
     with pytest.raises(PrincipalComponentError, match="run context"):
         control.final_result()
 
@@ -1276,9 +1276,9 @@ def test_shadow_probe_step_uses_suspended_override():
         def hindsight_step(self, *args, **kwargs):
             raise AssertionError("the live model is never stepped in hindsight")
 
-    pc = _pc("topos", 2)
+    pc = _pc("vision", 2)
     probe = ShadowProbe(
-        ComponentSource(informative=True, snr=1.0, seed=0, processor="topos", slot=0, pc=pc)
+        ComponentSource(informative=True, snr=1.0, seed=0, processor="vision", slot=0, pc=pc)
     )
     live = StubLive()
     ctx = [0.0] * 24

@@ -3,11 +3,11 @@
 # It is applied after the operator config, so these settings hold for the run.
 # The run's seed comes from [experiment].seed.
 
-[lingua]
+[language]
 # Greedy decoding in the planned runs (paper §6.1).
 temperature = 0.0
 
-[syneidesis]
+[workspace]
 arm = "competitive"
 
 [audition]

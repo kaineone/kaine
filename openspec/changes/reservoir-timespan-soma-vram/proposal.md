@@ -15,8 +15,8 @@ Two findings of the mathematics review of 2026-10-08.
 
 ### Modified Capabilities
 
-- `soma-predictive`: the reservoir timespan and the VRAM feature.
-- `chronos-predictive`: the reservoir timespan.
+- `interoception-predictive`: the reservoir timespan and the VRAM feature.
+- `sequence-predictive`: the reservoir timespan.
 
 ## Impact
 

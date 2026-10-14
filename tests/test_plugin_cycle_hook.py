@@ -87,7 +87,7 @@ async def test_three_ticks_call_hook_three_times():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=FakeWorkspace(),
-        registry=FakeRegistry(["chronos.out"]),
+        registry=FakeRegistry(["sequence.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
         tick_observer=_loaded(r=rec).cycle_observer(),
@@ -151,7 +151,7 @@ async def test_hook_cannot_change_the_cycle_or_event():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=FakeWorkspace(),
-        registry=FakeRegistry(["chronos.out"]),
+        registry=FakeRegistry(["sequence.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
         tick_observer=_loaded(m=mut).cycle_observer(),
@@ -180,7 +180,7 @@ async def test_observer_exception_never_stops_the_cycle():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=FakeWorkspace(),
-        registry=FakeRegistry(["chronos.out"]),
+        registry=FakeRegistry(["sequence.out"]),
         clock=FakeClock(),
         sleep=FakeClock().sleep,
         tick_observer=_boom,
@@ -195,7 +195,7 @@ async def test_observer_exception_never_stops_the_cycle():
 async def test_no_observer_publishes_identical_events():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     workspace = FakeWorkspace()
-    registry = FakeRegistry(["chronos.out"])
+    registry = FakeRegistry(["sequence.out"])
     clock = FakeClock()
     sleep_fn = clock.sleep
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for CycleEngine.consume_soma_regulation (kaine/cycle/engine.py).
+"""Tests for CycleEngine.consume_interoception_regulation (kaine/cycle/engine.py).
 
-The cycle engine drains ``soma.regulation`` advisories from ``soma.out`` and
+The cycle engine drains ``interoception.regulation`` advisories from ``interoception.out`` and
 acts on them within safe bounds:
 
 * ``reduce_rate`` lowers the processing rate (clamped to configured bounds)
@@ -61,8 +61,8 @@ async def cycle_with_fakes():
 
 async def _publish_regulation(bus: AsyncBus, payload: dict) -> None:
     event = validate_event(
-        source="soma",
-        type="soma.regulation",
+        source="interoception",
+        type="interoception.regulation",
         payload=payload,
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
@@ -141,12 +141,12 @@ async def test_unknown_action_ignored_without_raise(cycle_with_fakes):
 
 @pytest.mark.asyncio
 async def test_withheld_event_does_not_actuate(cycle_with_fakes):
-    """A warm-up soma.regulation.withheld record is non-actuating: the cycle
+    """A warm-up interoception.regulation.withheld record is non-actuating: the cycle
     must not throttle, shed, or schedule maintenance in response to it."""
     cycle, bus, reg = cycle_with_fakes
     withheld = validate_event(
-        source="soma",
-        type="soma.regulation.withheld",
+        source="interoception",
+        type="interoception.regulation.withheld",
         payload={
             "would_be_action": "reduce_rate",
             "prediction_error": 1.1,
@@ -169,8 +169,8 @@ async def test_withheld_event_does_not_actuate(cycle_with_fakes):
 async def test_non_regulation_events_ignored(cycle_with_fakes):
     cycle, bus, _reg = cycle_with_fakes
     other = validate_event(
-        source="soma",
-        type="soma.fatigue",
+        source="interoception",
+        type="interoception.fatigue",
         payload={"value": 1.0, "threshold": 100.0, "crossed": False},
         salience=0.1,
         timestamp=datetime.now(timezone.utc),

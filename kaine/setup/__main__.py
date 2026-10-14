@@ -170,21 +170,21 @@ def _provision_organ(
     from kaine.setup import organ as organ_mod
 
     modules = config.get("modules") or {}
-    if not modules.get("lingua"):
+    if not modules.get("language"):
         return  # organ not needed; no step offered
 
     # The resolved config for the Stage-2 (safetensors) decision: the operator's
-    # module choices over the shipped defaults (so [hypnos.voice_alignment].enabled
+    # module choices over the shipped defaults (so [sleep.voice_alignment].enabled
     # is read from the shipped file unless the operator overrode it).
     resolved = dict(shipped)
     resolved["modules"] = dict(modules)
-    if config.get("hypnos"):
-        resolved["hypnos"] = {
-            **(shipped.get("hypnos") or {}),
-            **(config.get("hypnos") or {}),
+    if config.get("sleep"):
+        resolved["sleep"] = {
+            **(shipped.get("sleep") or {}),
+            **(config.get("sleep") or {}),
         }
     # The served alias the operator chose (or the shipped default).
-    language_cfg = {**(shipped.get("lingua") or {}), **(config.get("lingua") or {})}
+    language_cfg = {**(shipped.get("language") or {}), **(config.get("language") or {})}
     chat_url = language_section_chat_url(language_cfg)
     model_id = str(language_cfg.get("model_id", served.ORGAN_GGUF_REPO))
     api_key = language_section_api_key(language_cfg)
@@ -263,7 +263,7 @@ def _provision_organ(
         out(f"  model server launch failed ({exc}); run manually: {cmd}\n")
         return
 
-    # Verify the served alias matches [lingua].model_id (catch the 404 pre-boot).
+    # Verify the served alias matches [language].model_id (catch the 404 pre-boot).
     try:
         verdict = served.verify_served_alias(chat_url, model_id, api_key=api_key)
     except Exception as exc:
@@ -296,7 +296,7 @@ def _provision_dependencies(
     redis_port = (config.get("redis") or {}).get("port")
     # The episodic memory and social cognition modules share KAINE's Qdrant; the episodic memory module's port wins if both set.
     qdrant_port = None
-    for owner in ("mnemos", "empatheia"):
+    for owner in ("episodic_memory", "social_cognition"):
         qdrant_port = ((config.get(owner) or {}).get("qdrant") or {}).get("port")
         if qdrant_port:
             break
@@ -376,9 +376,9 @@ def _print_next_steps(
     line("Environment gates you will need:")
     line("  KAINE_CYCLE_OPERATOR_PRESENT=1        (required to launch the cycle)")
     line("  KAINE_FIRST_BOOT_OPERATOR_PRESENT=1   (required by scripts/first-boot.sh)")
-    if (config.get("hypnos") or {}).get("voice_alignment") and modules.get("hypnos"):
+    if (config.get("sleep") or {}).get("voice_alignment") and modules.get("sleep"):
         line("  KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1  (if voice-alignment training)")
-    if modules.get("mundus"):
+    if modules.get("embodiment"):
         line("  KAINE_MUNDUS_OPERATOR_APPROVED=1      (required when mundus is enabled)")
     if enc_enabled:
         line("  KAINE_STATE_KEY=<32-byte key>         (required: encryption is enabled)")
@@ -386,19 +386,19 @@ def _print_next_steps(
     line()
     line("Bring up the supporting services you enabled:")
     line("  bash scripts/redis-bootstrap.sh       # event bus")
-    if modules.get("mnemos") or modules.get("empatheia"):
+    if modules.get("episodic_memory") or modules.get("social_cognition"):
         line("  bash scripts/qdrant-bootstrap.sh      # vector memory")
-    if modules.get("lingua"):
+    if modules.get("language"):
         line("  bash scripts/model-server-bootstrap.sh start   # language organ")
     audition_cfg = config.get("audition") or {}
     audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
     transcription_on = bool(audition_cfg.get("transcription_enabled", False))
-    vocal_cfg = config.get("vox") or {}
+    vocal_cfg = config.get("vocal") or {}
     vocal_backend = str(vocal_cfg.get("backend", "chatterbox")).strip().lower()
 
     if modules.get("audition") and audition_backend == "speaches" and transcription_on:
         line("  start Speaches (STT) on CPU with medium.en")
-    if modules.get("vox") and vocal_backend == "chatterbox":
+    if modules.get("vocal") and vocal_backend == "chatterbox":
         line("  start Chatterbox (TTS)")
 
     from kaine.setup import speech_models

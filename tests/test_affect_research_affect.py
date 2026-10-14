@@ -35,7 +35,7 @@ async def bus():
     await bus.close()
 
 
-def _event(source="soma", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
+def _event(source="interoception", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
     return eid, Event(
         source=source,
         type=type_,
@@ -111,10 +111,10 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
                 affect.drives.curiosity.value = 0.6
             r = 3.0 if i < 600 else 3.0 - (2.0 * (i - 600) / 199)
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -166,10 +166,10 @@ async def test_social_drive_relief_on_new_interaction(bus: AsyncBus):
     try:
         affect.drives.social_drive.value = 0.8
         await affect._handle_peer_event(
-            "chronos.out",
+            "sequence.out",
             Event(
-                source="chronos",
-                type="chronos.report",
+                source="sequence",
+                type="sequence.report",
                 payload={"time_since_last_interaction_s": 10},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -179,10 +179,10 @@ async def test_social_drive_relief_on_new_interaction(bus: AsyncBus):
         after_first = affect.drives.social_drive.value
         # Longer alone: no relief.
         await affect._handle_peer_event(
-            "chronos.out",
+            "sequence.out",
             Event(
-                source="chronos",
-                type="chronos.report",
+                source="sequence",
+                type="sequence.report",
                 payload={"time_since_last_interaction_s": 20},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -191,10 +191,10 @@ async def test_social_drive_relief_on_new_interaction(bus: AsyncBus):
         after_second = affect.drives.social_drive.value
         # A new interaction resets the idle clock and relieves the drive.
         await affect._handle_peer_event(
-            "chronos.out",
+            "sequence.out",
             Event(
-                source="chronos",
-                type="chronos.report",
+                source="sequence",
+                type="sequence.report",
                 payload={"time_since_last_interaction_s": 2},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -214,9 +214,9 @@ async def test_restlessness_relief_on_intent(bus: AsyncBus):
     try:
         affect.drives.restlessness.value = 0.8
         await affect._handle_peer_event(
-            "volition.out",
+            "action_selection.out",
             Event(
-                source="volition",
+                source="action_selection",
                 type="intent.think",
                 payload={},
                 salience=0.5,
@@ -248,10 +248,10 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
             fake_now[0] = t
             r = 3.0 - 2.0 * t / 120.0
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -268,10 +268,10 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
             t = i * step
             fake_now[0] = t
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": 5.0},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -292,8 +292,8 @@ async def test_score_snapshot_novelty_and_surprise(bus: AsyncBus):
     snap = _snapshot(
         [
             _event(
-                source="topos",
-                type_="topos.report",
+                source="vision",
+                type_="vision.report",
                 salience=0.5,
                 eid="e0",
                 normalised_error=3.0,
@@ -357,8 +357,8 @@ async def test_learning_progress_averaged_over_sources(bus):
             fake_now[0] = i * 0.1
             vision_err = 1.0 - 0.8 * i / 39
             await affect._handle_peer_event(
-                "topos.out",
-                _report("topos", "topos.report", vision_err),
+                "vision.out",
+                _report("vision", "vision.report", vision_err),
             )
             await affect._handle_peer_event(
                 "audition.out",
@@ -384,8 +384,8 @@ async def test_learning_progress_averaged_over_sources(bus):
                 fake_now[0] = i * 0.1
                 vision_err = 1.0 - 0.8 * i / 39
                 await vision_only._handle_peer_event(
-                    "topos.out",
-                    _report("topos", "topos.report", vision_err),
+                    "vision.out",
+                    _report("vision", "vision.report", vision_err),
                 )
                 if (i + 1) % 3 == 0:
                     await vision_only._tick()
@@ -407,10 +407,10 @@ async def test_interoception_report_without_wellness_keeps_prior(bus: AsyncBus):
     try:
         assert affect._wellness == 0.5
         await affect._handle_peer_event(
-            "soma.out",
+            "interoception.out",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -419,10 +419,10 @@ async def test_interoception_report_without_wellness_keeps_prior(bus: AsyncBus):
         assert affect._wellness == 0.5
 
         await affect._handle_peer_event(
-            "soma.out",
+            "interoception.out",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"wellness": 0.8},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -457,7 +457,7 @@ def test_shipped_config_drives_can_cross_threshold():
     config_path = Path(__file__).resolve().parents[1] / "config" / "kaine.toml"
     with open(config_path, "rb") as f:
         cfg = tomllib.load(f)
-    s = DriveSet.from_config(cfg["thymos"]["drives"])
+    s = DriveSet.from_config(cfg["affect"]["drives"])
     for d in s.all():
         equilibrium = d.build_rate / (d.build_rate + d.decay_rate)
         assert equilibrium > 0.85, f"{d.name} equilibrium {equilibrium:.3f} is not above 0.85"
@@ -471,9 +471,9 @@ async def test_rest_intent_does_not_relieve_restlessness(bus: AsyncBus):
     try:
         affect.drives.restlessness.value = 0.8
         await affect._handle_peer_event(
-            "volition.out",
+            "action_selection.out",
             Event(
-                source="volition",
+                source="action_selection",
                 type="intent.rest",
                 payload={},
                 salience=0.5,
@@ -483,9 +483,9 @@ async def test_rest_intent_does_not_relieve_restlessness(bus: AsyncBus):
         assert affect.drives.restlessness.value == pytest.approx(0.8)
         assert affect._intents_since_broadcast == 0
         await affect._handle_peer_event(
-            "volition.out",
+            "action_selection.out",
             Event(
-                source="volition",
+                source="action_selection",
                 type="intent.act",
                 payload={},
                 salience=0.5,
@@ -509,10 +509,10 @@ async def test_zero_first_error_does_not_seed_progress(bus: AsyncBus):
     await affect.initialize()
     try:
         await affect._handle_peer_event(
-            "topos.out",
+            "vision.out",
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"prediction_error": 0.0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -520,10 +520,10 @@ async def test_zero_first_error_does_not_seed_progress(bus: AsyncBus):
         )
         fake_now[0] = 0.1
         await affect._handle_peer_event(
-            "topos.out",
+            "vision.out",
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"prediction_error": 1.0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -531,10 +531,10 @@ async def test_zero_first_error_does_not_seed_progress(bus: AsyncBus):
         )
         fake_now[0] = 0.2
         await affect._handle_peer_event(
-            "topos.out",
+            "vision.out",
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"prediction_error": 1.0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -568,10 +568,10 @@ async def test_drives_build_under_stationary_noise(bus: AsyncBus):
             err = rng.lognormvariate(0.0, 0.3)
             alert = rng.random() < 0.05
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={
                         "prediction_error": err,
                         "alert": alert,
@@ -613,10 +613,10 @@ async def test_novelty_burst_relieves_boredom(bus: AsyncBus):
             err = rng.lognormvariate(0.0, 0.3)
             alert = rng.random() < 0.05
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={
                         "prediction_error": err,
                         "alert": alert,
@@ -639,10 +639,10 @@ async def test_novelty_burst_relieves_boredom(bus: AsyncBus):
             err = rng.lognormvariate(0.0, 0.3)
             alert = rng.random() < 0.4
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={
                         "prediction_error": err,
                         "alert": alert,
@@ -680,10 +680,10 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
             err = rng.lognormvariate(0.0, 0.3)
             alert = rng.random() < 0.05
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={
                         "prediction_error": err,
                         "alert": alert,
@@ -705,10 +705,10 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
             err = rng.lognormvariate(0.0, 0.3) * scale
             alert = rng.random() < 0.05
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={
                         "prediction_error": err,
                         "alert": alert,
@@ -750,10 +750,10 @@ async def test_curiosity_relief_is_report_rate_invariant(bus: AsyncBus):
                     else:
                         err = 1.0 - 0.6 * (t - 100.0) / 60.0
                     await affect._handle_peer_event(
-                        "topos.out",
+                        "vision.out",
                         Event(
-                            source="topos",
-                            type="topos.report",
+                            source="vision",
+                            type="vision.report",
                             payload={"prediction_error": err},
                             salience=0.5,
                             timestamp=datetime.now(timezone.utc),
@@ -794,10 +794,10 @@ async def test_low_first_error_does_not_depress_valence(bus: AsyncBus):
             else:
                 e = rng.lognormvariate(0.0, 0.3)
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": e},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -834,10 +834,10 @@ async def test_affective_reset_clears_progress_trackers(bus: AsyncBus):
             fake_now[0] = t
             r = 3.0 - 2.0 * t / 120.0
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -874,8 +874,8 @@ async def test_peer_consumer_survives_a_bad_event(bus: AsyncBus):
     try:
         await bus.publish(
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"bad": True, "prediction_error": 1.0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -883,8 +883,8 @@ async def test_peer_consumer_survives_a_bad_event(bus: AsyncBus):
         )
         await bus.publish(
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"n": 2, "prediction_error": 1.0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -915,7 +915,7 @@ async def test_skipped_perceptual_reports_leave_the_error_trackers_unchanged(bus
         for i in range(20):
             fake_now[0] = i * 0.1
             for stream, source, type_ in (
-                ("topos.out", "topos", "topos.report"),
+                ("vision.out", "vision", "vision.report"),
                 ("audition.out", "audition", "audition.perception"),
             ):
                 await affect._handle_peer_event(
@@ -939,7 +939,7 @@ async def test_skipped_perceptual_reports_leave_the_error_trackers_unchanged(bus
         for i in range(20, 40):
             fake_now[0] = i * 0.1
             for stream, source, type_ in (
-                ("topos.out", "topos", "topos.report"),
+                ("vision.out", "vision", "vision.report"),
                 ("audition.out", "audition", "audition.perception"),
             ):
                 await affect._handle_peer_event(

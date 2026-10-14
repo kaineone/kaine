@@ -30,9 +30,9 @@ def _hw_cfg(**hardware_overrides):
             "accelerated_time": False,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"chronos": 8},
+            "territories": {"sequence": 8},
         },
-        "backends": {"chronos": "cl1"},
+        "backends": {"sequence": "cl1"},
         "hardware": {
             "welfare_acknowledgement": REQUIRED_ACKNOWLEDGEMENT,
             "ethics_reference": "IRB-2026-001",
@@ -117,7 +117,7 @@ def accel():
 def test_complete_gate_declares_seams_and_warns(caplog):
     with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
         seams = Cl1Plugin().seams(_hw_cfg())
-    assert seams == frozenset({"chronos.network"})
+    assert seams == frozenset({"sequence.network"})
     assert any(
         "LIVING NEURAL CULTURE" in rec.message and "IRB-2026-001" in rec.message
         for rec in caplog.records
@@ -208,7 +208,7 @@ def test_hardware_session_opens_on_a_device(monkeypatch):
 def test_hardware_starts_in_beat_mode_and_stimulates_only_on_ticks():
     p = Cl1Plugin(session_factory=_FakeHardwareSession)
     try:
-        net = p.injections("chronos", _hw_cfg())["network"]
+        net = p.injections("sequence", _hw_cfg())["network"]
         broker = p._broker
         assert broker.beat_mode is True
 
@@ -280,7 +280,7 @@ def test_stimulation_queued_before_the_first_tick_after_a_long_boot_gap_is_disca
     must not be delivered on the first tick."""
     p = Cl1Plugin(session_factory=_FakeHardwareSession)
     try:
-        net = p.injections("chronos", _hw_cfg())["network"]
+        net = p.injections("sequence", _hw_cfg())["network"]
         net.tick([10.0] * 8)
         time.sleep(0.3)
         fake = p._session.neurons

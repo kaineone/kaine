@@ -31,7 +31,7 @@ published by Audition.
 
 ### Requirement: Graceful degradation, decay, and opt-out
 The vocal module SHALL fall back to affect-only parameters when no `audition.prosody` has been
-seen or when `[vox.mirroring].enabled` is false, and the mirror residual SHALL
+seen or when `[vocal.mirroring].enabled` is false, and the mirror residual SHALL
 decay over `decay_s` after the partner stops speaking.
 
 #### Scenario: No prosody yields affect-only voice

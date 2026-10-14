@@ -48,8 +48,8 @@ LIMITS = [
 
 VIEWING_LINES = ("branch", "repeat", "accumulate")
 
-EXPECTED_NULL_MODULES = {"praxis", "perception", "mundus"}
-_INTERNAL_SOURCES = {"syneidesis", "volition"}
+EXPECTED_NULL_MODULES = {"effectors", "perceptual_locus", "embodiment"}
+_INTERNAL_SOURCES = {"workspace", "action_selection"}
 
 _SCALAR_DIFF_KEYS = (
     "broadcast_rate_per_minute",

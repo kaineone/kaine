@@ -91,7 +91,7 @@ def test_preboot_row(monkeypatch):
     monkeypatch.setattr("kaine.preboot.check_torch_stack", _problems)
     monkeypatch.setattr("kaine.preboot.describe_torch_stack", _desc)
 
-    results = check_config_sanity({"modules": {"soma": True}})
+    results = check_config_sanity({"modules": {"interoception": True}})
     row = next(r for r in results if r.name == "Torch stack")
     assert row.status == "FAIL"
     assert row.detail.endswith(" — reinstall with scripts/install.sh")
@@ -101,7 +101,7 @@ def test_preboot_row(monkeypatch):
         return []
 
     monkeypatch.setattr("kaine.preboot.check_torch_stack", _no_problems)
-    results = check_config_sanity({"modules": {"soma": True}})
+    results = check_config_sanity({"modules": {"interoception": True}})
     row = next(r for r in results if r.name == "Torch stack")
     assert row.status == "PASS"
     assert row.detail == _desc()
@@ -111,7 +111,7 @@ def test_preboot_row(monkeypatch):
 
     monkeypatch.setattr("kaine.preboot.check_torch_stack", _no_problems)
     monkeypatch.setattr("kaine.preboot.describe_torch_stack", _not_installed)
-    results = check_config_sanity({"modules": {"soma": True}})
+    results = check_config_sanity({"modules": {"interoception": True}})
     row = next(r for r in results if r.name == "Torch stack")
     assert row.status == "SKIP"
     assert row.detail == "torch not installed"

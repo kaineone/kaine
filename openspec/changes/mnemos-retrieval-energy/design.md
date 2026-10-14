@@ -10,7 +10,7 @@ For a query embedding ξ and stored patterns X (the short-term entry embeddings 
 
 ## Publication
 
-`mnemos.familiarity` carries `{energy, normalised_energy}`: scalars only, no text, no vectors. It competes in the workspace like any other prediction-error signal. The `mnemos-recall-and-vector-strip` cache bounds the cost.
+`episodic_memory.familiarity` carries `{energy, normalised_energy}`: scalars only, no text, no vectors. It competes in the workspace like any other prediction-error signal. The `mnemos-recall-and-vector-strip` cache bounds the cost.
 
 ## Later options (not proposed)
 

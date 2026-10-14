@@ -17,9 +17,9 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     from kaine.modules.embodiment.module import Embodiment
 
     # Body-agnostic control plane: select exactly one embodiment adapter and
-    # build it from its own nested `[mundus.<adapter>]` table. Adapter-specific
+    # build it from its own nested `[embodiment.<adapter>]` table. Adapter-specific
     # settings (transport, per-family/channel exposure) live under that table,
-    # never flat in `[mundus]`. An unknown adapter name fails closed at boot.
+    # never flat in `[embodiment]`. An unknown adapter name fails closed at boot.
     adapter_name = str(section.get("adapter", "stub"))
     adapter_section = dict(section.get(adapter_name, {}) or {})
 
@@ -30,7 +30,7 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     else:
         raise ValueError(
             f"mundus: unknown adapter {adapter_name!r}; no embodiment constructed "
-            "(fail-closed). Set [mundus].adapter to a known adapter."
+            "(fail-closed). Set [embodiment].adapter to a known adapter."
         )
 
     # `expose_<family>`/`expose_<channel>` keys under the adapter table →
@@ -49,7 +49,7 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
             expose[name] = bool(value)
         else:
             raise ValueError(
-                f"[mundus.{adapter_name}].{key}: {name!r} is neither a continuous "
+                f"[embodiment.{adapter_name}].{key}: {name!r} is neither a continuous "
                 f"channel nor an action family of the {adapter_name!r} body "
                 f"(channels: {', '.join(caps.continuous_channels) or 'none'}; "
                 f"families: {', '.join(sorted(caps.action_families)) or 'none'})"
@@ -63,7 +63,7 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # Continuous embodiment control surface (`intuitive-embodiment-control-surface`):
     # the entity's per-tick continuous motor producer + freeze-then-free curriculum
     # + closed-loop forward model. Off by default (ships conservative); constructed
-    # only when [mundus.control_surface].enabled = true. The producer is held by the
+    # only when [embodiment.control_surface].enabled = true. The producer is held by the
     # control plane but its per-tick driving loop is the cycle's motor seam.
     cs_section = dict(section.get("control_surface", {}) or {})
     if bool(cs_section.get("enabled", False)):
@@ -83,8 +83,8 @@ def make_embodiment(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         curriculum = MotorCurriculum(**curriculum_kwargs) if curriculum_kwargs else None
         kwargs["control_surface"] = ContinuousMotorSurface(curriculum=curriculum)
 
-    # Constructed only when [modules].mundus is on; the operational two-layer gate
-    # is [mundus].enabled (default true here) AND KAINE_MUNDUS_OPERATOR_APPROVED=1.
+    # Constructed only when [modules].embodiment is on; the operational two-layer gate
+    # is [embodiment].enabled (default true here) AND KAINE_MUNDUS_OPERATOR_APPROVED=1.
     return Embodiment(
         bus,
         adapter=adapter,

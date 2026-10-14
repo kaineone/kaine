@@ -131,7 +131,7 @@ def test_profile_to_metadata_roundtrips():
 
 
 class _FakeMod:
-    name = "soma"
+    name = "interoception"
 
     def serialize(self):
         return {"wellness": 0.9}

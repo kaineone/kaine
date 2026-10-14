@@ -1,6 +1,6 @@
 # Security and Dashboard
 
-Use the `[nexus]` and `[security.state_encryption]` sections to secure the operator console and encrypt persisted cognitive state. Operators who run the dashboard or keep entity state on disk need these keys.
+Use the `[dashboard]` and `[security.state_encryption]` sections to secure the operator console and encrypt persisted cognitive state. Operators who run the dashboard or keep entity state on disk need these keys.
 
 ## Dashboard
 
@@ -19,18 +19,18 @@ The dashboard web console is described in [the dashboard](../05-dashboard.md). T
 
 ### Operator authentication
 
-`[nexus].access` chooses whether a token is required:
+`[dashboard].access` chooses whether a token is required:
 
 - `"open"` (shipped default): no sign-in. Anyone who can reach the address can view and control the entity. The dashboard listens only on loopback by default, so "anyone" means programs and people on this computer, plus the operator's tailnet if they choose to serve it there. The Host allowlist and Origin checks still apply.
 - `"token"`: an operator token is required. Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
-In token mode, the operator token must be at least 32 characters and must live only in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[nexus] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
+In token mode, the operator token must be at least 32 characters and must live only in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[dashboard] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
 
 A browser signs in once at `/login`. The session cookie authorizes page loads and reads, and every state-changing request also carries the per-session `X-Dashboard-Session-Key` header that the login page stores. Scripts can send `Authorization: Bearer <token>` instead.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `operator_token` | string | `""` | Token for token mode. Read only from `KAINE_NEXUS_TOKEN` or `config/secrets.toml` `[nexus] operator_token`. Must be at least 32 characters. |
+| `operator_token` | string | `""` | Token for token mode. Read only from `KAINE_NEXUS_TOKEN` or `config/secrets.toml` `[dashboard] operator_token`. Must be at least 32 characters. |
 | `access` | string | `"open"` | `"open"` or `"token"`. The shipped file sets `"open"`; if the key is absent, the dashboard uses `"token"`. |
 | `session_idle_minutes` | integer | `720` | Minutes a session can be idle before expiry. |
 | `session_max_hours` | integer | `24` | Maximum session lifetime, regardless of activity. |
@@ -42,7 +42,7 @@ See [the configuration overview](./README.md) for how `config/secrets.toml` is l
 
 ### Read-only view
 
-`[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) makes the dashboard a viewer only: every control request is refused with 403, and a banner says so. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus, and any change to a running study makes it inadmissible. The study-view overlay sets it.
+`[dashboard].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) makes the dashboard a viewer only: every control request is refused with 403, and a banner says so. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus, and any change to a running study makes it inadmissible. The study-view overlay sets it.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

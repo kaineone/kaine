@@ -124,7 +124,7 @@ async def test_run_publishes_presence_events_while_fresh(bus):
     stop.set()
     await asyncio.wait_for(task, timeout=2.0)
 
-    entries = await bus.range("gestation.out", start="-", end="+", count=None)
+    entries = await bus.range("development.out", start="-", end="+", count=None)
     presence_entries = [
         (_id, e) for _id, e in entries if getattr(e, "type", None) == PRESENCE_TYPE
     ]

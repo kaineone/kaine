@@ -15,7 +15,7 @@ The positive control's shadows (A.8) already skip a non-finite input and re-seed
 - A non-finite embedding does not reach the change score: the vision and audition modules report a change of 0 for it, as on a first report, and leave the previous embedding and the change history as they were, so the next reading is compared with the last finite one.
 - The vision module's habituator does not observe a skipped embedding; the report carries the last habituation score (null before the first finite embedding). A non-finite `latent`, `peripheral` or `foveal` vector is published as null, so a report carries no non-finite number. No module reads these vectors from the payload, and the dashboard privacy filter already drops them.
 - A reading has a defined error unless it was skipped or is the first reading after a skip, which has no prediction to be scored against. Paper A.2 sets the error of the very first reading to 0 ("The error is ν_t = ‖z_t − ẑ_t‖₂, with ν₁ = 0") and takes the running ratio over the window of the errors ν_t; A.5 does the same for the interoception module ("with ν^Som_t = 0 on the first reading"). The boot reading's 0 therefore stays in the window, and only readings without a defined error are kept out. The forward models expose this as `last_error_defined`, and the vision module, the audition module (acoustic and tone paths) and the interoception module append to their running windows only when it is true. Otherwise periodic gaps would fill the window with zeros, lower the mean and make real readings alert.
-- A report without a defined error publishes `prediction_error` as null (`topos.report`, `audition.perception`, `audition.emotion`, `audition.transcription`, `soma.report`), so the affect module does not pool a made-up 0 into its learning-progress trackers. The welfare observer and the preservation monitor read `soma.report`'s error with `float(...)`; they now treat a null error as no sample, which neither feeds nor ends a sustained-distress episode. Every other reader already skips a null error or maps it to its default.
+- A report without a defined error publishes `prediction_error` as null (`vision.report`, `audition.perception`, `audition.emotion`, `audition.transcription`, `interoception.report`), so the affect module does not pool a made-up 0 into its learning-progress trackers. The welfare observer and the preservation monitor read `interoception.report`'s error with `float(...)`; they now treat a null error as no sample, which neither feeds nor ends a sustained-distress episode. Every other reader already skips a null error or maps it to its default.
 - The social cognition module passes a null error through and leaves its `mean_prediction_error` average unchanged for an observation without a defined error, including the transcription placeholder fold, which used to feed it 0. The workspace-mediation benchmark records a skipped error as null.
 - A run of missing readings is not yet reported as a welfare signal. The welfare observer's gray-zone event (`welfare.gray_zone`) has a closed set of four categories, and the protective monitor acts on repeated gray-zone events of any category, so a new category for a blind sensor would also be able to preserve and pause or end the entity. That is a welfare-policy decision and is left to a follow-up change.
 - `widened_copy` starts a shadow in the re-seeding state when the live model holds no prediction, so a positive-control shadow built right after a skipped reading re-seeds with the live model instead of scoring and learning where the live model does not.
@@ -24,11 +24,11 @@ The positive control's shadows (A.8) already skip a non-finite input and re-seed
 
 ### Modified Capabilities
 
-- `topos-predictive`: a non-finite clip latent is skipped by the forward model and the change score.
+- `vision-predictive`: a non-finite clip latent is skipped by the forward model and the change score.
 - `audition-predictive`: a non-finite acoustic embedding or tone feature vector is skipped by the forward model, and a non-finite acoustic embedding by the change score.
-- `soma-predictive`: a skipped reading and the reading after it publish no error and stay out of the window; welfare consumers treat a null error as no sample.
-- `empatheia`: an observation without a defined error leaves the error average alone.
-- `topos`: `latent`, `peripheral`, `foveal`, `habituation_score` and `prediction_error` can be null.
+- `interoception-predictive`: a skipped reading and the reading after it publish no error and stay out of the window; welfare consumers treat a null error as no sample.
+- `social_cognition`: an observation without a defined error leaves the error average alone.
+- `vision`: `latent`, `peripheral`, `foveal`, `habituation_score` and `prediction_error` can be null.
 
 ## Impact
 

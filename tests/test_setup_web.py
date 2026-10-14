@@ -10,15 +10,18 @@ import re
 import socket
 import threading
 import time
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 from starlette.testclient import TestClient
 
+from kaine import legacy_aliases
 from kaine.bus.config import load_bus_config, load_bus_endpoint
 from kaine.bus.errors import BusConfigError
 from kaine.config import SHIPPED_CONFIG_PATH
+from kaine.dashboard.config import load_dashboard_config
 from kaine.hardware import describe_host
 from kaine.setup.web import create_setup_app, guard, serve
 from kaine.setup.wizard import ACK_PHRASE, run_wizard
@@ -31,7 +34,7 @@ def _shipped_config(tmp_path: Path) -> Path:
         return real
     fallback = tmp_path / "kaine.toml"
     fallback.write_text(
-        "[lingua]\nmodel_id = 'model-a'\n[vox]\nbackend = 'chatterbox'\n"
+        "[language]\nmodel_id = 'model-a'\n[vocal]\nbackend = 'chatterbox'\n"
         "predefined_voice_id = 'voice-a'\n[audition]\nbackend = 'speaches'\n"
         "stt_model = 'stt-a'\n"
     )
@@ -403,7 +406,7 @@ def test_absent_boolean_field_uses_default(tmp_path):
     sid = client.cookies["setup_session"]
     config = app.state.setup.store.sessions[sid]["config"]
     assert (
-        config.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
+        config.get("sleep", {}).get("voice_alignment", {}).get("trainer_python")
         == "/fake/trainer/python3"
     )
 
@@ -526,7 +529,7 @@ def test_save_refused_when_cycle_running(tmp_path, monkeypatch):
     assert r.status_code in (302, 303)
     sid = client.cookies["setup_session"]
     app.state.setup.store.sessions[sid]["config"] = {
-        "lingua": {"model_id": "model-a"}
+        "language": {"model_id": "model-a"}
     }
     app.state.setup.store.sessions[sid]["step_index"] = len(app.state.setup.steps)
     app.state.setup.store.sessions[sid]["acknowledged"] = True
@@ -975,7 +978,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
     seen: list[str] = []
     config_no = walk(app, client, seen_ids=seen)
     assert "trainer-provisioning" in seen
-    assert config_no.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python") is None
+    assert config_no.get("sleep", {}).get("voice_alignment", {}).get("trainer_python") is None
 
     # Ticked: the step records the probed interpreter.
     app2 = _mk_app(tmp_path, host=host, probe_trainer=probe_trainer)
@@ -992,11 +995,11 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
         },
     )
     assert (
-        config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
+        config_yes.get("sleep", {}).get("voice_alignment", {}).get("trainer_python")
         == "/fake/trainer/python3"
     )
     assert (
-        config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_backend")
+        config_yes.get("sleep", {}).get("voice_alignment", {}).get("trainer_backend")
         == "subprocess"
     )
 
@@ -1789,3 +1792,31 @@ def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
     assert "cl1" not in saved.get("plugins", {})
     assert saved["plugins"]["enabled"] == []
     assert "__kaine_remove__" not in operator_path.read_text(encoding="utf-8")
+
+
+OLD_TABLE = next(form for form in legacy_aliases.name_forms("dashboard") if form != "dashboard")
+
+
+def test_web_save_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    token = "t" * 40
+    secrets_path.write_text(f'[{OLD_TABLE}]\noperator_token = "{token}"\n')
+    before = secrets_path.read_bytes()
+    app = _mk_app(tmp_path)
+    _drive_web(app, {}, save=True)
+    assert secrets_path.read_bytes() == before
+    kaine_toml = tmp_path / "k.toml"
+    kaine_toml.write_text("[dashboard]\n")
+    cfg = load_dashboard_config(kaine_toml, secrets_path=secrets_path)
+    assert cfg.operator_token == token
+
+
+def test_web_save_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    app = _mk_app(tmp_path)
+    _drive_web(app, {}, save=True)
+    data = tomllib.loads(secrets_path.read_text())
+    assert set(data) == {"dashboard"}
+    assert len(data["dashboard"]["operator_token"]) >= 32

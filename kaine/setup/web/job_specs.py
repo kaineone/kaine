@@ -65,7 +65,7 @@ def build_job_specs(
             )
         )
 
-    if _module_enabled(modules, "lingua"):
+    if _module_enabled(modules, "language"):
         argv = (
             sys.executable,
             "-m",
@@ -124,7 +124,7 @@ def build_job_specs(
     dashboard_log = state_dir / "logs" / "nexus.log"
     specs.append(
         JobSpec(
-            name="nexus",
+            name="dashboard",
             title="Start Nexus",
             argv=(sys.executable, "-m", "kaine.dashboard"),
             detach=True,

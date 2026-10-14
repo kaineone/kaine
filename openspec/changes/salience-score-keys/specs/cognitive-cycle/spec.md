@@ -18,5 +18,5 @@ keys as the candidate ids.
 - **THEN** the workspace receives them in sequence order, `-2` before `-10`
 
 #### Scenario: Candidate ids carry the stream
-- **WHEN** the cycle reads an entry with id `1760000000000-0` from `soma.out`
-- **THEN** the workspace receives it with the id `soma.out:1760000000000-0`
+- **WHEN** the cycle reads an entry with id `1760000000000-0` from `interoception.out`
+- **THEN** the workspace receives it with the id `interoception.out:1760000000000-0`

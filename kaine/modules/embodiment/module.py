@@ -11,14 +11,14 @@ any wire protocol. Each body (the transport-free ``stub`` reference body today, 
 virtual world, VR runtime, or robot later) is a separate adapter, selected in
 config and injected here; adding a body never touches this core.
 
-Incoming perception (``FeedFrame``s from the adapter) becomes ``mundus.*`` bus
+Incoming perception (``FeedFrame``s from the adapter) becomes ``embodiment.*`` bus
 events; ``intent.avatar.*`` intents from the action selection module become symbolic actions, and
 (future) continuous setpoints become graded channel commands, both routed to the
 adapter's sinks. So the live cognitive loop perceives and acts through the body,
 not a script.
 
 Two-layer safety gate (mirrors voice-alignment / paracosm-connector): requires
-both ``[mundus].enabled = true`` in config and ``KAINE_MUNDUS_OPERATOR_APPROVED=1``
+both ``[embodiment].enabled = true`` in config and ``KAINE_MUNDUS_OPERATOR_APPROVED=1``
 in the environment. Per-action-family exposure flags gate world-mutating verbs;
 continuous channels gate per-channel and default unexposed.
 
@@ -34,9 +34,9 @@ tools). The *continuous* producer gap, however, is closed by
 per-tick ``intent.avatar.control`` carrying the continuous channel scalars, which
 this module routes to the continuous setpoint sink (``_drive_control`` →
 :meth:`apply_setpoints`, clamped and per-channel gated) and mirrors back as an
-efference copy (``mundus.efference``) time-aligned with the outgoing action so the
+efference copy (``embodiment.efference``) time-aligned with the outgoing action so the
 forward model can close the loop. The ``_speech_loop`` — mirroring
-``lingua.external`` text into local chat — also remains live. The exposure flags
+``language.external`` text into local chat — also remains live. The exposure flags
 still gate which families/channels are allowed.
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def operator_approved() -> bool:
 
 
 class Embodiment(BaseModule):
-    name: ClassVar[str] = "mundus"
+    name: ClassVar[str] = "embodiment"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
 
     def __init__(
@@ -84,7 +84,7 @@ class Embodiment(BaseModule):
         expose: Optional[dict[str, bool]] = None,
         continuous_expose: Optional[dict[str, bool]] = None,
         mirror_speech: bool = True,
-        speech_stream: str = "lingua.external",
+        speech_stream: str = "language.external",
         intent_stream: str = ACTION_SELECTION_STREAM,
         locus_reader: Optional[Callable[[], str]] = None,
         control_surface: Optional["ContinuousMotorSurface"] = None,
@@ -322,7 +322,7 @@ class Embodiment(BaseModule):
         scalars the entity emitted (clamped to range) — onto the bus time-aligned
         with the outgoing action, so the forward model can predict -> compare ->
         correct against the coupled proprioceptive/visual feedback (which arrives
-        via the body's own feed as `mundus.proprio` / `mundus.visual.*`). Feedback
+        via the body's own feed as `embodiment.proprio` / `embodiment.visual.*`). Feedback
         is mandatory, not optional: the efference copy is what makes the surface a
         closed loop rather than an open-loop joystick.
         """
@@ -337,7 +337,7 @@ class Embodiment(BaseModule):
             lo, hi = CONTINUOUS_CHANNEL_RANGE[name]
             efference[name] = max(lo, min(hi, float(value)))
         await self.publish(
-            "mundus.efference",
+            "embodiment.efference",
             {"channels": efference, "forwarded": bool(forwarded)},
             salience=0.2,
         )

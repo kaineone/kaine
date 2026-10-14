@@ -10,7 +10,7 @@ private.
 A review of where an entity's data actually lives found that decommission covers
 only part of it:
 
-- The whole episodic memory on tiers 0 and 1 (`state/mnemos/mnemos.db`, the
+- The whole episodic memory on tiers 0 and 1 (`state/episodic_memory/episodic_memory.db`, the
   sqlite-vec store) is neither backed up nor deleted.
 - Content-bearing stores survive: the raw bus archive (verbatim bus traffic), the
   external utterances, the voice-alignment job files, the entity's speech audio,

@@ -74,7 +74,7 @@ def _collect_out() -> tuple[list[str], callable]:
 
 
 def test_cl1_step_declined_by_default_writes_nothing():
-    cfg = {"modules": {"chronos": True, "soma": True}}
+    cfg = {"modules": {"sequence": True, "interoception": True}}
     out, sink = _collect_out()
     _cl1_substrate_step(cfg, input_fn=lambda _p: "", line=lambda text="": sink(text))
     assert "plugins" not in cfg
@@ -82,31 +82,31 @@ def test_cl1_step_declined_by_default_writes_nothing():
 
 
 def test_cl1_step_accepted_converts_enabled_modules():
-    cfg = {"modules": {"chronos": True, "soma": True}}
+    cfg = {"modules": {"sequence": True, "interoception": True}}
     out, sink = _collect_out()
     _cl1_substrate_step(cfg, input_fn=lambda _p: "y", line=lambda text="": sink(text))
     assert cfg["plugins"]["enabled"] == ["cl1"]
-    assert cfg["plugins"]["cl1"]["backends"] == {"chronos": "cl1", "soma": "cl1"}
+    assert cfg["plugins"]["cl1"]["backends"] == {"sequence": "cl1", "interoception": "cl1"}
     substrate = cfg["plugins"]["cl1"]["substrate"]
     assert substrate["target"] == "simulator"
     assert substrate["accelerated_time"] is True
     assert substrate["data_source"] == "reference_culture"
-    assert substrate["territories"] == {"chronos": 12, "soma": 12}
+    assert substrate["territories"] == {"sequence": 12, "interoception": 12}
     joined = "\n".join(out)
     assert "pip install ./plugins/kaine-cl1" in joined
     assert "pip install cl-sdk" in joined
 
 
 def test_cl1_step_converts_only_enabled_modules():
-    cfg = {"modules": {"chronos": False, "soma": True}}
+    cfg = {"modules": {"sequence": False, "interoception": True}}
     out, sink = _collect_out()
     _cl1_substrate_step(cfg, input_fn=lambda _p: "y", line=lambda text="": sink(text))
-    assert cfg["plugins"]["cl1"]["backends"] == {"soma": "cl1"}
-    assert cfg["plugins"]["cl1"]["substrate"]["territories"] == {"soma": 12}
+    assert cfg["plugins"]["cl1"]["backends"] == {"interoception": "cl1"}
+    assert cfg["plugins"]["cl1"]["substrate"]["territories"] == {"interoception": 12}
 
 
 def test_cl1_step_with_neither_module_writes_nothing():
-    cfg = {"modules": {"chronos": False}}
+    cfg = {"modules": {"sequence": False}}
     out, sink = _collect_out()
     _cl1_substrate_step(cfg, input_fn=lambda _p: "y", line=lambda text="": sink(text))
     assert "plugins" not in cfg
@@ -116,7 +116,7 @@ def test_cl1_step_with_neither_module_writes_nothing():
 def test_cl1_step_states_requirements():
     out, sink = _collect_out()
     _cl1_substrate_step(
-        {"modules": {"chronos": True, "soma": True}},
+        {"modules": {"sequence": True, "interoception": True}},
         input_fn=lambda _p: "n",
         line=lambda text="": sink(text),
     )
@@ -134,7 +134,7 @@ def test_cl1_step_runs_nothing(monkeypatch):
     monkeypatch.setattr(subprocess, "call", _no_run)
     monkeypatch.setattr(subprocess, "check_call", _no_run)
 
-    cfg = {"modules": {"chronos": True, "soma": True}}
+    cfg = {"modules": {"sequence": True, "interoception": True}}
     out, sink = _collect_out()
     _cl1_substrate_step(cfg, input_fn=lambda _p: "y", line=lambda text="": sink(text))
     assert cfg["plugins"]["enabled"] == ["cl1"]
@@ -153,7 +153,7 @@ def _full_run_answers(cl1_answer: str) -> list[str]:
         "",  # CPU threads (default)
         "y",
         "c",  # custom preset so the per-module answers below are used
-        *(("y" if m in {"chronos", "soma"} else "n") for m in MODULE_ORDER),
+        *(("y" if m in {"sequence", "interoception"} else "n") for m in MODULE_ORDER),
         "n",
         "n",
         cl1_answer,
@@ -214,8 +214,8 @@ def test_wizard_block_parses_with_the_plugin_config():
     assert result.acknowledged
     assert result.config["plugins"]["enabled"] == ["cl1"]
     overlay = plugin_config.overlay_from_mapping(result.config["plugins"]["cl1"])
-    assert overlay.cl1_modules() == ["chronos", "soma"]
-    assert overlay.territories == {"chronos": 12, "soma": 12}
+    assert overlay.cl1_modules() == ["sequence", "interoception"]
+    assert overlay.territories == {"sequence": 12, "interoception": 12}
     assert overlay.substrate.target == "simulator"
     assert overlay.substrate.accelerated_time is True
     assert overlay.substrate.data_source == "reference_culture"

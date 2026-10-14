@@ -29,9 +29,9 @@ class FakeRegistry:
 
 def test_snapshot_restore_round_trip(tmp_path):
     fm = ForkManager(tmp_path)
-    src = [FakeModule("soma", {"v": 1}), FakeModule("chronos", {"t": 7})]
+    src = [FakeModule("interoception", {"v": 1}), FakeModule("sequence", {"t": 7})]
     snap = fm.snapshot(FakeRegistry(src), label="root")
-    fresh = [FakeModule("soma", {}), FakeModule("chronos", {})]
+    fresh = [FakeModule("interoception", {}), FakeModule("sequence", {})]
     fm.restore(snap.id, FakeRegistry(fresh))
     assert fresh[0].serialize() == {"v": 1}
     assert fresh[1].serialize() == {"t": 7}
@@ -41,12 +41,12 @@ def test_fork_with_shed(tmp_path):
     fm = ForkManager(tmp_path)
     parent = fm.snapshot(
         FakeRegistry(
-            [FakeModule("soma", {"a": 1}), FakeModule("topos", {"b": 2})]
+            [FakeModule("interoception", {"a": 1}), FakeModule("vision", {"b": 2})]
         )
     )
-    child = fm.fork(parent.id, label="no-topos", shed=["topos"])
-    assert "topos" not in child.modules
-    assert "soma" in child.modules
+    child = fm.fork(parent.id, label="no-topos", shed=["vision"])
+    assert "vision" not in child.modules
+    assert "interoception" in child.modules
 
 
 def test_merge_applies_default_strategy(tmp_path):
@@ -60,10 +60,10 @@ def test_merge_applies_default_strategy(tmp_path):
 def test_merge_invokes_specialized_strategies(tmp_path):
     fm = ForkManager(tmp_path)
     a = fm.snapshot(
-        FakeRegistry([FakeModule("mnemos", {"short_term_size": 3, "collection_prefix": "mnemos_"})])
+        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 3, "collection_prefix": "mnemos_"})])
     )
     b = fm.snapshot(
-        FakeRegistry([FakeModule("mnemos", {"short_term_size": 5, "collection_prefix": "mnemos_"})])
+        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 5, "collection_prefix": "mnemos_"})])
     )
     merged = fm.merge(a.id, b.id)
-    assert merged.modules["mnemos"]["short_term_size"] == 8
+    assert merged.modules["episodic_memory"]["short_term_size"] == 8

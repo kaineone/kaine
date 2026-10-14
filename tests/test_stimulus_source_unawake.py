@@ -5,11 +5,11 @@ from kaine.boot.perception_feed import bind_stimulus_source_unawake_source
 
 
 def test_bind_stimulus_source_unawake_source_sets_fn():
-    cfg = {"perception_feed": {"_womb_unawake": {}}}
+    cfg = {"perception_feed": {"_stimulus_source_unawake": {}}}
     def fn() -> float:
         return 1.0
     bind_stimulus_source_unawake_source(cfg, fn)
-    assert cfg["perception_feed"]["_womb_unawake"]["fn"] is fn
+    assert cfg["perception_feed"]["_stimulus_source_unawake"]["fn"] is fn
 
 
 def test_bind_stimulus_source_unawake_source_silently_ignores_missing_holder():

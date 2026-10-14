@@ -200,7 +200,7 @@ async def test_transcription_from_remote_resets(bus: AsyncBus):
         assert sequence._user_input_cursors["audition.out"] == id1
         now["v"] = 1002.0
         await sequence.on_workspace(_empty_snapshot())
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         _, event = entries[0]
         assert event.payload["time_since_last_interaction_s"] == pytest.approx(2.0)
     finally:

@@ -173,7 +173,7 @@ def build_dependency_specs(
             DependencySpec(
                 name="Chatterbox (TTS)",
                 role="Vox",
-                module="vox",
+                module="vocal",
                 probe=lambda: probe_chatterbox(base_url=chatterbox_url),
             )
         )
@@ -182,7 +182,7 @@ def build_dependency_specs(
             DependencySpec(
                 name="sherpa-onnx (Kokoro)",
                 role="Vox",
-                module="vox",
+                module="vocal",
                 probe=(
                     lambda _mdir=_vocal_sherpa_model_dir(),
                     _mid=vocal_sherpa_model_id,
@@ -201,9 +201,9 @@ def build_dependency_specs(
             DependencySpec(
                 name=f"Vox backend {vocal_backend!r}",
                 role="Vox",
-                module="vox",
+                module="vocal",
                 probe=lambda: _async_degraded(
-                    f"unknown [vox].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
+                    f"unknown [vocal].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
                 ),
             )
         )
@@ -220,7 +220,7 @@ def build_dependency_specs(
         DependencySpec(
             name="Qdrant",
             role="Mnemos (memory)",
-            module="mnemos",
+            module="episodic_memory",
             probe=lambda: probe_qdrant(
                 host=qdrant_host, port=qdrant_port, api_key=qdrant_secret_key
             ),
@@ -228,7 +228,7 @@ def build_dependency_specs(
         DependencySpec(
             name="Chat LLM",
             role="Lingua / Hypnos",
-            module="lingua",
+            module="language",
             probe=lambda: probe_chat_llm(
                 base_url=chat_url, model_id=model_id, api_key=chat_api_key
             ),
@@ -243,7 +243,7 @@ def build_dependency_specs(
                 else f"Nous backend {planning_backend!r}"
             ),
             role="Nous (active inference)",
-            module="nous",
+            module="planning",
             probe=lambda: planning_health_probe(backend=planning_backend),
         ),
         DependencySpec(
@@ -302,20 +302,20 @@ def load_health_prober(
 
     specs = build_dependency_specs(
         redis_cfg=cfg.get("redis") or {},
-        qdrant_cfg=(cfg.get("mnemos") or {}).get("qdrant") or {},
+        qdrant_cfg=(cfg.get("episodic_memory") or {}).get("qdrant") or {},
         qdrant_secret_key=qdrant_key,
         redis_password=redis_password,
-        language_cfg=cfg.get("lingua") or {},
+        language_cfg=cfg.get("language") or {},
         audition_cfg=cfg.get("audition") or {},
-        vocal_cfg=cfg.get("vox") or {},
-        planning_cfg=cfg.get("nous") or {},
+        vocal_cfg=cfg.get("vocal") or {},
+        planning_cfg=cfg.get("planning") or {},
         state_encryption_cfg=state_enc_cfg,
     )
 
     research_submission_cfg = dict(cfg.get("research_submission") or {})
 
     # Unified deterministic perception-feed surface (unified-perception-feed).
-    vision_cfg = cfg.get("topos") or {}
+    vision_cfg = cfg.get("vision") or {}
     audition_cfg = cfg.get("audition") or {}
     perception_feed_cfg = dict(cfg.get("perception_feed") or {})
     vision_capture_geometry = (
@@ -329,7 +329,7 @@ def load_health_prober(
 
     # Model-server (language-organ) surface: chat_url + served alias + bearer key
     # (presence only — the key is never logged). Same resolution as the cycle.
-    language_cfg = cfg.get("lingua") or {}
+    language_cfg = cfg.get("language") or {}
     model_server_cfg = {
         "chat_url": language_section_chat_url(language_cfg),
         "model_id": language_cfg.get("model_id"),
@@ -337,7 +337,7 @@ def load_health_prober(
     }
 
     # Graded consolidation-divergence thresholds for the entity-care divergence
-    # assessment (rate, magnitude), read from [hypnos.voice_alignment].
+    # assessment (rate, magnitude), read from [sleep.voice_alignment].
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
         voice_alignment_thresholds_from_config,

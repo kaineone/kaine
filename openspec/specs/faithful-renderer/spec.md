@@ -24,7 +24,7 @@ template that lists the source, type, and key=value pairs of the
 payload's top-level entries.
 
 #### Scenario: Known template used when matching
-- **WHEN** rendering an event with `source="soma"`, `type="soma.report"`,
+- **WHEN** rendering an event with `source="interoception"`, `type="interoception.report"`,
   payload `{"wellness": 0.85, "alerts": []}`
 - **THEN** the output is a plain-text sentence beginning with the
   interoception-specific template (not the fallback) and including the
@@ -67,9 +67,9 @@ be removed at the template level, not at use time.
 
 ### Requirement: Templates for remaining v4 event types
 The FaithfulRenderer SHALL provide named, human-readable templates for the v4
-event types that currently fall back to raw-dict rendering: `nous.timeout`,
-`audition.prosody`, `vox.synthesized`, `mnemos.replay`, `hypnos.sleep.started`,
-`hypnos.sleep.completed`, `hypnos.association`, and `eidolon.self_model`. Each
+event types that currently fall back to raw-dict rendering: `planning.timeout`,
+`audition.prosody`, `vocal.synthesized`, `episodic_memory.replay`, `sleep.sleep.started`,
+`sleep.sleep.completed`, `sleep.association`, and `self_model.document`. Each
 SHALL render readable text, never a raw dict.
 
 #### Scenario: New event types render via named templates
@@ -77,22 +77,22 @@ SHALL render readable text, never a raw dict.
 - **THEN** the output is produced by that event's named template, not the fallback
 
 #### Scenario: Replay and self-model render no raw content
-- **WHEN** a `mnemos.replay` or `eidolon.self_model` event is rendered
+- **WHEN** a `episodic_memory.replay` or `self_model.document` event is rendered
 - **THEN** the output contains memory IDs / trait labels and numeric attributes
   only, and no raw transcript or sense-data text
 
 ### Requirement: Report templates include v4 predictive fields
-The `soma.report` template SHALL render `prediction_error` and `fatigue_value`,
-and the `chronos.report` template SHALL render `temporal_prediction_error`, so the
+The `interoception.report` template SHALL render `prediction_error` and `fatigue_value`,
+and the `sequence.report` template SHALL render `temporal_prediction_error`, so the
 forward-model signals are visible in the conscious-coalition view rather than
 silently dropped.
 
 #### Scenario: Interoception report shows predictive fields
-- **WHEN** a `soma.report` carrying `prediction_error` and `fatigue_value` is rendered
+- **WHEN** a `interoception.report` carrying `prediction_error` and `fatigue_value` is rendered
 - **THEN** the rendered line includes both values
 
 #### Scenario: Sequence report shows temporal prediction error
-- **WHEN** a `chronos.report` carrying `temporal_prediction_error` is rendered
+- **WHEN** a `sequence.report` carrying `temporal_prediction_error` is rendered
 - **THEN** the rendered line includes that value
 
 ### Requirement: Snapshot rendering is a prompt input with bounded selection

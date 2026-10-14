@@ -73,11 +73,11 @@ Additionally, per-event-type redactions SHALL be applied as specified in the
 taxonomy table in `design.md`. The following MUST NEVER appear in any written
 record, regardless of what the bus event carries:
 
-- Raw audio or raw video frames (`mundus.visual.raw`, PCM samples)
+- Raw audio or raw video frames (`embodiment.visual.raw`, PCM samples)
 - `audition.transcription` text (the verbatim speech transcript)
 - The language module's intent log content or intent params text
-- the episodic memory module's Qdrant memory text bodies (`text` field in `mnemos.recall` /
-  `mnemos.replay`)
+- the episodic memory module's Qdrant memory text bodies (`text` field in `episodic_memory.recall` /
+  `episodic_memory.replay`)
 - The self-model document (only drift scalars are logged)
 - The social cognition module's agent model content (only familiarity scalar is logged)
 - Conversation turn content (any form of user input or entity response text)
@@ -96,20 +96,20 @@ record, regardless of what the bus event carries:
 - **WHEN** an `audition.transcription` event arrives on the bus
 - **THEN** `ResearchEventObserver` SHALL write no record for it
 
-#### Scenario: mundus.visual.raw frames are never logged
+#### Scenario: embodiment.visual.raw frames are never logged
 
-- **WHEN** a `mundus.visual.raw` event arrives on the bus
+- **WHEN** a `embodiment.visual.raw` event arrives on the bus
 - **THEN** `ResearchEventObserver` SHALL write no record for it
 
 #### Scenario: episodic memory replay text is redacted
 
-- **WHEN** a `mnemos.replay` event payload contains a `text` field
+- **WHEN** a `episodic_memory.replay` event payload contains a `text` field
 - **THEN** the written record SHALL contain `memory_ids` and
   `max_affect_intensity` but SHALL NOT contain `text`
 
 #### Scenario: effectors action content is stripped
 
-- **WHEN** a `praxis.action` event payload contains `content`, `body`, or
+- **WHEN** a `effectors.action` event payload contains `content`, `body`, or
   `stdout`
 - **THEN** the written record SHALL NOT contain those fields (stripped via
   `_sanitize()`)
@@ -228,7 +228,7 @@ instead of by deleting records.
 - **THEN** that file remains on disk
 
 ### Requirement: External utterances are recorded locally, and inner speech never
-When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL record each `external_speech` event from `lingua.external`, with its text and timestamps, through the encrypted JSONL sink under `state/research/external_utterances/`. It SHALL NOT subscribe to `lingua.internal`, SHALL NOT record any `internal_speech` event, and SHALL NOT record `user_input`. The log SHALL NOT be export-eligible.
+When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL record each `external_speech` event from `language.external`, with its text and timestamps, through the encrypted JSONL sink under `state/research/external_utterances/`. It SHALL NOT subscribe to `language.internal`, SHALL NOT record any `internal_speech` event, and SHALL NOT record `user_input`. The log SHALL NOT be export-eligible.
 
 #### Scenario: An inner thought is not recorded
 - **WHEN** the language module publishes an `internal_speech` event while the log is enabled
@@ -239,7 +239,7 @@ When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL
 - **THEN** its text and timestamps are written to the external-utterance log
 
 ### Requirement: What Dashboard displays is recorded for each run
-When `[research_event_log.nexus_record].enabled` is true, the cycle SHALL record every event on the streams the dashboard displays, after the same privacy filter the dashboard applies, through the encrypted JSONL sink under `data/nexus_record/`. The record SHALL contain nothing that the dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
+When `[research_event_log.dashboard_record].enabled` is true, the cycle SHALL record every event on the streams the dashboard displays, after the same privacy filter the dashboard applies, through the encrypted JSONL sink under `data/dashboard_record/`. The record SHALL contain nothing that the dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
 
 #### Scenario: The record matches the display
 - **WHEN** an event on a displayed stream is published during a run with the record enabled
@@ -253,7 +253,7 @@ When `[research_event_log.nexus_record].enabled` is true, the cycle SHALL record
 The diagnostics privacy filter SHALL remove, at every nesting depth, every field named in its vector-field set (`latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`) and every list or tuple of 16 or more numbers (booleans excluded) whose key is not a reviewed non-embedding key (`saliences`, `step_magnitudes`). No perceptual or latent embedding SHALL reach the dashboard stream, the dashboard record or any other surface that uses the filter.
 
 #### Scenario: A vision report
-- **WHEN** a `topos.report` carrying `latent`, `peripheral` and `foveal` passes the filter
+- **WHEN** a `vision.report` carrying `latent`, `peripheral` and `foveal` passes the filter
 - **THEN** all three are removed and its scalar fields, `fovea` and `predicted_fovea` are kept
 
 #### Scenario: A short test latent

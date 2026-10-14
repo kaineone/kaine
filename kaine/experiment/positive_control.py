@@ -27,7 +27,7 @@ RESULT_EVENT_TYPE = "positive_control.result"
 
 #: Processors that participate in the positive control.
 #: Kept equal to ``kaine.modules.positive_control.PROCESSORS``; a test checks they match.
-PROCESSORS = ("topos", "audition", "soma")
+PROCESSORS = ("vision", "audition", "interoception")
 
 #: Mode value that marks a finished control verdict record.
 CONTROL_MODE = "control"

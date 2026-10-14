@@ -77,7 +77,7 @@ async def test_escalate_supervision_lost(tmp_path: Path):
     assert supervisor.escalated
     rec = escalation_state.read_escalation(tmp_path / "escalation.json")
     assert rec.escalated
-    assert rec.module == "spot"
+    assert rec.module == "supervisor"
     assert "supervision stopped" in rec.message
     assert mod.shutdown_called
 
@@ -97,7 +97,7 @@ async def test_run_escalates_on_crash_when_unattended(tmp_path: Path):
     assert stop_event.is_set()
     rec = escalation_state.read_escalation(tmp_path / "escalation.json")
     assert rec.escalated
-    assert rec.module == "spot"
+    assert rec.module == "supervisor"
 
 
 async def test_run_does_not_escalate_on_crash_when_not_unattended(

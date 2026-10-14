@@ -5,7 +5,7 @@
 
 ``SubprocessVoiceTrainer`` implements the same minimal :class:`Trainer`
 protocol as :class:`~kaine.modules.sleep.voice_alignment.FakeTrainer`,
-so it drops into the same slot in ``boot.py::make_hypnos`` and the sleep module calls it
+so it drops into the same slot in ``boot.py::make_sleep`` and the sleep module calls it
 identically. It runs the real unsloth DPO in an operator-configured EXTERNAL
 Python environment as a subprocess, or loads the same
 ``scripts/sleep_external_train.py`` by path and calls its entry point in a
@@ -474,8 +474,8 @@ def result_to_training_result(
 class SubprocessVoiceTrainer:
     """Runtime-venv bridge to the voice-alignment trainer script.
 
-    Constructed by ``boot.py::make_hypnos`` when
-    ``[hypnos.voice_alignment].trainer_backend`` is ``"subprocess"`` or
+    Constructed by ``boot.py::make_sleep`` when
+    ``[sleep.voice_alignment].trainer_backend`` is ``"subprocess"`` or
     ``"in_process"``. The two-layer operator gate (config ``enabled`` + the
     approval env var) is enforced by the orchestrator before ``train`` is ever
     called.
@@ -517,7 +517,7 @@ class SubprocessVoiceTrainer:
         if not base_path:
             raise SubprocessTrainerError(
                 "SubprocessVoiceTrainer needs base_model_path; set "
-                "[hypnos.voice_alignment].base_model_path"
+                "[sleep.voice_alignment].base_model_path"
             )
 
         _sweep_stale_workdir(

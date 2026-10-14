@@ -56,7 +56,7 @@ def _make_bus(
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
     stimulus_source_stream: str = DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
-    sleep_stream: str = "hypnos.out",
+    sleep_stream: str = "sleep.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
@@ -73,7 +73,7 @@ def _make_bus(
             f"{boot_ms + 1}-0",
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": readout},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -105,8 +105,8 @@ def _make_bus(
         (
             f"{i + 1}-0",
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -149,14 +149,14 @@ def _make_base_registry() -> Any:
 
 
 def _make_embodiment_only_registry() -> Any:
-    """A registry that contains embodiment but no sleep or Phantasia."""
+    """A registry that contains embodiment but no sleep or WorldModel."""
     registry = MagicMock()
     embodiment = MagicMock()
     embodiment.enabled_by_config = True
     embodiment.probe_available = AsyncMock(return_value=False)
     embodiment.activate = AsyncMock(return_value=False)
-    registry.get.side_effect = lambda name: embodiment if name == "mundus" else None
-    registry.__contains__.side_effect = lambda name: name == "mundus"
+    registry.get.side_effect = lambda name: embodiment if name == "embodiment" else None
+    registry.__contains__.side_effect = lambda name: name == "embodiment"
     return registry
 
 
@@ -180,7 +180,7 @@ def _make_registry(
     embodiment.activate = AsyncMock(return_value=embodiment_enabled and embodiment_approved)
 
     def _get(name: str):
-        return {"phantasia": world_model, "mundus": embodiment}[name]
+        return {"world_model": world_model, "embodiment": embodiment}[name]
 
     registry.get.side_effect = _get
     registry.__contains__.return_value = True
@@ -383,7 +383,7 @@ async def test_base_thesis_maturations_into_perceptual_world(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A registry without the sleep, world model and embodiment modules matures into the perceptual
-    world without ever probing Mundus."""
+    world without ever probing Embodiment."""
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -422,7 +422,7 @@ async def test_base_thesis_maturations_into_perceptual_world(
     assert runner.stage.is_embodied
     assert not runner.stage.is_developing
     assert len(published) == 1
-    assert published[0].type == "stage.birth"
+    assert published[0].type == "stage.maturation"
     assert published[0].payload["world"] == "perceptual"
     assert published[0].payload["conditions"] == {
         "c2_sleep_required": False,
@@ -441,7 +441,7 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
     tmp_path: Path,
 ) -> None:
     """When the embodiment module is present but unreachable, a ready entity holds in the stimulus source
-    and emits stage.birth.ready with reason awaiting_embodiment."""
+    and emits stage.maturation.ready with reason awaiting_embodiment."""
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -475,7 +475,7 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
     assert runner.stage.is_developing
     assert not runner.stage.is_embodied
     assert len(published) == 1
-    assert published[0].type == "stage.birth.ready"
+    assert published[0].type == "stage.maturation.ready"
     assert published[0].payload["reason"] == "awaiting_embodiment"
     runner._embodiment_availability.assert_awaited_once()
 

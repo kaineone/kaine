@@ -13,7 +13,7 @@ Phase ordering (non-negotiable; paper-canonical):
      re-injection (hypnos-consolidation).
   4. voice_alignment: orchestrated by the sleep module directly.
   5. affective_reset: the affect module reset; sleep ends with it. The interoception module's fatigue
-     resets on the hypnos.sleep.completed event that follows.
+     resets on the sleep.sleep.completed event that follows.
 
 Each phase is async, takes its specific collaborator(s), and returns a
 `PhaseResult`.  Exceptions are caught inside each phase function so one
@@ -21,9 +21,9 @@ failure cannot stop the pipeline: the orchestrator in `module.py` runs
 them in order regardless.
 
 Phase 3 (associative_replay) is fully implemented but gated by the
-`[hypnos.consolidation].associative_replay` config flag and ships disabled
+`[sleep.consolidation].associative_replay` config flag and ships disabled
 by default; it runs as a safe no-op until an operator opts in. Voice
-alignment (phase 4) is likewise gated by `[hypnos.voice_alignment].enabled`
+alignment (phase 4) is likewise gated by `[sleep.voice_alignment].enabled`
 plus the operator-approval env var.
 """
 from __future__ import annotations
@@ -165,7 +165,7 @@ async def deep_consolidation(
 
     Replay of the consolidated traces runs inside a replay window that this
     function opens through the episodic memory module itself (so the window never depends on
-    the episodic memory module having seen ``hypnos.sleep.started`` on the bus). The window is
+    the episodic memory module having seen ``sleep.sleep.started`` on the bus). The window is
     closed once replay is done. Perception is suspended for the duration
     using the provided callables and is always restored afterwards.
 
@@ -336,17 +336,17 @@ async def associative_replay(
     """Phase 3: associative cross-period replay (hypnos-consolidation).
 
     Gated by the ``associative_replay`` feature flag in
-    ``[hypnos.consolidation]``.  When disabled it returns a successful
+    ``[sleep.consolidation]``.  When disabled it returns a successful
     no-op so the pipeline ordering is preserved.
 
     When enabled it:
 
     1. Selects traces from at least two DISTINCT memory periods (short-term,
-       episodic, semantic) via ``mnemos.select_cross_period_traces`` so a
+       episodic, semantic) via ``episodic_memory.select_cross_period_traces`` so a
        single replay batch spans more than one period — the substrate for
        novel cross-period association.
     2. Cues the world model module (``generate_scenario``) for each cross-period seed and
-       consumes the resulting ``phantasia.scenario`` payloads.  When
+       consumes the resulting ``world_model.scenario`` payloads.  When
        the world model module is disabled/absent the cue degrades to a no-op (no scenarios
        produced) — the phase still succeeds.
     3. Re-injects the novel associations (the consumed scenarios) into the
@@ -458,7 +458,7 @@ async def affective_reset(
 
     Resets the entity's dimensional affect state (valence/arousal/dominance)
     toward baseline.  The interoception module's fatigue reset is handled separately via the
-    existing ``hypnos.sleep.completed`` event that the interoception module subscribes to
+    existing ``sleep.sleep.completed`` event that the interoception module subscribes to
     (``soma-forward-model-fatigue`` change); the sleep module publishes that event in
     ``_run_pipeline`` after all phases complete, which zeroes
     ``FatigueAccumulator`` without requiring a direct module reference here.
@@ -491,7 +491,7 @@ async def affective_reset(
 # ---------------------------------------------------------------------------
 # Phase 4: Voice Alignment (orchestrated by module.py directly)
 # ---------------------------------------------------------------------------
-# Voice alignment is complex enough that it is driven by Hypnos.module
+# Voice alignment is complex enough that it is driven by Sleep.module
 # rather than a standalone phase function.  The PhaseResult for it is
 # constructed in module._run_voice_alignment() and appended to the
 # phase_results list directly.  This module contains only the helper
@@ -544,7 +544,7 @@ async def reset_affect(affect: Optional[_SupportsAffectiveReset]) -> PhaseResult
 async def recalibrate_time(sequence_resetters: list[Any]) -> PhaseResult:
     """Reset the sequence module's habituation / rumination trackers via their reset() methods.
 
-    Each item in ``chronos_resetters`` is anything with a ``reset()`` method
+    Each item in ``sequence_resetters`` is anything with a ``reset()`` method
     — typically the detectors stashed inside the sequence module. The list
     shape lets callers pass several without an introspection dance.
     """

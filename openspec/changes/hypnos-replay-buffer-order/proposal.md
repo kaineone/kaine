@@ -17,9 +17,9 @@ this as a known gap. The episodic memory module is held, so the base-thesis form
 - `EpisodicMemory.replay_now()` adds that batch to its candidates, with the episodic
   point id as the replayed `memory_id`. Selection, the window guard and
   redaction are unchanged.
-- The episodic memory module drops the batch when it sees `hypnos.sleep.completed`, so the batch
+- The episodic memory module drops the batch when it sees `sleep.sleep.completed`, so the batch
   lives only for the sleep that made it. A preservation import drops it too.
-- When a `mnemos.replay` event is a member of a stored broadcast, the episodic memory module
+- When a `episodic_memory.replay` event is a member of a stored broadcast, the episodic memory module
   records it as `<replay of {memory_id}>` without the replayed text. Storing
   the text would nest the old trace inside the new one on every sleep, now
   that replay publishes events.
@@ -39,4 +39,4 @@ this as a known gap. The episodic memory module is held, so the base-thesis form
   `kaine/modules/sleep/phases.py` (docstrings), tests, and the episodic memory module and
   sleep pages of the book.
 - Behaviour: only with the episodic memory module enabled. Phase 2 now publishes up to
-  `selection_top_k` `mnemos.replay` events per sleep.
+  `selection_top_k` `episodic_memory.replay` events per sleep.

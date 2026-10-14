@@ -184,7 +184,7 @@ def decayed_strength(
     Parameters
     ----------
     strength:
-        Configured mirror strength (e.g. from ``[vox.mirroring].mirror_strength``).
+        Configured mirror strength (e.g. from ``[vocal.mirroring].mirror_strength``).
     last_prosody_ts:
         Timestamp (seconds, on the same clock as ``now``) of the most recent
         prosody event, or ``None`` when none has been seen.

@@ -90,7 +90,7 @@ async def test_seeded_utterance_never_reaches_state_logs(bus, tmp_path):
 
         await bus.publish(
             Event(
-                source="volition",
+                source="action_selection",
                 type="intent.speak",
                 payload={"kind": "speak", "about": HEARD},
                 salience=0.5,

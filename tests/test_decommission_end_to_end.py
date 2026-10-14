@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 
 import kaine.config
 import kaine.lifecycle.__main__ as lifecycle_main
+from kaine import legacy_aliases
 from kaine.lifecycle import decommission
 from kaine.lifecycle.identity import mint_identity, save_identity, write_identity_sidecar
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
@@ -43,6 +44,14 @@ if os.environ.get("KAINE_REQUIRE_REDIS_SERVER") == "1":
     importlib.import_module("sqlite_vec")
 else:
     pytest.importorskip("sqlite_vec")
+
+
+# Streams under the names they had before the keys rename, derived from the
+# rename table so the codemod cannot rewrite them: the decommission must clear
+# a pre-rename entity's streams as well as the current ones.
+OLD_AFFECT = legacy_aliases.old_stream_name("affect.out") or "affect.out"
+OLD_LANGUAGE_EXTERNAL = legacy_aliases.old_stream_name("language.external") or "language.external"
+BUS_STREAMS = (OLD_AFFECT, "affect.out", OLD_LANGUAGE_EXTERNAL, "language.external")
 
 
 @pytest.fixture(scope="module")
@@ -185,10 +194,10 @@ def build_entity(tmp_path, port):
 
     config_text = (
         "[research_submission]\nenabled = false\n"
-        "[mnemos]\nbackend = \"qdrant\"\n"
-        "[mnemos.qdrant]\nhost = \"127.0.0.1\"\nport = 1\n"
+        "[episodic_memory]\nbackend = \"qdrant\"\n"
+        "[episodic_memory.qdrant]\nhost = \"127.0.0.1\"\nport = 1\n"
         "[evaluation.observers]\nreplay_redact_content = false\n"
-        "[hypnos.voice_alignment]\norgan_adapters_dir = \"<organ>\"\n"
+        "[sleep.voice_alignment]\norgan_adapters_dir = \"<organ>\"\n"
     ).replace("<organ>", organ.as_posix())
     config_path.write_text(config_text, encoding="utf-8")
 
@@ -403,7 +412,7 @@ def build_entity(tmp_path, port):
 
     bus = redis.Redis(port=port, password="s3cret")
     bus.flushall()
-    for stream in ("thymos.out", "affect.out", "lingua.external"):
+    for stream in BUS_STREAMS:
         bus.xadd(stream, {"text": "SECRET-bus"})
     bus.xadd("workspace.broadcast", {"ping": "old"}, id="1000-0")
     bus.set("operator:note", "keep")
@@ -531,8 +540,8 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
         assert (backup_dir / "qdrant" / f"{name}.jsonl").is_file()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
-    for stream in ("thymos.out", "affect.out", "lingua.external"):
-        assert not bus.exists(stream)
+    for stream in BUS_STREAMS:
+        assert not bus.exists(stream), stream
     assert bus.get("operator:note") == b"keep"
 
     audit_path = roots.state_root / "audit" / "decommission.jsonl"
@@ -543,7 +552,8 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     assert record["outcome"] == "deleted"
     assert record["entity_id"] == roots.this_id.entity_id
     assert record["guardian_notice_reminder"] == "shown"
-    assert "thymos.out" in record["cleared_streams"]
+    assert OLD_AFFECT in record["cleared_streams"]
+    assert "affect.out" in record["cleared_streams"]
     assert record["aof_rewrite"] in ("started", "already in progress")
     assert record["rdb_snapshot"] in ("started", "already in progress")
     assert isinstance(record["deleted_locations"], list)
@@ -601,7 +611,8 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
         assert (tmp_path / db_rel).exists()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
-    assert bus.exists("thymos.out")
+    assert bus.exists(OLD_AFFECT)
+    assert bus.exists("affect.out")
 
     audit_path = roots.state_root / "audit" / "decommission.jsonl"
     assert not audit_path.exists()

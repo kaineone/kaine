@@ -12,8 +12,8 @@ from kaine_cl1.substrate.codec import StimRequest
 
 def _instrumented_broker():
     broker = SubstrateBroker(channel_count=64, ticks_per_second=100, nesting_factor=6)
-    broker.allocate("nous", 10)
-    broker.allocate("chronos", 12)
+    broker.allocate("planning", 10)
+    broker.allocate("sequence", 12)
     broker._loop_it = object()
 
     state = {"active": 0, "max_active": 0, "windows": []}
@@ -35,7 +35,7 @@ def _instrumented_broker():
                 from_timestamp=0,
                 frame_count=frames,
             )
-            for name in ("nous", "chronos")
+            for name in ("planning", "sequence")
         }
 
     broker._run_window = fake_window
@@ -54,11 +54,11 @@ def test_concurrent_exchanges_never_overlap():
     threads = [
         threading.Thread(
             target=run_exchanges,
-            args=("nous", broker.territory("nous").channels[0]),
+            args=("planning", broker.territory("planning").channels[0]),
         ),
         threading.Thread(
             target=run_exchanges,
-            args=("chronos", broker.territory("chronos").channels[0]),
+            args=("sequence", broker.territory("sequence").channels[0]),
         ),
     ]
 
@@ -80,7 +80,7 @@ def test_start_beat_waits_for_an_inflight_window():
 
     broker._beat_loop = fake_beat_loop
 
-    exchange_thread = threading.Thread(target=broker.exchange, args=("nous", []))
+    exchange_thread = threading.Thread(target=broker.exchange, args=("planning", []))
     exchange_thread.start()
 
     deadline = time.monotonic() + 1.0

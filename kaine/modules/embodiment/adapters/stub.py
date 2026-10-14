@@ -65,8 +65,8 @@ class StubAdapter:
             name="stub",
             transitional=False,
             feed_events={
-                "chat": ("mundus.chat", 0.6),
-                "proprio": ("mundus.proprio", 0.3),
+                "chat": ("embodiment.chat", 0.6),
+                "proprio": ("embodiment.proprio", 0.3),
             },
             action_families=dict(STUB_ACTION_FAMILIES),
             continuous_channels=STUB_CONTINUOUS_CHANNELS,

@@ -18,9 +18,9 @@ class RecorderModule(BaseModule):
     a ground-truth observer.
     """
 
-    name: ClassVar[str] = "echo"
+    name: ClassVar[str] = "recorder"
 
-    def __init__(self, bus, message_label: str = "echo") -> None:
+    def __init__(self, bus, message_label: str = "recorder") -> None:
         super().__init__(bus)
         self.snapshots: list[WorkspaceSnapshot] = []
         self._message_label = message_label
@@ -31,7 +31,7 @@ class RecorderModule(BaseModule):
         salience: float = 0.7,
     ) -> str:
         return await self.publish(
-            "echo.ping",
+            "recorder.ping",
             payload or {"label": self._message_label},
             salience=salience,
         )

@@ -129,7 +129,7 @@ def test_merge_owned_result_dumps_never_contains_remove() -> None:
             "plugins.cl1.substrate.target",
             "plugins.cl1.substrate.accelerated_time",
             "plugins.enabled",
-            "plugins.cl1.backends.chronos",
+            "plugins.cl1.backends.sequence",
         }
     )
     existing = {
@@ -139,7 +139,7 @@ def test_merge_owned_result_dumps_never_contains_remove() -> None:
             "enabled": ["cl1"],
             "cl1": {
                 "substrate": {"target": "sim", "accelerated_time": True},
-                "backends": {"chronos": "cl1"},
+                "backends": {"sequence": "cl1"},
             },
         },
     }
@@ -171,9 +171,9 @@ _CL1_CONFIG = {
         "target": "simulator",
         "accelerated_time": True,
         "data_source": "reference_culture",
-        "territories": {"chronos": 12, "soma": 12},
+        "territories": {"sequence": 12, "interoception": 12},
     },
-    "backends": {"chronos": "cl1", "soma": "cl1"},
+    "backends": {"sequence": "cl1", "interoception": "cl1"},
 }
 
 
@@ -182,7 +182,7 @@ def _run_cl1_step(existing: dict, answer: str = "n") -> tuple[dict, list[str]]:
 
     lines, out = _out_collector()
     ctx = StepContext(
-        config={"modules": {"chronos": True, "soma": True}},
+        config={"modules": {"sequence": True, "interoception": True}},
         host={},
         extra={"existing_config": existing, "input_fn": lambda _: answer, "out": out},
     )
@@ -192,7 +192,7 @@ def _run_cl1_step(existing: dict, answer: str = "n") -> tuple[dict, list[str]]:
 
 def test_cl1_step_decline_removes_existing_cl1_config() -> None:
     existing = {
-        "modules": {"chronos": True, "soma": True},
+        "modules": {"sequence": True, "interoception": True},
         "plugins": {"enabled": ["cl1"], "cl1": copy.deepcopy(_CL1_CONFIG)},
     }
     config, _out = _run_cl1_step(existing)
@@ -203,7 +203,7 @@ def test_cl1_step_decline_removes_existing_cl1_config() -> None:
 
 def test_cl1_step_decline_keeps_other_enabled_plugins() -> None:
     existing = {
-        "modules": {"chronos": True, "soma": True},
+        "modules": {"sequence": True, "interoception": True},
         "plugins": {"enabled": ["other", "cl1"], "cl1": copy.deepcopy(_CL1_CONFIG)},
     }
     config, _out = _run_cl1_step(existing)
@@ -213,7 +213,7 @@ def test_cl1_step_decline_keeps_other_enabled_plugins() -> None:
 
 
 def test_cl1_step_decline_without_cl1_writes_nothing() -> None:
-    existing = {"modules": {"chronos": True, "soma": True}}
+    existing = {"modules": {"sequence": True, "interoception": True}}
     config, _out = _run_cl1_step(existing)
     assert "plugins" not in config
     assert tomlwriter.merge_owned(existing, config, OWNED_KEYS) == existing

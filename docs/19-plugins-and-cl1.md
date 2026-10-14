@@ -58,10 +58,10 @@ class MyNetwork:
 
 class MyPlugin:
     def seams(self, config):
-        return frozenset({"chronos.network"})
+        return frozenset({"sequence.network"})
 
     def injections(self, module, config):
-        if module == "chronos":
+        if module == "sequence":
             return {"network": MyNetwork()}
         return {}
 
@@ -73,10 +73,10 @@ def make_plugin():
 
 | Seam | Replaces | Interface expected by the module |
 |---|---|---|
-| `chronos.network` | The default [Sequence](09-modules/sequence.md) CfC network | An object with a `units` attribute (hidden width) and a `tick(feature_vec)` method that returns a hidden-state vector. The sequence module sizes its forward-prediction head from `units`. |
-| `soma.forward_model` | The default [Interoception](09-modules/interoception.md) forward model | `step(...)`, `prediction_error_to_salience(...)`, a `suspended` property, `adaptation_steps`, `state_dict()`, `load_state_dict(...)`. An optional `context_dim` attribute greater than 0 makes the interoception module pass the broadcast context as `context=` and `null_context=` to `step`; without it the call is unchanged and the model reports no `context_gain`. An optional `last_error_defined` attribute, false for a reading the model skipped as non-finite and for the first reading after one, makes the interoception module publish a null `prediction_error` for that reading, keep it out of the running mean and report no unexpected error; without it every error counts as defined. The CL1 wetware model sets it. |
-| `nous.engine` | The active-inference engine KAINE builds from `[nous].backend` (`"pymdp"` or `"numpy"`) in [Planning](09-modules/planning.md) | An object satisfying `kaine.modules.planning.engine.ActiveInferenceEngine` (the planning module calls `step(...)` and reads `actions`). The `[nous]` complexity envelope is still validated. |
-| `nous.engine_wrapper` | The built engine, indirectly: a wrapper around the active-inference engine KAINE built from `[nous].backend` | A callable `wrap(engine)` that receives the engine KAINE built and returns an `ActiveInferenceEngine`. Use it to add to the default engine without seeing its settings. The wrapper must forward every attribute it does not override to the inner engine: the planning module probes optional methods with `getattr` (for example `seed_posterior` after a revive) and goes without them when they are missing. The planning module calls `engine.step` via `asyncio.to_thread`, so a wrapper that touches shared state must serialise it. Cannot be combined with `nous.engine`. |
+| `sequence.network` | The default [Sequence](09-modules/sequence.md) CfC network | An object with a `units` attribute (hidden width) and a `tick(feature_vec)` method that returns a hidden-state vector. The sequence module sizes its forward-prediction head from `units`. |
+| `interoception.forward_model` | The default [Interoception](09-modules/interoception.md) forward model | `step(...)`, `prediction_error_to_salience(...)`, a `suspended` property, `adaptation_steps`, `state_dict()`, `load_state_dict(...)`. An optional `context_dim` attribute greater than 0 makes the interoception module pass the broadcast context as `context=` and `null_context=` to `step`; without it the call is unchanged and the model reports no `context_gain`. An optional `last_error_defined` attribute, false for a reading the model skipped as non-finite and for the first reading after one, makes the interoception module publish a null `prediction_error` for that reading, keep it out of the running mean and report no unexpected error; without it every error counts as defined. The CL1 wetware model sets it. |
+| `planning.engine` | The active-inference engine KAINE builds from `[planning].backend` (`"pymdp"` or `"numpy"`) in [Planning](09-modules/planning.md) | An object satisfying `kaine.modules.planning.engine.ActiveInferenceEngine` (the planning module calls `step(...)` and reads `actions`). The `[planning]` complexity envelope is still validated. |
+| `planning.engine_wrapper` | The built engine, indirectly: a wrapper around the active-inference engine KAINE built from `[planning].backend` | A callable `wrap(engine)` that receives the engine KAINE built and returns an `ActiveInferenceEngine`. Use it to add to the default engine without seeing its settings. The wrapper must forward every attribute it does not override to the inner engine: the planning module probes optional methods with `getattr` (for example `seed_posterior` after a revive) and goes without them when they are missing. The planning module calls `engine.step` via `asyncio.to_thread`, so a wrapper that touches shared state must serialise it. Cannot be combined with `planning.engine`. |
 | `audition.acoustic_encoder` | The default [Audition](09-modules/audition.md) acoustic encoder | An object satisfying the `AcousticEncoder` protocol: `embedding_dim` (int), `model_id` (str), and `embed(audio_bytes, sample_rate)` returning a list of floats. Requires `general_audition = true` and `[audition].acoustic_encoder` to be unset or `"spectral"`. |
 | `oscillator.<module>` | The default module oscillator | An oscillator object accepted by the module's `attach_oscillator` method. |
 
@@ -143,10 +143,10 @@ The plugin keeps a module's identity, bus subscriptions and published events exa
 
 | Module | Seam | What runs on the substrate |
 |---|---|---|
-| [Sequence](09-modules/sequence.md) | `chronos.network` | The recurrent network whose hidden state feeds Sequence's prediction head. |
-| [Interoception](09-modules/interoception.md) | `soma.forward_model` | The reservoir under the interoception module's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units. |
+| [Sequence](09-modules/sequence.md) | `sequence.network` | The recurrent network whose hidden state feeds Sequence's prediction head. |
+| [Interoception](09-modules/interoception.md) | `interoception.forward_model` | The reservoir under the interoception module's interoceptive forward model; a small silicon readout still predicts the next metrics vector, so the prediction error keeps its usual units. |
 | Any oscillated module | `oscillator.<module>` | The oscillator of the oscillatory coherence layer: each time the module publishes, its own small territory is stimulated in proportion to the event's intensity, and the binding phase is read from that territory's firing. |
-| [Planning](09-modules/planning.md) | `nous.engine_wrapper` | A policy proposal beside KAINE's own active-inference engine, which keeps its beliefs and expected free energy. |
+| [Planning](09-modules/planning.md) | `planning.engine_wrapper` | A policy proposal beside KAINE's own active-inference engine, which keeps its beliefs and expected free energy. |
 
 ### Requirements
 
@@ -187,12 +187,12 @@ accelerated_time = true
 data_source = "reference_culture"
 
 [plugins.cl1.backends]
-chronos = "cl1"
-soma = "cl1"
+sequence = "cl1"
+interoception = "cl1"
 
 [plugins.cl1.substrate.territories]
-chronos = 12
-soma = 12
+sequence = 12
+interoception = 12
 ```
 
 To source the oscillatory-binding phase of some modules from the substrate as well, list them; each gets its own territory, and KAINE's `[oscillator].enabled` must be true:
@@ -202,7 +202,7 @@ To source the oscillatory-binding phase of some modules from the substrate as we
 enabled = true
 
 [plugins.cl1.oscillators]
-modules = ["chronos", "soma"]
+modules = ["sequence", "interoception"]
 channels_per_module = 4
 ```
 
@@ -224,16 +224,16 @@ Every boot with a converted module logs a warning that the substrate is simulate
 
 ### Planning on the substrate
 
-The planning module is off the substrate unless you set `nous = "cl1"`. When it is on, KAINE builds its usual active-inference engine and the plugin wraps it. Each step runs the silicon engine first, then stimulates one group of electrodes per action, harder for actions with lower expected free energy, and reads the tissue's proposed action from whichever group fires most in the window that answers its stimulation. When no group fires, or the top groups tie, the proposal is the silicon engine's choice and the answer counts as a disagreement. Once the substrate follows KAINE's cycle, that answer arrives one planning module step later, so it is scored against the silicon choice it was stimulated with, not the current one. The last two electrodes of the territory carry feedback in the manner of Cortical Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the silicon engine, and a random amplitude after one that did not.
+The planning module is off the substrate unless you set `planning = "cl1"`. When it is on, KAINE builds its usual active-inference engine and the plugin wraps it. Each step runs the silicon engine first, then stimulates one group of electrodes per action, harder for actions with lower expected free energy, and reads the tissue's proposed action from whichever group fires most in the window that answers its stimulation. When no group fires, or the top groups tie, the proposal is the silicon engine's choice and the answer counts as a disagreement. Once the substrate follows KAINE's cycle, that answer arrives one planning module step later, so it is scored against the silicon choice it was stimulated with, not the current one. The last two electrodes of the territory carry feedback in the manner of Cortical Labs' DishBrain experiment: a fixed pulse after a proposal that agreed with the silicon engine, and a random amplitude after one that did not.
 
 ```toml
 [plugins.cl1.backends]
-nous = "cl1"
+planning = "cl1"
 
 [plugins.cl1.substrate.territories]
-nous = 10        # two electrodes per action plus two feedback electrodes
+planning = 10        # two electrodes per action plus two feedback electrodes
 
-[plugins.cl1.nous]
+[plugins.cl1.planning]
 mode = "shadow"  # or "drive"
 ```
 

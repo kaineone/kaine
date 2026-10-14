@@ -279,7 +279,7 @@ def test_escalation_state_only_contains_operational_keys(tmp_path):
     write_escalation(
         EscalationRecord(
             escalated=True,
-            module="lingua",
+            module="language",
             attempts=5,
             snapshot_id="abc123",
             escalated_at="2026-06-07T00:00:00+00:00",
@@ -303,7 +303,7 @@ def test_escalation_state_only_contains_operational_keys(tmp_path):
             f"escalation.json carries forbidden token {word!r}: {raw}"
         )
     # Round-trips cleanly.
-    assert read_escalation(path).module == "lingua"
+    assert read_escalation(path).module == "language"
 
 
 @pytest.mark.asyncio
@@ -458,7 +458,7 @@ def test_perception_preview_persists_nothing():
 
 @pytest.mark.asyncio
 async def test_vision_preview_tap_writes_no_frame_to_disk(tmp_path, monkeypatch):
-    """With the dev override ON, driving Topos.process_frame captures a single
+    """With the dev override ON, driving Vision.process_frame captures a single
     in-memory JPEG but leaves NO raw frame on disk (repo/state/data/tmp)."""
     from tests.zero_persistence import (
         WriteRecorder,

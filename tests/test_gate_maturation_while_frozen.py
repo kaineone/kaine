@@ -39,7 +39,7 @@ def _make_bus(
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
     stimulus_source_stream: str = DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
-    sleep_stream: str = "hypnos.out",
+    sleep_stream: str = "sleep.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
@@ -56,7 +56,7 @@ def _make_bus(
             f"{boot_ms + 1}-0",
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": readout},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -89,8 +89,8 @@ def _make_bus(
         (
             f"{i + 1}-0",
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -149,7 +149,7 @@ def _make_registry(
     vocal.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": embodiment, "vox": vocal}
+    modules = {"sleep": MagicMock(), "world_model": world_model, "embodiment": embodiment, "vocal": vocal}
 
     def _get(name: str):
         return modules[name]

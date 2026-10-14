@@ -32,7 +32,7 @@ def _transcription(text: str) -> tuple[str, Event]:
 
 
 def _own_speech() -> tuple[str, Event]:
-    return ("e2", _event("lingua", "external_speech", {"text": "I said this"}))
+    return ("e2", _event("language", "external_speech", {"text": "I said this"}))
 
 
 def _snapshot(events, *, inhibited: bool = False) -> WorkspaceSnapshot:
@@ -71,7 +71,7 @@ def test_speak_intent_carries_referent_text():
 def test_no_disposed_content_produces_no_intent():
     # Experiential broadcast with only a non-communication event.
     v = ActionSelection()
-    snap = _snapshot([("e3", _event("soma", "soma.report", {"wellness": 0.5}))])
+    snap = _snapshot([("e3", _event("interoception", "interoception.report", {"wellness": 0.5}))])
     assert v.select(snap) == []
 
 

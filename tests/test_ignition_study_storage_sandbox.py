@@ -43,22 +43,22 @@ def repo(tmp_path):
     repo_root.mkdir()
     modules = repo_root / "modules"
     for name in (
-        "soma",
-        "chronos",
-        "topos",
+        "interoception",
+        "sequence",
+        "vision",
         "audition",
-        "lingua",
-        "thymos",
-        "hypnos",
-        "mnemos",
-        "phantasia",
-        "nous",
-        "eidolon",
-        "empatheia",
-        "vox",
-        "praxis",
-        "perception",
-        "mundus",
+        "language",
+        "affect",
+        "sleep",
+        "episodic_memory",
+        "world_model",
+        "planning",
+        "self_model",
+        "social_cognition",
+        "vocal",
+        "effectors",
+        "perceptual_locus",
+        "embodiment",
     ):
         (modules / name).mkdir(parents=True, exist_ok=True)
 
@@ -89,8 +89,8 @@ def plan(repo):
     return {
         "study_id": "storage-sandbox",
         "repo_root": str(repo),
-        "base_modules": ["soma", "chronos", "topos"],
-        "order": ["thymos", "mnemos"],
+        "base_modules": ["interoception", "sequence", "vision"],
+        "order": ["affect", "episodic_memory"],
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
@@ -121,22 +121,22 @@ def test_overlay_forces_child_data_root_to_line_directory(repo, plan):
 @pytest.fixture
 def known_modules(monkeypatch):
     names = [
-        "soma",
-        "chronos",
-        "topos",
+        "interoception",
+        "sequence",
+        "vision",
         "audition",
-        "lingua",
-        "thymos",
-        "hypnos",
-        "mnemos",
-        "phantasia",
-        "nous",
-        "eidolon",
-        "empatheia",
-        "vox",
-        "praxis",
-        "perception",
-        "mundus",
+        "language",
+        "affect",
+        "sleep",
+        "episodic_memory",
+        "world_model",
+        "planning",
+        "self_model",
+        "social_cognition",
+        "vocal",
+        "effectors",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")

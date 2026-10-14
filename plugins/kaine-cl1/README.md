@@ -19,7 +19,7 @@ Then enable it in the KAINE configuration; the block to paste is in
 
 KAINE discovers the `cl1` entry point in the `kaine.plugins` group and loads it
 only when `[plugins].enabled` names it. The plugin declares the seams it fills
-(`chronos.network`, `soma.forward_model`) and hands KAINE the objects for them.
+(`sequence.network`, `interoception.forward_model`) and hands KAINE the objects for them.
 Core KAINE never imports this package; an import-linter contract enforces that.
 
 ```

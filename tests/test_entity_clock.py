@@ -250,7 +250,7 @@ class _NullBus:
     async def publish(self, event):
         return "x"
 
-    async def publish_workspace(self, snapshot, source="syneidesis"):
+    async def publish_workspace(self, snapshot, source="workspace"):
         return "x"
 
     async def close(self):
@@ -315,7 +315,7 @@ async def test_interoception_reduce_rate_recomputes_period_regression():
     the stale period. Routing reduce_rate through the single setter fixes it."""
     cycle = _logical_engine(scale=1.0, rate=5.0)
     before_rate = cycle.processing_rate_hz
-    # Feed a soma.regulation/reduce_rate advisory through the real consumer.
+    # Feed a interoception.regulation/reduce_rate advisory through the real consumer.
     bus = _ReduceRateBus()
     cycle._bus = bus  # type: ignore[assignment]
     await cycle.consume_interoception_regulation()
@@ -327,7 +327,7 @@ async def test_interoception_reduce_rate_recomputes_period_regression():
 
 
 class _ReduceRateBus(_NullBus):
-    """A bus that yields exactly one soma.regulation/reduce_rate event."""
+    """A bus that yields exactly one interoception.regulation/reduce_rate event."""
 
     def __init__(self) -> None:
         self._served = False
@@ -339,14 +339,14 @@ class _ReduceRateBus(_NullBus):
         return entries, (entries[-1][0] if entries else None)
 
     async def read(self, stream, last_id="0", count=100, block_ms=0):
-        if stream == "soma.out" and not self._served:
+        if stream == "interoception.out" and not self._served:
             self._served = True
             return [
                 (
                     "1-0",
                     Event(
-                        source="soma",
-                        type="soma.regulation",
+                        source="interoception",
+                        type="interoception.regulation",
                         payload={"action": "reduce_rate", "reason": "test", "severity": 2},
                         salience=0.5,
                         timestamp=BASE_EPOCH,

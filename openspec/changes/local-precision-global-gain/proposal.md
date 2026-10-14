@@ -8,8 +8,8 @@ The paper also fixes greedy decoding (temperature 0) for the planned runs of the
 
 ## What Changes
 
-- **Remove the workspace precision weight.** `RuleBasedSalience` computes `priority = clip(intensity * novelty * goal)` and `score = clip(level * C_g(priority))` as before. `kaine/workspace/precision.py`, `make_source_precision`, the `precision` argument, and the `[syneidesis]` keys `precision_weighting`, `precision_sample_weight`, `precision_warmup_samples` and `precision_bounds` are removed (they shipped two days earlier; no deployment depends on them). The arousal contrast gain stays.
-- **Thesis profile decodes greedily.** `config/profiles/thesis_test.toml` sets `[lingua].temperature = 0.0`. Its comments stop calling the affect module "the precision core".
+- **Remove the workspace precision weight.** `RuleBasedSalience` computes `priority = clip(intensity * novelty * goal)` and `score = clip(level * C_g(priority))` as before. `kaine/workspace/precision.py`, `make_source_precision`, the `precision` argument, and the `[workspace]` keys `precision_weighting`, `precision_sample_weight`, `precision_warmup_samples` and `precision_bounds` are removed (they shipped two days earlier; no deployment depends on them). The arousal contrast gain stays.
+- **Thesis profile decodes greedily.** `config/profiles/thesis_test.toml` sets `[language].temperature = 0.0`. Its comments stop calling the affect module "the precision core".
 - The active `precision-weighted-selection` change drops its per-source weight requirement; its arousal contrast requirement stands.
 - Docs: `docs/08-cognitive-cycle/global-workspace.md`, `docs/appendix-a-configuration/core.md`.
 
@@ -17,7 +17,7 @@ The paper also fixes greedy decoding (temperature 0) for the planned runs of the
 
 ### Modified Capabilities
 
-- `syneidesis`: no per-source precision weight in workspace selection.
+- `workspace`: no per-source precision weight in workspace selection.
 - `thesis-test-configuration`: greedy decoding in the base-thesis profile.
 
 ## Impact

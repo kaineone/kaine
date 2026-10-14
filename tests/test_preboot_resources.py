@@ -40,28 +40,28 @@ def _probe(maxmemory: int, live: dict[str, int] | None = None):
 
 def test_budget_streams_cover_enabled_modules_and_extras():
     streams = preboot.budget_streams(
-        {"lingua": True, "nous": True, "topos": True, "soma": False}
+        {"language": True, "planning": True, "vision": True, "interoception": False}
     )
     assert streams[:2] == ["workspace.broadcast", "cycle.out"]
     for s in (
-        "topos.out",
-        "lingua.out",
-        "lingua.internal",
-        "lingua.external",
-        "nous.out",
-        "volition.out",
-        "volition_feedback.out",
+        "vision.out",
+        "language.out",
+        "language.internal",
+        "language.external",
+        "planning.out",
+        "action_selection.out",
+        "action_selection_feedback.out",
     ):
         assert s in streams
-    assert "soma.out" not in streams
+    assert "interoception.out" not in streams
 
 
 def test_budget_is_maxlen_times_size_times_headroom():
     cfg = {
-        "modules": {"topos": True},
+        "modules": {"vision": True},
         "bus": {
             "default_maxlen": 100000,
-            "per_stream_maxlen": {"workspace.broadcast": 1000, "cycle.out": 2000, "topos.out": 10},
+            "per_stream_maxlen": {"workspace.broadcast": 1000, "cycle.out": 2000, "vision.out": 10},
         },
     }
     total, shares = preboot.bus_budget(cfg)
@@ -71,12 +71,12 @@ def test_budget_is_maxlen_times_size_times_headroom():
 
 
 def test_budget_prefers_live_sizes_then_table_then_estimate():
-    cfg = {"modules": {"topos": True, "mnemos": True}, "bus": {"default_maxlen": 100}}
-    _, shares = preboot.bus_budget(cfg, {"topos.out": 50_000, "mnemos.out": 0})
+    cfg = {"modules": {"vision": True, "episodic_memory": True}, "bus": {"default_maxlen": 100}}
+    _, shares = preboot.bus_budget(cfg, {"vision.out": 50_000, "episodic_memory.out": 0})
     by = {s.stream: s for s in shares}
-    assert (by["topos.out"].entry_bytes, by["topos.out"].source) == (50_000, preboot.SIZE_LIVE)
+    assert (by["vision.out"].entry_bytes, by["vision.out"].source) == (50_000, preboot.SIZE_LIVE)
     assert by["cycle.out"].source == preboot.SIZE_TABLE
-    assert (by["mnemos.out"].entry_bytes, by["mnemos.out"].source) == (
+    assert (by["episodic_memory.out"].entry_bytes, by["episodic_memory.out"].source) == (
         2_000,
         preboot.SIZE_ESTIMATE,
     )
@@ -88,10 +88,10 @@ def test_shipped_config_budget_uses_new_caps():
     root = Path(__file__).resolve().parents[1]
     with (root / "config" / "kaine.toml").open("rb") as fh:
         cfg = tomllib.load(fh)
-    cfg["modules"] = {"topos": True, "audition": True}
+    cfg["modules"] = {"vision": True, "audition": True}
     _, shares = preboot.bus_budget(cfg)
     by = {s.stream: s.bytes for s in shares}
-    assert by["topos.out"] == 12000 * 40_000
+    assert by["vision.out"] == 12000 * 40_000
     assert by["audition.out"] == 12000 * 400
     assert by["workspace.broadcast"] == 100000 * 6_600
 
@@ -112,16 +112,16 @@ def _measured_config(budget_gib: float = 1.0) -> dict[str, Any]:
 
 
 def _estimated_config() -> dict[str, Any]:
-    """A small measured part plus a large unmeasured stream (mnemos.out at the
+    """A small measured part plus a large unmeasured stream (episodic_memory.out at the
     2 KB estimate: 300000 x 2 KB x 2 = about 1.1 GiB)."""
     return {
-        "modules": {"mnemos": True},
+        "modules": {"episodic_memory": True},
         "bus": {
             "default_maxlen": 100000,
             "per_stream_maxlen": {
                 "workspace.broadcast": 1000,
                 "cycle.out": 0,
-                "mnemos.out": 300000,
+                "episodic_memory.out": 300000,
             },
         },
     }
@@ -150,7 +150,7 @@ async def test_bus_budget_fail_when_measured_streams_exceed_maxmemory():
 async def test_bus_budget_warns_when_overage_rests_on_estimates():
     rows = await preboot.check_bus_budget(_estimated_config(), probe=_probe(GIB // 2))
     assert rows[0].status == preboot.WARN
-    assert "mnemos.out" in rows[0].detail
+    assert "episodic_memory.out" in rows[0].detail
     assert "estimate" in rows[0].detail
     assert "12gb" in rows[0].detail
 
@@ -158,7 +158,7 @@ async def test_bus_budget_warns_when_overage_rests_on_estimates():
 async def test_bus_budget_fails_when_live_sample_confirms_overage():
     """A live measurement of the same stream turns the estimate into a fact."""
     rows = await preboot.check_bus_budget(
-        _estimated_config(), probe=_probe(GIB // 2, {"mnemos.out": 2_000})
+        _estimated_config(), probe=_probe(GIB // 2, {"episodic_memory.out": 2_000})
     )
     assert rows[0].status == preboot.FAIL
     assert "live" in rows[0].detail
@@ -228,12 +228,12 @@ async def test_bus_client_maxmemory_empty_reply_raises():
 
 async def test_bus_client_samples_entry_size():
     bus = AsyncBus(BusConfig(password="x"), client=_FakeRedis(xlen=1000, usage=40_000_000))
-    assert await bus.stream_entry_bytes("topos.out") == 40_000
+    assert await bus.stream_entry_bytes("vision.out") == 40_000
 
 
 async def test_bus_client_does_not_sample_short_streams():
     bus = AsyncBus(BusConfig(password="x"), client=_FakeRedis(xlen=5, usage=10_000))
-    assert await bus.stream_entry_bytes("topos.out") is None
+    assert await bus.stream_entry_bytes("vision.out") is None
 
 
 # ---------------------------------------------------------------------------
@@ -264,15 +264,15 @@ def _disk_config(tmp_path: Path, **extra: Any) -> dict[str, Any]:
             "log_dir": str(data / "evaluation" / "research_events"),
             "raw_archive": {"archive_dir": str(state / "research" / "raw")},
         },
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "adapter_output_dir": str(state / "hypnos" / "adapters"),
                 "trainer_workdir": str(state / "hypnos" / "jobs"),
             }
         },
         "ignition_log": {"directory": str(data / "ignition")},
-        "spot": {"incident_log": {"path": str(state / "cycle" / "incidents")}},
-        "eidolon": {"persistence_path": str(state / "eidolon" / "self_model.json")},
+        "supervisor": {"incident_log": {"path": str(state / "cycle" / "incidents")}},
+        "self_model": {"persistence_path": str(state / "eidolon" / "self_model.json")},
     }
 
 
@@ -310,15 +310,15 @@ def test_durable_paths_cover_every_configured_store(tmp_path):
         "[evaluation.paths].evaluation_logs",
         "[research_event_log].log_dir",
         "[research_event_log.raw_archive].archive_dir",
-        "[hypnos.voice_alignment].adapter_output_dir",
-        "[hypnos.voice_alignment].trainer_workdir",
+        "[sleep.voice_alignment].adapter_output_dir",
+        "[sleep.voice_alignment].trainer_workdir",
         "[ignition_log].directory",
-        "[spot.incident_log].path",
-        "[eidolon].persistence_path",
+        "[supervisor.incident_log].path",
+        "[self_model].persistence_path",
     ):
         assert key in labels
     paths = dict(preboot.durable_paths(cfg))
-    assert paths["[eidolon].persistence_path"] == tmp_path / "state" / "eidolon"
+    assert paths["[self_model].persistence_path"] == tmp_path / "state" / "eidolon"
     assert paths["[preservation.welfare_response].out_root"] == tmp_path / "backups"
 
 
@@ -326,7 +326,7 @@ def test_durable_paths_cover_every_configured_store(tmp_path):
 def test_durable_paths_use_module_defaults():
     paths = dict(preboot.durable_paths({}))
     assert paths["[lifecycle].snapshots_path"] == Path("state/forks")
-    assert paths["[hypnos.voice_alignment].adapter_output_dir"] == Path("state/hypnos/adapters")
+    assert paths["[sleep.voice_alignment].adapter_output_dir"] == Path("state/hypnos/adapters")
     assert paths["[ignition_log].directory"] == Path("data/ignition")
     assert paths["[preservation.divergence_monitor].out_root"] == Path("backups")
 

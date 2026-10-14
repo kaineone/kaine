@@ -29,7 +29,7 @@ from tests._fakes import wait_for
 
 async def _publish_intent(bus: AsyncBus, kind: str, about: str) -> None:
     event = Event(
-        source="volition",
+        source="action_selection",
         type=f"intent.{kind}",
         payload={"kind": kind, "about": about},
         salience=0.5,
@@ -70,7 +70,7 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(tick_index=0, selected_events=events or [], inhibited=False)
 
 
-def _event(source="soma", type_="soma.report", payload=None) -> tuple:
+def _event(source="interoception", type_="interoception.report", payload=None) -> tuple:
     return (
         "e0",
         Event(
@@ -95,9 +95,9 @@ async def test_invalid_construction(bus: AsyncBus):
 async def test_think_intent_origin_copied_to_internal_speech(bus: AsyncBus, tmp_path: Path):
     language = _make_language(bus, tmp_path, responses=["inner thought"])
     event = Event(
-        source="volition",
+        source="action_selection",
         type="intent.think",
-        payload={"kind": "think", "about": "origin test", "origin": "nous"},
+        payload={"kind": "think", "about": "origin test", "origin": "planning"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
@@ -106,7 +106,7 @@ async def test_think_intent_origin_copied_to_internal_speech(bus: AsyncBus, tmp_
     assert entries
     payload_json = entries[0][1].get("payload") or entries[0][1]["payload"]
     payload = json.loads(payload_json)
-    assert payload.get("origin") == "nous"
+    assert payload.get("origin") == "planning"
 
 
 @pytest.mark.asyncio
@@ -196,14 +196,14 @@ async def test_bus_event_payload_shape(bus: AsyncBus, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_aggregate_language_out_mirrors_mode_specific_stream(bus: AsyncBus, tmp_path: Path):
-    """Every utterance is also published to the canonical lingua.out stream."""
+    """Every utterance is also published to the canonical language.out stream."""
     language = _make_language(bus, tmp_path, responses=["spoken"])
     await language.speak("hi", snapshot=_snapshot([_event()]))
     await language.think("quiet", snapshot=_snapshot([_event()]))
 
     external = await bus.client.xrange(EXTERNAL_STREAM)
     internal = await bus.client.xrange(INTERNAL_STREAM)
-    aggregate = await bus.client.xrange("lingua.out")
+    aggregate = await bus.client.xrange("language.out")
     assert len(aggregate) == 2
     assert (
         json.loads(external[0][1]["payload"])["text"]
@@ -443,7 +443,7 @@ async def _publish_speak(bus: AsyncBus, about: str, *, interrupt: bool = False) 
     if interrupt:
         payload["interrupt"] = True
     event = Event(
-        source="volition",
+        source="action_selection",
         type="intent.speak",
         payload=payload,
         salience=0.5,
@@ -691,7 +691,7 @@ async def test_heard_speech_redacted_when_about_kind_is_heard(bus: AsyncBus, tmp
         )
         language._latest_snapshot = snap
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={
                 "kind": "speak",
@@ -722,7 +722,7 @@ async def test_heard_speech_redacted_when_about_kind_missing(bus: AsyncBus, tmp_
     try:
         marker = "UNIQUE_MARKER_UNMARKED_456"
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={"kind": "speak", "about": marker, "entry_id": "e2"},
             salience=0.5,
@@ -745,14 +745,14 @@ async def test_felt_about_logged_verbatim(bus: AsyncBus, tmp_path: Path):
     try:
         about = "I feel curious."
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={
                 "kind": "speak",
                 "about": about,
                 "entry_id": "e3",
                 "about_kind": "felt",
-                "origin": "nous",
+                "origin": "planning",
             },
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -772,13 +772,13 @@ async def test_intent_log_record_has_all_required_fields(bus: AsyncBus, tmp_path
     await language.initialize()
     try:
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={
                 "kind": "speak",
                 "about": "hi",
                 "entry_id": "e4",
-                "origin": "nous",
+                "origin": "planning",
                 "about_kind": "felt",
             },
             salience=0.5,
@@ -790,7 +790,7 @@ async def test_intent_log_record_has_all_required_fields(bus: AsyncBus, tmp_path
         assert len(rec["record_id"]) == 32
         assert all(c in "0123456789abcdef" for c in rec["record_id"])
         assert rec["intent_entry_id"] == "e4"
-        assert rec["intent_origin"] == "nous"
+        assert rec["intent_origin"] == "planning"
         assert "sleep_index" in rec
         assert len(rec["system_digest"]) == 64
         assert all(c in "0123456789abcdef" for c in rec["system_digest"])
@@ -808,7 +808,7 @@ async def test_bus_payload_carries_record_id(bus: AsyncBus, tmp_path: Path):
     await language.initialize()
     try:
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={"kind": "speak", "about": "hello", "entry_id": "e5"},
             salience=0.5,
@@ -843,8 +843,8 @@ async def test_sleep_index_read_from_sleep_out(bus: AsyncBus, tmp_path: Path):
         # The sleep module publishes a completed sleep with index 3.
         await bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.consolidation_divergence",
+                source="sleep",
+                type="sleep.consolidation_divergence",
                 payload={"sleep_index": 3, "records_scanned": 0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -870,8 +870,8 @@ async def test_sleep_index_backfilled_at_initialize_takes_the_latest(bus: AsyncB
     for idx in (5, 1):
         await bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.consolidation_divergence",
+                source="sleep",
+                type="sleep.consolidation_divergence",
                 payload={"sleep_index": idx, "records_scanned": 0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -897,10 +897,10 @@ async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncB
             tick_index=2,
             selected_events=[
                 (
-                    "soma1",
+                    "interoception1",
                     Event(
-                        source="soma",
-                        type="soma.report",
+                        source="interoception",
+                        type="interoception.report",
                         payload={"wellness": 0.8, "alerts": []},
                         salience=0.5,
                         timestamp=datetime.now(timezone.utc),
@@ -911,7 +911,7 @@ async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncB
             is_experiential=True,
         )
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={"kind": "speak", "about": marker, "about_kind": "heard"},
             salience=0.5,

@@ -31,7 +31,7 @@ thread when the work ends. The failures happened after all of that.
 
 ### Modified Capabilities
 
-- `topos`: the reversible-unload tests for the perception encoders are stable
+- `vision`: the reversible-unload tests for the perception encoders are stable
   under load.
 
 ## Impact

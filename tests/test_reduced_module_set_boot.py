@@ -31,7 +31,7 @@ def _reduced_config():
     # layers only.
     cfg = load_kaine_config(operator_path=_MISSING_OPERATOR)
     cfg["modules"] = {name: False for name in cfg["modules"]}
-    for name in ("soma", "chronos", "lingua"):
+    for name in ("interoception", "sequence", "language"):
         cfg["modules"][name] = True
     return cfg
 
@@ -46,9 +46,9 @@ def test_build_registry_boots_exactly_the_three_modules(monkeypatch):
     bus = _bus()
     registry = build_registry(bus, _reduced_config())
     names = sorted(m.name for m in registry.all_modules())
-    assert names == sorted(["chronos", "lingua", "soma"])
+    assert names == sorted(["sequence", "language", "interoception"])
     # Disabled faculties are absent; the reduced set does not drag them in.
-    for disabled in ("mnemos", "eidolon", "thymos", "perception", "audition", "topos"):
+    for disabled in ("episodic_memory", "self_model", "affect", "perceptual_locus", "audition", "vision"):
         assert disabled not in registry
 
 
@@ -60,9 +60,9 @@ def test_no_work_lost_reenabling_a_module_is_a_toggle(monkeypatch):
 
     monkeypatch.setenv("KAINE_STATE_KEY", base64.b64encode(os.urandom(32)).decode("ascii"))
     cfg = _reduced_config()
-    cfg["modules"]["mnemos"] = True
+    cfg["modules"]["episodic_memory"] = True
     # In-memory backend so the re-enabled module constructs without Qdrant/secrets
     # (the point is that the toggle restores it, not the storage backend).
-    cfg.setdefault("mnemos", {})["backend"] = "inmemory"
+    cfg.setdefault("episodic_memory", {})["backend"] = "inmemory"
     registry = build_registry(_bus(), cfg)
-    assert "mnemos" in registry
+    assert "episodic_memory" in registry

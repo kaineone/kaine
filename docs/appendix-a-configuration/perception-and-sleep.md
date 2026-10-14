@@ -1,10 +1,10 @@
 # Perception feed and sleep
 
-The `[perception_feed]`, `[perception_preview]`, and `[hypnos]` sections in `config/kaine.toml` control what the entity senses and how it sleeps. Use this page when you are running a reproducible stimulus, with an entity in its developmental phase through the stimulus source channel, capturing the screen or desktop audio, or configuring offline consolidation and voice alignment.
+The `[perception_feed]`, `[perception_preview]`, and `[sleep]` sections in `config/kaine.toml` control what the entity senses and how it sleeps. Use this page when you are running a reproducible stimulus, with an entity in its developmental phase through the stimulus source channel, capturing the screen or desktop audio, or configuring offline consolidation and voice alignment.
 
 ## Perception feed
 
-`[perception_feed]` is one source of truth that drives both the vision surface ([the vision module](../09-modules/vision.md)) and the hearing surface ([the audition module](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the base-thesis `thesis_test` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[topos]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
+`[perception_feed]` is one source of truth that drives both the vision surface ([the vision module](../09-modules/vision.md)) and the hearing surface ([the audition module](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the base-thesis `thesis_test` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[vision]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
 
 ### Feed modes
 
@@ -15,7 +15,7 @@ The `[perception_feed]`, `[perception_preview]`, and `[hypnos]` sections in `con
 | `playlist` | Operator-curated media pinned by one checksummed manifest (`playlist_manifest`). Both video and its audio track come from the same media, advancing clip by clip. A digest mismatch fails the run. Audio decode needs PyAV (`av`); if it is missing the run fails with an install hint. |
 | `live` | Real camera and microphone. Non-reproducible, so use it only for operator-present demos, never for research runs. |
 | `screen` | Captures a desktop, region, or window and the desktop-audio monitor. Uses the system `ffmpeg` binary (`gdigrab` on Windows, `avfoundation` on macOS, `x11grab` on X11; native Wayland must run through XWayland). Non-reproducible, operator-present only. |
-| `womb` | External maternal channel used during the developmental phase. See [stimulus source channel](#stimulus-source-channel) below. |
+| `stimulus_source` | External maternal channel used during the developmental phase. See [stimulus source channel](#stimulus-source-channel) below. |
 
 In `screen` and `live` mode, the feed also enables capture for the vision and audition modules regardless of their module-level `capture_enabled` settings.
 
@@ -23,7 +23,7 @@ In `screen` and `live` mode, the feed also enables capture for the vision and au
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `mode` | string | `"off"` | `"off"`, `"seeded"`, `"playlist"`, `"live"`, `"screen"`, or `"womb"`. |
+| `mode` | string | `"off"` | `"off"`, `"seeded"`, `"playlist"`, `"live"`, `"screen"`, or `"stimulus_source"`. |
 | `seed` | integer | `0` | For `seeded` mode: the shared seed for both vision and audio generators and for cross-modal surprise events. |
 | `playlist_manifest` | string | `""` | For `playlist` mode: path to the checksummed manifest. |
 | `transition_seconds` | float | `20.0` | When a playlist is born from the stimulus source, the crossfade from the stimulus source's last field to the programme's first frame lasts this long; programme time starts when it ends. Needs the maturation record in the stage file. `0` disables the crossfade. |
@@ -31,7 +31,7 @@ In `screen` and `live` mode, the feed also enables capture for the vision and au
 
 ### `[perception_feed.video]`
 
-Geometry is taken from `[topos]`.
+Geometry is taken from `[vision]`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -49,11 +49,11 @@ Geometry is taken from `[topos]`.
 
 ### stimulus source channel
 
-`mode = "womb"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure developmental readiness.
+`mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure developmental readiness.
 
 **`maternal_distress_excursions` must stay `false`.** That feature is not built.
 
-#### `[perception_feed.womb]`
+#### `[perception_feed.stimulus_source]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -64,11 +64,11 @@ Geometry is taken from `[topos]`.
 | `maternal_distress_excursions` | boolean | `false` | Leave `false`: distress excursions are not implemented. |
 | `maternal_distress_max_magnitude` | float | `0.3` | Bound if distress were ever enabled. |
 | `maternal_distress_max_seconds` | integer | `30` | Maximum duration if distress were ever enabled. |
-| `external_drive_to_self_rhythm` | boolean | `true` | Drive the interoception module's self-rhythm with the maternal heartbeat. Needs `[soma].self_rhythm_enabled = true`. |
+| `external_drive_to_self_rhythm` | boolean | `true` | Drive the interoception module's self-rhythm with the maternal heartbeat. Needs `[interoception].self_rhythm_enabled = true`. |
 | `external_drive_max_amplitude` | float | `0.4` | Upper bound of the external drive. |
-| `birth_transition_seconds` | integer | `5` | Bounded maturation bloom duration, after which the stimulus source falls silent. Maximum `30`. |
+| `maturation_transition_seconds` | integer | `5` | Bounded maturation bloom duration, after which the stimulus source falls silent. Maximum `30`. |
 
-#### `[perception_feed.womb.video]`
+#### `[perception_feed.stimulus_source.video]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -78,21 +78,21 @@ Geometry is taken from `[topos]`.
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
 | `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
 
-#### `[perception_feed.womb.audio]`
+#### `[perception_feed.stimulus_source.audio]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `lowpass_hz` | float | `500` | Soundscape low-pass corner frequency, in Hz (100 to 2000). |
 
-#### `[perception_feed.womb.readout]`
+#### `[perception_feed.stimulus_source.readout]`
 
-The readout probes briefly change the maternal drive that an entity in its developmental phase perceives. They are bounded, announced on `gestation.out` as `gestation.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
+The readout probes briefly change the maternal drive that an entity in its developmental phase perceives. They are bounded, announced on `development.out` as `development.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
-The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `gestation_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm; on boot the readout restores it when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `gestation_readout.json`, so the progress also survives a revive.
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `development_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm; on boot the readout restores it when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `development_readout.json`, so the progress also survives a revive.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `readout_period_seconds` | integer | `60` | How often `gestation.readiness` is published. |
+| `readout_period_seconds` | integer | `60` | How often `development.readiness` is published. |
 | `sample_hz` | integer | `10` | Self-rhythm sampling rate. |
 | `withdrawal_period_seconds` | integer | `1800` | The drive is withdrawn to `0` once per this period. |
 | `withdrawal_seconds` | integer | `20` | How long the drive stays withdrawn. Hard maximum `30`. |
@@ -121,7 +121,7 @@ Entrainment is judged against surrogate heartbeats, with no fixed phase-locking 
 
 ### Screen capture
 
-Only read when `[perception_feed].mode = "screen"`. Video goes to the vision module (`kaine/modules/vision/screen.py`) and desktop audio goes to the audition module (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[topos].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
+Only read when `[perception_feed].mode = "screen"`. Video goes to the vision module (`kaine/modules/vision/screen.py`) and desktop audio goes to the audition module (`kaine/modules/audition/monitor.py`). For native-detail foveal crops, enable `native` together with `[vision].foveation`. None of these keys is in the shipped file (it carries them as a commented example under `[perception_feed.screen]`), so the defaults below apply.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -145,7 +145,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 
 ## Sleep and consolidation
 
-`[hypnos]` configures sleep. The sleep module starts a fatigue-triggered offline period in which perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline. Its consolidation phases (replay, downscaling and optional voice-alignment training) do work only when the episodic memory module, the world model module, or the voice-alignment trainer are enabled. The sleep module is built in a second pass after the episodic memory, planning, affect and world model modules. See [the sleep module](../09-modules/sleep.md) and [Sleep and maintenance](../10-sleep/README.md).
+`[sleep]` configures sleep. The sleep module starts a fatigue-triggered offline period in which perception pauses, forward-model adaptation is suspended in the predictive processors, and affect and drives return to baseline. Its consolidation phases (replay, downscaling and optional voice-alignment training) do work only when the episodic memory module, the world model module, or the voice-alignment trainer are enabled. The sleep module is built in a second pass after the episodic memory, planning, affect and world model modules. See [the sleep module](../09-modules/sleep.md) and [Sleep and maintenance](../10-sleep/README.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -156,21 +156,21 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
-The retired key `nous_step_burst` is ignored with a warning if present, so older local configs still boot.
+The retired key `planning_step_burst` is ignored with a warning if present, so older local configs still boot.
 
 ### Consolidation phases
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `fatigue_triggered` | boolean | `true` | When `true`, the sleep module subscribes to `soma.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
+| `fatigue_triggered` | boolean | `true` | When `true`, the sleep module subscribes to `interoception.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
 | `replay_window_s` | float | `5.0` | Replay window recorded with each sleep's metadata. It is informational, since replay completes synchronously. |
 | `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, the sleep module selects traces spanning at least two memory periods, cues the world model module for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if the world model module is disabled or absent. |
 
-The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[mnemos.strength]`.
+The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[episodic_memory.strength]`.
 
 ### Voice alignment
 
-`[hypnos.voice_alignment]` fine-tunes the language organ during the sleep cycle with DPO + QLoRA. It ships disabled and has a two-layer gate.
+`[sleep.voice_alignment]` fine-tunes the language organ during the sleep cycle with DPO + QLoRA. It ships disabled and has a two-layer gate.
 
 **Two-layer gate:** both `enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must be set. With only the config flag, the phase runs a `FakeTrainer` that completes without training, so a freshly cloned KAINE instance cannot rewrite the language organ on its own.
 
@@ -183,14 +183,14 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Config-layer gate. |
-| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Intent/expression JSONL written by the language module; the training data source. |
-| `adapter_output_dir` | string | `"state/hypnos/adapters"` | Directory for trained LoRA adapters. |
+| `intent_log_path` | string | `"state/language/intent_expression.jsonl"` | Intent/expression JSONL written by the language module; the training data source. |
+| `adapter_output_dir` | string | `"state/sleep/adapters"` | Directory for trained LoRA adapters. |
 | `base_model_path` | string | `""` | Path to local HuggingFace-format base weights (safetensors, config, tokenizer). Required when `enabled = true`. Not a model ID and not a `.gguf` file. Point it at the same abliterated Qwen weights used to derive the served organ's GGUF. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only; real weights load from `base_model_path`. |
 | `capability_probe_path` | string | `""` | Path to a capability-probe JSONL. Empty uses the bundled default at `kaine/modules/sleep/eval_probes/default.jsonl`. The set must hold at least one usable probe (`prompt` and `expected`): boot refuses voice alignment on every trainer backend otherwise (`EmptyCapabilityProbeSetError`), because an empty set would score every model 0 and pass every adapter. |
 | `abliteration_probe_path` | string | `""` | Path to a welfare probe JSONL. Each line is `{"prompt": "...", "deflection_patterns": [...]}`, with optional `probe_id` and `in_character` fields. Empty uses the bundled default at `eval_probes/abliteration_probes.jsonl`. Must be non-empty when the real trainer is active. |
 | `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
-| `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/lingua/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
+| `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/language/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
 | `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any entity that has spoken counts as diverged by the voice arm. Must be at least 0. |
 
 #### Training knobs
@@ -215,7 +215,7 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `reload_endpoint_url` | string | `""` | URL for `reload_endpoint` POSTs. |
 | `restart_service_unit` | string | `""` | Systemd `--user` unit name for `restart_service`. |
 | `organ_adapters_dir` | string | `"/organ-adapters"` | Directory mounted into the organ container for `organ_adapter` mode. |
-| `organ_url` | string | `""` | Organ readiness URL for `organ_adapter` mode. Empty falls back to `[lingua].chat_url`. |
+| `organ_url` | string | `""` | Organ readiness URL for `organ_adapter` mode. Empty falls back to `[language].chat_url`. |
 
 #### Trainer backends
 
@@ -223,8 +223,8 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 |---|---|---|---|
 | `trainer_backend` | string | `"in_process"` | `"in_process"` runs Unsloth DPO inside the runtime venv (needs the `[training]` extra). `"subprocess"` runs Unsloth out-of-process using `trainer_python`; the subprocess runs in a worker thread so it never blocks the cycle event loop. `"job_queue"` writes job specs into private `0o700` directories under `trainer_jobs_dir` for the `kaine-trainer` service and waits for `result.json` without blocking. |
 | `trainer_python` | string | `""` | Path to the external Python interpreter for `subprocess` mode. Required for that backend; empty + `subprocess` is a config error at boot (fail closed). Set this in `kaine.operator.toml`. |
-| `trainer_workdir` | string | `"state/hypnos/voice_align_jobs"` | Staging directory for `subprocess` job specs (`pairs.jsonl` + `job.json`) and Unsloth's compiled cache. |
-| `trainer_jobs_dir` | string | `"state/hypnos/voice_align_jobs"` | Shared job directory for the `job_queue` backend. |
+| `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Staging directory for `subprocess` job specs (`pairs.jsonl` + `job.json`) and Unsloth's compiled cache. |
+| `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared job directory for the `job_queue` backend. |
 | `trainer_timeout_s` | float | `21600.0` | Longest wait, in seconds, for the `job_queue` trainer service result. |
 
 On a single 12 GB GPU, a 4B LoRA training step (~9.8 GB) and the served organ (~3 GB) do not fit at the same time. With `reload_endpoint` or `restart_service`, the sleep module unloads the organ, trains, then reloads it (applying the accepted adapter through the server's `--lora` flag). The language organ's generation defers and the A/B-divergence eval arm skips while the organ is resting; both resume on reload. A failed or timed-out training window always reloads a working organ so the entity is not voiceless on wake. With `manual`, the operator owns the reload, so the system never stops the server unannounced.

@@ -17,8 +17,8 @@ readers SHALL use this loader so operator overrides apply uniformly. The shipped
 SHALL remain unchanged (all modules disabled); operator choices live only in the override file.
 
 #### Scenario: Operator override wins
-- **WHEN** `config/kaine.operator.toml` sets `[modules].soma = true` over a shipped `false`
-- **THEN** `load_kaine_config()` returns `soma = true` while the shipped `config/kaine.toml` on disk
+- **WHEN** `config/kaine.operator.toml` sets `[modules].interoception = true` over a shipped `false`
+- **THEN** `load_kaine_config()` returns `interoception = true` while the shipped `config/kaine.toml` on disk
   is unchanged
 
 #### Scenario: No override file is harmless
@@ -123,7 +123,7 @@ emits without training). The flow SHALL detect a usable trainer interpreter with
 a real probe (the interpreter exists AND can `import unsloth`) rather than a
 faked result, MUST NOT auto-install the multi-gigabyte trainer environment
 (guidance only), and on a successful probe MAY offer to record the interpreter
-as `[hypnos.voice_alignment].trainer_python` in the operator config.
+as `[sleep.voice_alignment].trainer_python` in the operator config.
 
 #### Scenario: NVIDIA host is guided to Unsloth Studio
 - **WHEN** the setup flow runs trainer provisioning and `describe_host()["backend"]` is `"cuda"`
@@ -207,17 +207,17 @@ The first-run wizard SHALL detect an accelerator/runtime mismatch on the current
 ### Requirement: Setup provides the Dashboard operator token
 When no dashboard operator token is configured, `python -m kaine.setup` SHALL
 generate one of at least 32 characters with a cryptographically secure
-generator. It SHALL store the token as `operator_token` in the `[nexus]` table
+generator. It SHALL store the token as `operator_token` in the `[dashboard]` table
 of `config/secrets.toml`, mode 600, preserving the rest of the file. It SHALL
 NOT replace a token that is already configured, and SHALL NOT print the token.
 
 #### Scenario: A fresh install gets a token
-- **WHEN** setup runs, `config/secrets.toml` has no `[nexus].operator_token`, and `KAINE_NEXUS_TOKEN` is unset
+- **WHEN** setup runs, `config/secrets.toml` has no `[dashboard].operator_token`, and `KAINE_NEXUS_TOKEN` is unset
 - **THEN** the file afterwards holds an `operator_token` of at least 32 characters
 - **AND** setup's output states where the token is stored without showing it
 
 #### Scenario: An existing token is kept
-- **WHEN** setup runs, and either `config/secrets.toml` already holds `[nexus].operator_token` or `KAINE_NEXUS_TOKEN` is set
+- **WHEN** setup runs, and either `config/secrets.toml` already holds `[dashboard].operator_token` or `KAINE_NEXUS_TOKEN` is set
 - **THEN** `config/secrets.toml`'s token value is unchanged
 - **AND** no token is written
 
@@ -227,7 +227,7 @@ port KAINE is configured to use, never on the upstream default of another
 installation:
 
 - Redis: `[redis].port`.
-- Qdrant: `[mnemos.qdrant].port`, then `[empatheia.qdrant].port`, then 6533.
+- Qdrant: `[episodic_memory.qdrant].port`, then `[social_cognition.qdrant].port`, then 6533.
 
 Containerised services SHALL NOT be reported as installed or missing according
 to a host binary on `PATH`.
@@ -237,7 +237,7 @@ to a host binary on `PATH`.
 - **THEN** detection probes 127.0.0.1:6533, not 6333
 
 #### Scenario: A configured Qdrant port is honoured
-- **WHEN** `[mnemos.qdrant].port` is 7000
+- **WHEN** `[episodic_memory.qdrant].port` is 7000
 - **THEN** detection probes 127.0.0.1:7000
 
 ### Requirement: The wizard offers module presets with a hardware-aware recommendation
@@ -372,7 +372,7 @@ Setup SHALL write only configuration keys on its owned-key allowlist, and
 SHALL merge them into an existing operator override rather than replacing
 the file. The allowlist SHALL exclude `[research]`, which the research
 harness owns, every operator-presence gate, and
-`[nexus].non_loopback_allowed`.
+`[dashboard].non_loopback_allowed`.
 
 #### Scenario: Hand edits survive a re-run
 - **WHEN** the operator override contains a key that setup does not own

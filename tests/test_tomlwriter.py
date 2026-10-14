@@ -32,8 +32,8 @@ def test_roundtrip_scalars():
 
 def test_roundtrip_nested_tables():
     data = {
-        "modules": {"soma": True, "lingua": True, "echo": False},
-        "hypnos": {"voice_alignment": {"training_device": "cuda:0"}},
+        "modules": {"interoception": True, "language": True, "recorder": False},
+        "sleep": {"voice_alignment": {"training_device": "cuda:0"}},
         "security": {"state_encryption": {"enabled": True}},
         "research_submission": {
             "enabled": True,

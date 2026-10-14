@@ -9,7 +9,7 @@ Covers:
   tested via the template rendering test below).
 - Section 4: Evaluation-tab observer surfaces welfare/prediction-error/coherence.
 - Section 5: FaithfulRenderer new templates render via named template, not fallback.
-  mnemos.replay and eidolon.self_model contain no raw content.
+  episodic_memory.replay and self_model.self_model contain no raw content.
   Existing report templates include new fields.
 - Section 6: Encryption probe states.
 - Section 7: narsese removed from CONTENT_FIELDS; merge-warning in forks HTML.
@@ -31,8 +31,8 @@ import pytest
 def test_diagnostics_streams_include_social_cognition_world_model_workspace():
     from kaine.dashboard.__main__ import DEFAULT_DIAGNOSTICS_STREAMS
 
-    assert "empatheia.out" in DEFAULT_DIAGNOSTICS_STREAMS
-    assert "phantasia.out" in DEFAULT_DIAGNOSTICS_STREAMS
+    assert "social_cognition.out" in DEFAULT_DIAGNOSTICS_STREAMS
+    assert "world_model.out" in DEFAULT_DIAGNOSTICS_STREAMS
     assert "workspace.broadcast" in DEFAULT_DIAGNOSTICS_STREAMS
 
 
@@ -40,7 +40,7 @@ def test_diagnostics_streams_include_original_streams():
     """The new streams must not replace the existing ones."""
     from kaine.dashboard.__main__ import DEFAULT_DIAGNOSTICS_STREAMS
 
-    for stream in ("soma.out", "thymos.out", "nous.out", "mnemos.out", "audition.out", "vox.out"):
+    for stream in ("interoception.out", "affect.out", "planning.out", "episodic_memory.out", "audition.out", "vocal.out"):
         assert stream in DEFAULT_DIAGNOSTICS_STREAMS
 
 
@@ -50,14 +50,14 @@ def test_diagnostics_streams_include_original_streams():
 
 
 NEW_EVENT_TYPES = [
-    ("nous", "nous.timeout"),
+    ("planning", "planning.timeout"),
     ("audition", "audition.prosody"),
-    ("vox", "vox.synthesized"),
-    ("mnemos", "mnemos.replay"),
-    ("hypnos", "hypnos.sleep.started"),
-    ("hypnos", "hypnos.sleep.completed"),
-    ("hypnos", "hypnos.association"),
-    ("eidolon", "eidolon.self_model"),
+    ("vocal", "vocal.synthesized"),
+    ("episodic_memory", "episodic_memory.replay"),
+    ("sleep", "sleep.sleep.started"),
+    ("sleep", "sleep.sleep.completed"),
+    ("sleep", "sleep.association"),
+    ("self_model", "self_model.document"),
 ]
 
 
@@ -76,18 +76,18 @@ def test_new_templates_return_non_empty_string(source, type_):
     from kaine.faithful.templates import TEMPLATES
 
     sample_payloads: dict[tuple[str, str], dict] = {
-        ("nous", "nous.timeout"): {"elapsed_ms": 100.0, "num_factors": 2, "num_actions": 3},
+        ("planning", "planning.timeout"): {"elapsed_ms": 100.0, "num_factors": 2, "num_actions": 3},
         ("audition", "audition.prosody"): {"source_label": "mic", "mean_pitch_hz": 130.0},
-        ("vox", "vox.synthesized"): {"text_length": 10, "voice": "example_voice", "success": True, "latency_ms": 150.0},
-        ("mnemos", "mnemos.replay"): {"memory_id": "short_term:1", "affect_intensity": 0.5},
-        ("hypnos", "hypnos.sleep.started"): {"started_at": 1700000000.0},
-        ("hypnos", "hypnos.sleep.completed"): {
+        ("vocal", "vocal.synthesized"): {"text_length": 10, "voice": "example_voice", "success": True, "latency_ms": 150.0},
+        ("episodic_memory", "episodic_memory.replay"): {"memory_id": "short_term:1", "affect_intensity": 0.5},
+        ("sleep", "sleep.sleep.started"): {"started_at": 1700000000.0},
+        ("sleep", "sleep.sleep.completed"): {
             "total_elapsed_ms": 3000.0,
             "phases": [{"name": "p1", "success": True, "elapsed_ms": 1000.0}],
             "fatigue_triggered": False,
         },
-        ("hypnos", "hypnos.association"): {"seed_memory_id": "m-1", "horizon": 4},
-        ("eidolon", "eidolon.self_model"): {
+        ("sleep", "sleep.association"): {"seed_memory_id": "m-1", "horizon": 4},
+        ("self_model", "self_model.document"): {
             "values": ["honesty"],
             "behavioral_norms": [],
             "personality_baseline": {"openness": 0.7},
@@ -101,10 +101,10 @@ def test_new_templates_return_non_empty_string(source, type_):
 
 
 def test_episodic_memory_replay_template_omits_raw_text():
-    """mnemos.replay template must not output the raw text field."""
+    """episodic_memory.replay template must not output the raw text field."""
     from kaine.faithful.templates import TEMPLATES
 
-    fn = TEMPLATES[("mnemos", "mnemos.replay")]
+    fn = TEMPLATES[("episodic_memory", "episodic_memory.replay")]
     payload = {
         "memory_id": "short_term:7",
         "text": "this is secret raw transcript content",
@@ -118,10 +118,10 @@ def test_episodic_memory_replay_template_omits_raw_text():
 
 
 def test_self_model_self_model_template_omits_raw_content():
-    """eidolon.self_model template must output only labels/counts/numerics."""
+    """self_model.self_model template must output only labels/counts/numerics."""
     from kaine.faithful.templates import TEMPLATES
 
-    fn = TEMPLATES[("eidolon", "eidolon.self_model")]
+    fn = TEMPLATES[("self_model", "self_model.document")]
     payload = {
         "values": ["autonomy"],
         "behavioral_norms": ["non-deception"],
@@ -137,7 +137,7 @@ def test_self_model_self_model_template_omits_raw_content():
 def test_interoception_report_template_includes_prediction_error_and_fatigue():
     from kaine.faithful.templates import TEMPLATES
 
-    fn = TEMPLATES[("soma", "soma.report")]
+    fn = TEMPLATES[("interoception", "interoception.report")]
     out = fn({
         "wellness": 0.9,
         "alerts": [],
@@ -149,10 +149,10 @@ def test_interoception_report_template_includes_prediction_error_and_fatigue():
 
 
 def test_interoception_report_template_no_prediction_error_still_works():
-    """Extending soma.report must not break the case where new fields are absent."""
+    """Extending interoception.report must not break the case where new fields are absent."""
     from kaine.faithful.templates import TEMPLATES
 
-    fn = TEMPLATES[("soma", "soma.report")]
+    fn = TEMPLATES[("interoception", "interoception.report")]
     out = fn({"wellness": 0.8, "alerts": []})
     assert isinstance(out, str)
     assert "0.8" in out
@@ -161,7 +161,7 @@ def test_interoception_report_template_no_prediction_error_still_works():
 def test_sequence_report_template_includes_temporal_prediction_error():
     from kaine.faithful.templates import TEMPLATES
 
-    fn = TEMPLATES[("chronos", "chronos.report")]
+    fn = TEMPLATES[("sequence", "sequence.report")]
     out = fn({
         "anomaly_score": 0.3,
         "habituation_score": 0.4,
@@ -230,10 +230,10 @@ def test_existing_content_fields_still_present():
 
 
 def test_diagnostics_html_contains_merge_warning_logic():
-    """Verify the forks table has a nous.merge_warning reference."""
+    """Verify the forks table has a planning.merge_warning reference."""
     base = Path(__file__).parent.parent / "kaine" / "dashboard" / "templates"
     diag = (base / "_diagnostics_sections.html").read_text()
-    assert "nous.merge_warning" in diag or "merge_warning" in diag
+    assert "planning.merge_warning" in diag or "merge_warning" in diag
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +327,7 @@ def test_prediction_error_section_from_live_registry(tmp_path):
     cfg = _eval_config(tmp_path)
 
     pe_obs = MagicMock()
-    pe_obs.event_counts = {"soma.out": 10, "chronos.out": 5}
+    pe_obs.event_counts = {"interoception.out": 10, "sequence.out": 5}
     pe_obs._stats_for_source.return_value = {"n": 10, "mean": 0.05, "p95": 0.12, "p99": 0.18}
 
     registry = MagicMock()
@@ -337,7 +337,7 @@ def test_prediction_error_section_from_live_registry(tmp_path):
     result = _aggregate(cfg, attribution=None, registry=registry)
     pe = result["prediction_error"]
     assert pe["source"] == "live"
-    assert pe["event_counts"]["soma.out"] == 10
+    assert pe["event_counts"]["interoception.out"] == 10
 
 
 def test_prediction_error_section_from_jsonl(tmp_path):
@@ -350,16 +350,16 @@ def test_prediction_error_section_from_jsonl(tmp_path):
         json.dumps({
             "ts": "2026-06-01T01:00:00Z",
             "sources": {
-                "soma.out": {"n": 32, "mean": 0.04, "p95": 0.11, "p99": 0.15},
+                "interoception.out": {"n": 32, "mean": 0.04, "p95": 0.11, "p99": 0.15},
             },
-            "event_counts": {"soma.out": 32},
+            "event_counts": {"interoception.out": 32},
         }) + "\n"
     )
 
     result = _aggregate(cfg, attribution=None, registry=None)
     pe = result["prediction_error"]
     assert pe["source"] == "jsonl"
-    assert pe["per_source"]["soma.out"]["n"] == 32
+    assert pe["per_source"]["interoception.out"]["n"] == 32
 
 
 def test_coherence_section_no_data(tmp_path):
@@ -380,7 +380,7 @@ def test_coherence_section_from_jsonl(tmp_path):
         json.dumps({
             "ts": "2026-06-01T01:00:00Z",
             "tick_index": 10,
-            "coherence": {"soma|thymos": 0.72, "thymos|nous": 0.65},
+            "coherence": {"interoception|affect": 0.72, "affect|planning": 0.65},
         }) + "\n"
     )
 
@@ -388,7 +388,7 @@ def test_coherence_section_from_jsonl(tmp_path):
     coh = result["coherence"]
     assert coh["source"] == "jsonl"
     assert coh["n"] == 1
-    assert "soma|thymos" in coh["latest"]
+    assert "interoception|affect" in coh["latest"]
 
 
 def test_individuation_section_absent(tmp_path):
@@ -527,7 +527,7 @@ def test_runtime_state_carries_run_identity_and_mode(tmp_path, monkeypatch):
         seed=42,
         started_at="2026-06-15T00:00:00+00:00",
         git_sha="deadbee",
-        model_ids={"lingua": "x"},
+        model_ids={"language": "x"},
         config_digest="dig",
         kaine_version="9.9.9",
     )
@@ -585,7 +585,7 @@ def test_metrics_snapshot_surfaces_new_fields(tmp_path):
                 "tick_index": 12,
                 "processing_rate_hz": 3.0,
                 "experiential_rate_hz": 3.0,
-                "modules": ["soma"],
+                "modules": ["interoception"],
                 "run_id": "r-1",
                 "seed": 99,
                 "git_sha": "cafef00",
@@ -1011,7 +1011,7 @@ def test_planning_policy_aggregate_no_data_and_from_jsonl(tmp_path):
 async def test_model_server_block_not_configured_when_language_off(tmp_path):
     prober = _prober(
         tmp_path,
-        modules_enabled={"lingua": False},
+        modules_enabled={"language": False},
         model_server_cfg={
             "chat_url": "http://127.0.0.1:11434/v1",
             "model_id": "kaineone/Qwen3.5-4B-abliterated-GGUF",
@@ -1036,7 +1036,7 @@ async def test_model_server_block_up_when_alias_served(tmp_path, monkeypatch):
     )
     prober = _prober(
         tmp_path,
-        modules_enabled={"lingua": True},
+        modules_enabled={"language": True},
         model_server_cfg={
             "chat_url": "http://127.0.0.1:11434/v1",
             "model_id": "kaineone/Qwen3.5-4B-abliterated-GGUF",
@@ -1059,7 +1059,7 @@ async def test_model_server_block_down_on_mismatch(tmp_path, monkeypatch):
     )
     prober = _prober(
         tmp_path,
-        modules_enabled={"lingua": True},
+        modules_enabled={"language": True},
         model_server_cfg={
             "chat_url": "http://127.0.0.1:11434/v1",
             "model_id": "kaineone/Qwen3.5-4B-abliterated-GGUF",
@@ -1170,7 +1170,7 @@ def _running_runtime_payload() -> dict[str, Any]:
             "time_scale": 2.0,
         },
         "time_scale": 2.0,
-        "modules": ["mnemos", "nous", "thymos"],
+        "modules": ["episodic_memory", "planning", "affect"],
         "supervision_mode": "research",
         "gate_checks": {"preservation_net_armed": True},
         "run_id": "run-contract-test",
@@ -1258,7 +1258,7 @@ def test_status_chip_priority_logic_in_js():
         block.index("offline") < block.index("frozen") < block.index("sleeping")
     )
     # Both sleep and wake events drive the chip.
-    assert "hypnos.sleep.started" in js and "hypnos.sleep.completed" in js
+    assert "sleep.sleep.started" in js and "sleep.sleep.completed" in js
     # The chip is fed running + frozen from the metrics snapshot.
     assert "setRunning(" in js and "setFrozen(" in js
 
@@ -1276,9 +1276,9 @@ async def test_vitals_health_contract(tmp_path):
         return "up", "ok"
 
     prober = HealthProber(
-        modules_enabled={"mnemos": True, "nous": True, "praxis": False},
+        modules_enabled={"episodic_memory": True, "planning": True, "effectors": False},
         dependencies=[
-            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=up_probe)
         ],
         cache_ttl_s=0.0,
         cycle_runtime_path=runtime,
@@ -1298,7 +1298,7 @@ async def test_vitals_health_contract(tmp_path):
         for field in ("name", "enabled", "initialized"):
             assert field in m, f"module cell missing {field!r}"
     mods = {m["name"]: m for m in snap["modules"]}
-    assert mods["mnemos"]["initialized"] is True  # in runtime module list
+    assert mods["episodic_memory"]["initialized"] is True  # in runtime module list
 
 
 def _dashboard_js() -> str:
@@ -1389,9 +1389,9 @@ def test_welfare_block_lists_blind_sensors_until_cleared(tmp_path):
             "replay_overload_count": 4,
             "sustained_interoceptive_distress_count": 0,
         },
-        {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1},
-        {"advisory": "blind_sensor", "processor": "soma", "blind_sensor_count": 2},
-        {"advisory": "blind_sensor_cleared", "processor": "topos", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor", "processor": "vision", "blind_sensor_count": 1},
+        {"advisory": "blind_sensor", "processor": "interoception", "blind_sensor_count": 2},
+        {"advisory": "blind_sensor_cleared", "processor": "vision", "blind_sensor_count": 2},
         {"advisory": "blind_sensor", "processor": "not_a_processor", "blind_sensor_count": 2},
     ]
     (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
@@ -1402,7 +1402,7 @@ def test_welfare_block_lists_blind_sensors_until_cleared(tmp_path):
     assert block["replay_overload"] == 4
     assert block["sustained_extreme_vad"] == 2
     assert block["blind_sensor_advisories"] == 2
-    assert block["blind_sensors"] == ["soma"]
+    assert block["blind_sensors"] == ["interoception"]
     assert block["sensor_silent_advisories"] == 0
     assert block["silent_sensors"] == []
 
@@ -1430,9 +1430,9 @@ def test_entity_care_template_renders_blind_sensors(tmp_path):
         "replay_overload": 0,
         "sustained_interoceptive_distress": 0,
         "blind_sensor_advisories": 2,
-        "blind_sensors": ["audition_acoustic", "soma"],
+        "blind_sensors": ["audition_acoustic", "interoception"],
         "sensor_silent_advisories": 1,
-        "silent_sensors": ["topos"],
+        "silent_sensors": ["vision"],
     }
     defaults = {
         "entity": {"name": "Test Entity"},
@@ -1448,7 +1448,7 @@ def test_entity_care_template_renders_blind_sensors(tmp_path):
     assert "sensor advisories" in output
     assert ", ".join(welfare["blind_sensors"]) in output
     assert "silent now" in output
-    assert "topos" in output
+    assert "vision" in output
 
     empty_output = template.render(
         entity_care=entity_care,
@@ -1468,8 +1468,8 @@ def test_welfare_block_reset_clears_stale_blind_state(tmp_path):
     welfare_dir = tmp_path / "eval" / "welfare"
     welfare_dir.mkdir(parents=True)
     lines = [
-        {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1},
-        {"advisory": "sensor_silent", "processor": "soma", "sensor_silent_count": 1},
+        {"advisory": "blind_sensor", "processor": "vision", "blind_sensor_count": 1},
+        {"advisory": "sensor_silent", "processor": "interoception", "sensor_silent_count": 1},
         {"advisory": "reset"},
         {"advisory": "blind_sensor", "processor": "audition_acoustic", "blind_sensor_count": 1},
     ]
@@ -1489,7 +1489,7 @@ def test_welfare_block_long_rollup_keeps_a_still_blind_processor(tmp_path):
     welfare_dir.mkdir(parents=True)
     older = [
         {"advisory": "reset"},
-        {"advisory": "blind_sensor", "processor": "soma", "blind_sensor_count": 1},
+        {"advisory": "blind_sensor", "processor": "interoception", "blind_sensor_count": 1},
     ]
     (welfare_dir / "welfare-2026-06-14.jsonl").write_text(
         "".join(json.dumps(line) + "\n" for line in older)
@@ -1498,13 +1498,13 @@ def test_welfare_block_long_rollup_keeps_a_still_blind_processor(tmp_path):
         {"gray_zone_event": "replay_overload", "replay_overload_count": i}
         for i in range(2000)
     ]
-    newer.append({"advisory": "sensor_silent_cleared", "processor": "topos", "sensor_silent_count": 0})
+    newer.append({"advisory": "sensor_silent_cleared", "processor": "vision", "sensor_silent_count": 0})
     (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
         "".join(json.dumps(line) + "\n" for line in newer)
     )
     block = _prober(tmp_path)._welfare_block()
     assert block["source"] == "jsonl"
-    assert block["blind_sensors"] == ["soma"]
+    assert block["blind_sensors"] == ["interoception"]
     assert block["silent_sensors"] == []
 
 
@@ -1516,11 +1516,11 @@ def test_welfare_block_reads_encrypted_lines(tmp_path, monkeypatch):
     monkeypatch.setattr("kaine.security.crypto.get_state_encryptor", lambda: _Reverser())
     welfare_dir = tmp_path / "eval" / "welfare"
     welfare_dir.mkdir(parents=True)
-    plain = {"advisory": "blind_sensor", "processor": "topos", "blind_sensor_count": 1}
+    plain = {"advisory": "blind_sensor", "processor": "vision", "blind_sensor_count": 1}
     (welfare_dir / "welfare-2026-06-15.jsonl").write_text(
         json.dumps(plain)[::-1] + "\n"
     )
     block = _prober(tmp_path)._welfare_block()
     assert block["source"] == "jsonl"
-    assert block["blind_sensors"] == ["topos"]
+    assert block["blind_sensors"] == ["vision"]
     assert block["blind_sensor_advisories"] == 1

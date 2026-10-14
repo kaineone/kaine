@@ -31,7 +31,7 @@ The cycle-layer welfare-protective monitor SHALL subscribe to `welfare.out`
 `welfare.gray_zone` events and feed each into its windowed-repeat arm; when the
 count within the configured window crosses the configured threshold, it SHALL take
 the configured preserve-then-act protective response. The existing sustained
-interoceptive-distress arm (read off `soma.out`) SHALL be retained. The coupling
+interoceptive-distress arm (read off `interoception.out`) SHALL be retained. The coupling
 SHALL be bus-only, with no import of `kaine.evaluation` by the cycle-layer monitor.
 
 #### Scenario: Repeated gray-zone events of a non-distress category trigger the response
@@ -39,7 +39,7 @@ SHALL be bus-only, with no import of `kaine.evaluation` by the cycle-layer monit
 - **THEN** the welfare-protective monitor preserves the entity first, then takes the configured action (pause/end/notify), and records the welfare action
 
 #### Scenario: The sustained-distress arm still functions
-- **WHEN** the interoception module reports sustained interoceptive distress on `soma.out` crossing the configured duration
+- **WHEN** the interoception module reports sustained interoceptive distress on `interoception.out` crossing the configured duration
 - **THEN** the welfare-protective monitor still triggers the preserve-then-act response from that arm
 
 ### Requirement: Research log and raw archive capture gray-zone events

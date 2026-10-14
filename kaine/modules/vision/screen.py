@@ -16,7 +16,7 @@ pure function (:func:`screen_capture_spec`), unit-tested per platform.
 The source spawns one ffmpeg that scales the capture to the vision module's configured
 geometry and emits raw ``bgr24`` frames on stdout, which the source reads a frame
 at a time and hands to the vision module as a BGR ``ndarray`` — the same shape the webcam
-source yields, so nothing downstream of ``Topos.process_frame`` changes. The
+source yields, so nothing downstream of ``Vision.process_frame`` changes. The
 process spawner is injected so the framing/lifecycle logic is testable without a
 display; the real one runs ffmpeg. As with all perception, raw frames are held in
 memory and released, never written to disk.
@@ -260,7 +260,7 @@ class ScreenCaptureSource:
         self._width = int(width)
         self._height = int(height)
         self._ffmpeg_path = ffmpeg_path
-        # Native passthrough (topos-foveation): emit frames at the capture's own
+        # Native passthrough (vision-foveation): emit frames at the capture's own
         # resolution with no scale filter, so the foveal crop carries true native
         # detail. (width, height) must then be the actual capture resolution — the
         # builder detects it — because they size the raw-frame reshape.

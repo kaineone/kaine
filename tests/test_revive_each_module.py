@@ -240,9 +240,9 @@ async def test_roundtrip_sequence(bus: AsyncBus, tmp_path: Path) -> None:
         rumination=RecurrenceRuminationDetector(window=4, threshold=4),
     )
     m1._last_interaction_at = 12345.6
-    # Chronos.deserialize merges cursors, so keep the default "audition.out".
+    # Sequence.deserialize merges cursors, so keep the default "audition.out".
     m1._user_input_cursors.update(
-        {"lingua.external": "99-0", "volition.out": "100-0"}
+        {"language.external": "99-0", "action_selection.out": "100-0"}
     )
     state = _json_roundtrip(m1.serialize())
     m2 = Sequence(
@@ -373,7 +373,7 @@ async def test_roundtrip_episodic_memory(bus: AsyncBus, tmp_path: Path) -> None:
     )
     m1 = EpisodicMemory(bus, core=core)
     # Synchronous serialize() is metadata-only; the matching deserialize is a
-    # no-op unless a memory_state capture is present (Mnemos.deserialize docstring).
+    # no-op unless a memory_state capture is present (EpisodicMemory.deserialize docstring).
     state = _json_roundtrip(m1.serialize())
     m2 = EpisodicMemory(
         bus,
@@ -422,7 +422,7 @@ async def test_roundtrip_sleep(bus: AsyncBus, tmp_path: Path) -> None:
     assert got["last_sleep_at"] == pytest.approx(state["last_sleep_at"])
     assert got["schedule"] == pytest.approx(state["schedule"], abs=1.0)
     # original_due_at / effective_due_at are old-process monotonic times and are
-    # ignored on restore (Hypnos.deserialize docstring).
+    # ignored on restore (Sleep.deserialize docstring).
 
 
 @pytest.mark.asyncio
@@ -746,25 +746,25 @@ async def _build_embodiment(bus: AsyncBus, tmp_path: Path, name: str) -> Embodim
 
 
 BASE_FACTORIES: dict[str, Any] = {
-    "soma": _build_interoception,
-    "chronos": _build_sequence,
-    "topos": _build_vision,
+    "interoception": _build_interoception,
+    "sequence": _build_sequence,
+    "vision": _build_vision,
     "audition": _build_audition,
-    "lingua": _build_language,
+    "language": _build_language,
 }
 
 ORDER: list[tuple[str, Any]] = [
-    ("thymos", _build_affect),
-    ("mnemos", _build_episodic_memory),
-    ("hypnos", _build_sleep),
-    ("phantasia", _build_world_model),
-    ("nous", _build_planning),
-    ("eidolon", _build_self_model),
-    ("empatheia", _build_social_cognition),
-    ("vox", _build_vocal),
-    ("praxis", _build_effectors),
-    ("perception", _build_perceptual_locus),
-    ("mundus", _build_embodiment),
+    ("affect", _build_affect),
+    ("episodic_memory", _build_episodic_memory),
+    ("sleep", _build_sleep),
+    ("world_model", _build_world_model),
+    ("planning", _build_planning),
+    ("self_model", _build_self_model),
+    ("social_cognition", _build_social_cognition),
+    ("vocal", _build_vocal),
+    ("effectors", _build_effectors),
+    ("perceptual_locus", _build_perceptual_locus),
+    ("embodiment", _build_embodiment),
 ]
 
 
@@ -776,8 +776,8 @@ def _mutate_interoception(m: Interoception, i: int) -> None:
 def _mutate_sequence(m: Sequence, i: int) -> None:
     m._last_interaction_at = 1000.0 + i
     # Keep the default "audition.out" cursor that deserialize preserves.
-    m._user_input_cursors["lingua.external"] = f"{i}-0"
-    m._user_input_cursors["volition.out"] = f"{i + 1}-0"
+    m._user_input_cursors["language.external"] = f"{i}-0"
+    m._user_input_cursors["action_selection.out"] = f"{i + 1}-0"
 
 
 def _mutate_vision(m: Vision, i: int) -> None:
@@ -855,22 +855,22 @@ def _mutate_embodiment(m: Embodiment, i: int) -> None:
 
 
 MUTATORS: dict[str, Any] = {
-    "soma": _mutate_interoception,
-    "chronos": _mutate_sequence,
-    "topos": _mutate_vision,
+    "interoception": _mutate_interoception,
+    "sequence": _mutate_sequence,
+    "vision": _mutate_vision,
     "audition": _mutate_audition,
-    "lingua": _mutate_language,
-    "thymos": _mutate_affect,
-    "mnemos": _mutate_episodic_memory,
-    "hypnos": _mutate_sleep,
-    "phantasia": _mutate_world_model,
-    "nous": _mutate_planning,
-    "eidolon": _mutate_self_model,
-    "empatheia": _mutate_social_cognition,
-    "vox": _mutate_vocal,
-    "praxis": _mutate_effectors,
-    "perception": _mutate_perceptual_locus,
-    "mundus": _mutate_embodiment,
+    "language": _mutate_language,
+    "affect": _mutate_affect,
+    "episodic_memory": _mutate_episodic_memory,
+    "sleep": _mutate_sleep,
+    "world_model": _mutate_world_model,
+    "planning": _mutate_planning,
+    "self_model": _mutate_self_model,
+    "social_cognition": _mutate_social_cognition,
+    "vocal": _mutate_vocal,
+    "effectors": _mutate_effectors,
+    "perceptual_locus": _mutate_perceptual_locus,
+    "embodiment": _mutate_embodiment,
 }
 
 
@@ -882,14 +882,14 @@ def _comparable_state(name: str, state: dict[str, Any]) -> dict[str, Any]:
     instance keeps its current configuration, so drop those keys.
     """
     s = _json_roundtrip(state)
-    if name == "chronos":
+    if name == "sequence":
         s.setdefault("user_input_cursors", {}).setdefault("audition.out", "$")
     elif name == "audition":
         s.pop("stt_model", None)
         s.pop("emotion_model_id", None)
-    elif name == "vox":
+    elif name == "vocal":
         s.pop("voice_mode", None)
-    elif name == "phantasia":
+    elif name == "world_model":
         for key in (
             "backend",
             "checkpoint_path",
@@ -982,10 +982,10 @@ async def test_study_order_revive_chain(
                     continue
                 got = _comparable_state(n, _json_roundtrip(fresh_modules[n].serialize()))
                 want = _comparable_state(n, pre[n])
-                if n == "hypnos":
+                if n == "sleep":
                     assert got["last_sleep_at"] == pytest.approx(want["last_sleep_at"])
                     assert got["schedule"] == pytest.approx(want["schedule"], abs=1.0)
-                elif n == "chronos":
+                elif n == "sequence":
                     for key in ("last_interaction_at", "time_since_last_interaction_s"):
                         g = got.pop(key, None)
                         w = want.pop(key, None)
@@ -1001,12 +1001,12 @@ async def test_study_order_revive_chain(
                 name, _json_roundtrip(fresh_modules[name].serialize())
             )
             want_new = _comparable_state(name, _json_roundtrip(fresh_new.serialize()))
-            if name == "hypnos":
+            if name == "sleep":
                 assert got_new["last_sleep_at"] == pytest.approx(want_new["last_sleep_at"])
                 assert got_new["schedule"] == pytest.approx(
                     want_new["schedule"], abs=1.0
                 )
-            elif name == "eidolon":
+            elif name == "self_model":
                 # A fresh self-model module draws a launch name (generate_launch_name), so
                 # two fresh instances differ only in the self-model's name.
                 got_model = json.loads(got_new.pop("model"))

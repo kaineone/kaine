@@ -183,7 +183,7 @@ class ScriptedBus:
         return f"{event.source}-pub"
 
     async def publish_workspace(
-        self, snapshot: dict[str, Any], source: str = "syneidesis"
+        self, snapshot: dict[str, Any], source: str = "workspace"
     ) -> str:
         self.workspace_broadcasts.append(snapshot)
         return "workspace-pub"

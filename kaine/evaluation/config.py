@@ -142,7 +142,7 @@ class RawArchiveConfig:
 class ExternalUtterancesConfig:
     """Parameters for the OPTIONAL local-only external-utterance recorder.
 
-    Subscribes only to ``lingua.external`` and writes one record per
+    Subscribes only to ``language.external`` and writes one record per
     ``external_speech`` event to ``state/research/external_utterances/``.
     The record contains the ``text`` field only; bystander ``user_input`` and
     all other payload fields are dropped. Never subscribes to other speech
@@ -197,7 +197,7 @@ class DashboardRecordConfig:
     """Parameters for the OPTIONAL local-only dashboard diagnostics recorder.
 
     Subscribes to the same streams as the dashboard diagnostics bridge and writes
-    one record per event to ``data/nexus_record/``. Each record contains
+    one record per event to ``data/dashboard_record/``. Each record contains
     exactly the payload produced by ``PrivacyFilter`` with
     ``dev_content_override=false`` (the same filter the bridge applies), plus
     stream name and entry id.
@@ -273,7 +273,7 @@ class ResearchEventLogConfig:
         Nested config for the OPTIONAL local-only raw bus archive.
     external_utterances:
         Nested config for the OPTIONAL local-only external-utterance recorder.
-    nexus_record:
+    dashboard_record:
         Nested config for the OPTIONAL local-only dashboard diagnostics recorder.
     """
 
@@ -303,7 +303,7 @@ class ResearchEventLogConfig:
                 data.get("external_utterances"), export_roots=export_roots
             ),
             dashboard_record=DashboardRecordConfig.from_mapping(
-                data.get("nexus_record"), export_roots=export_roots
+                data.get("dashboard_record"), export_roots=export_roots
             ),
         )
 
@@ -352,7 +352,7 @@ class ObserversConfig:
             replay_redact_content=bool(
                 data.get("replay_redact_content", cls.replay_redact_content)
             ),
-            social_cognition=bool(data.get("empatheia", cls.social_cognition)),
+            social_cognition=bool(data.get("social_cognition", cls.social_cognition)),
             voice_alignment_divergence=bool(
                 data.get("voice_alignment_divergence", cls.voice_alignment_divergence)
             ),
@@ -374,7 +374,7 @@ class WelfareConfig:
     Attributes
     ----------
     interoceptive_distress_threshold:
-        Minimum ``prediction_error`` magnitude (from ``soma.report``)
+        Minimum ``prediction_error`` magnitude (from ``interoception.report``)
         that is considered a high-distress state.  Default 0.8 — well
         above normal operating range, conservative enough not to fire
         spuriously during ordinary regulation.
@@ -454,12 +454,12 @@ class EvaluationConfig:
     # thinking models must have CoT suppressed or the bare baseline runs away
     # reasoning and returns empty content — so it DEFAULTS to False here too. The
     # server's `--reasoning-budget 0` flag does not reliably suppress CoT, so
-    # suppression is enforced client-side via enable_thinking (see lingua.client).
+    # suppression is enforced client-side via enable_thinking (see language.client).
     chat_url: str = DEFAULT_CHAT_URL
     # The A/B-divergence baseline runs this model bare (no architecture). It MUST
     # equal the language organ's model or the divergence measures a model
     # difference, not the architecture's conditioning. At cycle startup this is
-    # DERIVED from [lingua].model_id (see from_mapping's lingua_model_id); the
+    # DERIVED from [language].model_id (see from_mapping's language_model_id); the
     # default below is only a fallback for standalone/no-language-module reads.
     chat_model_id: str = "kaineone/Qwen3.5-4B-abliterated-GGUF"
     chat_timeout_s: float = 60.0
@@ -496,7 +496,7 @@ class EvaluationConfig:
         # The A/B-divergence baseline runs this model bare (no architecture), so it
         # MUST equal the language organ's model — otherwise the divergence measures
         # a model difference instead of the architecture's conditioning. Derive it
-        # from [lingua].model_id; an explicit value that DIFFERS is a fail-closed
+        # from [language].model_id; an explicit value that DIFFERS is a fail-closed
         # error (a silently-mismatched baseline invalidates the core metric).
         explicit_model = data.get("chat_model_id")
         if (
@@ -506,7 +506,7 @@ class EvaluationConfig:
         ):
             raise ValueError(
                 f"evaluation.chat_model_id ({explicit_model!r}) must equal the "
-                f"language organ's [lingua].model_id ({language_model_id!r}): the "
+                f"language organ's [language].model_id ({language_model_id!r}): the "
                 "A/B-divergence baseline must run the SAME model as Lingua, or the "
                 "divergence measures a model difference instead of the architecture. "
                 "Remove evaluation.chat_model_id (it derives from lingua) or set "
@@ -530,7 +530,7 @@ class EvaluationConfig:
             self_model_accuracy=bool(data.get("eidolon_accuracy", cls.self_model_accuracy)),
             self_model_accuracy_interval_hours=int(
                 data.get(
-                    "eidolon_accuracy_interval_hours",
+                    "self_model_accuracy_interval_hours",
                     cls.self_model_accuracy_interval_hours,
                 )
             ),

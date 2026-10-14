@@ -66,41 +66,41 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # positive frequencies.
     "cycle.tick": {"access_drive": UNIT, "experiential_rate_hz": NONNEG, "processing_rate_hz": NONNEG},
     # --- Prediction / precision ---
-    # prediction_error is clamped non-negative at the producer (soma.fatigue:
+    # prediction_error is clamped non-negative at the producer (interoception.fatigue:
     # max(0.0, e)); the vision module likewise reports a non-negative error magnitude.
     # The interoception module's fatigue_value accumulates on a scale of 0..threshold, not a unit
     # interval; unexpected_error is the learned-band residual, also non-negative.
-    "soma.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": NONNEG, "unexpected_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
-    "topos.report": {"prediction_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
+    "interoception.report": {"prediction_error": NONNEG, "wellness": UNIT, "fatigue_value": NONNEG, "unexpected_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
+    "vision.report": {"prediction_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
     "audition.perception": {"prediction_error": NONNEG, "entity_time_s": NONNEG, "prediction_broadcast_tick": NONNEG, "prediction_context_age_s": NONNEG},
     # Positive control result: numeric summary fields only.
     "positive_control.result": {"n_reports": NONNEG, "min_reports": NONNEG, "min_effect": NONNEG, "snr": (0.0, INF), "t_learn_s": NONNEG},
     "positive_control.ladder": {"entity_time_s": NONNEG},
-    "phantasia.world_error": {"error": NONNEG},
+    "world_model.world_error": {"error": NONNEG},
     # The planning module's confidence is 1 - normalised_entropy, clamped to [0, 1]
-    # (nous.module). expected_free_energy is a signed scalar with no hard
+    # (planning.module). expected_free_energy is a signed scalar with no hard
     # bound, so it is intentionally NOT declared.
-    "nous.belief": {"confidence": UNIT},
-    "nous.policy": {"confidence": UNIT},
-    "nous.error": {"confidence": UNIT},
-    "nous.timeout": {"confidence": UNIT},
-    # preference is a softmax probability in [0, 1] (nous.module).
-    "nous.proposal": {"preference": UNIT},
-    # --- Affect / motivation (thymos.state: documented [-1,1]/[0,1]) ---
-    "thymos.state": {
+    "planning.belief": {"confidence": UNIT},
+    "planning.policy": {"confidence": UNIT},
+    "planning.error": {"confidence": UNIT},
+    "planning.timeout": {"confidence": UNIT},
+    # preference is a softmax probability in [0, 1] (planning.module).
+    "planning.proposal": {"preference": UNIT},
+    # --- Affect / motivation (affect.state: documented [-1,1]/[0,1]) ---
+    "affect.state": {
         "valence": SIGNED_UNIT,
         "arousal": UNIT,
         "dominance": SIGNED_UNIT,
     },
-    # thymos.drive carries {drive, value}; each drive value is in [0, 1].
-    "thymos.drive": {"value": UNIT},
+    # affect.drive carries {drive, value}; each drive value is in [0, 1].
+    "affect.drive": {"value": UNIT},
     # --- Perception (derived) ---
     "audition.emotion": {"confidence": UNIT, "tone_error_ratio": NONNEG},
     # --- Self / social ---
     # The social cognition module's familiarity() is documented in [0, 1]; social error magnitude
     # is non-negative.
-    "empatheia.agent_model": {"familiarity_scalar": UNIT},
-    "empatheia.social_error": {"error_magnitude": NONNEG},
+    "social_cognition.agent_model": {"familiarity_scalar": UNIT},
+    "social_cognition.social_error": {"error_magnitude": NONNEG},
     # --- Coherence (PLV phase-locking value ∈ [0, 1]) ---
     # The coherence observer records a dict of pair -> PLV; handled specially in
     # _coherence_violations (nested), not via the flat SCHEMA.

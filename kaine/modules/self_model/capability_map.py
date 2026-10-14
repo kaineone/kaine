@@ -49,7 +49,7 @@ class CapabilityMapBuilder:
     # Observation
 
     def observe_policy(self, payload: dict[str, Any]) -> None:
-        """Record one nous.policy event.  Only the label and EFE are kept."""
+        """Record one planning.policy event.  Only the label and EFE are kept."""
         action = str(payload.get("policy") or "")
         if not action:
             return

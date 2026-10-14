@@ -15,27 +15,27 @@ import pytest
 from kaine.research.ignition_study.plan import init_study, validate_plan
 from kaine.research.ignition_study.runner import StudyHalted, StudyRunner
 
-BASE_MODULES = ["soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"]
-ORDER = ["mnemos"]
+BASE_MODULES = ["interoception", "sequence", "vision", "audition", "language", "affect", "sleep"]
+ORDER = ["episodic_memory"]
 
 
 @pytest.fixture
 def known_modules(monkeypatch):
     names = BASE_MODULES + [
-        "echo",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
-        "vox",
+        "recorder",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
+        "vocal",
         "audition",
-        "hypnos",
-        "empatheia",
-        "phantasia",
-        "perception",
-        "mundus",
+        "sleep",
+        "social_cognition",
+        "world_model",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
@@ -57,8 +57,8 @@ def _write_repo(repo_root: Path) -> None:
     (cfg / "kaine.toml").write_text(
         "[modules]\n"
         "echo = false\n"
-        "soma = false\n"
-        "[topos]\n"
+        "interoception = false\n"
+        "[vision]\n"
         'encoder_local_dir = "state/models"\n'
     )
 

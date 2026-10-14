@@ -48,14 +48,14 @@ class FakeClock:
 
 async def _xadd_external_speech(bus: AsyncBus, record_id: str, timestamp: datetime):
     fields = {
-        "source": "lingua",
+        "source": "language",
         "type": "external_speech",
         "salience": "0.5",
         "timestamp": timestamp.isoformat(),
         "causal_parent": "",
         "payload": json.dumps({"record_id": record_id}, separators=(",", ":")),
     }
-    return await bus.client.xadd("lingua.external", fields)
+    return await bus.client.xadd("language.external", fields)
 
 
 def _read_records(path):
@@ -201,8 +201,8 @@ async def test_social_cognition_and_social_drive(bus, tmp_path):
         t0 = datetime.now(timezone.utc)
         await bus.publish(
             Event(
-                source="thymos",
-                type="thymos.state",
+                source="affect",
+                type="affect.state",
                 payload={"drives": {"social_drive": 0.2}},
                 salience=0.5,
                 timestamp=t0 - timedelta(seconds=1),
@@ -211,8 +211,8 @@ async def test_social_cognition_and_social_drive(bus, tmp_path):
         await _xadd_external_speech(bus, R1, t0)
         await bus.publish(
             Event(
-                source="thymos",
-                type="thymos.state",
+                source="affect",
+                type="affect.state",
                 payload={"drives": {"social_drive": 0.5}},
                 salience=0.5,
                 timestamp=t0 + timedelta(seconds=0.1),
@@ -220,8 +220,8 @@ async def test_social_cognition_and_social_drive(bus, tmp_path):
         )
         await bus.publish(
             Event(
-                source="empatheia",
-                type="empatheia.social_error",
+                source="social_cognition",
+                type="social_cognition.social_error",
                 payload={"deviation_magnitude": 0.4},
                 salience=0.5,
                 timestamp=t0 + timedelta(seconds=0.2),
@@ -229,8 +229,8 @@ async def test_social_cognition_and_social_drive(bus, tmp_path):
         )
         await bus.publish(
             Event(
-                source="empatheia",
-                type="empatheia.social_error",
+                source="social_cognition",
+                type="social_cognition.social_error",
                 payload={"deviation_magnitude": 0.7},
                 salience=0.5,
                 timestamp=t0 + timedelta(seconds=0.3),
@@ -381,7 +381,7 @@ async def test_events_in_one_poll_are_handled_in_time_order(bus, tmp_path):
         t0 = datetime.now(timezone.utc)
         await _xadd_external_speech(bus, R1, t0)
         await asyncio.wait_for(_wait_for_open(observer), timeout=2)
-        # Both written before the next poll; lingua.external is read first.
+        # Both written before the next poll; language.external is read first.
         await _xadd_external_speech(bus, R2, t0 + timedelta(seconds=2))
         await bus.publish(
             Event(
@@ -442,7 +442,7 @@ async def test_start_utterance_outcome_observer_disabled_on_error(tmp_path, capl
 
 
 async def test_malformed_event_in_poll_does_not_drop_reply(bus, tmp_path, caplog):
-    """A malformed thymos.state event in the same poll must not prevent a later
+    """A malformed affect.state event in the same poll must not prevent a later
     operator reply from being recorded."""
     caplog.set_level(logging.DEBUG)
     path = tmp_path / "outcomes.jsonl"
@@ -457,8 +457,8 @@ async def test_malformed_event_in_poll_does_not_drop_reply(bus, tmp_path, caplog
         # must not abort handling of the reply.
         await bus.publish(
             Event(
-                source="thymos",
-                type="thymos.state",
+                source="affect",
+                type="affect.state",
                 payload={"drives": "oops"},
                 salience=0.5,
                 timestamp=t0 + timedelta(seconds=0.1),
@@ -481,7 +481,7 @@ async def test_malformed_event_in_poll_does_not_drop_reply(bus, tmp_path, caplog
     assert rec["record_id"] == R1
     assert rec["replied"] is True
     assert any(
-        "failed to handle thymos.out" in rec.message for rec in caplog.records
+        "failed to handle affect.out" in rec.message for rec in caplog.records
     )
 
 
@@ -598,7 +598,7 @@ async def test_phase_utterance_outcome_boots_despite_bad_reply_window(
 
     for language in ({"outcome_reply_window_s": "abc"}, None):
         ctx = types.SimpleNamespace(
-            kaine_config={"modules": {"lingua": True}, "lingua": language},
+            kaine_config={"modules": {"language": True}, "language": language},
             bus=FakeBus(),
             utterance_outcome=None,
         )
@@ -624,8 +624,8 @@ async def test_phase_utterance_outcome_disabled_skips_observer(monkeypatch):
     )
     ctx = types.SimpleNamespace(
         kaine_config={
-            "modules": {"lingua": False},
-            "lingua": {"outcome_reply_window_s": 10},
+            "modules": {"language": False},
+            "language": {"outcome_reply_window_s": 10},
         },
         bus=None,
         utterance_outcome=None,

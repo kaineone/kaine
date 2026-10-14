@@ -134,7 +134,7 @@ class StimulusSourceAudioSchedule:
 # kaine/modules/vision/feed.py.
 _SALT_AUDIO_BASE = 0xE100
 _SALT_AUDIO_CONTENT = 0xE3
-# Shared with the video source's onset draw (topos.feed _SALT_ONSET = 0xA1).
+# Shared with the video source's onset draw (vision.feed _SALT_ONSET = 0xA1).
 _SALT_SHARED_ONSET = 0xA1
 
 
@@ -441,7 +441,7 @@ class StimulusSourceProceduralAudioStream:
     ) -> bytes:
         """Synthesize the int16 LE PCM block at ``block_index``.
 
-        Pure function of ``(seed, block_index, params, birth_progress)``.
+        Pure function of ``(seed, block_index, params, maturation_progress)``.
         """
         import math
 

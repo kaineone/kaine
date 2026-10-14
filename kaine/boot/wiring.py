@@ -16,7 +16,7 @@ from kaine.storage import resolve
 from kaine.workspace.strategies import build_drive_sources, dominant_drive
 
 #: Label of the affect salience factor in downgrade reports.
-AFFECT_FACTOR_LABEL = "thymos_modulation"
+AFFECT_FACTOR_LABEL = "affect_modulation"
 
 log = logging.getLogger(__name__)
 
@@ -70,14 +70,14 @@ def make_coherence_scorer(kaine_config: dict[str, Any]):
     )
 
 
-# Allowed keys for the [syneidesis] section (workspace selection + the live
+# Allowed keys for the [workspace] section (workspace selection + the live
 # four-factor salience source selectors). A typo (e.g. `salience_goal_factors`)
 # must fail loudly rather than silently leave the goal factor on its default.
 _WORKSPACE_ALLOWED_KEYS: set[str] = {
     "top_k",
     "publication_threshold",
     "novelty_window",
-    "salience_thymos_factor",
+    "salience_affect_factor",
     "salience_goal_factor",
     "arousal_contrast_gain",
     "arm",  # the arm of the planned test, read by the cycle
@@ -104,9 +104,9 @@ def make_salience_factors(
     *,
     drive_sources: Mapping[str, frozenset[str]] | None = None,
 ):
-    """Select the goal + the affect module's salience factors from the [syneidesis] section.
+    """Select the goal + the affect module's salience factors from the [workspace] section.
 
-    Returns ``(thymos_modulator, goal_scorer, downgraded_factors)``. Both real
+    Returns ``(affect_modulator, goal_scorer, downgraded_factors)``. Both real
     factors read the entity's current affect/drives through ``affect_provider``
     (dependency injection — the workspace layer never imports ``kaine.modules``).
     ``downgraded_factors`` names each factor the operator deliberately set to the
@@ -121,20 +121,20 @@ def make_salience_factors(
         StaticGoalScorer,
     )
 
-    section = dict(kaine_config.get("syneidesis") or {})
+    section = dict(kaine_config.get("workspace") or {})
     _require_keys(section, _WORKSPACE_ALLOWED_KEYS)
 
-    affect_factor = str(section.get("salience_thymos_factor", _SALIENCE_AFFECT_FACTOR_DEFAULT))
+    affect_factor = str(section.get("salience_affect_factor", _SALIENCE_AFFECT_FACTOR_DEFAULT))
     goal_factor = str(section.get("salience_goal_factor", _SALIENCE_GOAL_FACTOR_DEFAULT))
 
     if affect_factor == "state_modulator":
         arousal_contrast_gain = float(section.get("arousal_contrast_gain", 8.0))
         if arousal_contrast_gain < 0.0:
             raise ConfigurationError(
-                "[syneidesis].arousal_contrast_gain must be >= 0"
+                "[workspace].arousal_contrast_gain must be >= 0"
             )
         baseline_arousal = float(
-            (kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+            (kaine_config.get("affect") or {}).get("baseline_arousal", 0.3)
         )
         affect_modulator = StateModulator(
             affect_provider.dimensional_state,
@@ -145,7 +145,7 @@ def make_salience_factors(
         affect_modulator = StaticAffectModulator()
     else:
         raise ConfigurationError(
-            "unknown [syneidesis].salience_thymos_factor "
+            "unknown [workspace].salience_affect_factor "
             f"{affect_factor!r} (expected 'state_modulator' or 'static')"
         )
 
@@ -161,7 +161,7 @@ def make_salience_factors(
         goal_scorer = StaticGoalScorer()
     else:
         raise ConfigurationError(
-            "unknown [syneidesis].salience_goal_factor "
+            "unknown [workspace].salience_goal_factor "
             f"{goal_factor!r} (expected 'drive_relevance' or 'static')"
         )
 
@@ -177,7 +177,7 @@ def make_salience_factors(
     if goal_factor == "static" and _SALIENCE_GOAL_FACTOR_DEFAULT == "static":
         log.info(
             "salience goal factor is on the staged static baseline "
-            "(set [syneidesis].salience_goal_factor = 'drive_relevance' to activate "
+            "(set [workspace].salience_goal_factor = 'drive_relevance' to activate "
             "the drive-relevance scorer once validated)"
         )
 
@@ -252,10 +252,10 @@ def _wire_language_self_model(registry: ModuleRegistry) -> None:
     """Confirm the language module seeds its persona from the *bus-mediated* self-model module's
     self-model snapshot rather than an in-process self-model module reference.
 
-    Previously this injected a live ``eidolon.model`` accessor into the language module — a
+    Previously this injected a live ``self_model.model`` accessor into the language module — a
     direct boot-time Python reference that pinned the two modules into one
     process. That reference is the coupling the ``distributed-deployment``
-    change removes: the self-model module now publishes its self-model to ``eidolon.out`` and
+    change removes: the self-model module now publishes its self-model to ``self_model.out`` and
     The language module caches it via its own ``_self_model_cache_loop`` (over the shared
     authenticated bus), so the language organ can run in a separate process /
     on a separate trusted GPU host. This helper therefore no longer wires an
@@ -266,9 +266,9 @@ def _wire_language_self_model(registry: ModuleRegistry) -> None:
     decoupling target — see docs/07-deployment/README.md); only the read-only
     The language module → the self-model module accessor is bus-mediated here.
     """
-    if "lingua" not in registry or "eidolon" not in registry:
+    if "language" not in registry or "self_model" not in registry:
         return
-    log.info("lingua persona seeded from bus-mediated eidolon.self_model snapshot")
+    log.info("lingua persona seeded from bus-mediated self_model.self_model snapshot")
 
 
 def _wire_language_organ_adapter(
@@ -281,10 +281,10 @@ def _wire_language_organ_adapter(
     """
     if kaine_config is None:
         return
-    if "lingua" not in registry or "hypnos" not in registry:
+    if "language" not in registry or "sleep" not in registry:
         return
 
-    sleep_cfg = kaine_config.get("hypnos", {})
+    sleep_cfg = kaine_config.get("sleep", {})
     voice_cfg = sleep_cfg.get("voice_alignment", {}) if sleep_cfg else {}
     if not voice_cfg.get("enabled"):
         return
@@ -293,12 +293,12 @@ def _wire_language_organ_adapter(
     if _effective_hot_swap_mode(mode, kaine_config) != "organ_adapter":
         return
 
-    language_cfg = kaine_config.get("lingua", {})
+    language_cfg = kaine_config.get("language", {})
     organ_url = voice_cfg.get("organ_url") or language_cfg.get("chat_url")
     if not organ_url:
         log.warning(
             "organ_adapter hot-swap configured but neither organ_url nor "
-            "lingua.chat_url is set; skipping per-request LoRA wiring"
+            "language.chat_url is set; skipping per-request LoRA wiring"
         )
         return
 
@@ -318,7 +318,7 @@ def _wire_language_organ_adapter(
         organ_url=organ_root_url(organ_url),
         api_key=api_key,
     )
-    registry.get("lingua").set_lora_resolver(resolver)
+    registry.get("language").set_lora_resolver(resolver)
     log.info(
         "lingua applies its own voice-alignment adapter when the organ has it loaded"
     )
@@ -330,10 +330,10 @@ def _wire_self_model_capabilities(registry: ModuleRegistry) -> None:
     (the ``eidolon-self-inference`` "Capability map from Effectors whitelist"
     requirement). No-op unless both modules are present. Idempotent: the whitelist
     is fixed for the boot, so re-running (e.g. after a supervisor rebuild) is safe."""
-    if "praxis" not in registry or "eidolon" not in registry:
+    if "effectors" not in registry or "self_model" not in registry:
         return
-    effectors = registry.get("praxis")
-    self_model = registry.get("eidolon")
+    effectors = registry.get("effectors")
+    self_model = registry.get("self_model")
     engine = getattr(self_model, "self_inference", None)
     if engine is None or not hasattr(engine, "set_whitelist_commands"):
         return
@@ -348,9 +348,9 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
     module's ``relieves_drives`` declaration, with the dominant-drive rule handed
     in so the affect module never imports the workspace. Re-run by ``rewire_module`` so a
     restarted affect module, or a restarted module that changes the table, is re-wired."""
-    if "thymos" not in registry:
+    if "affect" not in registry:
         return
-    affect = registry.get("thymos")
+    affect = registry.get("affect")
     affect.set_drive_relevance(drive_sources_for(registry), dominant_drive)
     log.info("wired thymos goal significance to the drive-to-source table")
 
@@ -366,11 +366,11 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
     of one module does not replace the live gate and leave the old instance
     wired to the other side.
     """
-    if "vox" not in registry or "audition" not in registry:
+    if "vocal" not in registry or "audition" not in registry:
         return
     from kaine.modules.vocal.coordination import SpeakingGate
 
-    vocal = registry.get("vox")
+    vocal = registry.get("vocal")
     audition = registry.get("audition")
     # Reuse an existing gate if one side already has one; otherwise create a
     # fresh shared gate. This makes rewire_module idempotent and preserves the

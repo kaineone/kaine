@@ -49,7 +49,7 @@ def test_security_md_mentions_observer_jsonl(security_text: str) -> None:
 
 def test_security_md_mentions_world_model(security_text: str) -> None:
     """§4 must name the world-model checkpoints."""
-    assert "phantasia" in security_text, (
+    assert "world_model" in security_text, (
         "SECURITY.md §4 does not mention the Phantasia checkpoints "
         "(expected substring 'phantasia')"
     )

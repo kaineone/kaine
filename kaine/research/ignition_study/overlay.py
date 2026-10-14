@@ -50,7 +50,7 @@ def build_overlay(
     modules = {name: (name in enabled) for name in all_modules}
 
     perception: dict[str, Any] = {
-        "mode": "womb" if step_kind == "gestation" else "playlist",
+        "mode": "stimulus_source" if step_kind == "gestation" else "playlist",
     }
     if step_kind == "viewing":
         perception["playlist_manifest"] = plan["programme"]["manifest"]
@@ -78,16 +78,16 @@ def build_overlay(
         # [storage].data_root overrides cannot lift study writes out of the
         # per-step sandbox.
         "storage": {"data_root": "."},
-        "soma": {
+        "interoception": {
             # The developmental phase uses local stimulus source mode, which requires the interoception module's self-rhythm.
             # An entity gestated with the self-rhythm also keeps it for all later
             # viewings, because the interoceptive feature slots must remain filled.
             "self_rhythm_enabled": True,
         },
         "perception_feed": perception,
-        "developmental_stage": {"enabled": True, "require_operator_ack_for_birth": False},
-        "mnemos": {"collection_prefix": collection_prefix},
-        "empatheia": {"collection": collection_prefix},
+        "developmental_stage": {"enabled": True, "require_operator_ack_for_maturation": False},
+        "episodic_memory": {"collection_prefix": collection_prefix},
+        "social_cognition": {"collection": collection_prefix},
         # Relative to the step's working directory; the runner records it.
         "ignition_log": {"enabled": True, "directory": IGNITION_LOG_DIR},
         # Every step records the workspace graph (the ignition log), the external
@@ -97,7 +97,7 @@ def build_overlay(
         "research_event_log": {
             "enabled": True,
             "external_utterances": {"enabled": True},
-            "nexus_record": {"enabled": False},
+            "dashboard_record": {"enabled": False},
             "raw_archive": {"enabled": False},
         },
         # No evaluation observer runs in a study; the welfare net's gray-zone
@@ -107,12 +107,12 @@ def build_overlay(
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},
         },
-        "phantasia": {"training_enabled": True, "persist_weights": True},
-        "topos": {"encoder_local_dir": encoder_dir},
+        "world_model": {"training_enabled": True, "persist_weights": True},
+        "vision": {"encoder_local_dir": encoder_dir},
         # Greedy decoding and the competitive arm in every study step (paper §5.4,
         # §6.1), so an operator override cannot make a step sample or run a control.
-        "lingua": {"temperature": 0.0},
-        "syneidesis": {"arm": "competitive"},
+        "language": {"temperature": 0.0},
+        "workspace": {"arm": "competitive"},
     }
 
     registered_steps = plan.get("voice_alignment_steps", voice_alignment_steps(plan))
@@ -124,7 +124,7 @@ def build_overlay(
         voice_alignment["hot_swap_mode"] = "organ_adapter"
         # The kaine-study service mounts the shared trainer jobs volume here.
         voice_alignment["trainer_jobs_dir"] = "/trainer-jobs"
-    study_overlay["hypnos"] = {"voice_alignment": voice_alignment}
+    study_overlay["sleep"] = {"voice_alignment": voice_alignment}
 
     overlay = deep_merge(operator_config, study_overlay)
     return overlay, enabled, models_dir
@@ -136,8 +136,8 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 
 def _absolute_encoder_dir(repo_root: Path, base_config: dict[str, Any]) -> str:
-    """Resolve ``[topos].encoder_local_dir`` absolutely against the repository."""
-    vision = base_config.get("topos", {})
+    """Resolve ``[vision].encoder_local_dir`` absolutely against the repository."""
+    vision = base_config.get("vision", {})
     value = vision.get("encoder_local_dir")
     if not value:
         target = repo_root / "state" / "models"

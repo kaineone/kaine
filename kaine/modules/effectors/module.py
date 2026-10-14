@@ -41,7 +41,7 @@ _REQUEST_TYPES: dict[str, type[ActionRequest]] = {
 
 
 class Effectors(BaseModule):
-    name: ClassVar[str] = "praxis"
+    name: ClassVar[str] = "effectors"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"restlessness"})
 
     def __init__(
@@ -91,7 +91,7 @@ class Effectors(BaseModule):
         #     share one per-boot run_id (a forged run_id can't produce a valid
         #     HMAC), so the dict holds effectively one entry per boot;
         #   * seq is monotonic per run_id and the effectors module reads act intents from a
-        #     SINGLE ordered stream (volition.out) via one sequential loop, so a
+        #     SINGLE ordered stream (action_selection.out) via one sequential loop, so a
         #     legitimate intent never arrives with a lower seq than one already
         #     realized — a high-water mark can never wrongly reject a legit intent
         #     and additionally rejects stale captures below the mark.
@@ -157,7 +157,7 @@ class Effectors(BaseModule):
         )
 
     async def _intent_loop(self) -> None:
-        """Realize `act` intents off ``volition.out``.
+        """Realize `act` intents off ``action_selection.out``.
 
         The effectors module is intent-driven: it never acts on the raw workspace broadcast.
         The only path to effector execution is an `act` intent from the
@@ -293,7 +293,7 @@ class Effectors(BaseModule):
         except Exception:
             log.exception("praxis audit log append failed")
         await self.publish(
-            "praxis.action",
+            "effectors.action",
             {
                 "effector": effector_name,
                 "success": False,
@@ -360,7 +360,7 @@ class Effectors(BaseModule):
             log.exception("praxis audit log append failed")
         salience = self._baseline_salience if result.success else self._alert_salience
         await self.publish(
-            "praxis.action",
+            "effectors.action",
             {
                 "effector": effector_name,
                 "success": result.success,

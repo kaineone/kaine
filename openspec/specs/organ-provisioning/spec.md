@@ -13,8 +13,8 @@ edit to the evaluation section.
 #### Scenario: Shipped config points at the published organ
 
 - **WHEN** an operator inspects shipped `config/kaine.toml`
-- **THEN** `[lingua].model_id` is the published KAINE organ (`kaineone/...`) and
-  `[evaluation].chat_model_id` is unset (it derives from `[lingua].model_id`)
+- **THEN** `[language].model_id` is the published KAINE organ (`kaineone/...`) and
+  `[evaluation].chat_model_id` is unset (it derives from `[language].model_id`)
 
 #### Scenario: The first-boot guard is unaffected
 
@@ -87,7 +87,7 @@ The system SHALL launch the OpenAI-compatible model server as a consent-gated se
 services), so a fresh install reaches a running organ without a manual server start.
 The bootstrap SHALL locate the hardware-appropriate server binary (the Unsloth Studio
 server on NVIDIA, the unsloth-core build on AMD), launch it against the downloaded
-GGUF under the exact `[lingua].model_id` alias with chain-of-thought suppressed on the
+GGUF under the exact `[language].model_id` alias with chain-of-thought suppressed on the
 configured port, and supervise the process so a crash is restarted (a `systemd --user`
 restart-on-failure unit where available, otherwise a supervised background process
 with a pidfile). It SHALL provide start, status, and stop, and SHALL NOT silently
@@ -116,7 +116,7 @@ guidance and fail.
 ### Requirement: The served organ name is verified against the configuration
 
 The system SHALL verify that the running model server lists the organ under the exact
-alias configured in `[lingua].model_id` before declaring the organ ready, and SHALL
+alias configured in `[language].model_id` before declaring the organ ready, and SHALL
 report an actionable mismatch rather than letting the cycle fail with a server 404 on
 its first language call. The launched server's port SHALL be treated as a KAINE-owned
 service by the GPU pre-boot headroom gate and SHALL never be terminated as a foreign
@@ -124,12 +124,12 @@ consumer.
 
 #### Scenario: Served alias matches
 
-- **WHEN** the model server lists a model whose name equals `[lingua].model_id`
+- **WHEN** the model server lists a model whose name equals `[language].model_id`
 - **THEN** the organ is reported ready
 
 #### Scenario: Served alias mismatch
 
-- **WHEN** the server is up but does not list a model matching `[lingua].model_id`
+- **WHEN** the server is up but does not list a model matching `[language].model_id`
 - **THEN** a "served name ≠ configured name" mismatch is reported and the organ is not
   declared ready
 

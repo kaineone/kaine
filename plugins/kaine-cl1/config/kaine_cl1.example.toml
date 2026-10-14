@@ -32,25 +32,25 @@ data_source = "reference_culture"
 # modules with an implemented wetware backend are accepted; the others name the
 # OpenSpec change that will add them.
 [plugins.cl1.backends]
-chronos = "cl1"
-soma = "cl1"
-# nous = "cl1"                # a policy proposal beside the planning module's engine; see [plugins.cl1.nous]
-# audition_frontend, phantasia_surprise, action selection, affect: hybrid-wetware-conversions
+sequence = "cl1"
+interoception = "cl1"
+# planning = "cl1"                # a policy proposal beside the planning module's engine; see [plugins.cl1.planning]
+# audition_frontend, world_model_surprise, action selection, affect: hybrid-wetware-conversions
 
 # Channel-territory sizes (electrodes leased per converted module). Channel 0 is
 # reserved, so the sum must stay <= 63.
 # Optional: source these modules' oscillatory-binding phase from the substrate.
 # Needs KAINE's [oscillator].enabled = true. Each gets its own territory.
 # [plugins.cl1.oscillators]
-# modules = ["chronos", "soma"]
+# modules = ["sequence", "interoception"]
 # channels_per_module = 4
 
 [plugins.cl1.substrate.territories]
-chronos = 12
-soma = 12
-# nous = 10                   # two per action (four by default) plus two feedback channels
+sequence = 12
+interoception = 12
+# planning = 10                   # two per action (four by default) plus two feedback channels
 
 # the planning module on the substrate (docs/19-plugins-and-cl1.md): "shadow" logs the tissue's policy proposal
-# and leaves Nous unchanged; "drive" acts on it. Only read when nous = "cl1".
-# [plugins.cl1.nous]
+# and leaves Planning unchanged; "drive" acts on it. Only read when planning = "cl1".
+# [plugins.cl1.planning]
 # mode = "shadow"

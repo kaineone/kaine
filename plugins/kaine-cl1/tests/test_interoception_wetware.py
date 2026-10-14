@@ -27,7 +27,7 @@ def substrate():
     session = SubstrateSession(SubstrateConfig(accelerated_time=True, ticks_per_second=100))
     session.open()
     broker = SubstrateBroker(channel_count=64, ticks_per_second=100, nesting_factor=6)
-    territory = broker.allocate("soma", 12)
+    territory = broker.allocate("interoception", 12)
     broker.open(session.neurons)
     try:
         yield broker, territory

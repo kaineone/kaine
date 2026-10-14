@@ -48,9 +48,9 @@ stream this tick. The cycle SHALL NOT block on any individual module's
 read and SHALL continue running if a module raises during processing.
 
 #### Scenario: Quiet module skipped silently
-- **WHEN** module `chronos` has no new events since the last tick
+- **WHEN** module `sequence` has no new events since the last tick
 - **THEN** the cycle's collected event set contains no entries from
-  `chronos.out` and no error is raised
+  `sequence.out` and no error is raised
 
 #### Scenario: Erroring module does not stop the cycle
 - **WHEN** the bus raises for `bad_module.out` on a tick
@@ -62,7 +62,7 @@ On every tick the cycle SHALL publish a tick-latency event to its own
 `cycle.out` stream (source `cycle`) containing `tick_index`,
 `wall_duration_ms`, `target_duration_ms`, `slip_ms`, and a boolean
 `is_experiential`. The interoception module subscribes to `cycle.out` like any other consumer.
-The cycle SHALL claim source `syneidesis` only when calling
+The cycle SHALL claim source `workspace` only when calling
 `bus.publish_workspace`.
 
 #### Scenario: Slip recorded when tick overruns
@@ -135,12 +135,12 @@ precedence `KAINE_QDRANT_API_KEY` environment variable first, then
 `config/secrets.toml` `[qdrant].api_key`, and the resolved value SHALL be
 injected into the in-memory `[qdrant].api_key` section of **every qdrant-backed
 consumer** so each module's factory forwards it to the Qdrant client. The
-qdrant-backed consumers are at minimum `[mnemos.qdrant]` and
-`[empatheia.qdrant]`.
+qdrant-backed consumers are at minimum `[episodic_memory.qdrant]` and
+`[social_cognition.qdrant]`.
 
 The loader SHALL NOT require the key to be present in the git-tracked
 `config/kaine.toml`. For each consumer section, when a key is already present
-(e.g. `[mnemos.qdrant].api_key` or `[empatheia.qdrant].api_key` in
+(e.g. `[episodic_memory.qdrant].api_key` or `[social_cognition.qdrant].api_key` in
 `config/kaine.toml`), the loader SHALL leave that section's key intact rather
 than overwrite it. When no key is resolvable from the environment or
 `config/secrets.toml`, the loader SHALL NOT inject an empty value into any
@@ -152,8 +152,8 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 
 - **WHEN** `config/secrets.toml` contains `[qdrant].api_key` and no
   `KAINE_QDRANT_API_KEY` env var is set and `config/kaine.toml` has no
-  `[mnemos.qdrant].api_key`
-- **THEN** the loaded cycle config has `mnemos.qdrant.api_key` equal to the
+  `[episodic_memory.qdrant].api_key`
+- **THEN** the loaded cycle config has `episodic_memory.qdrant.api_key` equal to the
   secrets-file value
 - **AND** a qdrant-backed episodic memory module constructs without raising the missing-key
   error
@@ -162,8 +162,8 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 
 - **WHEN** `config/secrets.toml` contains `[qdrant].api_key` and no
   `KAINE_QDRANT_API_KEY` env var is set and `config/kaine.toml` has no
-  `[empatheia.qdrant].api_key`
-- **THEN** the loaded cycle config has `empatheia.qdrant.api_key` equal to the
+  `[social_cognition.qdrant].api_key`
+- **THEN** the loaded cycle config has `social_cognition.qdrant.api_key` equal to the
   secrets-file value
 - **AND** a qdrant-backed social cognition module constructs without raising the missing-key
   error
@@ -172,15 +172,15 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 
 - **WHEN** both `KAINE_QDRANT_API_KEY` is set and `config/secrets.toml`
   `[qdrant].api_key` is present with a different value
-- **THEN** the loaded cycle config has both `mnemos.qdrant.api_key` and
-  `empatheia.qdrant.api_key` equal to the environment-variable value
+- **THEN** the loaded cycle config has both `episodic_memory.qdrant.api_key` and
+  `social_cognition.qdrant.api_key` equal to the environment-variable value
 
 #### Scenario: Explicit per-consumer key is left intact
 
-- **WHEN** `config/kaine.toml` already sets `[empatheia.qdrant].api_key` to an
+- **WHEN** `config/kaine.toml` already sets `[social_cognition.qdrant].api_key` to an
   explicit value and a different key is resolvable from the environment or
   `config/secrets.toml`
-- **THEN** the loaded cycle config leaves `empatheia.qdrant.api_key` at its
+- **THEN** the loaded cycle config leaves `social_cognition.qdrant.api_key` at its
   explicit value, unchanged
 
 #### Scenario: Key absent everywhere yields a clear error, not a silent empty key
@@ -196,13 +196,13 @@ loader SHALL emit the same file-mode warning the bus config loader emits.
 - **WHEN** `config/secrets.toml` does not exist but `KAINE_QDRANT_API_KEY` is
   set in the environment
 - **THEN** the loader resolves the key from the environment without error
-- **AND** the loaded cycle config has `mnemos.qdrant.api_key` and
-  `empatheia.qdrant.api_key` equal to the environment-variable value
+- **AND** the loaded cycle config has `episodic_memory.qdrant.api_key` and
+  `social_cognition.qdrant.api_key` equal to the environment-variable value
 
 ### Requirement: Freeze control attribution
 The cycle freeze control SHALL carry a `source` field identifying who froze the
 entity — `"operator"` (the default, written by the dashboard freeze endpoint) or
-`"spot"` (written by the supervisor during recovery). Reading a control file with
+`"supervisor"` (written by the supervisor during recovery). Reading a control file with
 no `source` SHALL default to `"operator"` (backward compatible). The freeze-watch
 loop SHALL pause/resume the cycle on the `frozen` flag regardless of source.
 
@@ -215,8 +215,8 @@ loop SHALL pause/resume the cycle on the `frozen` flag regardless of source.
 - **THEN** the parsed source is `"operator"`
 
 ### Requirement: Supervisor lifecycle and escalation exit
-When `[spot].enabled` is true the cycle entrypoint SHALL construct a `ForkManager`
-and a module-rebuild closure, parse `[spot]`, construct the supervisor, run it as a
+When `[supervisor].enabled` is true the cycle entrypoint SHALL construct a `ForkManager`
+and a module-rebuild closure, parse `[supervisor]`, construct the supervisor, run it as a
 task alongside the cycle and freeze-watch tasks, and await it during shutdown. The
 entrypoint SHALL clear any stale escalation record at clean boot (next to the
 existing freeze clear) and SHALL propagate a non-zero process exit when the
@@ -314,7 +314,7 @@ tie-breaks do not depend on dispatch incidentals.
 - **THEN** the selection tie-break resolves them in the canonical `(source, type, entry_id)` order
 
 ### Requirement: Conscious-access rate adapts to arousal and salience
-When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every tick before deciding whether the tick is an experiential broadcast, an access drive in [0, 1] equal to the larger of a tonic part (the affect module's arousal above its resting baseline, normalised to [0, 1]) and a phasic part (the highest salience among this tick's module reports above a floor, normalised to [0, 1], held as a peak that decays exponentially in subjective time). The effective experiential rate for the tick SHALL be `resting + (processing − resting) × drive`, where `resting` is the configured experiential rate and `processing` is the processing rate. Events whose source is `cycle` or `syneidesis` SHALL NOT contribute to the phasic part.
+When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every tick before deciding whether the tick is an experiential broadcast, an access drive in [0, 1] equal to the larger of a tonic part (the affect module's arousal above its resting baseline, normalised to [0, 1]) and a phasic part (the highest salience among this tick's module reports above a floor, normalised to [0, 1], held as a peak that decays exponentially in subjective time). The effective experiential rate for the tick SHALL be `resting + (processing − resting) × drive`, where `resting` is the configured experiential rate and `processing` is the processing rate. Events whose source is `cycle` or `workspace` SHALL NOT contribute to the phasic part.
 
 #### Scenario: Calm entity broadcasts at the resting rate
 - **WHEN** arousal equals its baseline and no report exceeds the salience floor, at 10 Hz processing and a 3.333 Hz resting rate, for 300 ticks
@@ -329,7 +329,7 @@ When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every ti
 - **THEN** the access drive is 1.0 on that tick and decays toward 0 over the following subjective second, and the broadcast rate returns to the resting rate
 
 #### Scenario: The cycle's own telemetry is not a report
-- **WHEN** the only high-salience event on a tick has source `cycle` or `syneidesis`
+- **WHEN** the only high-salience event on a tick has source `cycle` or `workspace`
 - **THEN** the phasic part is 0
 
 ### Requirement: Adaptation stays within the resting rate and the processing rate

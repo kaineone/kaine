@@ -15,10 +15,10 @@ allowed).
 
 Documented exclusions:
 
-- Curated research log: ``vox.out`` (raw audio content) and ``lingua.out``
+- Curated research log: ``vocal.out`` (raw audio content) and ``language.out``
   (transcripts) are NEVER curated — the research log stays content-free.
 - dashboard diagnostics additionally excludes the low-signal operational streams
-  (``volition.out``, ``mundus.out``, ``perception.out``, ``welfare.out``,
+  (``action_selection.out``, ``embodiment.out``, ``perceptual_locus.out``, ``welfare.out``,
   ``preservation.out``, ``individuation.out``) and adds the non-module
   ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the
   cycle's ``cycle.tick``, ``cycle.rates`` and ``cycle.time_scale`` events.
@@ -36,40 +36,40 @@ from kaine.bus.streams import PERCEPTION_FEED_STREAM
 #: Every cognitive module that publishes a stream. Order is stable.
 CANONICAL_MODULE_NAMES: tuple[str, ...] = (
     "cycle",
-    "volition",
-    "soma",
-    "chronos",
-    "topos",
-    "phantasia",
-    "nous",
-    "thymos",
+    "action_selection",
+    "interoception",
+    "sequence",
+    "vision",
+    "world_model",
+    "planning",
+    "affect",
     "audition",
-    "lingua",
-    "vox",
-    "mnemos",
-    "hypnos",
-    "eidolon",
-    "empatheia",
-    "praxis",
-    "spot",
-    "perception",
-    "mundus",
+    "language",
+    "vocal",
+    "episodic_memory",
+    "sleep",
+    "self_model",
+    "social_cognition",
+    "effectors",
+    "supervisor",
+    "perceptual_locus",
+    "embodiment",
     "welfare",
     "preservation",
     "individuation",
 )
 
 #: Streams with content-bearing payloads that are never curated.
-_CURATED_EXCLUSIONS: frozenset[str] = frozenset({"lingua.out", "vox.out"})
+_CURATED_EXCLUSIONS: frozenset[str] = frozenset({"language.out", "vocal.out"})
 
 #: Operational streams the dashboard diagnostics monitor does not tail.
 #: ``cycle.out`` carries the cycle's operational events (``cycle.tick``,
 #: ``cycle.rates``, ``cycle.time_scale``) and the dashboard tails it.
 _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
     {
-        "volition.out",
-        "mundus.out",
-        "perception.out",
+        "action_selection.out",
+        "embodiment.out",
+        "perceptual_locus.out",
         "welfare.out",
         "preservation.out",
         "individuation.out",
@@ -78,7 +78,7 @@ _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
 
 #: Additional module-produced streams that are not ``<module>.out``.
 _ADDITIONAL_PRODUCED_STREAMS: tuple[str, ...] = (
-    "volition_feedback.out",
+    "action_selection_feedback.out",
     "positive_control.out",
 )
 

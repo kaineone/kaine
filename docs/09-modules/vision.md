@@ -4,7 +4,7 @@ The vision module is KAINE's foveated vision. It encodes short clips of the vide
 
 ## Status and dependencies
 
-Implemented. The shipped `config/kaine.toml` sets `[modules].topos = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it. With no profile selected, the loader applies `thesis_test` automatically, so the default entity has the vision module enabled.
+Implemented. The shipped `config/kaine.toml` sets `[modules].vision = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it. With no profile selected, the loader applies `thesis_test` automatically, so the default entity has the vision module enabled.
 
 - Live camera capture needs the `[vision]` extra: `pip install -e .[vision]`. It installs `opencv-python-headless`, `Pillow`, and `transformers`.
 - `torch` comes from the `[core]` extra, not the base package.
@@ -15,11 +15,11 @@ Implemented. The shipped `config/kaine.toml` sets `[modules].topos = false`, and
 - The forward model (`LatentForwardModel`) always runs on the CPU, whatever the encoder device.
 - Encoder weights are frozen: the encoder runs in `eval()` mode with `requires_grad=False` on every parameter.
 
-The vision module publishes no `topos.report` until its 16-frame ring buffer first fills, about 1.6 s at 10 Hz.
+The vision module publishes no `vision.report` until its 16-frame ring buffer first fills, about 1.6 s at 10 Hz.
 
 ### Encoder backends
 
-`[topos].encoder_backend` selects the encoder behind the `Encoder` protocol:
+`[vision].encoder_backend` selects the encoder behind the `Encoder` protocol:
 
 - `internvideo_next` (shipped default) is OpenGVLab's InternVideo-Next base model (MIT licence, 91M parameters). A 16-frame clip produces one 768-dimensional embedding that captures motion. The vision module keeps a RAM-only 16-frame ring buffer and emits one clip embedding every `clip_stride` frames; at the shipped `vision_sample_hz = 10` and `clip_stride = 3` that is about 3.3 Hz.
 - `dinov2` is the Apache-2.0 per-frame fallback: `clip_len = 1` and the 384-dimensional CLS token of DINOv2-small.
@@ -99,7 +99,7 @@ intensity = baseline_salience + (alert_salience − baseline_salience) × min(1,
 
 so it reaches the alert level when the error is twice its running mean (`kaine/modules/intensity.py`). With forward prediction off, only the change criterion applies and every report is at `baseline_salience` or `alert_salience`.
 
-Every `topos.report` carries `alert`, and the access rate's phasic input counts only reports whose `alert` is true. The affect module reads alert reports directly from `topos.out` and raises arousal in proportion to how far `normalised_error` exceeds 1.
+Every `vision.report` carries `alert`, and the access rate's phasic input counts only reports whose `alert` is true. The affect module reads alert reports directly from `vision.out` and raises arousal in proportion to how far `normalised_error` exceeds 1.
 
 ## Inputs
 
@@ -108,7 +108,7 @@ Every `topos.report` carries `alert`, and the access rate's phasic input counts 
 | `LiveCamera` task | `process_frame(image)` | Delivers one RGB `PIL.Image` per capture interval |
 | `source_factory` | Registered by the perception feed | Seeded, playlist, and screen sources; gated by `effective_virtual_video_capture()` |
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the forward model's context |
-| `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends and resumes forward-model adaptation |
+| `sleep.out` | `sleep.sleep.started` / `sleep.sleep.completed` | Suspends and resumes forward-model adaptation |
 | `kaine.perception_state` | `effective_video_capture()`, polled every 250 ms | The live camera runs only when the locus is `physical` and video is desired |
 | The affect module's arousal | `set_arousal_provider()` | Sizes the fovea |
 
@@ -116,11 +116,11 @@ The 250 ms poll interval is a class default with no config key.
 
 ## Outputs
 
-All events are published to the `topos.out` stream.
+All events are published to the `vision.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `topos.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
+| `vision.report` | `latent`, `change_score`, `habituation_score`, `encoder_model_id`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`; with foveation also `peripheral`, `foveal`, `fovea`, `predicted_fovea`; with a playlist feed also `item`, `item_order` | `alert_salience` on an alert, otherwise graded from `baseline_salience` (see above) |
 
 `normalised_error` is the error ratio. `latent`, `peripheral`, `foveal`, `habituation_score` and `prediction_error` can be `null`: a vector that holds a non-finite value is published as `null`, a skipped reading carries the previous habituation score (`null` before the first finite reading), and a report without a defined error (a skipped reading and the reading after it) has a `null` `prediction_error` and a `normalised_error` of 0. `context_age_s` is the entity seconds since the vision module received the broadcast it holds as context, or `null` before the first accessed broadcast.
 
@@ -128,7 +128,7 @@ With foveation off, the report carries the single whole-frame embedding and none
 
 ## Sleep
 
-During sleep the sleep module switches the perceptual locus module off and pauses a playlist feed's shared clock, so no frames reach the vision module. Independently, the vision module sets its forward model's `suspended` flag from `hypnos.sleep.started` to `hypnos.sleep.completed`, and no gradient step is taken while it is set.
+During sleep the sleep module switches the perceptual locus module off and pauses a playlist feed's shared clock, so no frames reach the vision module. Independently, the vision module sets its forward model's `suspended` flag from `sleep.sleep.started` to `sleep.sleep.completed`, and no gradient step is taken while it is set.
 
 ## Persistence
 
@@ -142,7 +142,7 @@ On restore, the vision module logs a warning if the recorded encoder differs fro
 
 ## Configuration
 
-Section `[topos]` in `config/kaine.toml`. The full reference is in the [modules configuration appendix](../appendix-a-configuration/modules.md). Where the class default differs from the shipped value, both are given.
+Section `[vision]` in `config/kaine.toml`. The full reference is in the [modules configuration appendix](../appendix-a-configuration/modules.md). Where the class default differs from the shipped value, both are given.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -184,7 +184,7 @@ The shared top-level `[perception_feed]` section drives a deterministic audio-vi
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `mode` | string | `"off"` shipped; `"seeded"` in `thesis_test` | `off`, `seeded`, `playlist`, `live`, `screen`, or `womb` |
+| `mode` | string | `"off"` shipped; `"seeded"` in `thesis_test` | `off`, `seeded`, `playlist`, `live`, `screen`, or `stimulus_source` |
 | `seed` | integer | `0` | Seeded mode: the stream is a pure function of this seed |
 | `playlist_manifest` | string | `""` | Playlist mode: path to the single checksummed manifest |
 | `[perception_feed.video].surprise_interval` | integer | `150` | Seeded mode: shared cross-modal cadence of surprise events |
@@ -214,11 +214,11 @@ graph TD
     Encode --> FwdModel["LatentForwardModel\n[embedding, buffer mean, context] to next embedding\nonline SGD, CPU"]
     WS["workspace broadcast"] -->|accessed members| Ctx["BroadcastContext\n24 components"]
     Ctx --> FwdModel
-    FwdModel -->|error, null-context error| Report["topos.report\nintensity, alert, context_gain"]
+    FwdModel -->|error, null-context error| Report["vision.report\nintensity, alert, context_gain"]
     ChangeD --> Report
     Habituator --> Report
 
-    SleepOut["hypnos.out"] -->|sleep.started / completed| FwdModel
+    SleepOut["sleep.out"] -->|sleep.started / completed| FwdModel
 ```
 
 ### InternVideo-Next encoder
@@ -233,7 +233,7 @@ Both encoders accept a `PIL.Image`, `bytes`, or a `numpy.ndarray`. The capture p
 
 ### Attention-driven foveation
 
-Foveation is off in the shipped `config/kaine.toml` and on in the `thesis_test` profile. With `[topos].foveation = true`, the vision module spends resolution where frame change is least expected instead of encoding the whole frame uniformly. It works with either encoder: each view is encoded through the encoder's clip interface, so `dinov2` encodes one image per view and `internvideo_next` encodes each view as a real 16-frame clip cut from every buffered frame at the fovea chosen on the latest frame.
+Foveation is off in the shipped `config/kaine.toml` and on in the `thesis_test` profile. With `[vision].foveation = true`, the vision module spends resolution where frame change is least expected instead of encoding the whole frame uniformly. It works with either encoder: each view is encoded through the encoder's clip interface, so `dinov2` encodes one image per view and `internvideo_next` encodes each view as a real 16-frame clip cut from every buffered frame at the fovea chosen on the latest frame.
 
 On each clip report, from the latest frame:
 
@@ -283,9 +283,9 @@ Add to your local `config/kaine.toml` (do not commit):
 
 ```toml
 [modules]
-topos = true
+vision = true
 
-[topos]
+[vision]
 capture_enabled = true   # requires pip install -e .[vision]
 capture_device = 0       # or an RTSP URL
 ```
@@ -362,7 +362,7 @@ The vision and audition modules are separate modules with separate loops, so the
 
 ## Spec and related
 
-- OpenSpec: `openspec/specs/topos/spec.md`
-- OpenSpec (predictive): `openspec/specs/topos-predictive/spec.md`
+- OpenSpec: `openspec/specs/vision/spec.md`
+- OpenSpec (predictive): `openspec/specs/vision-predictive/spec.md`
 - Related modules: [Perceptual locus](perceptual-locus.md) (locus arbiter), [Audition](audition.md) (hearing), [Affect](affect.md) (arousal), [Sleep](sleep.md) (sleep)
 - Cognitive cycle: [The cognitive cycle](../08-cognitive-cycle/README.md) and [The global workspace](../08-cognitive-cycle/global-workspace.md)

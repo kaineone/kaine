@@ -148,7 +148,7 @@ Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncode
 **Persisted forward model (A1)**
 - The acoustic forward model's weights and buffer summary persist with the entity. They are keyed by the encoder's `model_id`, so switching encoder and back keeps what was learned under each.
 - A checkpoint whose shapes do not match the running encoder is discarded with a warning, matching the vision module.
-- Both forward models suspend adaptation between `hypnos.sleep.started` and `hypnos.sleep.completed`, matching the vision module.
+- Both forward models suspend adaptation between `sleep.sleep.started` and `sleep.sleep.completed`, matching the vision module.
 
 **Self-supervised encoders (B1)**
 - Dasheng-base (Apache-2.0, from Hugging Face, never the GPL Zenodo copy) and WavJEPA-base (code BSD-3-Clause, weights MIT) are vendored under `external/`, with pinned revisions and `UPSTREAM` files.

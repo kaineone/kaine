@@ -63,14 +63,14 @@ def make_interoception(
     pc_section = section.pop("positive_control", None)
     kw = _pop(section, allowed)
     kw["positive_control"] = PositiveControlSettings.from_config(pc_section)
-    kw.update(_check_injections("soma", injections, {"forward_model"}))
+    kw.update(_check_injections("interoception", injections, {"forward_model"}))
 
     if kw.get("self_rhythm_enabled"):
         kw.pop("self_rhythm_enabled")
         step_hz = float(kw.pop("self_rhythm_step_hz", 20.0))
         eta = kw.pop("self_rhythm_eta", 0.0)
         if isinstance(eta, bool) or not isinstance(eta, (int, float)) or not math.isfinite(float(eta)) or float(eta) < 0.0:
-            raise ValueError("[soma].self_rhythm_eta must be a finite number >= 0")
+            raise ValueError("[interoception].self_rhythm_eta must be a finite number >= 0")
         # The oscillator integrates at the rate the interoception module steps it; a mismatch would
         # silently change the rhythm's frequency.
         osc = make_self_rhythm_oscillator(
@@ -78,11 +78,11 @@ def make_interoception(
         )
         if osc is None:
             raise ValueError(
-                "[soma].self_rhythm_enabled requires the oscillator extra (snnTorch)"
+                "[interoception].self_rhythm_enabled requires the oscillator extra (snnTorch)"
             )
         kw["self_rhythm"] = osc
         kw["self_rhythm_step_hz"] = step_hz
-        if feed_section.get("mode") == "womb":
+        if feed_section.get("mode") == "stimulus_source":
             params = _stimulus_source_params(feed_section)
             if params.external_drive_to_self_rhythm:
                 from kaine.cycle.development import DevelopmentReadoutConfig
@@ -92,7 +92,7 @@ def make_interoception(
                 # at boot; the developmental-phase owner only ever moves it for bounded,
                 # announced probes.
                 readout = DevelopmentReadoutConfig.from_dict(
-                    (feed_section.get("womb") or {}).get("readout")
+                    (feed_section.get("stimulus_source") or {}).get("readout")
                 )
                 kw["maternal_drive"] = MaternalDriveProvider(
                     clock,
@@ -105,6 +105,6 @@ def make_interoception(
         kw.pop("self_rhythm_step_hz", None)
         eta = kw.pop("self_rhythm_eta", 0.0)
         if isinstance(eta, bool) or not isinstance(eta, (int, float)) or not math.isfinite(float(eta)) or float(eta) < 0.0:
-            raise ValueError("[soma].self_rhythm_eta must be a finite number >= 0")
+            raise ValueError("[interoception].self_rhythm_eta must be a finite number >= 0")
 
     return Interoception(bus, entity_clock=entity_clock, **kw)

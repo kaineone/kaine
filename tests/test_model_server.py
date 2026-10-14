@@ -68,7 +68,7 @@ def test_build_launch_cmd_flags_and_port():
     )
     assert cmd[0] == "/bin/llama-server"
     assert "-m" in cmd and "kaineone/Qwen3.5-4B-abliterated-GGUF" in cmd
-    # served alias is exactly [lingua].model_id
+    # served alias is exactly [language].model_id
     i = cmd.index("--alias")
     assert cmd[i + 1] == "kaineone/Qwen3.5-4B-abliterated-GGUF"
     # port parsed from chat_url
@@ -221,7 +221,7 @@ def test_health_check_times_out():
 
 def _cfg():
     return {
-        "lingua": {
+        "language": {
             "chat_url": "http://127.0.0.1:11434/v1",
             "model_id": "kaineone/Qwen3.5-4B-abliterated-GGUF",
         }
@@ -243,7 +243,7 @@ def _cfg_with_gguf(tmp_path):
     gguf = tmp_path / "organ.Q4_K_M.gguf"
     gguf.write_text("gguf")
     cfg = _cfg()
-    cfg["lingua"]["model_gguf_path"] = str(gguf)
+    cfg["language"]["model_gguf_path"] = str(gguf)
     return cfg
 
 
@@ -266,7 +266,7 @@ def test_cmd_start_missing_gguf_fails_honestly(monkeypatch, tmp_path):
     monkeypatch.setattr(ms, "locate_binary", lambda *a, **k: tmp_path / "srv")
     (tmp_path / "srv").write_text("x")
     cfg = _cfg()
-    cfg["lingua"]["model_gguf_path"] = str(tmp_path / "absent.gguf")  # does not exist
+    cfg["language"]["model_gguf_path"] = str(tmp_path / "absent.gguf")  # does not exist
     out_lines = []
     rc = ms.cmd_start(cfg, out=out_lines.append)
     assert rc == 5

@@ -98,7 +98,7 @@ class DesiredState:
     locus: str = "physical"
     locus_locked: bool = False
     # Attribution of the lock (see LOCKED_BY): `operator` (a dashboard lock) or
-    # `gestation` (the developmental gate confining the entity to the stimulus source).
+    # `development` (the developmental gate confining the entity to the stimulus source).
     # Only meaningful when `locus_locked` is true; drives honest denial logging.
     locked_by: str = "operator"
 
@@ -210,16 +210,16 @@ def write_desired_locus(
     """Set the perceptual locus (and optionally its lock). Invalid values fall
     back to `physical` so the camera/mic can never be left in an unknown state.
 
-    ``locked_by`` records WHO holds the lock (``operator`` | ``gestation``); the
-    developmental gate passes ``gestation`` so a stimulus source confinement is logged as a
+    ``locked_by`` records WHO holds the lock (``operator`` | ``development``); the
+    developmental gate passes ``development`` so a stimulus source confinement is logged as a
     developmental-gate action, not an operator lock. When omitted the existing
     attribution is preserved.
 
-    A lock held by ``gestation`` cannot be moved or re-attributed by any caller
+    A lock held by ``development`` cannot be moved or re-attributed by any caller
     other than the development holder: if the current desired state is locked by
-    ``gestation`` and ``locked_by != "gestation"``, the locus stays ``virtual``
+    ``development`` and ``locked_by != "development"``, the locus stays ``virtual``
     and the lock and attribution remain unchanged. The development holder itself
-    (``locked_by="gestation"``) may set anything, including unlocking."""
+    (``locked_by="development"``) may set anything, including unlocking."""
     target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
     if cur.locus_locked and cur.locked_by == "gestation" and locked_by != "gestation":
@@ -312,7 +312,7 @@ def evaluate_locus_switch(
     """Decide whether an ENTITY-initiated locus switch is allowed.
 
     Operator switches (via the dashboard) bypass this — it gates only self-initiated
-    `intent.perception.switch`. Returns (allowed, reason). ``locked_by``
+    `intent.perceptual_locus.switch`. Returns (allowed, reason). ``locked_by``
     attributes a lock denial honestly: a development-gate confinement is reported
     as such, not as an operator lock (`developmental-maturation-gate`).
     """

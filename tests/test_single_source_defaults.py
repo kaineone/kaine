@@ -19,19 +19,19 @@ from kaine.defaults import (
 
 def test_model_server_api_key_config_over_env(monkeypatch):
     monkeypatch.setenv(MODEL_SERVER_API_KEY_ENV, "env-key")
-    assert model_server_api_key({"lingua": {"api_key": "config-key"}}) == "config-key"
+    assert model_server_api_key({"language": {"api_key": "config-key"}}) == "config-key"
 
 
 def test_model_server_api_key_env_when_config_missing(monkeypatch):
     monkeypatch.setenv(MODEL_SERVER_API_KEY_ENV, "env-key")
     assert model_server_api_key({}) == "env-key"
-    assert model_server_api_key({"lingua": {}}) == "env-key"
+    assert model_server_api_key({"language": {}}) == "env-key"
     assert model_server_api_key(None) == "env-key"
 
 
 def test_model_server_api_key_env_when_config_empty(monkeypatch):
     monkeypatch.setenv(MODEL_SERVER_API_KEY_ENV, "env-key")
-    assert model_server_api_key({"lingua": {"api_key": ""}}) == "env-key"
+    assert model_server_api_key({"language": {"api_key": ""}}) == "env-key"
     assert language_section_api_key({"api_key": ""}) == "env-key"
 
 
@@ -39,14 +39,14 @@ def test_model_server_api_key_none_when_both_absent(monkeypatch):
     monkeypatch.delenv(MODEL_SERVER_API_KEY_ENV, raising=False)
     assert model_server_api_key({}) is None
     assert model_server_api_key(None) is None
-    assert model_server_api_key({"lingua": {"api_key": ""}}) is None
+    assert model_server_api_key({"language": {"api_key": ""}}) is None
 
 
 def test_language_chat_url_default_and_override():
     assert language_chat_url({}) == DEFAULT_CHAT_URL
     assert language_chat_url(None) == DEFAULT_CHAT_URL
-    assert language_chat_url({"lingua": {"chat_url": ""}}) == DEFAULT_CHAT_URL
-    assert language_chat_url({"lingua": {"chat_url": "http://x/v1"}}) == "http://x/v1"
+    assert language_chat_url({"language": {"chat_url": ""}}) == DEFAULT_CHAT_URL
+    assert language_chat_url({"language": {"chat_url": "http://x/v1"}}) == "http://x/v1"
     assert language_section_chat_url({}) == DEFAULT_CHAT_URL
     assert language_section_chat_url({"chat_url": "http://y/v1"}) == "http://y/v1"
 

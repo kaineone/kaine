@@ -8,8 +8,8 @@ expects for its forward model (e.g. the sequence module's CfC network, the inter
 `kaine_cl1.substrate`. The backend is injected at construction by
 `kaine_cl1.boot`; the KAINE module body is unchanged and unaware.
 
-Strong-tier backends (full conversions, planned): `chronos`, `soma`, `nous`,
+Strong-tier backends (full conversions, planned): `sequence`, `interoception`, `planning`,
 `oscillator`. Hybrid-tier (silicon + wetware together within one module,
-sometimes permanent): `audition_frontend`, `phantasia_surprise`, `volition`,
-`thymos`. See `openspec/` for the per-module change proposals and their status.
+sometimes permanent): `audition_frontend`, `world_model_surprise`, `action_selection`,
+`affect`. See `openspec/` for the per-module change proposals and their status.
 """

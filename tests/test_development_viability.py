@@ -228,7 +228,7 @@ async def test_owner_publishes_viability_r1(
     assert owner._viability_verdict["rule"] == "R1"
     assert (tmp_path / "gestation_viability.json").exists()
 
-    viability_events = [e for e in bus.events if e.type == "gestation.viability"]
+    viability_events = [e for e in bus.events if e.type == "development.viability"]
     assert len(viability_events) == 1
     assert viability_events[0].source == SOURCE
     assert viability_events[0].payload["rule"] == "R1"
@@ -277,7 +277,7 @@ async def test_owner_publishes_nothing_when_viability_watch_is_off(
 
     assert owner._viability_verdict is None
     assert not (tmp_path / "gestation_viability.json").exists()
-    assert not any(e.type == "gestation.viability" for e in bus.events)
+    assert not any(e.type == "development.viability" for e in bus.events)
 
 
 @pytest.mark.asyncio

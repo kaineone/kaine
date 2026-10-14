@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
-"""Live integration: the real KAINE `Chronos` module running its forward model on
+"""Live integration: the real KAINE `Sequence` module running its forward model on
 the substrate, over a real (fake-backed) bus.
 
 Skips cleanly where the `kaine` stack (and `fakeredis`) is not installed,
 so the sim-only suite still runs anywhere. Where kaine IS installed (the build
 machine), this proves the conversion is pure injection: stock sequence module +
-`WetwareTimingModel` publishes the same `chronos.out` contract as silicon.
+`WetwareTimingModel` publishes the same `sequence.out` contract as silicon.
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _open_substrate(nesting=6, territory=8):
     s = SubstrateSession(SubstrateConfig(accelerated_time=True, ticks_per_second=100))
     s.open()
     b = SubstrateBroker(channel_count=64, ticks_per_second=100, nesting_factor=nesting)
-    terr = b.allocate("chronos", territory)
+    terr = b.allocate("sequence", territory)
     b.open(s.neurons)
     return s, b, terr
 
@@ -77,7 +77,7 @@ def _open_substrate(nesting=6, territory=8):
 async def _run_wetware_sequence(ticks=4):
     s, b, terr = _open_substrate()
     try:
-        kwarg, net = wetware_injection("chronos", b, terr)  # ("network", WetwareTimingModel)
+        kwarg, net = wetware_injection("sequence", b, terr)  # ("network", WetwareTimingModel)
         assert kwarg == "network"
         bus = _bus()
         sequence = _sequence(bus, net)
@@ -86,7 +86,7 @@ async def _run_wetware_sequence(ticks=4):
             await sequence.on_workspace(
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         await bus.close()
         return [ev for _, ev in entries]
     finally:
@@ -101,7 +101,7 @@ async def _run_silicon_sequence(ticks=4):
         await sequence.on_workspace(
             WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
         )
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     await bus.close()
     return [ev for _, ev in entries]
 
@@ -109,7 +109,7 @@ async def _run_silicon_sequence(ticks=4):
 async def test_wetware_network_injects_into_real_sequence():
     events = await _run_wetware_sequence(ticks=4)
     assert len(events) == 4
-    assert all(ev.type == "chronos.report" for ev in events)
+    assert all(ev.type == "sequence.report" for ev in events)
     # the biological forward model produced a real, finite temporal signal
     for ev in events:
         err = ev.payload["temporal_prediction_error"]
@@ -120,6 +120,6 @@ async def test_wetware_network_injects_into_real_sequence():
 async def test_event_schema_matches_silicon():
     wet = await _run_wetware_sequence(ticks=3)
     sil = await _run_silicon_sequence(ticks=3)
-    assert {e.type for e in wet} == {e.type for e in sil} == {"chronos.report"}
+    assert {e.type for e in wet} == {e.type for e in sil} == {"sequence.report"}
     # The wetware backend does not change the sequence module's published event contract.
     assert set(wet[0].payload.keys()) == set(sil[0].payload.keys())

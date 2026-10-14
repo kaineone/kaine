@@ -162,7 +162,7 @@ class RecordingWorldModel:
 
 
 async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: Path):
-    """A real sleep produces a phantasia.scenario for every mnemos.replay cue."""
+    """A real sleep produces a world_model.scenario for every episodic_memory.replay cue."""
     episodic_memory = await _new_episodic_memory(bus, replay_selection_top_k=5, replay_redact_content=False)
     world_model = WorldModel(bus, backend="fake", rollout_horizon=4)
     sleep = _make_sleep(bus, tmp_path, episodic_memory, FakeAffect(), world_model=world_model)
@@ -172,7 +172,7 @@ async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: P
     try:
         for i in range(4):
             await world_model.on_workspace(
-                _snapshot([_event("soma", "soma.report", salience=0.4)], tick=i)
+                _snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i)
             )
 
         for i in range(3):
@@ -191,8 +191,8 @@ async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: P
 
         replayed = {
             ev.payload["memory_id"]
-            for _, ev in await bus.read("mnemos.out", last_id="0")
-            if ev.type == "mnemos.replay"
+            for _, ev in await bus.read("episodic_memory.out", last_id="0")
+            if ev.type == "episodic_memory.replay"
         }
         assert len(replayed) == 3
 
@@ -200,11 +200,11 @@ async def test_sleep_cues_world_model_through_the_bus(bus: AsyncBus, tmp_path: P
         seed_ids = set()
         while seed_ids != replayed and asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(0.02)
-            events = await bus.read("phantasia.out", last_id="0")
+            events = await bus.read("world_model.out", last_id="0")
             seed_ids = {
                 ev.payload["seed_memory_id"]
                 for _, ev in events
-                if ev.type == "phantasia.scenario"
+                if ev.type == "world_model.scenario"
             }
         assert seed_ids == replayed, f"expected scenarios for {replayed}, got {seed_ids}"
 

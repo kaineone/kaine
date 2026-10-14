@@ -11,20 +11,20 @@ Two modes:
 
   * **Waking (inference).** Each workspace tick, encode the snapshot to a
     fixed-width observation vector, fold it into the world model, and publish
-    ``phantasia.world_error`` — a SALIENCE-ONLY prediction-error signal. It
+    ``world_model.world_error`` — a SALIENCE-ONLY prediction-error signal. It
     carries no imagined content. The observation is appended to a bounded
     in-memory ring buffer (the training corpus), which is NEVER serialized.
 
   * **Offline (scenario window only).** While the scenario window that the sleep module
     opens around the sleep phases that cue the world model module is open: (1) on a
-    ``mnemos.replay`` cue, seed the world model from the prior trajectory and
-    roll out imagined trajectories, publishing ``phantasia.scenario`` events.
-    Because those events are published on ``phantasia.out``, they are
+    ``episodic_memory.replay`` cue, seed the world model from the prior trajectory and
+    roll out imagined trajectories, publishing ``world_model.scenario`` events.
+    Because those events are published on ``world_model.out``, they are
     re-injected into the workspace broadcast so the planning module, the affect module and the self-model module
     process them via ``on_workspace`` (associative consolidation); (2) training
-    over the accumulated buffer runs when ``hypnos.sleep.started`` arrives,
+    over the accumulated buffer runs when ``sleep.sleep.started`` arrives,
     gated by ``training_enabled``. The waking path pauses from
-    ``hypnos.sleep.started`` to ``hypnos.sleep.completed``.
+    ``sleep.sleep.started`` to ``sleep.sleep.completed``.
 
 ZERO-PERSISTENCE (load-bearing): the trajectory buffer is in-memory only and is
 never serialized to disk; a training pass writes NOTHING to disk; observation
@@ -86,7 +86,7 @@ def _utc_now() -> datetime:
 
 
 class WorldModel(BaseModule):
-    name: ClassVar[str] = "phantasia"
+    name: ClassVar[str] = "world_model"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom"})
 
     def __init__(
@@ -105,9 +105,9 @@ class WorldModel(BaseModule):
         # Opt-in learned-weight persistence (requires a real backend).
         persist_weights: bool = False,
         checkpoint_path: str = "state/phantasia/world_model.ckpt",
-        # Peer streams: mnemos.replay cues + the sleep module's window tracking.
-        episodic_memory_stream: str = "mnemos.out",
-        sleep_stream: str = "hypnos.out",
+        # Peer streams: episodic_memory.replay cues + the sleep module's window tracking.
+        episodic_memory_stream: str = "episodic_memory.out",
+        sleep_stream: str = "sleep.out",
         # Forwarded to the real backend (ignored by the fake).
         world_model_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
@@ -154,8 +154,8 @@ class WorldModel(BaseModule):
         # Bounded in-memory waking-trajectory ring buffer. NEVER serialized.
         self._buffer: deque[list[float]] = deque(maxlen=int(trajectory_buffer_size))
 
-        # _asleep tracks the sleep from hypnos.sleep.started to
-        # hypnos.sleep.completed on the bus and pauses the waking path for the
+        # _asleep tracks the sleep from sleep.sleep.started to
+        # sleep.sleep.completed on the bus and pauses the waking path for the
         # whole sleep. The sleep module itself opens and closes the scenario window.
         self._asleep: bool = False
         self._window_active: bool = False
@@ -379,8 +379,8 @@ class WorldModel(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         """Each waking tick: encode, fold in, publish salience-only world error.
 
-        The waking path is skipped while asleep (from ``hypnos.sleep.started``
-        to ``hypnos.sleep.completed``) or while the scenario window is open.
+        The waking path is skipped while asleep (from ``sleep.sleep.started``
+        to ``sleep.sleep.completed``) or while the scenario window is open.
         """
         if self._asleep or self._window_active:
             return
@@ -391,13 +391,13 @@ class WorldModel(BaseModule):
         await self._publish_world_error(error, snapshot.tick_index)
 
     async def _publish_world_error(self, error: float, tick_index: int) -> None:
-        """Publish phantasia.world_error — SALIENCE-ONLY, no scenario content."""
+        """Publish world_model.world_error — SALIENCE-ONLY, no scenario content."""
         error = max(0.0, min(1.0, float(error)))
         salience = self._baseline_salience + error * (
             self._alert_salience - self._baseline_salience
         )
         await self.publish(
-            "phantasia.world_error",
+            "world_model.world_error",
             {
                 "world_error": error,
                 "salience": salience,
@@ -412,11 +412,11 @@ class WorldModel(BaseModule):
         )
 
     # ------------------------------------------------------------------
-    # Offline path: mnemos.replay cue (the sleep module's window only) -> scenarios
+    # Offline path: episodic_memory.replay cue (the sleep module's window only) -> scenarios
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
-        """Background loop: track the sleep module's window + handle mnemos.replay cues."""
+        """Background loop: track the sleep module's window + handle episodic_memory.replay cues."""
         try:
             while not self._stopped.is_set():
                 progressed = False
@@ -442,18 +442,18 @@ class WorldModel(BaseModule):
 
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
         if stream == self._sleep_stream:
-            if event.type == "hypnos.sleep.started":
+            if event.type == "sleep.sleep.started":
                 # The waking path pauses for the whole sleep. The scenario
                 # window is opened by the sleep module, so a late sleep.started on the
                 # bus cannot open it after the sleep ended.
                 self._asleep = True
                 # Maintenance entered: run an in-memory training pass.
                 await self._maybe_train()
-            elif event.type == "hypnos.sleep.completed":
+            elif event.type == "sleep.sleep.completed":
                 self._asleep = False
                 # Backstop: the sleep module closes the window itself after phase 3.
                 self.close_scenario_window()
-        elif stream == self._episodic_memory_stream and event.type == "mnemos.replay":
+        elif stream == self._episodic_memory_stream and event.type == "episodic_memory.replay":
             await self._handle_replay_cue(event)
 
     def open_scenario_window(self) -> None:
@@ -486,7 +486,7 @@ class WorldModel(BaseModule):
         return any(opened <= ts <= closed for opened, closed in self._closed_windows)
 
     async def _handle_replay_cue(self, event: Event) -> None:
-        """On a mnemos.replay cue inside a scenario window, generate a scenario.
+        """On a episodic_memory.replay cue inside a scenario window, generate a scenario.
 
         Offline only: a cue published while awake is ignored, since the live
         loop never produces scenarios (paper §3.3.5 phase 3).
@@ -496,11 +496,11 @@ class WorldModel(BaseModule):
         await self.generate_scenario(seed_memory_id=str(event.payload.get("memory_id", "")))
 
     async def generate_scenario(self, *, seed_memory_id: str = "") -> list[dict[str, Any]]:
-        """Roll out imagined trajectories and publish phantasia.scenario events.
+        """Roll out imagined trajectories and publish world_model.scenario events.
 
         Seeds the world model from the accumulated waking trajectory (the most
         recent observations) and imagines ``rollout_horizon`` steps forward.
-        The published events land on ``phantasia.out`` and are thereby
+        The published events land on ``world_model.out`` and are thereby
         re-injected into the workspace broadcast for downstream consolidation.
 
         Returns the list of published scenario payloads (for tests / callers).
@@ -546,7 +546,7 @@ class WorldModel(BaseModule):
             "engine": self._engine,
         }
         await self.publish(
-            "phantasia.scenario",
+            "world_model.scenario",
             payload,
             salience=max(0.0, min(1.0, salience)),
         )
@@ -700,7 +700,7 @@ class WorldModel(BaseModule):
 
         When weight persistence is on (a learning backend, ``persist_weights``),
         the live learned weights are flushed to the checkpoint file so the
-        preservation bundle (which copies ``state/phantasia/``) carries them.
+        preservation bundle (which copies ``state/world_model/``) carries them.
         Returns an HONEST record:
 
         * ``{"captured": True, "checkpoint_path": ...}`` when weights were saved.

@@ -170,7 +170,7 @@ def init_study(
 ) -> dict[str, Any]:
     """Create a new study directory and its line subdirectories.
 
-    Every step working directory (``gestation``, ``branch/<k>`` for k = 0..K,
+    Every step working directory (``development``, ``branch/<k>`` for k = 0..K,
     ``repeat`` and ``accumulate``) receives ``config/kaine.toml`` and
     ``config/profiles`` symlinks pointing into the repository configuration so
     the operator's base settings are shared but never edited inside the study.

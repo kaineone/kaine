@@ -42,7 +42,7 @@ Thumbs.db
 # KAINE runtime state — never check in module state, memories, adapters, or logs
 state/
 state/eidolon/
-state/perception/
+state/perceptual_locus/
 # Trained/merged LoRA adapter *output* only — anchored so it never matches source
 # packages such as kaine/modules/embodiment/adapters/. (state/ already covers these.)
 state/hypnos/adapters/

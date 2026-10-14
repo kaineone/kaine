@@ -80,7 +80,7 @@ def test_layout2_audition_slot23_not_overflow():
 def test_effectors_overflow_unchanged_across_layouts():
     for layout in (1, 2):
         feat = SnapshotFeaturizer(clock=lambda: 0.0, layout=layout)
-        snap = _snapshot([_event("praxis", 0.6)])
+        snap = _snapshot([_event("effectors", 0.6)])
         vec = feat.featurize(snap)
         assert vec[11] == pytest.approx(0.6), f"layout {layout}"
         assert vec[23] == pytest.approx(0.0), f"layout {layout}"
@@ -179,5 +179,5 @@ def test_thesis_profile_runs_forward_head_and_shipped_config_does_not():
     root = Path(__file__).resolve().parent.parent
     profile = tomllib.loads((root / "config/profiles/thesis_test.toml").read_text())
     shipped = tomllib.loads((root / "config/kaine.toml").read_text())
-    assert profile["chronos"]["forward_prediction"] is True
-    assert shipped["chronos"]["forward_prediction"] is False
+    assert profile["sequence"]["forward_prediction"] is True
+    assert shipped["sequence"]["forward_prediction"] is False

@@ -60,7 +60,7 @@ def _episode_entry(
 
 
 class SelfModel(BaseModule):
-    name: ClassVar[str] = "eidolon"
+    name: ClassVar[str] = "self_model"
 
     def __init__(
         self,
@@ -71,8 +71,8 @@ class SelfModel(BaseModule):
         drift_window: int = 100,
         drift_threshold: float = 0.6,
         save_interval_s: float = 30.0,
-        internal_speech_stream: str = "lingua.internal",
-        external_speech_stream: str = "lingua.external",
+        internal_speech_stream: str = "language.internal",
+        external_speech_stream: str = "language.external",
         identity_history_cap: int = 0,
         voice_observations_cap: int = 0,
         baseline_salience: float = 0.05,
@@ -153,8 +153,8 @@ class SelfModel(BaseModule):
         self._external_cursor = await self._latest_cursor(self._external_speech_stream)
 
         if self._inference.enabled:
-            self._affect_cursor = await self._latest_cursor("thymos.out")
-            self._planning_cursor = await self._latest_cursor("nous.out")
+            self._affect_cursor = await self._latest_cursor("affect.out")
+            self._planning_cursor = await self._latest_cursor("planning.out")
 
         await super().initialize()
         self._tasks.append(
@@ -172,7 +172,7 @@ class SelfModel(BaseModule):
                 self._periodic_save_loop(), name=f"{self.name}-periodic-save"
             )
         )
-        # Publish an initial self-model snapshot to eidolon.out so a bus-mediated
+        # Publish an initial self-model snapshot to self_model.out so a bus-mediated
         # consumer (a split-host language module) can seed its persona at boot rather than
         # waiting for the first sleep-driven update. On a fresh start the model is
         # empty, so this seeds the same minimal persona as the single-host default.
@@ -228,7 +228,7 @@ class SelfModel(BaseModule):
             self._drift_count += 1
             await self._record_drift(result)
             await self.publish(
-                "eidolon.drift",
+                "self_model.drift",
                 {
                     "score": result.score,
                     "recent_count": result.recent_count,
@@ -387,12 +387,12 @@ class SelfModel(BaseModule):
     # Self-inference consumer loops (run only when inference is enabled)
 
     async def _affect_consumer_loop(self) -> None:
-        """Subscribe to thymos.out for state and drive events."""
+        """Subscribe to affect.out for state and drive events."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "thymos.out",
+                        "affect.out",
                         last_id=self._affect_cursor,
                         count=64,
                         block_ms=0,
@@ -403,9 +403,9 @@ class SelfModel(BaseModule):
                 if last_scanned is not None:
                     self._affect_cursor = last_scanned
                     for _, ev in entries:
-                        if ev.type == "thymos.state":
+                        if ev.type == "affect.state":
                             self._inference.observe_affect_state(ev.payload)
-                        elif ev.type == "thymos.drive":
+                        elif ev.type == "affect.drive":
                             self._inference.observe_affect_drive(ev.payload)
                 else:
                     await asyncio.sleep(0.05)
@@ -413,12 +413,12 @@ class SelfModel(BaseModule):
             raise
 
     async def _planning_consumer_loop(self) -> None:
-        """Subscribe to nous.out for policy events."""
+        """Subscribe to planning.out for policy events."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "nous.out",
+                        "planning.out",
                         last_id=self._planning_cursor,
                         count=64,
                         block_ms=0,
@@ -429,7 +429,7 @@ class SelfModel(BaseModule):
                 if last_scanned is not None:
                     self._planning_cursor = last_scanned
                     for _, ev in entries:
-                        if ev.type == "nous.policy":
+                        if ev.type == "planning.policy":
                             self._inference.observe_planning_policy(ev.payload)
                 else:
                     await asyncio.sleep(0.05)
@@ -437,13 +437,13 @@ class SelfModel(BaseModule):
             raise
 
     async def _sleep_consumer_loop(self) -> None:
-        """Subscribe to hypnos.out for maintenance cycle end events."""
-        cursor = await self._latest_cursor("hypnos.out")
+        """Subscribe to sleep.out for maintenance cycle end events."""
+        cursor = await self._latest_cursor("sleep.out")
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "hypnos.out",
+                        "sleep.out",
                         last_id=cursor,
                         count=32,
                         block_ms=0,
@@ -454,11 +454,11 @@ class SelfModel(BaseModule):
                 if last_scanned is not None:
                     cursor = last_scanned
                     for _, ev in entries:
-                        if ev.type == "hypnos.sleep.completed":
+                        if ev.type == "sleep.sleep.completed":
                             self._model = self._inference.maintenance_cycle_end(
                                 self._model
                             )
-                            # Publish updated self-model to eidolon.out so
+                            # Publish updated self-model to self_model.out so
                             # the dashboard diagnostics and sidecar can read the fields.
                             await self._publish_self_model()
                 else:
@@ -486,7 +486,7 @@ class SelfModel(BaseModule):
         return True
 
     async def _publish_self_model(self) -> None:
-        """Publish the populated self-model fields to eidolon.out.
+        """Publish the populated self-model fields to self_model.out.
 
         This is the bus-mediated self-model snapshot other trusted-host modules
         (notably the language module's persona seeding) consume in place of an in-process
@@ -497,7 +497,7 @@ class SelfModel(BaseModule):
         """
         m = self._model
         await self.publish(
-            "eidolon.self_model",
+            "self_model.document",
             {
                 "name": getattr(m, "name", None),
                 "values": list(m.values),

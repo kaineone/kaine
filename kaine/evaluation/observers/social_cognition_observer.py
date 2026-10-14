@@ -3,14 +3,14 @@
 
 """The social cognition module observer — tracks agent-model prediction accuracy.
 
-Subscribes to ``empatheia.out`` (type ``empatheia.agent_model``) and, when
+Subscribes to ``social_cognition.out`` (type ``social_cognition.agent_model``) and, when
 a subsequent ``audition.out`` emotion event arrives for the same agent,
 computes a simple accuracy metric: whether the predicted familiarity/
 reliability was consistent with the observed emotion signal.
 
 Accuracy model
 --------------
-When a new ``empatheia.agent_model`` prediction arrives, the observer
+When a new ``social_cognition.agent_model`` prediction arrives, the observer
 stores it keyed by ``agent_id``.  When the next ``audition.out`` event of
 type ``audition.emotion`` arrives, the observer pairs it with any pending
 prediction and computes:
@@ -23,7 +23,7 @@ skipped — no record is written — rather than scoring against a fabricated
 default that would inflate accuracy toward 1.0.  The pair is written to the
 sink (with ``confidence_present: true``) and the pending prediction is cleared.
 
-Source streams: ``empatheia.out`` and ``audition.out``.  When either is
+Source streams: ``social_cognition.out`` and ``audition.out``.  When either is
 absent the observer runs silently.
 """
 
@@ -39,14 +39,14 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_SOCIAL_COGNITION_STREAM = "empatheia.out"
+_SOCIAL_COGNITION_STREAM = "social_cognition.out"
 _AUDITION_STREAM = "audition.out"
 
 
 class SocialCognitionObserver(StreamSubscriberObserver):
-    """Tracks empatheia.agent_model predictions vs. subsequent audition events."""
+    """Tracks social_cognition.agent_model predictions vs. subsequent audition events."""
 
-    name = "empatheia"
+    name = "social_cognition"
     streams = (_SOCIAL_COGNITION_STREAM, _AUDITION_STREAM)
 
     def __init__(
@@ -62,7 +62,7 @@ class SocialCognitionObserver(StreamSubscriberObserver):
         self._pending: dict[str, dict[str, Any]] = {}
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if stream == _SOCIAL_COGNITION_STREAM and event.type == "empatheia.agent_model":
+        if stream == _SOCIAL_COGNITION_STREAM and event.type == "social_cognition.agent_model":
             payload = event.payload or {}
             agent_id = str(payload.get("agent_id") or "unknown")
             self._pending[agent_id] = {

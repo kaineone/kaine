@@ -6,7 +6,7 @@
 Validates the `drives-to-behavior` change with fakes only (no live boot):
 WorkspaceSnapshot objects are built directly, mirroring tests/test_action_selection.py.
 Covers: social_drive → speak; curiosity/boredom/restlessness → think;
-inhibited → none (via Volition.select, proving the gate still holds);
+inhibited → none (via ActionSelection.select, proving the gate still holds);
 user utterance outranks social-drive speak; in-flight guards prevent stacking
 and clear on the entity's own output; drive_initiative-off parity with the
 default policy.
@@ -43,15 +43,15 @@ def _transcription(text: str) -> tuple[str, Event]:
 
 
 def _drive(name: str, value: float = 0.9) -> tuple[str, Event]:
-    return (f"d-{name}", _event("thymos", "thymos.drive", {"drive": name, "value": value}))
+    return (f"d-{name}", _event("affect", "affect.drive", {"drive": name, "value": value}))
 
 
 def _own_external() -> tuple[str, Event]:
-    return ("x1", _event("lingua", "external_speech", {"text": "I said this"}))
+    return ("x1", _event("language", "external_speech", {"text": "I said this"}))
 
 
 def _own_internal() -> tuple[str, Event]:
-    return ("i1", _event("lingua", "internal_speech", {"text": "I thought this"}))
+    return ("i1", _event("language", "internal_speech", {"text": "I thought this"}))
 
 
 def _snapshot(events, *, inhibited: bool = False) -> WorkspaceSnapshot:
@@ -269,13 +269,13 @@ def test_own_internal_speech_alone_produces_no_intent():
 
 def test_unknown_drive_name_ignored():
     policy = DriveBiasedActionSelectionPolicy()
-    bad = ("d-x", _event("thymos", "thymos.drive", {"drive": "unknown"}))
+    bad = ("d-x", _event("affect", "affect.drive", {"drive": "unknown"}))
     assert policy(_snapshot([bad])) == []
 
 
 def test_non_drive_affect_event_ignored():
     policy = DriveBiasedActionSelectionPolicy()
-    other = ("t1", _event("thymos", "thymos.emotion", {"valence": 0.1}))
+    other = ("t1", _event("affect", "affect.emotion", {"valence": 0.1}))
     assert policy(_snapshot([other])) == []
 
 

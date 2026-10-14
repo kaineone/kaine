@@ -66,8 +66,8 @@ def make_vision(
         "forward_model_units",
         "prediction_error_window",
         "visual_buffer_size",
-        # Attention-driven foveation (topos-foveation). Off by default → the
-        # single whole-frame encode is unchanged. See make_topos foveation block.
+        # Attention-driven foveation (vision-foveation). Off by default → the
+        # single whole-frame encode is unchanged. See make_vision foveation block.
         "foveation",
         "foveation_grid",
         "foveation_hysteresis",
@@ -78,7 +78,7 @@ def make_vision(
         "foveal_size",
         # Unified deterministic perception feed (unified-perception-feed). This
         # is the resolved top-level [perception_feed] config, injected by
-        # build_registry under this reserved key (NOT a [topos.*] key the
+        # build_registry under this reserved key (NOT a [vision.*] key the
         # operator sets). Selecting a seeded/playlist mode supplies a
         # source_factory and forces capture on. Shipped mode = "off". Popped
         # before the key check below.
@@ -112,7 +112,7 @@ def make_vision(
         configured = str(section["encoder_revision"]).strip()
         if configured != PINNED_REVISION:
             raise ValueError(
-                f"[topos].encoder_revision {configured!r} does not match the pinned "
+                f"[vision].encoder_revision {configured!r} does not match the pinned "
                 f"InternVideo-Next revision {PINNED_REVISION!r}; the pin decides which "
                 f"vendored code and weights load, so it cannot be changed from configuration"
             )
@@ -136,7 +136,7 @@ def make_vision(
         window = section["habituation_window"]
         if not isinstance(window, int) or isinstance(window, bool) or window < 2:
             raise ValueError(
-                "[topos].habituation_window must be an integer of at least 2"
+                "[vision].habituation_window must be an integer of at least 2"
             )
         kwargs["habituator"] = RollingMeanHabituator(window=window)
     # Forward prediction knobs
@@ -154,11 +154,11 @@ def make_vision(
     )
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))
 
-    # Attention-driven foveation (topos-foveation). Off by default → the vision module runs
+    # Attention-driven foveation (vision-foveation). Off by default → the vision module runs
     # the single whole-frame encode. When on, each frame yields a spatial saliency
     # map, one arousal-sized fovea, and a peripheral + foveal encode. The grab is
     # native by default — for screen mode set capture_width/height to the panel
-    # resolution (the host benchmark can dial it back). See openspec topos-foveation.
+    # resolution (the host benchmark can dial it back). See openspec vision-foveation.
     if bool(section.get("foveation", False)):
         kwargs["foveation_enabled"] = True
         grid = section.get("foveation_grid")
@@ -189,7 +189,7 @@ def make_vision(
     # source_factory and force capture on so LiveCamera reads from the
     # deterministic source.
     mode = str(feed_section.get("mode", "off")).lower()
-    if mode not in ("off", "seeded", "playlist", "womb", "live", "screen"):
+    if mode not in ("off", "seeded", "playlist", "stimulus_source", "live", "screen"):
         raise ValueError(
             f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
         )
@@ -198,7 +198,7 @@ def make_vision(
     if mode == "live":
         # Real camera path: honour the existing live-camera config below.
         kwargs["capture_enabled"] = True
-    elif mode in ("seeded", "playlist", "womb", "screen"):
+    elif mode in ("seeded", "playlist", "stimulus_source", "screen"):
         kwargs["source_factory"] = _build_perception_feed_video_factory(
             mode, feed_section, width=width, height=height
         )

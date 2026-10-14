@@ -222,7 +222,7 @@ async def _async_self_check(
         await eid2.initialize()
         reg2.register(eid2)
         await fm.revive(bundle, reg2)
-        revived = reg2.get("eidolon").model
+        revived = reg2.get("self_model").model
         if revived.name != "preflight-probe" or revived.values != ["continuity"]:
             return False, (
                 "revived individual did not match the preserved one "
@@ -305,7 +305,7 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
         modules = config.get("modules") or {}
         individuation_enabled = bool(
             individuation_cfg.enabled
-            and modules.get("lingua")
+            and modules.get("language")
         )
     except ValueError:
         individuation_enabled = False

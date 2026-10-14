@@ -242,7 +242,7 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str, reason: str = "encr
 
 def _episodic_memory_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
     cfg = qdrant_cfg or {}
-    return str((cfg.get("mnemos") or {}).get("collection_prefix", "mnemos_"))
+    return str((cfg.get("episodic_memory") or {}).get("collection_prefix", "mnemos_"))
 
 
 def _episodic_memory_prefix_forms(qdrant_cfg: dict[str, Any] | None) -> list[str]:
@@ -269,7 +269,7 @@ def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list
             if coll not in seen:
                 seen.add(coll)
                 names.append(coll)
-    social_cognition = str((cfg.get("empatheia") or {}).get("collection", "empatheia_agents"))
+    social_cognition = str((cfg.get("social_cognition") or {}).get("collection", "empatheia_agents"))
     if social_cognition and social_cognition not in seen:
         seen.add(social_cognition)
         names.append(social_cognition)
@@ -293,11 +293,11 @@ def _qdrant_client(qdrant_cfg: dict[str, Any] | None):
     """Build a QdrantClient from a connection config dict, or None on failure.
 
     ``qdrant_cfg`` mirrors the kaine.toml layout: the connection lives at
-    ``[mnemos.qdrant]`` (host/port/api_key). A flat ``{host, port, api_key}``
+    ``[episodic_memory.qdrant]`` (host/port/api_key). A flat ``{host, port, api_key}``
     dict is also accepted for tests.
     """
     cfg = qdrant_cfg or {}
-    conn = (cfg.get("mnemos") or {}).get("qdrant") or cfg.get("connection") or cfg
+    conn = (cfg.get("episodic_memory") or {}).get("qdrant") or cfg.get("connection") or cfg
     host = str(conn.get("host", "127.0.0.1"))
     port = int(conn.get("port", 6533))
     api_key = _qdrant_api_key(conn)
@@ -364,8 +364,8 @@ def _export_qdrant(
 def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
     """Return True only when an enabled, supported memory module uses Qdrant.
 
-    Checks both the episodic memory module (``mnemos``) and the social
-    cognition module (``empatheia``). For a module to count as using Qdrant,
+    Checks both the episodic memory module (``episodic_memory``) and the social
+    cognition module (``social_cognition``). For a module to count as using Qdrant,
     all of the following must hold:
 
     * the module is enabled: at least one of its name forms is present in
@@ -387,7 +387,7 @@ def qdrant_in_use(config: Mapping[str, Any] | None) -> bool:
         unsup = tier.get("unsupported_modules")
         if isinstance(unsup, list):
             unsupported = {str(x) for x in unsup}
-    for module in ("mnemos", "empatheia"):
+    for module in ("episodic_memory", "social_cognition"):
         forms = legacy_aliases.name_forms(module)
         enabled = False
         if isinstance(modules, Mapping):
@@ -417,7 +417,7 @@ def qdrant_endpoint_configured(config: Mapping[str, Any] | None) -> bool:
         unsup = tier.get("unsupported_modules")
         if isinstance(unsup, list):
             unsupported = {str(x) for x in unsup}
-    for module in ("mnemos", "empatheia"):
+    for module in ("episodic_memory", "social_cognition"):
         forms = legacy_aliases.name_forms(module)
         if any(form in unsupported for form in forms):
             continue
@@ -444,7 +444,7 @@ def qdrant_endpoint_label(config: Mapping[str, Any] | None) -> str:
         unsup = tier.get("unsupported_modules")
         if isinstance(unsup, list):
             unsupported = {str(x) for x in unsup}
-    for module in ("mnemos", "empatheia"):
+    for module in ("episodic_memory", "social_cognition"):
         forms = legacy_aliases.name_forms(module)
         if any(form in unsupported for form in forms):
             continue
@@ -1003,22 +1003,15 @@ def update_manifest_continuity_note(backup: BackupResult, note: str) -> bool:
 # Entity state subtrees removed on decommission, relative to state_root.
 _STATE_SUBTREES = tuple(
     [
-        *legacy_aliases.name_forms("eidolon"),
-        *legacy_aliases.name_forms("lingua"),
-        *(Path(form) / "adapters" for form in legacy_aliases.name_forms("hypnos")),
-        *legacy_aliases.name_forms("phantasia"),
+        *legacy_aliases.name_forms("self_model"),
+        *legacy_aliases.name_forms("language"),
+        *(Path(form) / "adapters" for form in legacy_aliases.name_forms("sleep")),
+        *legacy_aliases.name_forms("world_model"),
         "forks",
         *legacy_aliases.name_forms("perception"),
         "individuation",
     ]
 )
-
-# Files under state/cycle that belong to the entity run (not the dir itself,
-# which may hold operator config we leave alone — but these are entity files).
-_CYCLE_FILES = ("runtime.json",)
-
-# Other entity files, relative to state_root, that must be removed.
-_STATE_FILES = (Path("preservation") / "divergence_edge.json",)
 
 
 def delete_entity_state(

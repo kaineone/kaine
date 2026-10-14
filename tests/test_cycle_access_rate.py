@@ -72,10 +72,10 @@ async def test_full_arousal_broadcasts_every_tick(adaptive_cycle):
 async def test_salient_report_raises_access_then_decays(adaptive_cycle):
     cycle, bus, _clock, _syn, reg, _access_rate, set_arousal = adaptive_cycle
     set_arousal(0.3)
-    reg.set_streams(["topos.out"])
+    reg.set_streams(["vision.out"])
     await bus.publish(
         Event(
-            source="topos",
+            source="vision",
             type="report",
             payload={"alert": True},
             salience=1.0,
@@ -143,10 +143,10 @@ async def test_operator_lowers_resting_rate(adaptive_cycle):
 async def test_tick_payload_carries_effective_rate_and_drive(adaptive_cycle):
     cycle, bus, _clock, _syn, reg, _access_rate, set_arousal = adaptive_cycle
     set_arousal(1.0)
-    reg.set_streams(["topos.out"])
+    reg.set_streams(["vision.out"])
     await bus.publish(
         Event(
-            source="topos",
+            source="vision",
             type="report",
             payload={},
             salience=1.0,

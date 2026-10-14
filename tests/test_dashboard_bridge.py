@@ -15,7 +15,7 @@ from kaine.dashboard.privacy import PrivacyFilter
 
 def _event(text="hi"):
     return Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload={"text": text, "metric": 1},
         salience=0.5,
@@ -67,10 +67,10 @@ async def test_bridge_content_strips_for_any_client():
     # content-stripped payload. The bridge never serves raw cognitive content.
     bus = FakeBus()
     pf = PrivacyFilter()
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     client = bridge.add_client("diagnostics")
-    bus.push("lingua.external", _event("hello"))
+    bus.push("language.external", _event("hello"))
     await bridge.start()
     try:
         entry_id, evt = await asyncio.wait_for(client.queue.get(), timeout=1.0)
@@ -84,10 +84,10 @@ async def test_bridge_content_strips_for_any_client():
 async def test_bridge_strips_for_diagnostics_client():
     bus = FakeBus()
     pf = PrivacyFilter()
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     client = bridge.add_client("diagnostics")
-    bus.push("lingua.external", _event("secret"))
+    bus.push("language.external", _event("secret"))
     await bridge.start()
     try:
         _, evt = await asyncio.wait_for(client.queue.get(), timeout=1.0)
@@ -103,11 +103,11 @@ async def test_bridge_fans_out_to_multiple_clients_all_scrubbed():
     # is no longer a surface that gets full content.
     bus = FakeBus()
     pf = PrivacyFilter()
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     a = bridge.add_client("diagnostics")
     b = bridge.add_client("diagnostics")
-    bus.push("lingua.external", _event("hello"))
+    bus.push("language.external", _event("hello"))
     await bridge.start()
     try:
         _, a_evt = await asyncio.wait_for(a.queue.get(), timeout=1.0)
@@ -122,11 +122,11 @@ async def test_bridge_fans_out_to_multiple_clients_all_scrubbed():
 async def test_bridge_remove_client_stops_delivery():
     bus = FakeBus()
     pf = PrivacyFilter()
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     client = bridge.add_client("diagnostics")
     bridge.remove_client(client)
-    bus.push("lingua.external", _event("hello"))
+    bus.push("language.external", _event("hello"))
     await bridge.start()
     try:
         await asyncio.sleep(0.05)
@@ -139,7 +139,7 @@ def test_event_to_sse_payload_serializes_timestamp():
     evt = _event()
     out = event_to_sse_payload("1-0", evt)
     assert out["id"] == "1-0"
-    assert out["source"] == "lingua"
+    assert out["source"] == "language"
     assert isinstance(out["timestamp"], str)
 
 
@@ -179,10 +179,10 @@ async def test_dispatch_calls_privacy_filter_once_per_event_not_once_per_client(
 
     monkeypatch.setattr(PrivacyFilter, "filter", counting_filter)
 
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     clients = [bridge.add_client("diagnostics") for _ in range(5)]
-    bus.push("lingua.external", _event("hello"))
+    bus.push("language.external", _event("hello"))
     await bridge.start()
     try:
         for c in clients:
@@ -201,11 +201,11 @@ async def test_dispatch_output_identical_across_all_clients_and_matches_direct_f
     # introduced by sharing one filtered instance instead of recomputing it).
     bus = FakeBus()
     pf = PrivacyFilter()
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
     clients = [bridge.add_client("diagnostics") for _ in range(3)]
     raw_event = _event("hello secret")
-    bus.push("lingua.external", raw_event)
+    bus.push("language.external", raw_event)
     expected = pf.filter(raw_event, surface="diagnostics")
     await bridge.start()
     try:
@@ -237,9 +237,9 @@ async def test_dispatch_skips_filter_when_no_clients(monkeypatch):
         return orig_filter(self, event, surface=surface)
 
     monkeypatch.setattr(PrivacyFilter, "filter", counting_filter)
-    bridge = BusBridge(bus, pf, streams=["lingua.external"], poll_interval_s=0.01)
-    bridge._cursors["lingua.external"] = "0"
-    bus.push("lingua.external", _event("hello"))
+    bridge = BusBridge(bus, pf, streams=["language.external"], poll_interval_s=0.01)
+    bridge._cursors["language.external"] = "0"
+    bus.push("language.external", _event("hello"))
     await bridge.start()
     try:
         await asyncio.sleep(0.05)
@@ -256,11 +256,11 @@ async def test_publish_synthetic_goes_through_the_same_filter_once_fanout_path()
     a = bridge.add_client("diagnostics")
     b = bridge.add_client("diagnostics")
     await bridge.publish_synthetic(
-        source="nexus", type="nexus.snapshot", payload={"metrics": {"a": 1}}
+        source="dashboard", type="dashboard.snapshot", payload={"metrics": {"a": 1}}
     )
     _, evt_a = await asyncio.wait_for(a.queue.get(), timeout=1.0)
     _, evt_b = await asyncio.wait_for(b.queue.get(), timeout=1.0)
-    assert evt_a.source == "nexus"
-    assert evt_a.type == "nexus.snapshot"
+    assert evt_a.source == "dashboard"
+    assert evt_a.type == "dashboard.snapshot"
     assert evt_a.payload == {"metrics": {"a": 1}}
     assert evt_a is evt_b

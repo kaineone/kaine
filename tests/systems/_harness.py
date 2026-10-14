@@ -11,8 +11,8 @@ Usage:
             interoception = Interoception(h.bus)
             await h.register(interoception)
             await h.inject_cycle_event(...)
-            events = await h.collect("soma.out", count=1, timeout=1.0)
-            assert events[0].type == "soma.tick"
+            events = await h.collect("interoception.out", count=1, timeout=1.0)
+            assert events[0].type == "interoception.tick"
 """
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ class SubsystemHarness:
         salience: float = 0.5,
     ) -> str:
         """Inject a standard-format event into an arbitrary stream
-        (e.g. lingua.external) using the same xadd shape AsyncBus.read
+        (e.g. language.external) using the same xadd shape AsyncBus.read
         expects to decode."""
         import json
 

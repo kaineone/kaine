@@ -7,7 +7,7 @@
 ## Shadow readouts
 
 - **Where.** In the affect module, from the same broadcast the appraisal reads. When the planning module is enabled, `U` and `EU` come from the planning module's preference vector `C` and its predicted observations (an injected read-only provider). When the planning module is off, a minimal interoceptive model is used: categorical interoception module bands with preferences at the homeostatic set points. Which of the two becomes primary is an open item.
-- **Output.** `thymos.shadow_affect` on `thymos.out` carries `{valence_shadow, arousal_shadow, model}`. It is content-free and excluded from salience and from every consumer except the research log.
+- **Output.** `affect.shadow_affect` on `affect.out` carries `{valence_shadow, arousal_shadow, model}`. It is content-free and excluded from salience and from every consumer except the research log.
 - **Offline comparison.** On recorded runs, the correlation and lag between the shadow readouts and today's valence and arousal; the shadow readouts' response to marked surprises; and the stability of their range.
 
 ## Gate

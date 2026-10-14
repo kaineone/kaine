@@ -91,7 +91,7 @@ async def test_fork_carries_its_own_copy(bus, tmp_path):
 
     fm = ForkManager(tmp_path / "forks")
     parent_snap = fm.snapshot(reg)
-    parent_artifact = artifacts_dir(fm.root, parent_snap.id, "phantasia") / "world_model.ckpt"
+    parent_artifact = artifacts_dir(fm.root, parent_snap.id, "world_model") / "world_model.ckpt"
     assert parent_artifact.is_file()
     parent_artifact_bytes = parent_artifact.read_bytes()
     parent_ckpt_bytes = ckpt_a.read_bytes()
@@ -110,7 +110,7 @@ async def test_fork_carries_its_own_copy(bus, tmp_path):
     assert ckpt_b.is_file()
     assert ckpt_a.read_bytes() == parent_ckpt_bytes
     assert parent_artifact.read_bytes() == parent_artifact_bytes
-    assert artifacts_dir(fm.root, child.id, "phantasia") != parent_artifact.parent
+    assert artifacts_dir(fm.root, child.id, "world_model") != parent_artifact.parent
 
     await ph.shutdown()
     await ph2.shutdown()
@@ -128,7 +128,7 @@ async def test_fork_then_diverges(bus, tmp_path):
 
     fm = ForkManager(tmp_path / "forks")
     parent_snap = fm.snapshot(reg)
-    parent_artifact = artifacts_dir(fm.root, parent_snap.id, "phantasia") / "world_model.ckpt"
+    parent_artifact = artifacts_dir(fm.root, parent_snap.id, "world_model") / "world_model.ckpt"
     parent_artifact_bytes = parent_artifact.read_bytes()
 
     child = fm.fork(parent_snap.id)
@@ -163,9 +163,9 @@ async def test_two_forks_are_independent_copies(bus, tmp_path):
     c1 = fm.fork(parent_snap.id)
     c2 = fm.fork(parent_snap.id)
 
-    a1 = artifacts_dir(fm.root, c1.id, "phantasia") / "world_model.ckpt"
-    a2 = artifacts_dir(fm.root, c2.id, "phantasia") / "world_model.ckpt"
-    parent_ckpt = artifacts_dir(fm.root, parent_snap.id, "phantasia") / "world_model.ckpt"
+    a1 = artifacts_dir(fm.root, c1.id, "world_model") / "world_model.ckpt"
+    a2 = artifacts_dir(fm.root, c2.id, "world_model") / "world_model.ckpt"
+    parent_ckpt = artifacts_dir(fm.root, parent_snap.id, "world_model") / "world_model.ckpt"
     original_a1 = a1.read_bytes()
 
     a1.write_bytes(b"modified")
@@ -186,11 +186,11 @@ async def test_shed_drops_world_model_artifacts(bus, tmp_path):
 
     fm = ForkManager(tmp_path / "forks")
     parent_snap = fm.snapshot(reg)
-    child = fm.fork(parent_snap.id, shed=["phantasia"])
+    child = fm.fork(parent_snap.id, shed=["world_model"])
 
     assert not (snapshot_dir(fm.root, child.id) / "artifacts" / "phantasia").exists()
-    assert "phantasia" not in child.modules
-    assert child.metadata["shed"] == ["phantasia"]
+    assert "world_model" not in child.modules
+    assert child.metadata["shed"] == ["world_model"]
 
     await ph.shutdown()
 
@@ -312,15 +312,15 @@ async def test_merge_refusal_and_choice(bus, tmp_path):
         fm.merge(a.id, b.id)
 
     merged = fm.merge(a.id, b.id, world_model_from="b")
-    b_artifact = artifacts_dir(fm.root, b.id, "phantasia") / "world_model.ckpt"
-    merged_artifact = artifacts_dir(fm.root, merged.id, "phantasia") / "world_model.ckpt"
+    b_artifact = artifacts_dir(fm.root, b.id, "world_model") / "world_model.ckpt"
+    merged_artifact = artifacts_dir(fm.root, merged.id, "world_model") / "world_model.ckpt"
     assert merged_artifact.read_bytes() == b_artifact.read_bytes()
-    assert merged.metadata["artifact_sources"]["phantasia"] == "b"
+    assert merged.metadata["artifact_sources"]["world_model"] == "b"
 
     # Only one parent carries artifacts: succeeds without a choice.
-    c = fm.fork(a.id, shed=["phantasia"])
+    c = fm.fork(a.id, shed=["world_model"])
     merged2 = fm.merge(a.id, c.id)
-    assert merged2.metadata["artifact_sources"]["phantasia"] == "a"
+    assert merged2.metadata["artifact_sources"]["world_model"] == "a"
 
     await ph_a.shutdown()
     await ph_b.shutdown()

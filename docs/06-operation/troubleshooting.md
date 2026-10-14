@@ -28,7 +28,7 @@ The dashboard health board marks Speaches as `up` once `/v1/models` returns 200.
 
 ## The vocal module is silent: no voice
 
-The [vocal module](../09-modules/vocal.md) sends text to a Chatterbox server, and with `voice_mode = "predefined"` each request names a voice file that the server serves. The shipped config names no voice, so at startup the vocal module asks the server for its voices and uses the first in sorted order. If the server is unreachable at that moment or lists no voices, or `[vox].default_voice` is not among them, the log has a line beginning `vocal module silent:` and the vocal module plays nothing until it is restarted. List the voices your server has:
+The [vocal module](../09-modules/vocal.md) sends text to a Chatterbox server, and with `voice_mode = "predefined"` each request names a voice file that the server serves. The shipped config names no voice, so at startup the vocal module asks the server for its voices and uses the first in sorted order. If the server is unreachable at that moment or lists no voices, or `[vocal].default_voice` is not among them, the log has a line beginning `vocal module silent:` and the vocal module plays nothing until it is restarted. List the voices your server has:
 
 ```bash
 curl -s http://127.0.0.1:8883/get_predefined_voices
@@ -37,14 +37,14 @@ curl -s http://127.0.0.1:8883/get_predefined_voices
 Start the server, or add a voice to its `voices/` directory, and restart. To use a particular voice, set it in the gitignored overlay `config/kaine.operator.toml`. Keep per-install changes out of the tracked `config/kaine.toml`: the loader, `kaine/config.py`, merges the overlay over the shipped file (see [How configuration works](../appendix-a-configuration/README.md)).
 
 ```toml
-[vox]
+[vocal]
 voice_mode = "predefined"
 predefined_voice_id = "Abigail.wav"
 ```
 
 ## The model server does not serve the model or leaks reasoning
 
-The [language module](../09-modules/language.md) posts chat-completion requests to `[lingua].chat_url`. The URL must end with `/v1`, for example `http://127.0.0.1:11434/v1`.
+The [language module](../09-modules/language.md) posts chat-completion requests to `[language].chat_url`. The URL must end with `/v1`, for example `http://127.0.0.1:11434/v1`.
 
 To suppress chain-of-thought, the language module sends `chat_template_kwargs: {"enable_thinking": false}` in the request body. The shipped model server, llama.cpp's server with the organ's chat template, honours it. A server that ignores the parameter lets raw reasoning tokens into the response.
 

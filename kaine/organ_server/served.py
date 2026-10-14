@@ -183,7 +183,7 @@ def verify_served_alias(
         listed=False,
         served=served,
         detail=(
-            f"served name(s) {list(served)} ≠ configured [lingua].model_id "
+            f"served name(s) {list(served)} ≠ configured [language].model_id "
             f"'{model_id}' — launch the server with --alias '{model_id}'"
         ),
     )

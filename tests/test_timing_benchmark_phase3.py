@@ -160,7 +160,7 @@ def test_benchmark_vision_skips_honestly_without_encoder(monkeypatch, capsys):
         raise RuntimeError("encoder model not present")
 
     monkeypatch.setattr(enc.DINOv2Encoder, "load", _boom)
-    res = asyncio.run(bench._benchmark_vision({"topos": {}}, encodes=3))
+    res = asyncio.run(bench._benchmark_vision({"vision": {}}, encodes=3))
     assert res["ran"] is False
     assert "encoder" in res["reason"].lower()
     assert res["samples_ms"] == []

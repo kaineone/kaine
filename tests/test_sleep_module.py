@@ -244,7 +244,7 @@ async def test_rotation_failure_does_not_break_sleep(
     assert summary["corpus"]["rotated"] is None
     assert summary["corpus"]["warned"] is False
     assert summary["corpus"]["error"] == "RuntimeError: rotation intentionally broken"
-    assert "hypnos.sleep.completed" in captured
+    assert "sleep.sleep.completed" in captured
 
 
 @pytest.mark.asyncio
@@ -308,11 +308,11 @@ async def test_ceiling_failure_after_rotation_keeps_the_fresh_measurement(
 async def test_started_and_completed_events(bus: AsyncBus, tmp_path: Path):
     sleep = _make_sleep(bus, tmp_path)
     await sleep.enter_sleep()
-    entries = await bus.read("hypnos.out", last_id="0", count=20)
+    entries = await bus.read("sleep.out", last_id="0", count=20)
     types = [e.type for _, e in entries]
-    assert "hypnos.sleep.started" in types
-    assert "hypnos.sleep.completed" in types
-    completed = next(e for _, e in entries if e.type == "hypnos.sleep.completed")
+    assert "sleep.sleep.started" in types
+    assert "sleep.sleep.completed" in types
+    completed = next(e for _, e in entries if e.type == "sleep.sleep.completed")
     assert "phases" in completed.payload
     assert len(completed.payload["phases"]) == 5
     assert "voice_alignment" in completed.payload

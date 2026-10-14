@@ -13,7 +13,7 @@ from kaine.workspace.strategies import AffectModulator
 
 def _event() -> Event:
     return Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload={},
         salience=0.5,

@@ -32,11 +32,11 @@ DEFAULT_INTERACTION_EVENT_TYPES: tuple[str, ...] = (
     "audition.transcription",
     "audition.emotion",
 )
-_SLEEP_STREAM: str = "hypnos.out"
+_SLEEP_STREAM: str = "sleep.out"
 
 
 class Sequence(BaseModule):
-    name: ClassVar[str] = "chronos"
+    name: ClassVar[str] = "sequence"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive"})
 
     def __init__(
@@ -116,7 +116,7 @@ class Sequence(BaseModule):
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
         self._last_hidden: Optional[list[float]] = None  # hidden state from previous tick
 
-        # sleep flag — set True when hypnos.sleep.started, False on completed
+        # sleep flag — set True when sleep.sleep.started, False on completed
         self._in_sleep: bool = False
         # Initialize resolves this to the current stream tail via last_entry_id().
         self._sleep_cursor: str = "$"
@@ -282,7 +282,7 @@ class Sequence(BaseModule):
         else:
             salience = self._baseline_salience
         await self.publish(
-            "chronos.report",
+            "sequence.report",
             {
                 "alert": alert,
                 "temporal_context": hidden,
@@ -333,7 +333,7 @@ class Sequence(BaseModule):
             raise
 
     async def _sleep_loop(self) -> None:
-        """Subscribe to hypnos.out to gate adaptation during sleep."""
+        """Subscribe to sleep.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
@@ -346,12 +346,12 @@ class Sequence(BaseModule):
                     if last_scanned is not None:
                         self._sleep_cursor = last_scanned
                         for _, event in entries:
-                            if event.type == "hypnos.sleep.started":
+                            if event.type == "sleep.sleep.started":
                                 self._in_sleep = True
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = True
                                 log.debug("chronos: adaptation suspended (hypnos sleep started)")
-                            elif event.type == "hypnos.sleep.completed":
+                            elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = False

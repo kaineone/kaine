@@ -9,8 +9,8 @@ How KAINE builds and trusts its configuration: the shipped file, the module prof
 After merging the shipped configuration, the module profile, the deployment tier and the operator overlay, the loader SHALL validate the shape of the sections the runtime depends on and SHALL raise a configuration error naming the dotted key, the expected type and the actual type when any rule is violated. `[modules]` SHALL be a table whose values are booleans. `[tier]`, when present, SHALL be a table whose `name`, when present, is a string, whose `unsupported_modules`, when present, is a list of strings, and whose `oscillator_supported`, when present, is a boolean. `[oscillator]`, when present, SHALL be a table whose `enabled`, when present, is a boolean. `[security]` and `[deployment]`, when present, SHALL be tables. `[deployment].tier`, when present, SHALL be a string. `[security.state_encryption]`, when present, SHALL be a table whose `enabled`, when present, is a boolean. The error message SHALL NOT include the offending value. Sections and keys outside these rules SHALL pass through unchanged.
 
 #### Scenario: A quoted boolean module toggle is rejected
-- **WHEN** the operator overlay sets `[modules]` `soma = "false"`
-- **THEN** loading raises a configuration error naming `modules.soma`, expecting a boolean and reporting a string, and no module is enabled by it
+- **WHEN** the operator overlay sets `[modules]` `interoception = "false"`
+- **THEN** loading raises a configuration error naming `modules.interoception`, expecting a boolean and reporting a string, and no module is enabled by it
 
 #### Scenario: A module table written as a list is rejected
 - **WHEN** the merged configuration has `modules` as a list
@@ -62,14 +62,14 @@ The cognitive cycle SHALL set its root log level from `[logging].level` after lo
 - **THEN** the cycle exits non-zero with a configuration error naming the key and the accepted values
 
 ### Requirement: Organ, key and disk defaults have one source
-The organ chat URL default, the model-server API key lookup and the free-disk floor SHALL be defined once, in `kaine/defaults.py`, and every consumer SHALL read them from there. The key lookup SHALL prefer `[lingua].api_key` and fall back to the `KAINE_MODEL_SERVER_API_KEY` environment variable. A missing key SHALL read as None, never as an empty string that a client might send.
+The organ chat URL default, the model-server API key lookup and the free-disk floor SHALL be defined once, in `kaine/defaults.py`, and every consumer SHALL read them from there. The key lookup SHALL prefer `[language].api_key` and fall back to the `KAINE_MODEL_SERVER_API_KEY` environment variable. A missing key SHALL read as None, never as an empty string that a client might send.
 
 #### Scenario: A configured key wins over the environment
-- **WHEN** `[lingua].api_key` is set and `KAINE_MODEL_SERVER_API_KEY` is also set
+- **WHEN** `[language].api_key` is set and `KAINE_MODEL_SERVER_API_KEY` is also set
 - **THEN** `model_server_api_key(config)` returns the configured key
 
 #### Scenario: The environment fills a missing key
-- **WHEN** `[lingua].api_key` is absent or empty and `KAINE_MODEL_SERVER_API_KEY` is set
+- **WHEN** `[language].api_key` is absent or empty and `KAINE_MODEL_SERVER_API_KEY` is set
 - **THEN** `model_server_api_key(config)` returns the environment value
 
 #### Scenario: No stray copies of the organ port
@@ -77,8 +77,8 @@ The organ chat URL default, the model-server API key lookup and the free-disk fl
 - **THEN** the literal `11434` appears only in `kaine/net.py` and `kaine/defaults.py`
 
 ### Requirement: Social cognition operator sources are checked when the config loads
-Config loading SHALL refuse a `[empatheia].operator_sources` that is not a list of strings, naming the key, before the boot opens any resource.
+Config loading SHALL refuse a `[social_cognition].operator_sources` that is not a list of strings, naming the key, before the boot opens any resource.
 
 #### Scenario: A string instead of a list
-- **WHEN** `[empatheia].operator_sources` is the string `"live_mic"`
-- **THEN** loading the config fails with a shape error naming `empatheia.operator_sources`
+- **WHEN** `[social_cognition].operator_sources` is the string `"live_mic"`
+- **THEN** loading the config fails with a shape error naming `social_cognition.operator_sources`

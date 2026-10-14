@@ -19,7 +19,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from kaine.experiment.run_context import get_run_context
 from kaine.storage import resolve
@@ -53,6 +53,7 @@ class AsyncJsonlSink:
         retention_days: int = 30,
         flush_interval_s: float = 0.5,
         queue_maxsize: int = 4096,
+        retention_prefixes: Iterable[str] = (),
     ) -> None:
         self._dir = resolve(dir_path)
         self._name = str(name)
@@ -69,6 +70,7 @@ class AsyncJsonlSink:
         # run context is set (run-identity / completeness gating). Starts at 0;
         # only advances when a context exists, so it is inert outside a run.
         self._seq = 0
+        self._retention_prefixes = tuple(retention_prefixes)
 
     @property
     def directory(self) -> Path:
@@ -225,10 +227,11 @@ class AsyncJsonlSink:
         if self._retention_days <= 0 or not self._dir.exists():
             return
         cutoff = time.time() - (self._retention_days * 86400)
+        prefixes = (self._name,) + self._retention_prefixes
         for entry in self._dir.iterdir():
             if not entry.is_file() or entry.suffix != ".jsonl":
                 continue
-            if not entry.name.startswith(f"{self._name}-"):
+            if not any(entry.name.startswith(f"{prefix}-") for prefix in prefixes):
                 continue
             try:
                 if entry.stat().st_mtime < cutoff:

@@ -22,17 +22,17 @@ from kaine.research.ignition_study.runner import (
     StudyRunner,
 )
 
-BASE_MODULES = ["soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"]
+BASE_MODULES = ["interoception", "sequence", "vision", "audition", "language", "affect", "sleep"]
 ORDER = [
-    "mnemos",
-    "phantasia",
-    "nous",
-    "eidolon",
-    "empatheia",
-    "vox",
-    "praxis",
-    "perception",
-    "mundus",
+    "episodic_memory",
+    "world_model",
+    "planning",
+    "self_model",
+    "social_cognition",
+    "vocal",
+    "effectors",
+    "perceptual_locus",
+    "embodiment",
 ]
 
 STANDIN_SCRIPT = textwrap.dedent(
@@ -265,23 +265,23 @@ STANDIN_SCRIPT = textwrap.dedent(
 @pytest.fixture
 def known_modules(monkeypatch):
     names = [
-        "echo",
-        "soma",
-        "chronos",
-        "topos",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
-        "vox",
+        "recorder",
+        "interoception",
+        "sequence",
+        "vision",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
+        "vocal",
         "audition",
-        "hypnos",
-        "empatheia",
-        "phantasia",
-        "perception",
-        "mundus",
+        "sleep",
+        "social_cognition",
+        "world_model",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     monkeypatch.setenv("KAINE_REDIS_PASSWORD", "test-redis-pw")
@@ -303,8 +303,8 @@ def _write_repo(repo_root: Path) -> None:
     (cfg / "kaine.toml").write_text(
         '[modules]\n'
         'echo = false\n'
-        'soma = false\n'
-        '[topos]\n'
+        'interoception = false\n'
+        '[vision]\n'
         'encoder_local_dir = "state/models"\n'
     )
 
@@ -486,10 +486,10 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     # The seed is born automatically; the entity in the seed never waits on
     # an operator acknowledgement.
     seed_overlay = _read_overlay(study_dir / "gestation")
-    assert seed_overlay["developmental_stage"]["require_operator_ack_for_birth"] is False
+    assert seed_overlay["developmental_stage"]["require_operator_ack_for_maturation"] is False
     # The world model module is checked wherever it is enabled.
     for s in steps:
-        if "phantasia" in s["modules"]:
+        if "world_model" in s["modules"]:
             assert s["world_model_captured"] is True
         else:
             assert s["world_model_captured"] is None
@@ -506,8 +506,8 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     for line, k, expected_prefix in expected_prefixes:
         ld = _expected_line_dir(study_dir, line, k)
         overlay = _read_overlay(ld)
-        assert overlay["mnemos"]["collection_prefix"] == expected_prefix
-        assert overlay["empatheia"]["collection"] == expected_prefix
+        assert overlay["episodic_memory"]["collection_prefix"] == expected_prefix
+        assert overlay["social_cognition"]["collection"] == expected_prefix
 
     # One flush per step, on that step's own database, before its child
     # started, with the same authenticated URL the child was given.
@@ -777,7 +777,7 @@ def test_line_overlay_is_owner_only(tmp_path):
     from kaine.research.ignition_study.runner import _write_text_atomic
 
     target = tmp_path / "kaine.operator.toml"
-    _write_text_atomic(target, "[lingua]\napi_key = \"k\"\n")
+    _write_text_atomic(target, "[language]\napi_key = \"k\"\n")
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
@@ -821,7 +821,7 @@ def test_outcome_refuses_the_start_bundle_as_result(tmp_path: Path, known_module
 
 
 def test_world_model_world_model_true(tmp_path: Path, known_modules, monkeypatch):
-    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    study_dir = _create_study(tmp_path, viewings=2, order=["world_model"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "true")
@@ -832,18 +832,18 @@ def test_world_model_world_model_true(tmp_path: Path, known_modules, monkeypatch
     assert result == "complete"
     assert len(steps) == 5
 
-    world_model_steps = [s for s in steps if "phantasia" in s["modules"]]
+    world_model_steps = [s for s in steps if "world_model" in s["modules"]]
     assert len(world_model_steps) == 2
     assert all(s["world_model_captured"] is True for s in world_model_steps)
     for s in steps:
-        if "phantasia" not in s["modules"]:
+        if "world_model" not in s["modules"]:
             assert s["world_model_captured"] is None
 
     _all_bundles_exist(steps)
 
 
 def test_world_model_world_model_false(tmp_path: Path, known_modules, monkeypatch):
-    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    study_dir = _create_study(tmp_path, viewings=2, order=["world_model"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "false")
@@ -857,7 +857,7 @@ def test_world_model_world_model_false(tmp_path: Path, known_modules, monkeypatc
 
     world_model_step = steps[3]
     assert world_model_step["line"] == "branch" and world_model_step["step"] == 1
-    assert "phantasia" in world_model_step["modules"]
+    assert "world_model" in world_model_step["modules"]
     assert world_model_step["outcome"] == "failed:world_model_not_captured"
     assert world_model_step["world_model_captured"] is False
 
@@ -865,7 +865,7 @@ def test_world_model_world_model_false(tmp_path: Path, known_modules, monkeypatc
 
 
 def test_world_model_manifest_missing(tmp_path: Path, known_modules, monkeypatch):
-    study_dir = _create_study(tmp_path, viewings=2, order=["phantasia"])
+    study_dir = _create_study(tmp_path, viewings=2, order=["world_model"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "missing")
@@ -879,7 +879,7 @@ def test_world_model_manifest_missing(tmp_path: Path, known_modules, monkeypatch
 
     world_model_step = steps[3]
     assert world_model_step["line"] == "branch" and world_model_step["step"] == 1
-    assert "phantasia" in world_model_step["modules"]
+    assert "world_model" in world_model_step["modules"]
     assert world_model_step["outcome"] == "failed:manifest_unreadable"
     assert world_model_step["world_model_captured"] is False
 
@@ -889,7 +889,7 @@ def test_world_model_manifest_missing(tmp_path: Path, known_modules, monkeypatch
 def test_no_world_model_completes_without_manifest(
     tmp_path: Path, known_modules, monkeypatch
 ):
-    study_dir = _create_study(tmp_path, viewings=2, order=["mnemos", "nous"])
+    study_dir = _create_study(tmp_path, viewings=2, order=["episodic_memory", "planning"])
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_MANIFEST", "missing")
@@ -959,7 +959,7 @@ def test_maturation_preservation_waits_the_fallback_without_a_bloom_end(
     monkeypatch.setenv("IGNITION_STANDIN_BLOOM_SECONDS", "none")
     # The child's own configured bloom length, plus the margin.
     with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
-        fh.write("[perception_feed.womb]\nbirth_transition_seconds = 0.4\n")
+        fh.write("[perception_feed.stimulus_source]\nbirth_transition_seconds = 0.4\n")
     assert _run(_runner(study_dir, script, maturation_bloom_margin_seconds=0.3)) == "complete"
 
     stage = json.loads(
@@ -1380,9 +1380,9 @@ def test_cycle_process_alive_checks_the_command_line():
     "stimulus_source_toml, expected",
     [
         (None, "default"),
-        ("birth_transition_seconds = 12.5\n", 12.5),
-        ("birth_transition_seconds = 99.0\n", "max"),
-        ('birth_transition_seconds = "soon"\n', "max"),
+        ("maturation_transition_seconds = 12.5\n", 12.5),
+        ("maturation_transition_seconds = 99.0\n", "max"),
+        ('maturation_transition_seconds = "soon"\n', "max"),
     ],
 )
 def test_maturation_bloom_fallback_follows_the_child_configuration(
@@ -1396,7 +1396,7 @@ def test_maturation_bloom_fallback_follows_the_child_configuration(
     study_dir = _create_study(tmp_path, viewings=1)
     if stimulus_source_toml is not None:
         with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
-            fh.write("[perception_feed.womb]\n" + stimulus_source_toml)
+            fh.write("[perception_feed.stimulus_source]\n" + stimulus_source_toml)
     runner = _runner(study_dir, tmp_path / "unused.py", maturation_bloom_margin_seconds=1.5)
     got = runner._maturation_bloom_fallback_seconds(study_dir / "gestation", dict(os.environ))
     if expected == "default":

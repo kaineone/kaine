@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Executive action selection ("Volition").
+"""Executive action selection ("ActionSelection").
 
 KAINE's global workspace decides *what is accessed* and flags
 executive inhibition (`WorkspaceSnapshot.inhibited`) when the winning coalition
@@ -10,9 +10,9 @@ coalition must clear that threshold *before reaching the action layer* - "the
 system can consider speaking and decide that silence is the better choice."
 
 This module is that action layer. Each experiential tick the cognitive cycle
-hands ``Volition.select`` the broadcast ``WorkspaceSnapshot`` and the action selection module
+hands ``ActionSelection.select`` the broadcast ``WorkspaceSnapshot`` and the action selection module
 returns zero or more :class:`Intent` objects describing what the entity has
-decided to DO. The cycle publishes those intents to the ``volition.out`` stream;
+decided to DO. The cycle publishes those intents to the ``action_selection.out`` stream;
 effectors (the language and effectors modules) realize them. Effectors never self-trigger off the
 raw broadcast — the only path to action is an intent, and intents only exist
 when the snapshot is *not* inhibited.
@@ -45,13 +45,13 @@ ACT = "act"
 REST = "rest"
 
 # Bus transport for intents.
-ACTION_SELECTION_SOURCE = "volition"
-ACTION_SELECTION_STREAM = "volition.out"
+ACTION_SELECTION_SOURCE = "action_selection"
+ACTION_SELECTION_STREAM = "action_selection.out"
 # Proposal outcomes are published under their own source so they land on
 # their own stream (the bus maps a source to "<source>.out"). No effector
-# reads it, so an inhibited snapshot still publishes nothing to volition.out.
-ACTION_SELECTION_FEEDBACK_SOURCE = "volition_feedback"
-ACTION_SELECTION_FEEDBACK_STREAM = "volition_feedback.out"
+# reads it, so an inhibited snapshot still publishes nothing to action_selection.out.
+ACTION_SELECTION_FEEDBACK_SOURCE = "action_selection_feedback"
+ACTION_SELECTION_FEEDBACK_STREAM = "action_selection_feedback.out"
 
 # Event types used when an intent is published to the bus.
 INTENT_TYPES: dict[str, str] = {
@@ -61,8 +61,8 @@ INTENT_TYPES: dict[str, str] = {
     REST: "intent.rest",
 }
 
-# Event type used for the planning module's proposal outcomes on volition_feedback.out.
-PROPOSAL_OUTCOME_TYPE = "volition.proposal_outcome"
+# Event type used for the planning module's proposal outcomes on action_selection_feedback.out.
+PROPOSAL_OUTCOME_TYPE = "action_selection.proposal_outcome"
 
 # The source/type of a user-communication event the default policy is disposed
 # to answer (a transcribed utterance heard by the ears).
@@ -70,9 +70,9 @@ USER_COMMUNICATION_SOURCE = "audition"
 USER_COMMUNICATION_TYPE = "audition.transcription"
 
 # The entity's own speech — never something to "respond" to. Both external
-# (TTS-bound) and internal (private monologue) speech carry source "lingua";
+# (TTS-bound) and internal (private monologue) speech carry source "language";
 # the event type distinguishes the channel a given output was realized on.
-OWN_EXTERNAL_SPEECH_SOURCE = "lingua"
+OWN_EXTERNAL_SPEECH_SOURCE = "language"
 OWN_EXTERNAL_SPEECH_TYPE = "external_speech"
 OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
 
@@ -94,7 +94,7 @@ class Intent:
     carries its request fields.
 
     ``run_id`` / ``seq`` / ``sig`` are the provenance envelope attached to
-    ``act`` intents by :meth:`Volition.select` when a signer is wired (see
+    ``act`` intents by :meth:`ActionSelection.select` when a signer is wired (see
     ``kaine.security.intent_signing``). They are absent (``None``) for unsigned
     intents and for non-``act`` kinds. ``sig`` is an HMAC over
     ``canonical(kind, effector, params, run_id, seq)`` that the effectors module verifies
@@ -183,7 +183,7 @@ class DefaultActionSelectionPolicy:
       is still being realized. The guard is armed when a ``speak`` intent is
       emitted and persists across subsequent decision ticks; it is cleared by
       :meth:`mark_realized` once the prior utterance's realization is observed
-      (the entity's own ``lingua.external`` output appears in a later coalition).
+      (the entity's own ``language.external`` output appears in a later coalition).
 
     Injectable so `drives-to-behavior` can supply a drive-biased policy without
     touching the action selection module's plumbing.

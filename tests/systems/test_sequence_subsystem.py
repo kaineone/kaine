@@ -21,12 +21,12 @@ async def test_sequence_publishes_on_workspace_broadcast():
                 {
                     "tick_index": tick,
                     "selected": [
-                        {"source": "soma", "type": "soma.tick", "salience": 0.5, "payload": {}}
+                        {"source": "interoception", "type": "interoception.tick", "salience": 0.5, "payload": {}}
                     ],
                     "salience_scores": {f"x-{tick}": 0.5},
                 }
             )
-        events = await h.collect("chronos.out", count=1, timeout=2.0)
+        events = await h.collect("sequence.out", count=1, timeout=2.0)
         assert events, "Chronos should have published a context event"
 
 

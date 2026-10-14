@@ -36,12 +36,12 @@ def _default_order() -> list[str]:
     # The effectors, perceptual locus and embodiment modules need an effector, body or alternative
     # sensor feed; on the reference host they would be expected nulls (use --order).
     return [
-        "mnemos",
-        "phantasia",
-        "nous",
-        "eidolon",
-        "empatheia",
-        "vox",
+        "episodic_memory",
+        "world_model",
+        "planning",
+        "self_model",
+        "social_cognition",
+        "vocal",
     ]
 
 
@@ -173,7 +173,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init_p.add_argument(
         "--base-modules",
         nargs="+",
-        default=["soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"],
+        default=["interoception", "sequence", "vision", "audition", "language", "affect", "sleep"],
     )
     init_p.add_argument("--order", nargs="+", default=_default_order())
     init_p.add_argument("--programme-manifest", required=True)

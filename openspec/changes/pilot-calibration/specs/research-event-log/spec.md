@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Reports carry entity time and wakefulness
-The vision module (`topos.report`), the audition module (`audition.perception`) and the interoception module (`soma.report`) SHALL put on every report `entity_time_s`, the entity clock's reading for the report (entity seconds since the run started), and `awake`, false while the sleep module holds the processor asleep, and the curated research log SHALL copy both. The planned test counts a report only when the entity was awake and the report falls after the learning period T_learn, measured in entity time from the start of the run (paper Appendix A.8). The range sweep SHALL bound `entity_time_s` below by 0.
+The vision module (`vision.report`), the audition module (`audition.perception`) and the interoception module (`interoception.report`) SHALL put on every report `entity_time_s`, the entity clock's reading for the report (entity seconds since the run started), and `awake`, false while the sleep module holds the processor asleep, and the curated research log SHALL copy both. The planned test counts a report only when the entity was awake and the report falls after the learning period T_learn, measured in entity time from the start of the run (paper Appendix A.8). The range sweep SHALL bound `entity_time_s` below by 0.
 
 #### Scenario: A report while asleep
 - **WHEN** the vision module reports after a sleep has started

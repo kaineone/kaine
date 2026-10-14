@@ -10,25 +10,25 @@ Point a browser at:
 http://127.0.0.1:8088/diagnostics/
 ```
 
-When `[nexus].conversation_enabled` is true, `/` is the console. With the shipped config, conversation is off and `/` returns a `307` redirect to `/diagnostics/`.
+When `[dashboard].conversation_enabled` is true, `/` is the console. With the shipped config, conversation is off and `/` returns a `307` redirect to `/diagnostics/`.
 
 The evaluation surface is at `/diagnostics/evaluation/`. It is mounted only when `[evaluation].enabled` is true, which is the shipped default.
 
-A native dashboard binds `127.0.0.1:8088` (`[nexus].host` and `port`). In containers it listens on all interfaces inside the container, and the port is published on `127.0.0.1:8088` only. Either way an open dashboard is reachable by anyone who can run code on the same host, and by your tailnet if you serve it there.
+A native dashboard binds `127.0.0.1:8088` (`[dashboard].host` and `port`). In containers it listens on all interfaces inside the container, and the port is published on `127.0.0.1:8088` only. Either way an open dashboard is reachable by anyone who can run code on the same host, and by your tailnet if you serve it there.
 
 ## Who can use Dashboard
 
-`[nexus].access` controls whether a visitor can just view or also control the entity. Override it per launch with `KAINE_NEXUS_ACCESS`.
+`[dashboard].access` controls whether a visitor can just view or also control the entity. Override it per launch with `KAINE_NEXUS_ACCESS`.
 
 ### Open access (default)
 
-The shipped `[nexus].access` is `"open"`. There is no sign-in page and no token, and anyone who can reach the address can view the dashboard and use its controls (freeze, rate changes, perception toggles, forks and merges, preservation actions).
+The shipped `[dashboard].access` is `"open"`. There is no sign-in page and no token, and anyone who can reach the address can view the dashboard and use its controls (freeze, rate changes, perception toggles, forks and merges, preservation actions).
 
 Use open access only when you are the only person who can reach the host. Host and Origin header checks still apply in open mode and block requests from other web origins, including DNS-rebinding attempts.
 
 ### Token access
 
-Set `[nexus].access = "token"` (or launch with `KAINE_NEXUS_ACCESS=token`) to require an operator token for state-changing routes and the diagnostics stream. Read-only diagnostics pages, `/diagnostics/health.json` and similar read routes need no token with the shipped settings; that changes if `[nexus].conversation_enabled` or `[nexus].dev_content_override` is true. Keep the URL off untrusted networks even in token mode.
+Set `[dashboard].access = "token"` (or launch with `KAINE_NEXUS_ACCESS=token`) to require an operator token for state-changing routes and the diagnostics stream. Read-only diagnostics pages, `/diagnostics/health.json` and similar read routes need no token with the shipped settings; that changes if `[dashboard].conversation_enabled` or `[dashboard].dev_content_override` is true. Keep the URL off untrusted networks even in token mode.
 
 In token mode:
 
@@ -39,7 +39,7 @@ In token mode:
 
 ## Read-only view
 
-Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to turn the dashboard into a viewer. Every request except `GET`, `HEAD`, and `OPTIONS` is refused with `403`, and a read-only banner is shown.
+Set `[dashboard].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to turn the dashboard into a viewer. Every request except `GET`, `HEAD`, and `OPTIONS` is refused with `403`, and a read-only banner is shown.
 
 Use it when the dashboard is watching a research run, because some controls act on the running entity through the event bus and would change the run under study.
 
@@ -53,7 +53,7 @@ To reach the dashboard from another device on your tailnet:
    tailscale serve --bg 8088
    ```
 
-2. Allow the machine's tailnet name (for example, `my-machine.tail1234.ts.net`). For a native launch, set `KAINE_NEXUS_EXTRA_HOSTS` in the environment; for Compose, set it in `compose/.env`, which the `kaine-nexus` service passes through. `KAINE_NEXUS_EXTRA_HOSTS` adds the name to both the Host allow-list and the allowed origins. The Quadlet unit does not pass it, so on a Quadlet host follow [A dedicated headless host](07-deployment/headless-host.md), which adds the name to `[nexus].host_allowlist` and the origin to the unit.
+2. Allow the machine's tailnet name (for example, `my-machine.tail1234.ts.net`). For a native launch, set `KAINE_NEXUS_EXTRA_HOSTS` in the environment; for Compose, set it in `compose/.env`, which the `kaine-dashboard` service passes through. `KAINE_NEXUS_EXTRA_HOSTS` adds the name to both the Host allow-list and the allowed origins. The Quadlet unit does not pass it, so on a Quadlet host follow [A dedicated headless host](07-deployment/headless-host.md), which adds the name to `[dashboard].host_allowlist` and the origin to the unit.
 
 3. Restart the dashboard.
 
@@ -69,7 +69,7 @@ or `tailscale serve reset`.
 
 ## Operator token
 
-In token mode, the dashboard reads the operator token from the environment variable `KAINE_NEXUS_TOKEN` first, then from `[nexus].operator_token` in `config/secrets.toml`. Compose passes `KAINE_NEXUS_TOKEN` from `compose/.env` into the container, and both container setups mount `config/secrets.toml` read-only. The token must be at least 32 characters, and the dashboard refuses to start if a config file other than `config/secrets.toml` holds one.
+In token mode, the dashboard reads the operator token from the environment variable `KAINE_NEXUS_TOKEN` first, then from `[dashboard].operator_token` in `config/secrets.toml`. Compose passes `KAINE_NEXUS_TOKEN` from `compose/.env` into the container, and both container setups mount `config/secrets.toml` read-only. The token must be at least 32 characters, and the dashboard refuses to start if a config file other than `config/secrets.toml` holds one.
 
 `python -m kaine.setup` writes the secrets file. Print the current token with:
 
@@ -93,13 +93,13 @@ Put it in the same place, restart the dashboard, and sign in again. A browser se
 
 ### Console
 
-The console at `/` is mounted only when `[nexus].conversation_enabled` is true; with the shipped config `/` redirects to diagnostics. It is a single screen that does not scroll, with the Presence visualizer, collapsible diagnostic and evaluation sections, and the Health and services sidebar, and it shows no message content. Most sections start closed and slide in from the left rail when you open them; the welfare and divergence sections open and flash when a relevant event arrives.
+The console at `/` is mounted only when `[dashboard].conversation_enabled` is true; with the shipped config `/` redirects to diagnostics. It is a single screen that does not scroll, with the Presence visualizer, collapsible diagnostic and evaluation sections, and the Health and services sidebar, and it shows no message content. Most sections start closed and slide in from the left rail when you open them; the welfare and divergence sections open and flash when a relevant event arrives.
 
 ### Diagnostics
 
 `/diagnostics/` is the deep technical view: live charts, run identity, health, and controls. It is reachable from the left-rail "Diagnostics" link on every page.
 
-Content fields are stripped unless `[nexus].dev_content_override` is true. Status, metrics and derived affect are always shown.
+Content fields are stripped unless `[dashboard].dev_content_override` is true. Status, metrics and derived affect are always shown.
 
 ### Evaluation
 
@@ -109,7 +109,7 @@ The sidecar writes JSONL under `data/` and an optional `summary.json` for batch 
 
 ## Presence visualizer
 
-The console leads with a ferrofluid-style affect visualizer, rendered with Three.js from `kaine/dashboard/static/vendor/vendor/` with no CDN fetch. With no entity running it shows an idle state. When a cycle is up, it follows the derived affect in `thymos.state` (`valence`, `arousal`) carried on the diagnostics SSE stream, and it never receives raw audio or content.
+The console leads with a ferrofluid-style affect visualizer, rendered with Three.js from `kaine/dashboard/static/vendor/vendor/` with no CDN fetch. With no entity running it shows an idle state. When a cycle is up, it follows the derived affect in `affect.state` (`valence`, `arousal`) carried on the diagnostics SSE stream, and it never receives raw audio or content.
 
 ## Health and services board
 
@@ -134,13 +134,13 @@ The rows that appear depend on the configured backends:
 | Qdrant | Episodic memory's `/readyz`, with the API key. | |
 | Chat LLM | The model server's `/v1/models`, checked for the configured model. |
 | Speech in | Speaches, or sherpa-onnx (Moonshine) when `[audition].backend = "sherpa_onnx"`. Speaches reports `not configured` while transcription is disabled. |
-| Speech out | Chatterbox when `[vox].backend = "chatterbox"`, or sherpa-onnx (Kokoro) when `[vox].backend = "sherpa_onnx"`. |
-| Active inference | pymdp and JAX when `[nous].backend = "pymdp"`, or NumPy when `[nous].backend = "numpy"`. |
+| Speech out | Chatterbox when `[vocal].backend = "chatterbox"`, or sherpa-onnx (Kokoro) when `[vocal].backend = "sherpa_onnx"`. |
+| Active inference | pymdp and JAX when `[planning].backend = "pymdp"`, or NumPy when `[planning].backend = "numpy"`. |
 | State encryption | Whether the key can be resolved, without reading it. |
 
 See the module chapters for backend details: [audition](09-modules/audition.md), [vocal](09-modules/vocal.md), and [planning](09-modules/planning.md).
 
-Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing` (a perception sensor is live). Module state is read from `state/cycle/runtime.json` and `state/perception/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
+Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing` (a perception sensor is live). Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
 
 The unauthenticated endpoint `/diagnostics/health.json` returns the same health data as JSON.
 
@@ -204,7 +204,7 @@ POST /diagnostics/cycle/override
 
 Freeze state lives in `state/cycle/control.json`. A freeze-watch task in the cycle entrypoint polls it every 250 ms and applies it, and a fresh launch clears any stale freeze.
 
-Freeze holders stack: `operator` (dashboard or API), `spot` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `gestation` and `programme_end`. Each holder pushes its own entry and pops only its own, so a supervisor recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack is empty. A welfare-protective pause lifts only through an operator override that names it or an explicit welfare stand-down; resume does not lift it.
+Freeze holders stack: `operator` (dashboard or API), `supervisor` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `development` and `programme_end`. Each holder pushes its own entry and pops only its own, so a supervisor recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack is empty. A welfare-protective pause lifts only through an operator override that names it or an explicit welfare stand-down; resume does not lift it.
 
 ### Perceptual locus
 
@@ -247,22 +247,22 @@ See [Forks and merges](12-forks-and-merges.md) for the lifecycle semantics.
 The dashboard also exposes:
 
 - `/diagnostics/caretaker`, the caretaker's status and acknowledgement (`/diagnostics/caretaker/ack`);
-- `/diagnostics/birth`, the maturation status and the operator's acknowledgement of a supervised maturation (`/diagnostics/birth/ack`; see [developmental phase](06-operation/development.md#supervised-maturation)).
+- `/diagnostics/maturation`, the maturation status and the operator's acknowledgement of a supervised maturation (`/diagnostics/maturation/ack`; see [developmental phase](06-operation/development.md#supervised-maturation)).
 
-## Quick reference for [nexus] keys
+## Quick reference for [dashboard] keys
 
 | Key / variable | Default | Effect |
 |---|---|---|
-| `[nexus].host` / `KAINE_NEXUS_HOST` | `"127.0.0.1"` | The bind address. A non-loopback bind also needs `non_loopback_allowed`. |
-| `[nexus].port` / `KAINE_NEXUS_PORT` | `8088` | The listening port. |
-| `[nexus].non_loopback_allowed` / `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` | `false` | Permits a non-loopback bind; the container setups set it because the container's port is published on loopback. |
-| `[nexus].access` / `KAINE_NEXUS_ACCESS` | `"open"` | `"open"` allows anyone who passes the Host and Origin checks; `"token"` requires the operator token. |
-| `[nexus].read_only` / `KAINE_NEXUS_READ_ONLY` | `false` | When true, only `GET`/`HEAD`/`OPTIONS` are allowed; everything else returns `403`. |
-| `[nexus].operator_token` (in `config/secrets.toml`) / `KAINE_NEXUS_TOKEN` | generated by setup | The token used in `"token"` mode, at least 32 characters. |
-| `[nexus].session_idle_minutes` | `720` | A browser session ends after this long without use. |
-| `[nexus].session_max_hours` | `24` | A browser session's maximum length. |
-| `[nexus].conversation_enabled` / `KAINE_NEXUS_CONVERSATION_ENABLED` | `false` | When true, mounts the console at `/`. |
-| `[nexus].dev_content_override` | `false` | When true, diagnostics shows content fields. |
+| `[dashboard].host` / `KAINE_NEXUS_HOST` | `"127.0.0.1"` | The bind address. A non-loopback bind also needs `non_loopback_allowed`. |
+| `[dashboard].port` / `KAINE_NEXUS_PORT` | `8088` | The listening port. |
+| `[dashboard].non_loopback_allowed` / `KAINE_NEXUS_NON_LOOPBACK_ALLOWED` | `false` | Permits a non-loopback bind; the container setups set it because the container's port is published on loopback. |
+| `[dashboard].access` / `KAINE_NEXUS_ACCESS` | `"open"` | `"open"` allows anyone who passes the Host and Origin checks; `"token"` requires the operator token. |
+| `[dashboard].read_only` / `KAINE_NEXUS_READ_ONLY` | `false` | When true, only `GET`/`HEAD`/`OPTIONS` are allowed; everything else returns `403`. |
+| `[dashboard].operator_token` (in `config/secrets.toml`) / `KAINE_NEXUS_TOKEN` | generated by setup | The token used in `"token"` mode, at least 32 characters. |
+| `[dashboard].session_idle_minutes` | `720` | A browser session ends after this long without use. |
+| `[dashboard].session_max_hours` | `24` | A browser session's maximum length. |
+| `[dashboard].conversation_enabled` / `KAINE_NEXUS_CONVERSATION_ENABLED` | `false` | When true, mounts the console at `/`. |
+| `[dashboard].dev_content_override` | `false` | When true, diagnostics shows content fields. |
 | `KAINE_NEXUS_EXTRA_HOSTS` | empty | Comma-separated host names (such as a tailnet name) added to the Host allow-list and the allowed origins. |
 
-For the full `[nexus]` schema, see [Security and the dashboard](appendix-a-configuration/security-and-dashboard.md). For the wider security model, see [Security and privacy](13-security-and-privacy.md).
+For the full `[dashboard]` schema, see [Security and the dashboard](appendix-a-configuration/security-and-dashboard.md). For the wider security model, see [Security and privacy](13-security-and-privacy.md).

@@ -17,7 +17,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 
-LANGUAGE_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "language.external"
 USER_INPUT_STREAMS = frozenset({"audition.out"})
 
 

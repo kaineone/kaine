@@ -35,8 +35,8 @@ A `WetwareOscillator` SHALL implement KAINE's `OscillatorProtocol`. Each `step(d
 For each module listed in `[plugins.cl1.oscillators].modules`, the plugin SHALL declare `oscillator.<module>` and SHALL return a `WetwareOscillator` on territory `oscillator.<module>` from `make_oscillator`. The total channels leased across all territories SHALL NOT exceed the usable channels; otherwise `seams` SHALL raise `ValueError`.
 
 #### Scenario: Declared seams
-- **WHEN** `oscillators.modules = ["chronos", "soma"]`
-- **THEN** `seams` includes `oscillator.chronos` and `oscillator.soma`
+- **WHEN** `oscillators.modules = ["sequence", "interoception"]`
+- **THEN** `seams` includes `oscillator.sequence` and `oscillator.interoception`
 
 #### Scenario: Channel budget exceeded
 - **WHEN** the converted-module territories plus `channels_per_module` times the number of oscillated modules exceed 63

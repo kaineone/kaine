@@ -63,10 +63,10 @@ async def test_on_workspace_publishes_sequence_report(bus: AsyncBus):
         rumination=RecurrenceRuminationDetector(window=4, threshold=4),
     )
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     assert len(entries) == 1
     _, event = entries[0]
-    assert event.type == "chronos.report"
+    assert event.type == "sequence.report"
     payload = event.payload
     assert payload["temporal_context"] == [0.5, 0.5, 0.5, 0.5]
     assert payload["anomaly_score"] == 0.0  # no prior history
@@ -86,7 +86,7 @@ async def test_rumination_flag_raises_salience(bus: AsyncBus):
         rumination=FlaggingRumination(),
     )
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     _, event = entries[0]
     assert event.payload["rumination_detected"] is True
     assert event.salience == pytest.approx(sequence._alert_salience)
@@ -127,7 +127,7 @@ async def test_user_input_resets_time_since_last_interaction(bus: AsyncBus):
         # Advance time and check the report value
         now["v"] = 1003.0
         await sequence.on_workspace(_empty_snapshot())
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         _, event = entries[0]
         assert event.payload["time_since_last_interaction_s"] == pytest.approx(3.0)
     finally:
@@ -199,7 +199,7 @@ class ConstantPredictionHead:
 
 @pytest.mark.asyncio
 async def test_temporal_prediction_error_present_on_report(bus: AsyncBus):
-    """chronos.report always includes temporal_prediction_error."""
+    """sequence.report always includes temporal_prediction_error."""
     network = FakeNetwork(units=4)
     sequence = Sequence(
         bus,
@@ -209,7 +209,7 @@ async def test_temporal_prediction_error_present_on_report(bus: AsyncBus):
     )
     sequence._pred_head = ConstantPredictionHead(pred_value=0.0, input_size=24)
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     _, event = entries[0]
     assert "temporal_prediction_error" in event.payload
     assert isinstance(event.payload["temporal_prediction_error"], float)
@@ -227,7 +227,7 @@ async def test_temporal_prediction_error_zero_on_first_tick(bus: AsyncBus):
     )
     sequence._pred_head = ConstantPredictionHead(pred_value=0.5, input_size=24)
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     _, event = entries[0]
     assert event.payload["temporal_prediction_error"] == pytest.approx(0.0)
 
@@ -250,7 +250,7 @@ async def test_temporal_prediction_error_nonzero_on_subsequent_tick(bus: AsyncBu
     await sequence.on_workspace(_empty_snapshot(tick=0))
     # Second tick: has a prior hidden state; prediction is 99.0 vs ~0.0 target
     await sequence.on_workspace(_empty_snapshot(tick=1))
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     assert len(entries) == 2
     _, event2 = entries[1]
     assert event2.payload["temporal_prediction_error"] > 0.0
@@ -270,7 +270,7 @@ async def test_legacy_fields_retained_with_forward_prediction(bus: AsyncBus):
     )
     sequence._pred_head = ConstantPredictionHead(pred_value=0.0, input_size=24)
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     _, event = entries[0]
     payload = event.payload
     assert "anomaly_score" in payload
@@ -292,7 +292,7 @@ async def test_forward_prediction_disabled_behavior_unchanged(bus: AsyncBus):
         rumination=RecurrenceRuminationDetector(window=4, threshold=4),
     )
     await sequence.on_workspace(_empty_snapshot())
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     _, event = entries[0]
     payload = event.payload
     # Field still present (always emitted), value is 0.0 when disabled
@@ -303,7 +303,7 @@ async def test_forward_prediction_disabled_behavior_unchanged(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_adaptation_suspended_during_sleep(bus: AsyncBus):
-    """When _in_hypnos=True, adapt() is not called on the head."""
+    """When _in_sleep=True, adapt() is not called on the head."""
     network = FakeNetwork(units=4)
     head = ConstantPredictionHead(pred_value=0.0, input_size=24)
     sequence = Sequence(
@@ -398,8 +398,8 @@ async def test_anomaly_salience_tracks_prediction_error(bus: AsyncBus):
     from kaine.bus import Event as BusEvent
     # Use a snapshot with a salient event so feature_vec is not all zeros
     ev = BusEvent(
-        source="soma",
-        type="soma.report",
+        source="interoception",
+        type="interoception.report",
         payload={},
         salience=0.9,
         timestamp=datetime.now(tz.utc),
@@ -410,7 +410,7 @@ async def test_anomaly_salience_tracks_prediction_error(bus: AsyncBus):
         inhibited=False,
     )
     await sequence.on_workspace(snap)
-    entries = await bus.read("chronos.out", last_id="0")
+    entries = await bus.read("sequence.out", last_id="0")
     assert len(entries) == 2
     _, event2 = entries[1]
     assert event2.salience == pytest.approx(sequence._alert_salience)

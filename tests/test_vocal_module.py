@@ -64,25 +64,25 @@ async def test_language_external_origin_copied_to_vocal_synthesized(
     await vocal.initialize()
     try:
         await bus.client.xadd(
-            "lingua.external",
+            "language.external",
             {
-                "source": "lingua",
-                "type": "lingua.external",
+                "source": "language",
+                "type": "language.external",
                 "salience": "0.5",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "causal_parent": "",
-                "payload": json.dumps({"text": "hello world", "origin": "nous"}),
+                "payload": json.dumps({"text": "hello world", "origin": "planning"}),
             },
         )
         synthesized = []
         for _ in range(50):
             await asyncio.sleep(0.02)
-            entries = await bus.read("vox.out", last_id="0")
-            synthesized = [e for _, e in entries if e.type == "vox.synthesized"]
+            entries = await bus.read("vocal.out", last_id="0")
+            synthesized = [e for _, e in entries if e.type == "vocal.synthesized"]
             if synthesized:
                 break
         assert synthesized
-        assert synthesized[-1].payload.get("origin") == "nous"
+        assert synthesized[-1].payload.get("origin") == "planning"
     finally:
         await vocal.shutdown()
 
@@ -147,10 +147,10 @@ async def test_synthesize_text_publishes_diagnostics_event(bus: AsyncBus, tmp_pa
     await vocal.initialize()
     try:
         await vocal.synthesize_text("hello secret content")
-        entries = await bus.read("vox.out", last_id="0")
+        entries = await bus.read("vocal.out", last_id="0")
         assert len(entries) == 1
         _, event = entries[0]
-        assert event.type == "vox.synthesized"
+        assert event.type == "vocal.synthesized"
         # No audio bytes anywhere in the payload.
         for v in event.payload.values():
             assert not isinstance(v, bytes)
@@ -172,14 +172,14 @@ async def test_language_external_event_triggers_synthesis(bus: AsyncBus, tmp_pat
     vocal = _make_vocal(bus, tmp_path)
     await vocal.initialize()
     try:
-        # Simulate a lingua.external event using bus.client.xadd directly
+        # Simulate a language.external event using bus.client.xadd directly
         # (matches how the language module actually publishes — it bypasses the
         # default <module>.out routing for the dedicated stream).
         await bus.client.xadd(
-            "lingua.external",
+            "language.external",
             {
-                "source": "lingua",
-                "type": "lingua.external",
+                "source": "language",
+                "type": "language.external",
                 "salience": "0.4",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "causal_parent": "",
@@ -201,12 +201,12 @@ async def test_affect_state_updates_affect_used(bus: AsyncBus, tmp_path: Path):
     vocal = _make_vocal(bus, tmp_path)
     await vocal.initialize()
     try:
-        # Publish a thymos.state event with high arousal.
+        # Publish a affect.state event with high arousal.
         await bus.client.xadd(
-            "thymos.out",
+            "affect.out",
             {
-                "source": "thymos",
-                "type": "thymos.state",
+                "source": "affect",
+                "type": "affect.state",
                 "salience": "0.1",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "causal_parent": "",
@@ -272,7 +272,7 @@ async def test_real_chatterbox_synthesis(bus: AsyncBus, tmp_path: Path):
 
     Chatterbox's ``predefined`` voice mode REQUIRES a ``predefined_voice_id``
     that exists on the server (it 400s otherwise — the same failure an
-    unconfigured ``[vox]`` boot would hit). Fetch an actual voice from the
+    unconfigured ``[vocal]`` boot would hit). Fetch an actual voice from the
     server's ``/get_predefined_voices`` so this validates synthesis rather than
     the missing-id error; skip if the server exposes no predefined voices.
     """

@@ -141,7 +141,7 @@ def test_check_corpus_ceiling_warns_at_threshold(tmp_path: Path, caplog) -> None
     assert info["warned"] is True
     assert info["corpus_bytes"] == threshold
     assert info["ceiling_bytes"] == ceiling_bytes
-    assert "[hypnos.voice_alignment].corpus_ceiling_gb" in caplog.text
+    assert "[sleep.voice_alignment].corpus_ceiling_gb" in caplog.text
 
     # The guard never deletes.
     assert target.exists()

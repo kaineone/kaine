@@ -140,12 +140,12 @@ still-unbuilt foveation Phase 3–4._
 - [x] 5.3 `serialize()`/`deserialize()` carry `acoustic_forward_models` keyed by
       encoder `model_id`: load on matching shapes, discard on a mismatch with a
       warning, carry other encoders' entries forward untouched.
-- [x] 5.4 A `hypnos.out` consumer suspends adaptation of both forward models during
+- [x] 5.4 A `sleep.out` consumer suspends adaptation of both forward models during
       sleep, as the vision module does.
 - [x] 5.5 Tests: config selection, the plugin seam (honoured, conflict, recorded),
       a persistence round-trip through `serialize`/`deserialize` in a fresh
       instance, the mismatch discard, encoder switch-and-back, sleep suspension
-      through decoded `hypnos.out` events, and the zero-persistence test over the
+      through decoded `sleep.out` events, and the zero-persistence test over the
       new key. Mutation-check each one.
 
 ## 6. Self-supervised encoders (amendment 2026-10-05, B1)

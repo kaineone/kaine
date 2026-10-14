@@ -50,9 +50,9 @@ def _strategy():
 
 def _interoception_event(salience=0.9):
     return Event(
-        source="soma",
-        type="soma.report",
-        payload={"body": "soma"},
+        source="interoception",
+        type="interoception.report",
+        payload={"body": "interoception"},
         salience=salience,
         timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
     )
@@ -60,9 +60,9 @@ def _interoception_event(salience=0.9):
 
 def _vision_event(salience=0.1):
     return Event(
-        source="topos",
-        type="topos.report",
-        payload={"place": "topos"},
+        source="vision",
+        type="vision.report",
+        payload={"place": "vision"},
         salience=salience,
         timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
     )
@@ -102,10 +102,10 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
         publication_threshold=0.35,
         **kwargs,
     )
-    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    cycle, bus = _make_cycle(syn, ["interoception.out", "vision.out"], client)
     try:
-        await client.xadd("soma.out", _encode_event(_interoception_event()), id="1760000000000-0")
-        await client.xadd("topos.out", _encode_event(_vision_event()), id="1760000000000-0")
+        await client.xadd("interoception.out", _encode_event(_interoception_event()), id="1760000000000-0")
+        await client.xadd("vision.out", _encode_event(_vision_event()), id="1760000000000-0")
         result = await cycle.tick()
         assert result.is_experiential
         entries = await client.xrange(WORKSPACE_STREAM)
@@ -113,8 +113,8 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
         _entry_id, fields = entries[0]
         snap = json.loads(fields["snapshot"])
         assert set(snap["salience_scores"]) == {
-            "soma.out:1760000000000-0",
-            "topos.out:1760000000000-0",
+            "interoception.out:1760000000000-0",
+            "vision.out:1760000000000-0",
         }
         selected = snap["selected"]
         assert len(selected) == 2
@@ -122,7 +122,7 @@ async def test_scores_from_two_streams_with_one_entry_id_both_survive(arm, arm_s
             entry_id = item["entry_id"]
             assert entry_id in snap["salience_scores"]
         scores = snap["salience_scores"]
-        assert scores["soma.out:1760000000000-0"] > scores["topos.out:1760000000000-0"]
+        assert scores["interoception.out:1760000000000-0"] > scores["vision.out:1760000000000-0"]
     finally:
         await bus.close()
 
@@ -136,10 +136,10 @@ async def test_broadcast_context_reads_each_members_own_score():
         publication_threshold=0.35,
         arm="competitive",
     )
-    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    cycle, bus = _make_cycle(syn, ["interoception.out", "vision.out"], client)
     try:
-        await client.xadd("soma.out", _encode_event(_interoception_event()), id="1760000000000-0")
-        await client.xadd("topos.out", _encode_event(_vision_event()), id="1760000000000-0")
+        await client.xadd("interoception.out", _encode_event(_interoception_event()), id="1760000000000-0")
+        await client.xadd("vision.out", _encode_event(_vision_event()), id="1760000000000-0")
         await cycle.tick()
         entries = await client.xrange(WORKSPACE_STREAM)
         assert len(entries) == 1
@@ -168,7 +168,7 @@ async def test_broadcast_context_reads_each_members_own_score():
         ctx = BroadcastContext(clock=lambda: 0.0)
         adopted = ctx.observe(snapshot)
         assert adopted is True
-        assert ctx._members == [("soma", "soma.report", 0.9)]
+        assert ctx._members == [("interoception", "interoception.report", 0.9)]
     finally:
         await bus.close()
 
@@ -177,40 +177,40 @@ async def test_broadcast_context_reads_each_members_own_score():
 async def test_candidates_are_ordered_by_source_first():
     client = fakeredis.FakeRedis(decode_responses=True)
     syn = FakeWorkspace()
-    cycle, bus = _make_cycle(syn, ["topos.out", "soma.out"], client)
+    cycle, bus = _make_cycle(syn, ["vision.out", "interoception.out"], client)
     try:
         vision_event = Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={"order": "third"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 2, tzinfo=timezone.utc),
         )
         interoception_first = Event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"order": "first"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
         )
         interoception_second = Event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"order": "second"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
         )
-        await client.xadd("topos.out", _encode_event(vision_event), id="1760000000000-0")
-        await client.xadd("soma.out", _encode_event(interoception_first), id="1760000000000-0")
-        await client.xadd("soma.out", _encode_event(interoception_second), id="1760000000000-1")
+        await client.xadd("vision.out", _encode_event(vision_event), id="1760000000000-0")
+        await client.xadd("interoception.out", _encode_event(interoception_first), id="1760000000000-0")
+        await client.xadd("interoception.out", _encode_event(interoception_second), id="1760000000000-1")
         await cycle.tick()
         assert len(syn.calls) == 1
         events = syn.calls[0]["events"]
         ids = [entry_id for entry_id, _ in events]
         assert ids == [
-            "soma.out:1760000000000-0",
-            "soma.out:1760000000000-1",
-            "topos.out:1760000000000-0",
+            "interoception.out:1760000000000-0",
+            "interoception.out:1760000000000-1",
+            "vision.out:1760000000000-0",
         ]
     finally:
         await bus.close()
@@ -223,15 +223,15 @@ async def test_entry_id_orders_before_stream():
     cycle, bus = _make_cycle(syn, ["a.out", "b.out"], client)
     try:
         a_event = Event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"stream": "a"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
         )
         b_event = Event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"stream": "b"},
             salience=0.5,
             timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
@@ -265,15 +265,15 @@ async def test_duplicate_candidate_ids_are_refused(arm):
     )
     now = datetime.now(timezone.utc)
     ev1 = Event(
-        source="soma",
-        type="soma.report",
+        source="interoception",
+        type="interoception.report",
         payload={},
         salience=0.9,
         timestamp=now,
     )
     ev2 = Event(
-        source="topos",
-        type="topos.report",
+        source="vision",
+        type="vision.report",
         payload={},
         salience=0.1,
         timestamp=now,
@@ -286,9 +286,9 @@ async def test_duplicate_candidate_ids_are_refused(arm):
 
 
 def test_stream_entry_key_round_trip():
-    key = stream_entry_key("soma.out", "1760000000000-0")
-    assert key == "soma.out:1760000000000-0"
-    assert split_stream_entry_key(key) == ("soma.out", "1760000000000-0")
+    key = stream_entry_key("interoception.out", "1760000000000-0")
+    assert key == "interoception.out:1760000000000-0"
+    assert split_stream_entry_key(key) == ("interoception.out", "1760000000000-0")
     assert split_stream_entry_key("1760000000000-0") == (None, "1760000000000-0")
 
 
@@ -297,7 +297,7 @@ async def test_select_dual_refuses_duplicate_candidate_ids():
     ctx = {
         "tick_index": 0,
         "is_experiential": True,
-        "phases": {"soma": 0.0, "topos": 1.0},
+        "phases": {"interoception": 0.0, "vision": 1.0},
     }
     syne = Workspace(
         strategy=_strategy(),
@@ -316,7 +316,7 @@ async def test_select_dual_keeps_one_score_per_candidate():
     ctx = {
         "tick_index": 0,
         "is_experiential": True,
-        "phases": {"soma": 0.0, "topos": 1.0},
+        "phases": {"interoception": 0.0, "vision": 1.0},
     }
     syne = Workspace(
         strategy=_strategy(),
@@ -326,7 +326,7 @@ async def test_select_dual_keeps_one_score_per_candidate():
             plv_window=12, coherence_floor=0.5, coherence_ceiling=1.5
         ),
     )
-    ids = ["soma.out:1760000000000-0", "topos.out:1760000000000-0"]
+    ids = ["interoception.out:1760000000000-0", "vision.out:1760000000000-0"]
     primary, counterfactual = await syne.select_dual(
         [(ids[0], _interoception_event()), (ids[1], _vision_event())], ctx
     )
@@ -341,22 +341,22 @@ async def test_select_dual_keeps_one_score_per_candidate():
 async def test_entry_ids_order_numerically_within_a_millisecond():
     client = fakeredis.FakeRedis(decode_responses=True)
     syn = FakeWorkspace()
-    cycle, bus = _make_cycle(syn, ["soma.out"], client)
+    cycle, bus = _make_cycle(syn, ["interoception.out"], client)
     try:
         for i in range(12):
             event = Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"i": i},
                 salience=0.5,
                 timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
             )
-            await client.xadd("soma.out", _encode_event(event), id=f"1760000000000-{i}")
+            await client.xadd("interoception.out", _encode_event(event), id=f"1760000000000-{i}")
         await cycle.tick()
         assert len(syn.calls) == 1
         events = syn.calls[0]["events"]
         ids = [entry_id for entry_id, _ in events]
-        assert ids == [f"soma.out:1760000000000-{i}" for i in range(12)]
+        assert ids == [f"interoception.out:1760000000000-{i}" for i in range(12)]
     finally:
         await bus.close()
 
@@ -376,7 +376,7 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
         top_k=5,
         publication_threshold=0.35,
     )
-    cycle, bus = _make_cycle(workspace, ["audition.out", "soma.out"], client)
+    cycle, bus = _make_cycle(workspace, ["audition.out", "interoception.out"], client)
 
     tone_event = Event(
         source="audition",
@@ -399,7 +399,7 @@ async def test_tone_event_is_accessed_through_the_engine_path(tmp_path):
             "audition.out", _encode_event(tone_event), id="1760000000000-0"
         )
         await client.xadd(
-            "soma.out", _encode_event(_interoception_event(0.1)), id="1760000000000-0"
+            "interoception.out", _encode_event(_interoception_event(0.1)), id="1760000000000-0"
         )
         result = await cycle.tick()
         assert result.is_experiential
@@ -442,30 +442,30 @@ async def _matched_coalitions(seed):
         arm="matched",
         arm_seed=seed,
     )
-    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    cycle, bus = _make_cycle(syn, ["interoception.out", "vision.out"], client)
     try:
         base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         for i in range(12):
             event = Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"i": i},
                 salience=0.1 + 0.05 * i,
                 timestamp=base.replace(second=i),
             )
             await client.xadd(
-                "soma.out", _encode_event(event), id=f"1760000000000-{i}"
+                "interoception.out", _encode_event(event), id=f"1760000000000-{i}"
             )
         for i in range(3):
             event = Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={"j": i},
                 salience=0.5,
                 timestamp=base.replace(second=12 + i),
             )
             await client.xadd(
-                "topos.out", _encode_event(event), id=f"1760000000000-{i}"
+                "vision.out", _encode_event(event), id=f"1760000000000-{i}"
             )
         result = await cycle.tick()
         assert result.is_experiential
@@ -486,25 +486,25 @@ async def test_matched_draw_is_reproducible_over_the_new_order():
     assert first == second
     assert len(first) == 2
     for entry_id in first:
-        assert entry_id.startswith(("soma.out:", "topos.out:"))
+        assert entry_id.startswith(("interoception.out:", "vision.out:"))
 
 
 @pytest.mark.asyncio
 async def test_read_cursors_stay_raw_bus_ids():
     client = fakeredis.FakeRedis(decode_responses=True)
     syn = Workspace(strategy=_strategy(), arm="competitive")
-    cycle, bus = _make_cycle(syn, ["soma.out", "topos.out"], client)
+    cycle, bus = _make_cycle(syn, ["interoception.out", "vision.out"], client)
     try:
         await client.xadd(
-            "soma.out", _encode_event(_interoception_event()), id="1760000000000-0"
+            "interoception.out", _encode_event(_interoception_event()), id="1760000000000-0"
         )
         await client.xadd(
-            "topos.out", _encode_event(_vision_event()), id="1760000000000-0"
+            "vision.out", _encode_event(_vision_event()), id="1760000000000-0"
         )
         await cycle.tick()
         assert cycle._cursors == {
-            "soma.out": "1760000000000-0",
-            "topos.out": "1760000000000-0",
+            "interoception.out": "1760000000000-0",
+            "vision.out": "1760000000000-0",
         }
         for value in cycle._cursors.values():
             assert ":" not in value

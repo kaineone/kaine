@@ -472,12 +472,12 @@
     if (msg.type === "cycle.rates" || "processing_rate_hz" in p || "experiential_rate_hz" in p) {
       out.rate = [num(p.processing_rate_hz), num(p.experiential_rate_hz)];
     }
-    if (msg.source === "thymos" || "valence" in p || "arousal" in p || "dominance" in p) {
+    if (msg.source === "affect" || "valence" in p || "arousal" in p || "dominance" in p) {
       if ("valence" in p || "arousal" in p || "dominance" in p) {
         out.affect = [num(p.valence), num(p.arousal), num(p.dominance)];
       }
     }
-    if (typeof msg.salience === "number" && msg.source !== "cycle" && msg.source !== "syneidesis") {
+    if (typeof msg.salience === "number" && msg.source !== "cycle" && msg.source !== "workspace") {
       out.salience = msg.salience;
     }
     if (msg.type === "workspace.broadcast" && p.metadata && typeof p.metadata.coherence === "number" && isFinite(p.metadata.coherence)) {
@@ -556,7 +556,7 @@
     NexusStream.subscribe(function (msg) {
       const p = msg.payload || {};
       // soma.report carries fatigue_value and fatigue_threshold.
-      if (msg.source === "soma" && msg.type === "soma.report" &&
+      if (msg.source === "interoception" && msg.type === "interoception.report" &&
           ("fatigue_value" in p || "fatigue_threshold" in p)) {
         fatigue.push(Date.now() / 1000, [num(p.fatigue_value), num(p.fatigue_threshold)]);
       }
@@ -888,8 +888,8 @@
       // health snapshot, including the spot block — reconcile from it so a
       // reconnect (or simply a missed spot.status) never leaves the border
       // stale. Bridge-forwarded bus events additionally arrive as
-      // msg.source === "spot" for instant reaction to a state change.
-      if (msg.source === "nexus" && msg.type === "nexus.snapshot") {
+      // msg.source === "supervisor" for instant reaction to a state change.
+      if (msg.source === "dashboard" && msg.type === "dashboard.snapshot") {
         var health = msg.payload && msg.payload.health;
         if (health) {
           if (window.NexusRedAlert) NexusRedAlert.evaluateHealth(health);
@@ -898,12 +898,12 @@
         return;
       }
       // Bridge emits {source, type, payload, ...} — spot publishes to spot.out
-      // so msg.source === "spot".
-      if (msg.source !== "spot") return;
+      // so msg.source === "supervisor".
+      if (msg.source !== "supervisor") return;
       var p = msg.payload || {};
-      if (msg.type === "spot.status") {
+      if (msg.type === "supervisor.status") {
         applySpotState(p.state, p.module, p.message);
-      } else if (msg.type === "spot.log") {
+      } else if (msg.type === "supervisor.log") {
         var text = p.message || p.text || JSON.stringify(p);
         appendLogLine(text, p.level || "info");
       }
@@ -1143,7 +1143,7 @@
 
 /* ---- Metrics in-place refresh (B14) --------------------------------------
    The metrics-kv board is server-rendered once at page load; this keeps it
-   live from the server-pushed `nexus.snapshot` event (task 2.2) rather than
+   live from the server-pushed `dashboard.snapshot` event (task 2.2) rather than
    polling /diagnostics/metrics.json on its own timer. */
 (function () {
   function render(kvEl, metrics) {
@@ -1164,7 +1164,7 @@
     var kvEl = document.getElementById("metrics-kv");
     if (!kvEl || !window.NexusStream) return;
     NexusStream.subscribe(function (msg) {
-      if (msg && msg.source === "nexus" && msg.type === "nexus.snapshot") {
+      if (msg && msg.source === "dashboard" && msg.type === "dashboard.snapshot") {
         var p = msg.payload || {};
         if (p.metrics) render(kvEl, p.metrics);
       }
@@ -1215,7 +1215,7 @@
    panels frozen on their dead "not running" snapshot forever — the operator
    has to reload the page. This refreshes them in place: a ONE-SHOT fetch of
    /diagnostics/metrics.json + /diagnostics/health.json for the first paint,
-   then the server-pushed `nexus.snapshot` event (over the shared diagnostics
+   then the server-pushed `dashboard.snapshot` event (over the shared diagnostics
    SSE — task 2.2) keeps them live thereafter, no poll loop. Per-module
    activity + the awake/sleeping pill are driven from the same shared stream.
    All fields are non-content operational metadata.
@@ -1456,14 +1456,14 @@
     NexusStream.subscribe(function (msg) {
       if (!msg) return;
       if (msg.source) lastSeen[msg.source] = Date.now();
-      if (msg.source === "hypnos") {
-        if (msg.type === "hypnos.sleep.started") setSleep(true);
-        else if (msg.type === "hypnos.sleep.completed") setSleep(false);
+      if (msg.source === "sleep") {
+        if (msg.type === "sleep.sleep.started") setSleep(true);
+        else if (msg.type === "sleep.sleep.completed") setSleep(false);
       }
       // The server pushes a combined {metrics, health} snapshot every few
       // seconds (>= the health cache TTL) over this SAME stream — no
       // separate poll loop needed to keep these panels live.
-      if (msg.source === "nexus" && msg.type === "nexus.snapshot") {
+      if (msg.source === "dashboard" && msg.type === "dashboard.snapshot") {
         var p = msg.payload || {};
         renderSnapshot(p.metrics, p.health);
       }

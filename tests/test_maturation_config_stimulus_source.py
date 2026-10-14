@@ -20,11 +20,11 @@ def test_stimulus_source_timing_defaults() -> None:
 def test_stimulus_source_timing_from_dict() -> None:
     cfg = MaturationConfig.from_dict(
         {
-            "womb_ready_retry_seconds": 7.5,
-            "womb_check_seconds": 2.0,
-            "womb_loss_after_seconds": 10.0,
-            "womb_arm_timeout_seconds": 300.0,
-            "womb_presence_window_seconds": 6.0,
+            "stimulus_source_ready_retry_seconds": 7.5,
+            "stimulus_source_check_seconds": 2.0,
+            "stimulus_source_loss_after_seconds": 10.0,
+            "stimulus_source_arm_timeout_seconds": 300.0,
+            "stimulus_source_presence_window_seconds": 6.0,
         }
     )
     assert cfg.stimulus_source_ready_retry_seconds == 7.5

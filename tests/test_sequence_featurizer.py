@@ -33,13 +33,13 @@ def _snapshot(events=None, *, inhibited=False, is_experiential=True, tick=0):
 
 def test_feature_vec_has_documented_dimensionality():
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
-    snap = _snapshot([_event("soma", 0.5)])
+    snap = _snapshot([_event("interoception", 0.5)])
     vec = feat.featurize(snap)
     assert len(vec) == DEFAULT_FEATURE_DIM == 24
 
 
 def test_featurizer_is_deterministic_for_same_snapshot():
-    snap = _snapshot([_event("soma", 0.5)], inhibited=False)
+    snap = _snapshot([_event("interoception", 0.5)], inhibited=False)
     feat_a = SnapshotFeaturizer(clock=lambda: 1.0)
     feat_b = SnapshotFeaturizer(clock=lambda: 1.0)
     assert feat_a.featurize(snap) == feat_b.featurize(snap)
@@ -47,29 +47,29 @@ def test_featurizer_is_deterministic_for_same_snapshot():
 
 def test_inhibited_bit_distinguishes_snapshots():
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
-    a = feat.featurize(_snapshot([_event("soma", 0.5)], inhibited=False))
+    a = feat.featurize(_snapshot([_event("interoception", 0.5)], inhibited=False))
     feat2 = SnapshotFeaturizer(clock=lambda: 0.0)
-    b = feat2.featurize(_snapshot([_event("soma", 0.5)], inhibited=True))
+    b = feat2.featurize(_snapshot([_event("interoception", 0.5)], inhibited=True))
     assert a != b
     assert a[21] == 0.0 and b[21] == 1.0
 
 
 def test_experiential_bit_distinguishes():
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
-    a = feat.featurize(_snapshot([_event("soma", 0.5)], is_experiential=True))
+    a = feat.featurize(_snapshot([_event("interoception", 0.5)], is_experiential=True))
     feat2 = SnapshotFeaturizer(clock=lambda: 0.0)
-    b = feat2.featurize(_snapshot([_event("soma", 0.5)], is_experiential=False))
+    b = feat2.featurize(_snapshot([_event("interoception", 0.5)], is_experiential=False))
     assert a[22] != b[22]
 
 
 def test_source_onehot_accumulates_salience():
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
     snap = _snapshot(
-        [_event("soma", 0.4), _event("soma", 0.3), _event("nous", 0.6)]
+        [_event("interoception", 0.4), _event("interoception", 0.3), _event("planning", 0.6)]
     )
     vec = feat.featurize(snap)
-    interoception_idx = DEFAULT_KNOWN_SOURCES.index("soma")
-    planning_idx = DEFAULT_KNOWN_SOURCES.index("nous")
+    interoception_idx = DEFAULT_KNOWN_SOURCES.index("interoception")
+    planning_idx = DEFAULT_KNOWN_SOURCES.index("planning")
     assert vec[4 + interoception_idx] == 0.7
     assert vec[4 + planning_idx] == 0.6
 
@@ -85,7 +85,7 @@ def test_unknown_source_lands_in_overflow_bucket():
 def test_delta_time_log_scaled():
     times = iter([1000.0, 1001.5, 1031.5])
     feat = SnapshotFeaturizer(clock=lambda: next(times))
-    snap = _snapshot([_event("soma", 0.5)])
+    snap = _snapshot([_event("interoception", 0.5)])
     vec0 = feat.featurize(snap)
     vec1 = feat.featurize(snap)
     vec2 = feat.featurize(snap)
@@ -120,9 +120,9 @@ def test_reserved_slot_23_is_always_zero():
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
     for snap in [
         _snapshot([]),
-        _snapshot([_event("soma", 0.5)]),
-        _snapshot([_event("nous", 0.9), _event("thymos", 0.3)], inhibited=True),
-        _snapshot([_event("chronos", 1.0)], is_experiential=False),
+        _snapshot([_event("interoception", 0.5)]),
+        _snapshot([_event("planning", 0.9), _event("affect", 0.3)], inhibited=True),
+        _snapshot([_event("sequence", 1.0)], is_experiential=False),
     ]:
         vec = feat.featurize(snap)
         assert vec[23] == 0.0, (
@@ -134,6 +134,6 @@ def test_reserved_slot_23_is_always_zero():
 def test_feature_dim_unchanged():
     """Feature dim must remain 24 (no accidental slot removal)."""
     feat = SnapshotFeaturizer(clock=lambda: 0.0)
-    vec = feat.featurize(_snapshot([_event("soma", 0.5)]))
+    vec = feat.featurize(_snapshot([_event("interoception", 0.5)]))
     assert len(vec) == 24
     assert DEFAULT_FEATURE_DIM == 24

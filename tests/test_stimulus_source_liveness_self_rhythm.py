@@ -18,19 +18,19 @@ async def passing_probe(config):
 @pytest.mark.asyncio
 async def test_refuses_when_interoception_disabled():
     config = {
-        "modules": {"topos": True, "audition": True, "soma": False},
-        "soma": {"self_rhythm_enabled": True},
+        "modules": {"vision": True, "audition": True, "interoception": False},
+        "interoception": {"self_rhythm_enabled": True},
     }
     result = await _check_local_stimulus_source(config, passing_probe)
     assert not result.live
-    assert "[modules].soma is disabled" in result.reason
+    assert "[modules].interoception is disabled" in result.reason
 
 
 @pytest.mark.asyncio
 async def test_refuses_when_self_rhythm_off():
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": False},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": False},
     }
     result = await _check_local_stimulus_source(config, passing_probe)
     assert not result.live
@@ -41,8 +41,8 @@ async def test_refuses_when_self_rhythm_off():
 async def test_refuses_when_snntorch_missing(monkeypatch):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
     }
     result = await _check_local_stimulus_source(config, passing_probe)
     assert not result.live
@@ -53,8 +53,8 @@ async def test_refuses_when_snntorch_missing(monkeypatch):
 async def test_passes_when_ready(monkeypatch):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: True)
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
     }
     result = await _check_local_stimulus_source(config, passing_probe)
     assert result.live

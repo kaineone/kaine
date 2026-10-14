@@ -139,7 +139,7 @@ async def test_hold_until_stimulus_source_ready_not_ready_then_ready(recorder):
     )
     assert result is True
     assert len(recorder.publishes) == 2
-    assert recorder.publishes[0][0] == "stage.gestation.no_stimulus"
+    assert recorder.publishes[0][0] == "stage.development.no_stimulus"
     assert recorder.publishes[0][1]["detail"] == "no feed"
     assert recorder.publishes[0][1]["provider"] == "local"
     assert recorder.publishes[0][2] == 0.7
@@ -185,7 +185,7 @@ async def test_hold_until_stimulus_source_ready_raising_ready_check(recorder):
     )
     assert result is True
     assert len(recorder.publishes) == 1
-    assert recorder.publishes[0][0] == "stage.gestation.no_stimulus"
+    assert recorder.publishes[0][0] == "stage.development.no_stimulus"
     assert recorder.publishes[0][1]["detail"].startswith("RuntimeError")
 
 

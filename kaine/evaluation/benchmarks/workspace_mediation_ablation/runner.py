@@ -61,7 +61,7 @@ from kaine.workspace import (
 )
 
 ARMS: tuple[str, ...] = ("workspace_on", "pooled")
-PROCESSORS: tuple[str, ...] = ("soma", "topos")
+PROCESSORS: tuple[str, ...] = ("interoception", "vision")
 
 
 class _NeverAlertDetector:
@@ -220,7 +220,7 @@ async def _run_arm(
         clock[0] = float(t)
 
         await interoception.tick_once()
-        interoception_report = _last_report(interoception_bus, "soma", "soma.report")
+        interoception_report = _last_report(interoception_bus, "interoception", "interoception.report")
         interoception_errors.append(
             _read_error(interoception_report.payload)
             if interoception_report is not None
@@ -228,7 +228,7 @@ async def _run_arm(
         )
 
         await vision.process_frame(script.vision_frames[t])
-        vision_report = _last_report(vision_bus, "topos", "topos.report")
+        vision_report = _last_report(vision_bus, "vision", "vision.report")
         vision_errors.append(
             _read_error(vision_report.payload)
             if vision_report is not None
@@ -270,20 +270,20 @@ async def _run_arm(
         )
 
     included_reports = {
-        "soma": sum(
+        "interoception": sum(
             1
             for i, g in enumerate(interoception_gains)
             if i >= config.warmup_ticks and g is not None and math.isfinite(g)
         ),
-        "topos": sum(
+        "vision": sum(
             1
             for i, g in enumerate(vision_gains)
             if i >= config.warmup_ticks and g is not None and math.isfinite(g)
         ),
     }
     ig_by_processor = {
-        "soma": mean_gain(interoception_gains, skip=config.warmup_ticks),
-        "topos": mean_gain(vision_gains, skip=config.warmup_ticks),
+        "interoception": mean_gain(interoception_gains, skip=config.warmup_ticks),
+        "vision": mean_gain(vision_gains, skip=config.warmup_ticks),
     }
     ig = headline_gain(ig_by_processor)
 

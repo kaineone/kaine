@@ -114,7 +114,7 @@ def test_append_records_all_new_fields(tmp_path: Path):
         model="m",
         record_id="rid",
         intent_entry_id="eid",
-        intent_origin="nous",
+        intent_origin="planning",
         sleep_index=3,
         system_digest="digest",
         seed=42,
@@ -122,7 +122,7 @@ def test_append_records_all_new_fields(tmp_path: Path):
     rec = _records(p)[0]
     assert rec["record_id"] == "rid"
     assert rec["intent_entry_id"] == "eid"
-    assert rec["intent_origin"] == "nous"
+    assert rec["intent_origin"] == "planning"
     assert rec["sleep_index"] == 3
     assert rec["system_digest"] == "digest"
     assert rec["seed"] == 42

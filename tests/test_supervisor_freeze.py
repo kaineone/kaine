@@ -80,7 +80,7 @@ def _supervisor(registry, fork_manager, bus):
 
 async def test_incident_writes_control_with_supervisor_source(bus, tmp_path):
     # A module that stays dead even after a light restart, so the supervisor's freeze
-    # persists with source="spot" (it never recovers on this single poll).
+    # persists with source="supervisor" (it never recovers on this single poll).
     mod = _AlwaysDeadMod(bus)
     await mod.initialize()
     registry = ModuleRegistry()
@@ -92,7 +92,7 @@ async def test_incident_writes_control_with_supervisor_source(bus, tmp_path):
     await supervisor._poll_once(stop)
     control = control_state.read_control()
     assert control.frozen is True
-    assert control.source == "spot"
+    assert control.source == "supervisor"
     assert supervisor._incidents["deadmod"].attempts == 1
     await registry.get("deadmod").shutdown()
 
@@ -167,9 +167,9 @@ async def test_development_only_freeze_crashed_module_recovered(bus, tmp_path, m
         nonlocal supervisor_pushed_on_top
         result = orig_freeze(*args, **kwargs)
         calls.append((args, kwargs.copy()))
-        if kwargs.get("source") == "spot":
+        if kwargs.get("source") == "supervisor":
             stack = control_state.read_control().stack
-            if stack and stack[-1].get("source") == "spot":
+            if stack and stack[-1].get("source") == "supervisor":
                 supervisor_pushed_on_top = True
         return result
 
@@ -304,7 +304,7 @@ async def test_hung_module_ignored_while_supervisor_entry_sits_on_development(
     monkeypatch.setattr(supervisor, "_sleeping", lambda: False)
 
     control_state.push_freeze(reason="womb lost", source="gestation")
-    control_state.push_freeze(reason="spot: other crashed", source="spot")
+    control_state.push_freeze(reason="spot: other crashed", source="supervisor")
     pre_stack = tuple(control_state.read_control().stack)
 
     await supervisor._poll_once(asyncio.Event())

@@ -110,13 +110,13 @@ async def test_trajectory_writes_snapshot_entry(tmp_path):
     bus.push(
         "workspace.broadcast",
         _event(
-            "syneidesis",
+            "workspace",
             "workspace.broadcast",
             {
                 "tick_index": 42,
                 "is_experiential": True,
                 "salience_scores": {"a-1": 0.9},
-                "selected": [{"source": "soma", "type": "soma.tick", "salience": 0.9}],
+                "selected": [{"source": "interoception", "type": "interoception.tick", "salience": 0.9}],
             },
         ),
     )
@@ -145,24 +145,24 @@ async def test_attribution_counts_sources(tmp_path):
     bus.push(
         "workspace.broadcast",
         _event(
-            "syneidesis",
+            "workspace",
             "workspace.broadcast",
-            {"selected": [{"source": "soma"}, {"source": "thymos"}]},
+            {"selected": [{"source": "interoception"}, {"source": "affect"}]},
         ),
     )
     bus.push(
         "workspace.broadcast",
-        _event("syneidesis", "workspace.broadcast", {"selected": [{"source": "soma"}]}),
+        _event("workspace", "workspace.broadcast", {"selected": [{"source": "interoception"}]}),
     )
     await sink.start()
     await obs.start()
     try:
-        await wait_for(lambda: obs.running_total.get("soma", 0) >= 2)
+        await wait_for(lambda: obs.running_total.get("interoception", 0) >= 2)
     finally:
         await obs.stop()
         await sink.stop()
-    assert obs.running_total["soma"] == 2
-    assert obs.running_total["thymos"] == 1
+    assert obs.running_total["interoception"] == 2
+    assert obs.running_total["affect"] == 1
 
 
 # ---------- ProactiveAuditObserver ----------
@@ -179,13 +179,13 @@ async def test_proactive_audit_logs_when_no_recent_input(tmp_path):
         affect_state_provider=lambda: {"valence": 0.0},
     )
     bus.push(
-        "lingua.external",
+        "language.external",
         _event(
-            "lingua",
+            "language",
             "external_speech",
             {
                 "text": "noise",
-                "trigger_module": "thymos",
+                "trigger_module": "affect",
                 "trigger_salience": 0.9,
                 "tick_index": 5,
             },
@@ -201,7 +201,7 @@ async def test_proactive_audit_logs_when_no_recent_input(tmp_path):
     files = list(tmp_path.glob("proactive_audit-*.jsonl"))
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
-    assert line["trigger_module"] == "thymos"
+    assert line["trigger_module"] == "affect"
 
 
 @pytest.mark.asyncio
@@ -215,11 +215,11 @@ async def test_proactive_audit_skips_when_recent_input(tmp_path):
         last_user_input_provider=lambda: just_now,
         proactive_threshold_seconds=60.0,
     )
-    bus.push("lingua.external", _event("lingua", "external_speech", {"text": "hi"}))
+    bus.push("language.external", _event("language", "external_speech", {"text": "hi"}))
     await sink.start()
     await obs.start()
     try:
-        await wait_for(lambda: "lingua.external" in obs._cursors)
+        await wait_for(lambda: "language.external" in obs._cursors)
     finally:
         await obs.stop()
         await sink.stop()
@@ -236,8 +236,8 @@ async def test_sleep_snapshot_pairs_began_and_ended(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="sleep_snapshots", flush_interval_s=0.05)
     states = iter([{"phase": "before"}, {"phase": "after"}])
     obs = SleepSnapshotRecorder(bus, sink, state_provider=lambda: next(states))
-    bus.push("hypnos.out", _event("hypnos", "hypnos.sleep.started", {}))
-    bus.push("hypnos.out", _event("hypnos", "hypnos.sleep.completed", {"dt": 30}))
+    bus.push("sleep.out", _event("sleep", "sleep.sleep.started", {}))
+    bus.push("sleep.out", _event("sleep", "sleep.sleep.completed", {"dt": 30}))
     await sink.start()
     await obs.start()
     try:
@@ -261,10 +261,10 @@ async def test_voice_tracking_records_cycle(tmp_path):
     sink = AsyncJsonlSink(tmp_path, name="voice_tracking", flush_interval_s=0.05)
     obs = VoiceTrackingObserver(bus, sink)
     bus.push(
-        "hypnos.out",
+        "sleep.out",
         _event(
-            "hypnos",
-            "hypnos.sleep.completed",
+            "sleep",
+            "sleep.sleep.completed",
             {
                 "pairs_processed": 12,
                 "pairs_above_threshold": 4,
@@ -311,8 +311,8 @@ async def test_affect_correlation_writes_pair(tmp_path):
         bus, sink, affect_state_provider=lambda: {"valence": 0.4, "arousal": 0.6}
     )
     bus.push(
-        "lingua.external",
-        _event("lingua", "external_speech", {"text": "perhaps we'll see"}),
+        "language.external",
+        _event("language", "external_speech", {"text": "perhaps we'll see"}),
     )
     await sink.start()
     await obs.start()
@@ -358,9 +358,9 @@ async def test_ab_divergence_writes_pair(tmp_path):
         sample_rate=1.0,
     )
     bus.push(
-        "lingua.external",
+        "language.external",
         _event(
-            "lingua",
+            "language",
             "external_speech",
             {
                 "text": "specific contextual answer",
@@ -392,13 +392,13 @@ async def test_ab_divergence_honors_zero_sample_rate(tmp_path):
         bus, sink, embedder=HashEmbedder(), client=fake_bare, sample_rate=0.0
     )
     bus.push(
-        "lingua.external",
-        _event("lingua", "external_speech", {"text": "x", "user_input": "y"}),
+        "language.external",
+        _event("language", "external_speech", {"text": "x", "user_input": "y"}),
     )
     await sink.start()
     await obs.start()
     try:
-        await wait_for(lambda: "lingua.external" in obs._cursors)
+        await wait_for(lambda: "language.external" in obs._cursors)
     finally:
         await obs.stop()
         await sink.stop()

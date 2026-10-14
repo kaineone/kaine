@@ -77,8 +77,8 @@ def test_study_configuration(
         study=study,
         studies_dir=STUDIES_DIR,
     )
-    assert cfg["lingua"]["temperature"] == 0.0
-    assert cfg["syneidesis"]["arm"] == arm
+    assert cfg["language"]["temperature"] == 0.0
+    assert cfg["workspace"]["arm"] == arm
     assert cfg["planned_test"]["role"] == role
     if role in ("test", "positive_control"):
         assert (

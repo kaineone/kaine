@@ -69,7 +69,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     DepSpec(
         name="model_server",
         role="language organ (lingua) — OpenAI-compatible model server",
-        modules=("lingua",),
+        modules=("language",),
         binary=None,
         port=SERVICE_PORTS["model_server"],
         kind="command",
@@ -77,7 +77,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
         note=(
             "launches + supervises the OpenAI-compatible model server against the "
             "downloaded organ GGUF (huggingface.co/kaineone/Qwen3.5-4B-abliterated-GGUF) "
-            "under the exact [lingua].model_id alias. Locates the hardware-appropriate "
+            "under the exact [language].model_id alias. Locates the hardware-appropriate "
             "server binary (Unsloth Studio's llama-server on NVIDIA, the unsloth-core "
             "build on AMD; honors KAINE_MODEL_SERVER_BIN); it NEVER silently installs "
             "the multi-GB server toolchain — if the binary is absent it prints install "
@@ -88,7 +88,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     DepSpec(
         name="qdrant",
         role="vector memory (mnemos, empatheia)",
-        modules=("mnemos", "empatheia"),
+        modules=("episodic_memory", "social_cognition"),
         # Containerised: no host binary to look for. Uses DEFAULT_QDRANT_PORT,
         # the KAINE-owned container's host port (compose/qdrant.yml), not upstream's default.
         binary=None,
@@ -115,7 +115,7 @@ DEPENDENCIES: tuple[DepSpec, ...] = (
     DepSpec(
         name="chatterbox",
         role="text-to-speech (vox)",
-        modules=("vox",),
+        modules=("vocal",),
         binary=None,
         port=SERVICE_PORTS["chatterbox"],
         kind="guide",

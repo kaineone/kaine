@@ -71,7 +71,7 @@ async def bus():
 
 @pytest.mark.asyncio
 async def test_scene_cut_produces_an_alert_level_vision_report(bus: AsyncBus):
-    """A hard scene cut MUST raise at least one alert-level topos.report."""
+    """A hard scene cut MUST raise at least one alert-level vision.report."""
     steady = [0.5, 0.5, 0.5, 0.5]
     cut = [0.5, -0.5, 0.5, -0.5]  # orthogonal → a hard cut
     enc = _FakeClipEncoder([steady] * 6 + [cut] + [steady] * 3)
@@ -85,11 +85,11 @@ async def test_scene_cut_produces_an_alert_level_vision_report(bus: AsyncBus):
     )
     for _ in range(10):
         await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     reports = [ev for _, ev in entries]
     alerted = [r for r in reports if r.payload["alert"]]
     # The cut alerts; a run over a steady stream does NOT sit at a flat baseline.
-    assert alerted, "scene cut produced no alert-level topos.report (flat perception)"
+    assert alerted, "scene cut produced no alert-level vision.report (flat perception)"
     assert any(r.salience == pytest.approx(0.7) for r in alerted)
     # And the steady frames before the cut stayed at baseline (perception varies).
     assert reports[0].salience == pytest.approx(0.2)

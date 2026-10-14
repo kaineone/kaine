@@ -128,10 +128,10 @@ def build_launch_cmd(
 ) -> list[str]:
     """Build the exact server launch argv.
 
-    ``-m <gguf> --alias <[lingua].model_id> --host 127.0.0.1 --port <from chat_url>
+    ``-m <gguf> --alias <[language].model_id> --host 127.0.0.1 --port <from chat_url>
     --jinja --reasoning-budget 0`` — the validated serving flags. The alias is the
     served name the wizard verifies and the organ POSTs to, so it MUST equal
-    ``[lingua].model_id``. ``--reasoning-budget 0`` is a best-effort server hint to
+    ``[language].model_id``. ``--reasoning-budget 0`` is a best-effort server hint to
     cap hybrid-thinking, but on the abliterated Qwen3.5 template it does NOT
     reliably suppress the chain-of-thought (the model reasons first and the
     visible ``content`` comes back empty). Actual suppression is enforced
@@ -300,7 +300,7 @@ def _read_pidfile(pidfile: Path) -> Optional[int]:
 
 
 def sleep_idle_seconds_from_config(language: dict[str, Any]) -> int:
-    """Return the idle-unload timeout from [lingua].model_server_sleep_idle_seconds.
+    """Return the idle-unload timeout from [language].model_server_sleep_idle_seconds.
 
     ``-1`` keeps the organ loaded indefinitely; any non-negative integer releases
     the model and KV cache after that many seconds with no requests, reloading on
@@ -309,7 +309,7 @@ def sleep_idle_seconds_from_config(language: dict[str, Any]) -> int:
     value = language.get("model_server_sleep_idle_seconds", 600)
     if isinstance(value, bool) or not isinstance(value, int) or value < -1:
         raise ValueError(
-            "[lingua].model_server_sleep_idle_seconds must be an integer of -1 or more (-1 keeps the organ loaded)"
+            "[language].model_server_sleep_idle_seconds must be an integer of -1 or more (-1 keeps the organ loaded)"
         )
     return value
 
@@ -335,7 +335,7 @@ def _resolve_launch(
     host that downloaded it; an operator override may point ``-m`` at a file."""
     from kaine.organ_server.served import detect_organ_backend
 
-    language = config.get("lingua") or {}
+    language = config.get("language") or {}
     chat_url = language_section_chat_url(language)
     alias = str(language.get("model_id", ORGAN_GGUF_REPO))
     api_key = language_section_api_key(language)
@@ -524,7 +524,7 @@ def cmd_status(
     cfg = config if config is not None else _load_config()
     emit = out if out is not None else sys.stdout.write
 
-    language = cfg.get("lingua") or {}
+    language = cfg.get("language") or {}
     chat_url = language_section_chat_url(language)
     alias = str(language.get("model_id", ORGAN_GGUF_REPO))
     api_key = language_section_api_key(language)

@@ -14,7 +14,7 @@ shipped configuration, the compose and quadlet files, the docs, the specs and
 `LICENSE.md`. Nothing under a real `state/`, `data/` or `backups/` was read.
 
 Paths below are relative to the data root and use today's names. The persisted
-rename step later moves `mnemos/` to `episodic_memory/` and so on, so every
+rename step later moves `episodic_memory/` to `episodic_memory/` and so on, so every
 location is resolved through the rename table and the configuration (see
 "Implementation").
 
@@ -79,29 +79,29 @@ Decisions:
 
 | Location | Holds | Today | Decision | Reason |
 |---|---|---|---|---|
-| `state/eidolon/self_model.json` | self-understanding, identity history | backed up, deleted | BACKUP + DELETE | cognitive state; unchanged |
-| `state/lingua/intent_expression.jsonl`, `state/lingua/intent_log/` | prompts, responses, inner monologue | backed up, deleted | BACKUP + DELETE | cognitive state; unchanged |
-| `state/lingua/utterance_outcomes.jsonl`, `voice_measures*.json(l)` | voice outcomes and measures | deleted, **not backed up** | BACKUP + DELETE | part of the developing voice (CAL Article 4.2(b)) |
-| `state/hypnos/adapters/` | learned voice adapters | backed up, deleted | BACKUP + DELETE | unchanged |
-| `state/hypnos/consolidation_divergence.json` | consolidation record | **kept** | BACKUP + DELETE | a consolidation record is cognitive state by definition |
-| `state/hypnos/organ_window.json` | which organs were loaded when (GPU residency) | kept | DELETE | scheduling state of the host's memory, not something the entity learned; a later entity would inherit it |
-| `state/phantasia/` (checkpoint and sidecar) | world-model weights | backed up, deleted | BACKUP + DELETE | unchanged |
-| `state/mnemos/mnemos.db` (sqlite-vec, the default store on tiers 0 and 1) | **the episodic memory** | **neither** | BACKUP + DELETE | memories are cognitive state; today the whole memory survives on two tiers |
-| `state/mnemos/mnemos.db-wal`, `mnemos.db-shm` | uncheckpointed memory pages | neither | BACKUP + DELETE (checkpoint into the database before the backup, then delete all three) | the write-ahead log can hold memory content the main file does not yet have |
-| `state/mnemos/store_health.json` | store state markers (for example an interrupted import) | kept | DELETE | not a health metric but a marker the next store would act on |
+| `state/self_model/self_model.json` | self-understanding, identity history | backed up, deleted | BACKUP + DELETE | cognitive state; unchanged |
+| `state/language/intent_expression.jsonl`, `state/language/intent_log/` | prompts, responses, inner monologue | backed up, deleted | BACKUP + DELETE | cognitive state; unchanged |
+| `state/language/utterance_outcomes.jsonl`, `voice_measures*.json(l)` | voice outcomes and measures | deleted, **not backed up** | BACKUP + DELETE | part of the developing voice (CAL Article 4.2(b)) |
+| `state/sleep/adapters/` | learned voice adapters | backed up, deleted | BACKUP + DELETE | unchanged |
+| `state/sleep/consolidation_divergence.json` | consolidation record | **kept** | BACKUP + DELETE | a consolidation record is cognitive state by definition |
+| `state/sleep/organ_window.json` | which organs were loaded when (GPU residency) | kept | DELETE | scheduling state of the host's memory, not something the entity learned; a later entity would inherit it |
+| `state/world_model/` (checkpoint and sidecar) | world-model weights | backed up, deleted | BACKUP + DELETE | unchanged |
+| `state/episodic_memory/episodic_memory.db` (sqlite-vec, the default store on tiers 0 and 1) | **the episodic memory** | **neither** | BACKUP + DELETE | memories are cognitive state; today the whole memory survives on two tiers |
+| `state/episodic_memory/episodic_memory.db-wal`, `episodic_memory.db-shm` | uncheckpointed memory pages | neither | BACKUP + DELETE (checkpoint into the database before the backup, then delete all three) | the write-ahead log can hold memory content the main file does not yet have |
+| `state/episodic_memory/store_health.json` | store state markers (for example an interrupted import) | kept | DELETE | not a health metric but a marker the next store would act on |
 | `state/individuation/` | maturation reference, ledger, reports, maturation adapter | backed up (fatal), deleted | BACKUP + DELETE | unchanged |
 | `state/forks/<id>/` snapshots of **this** entity | full module state | latest backed up; whole dir deleted | BACKUP + DELETE, this entity's only | all of the entity's snapshots are its state; the backup carries them, not only the latest |
 | `state/forks/<id>/` of **other** entities and preserved forks | another individual | **deleted** (whole dir) | RETAIN | a preserved or individuated fork is a separate entity (CAL Article 4.6); deleting it here breaches docs/12-forks-and-merges.md |
 | `state/forks/merged_adapters/` | merged voice adapters | deleted, not backed up | BACKUP + DELETE (this entity's) | learned voice; a merged snapshot lists its adapter paths, so an adapter belongs to the entity whose snapshots list it, and one no snapshot of another entity lists is this entity's |
-| `state/lifecycle/stage.json` and `gestation_*.json`, `birth_request.json`, `birth_ack.json` | developmental stage and progress | **kept** | BACKUP + DELETE | developmental state is in preservation bundles already; left behind, a new boot would inherit the stage |
+| `state/lifecycle/stage.json` and `development_*.json`, `maturation_request.json`, `maturation_ack.json` | developmental stage and progress | **kept** | BACKUP + DELETE | developmental state is in preservation bundles already; left behind, a new boot would inherit the stage |
 | `state/identity/entity.json` | entity id and lineage | read into the manifest, **kept** | BACKUP + DELETE (the whole file goes into the backup; the id is also in the audit record) | lineage is part of who the entity is; left behind, the next entity in this state root would reuse the decommissioned id |
-| `state/perception/` | locus runtime and desire | deleted | DELETE | operational; unchanged |
-| `state/praxis/files/` | files the entity wrote | **kept** | BACKUP + DELETE | the entity's own output and learned behaviour |
-| `state/praxis/notifications.log` | notifications the entity sent | **kept** | BACKUP + DELETE | entity-written content |
-| `state/praxis/audit.log` | hash-chained action audit, no content | kept | RETAIN | accountability record of what the entity did; required to audit its actions after the fact |
-| `state/vox/*.wav` | the entity's speech audio (bounded) | **kept** | DELETE | rendered output, not state; private content |
-| `state/hypnos/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | BACKUP + DELETE for this entity's jobs only (after its running jobs are cancelled); other entries KEPT | the volume is shared with the study runner (`/trainer-jobs`); a job is this entity's when its `job.json` names this entity's adapter store or it holds one of this entity's adapters |
-| `state/hypnos/voice_alignment_audit.jsonl` | adapter verdicts, no content | kept | RETAIN | welfare and audit record of voice changes |
+| `state/perceptual_locus/` | locus runtime and desire | deleted | DELETE | operational; unchanged |
+| `state/effectors/files/` | files the entity wrote | **kept** | BACKUP + DELETE | the entity's own output and learned behaviour |
+| `state/effectors/notifications.log` | notifications the entity sent | **kept** | BACKUP + DELETE | entity-written content |
+| `state/effectors/audit.log` | hash-chained action audit, no content | kept | RETAIN | accountability record of what the entity did; required to audit its actions after the fact |
+| `state/vocal/*.wav` | the entity's speech audio (bounded) | **kept** | DELETE | rendered output, not state; private content |
+| `state/sleep/voice_align_jobs/` (`kaine-trainer-jobs` volume) | training pairs (plaintext utterances) while a job runs, metadata after | **kept** | BACKUP + DELETE for this entity's jobs only (after its running jobs are cancelled); other entries KEPT | the volume is shared with the study runner (`/trainer-jobs`); a job is this entity's when its `job.json` names this entity's adapter store or it holds one of this entity's adapters |
+| `state/sleep/voice_alignment_audit.jsonl` | adapter verdicts, no content | kept | RETAIN | welfare and audit record of voice changes |
 
 ### Cycle and welfare records (state/cycle, state/preservation)
 
@@ -128,7 +128,7 @@ Decisions:
 | `data/evaluation/replay/` when `replay_redact_content = false` | verbatim memory text | kept | DELETE (content records only) | private content; the redacted default is metrics and stays |
 | `data/evaluation/welfare/` | gray-zone and welfare events | kept | RETAIN | CAL Article 4.7: Welfare Events are logged and reviewed |
 | `data/evaluation/research_events/`, `runs/<run_id>/manifest.json`, `positive_control/`, `benchmarks/`, `redteam/` | curated metrics and run metadata | kept | RETAIN | research record |
-| `data/nexus_record/` | privacy-filtered dashboard record | kept | RETAIN when the privacy filter was on; DELETE records written with the development content override | the filtered record holds no content; an override record does |
+| `data/dashboard_record/` | privacy-filtered dashboard record | kept | RETAIN when the privacy filter was on; DELETE records written with the development content override | the filtered record holds no content; an override record does |
 | `data/workspace_trajectory/` (opt-in) | filtered workspace snapshots | kept | RETAIN when filtered; DELETE when it holds content | same rule |
 | `data/ignition/` | broadcast metadata | kept | RETAIN | research log the operator deletes by hand (docs/15-experiments) |
 | `research_out/` | published metric bundles | kept | RETAIN | already published under the licence |
@@ -137,7 +137,7 @@ Decisions:
 
 | Location | Holds | Today | Decision | Reason |
 |---|---|---|---|---|
-| Qdrant `mnemos_*` collections, `empatheia_agents` | memories and agent models | exported best effort, dropped only if the unauthenticated probe succeeds | BACKUP (fatal on failure) + DELETE (authenticated; failure fatal) | cognitive state; today on the secured setup neither happens |
+| Qdrant `episodic_memory_*` collections, `social_cognition_agents` | memories and agent models | exported best effort, dropped only if the unauthenticated probe succeeds | BACKUP (fatal on failure) + DELETE (authenticated; failure fatal) | cognitive state; today on the secured setup neither happens |
 | Qdrant `kaine_meta` stamp and strength points of this entity | store metadata | deleted | DELETE | unchanged, now authenticated |
 | Redis streams on the configured database (old and new names) | recent bus traffic | cleared if reachable, no auth (fixed in `decommission-clears-bus-streams`) | DELETE | private content; authenticated, exact names, streams only |
 | Redis append-only file | history of every stream write | kept | DELETE (rewrite after the deletion) | deleted entries otherwise stay on disk; `BGREWRITEAOF` (in `decommission-clears-bus-streams`) |
@@ -191,9 +191,9 @@ The owner reviewed this design and decided:
 
 - **Location registry.** One table in `kaine/lifecycle/decommission.py` lists every
   location with its decision. Each location resolves through the configuration
-  (`[eidolon].persistence_path`, `[lingua].intent_log_path`,
-  `[hypnos.voice_alignment].adapter_output_dir`, `[phantasia].checkpoint_path`,
-  `[vox].sink_path`, `[praxis].*`, `[lifecycle].snapshots_path`, the research and
+  (`[self_model].persistence_path`, `[language].intent_log_path`,
+  `[sleep.voice_alignment].adapter_output_dir`, `[world_model].checkpoint_path`,
+  `[vocal].sink_path`, `[effectors].*`, `[lifecycle].snapshots_path`, the research and
   evaluation roots, the episodic-memory backend and path) and through the rename
   table, so old and new names are both covered. Hard-coded subpaths go.
 - **Backup.**
@@ -259,11 +259,11 @@ The implementation review settled these points:
   `qdrant_absent_asserted`, and the flag never overrides a module that is on.
   No endpoint at all means Qdrant is never contacted.
 - **Renamed names.** Paths take their old and new forms from
-  `legacy_names.STATE_PATHS` (for example `mnemos/mnemos.db` and
+  `legacy_names.STATE_PATHS` (for example `episodic_memory/episodic_memory.db` and
   `episodic_memory/episodic_memory.db`, with `-wal`, `-shm` and `-journal`;
-  `gestation_*` and `development_*`; `birth_*` and `maturation_*`), and Qdrant
+  `development_*` and `development_*`; `maturation_*` and `maturation_*`), and Qdrant
   collection names from `legacy_names.COLLECTIONS`.
-- **Trainer work directory.** `[hypnos.voice_alignment].trainer_workdir` holds
+- **Trainer work directory.** `[sleep.voice_alignment].trainer_workdir` holds
   `pairs.jsonl`, which is private content, so it is backed up, then deleted
   (contents only). The job directory keeps its DELETE decision when it is a
   separate directory. A job that a trainer has claimed and not finished blocks

@@ -55,7 +55,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 
 
 class Interoception(BaseModule):
-    name: ClassVar[str] = "soma"
+    name: ClassVar[str] = "interoception"
 
     def __init__(
         self,
@@ -97,7 +97,7 @@ class Interoception(BaseModule):
         # substrate baseline, WITHHOLD the punitive allostatic actions its
         # (untrained) prediction error would trigger and DAMPEN its inflation
         # of the fatigue accumulator. The prediction-error signal itself is never
-        # altered, and the absolute [soma.thresholds] limits are never gated
+        # altered, and the absolute [interoception.thresholds] limits are never gated
         # (see tick_once). Grounded in the paper's warmed-up-signal logic.
         regulation_warmup_enabled: bool = True,
         regulation_warmup_min_samples: int = 1000,
@@ -145,7 +145,7 @@ class Interoception(BaseModule):
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
-            PositiveControl("soma", positive_control)
+            PositiveControl("interoception", positive_control)
             if positive_control is not None and positive_control.enabled
             else None
         )
@@ -200,7 +200,7 @@ class Interoception(BaseModule):
         # --- Developmental warm-up state ---
         # A grace window applied ONLY to the action path (regulation advisories +
         # fatigue-accumulator input) while the forward model learns the host
-        # baseline. It NEVER touches the signal path (soma.report / soma.fatigue),
+        # baseline. It NEVER touches the signal path (interoception.report / interoception.fatigue),
         # and a live hard-threshold breach overrides it unconditionally.
         if regulation_warmup_min_samples < 0:
             raise ValueError("regulation_warmup_min_samples must be >= 0")
@@ -535,7 +535,7 @@ class Interoception(BaseModule):
         ctx = null = None
         scored_stamp = self._prediction_stamp
         if getattr(self._forward_model, "context_dim", 0) > 0:
-            ctx, null = self._context.context_and_null(("soma", "lingua"))
+            ctx, null = self._context.context_and_null(("interoception", "language"))
             if getattr(self._forward_model, "accepts_timespan", False):
                 prediction_error = self._forward_model.step(
                     feature_vec, timespan=ts, context=ctx, null_context=null
@@ -631,7 +631,7 @@ class Interoception(BaseModule):
 
         # --- Developmental warm-up gate (ACTION PATH ONLY) ---
         # A live hard-threshold breach OVERRIDES the gate unconditionally: the
-        # [soma.thresholds] limits are absolute, not learned predictions, so a
+        # [interoception.thresholds] limits are absolute, not learned predictions, so a
         # real substrate problem (e.g. GPU >= 83 C) always actuates and always
         # integrates fatigue at full weight, even during warm-up (design §4).
         hard_breach = alert.is_alert
@@ -643,7 +643,7 @@ class Interoception(BaseModule):
         if warmup_active and not self._warmup_started_emitted:
             self._warmup_started_emitted = True
             await self.publish(
-                "soma.warmup.started",
+                "interoception.warmup.started",
                 {
                     "min_samples": self._warmup_min_samples,
                     "min_seconds": self._warmup_min_seconds,
@@ -743,16 +743,16 @@ class Interoception(BaseModule):
             error_window=list(self._prediction_error_window),
         )
         salience = self._alert_salience if alert.is_alert else error_salience
-        await self.publish("soma.report", payload, salience=salience)
+        await self.publish("interoception.report", payload, salience=salience)
         self._self_rhythm_own_drive = float(salience)
         if pc_args is not None:
             await self._queue_positive_control(pc_args, pc_suspended)
 
-        # --- Publish soma.fatigue if threshold newly crossed ---
+        # --- Publish interoception.fatigue if threshold newly crossed ---
         if fatigue_crossed and not self._fatigue_threshold_emitted:
             self._fatigue_threshold_emitted = True
             await self.publish(
-                "soma.fatigue",
+                "interoception.fatigue",
                 {
                     "value": self._fatigue.value,
                     "threshold": self._fatigue.threshold,
@@ -766,21 +766,21 @@ class Interoception(BaseModule):
             # (e.g. after maintenance reset).
             self._fatigue_threshold_emitted = False
 
-        # --- Publish soma.regulation advisory if one was raised ---
+        # --- Publish interoception.regulation advisory if one was raised ---
         if advisory is not None:
             await self.publish(
-                "soma.regulation",
+                "interoception.regulation",
                 {**advisory, "alert": True},
                 salience=self._alert_salience,
             )
 
         # --- Warm-up withheld an advisory: record it, never a silent no-op ---
-        # Emitted on soma.out as a NON-ACTUATING event type (the cycle engine's
-        # consume_soma_regulation ignores anything that is not `soma.regulation`),
+        # Emitted on interoception.out as a NON-ACTUATING event type (the cycle engine's
+        # consume_interoception_regulation ignores anything that is not `interoception.regulation`),
         # so the "cry" is auditable without throttling/shedding/maintenance.
         if withheld_advisory is not None:
             await self.publish(
-                "soma.regulation.withheld",
+                "interoception.regulation.withheld",
                 {
                     "would_be_action": withheld_advisory["action"],
                     "prediction_error": prediction_error,
@@ -808,7 +808,7 @@ class Interoception(BaseModule):
         ):
             self._warmup_completed = True
             await self.publish(
-                "soma.warmup.completed",
+                "interoception.warmup.completed",
                 {
                     "samples_seen": self._samples_seen,
                     "lived_seconds": self._lived_seconds(),
@@ -927,12 +927,12 @@ class Interoception(BaseModule):
             raise
 
     async def _sleep_event_loop(self) -> None:
-        """Subscribe to hypnos.out to set/clear the _in_hypnos flag."""
+        """Subscribe to sleep.out to set/clear the _in_sleep flag."""
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "hypnos.out",
+                        "sleep.out",
                         last_id=self._sleep_cursor,
                         count=32,
                         block_ms=0,
@@ -940,20 +940,20 @@ class Interoception(BaseModule):
                     if last_scanned is not None:
                         self._sleep_cursor = last_scanned
                         for _, event in entries:
-                            if event.type == "hypnos.sleep.started":
+                            if event.type == "sleep.sleep.started":
                                 self._in_sleep = True
                                 self._fatigue.faster_decay = True
                                 log.debug(
-                                    "soma: _in_hypnos=True (hypnos.sleep.started)"
+                                    "soma: _in_hypnos=True (sleep.sleep.started)"
                                 )
-                            elif event.type == "hypnos.sleep.completed":
+                            elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 self._fatigue.faster_decay = False
                                 self._fatigue.reset()
                                 self._fatigue_threshold_emitted = False
                                 self._regulation.reset()
                                 log.debug(
-                                    "soma: _in_hypnos=False (hypnos.sleep.completed); "
+                                    "soma: _in_hypnos=False (sleep.sleep.completed); "
                                     "fatigue reset"
                                 )
                     else:

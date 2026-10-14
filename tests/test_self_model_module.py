@@ -87,14 +87,14 @@ async def test_workspace_below_threshold_no_event(bus: AsyncBus, tmp_path: Path)
     )
     await self_model.initialize()
     try:
-        # The self-model module publishes an initial self-model seed to eidolon.out at boot
+        # The self-model module publishes an initial self-model seed to self_model.out at boot
         # (the bus-mediated persona snapshot a split-host language module consumes). Seek
         # past it so this test measures only the below-threshold drift behavior.
-        tail = await bus.client.xrevrange("eidolon.out", count=1)
+        tail = await bus.client.xrevrange("self_model.out", count=1)
         cursor = (tail[0][0] if tail else "0")
         for _ in range(5):
-            await self_model.on_workspace(_snapshot(["soma", "chronos"]))
-        entries = await bus.read("eidolon.out", last_id=cursor)
+            await self_model.on_workspace(_snapshot(["interoception", "sequence"]))
+        entries = await bus.read("self_model.out", last_id=cursor)
         assert len(entries) == 0
     finally:
         await self_model.shutdown()
@@ -110,9 +110,9 @@ async def test_workspace_above_threshold_publishes_diagnostics_only(bus: AsyncBu
     )
     await self_model.initialize()
     try:
-        await self_model.on_workspace(_snapshot(["soma", "chronos"]))
-        await self_model.on_workspace(_snapshot(["mnemos"]))
-        entries = await bus.read("eidolon.out", last_id="0")
+        await self_model.on_workspace(_snapshot(["interoception", "sequence"]))
+        await self_model.on_workspace(_snapshot(["episodic_memory"]))
+        entries = await bus.read("self_model.out", last_id="0")
         assert len(entries) >= 1
         _, ev = entries[-1]
         # Diagnostics-only payload
@@ -140,10 +140,10 @@ async def test_drift_event_carries_no_contents(bus: AsyncBus, tmp_path: Path):
     await self_model.initialize()
     try:
         # Seek past the boot self-model seed so entries[0] is the drift event.
-        tail = await bus.client.xrevrange("eidolon.out", count=1)
+        tail = await bus.client.xrevrange("self_model.out", count=1)
         cursor = (tail[0][0] if tail else "0")
-        await self_model.on_workspace(_snapshot(["soma"]))
-        entries = await bus.read("eidolon.out", last_id=cursor)
+        await self_model.on_workspace(_snapshot(["interoception"]))
+        entries = await bus.read("self_model.out", last_id=cursor)
         _, ev = entries[0]
         # Forbidden keys per the privacy boundary.
         for forbidden in ("text", "payload", "value", "belief"):
@@ -158,17 +158,17 @@ async def test_internal_speech_increments_counter(bus: AsyncBus, tmp_path: Path)
     self_model = SelfModel(
         bus,
         persistence_path=tmp_path / "m.json",
-        internal_speech_stream="lingua.internal",
+        internal_speech_stream="language.internal",
         save_interval_s=60,
     )
     await self_model.initialize()
     try:
-        # Publish three events to lingua.internal directly.
+        # Publish three events to language.internal directly.
         for _ in range(3):
             await bus.client.xadd(
-                "lingua.internal",
+                "language.internal",
                 {
-                    "source": "lingua",
+                    "source": "language",
                     "type": "internal.thought",
                     "salience": "0.1",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -191,7 +191,7 @@ async def _publish_speech(bus: AsyncBus, stream: str, text: str) -> None:
     await bus.client.xadd(
         stream,
         {
-            "source": "lingua",
+            "source": "language",
             "type": "internal_speech" if stream.endswith("internal") else "external_speech",
             "salience": "0.1",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -217,14 +217,14 @@ async def test_voice_observation_records_features_both_channels(
     self_model = SelfModel(
         bus,
         persistence_path=tmp_path / "m.json",
-        internal_speech_stream="lingua.internal",
-        external_speech_stream="lingua.external",
+        internal_speech_stream="language.internal",
+        external_speech_stream="language.external",
         save_interval_s=60,
     )
     await self_model.initialize()
     try:
-        await _publish_speech(bus, "lingua.internal", "thinking quietly here")
-        await _publish_speech(bus, "lingua.external", "hello world out loud now")
+        await _publish_speech(bus, "language.internal", "thinking quietly here")
+        await _publish_speech(bus, "language.external", "hello world out loud now")
 
         await _wait_until(
             lambda: len(self_model.model.voice_observations) >= 2
@@ -262,7 +262,7 @@ async def test_voice_observation_stores_no_raw_text(bus: AsyncBus, tmp_path: Pat
     await self_model.initialize()
     try:
         secret = "do not persist this sentence anywhere"
-        await _publish_speech(bus, "lingua.internal", secret)
+        await _publish_speech(bus, "language.internal", secret)
         await _wait_until(lambda: len(self_model.model.voice_observations) >= 1)
 
         obs = self_model.model.voice_observations[0]
@@ -293,7 +293,7 @@ async def test_voice_observations_capped(bus: AsyncBus, tmp_path: Path):
     await self_model.initialize()
     try:
         for i in range(7):
-            await _publish_speech(bus, "lingua.internal", f"utterance number {i}")
+            await _publish_speech(bus, "language.internal", f"utterance number {i}")
         await _wait_until(lambda: self_model.model.internal_speech_count >= 7)
 
         # Count keeps climbing; the buffer is capped to the most recent N.
@@ -322,11 +322,11 @@ async def test_voice_observations_uncapped_by_default(bus: AsyncBus, tmp_path: P
         # Wait until the speech loop is live (its "$" cursor resolved) so no
         # utterance published below is missed.
         while self_model.model.internal_speech_count == 0:
-            await _publish_speech(bus, "lingua.internal", "warm up")
+            await _publish_speech(bus, "language.internal", "warm up")
             await _wait_until(lambda: self_model.model.internal_speech_count >= 1)
         start = self_model.model.internal_speech_count
         for i in range(300):
-            await _publish_speech(bus, "lingua.internal", f"utterance number {i}")
+            await _publish_speech(bus, "language.internal", f"utterance number {i}")
         await _wait_until(
             lambda: self_model.model.internal_speech_count >= start + 300, attempts=1000
         )
@@ -346,8 +346,8 @@ async def test_shutdown_persists_final_state(bus: AsyncBus, tmp_path: Path):
         save_interval_s=60,
     )
     await self_model.initialize()
-    await self_model.on_workspace(_snapshot(["soma"]))
-    await self_model.on_workspace(_snapshot(["mnemos"]))
+    await self_model.on_workspace(_snapshot(["interoception"]))
+    await self_model.on_workspace(_snapshot(["episodic_memory"]))
     await self_model.shutdown()
     loaded = SelfModelDocument.from_json(p.read_text())
     # identity_history should have at least one entry from the drift event.
@@ -357,7 +357,7 @@ async def test_shutdown_persists_final_state(bus: AsyncBus, tmp_path: Path):
 class _ScriptedDrift:
     """Drift detector returning scripted scores (threshold 0.5 in the tests)."""
 
-    def __init__(self, scores, sources=("topos",)):
+    def __init__(self, scores, sources=("vision",)):
         self._scores = list(scores)
         self._sources = tuple(sources)
 
@@ -401,7 +401,7 @@ async def test_sustained_drift_is_one_episode(bus: AsyncBus, tmp_path: Path):
     await self_model.initialize()
     try:
         for _ in range(n):
-            await self_model.on_workspace(_snapshot(["topos"]))
+            await self_model.on_workspace(_snapshot(["vision"]))
         history = self_model.model.identity_history
         assert len(history) == 1
         ep = history[0]
@@ -409,8 +409,8 @@ async def test_sustained_drift_is_one_episode(bus: AsyncBus, tmp_path: Path):
         assert ep["count"] == n
         assert ep["peak_score"] == pytest.approx(0.95)
         assert ep["score"] == pytest.approx(0.95)
-        assert ep["sources"] == {"topos": n}
-        assert ep["top_sources"] == ["topos"]
+        assert ep["sources"] == {"vision": n}
+        assert ep["top_sources"] == ["vision"]
         assert ep["onset"] <= ep["end"]
         assert ep["timestamp"] == ep["onset"]
         assert self_model._drift_count == n
@@ -424,7 +424,7 @@ async def test_quiet_broadcast_closes_the_episode(bus: AsyncBus, tmp_path: Path)
     await self_model.initialize()
     try:
         for _ in range(16):
-            await self_model.on_workspace(_snapshot(["topos"]))
+            await self_model.on_workspace(_snapshot(["vision"]))
         history = self_model.model.identity_history
         assert [ep["count"] for ep in history] == [3, 3, 3, 3]
     finally:
@@ -441,7 +441,7 @@ async def test_save_stays_small_under_sustained_drift(bus: AsyncBus, tmp_path: P
     try:
         for chunk in range(4):
             for _ in range(5000):
-                await self_model.on_workspace(_snapshot(["topos"]))
+                await self_model.on_workspace(_snapshot(["vision"]))
             await self_model._save_to_disk()
             sizes.append(path.stat().st_size)
     finally:
@@ -457,7 +457,7 @@ async def test_identity_history_cap_keeps_most_recent_episodes(bus: AsyncBus, tm
     try:
         closed = []
         for i in range(30):
-            await self_model.on_workspace(_snapshot(["topos"]))
+            await self_model.on_workspace(_snapshot(["vision"]))
             if i % 3 == 2:  # the quiet broadcast after each episode
                 closed.append(self_model.model.identity_history[-1])
         assert list(self_model.model.identity_history) == closed[-4:]
@@ -474,7 +474,7 @@ async def test_identity_history_uncapped_by_default(bus: AsyncBus, tmp_path: Pat
     await self_model.initialize()
     try:
         for _ in range(600):
-            await self_model.on_workspace(_snapshot(["topos"]))
+            await self_model.on_workspace(_snapshot(["vision"]))
         assert len(self_model.model.identity_history) == 300
     finally:
         await self_model.shutdown()
@@ -487,7 +487,7 @@ async def test_old_per_alert_history_loads_and_is_kept(bus: AsyncBus, tmp_path: 
     import json as _json
 
     legacy = [
-        {"timestamp": 1.0 + i, "score": 0.7, "top_sources": ["topos"]} for i in range(3)
+        {"timestamp": 1.0 + i, "score": 0.7, "top_sources": ["vision"]} for i in range(3)
     ]
     path = tmp_path / "m.json"
     path.write_text(
@@ -498,8 +498,8 @@ async def test_old_per_alert_history_loads_and_is_kept(bus: AsyncBus, tmp_path: 
     await self_model.initialize()
     try:
         assert self_model.model.identity_history == legacy
-        await self_model.on_workspace(_snapshot(["topos"]))
-        await self_model.on_workspace(_snapshot(["topos"]))
+        await self_model.on_workspace(_snapshot(["vision"]))
+        await self_model.on_workspace(_snapshot(["vision"]))
         history = self_model.model.identity_history
         assert history[:3] == legacy
         assert len(history) == 4

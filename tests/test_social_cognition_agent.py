@@ -17,7 +17,7 @@ from kaine.modules.social_cognition.store import QdrantAgentStore
 
 @pytest.mark.asyncio
 async def test_social_cognition_initialize_loads_embedder_before_qdrant_store():
-    """A failing embedder.load() must fail Empatheia.initialize() before the
+    """A failing embedder.load() must fail SocialCognition.initialize() before the
     Qdrant store opens, so missing models are never masked as zero vectors.
     """
 

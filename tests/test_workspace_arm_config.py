@@ -29,7 +29,7 @@ _REPO = Path(__file__).resolve().parents[1]
 
 def test_shipped_arm_is_competitive():
     cfg = load_kaine_config(profile="thesis_test", operator_path=_MISSING)
-    assert cfg["syneidesis"]["arm"] == "competitive"
+    assert cfg["workspace"]["arm"] == "competitive"
 
 
 def test_arm_kwargs_default_and_seed():
@@ -56,7 +56,7 @@ def test_shipped_config_passes_the_workspace_key_guard():
 def test_each_arm_passes_the_workspace_key_guard():
     for arm in ("competitive", "matched", "pooled"):
         make_salience_factors(
-            {"syneidesis": {"arm": arm}}, AffectStateProvider()
+            {"workspace": {"arm": arm}}, AffectStateProvider()
         )
 
 
@@ -64,8 +64,8 @@ def test_study_overlay_passes_the_workspace_key_guard(monkeypatch, tmp_path):
     plan = {
         "study_id": "s",
         "repo_root": str(_REPO),
-        "base_modules": ["soma"],
-        "order": ["mnemos"],
+        "base_modules": ["interoception"],
+        "order": ["episodic_memory"],
         "programme": {
             "manifest": str(tmp_path / "p.toml"),
             "sha256": "a" * 64,
@@ -126,7 +126,7 @@ async def test_boot_path_builds_the_workspace_for_every_study(monkeypatch):
             else study.removeprefix("workspace_mediation_")
         )
         assert ctx.workspace.arm == expected
-        assert cfg["lingua"]["temperature"] == (0.7 if study is None else 0.0)
+        assert cfg["language"]["temperature"] == (0.7 if study is None else 0.0)
 
 
 def test_study_may_not_change_modules(tmp_path):
@@ -155,8 +155,8 @@ def test_study_file_allowlist(tmp_path):
         assert table in str(exc_info.value)
 
     (tmp_path / "ok.toml").write_text(
-        "[lingua]\ntemperature = 0.0\n"
-        "[syneidesis]\narm = \"pooled\"\n"
+        "[language]\ntemperature = 0.0\n"
+        "[workspace]\narm = \"pooled\"\n"
         "[experiment]\nseed = 5\n"
         "[individuation]\nprobe_temperature = 0.0\n"
     )
@@ -166,15 +166,15 @@ def test_study_file_allowlist(tmp_path):
 
 def test_study_wins_over_operator(tmp_path):
     (tmp_path / "op.toml").write_text(
-        '[lingua]\ntemperature = 0.9\n[syneidesis]\narm = "competitive"\n'
+        '[language]\ntemperature = 0.9\n[workspace]\narm = "competitive"\n'
     )
     cfg = load_kaine_config(
         operator_path=tmp_path / "op.toml",
         study="workspace_mediation_pooled",
         studies_dir=_REPO / "config" / "studies",
     )
-    assert cfg["lingua"]["temperature"] == 0.0
-    assert cfg["syneidesis"]["arm"] == "pooled"
+    assert cfg["language"]["temperature"] == 0.0
+    assert cfg["workspace"]["arm"] == "pooled"
 
 
 def test_study_resolved_from_environment():
@@ -185,7 +185,7 @@ def test_study_resolved_from_environment():
         profiles_dir=_REPO / "config" / "profiles",
         studies_dir=_REPO / "config" / "studies",
     )
-    assert cfg["syneidesis"]["arm"] == "matched"
+    assert cfg["workspace"]["arm"] == "matched"
 
 
 def test_study_may_set_only_the_tone_rule_in_audition(tmp_path):

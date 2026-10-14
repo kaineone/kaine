@@ -11,15 +11,15 @@ The CL1 plugin's wetware interoception backend, `WetwareInteroceptiveModel`, ret
 - `WetwareInteroceptiveModel` gets the built-in model's contract: `last_reading_skipped`, `last_error_defined` and the skip itself. A non-finite reading clears the stored prediction and the hidden state behind it, marks the reading skipped and its error undefined, and returns 0 without a substrate tick or a readout update. The next reading returns 0 with an undefined error and makes no update. The first reading after construction or `reset()` keeps its defined error of 0 (paper A.5). `reset()` clears the flags.
 - The interoception module reports an unexpected error of 0 and leaves its expected-error estimates unchanged for a reading without a defined error from any forward model, including one without per-channel residuals.
 - `SocialCognitionMergeStrategy` treats a missing or null `behavioral_summary` entry on one side as absent. A key defined on both sides keeps the count-weighted average. A key defined on one side takes that side's value. A key defined on neither side stays absent. When the sides that hold a value have no interactions, their plain mean is used.
-- The CL1 plugin's `soma-wetware-backend` spec is updated in the plugin's own OpenSpec tree (`plugins/kaine-cl1/openspec/changes/missing-error-consistency/`).
+- The CL1 plugin's `interoception-wetware-backend` spec is updated in the plugin's own OpenSpec tree (`plugins/kaine-cl1/openspec/changes/missing-error-consistency/`).
 
 ## Capabilities
 
 ### Modified Capabilities
 
-- `empatheia`: a missing or null behavioural-summary entry is absent in a merge.
-- `soma-predictive`: a reading without a defined error reports no unexpected error and teaches the expected error nothing.
-- `soma-wetware-backend` (CL1 plugin): the wetware model skips a non-finite reading as the built-in model does and exposes `last_error_defined`.
+- `social_cognition`: a missing or null behavioural-summary entry is absent in a merge.
+- `interoception-predictive`: a reading without a defined error reports no unexpected error and teaches the expected error nothing.
+- `interoception-wetware-backend` (CL1 plugin): the wetware model skips a non-finite reading as the built-in model does and exposes `last_error_defined`.
 
 ## Impact
 

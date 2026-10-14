@@ -69,7 +69,7 @@ implement it. The lead reviews this design before any code lands.
 
 ### New Capabilities
 
-- `topos-foveation`: spatial saliency mapping over the current frame; precision-
+- `vision-foveation`: spatial saliency mapping over the current frame; precision-
   weighted fovea-target selection combining bottom-up saliency and optional
   top-down bias, with arousal-set fovea size; production of a peripheral view and a
   foveal crop from a single in-memory grab; saccadic hysteresis for any native
@@ -78,7 +78,7 @@ implement it. The lead reviews this design before any code lands.
 
 ### Modified Capabilities
 
-- `topos`: the `topos.report` carries a peripheral latent, a foveal latent, and the
+- `vision`: the `vision.report` carries a peripheral latent, a foveal latent, and the
   content-free fovea location, rather than a single whole-frame latent, when
   foveation is enabled; whole-frame salience remains available as a diagnostic and
   as the fallback when foveation is off. The frozen-encoder and zero-persistence
@@ -86,7 +86,7 @@ implement it. The lead reviews this design before any code lands.
 
 ## Impact
 
-- **Depends on:** `topos`, `topos-predictive` (the forward-model prediction error
+- **Depends on:** `vision`, `vision-predictive` (the forward-model prediction error
   that drives the spatial map), `reproducible-perception` (the screen/live capture
   path the two views are derived from), `oscillatory-binding` (precision weighting
   in the workspace for the bottom-up/top-down combination), `entity-time` (the
@@ -95,7 +95,7 @@ implement it. The lead reviews this design before any code lands.
   `kaine/modules/vision/module.py` and the salience/forward-model path (spatial
   map + fovea selection + dual-view encode), the perception feed builders in
   `kaine/boot.py` (moderate-res grab + optional native region capture), config
-  `[perception_feed]`/`[topos]`, and `docs/09-modules/vision.md`. No entity is booted
+  `[perception_feed]`/`[vision]`, and `docs/09-modules/vision.md`. No entity is booted
   by this change.
 - **Encoder cost:** two small encodes (a downsampled peripheral + a native-size
   foveal patch) replace one large uniform encode — comparable or cheaper — but this

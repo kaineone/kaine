@@ -5,4 +5,4 @@
 ## 2. After the workspace-mediation ablation
 
 - [ ] 2.1 **Deferred (gated on the ablation):** the offline separation check on a frozen synthetic memory store, recorded under `docs/records/`. Reason: a new episodic memory competitor changes the workspace competition the ablation measures.
-- [ ] 2.2 **Deferred (gated on 2.1):** `mnemos.familiarity` behind config, off by default, with a paper note.
+- [ ] 2.2 **Deferred (gated on 2.1):** `episodic_memory.familiarity` behind config, off by default, with a paper note.

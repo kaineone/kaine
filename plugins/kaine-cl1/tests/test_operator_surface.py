@@ -28,10 +28,10 @@ def _cfg(**substrate_overrides):
         "accelerated_time": True,
         "ticks_per_second": 100,
         "cognitive_rate": 3.333,
-        "territories": {"chronos": 8},
+        "territories": {"sequence": 8},
     }
     substrate.update(substrate_overrides)
-    return {"substrate": substrate, "backends": {"chronos": "cl1"}}
+    return {"substrate": substrate, "backends": {"sequence": "cl1"}}
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def test_missing_cl_sdk_through_kaines_loader(monkeypatch):
     monkeypatch.setattr("kaine_cl1.plugin._cl_sdk_installed", lambda: False)
 
     config = {
-        "modules": {"chronos": True},
+        "modules": {"sequence": True},
         "plugins": {"enabled": ["cl1"], "cl1": _cfg()},
     }
     with pytest.raises(PluginError, match="pip install cl-sdk"):
@@ -115,7 +115,7 @@ def test_seams_warns_that_the_substrate_is_simulated(caplog):
     messages = " ".join(record.message for record in caplog.records)
     assert "SIMULATED" in messages
     assert "reference_culture" in messages
-    assert "chronos" in messages
+    assert "sequence" in messages
 
     caplog.clear()
     plugin.seams({})
@@ -207,7 +207,7 @@ def test_session_leaves_source_alone_when_unset(clean_source, monkeypatch):
 def test_default_source_responds_to_stimulation(clean_source):
     p = Cl1Plugin()
     try:
-        net = p.injections("chronos", _cfg())["network"]
+        net = p.injections("sequence", _cfg())["network"]
         quiet = np.mean([np.sum(net.tick([-10.0] * 8)) for _ in range(6)])
         loud = np.mean([np.sum(net.tick([10.0] * 8)) for _ in range(6)])
         assert loud > quiet

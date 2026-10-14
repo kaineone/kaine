@@ -32,11 +32,11 @@ async def bus():
 
 
 async def _publish_self_model(bus: AsyncBus, **fields) -> None:
-    # Source "eidolon" routes to the eidolon.out stream the language module consumes.
+    # Source "self_model" routes to the self_model.out stream the language module consumes.
     await bus.publish(
         Event(
-            source="eidolon",
-            type="eidolon.self_model",
+            source="self_model",
+            type="self_model.document",
             payload={
                 "name": fields.get("name", "Kaine Umarov"),
                 "values": fields.get("values", ["curiosity", "honesty"]),

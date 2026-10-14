@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Real-path tests for VoiceAlignmentDivergenceObserver against Hypnos."""
+"""Real-path tests for VoiceAlignmentDivergenceObserver against Sleep."""
 from __future__ import annotations
 
 import json
@@ -92,11 +92,11 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
     sleep = _build_sleep(bus, tmp_path, enabled=True, fake_training_stack=fake_training_stack)
     await sleep.enter_sleep()
 
-    entries = await bus.read("hypnos.out", count=10)
+    entries = await bus.read("sleep.out", count=10)
     completed = [
         (entry_id, event)
         for entry_id, event in entries
-        if event.type == "hypnos.sleep.completed"
+        if event.type == "sleep.sleep.completed"
     ]
     assert len(completed) == 1
     entry_id, event = completed[0]
@@ -111,7 +111,7 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
 
     sink = FakeSink()
     observer = VoiceAlignmentDivergenceObserver(bus, sink)
-    await observer.handle("hypnos.out", entry_id, event)
+    await observer.handle("sleep.out", entry_id, event)
 
     assert sink.rows == []
     assert not any("/home/" in str(v) for v in payload.values())
@@ -122,17 +122,17 @@ async def test_observer_skips_disabled_voice_alignment(bus: AsyncBus, tmp_path: 
     sleep = _build_sleep(bus, tmp_path, enabled=False, fake_training_stack=fake_training_stack)
     await sleep.enter_sleep()
 
-    entries = await bus.read("hypnos.out", count=10)
+    entries = await bus.read("sleep.out", count=10)
     completed = [
         (entry_id, event)
         for entry_id, event in entries
-        if event.type == "hypnos.sleep.completed"
+        if event.type == "sleep.sleep.completed"
     ]
     assert len(completed) == 1
     entry_id, event = completed[0]
 
     sink = FakeSink()
     observer = VoiceAlignmentDivergenceObserver(bus, sink)
-    await observer.handle("hypnos.out", entry_id, event)
+    await observer.handle("sleep.out", entry_id, event)
 
     assert sink.rows == []

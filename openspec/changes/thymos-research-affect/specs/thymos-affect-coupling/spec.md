@@ -3,7 +3,7 @@
 ### Requirement: Appraisal-routed perceived emotion
 A detected speaker emotion (`audition.emotion`) SHALL be folded into the affect module's
 own Scherer appraisal as a perceptual input, weighted by `familiarity` from the
-latest `empatheia.agent_model`, and SHALL NOT be written directly to the
+latest `social_cognition.agent_model`, and SHALL NOT be written directly to the
 dimensional (valence/arousal/dominance) state. The entity's own appraisal, together with its goal significance, coping, and
 novelty, SHALL determine the classified emotion, and its intrinsic-pleasantness
 check SHALL set the valence target, so the bounded state change runs through

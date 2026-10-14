@@ -38,8 +38,8 @@ def _effect(dig, *, competing=10, accessed=10, not_exercised=False, reason=None)
         "not_exercised_reason": reason,
         "ig_on": 0.1,
         "ig_pooled": 0.05,
-        "ig_on_by_processor": {"soma": 0.1, "topos": 0.1},
-        "ig_pooled_by_processor": {"soma": 0.05, "topos": 0.05},
+        "ig_on_by_processor": {"interoception": 0.1, "vision": 0.1},
+        "ig_pooled_by_processor": {"interoception": 0.05, "vision": 0.05},
     }
 
 
@@ -85,10 +85,10 @@ async def test_coupled_battery_exercises_and_reports_float_gains():
     assert isinstance(effect["ig_pooled"], float)
     assert isinstance(effect["dig"], float)
     for key in ("ig_on_by_processor", "ig_pooled_by_processor"):
-        for proc in ("soma", "topos"):
+        for proc in ("interoception", "vision"):
             assert isinstance(effect[key][proc], float)
-    assert effect["included_reports_on"]["soma"] > 0
-    assert effect["included_reports_on"]["topos"] > 0
+    assert effect["included_reports_on"]["interoception"] > 0
+    assert effect["included_reports_on"]["vision"] > 0
 
 
 @pytest.mark.asyncio

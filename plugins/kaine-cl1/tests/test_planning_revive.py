@@ -28,14 +28,14 @@ from kaine.plugins import load_plugins  # noqa: E402
 
 def _config(*, territory=10, mode=None):
     cl1 = {
-        "substrate": {"target": "simulator", "accelerated_time": True, "territories": {"nous": territory}},
-        "backends": {"nous": "cl1"},
+        "substrate": {"target": "simulator", "accelerated_time": True, "territories": {"planning": territory}},
+        "backends": {"planning": "cl1"},
     }
     if mode is not None:
-        cl1["nous"] = {"mode": mode}
+        cl1["planning"] = {"mode": mode}
     return {
-        "modules": {"nous": True},
-        "nous": {"efe_timeout_ms": 60000.0},
+        "modules": {"planning": True},
+        "planning": {"efe_timeout_ms": 60000.0},
         "plugins": {"enabled": ["cl1"], "cl1": cl1},
     }
 
@@ -80,7 +80,7 @@ async def test_revive_seeds_kaines_engine_through_the_wrapper(reference_culture,
 
     try:
         reg = build_registry(bus, cfg, plugins=plugins)
-        planning = reg.get("nous")
+        planning = reg.get("planning")
 
         posterior = []
         for num in planning.engine._inner._model.num_states:

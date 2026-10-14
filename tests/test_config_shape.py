@@ -144,7 +144,7 @@ def test_modules_toggle_string_rejected(tmp_path: Path):
         '[modules]\nsoma = false\n',
         '[modules]\nsoma = "SECRETVOICE"\n',
     )
-    with pytest.raises(ConfigShapeError, match=r"modules\.soma.*expected.*bool") as exc_info:
+    with pytest.raises(ConfigShapeError, match=r"modules\.interoception.*expected.*bool") as exc_info:
         load_kaine_config(shipped, op, strict_operator=True)
     assert "SECRETVOICE" not in str(exc_info.value)
 
@@ -155,7 +155,7 @@ def test_modules_toggle_int_rejected(tmp_path: Path):
         '[modules]\nsoma = false\n',
         '[modules]\nsoma = 1\n',
     )
-    with pytest.raises(ConfigShapeError, match=r"modules\.soma.*expected.*bool") as exc_info:
+    with pytest.raises(ConfigShapeError, match=r"modules\.interoception.*expected.*bool") as exc_info:
         load_kaine_config(shipped, op, strict_operator=True)
     assert "1" not in str(exc_info.value)
 

@@ -79,7 +79,7 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     assert loaded_control.reason == "data-root test"
 
     # escalation
-    escalation = EscalationRecord(escalated=True, module="topos", attempts=5, message="data-root test")
+    escalation = EscalationRecord(escalated=True, module="vision", attempts=5, message="data-root test")
     write_escalation(escalation)
     assert (root / ESCALATION_PATH).is_file()
     assert not (cwd / ESCALATION_PATH).exists()

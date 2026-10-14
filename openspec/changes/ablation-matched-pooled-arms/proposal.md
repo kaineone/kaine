@@ -9,7 +9,7 @@ competitive selection today, so neither control can be run.
 
 ## What Changes
 
-- `[syneidesis].arm` selects the arm of the live cycle: `competitive` (the
+- `[workspace].arm` selects the arm of the live cycle: `competitive` (the
   default, selection and access as built), `matched` or `pooled`.
 - Matched arm: on each broadcast tick the workspace scores every candidate as
   before, then draws `min(top_k, n)` candidates uniformly without replacement,
@@ -29,10 +29,10 @@ competitive selection today, so neither control can be run.
   them.
 - The matched and pooled arms require the coherence layer to be off, as it is
   in the base-thesis form; the workspace refuses the combination at construction.
-- The module-addition study's overlay pins `[lingua].temperature = 0.0` and
-  `[syneidesis].arm = "competitive"`, so an operator override cannot make a
+- The module-addition study's overlay pins `[language].temperature = 0.0` and
+  `[workspace].arm = "competitive"`, so an operator override cannot make a
   study run sample stochastically or run a control arm.
-- The `[syneidesis]` key guard in `kaine/boot/wiring.py` accepts `arm`, and a
+- The `[workspace]` key guard in `kaine/boot/wiring.py` accepts `arm`, and a
   test runs the real boot phase that builds the workspace on the shipped
   configuration and on every study configuration.
 - Greedy decoding moves out of the `thesis_test` profile (operator decision,
@@ -40,8 +40,8 @@ competitive selection today, so neither control can be run.
   A new study layer, `config/studies/<name>.toml` selected by `KAINE_STUDY`,
   is applied after the operator config. Three study configurations,
   `workspace_mediation_competitive`, `_matched` and `_pooled`, set greedy
-  decoding and the arm. A study file may set only the `[lingua]`,
-  `[syneidesis]`, `[experiment]` and `[individuation]` tables, and the run
+  decoding and the arm. A study file may set only the `[language]`,
+  `[workspace]`, `[experiment]` and `[individuation]` tables, and the run
   context and manifest record the study's name. The module-addition runner clears `KAINE_STUDY` for its
   child processes, whose overlay is their study configuration.
 - The matched arm refuses a selection whose context does not say whether the
@@ -58,11 +58,11 @@ competitive selection today, so neither control can be run.
 
 ### Modified Capabilities
 
-- `syneidesis`: arm selection, the matched draw, the pooled broadcast, and the
+- `workspace`: arm selection, the matched draw, the pooled broadcast, and the
   pooled context rule.
 - `research-event-log`: the workspace record carries the arm.
 - `configuration-loading`: the study layer.
-- `lingua`: greedy decoding only in study configurations; the cache ignores empty broadcasts.
+- `language`: greedy decoding only in study configurations; the cache ignores empty broadcasts.
 - `individuation-boundary`: the probe's own decoding temperature.
 - `module-ignition-study`: the study configuration sets greedy decoding and the
   competitive arm.

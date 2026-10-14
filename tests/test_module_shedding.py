@@ -99,29 +99,29 @@ async def test_full_stack_degrades_gracefully():
 
 @pytest.mark.asyncio
 async def test_no_language_combination():
-    names = [n for n in CANONICAL_MODULE_NAMES if n != "lingua"]
+    names = [n for n in CANONICAL_MODULE_NAMES if n != "language"]
     await _run(names)
 
 
 @pytest.mark.asyncio
 async def test_no_vision_combination():
-    names = [n for n in CANONICAL_MODULE_NAMES if n != "topos"]
+    names = [n for n in CANONICAL_MODULE_NAMES if n != "vision"]
     await _run(names)
 
 
 @pytest.mark.asyncio
 async def test_cognition_only_combination():
-    await _run(["nous", "mnemos", "eidolon"])
+    await _run(["planning", "episodic_memory", "self_model"])
 
 
 @pytest.mark.asyncio
 async def test_perception_only_combination():
-    await _run(["soma", "chronos", "topos"])
+    await _run(["interoception", "sequence", "vision"])
 
 
 @pytest.mark.asyncio
 async def test_lone_interoception_combination():
-    await _run(["soma"])
+    await _run(["interoception"])
 
 
 @pytest.mark.asyncio
@@ -139,7 +139,7 @@ async def test_empty_registry_runs_clean():
 
 @pytest.mark.asyncio
 async def test_workspace_never_selects_unregistered_source():
-    names = ["nous", "mnemos", "eidolon"]
+    names = ["planning", "episodic_memory", "self_model"]
     bus, cycle, registry, modules = await _make_stack(names)
     try:
         for module in modules.values():
@@ -150,7 +150,7 @@ async def test_workspace_never_selects_unregistered_source():
         for module in modules.values():
             for snap in module.snapshots:
                 for _, event in snap.selected_events:
-                    assert event.source in set(names) | {"syneidesis"}, (
+                    assert event.source in set(names) | {"workspace"}, (
                         f"unregistered source leaked into broadcast: {event.source}"
                     )
     finally:
@@ -159,30 +159,30 @@ async def test_workspace_never_selects_unregistered_source():
 
 @pytest.mark.asyncio
 async def test_shed_mid_run_drops_within_one_tick():
-    names = ["soma", "chronos"]
+    names = ["interoception", "sequence"]
     bus, cycle, registry, modules = await _make_stack(names)
     try:
-        await modules["soma"].publish_one(salience=0.8)
-        await modules["chronos"].publish_one(salience=0.8)
+        await modules["interoception"].publish_one(salience=0.8)
+        await modules["sequence"].publish_one(salience=0.8)
         result = await cycle.tick()
         assert result.events_collected >= 2
 
         # Shed the sequence module: shutdown its background task + unregister.
-        await modules["chronos"].shutdown()
-        registry.unregister("chronos")
-        modules.pop("chronos")
+        await modules["sequence"].shutdown()
+        registry.unregister("sequence")
+        modules.pop("sequence")
 
-        await modules["soma"].publish_one(salience=0.8)
+        await modules["interoception"].publish_one(salience=0.8)
         await cycle.tick()
         await asyncio.sleep(0.05)
 
         # The most recent broadcast that the interoception module sees should contain only interoception
         # events (cycle reads from active streams now, which excludes
-        # chronos.out).
-        if modules["soma"].snapshots:
-            latest = modules["soma"].snapshots[-1]
+        # sequence.out).
+        if modules["interoception"].snapshots:
+            latest = modules["interoception"].snapshots[-1]
             for _, event in latest.selected_events:
-                assert event.source == "soma", (
+                assert event.source == "interoception", (
                     f"shed module's event still selected: {event.source}"
                 )
     finally:

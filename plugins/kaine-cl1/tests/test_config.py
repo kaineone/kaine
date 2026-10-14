@@ -10,9 +10,9 @@ from kaine_cl1.config import load_overlay
 def test_example_config_is_not_inert():
     path = Path(__file__).resolve().parents[1] / "config" / "kaine_cl1.example.toml"
     overlay = load_overlay(path)
-    assert overlay.cl1_modules() == ["chronos", "soma"]
-    assert overlay.territories["chronos"] == 12
-    assert overlay.territories["soma"] == 12
+    assert overlay.cl1_modules() == ["sequence", "interoception"]
+    assert overlay.territories["sequence"] == 12
+    assert overlay.territories["interoception"] == 12
     assert overlay.substrate.accelerated_time is True
 
 
@@ -24,15 +24,15 @@ def test_top_level_form(tmp_path):
 accelerated_time = true
 
 [substrate.territories]
-chronos = 4
+sequence = 4
 
 [backends]
-chronos = "cl1"
+sequence = "cl1"
 """
     )
     overlay = load_overlay(path)
-    assert overlay.cl1_modules() == ["chronos"]
-    assert overlay.territories == {"chronos": 4}
+    assert overlay.cl1_modules() == ["sequence"]
+    assert overlay.territories == {"sequence": 4}
 
 
 def test_plugin_block_form(tmp_path):
@@ -43,15 +43,15 @@ def test_plugin_block_form(tmp_path):
 accelerated_time = true
 
 [plugins.cl1.substrate.territories]
-chronos = 4
+sequence = 4
 
 [plugins.cl1.backends]
-chronos = "cl1"
+sequence = "cl1"
 """
     )
     overlay = load_overlay(path)
-    assert overlay.cl1_modules() == ["chronos"]
-    assert overlay.territories == {"chronos": 4}
+    assert overlay.cl1_modules() == ["sequence"]
+    assert overlay.territories == {"sequence": 4}
 
 
 def test_both_forms_rejected(tmp_path):
@@ -59,10 +59,10 @@ def test_both_forms_rejected(tmp_path):
     path.write_text(
         """
 [backends]
-chronos = "cl1"
+sequence = "cl1"
 
 [plugins.cl1.backends]
-chronos = "cl1"
+sequence = "cl1"
 """
     )
     with pytest.raises(ValueError):

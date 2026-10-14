@@ -14,7 +14,7 @@ This harness wires the SAME locus-gated capture supervisors the live boot uses
 (the vision module -> LiveCamera, the audition module -> LiveMicrophone, plus the passive
 PerceptualLocusLocus arbiter) against an in-memory bus, selects the virtual feed the
 way boot now does (``perception_state.select_virtual_feed``), and asserts that
-within a bounded wait visual events land on ``topos.out`` and auditory events on
+within a bounded wait visual events land on ``vision.out`` and auditory events on
 ``audition.out`` — deterministically driven by the seeded source.
 
 Only the encoder / STT / emotion collaborators are faked (heavy models, not the
@@ -58,7 +58,7 @@ class _FakeEncoder:
 
     async def encode(self, image):  # noqa: ARG002
         # Vary the latent slightly per call so change-detection has something to
-        # see; the salience path still publishes a topos.report every frame.
+        # see; the salience path still publishes a vision.report every frame.
         self.calls += 1
         return [float(self.calls % 7), 0.0, 0.0, 0.0]
 
@@ -156,7 +156,7 @@ async def _wait_for_events(bus: AsyncBus, stream: str, *, timeout_s: float = 8.0
 @pytest.mark.asyncio
 async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
     """The smoking gun: with the seeded feed selected (virtual locus), the vision module
-    publishes to topos.out and Audition publishes to audition.out."""
+    publishes to vision.out and Audition publishes to audition.out."""
     vision = _make_vision(bus)
     audition = _make_audition(bus)
     perceptual_locus = PerceptualLocus(bus, desired_path=virtual_feed_state)
@@ -165,11 +165,11 @@ async def test_seeded_feed_delivers_vision_and_hearing(bus, virtual_feed_state):
     await audition.initialize()
     await perceptual_locus.initialize()
     try:
-        vision_events = await _wait_for_events(bus, "topos.out")
+        vision_events = await _wait_for_events(bus, "vision.out")
         audition_events = await _wait_for_events(bus, "audition.out")
 
-        assert vision_events, "topos.out received no events — vision is dark"
-        assert any(e.type == "topos.report" for e in vision_events)
+        assert vision_events, "vision.out received no events — vision is dark"
+        assert any(e.type == "vision.report" for e in vision_events)
 
         assert audition_events, "audition.out received no events — hearing is dark"
         types = {e.type for e in audition_events}
@@ -198,7 +198,7 @@ async def test_physical_locus_keeps_virtual_feed_dark(bus, tmp_path, monkeypatch
     vision = _make_vision(bus)
     await vision.initialize()
     try:
-        vision_events = await _wait_for_events(bus, "topos.out", timeout_s=1.5)
+        vision_events = await _wait_for_events(bus, "vision.out", timeout_s=1.5)
         assert not vision_events, (
             "virtual seeded feed published while locus=physical — XOR violated"
         )

@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from kaine.bus.errors import EventValidationError, ReservedStreamError
 
 WORKSPACE_STREAM = "workspace.broadcast"
-WORKSPACE_SOURCE = "syneidesis"
+WORKSPACE_SOURCE = "workspace"
 # Audio channels whose voices are the operator's (shared by the action selection, social cognition and sequence modules).
 OPERATOR_SOURCES: tuple[str, ...] = ("live_mic", "microphone", "remote")
 

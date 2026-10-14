@@ -4,20 +4,20 @@ The language module is the language organ. It turns accessed workspace content i
 
 ## Status
 
-The language module ships disabled in the default config (`[modules].lingua = false`). The `thesis_test` profile enables it. In general use the organ samples at the shipped `temperature` (0.7). The study configurations of the planned runs (the module-addition study's overlay and `config/studies/workspace_mediation_*.toml`) set `temperature = 0.0`, so in those runs the organ decodes greedily and what it voices is a deterministic function of its input. The language module needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only the sleep module's voice-alignment phase uses them.
+The language module ships disabled in the default config (`[modules].language = false`). The `thesis_test` profile enables it. In general use the organ samples at the shipped `temperature` (0.7). The study configurations of the planned runs (the module-addition study's overlay and `config/studies/workspace_mediation_*.toml`) set `temperature = 0.0`, so in those runs the organ decodes greedily and what it voices is a deterministic function of its input. The language module needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only the sleep module's voice-alignment phase uses them.
 
 ## Role in the base-thesis form
 
 In the base-thesis form the language organ is output-only. The audition module's transcription path is off (`[audition].transcription_enabled = false`), so speech reaches the entity only as sound and tone of voice, and no transcript reaches the language module. Everything it voices comes from the workspace.
 
-The language module never speaks on its own initiative. Its only triggers are `speak` and `think` intents from the action selection module. The thesis profile selects `[volition].policy = "self_initiated_report"`, under which `SelfInitiatedReportPolicy` reads each accessed broadcast and takes the best score in the coalition, leaving the language module's own utterances aside:
+The language module never speaks on its own initiative. Its only triggers are `speak` and `think` intents from the action selection module. The thesis profile selects `[action_selection].policy = "self_initiated_report"`, under which `SelfInitiatedReportPolicy` reads each accessed broadcast and takes the best score in the coalition, leaving the language module's own utterances aside:
 
 - a `speak` intent needs that score to reach `report_threshold` (default 0.6), the leading candidate's source and event type to differ from the last spoken report's if that report fell within `sig_expiry_s` (300 s in the thesis profile), and `speak_refractory_s` (8 s) to have passed since the last one;
 - a `think` intent uses the lower `think_threshold` (default 0.45) and `think_refractory_s` (3 s).
 
-The intent's `about` names the leading source and its score, for example `"topos (surprise=0.812)"`, with `about_kind = "event"`. An inhibited broadcast yields no intent. The non-default `DriveBiasedActionSelectionPolicy` instead answers a heard utterance and drive-initiated intents; see [`report_policy.py`](../../kaine/workspace/report_policy.py), [`drive_policy.py`](../../kaine/workspace/drive_policy.py) and the [core configuration reference](../appendix-a-configuration/core.md) for `[volition]`.
+The intent's `about` names the leading source and its score, for example `"vision (surprise=0.812)"`, with `about_kind = "event"`. An inhibited broadcast yields no intent. The non-default `DriveBiasedActionSelectionPolicy` instead answers a heard utterance and drive-initiated intents; see [`report_policy.py`](../../kaine/workspace/report_policy.py), [`drive_policy.py`](../../kaine/workspace/drive_policy.py) and the [core configuration reference](../appendix-a-configuration/core.md) for `[action_selection]`.
 
-The language module's utterances re-enter the bus on `lingua.out` and compete like any other candidate, at the fixed level `baseline_salience` (0.4). With the default access threshold (`[syneidesis].publication_threshold = 0.35`), a priority of 0.4 stays below the threshold at every arousal, so an utterance can ride in a broadcast but never leads an accessed one. These levels are provisional; they are to be calibrated before the live runs, and that calibration is not built yet.
+The language module's utterances re-enter the bus on `language.out` and compete like any other candidate, at the fixed level `baseline_salience` (0.4). With the default access threshold (`[workspace].publication_threshold = 0.35`), a priority of 0.4 stays below the threshold at every arousal, so an utterance can ride in a broadcast but never leads an accessed one. These levels are provisional; they are to be calibrated before the live runs, and that calibration is not built yet.
 
 The language module's utterances are recorded and observed, and they are not a measure in the planned test, which measures the competition through the processors' own predictions (see [Running experiments](../15-experiments/README.md)). The organ is a language model following a persona prompt, so its first-person text is not evidence of the entity's internal state.
 
@@ -59,19 +59,19 @@ The organ's weights have the single direction that mediates refusal projected ou
 
 | Source | Mechanism | Use |
 |---|---|---|
-| `volition.out` | `_intent_loop` | `speak` intents (external speech) and `think` intents (inner thought); `intent.rest` is ignored |
+| `action_selection.out` | `_intent_loop` | `speak` intents (external speech) and `think` intents (inner thought); `intent.rest` is ignored |
 | `workspace.broadcast` | `_snapshot_cache_loop` | Caches the latest accessed coalition for the prompt; never triggers speech |
-| `eidolon.out`, `eidolon.self_model` | bus subscription | Persona name, values, norms and situation facts, when the self-model module is enabled |
-| `hypnos.out` | bus subscription | The completed-sleep count recorded as `sleep_index` |
+| `self_model.out`, `self_model.document` | bus subscription | Persona name, values, norms and situation facts, when the self-model module is enabled |
+| `sleep.out` | bus subscription | The completed-sleep count recorded as `sleep_index` |
 
 ## Outputs
 
 | Stream | Event type | Description |
 |---|---|---|
-| `lingua.external` | `external_speech` | External speech. The vocal module subscribes here for synthesis |
-| `lingua.internal` | `internal_speech` | Inner thought. The vocal module never reads this stream |
-| `lingua.internal` | `realization_failed` | Content-free audit event when a generation fails; carries `mode` and `reason_class` only, never text, and is not mirrored |
-| `lingua.out` | `external_speech`, `internal_speech` | A mirror of every speech event, so one subscription sees both, and the copy the cycle reads as a candidate |
+| `language.external` | `external_speech` | External speech. The vocal module subscribes here for synthesis |
+| `language.internal` | `internal_speech` | Inner thought. The vocal module never reads this stream |
+| `language.internal` | `realization_failed` | Content-free audit event when a generation fails; carries `mode` and `reason_class` only, never text, and is not mirrored |
+| `language.out` | `external_speech`, `internal_speech` | A mirror of every speech event, so one subscription sees both, and the copy the cycle reads as a candidate |
 
 Both speech events carry `text`, `mode`, `model`, `prompt_length`, `latency_ms`, `record_id`, `origin` (when the intent had one) and `faithful_rendering`. The published `faithful_rendering` is redacted: heard speech in it is replaced by `[heard speech]`, as in the intent log. `external_speech` carries `user_input` only for felt and event intents, with any heard text in it redacted. Under the default `self_initiated_report` policy that field is the policy's own description of the leading candidate. A reply to heard speech never carries `user_input`, so the A/B divergence sidecar measures only felt- and event-triggered replies and records replies to heard speech as content-free skips.
 
@@ -79,7 +79,7 @@ The action-selection policy's guard timeouts are what free speech after a failed
 
 ## Configuration
 
-The full `[lingua]` reference is in the [modules configuration page](../appendix-a-configuration/modules.md). An unknown key in `[lingua]` stops boot.
+The full `[language]` reference is in the [modules configuration page](../appendix-a-configuration/modules.md). An unknown key in `[language]` stops boot.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -91,7 +91,7 @@ The full `[lingua]` reference is in the [modules configuration page](../appendix
 | `think` | bool or unset | `false` | `false` asks the server for no chain of thought, `true` allows one, unset sends neither field |
 | `request_timeout_s` | float | `60.0` | HTTP timeout per request |
 | `model_server_sleep_idle_seconds` | int | `600` | Idle seconds before a natively launched organ server unloads the model; `-1` keeps it loaded. Read by the organ launcher; the language module ignores it |
-| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Append-only intent-expression log |
+| `intent_log_path` | string | `"state/language/intent_expression.jsonl"` | Append-only intent-expression log |
 | `baseline_salience` | float `[0, 1]` | `0.4` | Intensity of published speech events |
 | `alert_salience` | float `[0, 1]` | `0.7` | Accepted; the language module publishes its speech at `baseline_salience` |
 | `context_max_events` | int | `8` | Most coalition members rendered into the prompt |
@@ -103,7 +103,7 @@ The full `[lingua]` reference is in the [modules configuration page](../appendix
 | `gguf_path` | string | unset | Directory of the local GGUF for the in-process backend |
 | `gguf_filename` | string | unset | File name of the local GGUF for the in-process backend |
 
-The utterance-outcome observer reads `[lingua].outcome_reply_window_s` (30 s by default); the language module factory accepts the key and leaves it to the observer.
+The utterance-outcome observer reads `[language].outcome_reply_window_s` (30 s by default); the language module factory accepts the key and leaves it to the observer.
 
 ## How it works
 
@@ -115,42 +115,42 @@ When an organ adapter is active, the client asks its LoRA resolver for the per-e
 
 While the sleep module has unloaded the organ to train an adapter, the client returns an empty "organ resting" response instead of calling the server, and generation resumes when the organ is reloaded.
 
-An interrupt-marked `speak` intent cancels an in-flight generation and realizes the new one. This happens only when `[volition].interrupt_threshold` is set (it is unset by default) and a coalition whose score crosses it arrives during a `speak`; a `think` intent never preempts a `speak`. The preemption is logged content-free, as a record with `event` set to `"preempted"` and the `mode` and `tick` of the cancelled generation.
+An interrupt-marked `speak` intent cancels an in-flight generation and realizes the new one. This happens only when `[action_selection].interrupt_threshold` is set (it is unset by default) and a coalition whose score crosses it arrives during a `speak`; a `think` intent never preempts a `speak`. The preemption is logged content-free, as a record with `event` set to `"preempted"` and the `mode` and `tick` of the cancelled generation.
 
 ### Intent-expression log
 
-Every generation is appended to `state/lingua/intent_expression.jsonl` by `IntentExpressionLog`. Each record carries:
+Every generation is appended to `state/language/intent_expression.jsonl` by `IntentExpressionLog`. Each record carries:
 
 - `mode` (`"external"` or `"internal"`), `prompt`, `generated_text` and `model`;
 - `faithful_rendering`, the rendered awareness block that conditioned the prompt;
 - `prompt_tokens`, `completion_tokens` and `latency_ms`;
 - `record_id`, a 32-hex-character id also carried on the published speech event;
 - `intent_entry_id` and `intent_origin`;
-- `sleep_index`, the latest completed-sleep count seen on `hypnos.out`, or `null` before one;
+- `sleep_index`, the latest completed-sleep count seen on `sleep.out`, or `null` before one;
 - `system_digest`, the SHA-256 of the system prompt;
 - `seed`, the sampling seed, `null` for ordinary utterances.
 
-Heard speech is redacted. Every external-input event (`audition.transcription`, and `mundus.chat` from other avatars) is replaced by `[heard speech]` at every text leaf of the logged rendering and prompt, as are heard-text fields nested in other events. The logged rendering lists the same events in the same order as the rendering the organ saw. Any heard text that still appears is replaced as a last resort, and a warning is logged without the text.
+Heard speech is redacted. Every external-input event (`audition.transcription`, and `embodiment.chat` from other avatars) is replaced by `[heard speech]` at every text leaf of the logged rendering and prompt, as are heard-text fields nested in other events. The logged rendering lists the same events in the same order as the rendering the organ saw. Any heard text that still appears is replaced as a last resort, and a warning is logged without the text.
 
-The language module never truncates the log. At each sleep the sleep module moves the waking log into the per-sleep corpus under `state/lingua/intent_log/`.
+The language module never truncates the log. At each sleep the sleep module moves the waking log into the per-sleep corpus under `state/language/intent_log/`.
 
 ### Utterance outcomes
 
-When the language module is enabled, the cycle runs an observer (`kaine/cycle/utterance_outcome.py`) that appends one record per external utterance to `state/lingua/utterance_outcomes.jsonl`, joined to the intent log by `record_id`. Each record holds these fields and no text:
+When the language module is enabled, the cycle runs an observer (`kaine/cycle/utterance_outcome.py`) that appends one record per external utterance to `state/language/utterance_outcomes.jsonl`, joined to the intent log by `record_id`. Each record holds these fields and no text:
 
 | Field | Meaning |
 |---|---|
 | `replied` | Whether operator speech (an audition module transcription from a live source, the rule the sequence module uses for an interaction) arrived first |
 | `reply_latency_s` | Time from the utterance to that reply |
 | `preempted` | Whether the entity's own next utterance came first |
-| `empatheia_deviation` | Largest social cognition module's social-error deviation in the window |
+| `social_cognition_deviation` | Largest social cognition module's social-error deviation in the window |
 | `social_drive_delta` | Change in the affect module's social drive across the window |
 
 The window closes at the first reply, at the entity's next utterance, or after the reply window (30 s). A record still open at shutdown is dropped.
 
 ## Enabling and use
 
-1. Set `[modules].lingua = true`, or run the `thesis_test` profile.
+1. Set `[modules].language = true`, or run the `thesis_test` profile.
 2. Download the published organ GGUF. The first-run wizard offers this, or run `hf download kaineone/Qwen3.5-4B-abliterated-GGUF`.
 3. Start and supervise the model server:
 
@@ -173,7 +173,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
 
 - `faithful_rendering` holds rendered coalition text with heard speech replaced by `[heard speech]`. It contains no audio, camera frames or heard words.
 - `user_input` is published only for felt and event intents, with heard text redacted, and the language module does not write it to disk.
-- Inner thought on `lingua.internal` never reaches the vocal module, and the dashboard does not display its content.
+- Inner thought on `language.internal` never reaches the vocal module, and the dashboard does not display its content.
 
 ## Key files
 
@@ -203,7 +203,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
 
 ## Spec and related pages
 
-- Spec: [`openspec/specs/lingua/spec.md`](../../openspec/specs/lingua/spec.md)
-- [Vocal](vocal.md) subscribes to `lingua.external`; [Self-model](self-model.md) supplies the self-model and reads `lingua.internal`; [Sleep](sleep.md) reads the intent log; [Planning](planning.md) can propose intents through the action selection module
+- Spec: [`openspec/specs/language/spec.md`](../../openspec/specs/language/spec.md)
+- [Vocal](vocal.md) subscribes to `language.external`; [Self-model](self-model.md) supplies the self-model and reads `language.internal`; [Sleep](sleep.md) reads the intent log; [Planning](planning.md) can propose intents through the action selection module
 - [Voice alignment](../10-sleep/voice-alignment.md)
 - [Verification](../18-verification.md)

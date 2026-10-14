@@ -4,7 +4,7 @@
 """Hardware-aware sleep-cycle voice-alignment trainer provisioning.
 
 The voice-alignment trainer runs unsloth out-of-process in an operator-configured
-interpreter (``[hypnos.voice_alignment].trainer_python``; see the
+interpreter (``[sleep.voice_alignment].trainer_python``; see the
 ``external-unsloth-trainer`` change). Which unsloth a host needs is
 hardware-dependent, per unsloth's documentation:
 
@@ -110,7 +110,7 @@ _CUDA_GUIDANCE = TrainerGuidance(
         "env before training — the shipped transformers 4.x does not recognise "
         "the qwen3_5 model type. Run inside the Studio env: "
         "pip install --upgrade --force-reinstall --no-cache-dir unsloth unsloth_zoo",
-        "Point [hypnos.voice_alignment].trainer_python at that interpreter "
+        "Point [sleep.voice_alignment].trainer_python at that interpreter "
         "(the wizard offers to set it once detected).",
     ),
 )
@@ -129,7 +129,7 @@ _ROCM_GUIDANCE = TrainerGuidance(
         "venv).",
         "Install unsloth-core (the AMD-supported unsloth) into that env per the "
         "docs above; the wizard never auto-installs it.",
-        "Point [hypnos.voice_alignment].trainer_python at that env's python "
+        "Point [sleep.voice_alignment].trainer_python at that env's python "
         "(the wizard offers to set it once detected).",
     ),
 )
@@ -202,7 +202,7 @@ def probe_trainer(
         return (
             False,
             "no candidate interpreter (set "
-            "[hypnos.voice_alignment].trainer_python to the trainer env's python)",
+            "[sleep.voice_alignment].trainer_python to the trainer env's python)",
         )
     if not candidate.is_file():
         return (False, f"{candidate}: interpreter not found")
@@ -265,7 +265,7 @@ def probe_transformers_version(
         return (
             False,
             "no candidate interpreter (set "
-            "[hypnos.voice_alignment].trainer_python to the trainer env's python)",
+            "[sleep.voice_alignment].trainer_python to the trainer env's python)",
         )
     if not candidate.is_file():
         return (False, f"{candidate}: interpreter not found")

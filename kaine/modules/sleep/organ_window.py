@@ -23,7 +23,7 @@ the bracket is unnecessary (serve on one device, train on the other) and is
 SKIPPED — the bracket is a single-GPU accommodation, not a universal requirement.
 
 The window publishes its state through a small boundary-neutral STATE FILE
-(``state/hypnos/organ_window.json``) that organ-dependent consumers (the language module's
+(``state/sleep/organ_window.json``) that organ-dependent consumers (the language module's
 chat client, the A/B-divergence eval arm) read to learn the organ is "resting"
 and degrade gracefully — deferred/skipped, not crashed. This mirrors the written-
 record seam the sleep module already uses for the consolidation-divergence metric, so no

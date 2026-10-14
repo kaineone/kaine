@@ -17,7 +17,7 @@ from kaine.workspace import (
 
 def _ev(intensity: float, eid: str) -> tuple[str, Event]:
     return eid, Event(
-        source="soma",
+        source="interoception",
         type=f"t.{eid}",
         payload={"id": eid},
         salience=intensity,

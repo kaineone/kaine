@@ -295,14 +295,14 @@ def _select_components(
     default_stt = DEFAULT_STT
     default_tts = DEFAULT_TTS
 
-    if _is_enabled(modules, "lingua"):
-        section = config.get("lingua", {})
+    if _is_enabled(modules, "language"):
+        section = config.get("language", {})
         backend = section.get("backend")
         model_id = section.get("model_id") or ""
         if backend == "llama_cpp":
             components.append(
                 ComponentInfo(
-                    name="lingua",
+                    name="language",
                     kind="not_measured",
                     backend=backend,
                     model_id=model_id,
@@ -314,7 +314,7 @@ def _select_components(
             if not _is_loopback_url(url):
                 components.append(
                     ComponentInfo(
-                        name="lingua",
+                        name="language",
                         kind="not_measured",
                         backend=backend or "openai",
                         model_id=model_id,
@@ -326,7 +326,7 @@ def _select_components(
             else:
                 components.append(
                     ComponentInfo(
-                        name="lingua",
+                        name="language",
                         kind="external",
                         backend=backend or "openai",
                         model_id=model_id,
@@ -396,15 +396,15 @@ def _select_components(
                     )
                 )
 
-    if _is_enabled(modules, "vox"):
-        vocal = config.get("vox", {})
+    if _is_enabled(modules, "vocal"):
+        vocal = config.get("vocal", {})
         backend = vocal.get("backend", "chatterbox")
         if backend == "chatterbox":
             url = vocal.get("chatterbox_url", "http://127.0.0.1:8883")
             if not _is_loopback_url(url):
                 components.append(
                     ComponentInfo(
-                        name="vox.tts",
+                        name="vocal.tts",
                         kind="not_measured",
                         backend="chatterbox",
                         model_id="chatterbox",
@@ -416,7 +416,7 @@ def _select_components(
             else:
                 components.append(
                     ComponentInfo(
-                        name="vox.tts",
+                        name="vocal.tts",
                         kind="external",
                         backend="chatterbox",
                         model_id="chatterbox",
@@ -429,7 +429,7 @@ def _select_components(
             if _sherpa_present(model_id, model_dir):
                 components.append(
                     ComponentInfo(
-                        name="vox.tts",
+                        name="vocal.tts",
                         kind="in_process",
                         backend="sherpa_onnx",
                         model_id=model_id,
@@ -439,7 +439,7 @@ def _select_components(
             else:
                 components.append(
                     ComponentInfo(
-                        name="vox.tts",
+                        name="vocal.tts",
                         kind="absent",
                         backend="sherpa_onnx",
                         model_id=model_id,
@@ -449,7 +449,7 @@ def _select_components(
         else:
             components.append(
                 ComponentInfo(
-                    name="vox.tts",
+                    name="vocal.tts",
                     kind="not_measured",
                     backend=backend,
                     model_id="",
@@ -525,8 +525,8 @@ def _select_components(
                 )
             )
 
-    if _is_enabled(modules, "topos"):
-        vision = config.get("topos", {})
+    if _is_enabled(modules, "vision"):
+        vision = config.get("vision", {})
         backend = vision.get("encoder_backend", "internvideo_next")
         if backend == "internvideo_next":
             model_id = vision.get("encoder_model_id") or "internvideo_next"
@@ -535,7 +535,7 @@ def _select_components(
             if present:
                 components.append(
                     ComponentInfo(
-                        name="topos.encoder",
+                        name="vision.encoder",
                         kind="in_process",
                         backend="internvideo_next",
                         model_id=model_id,
@@ -545,7 +545,7 @@ def _select_components(
             else:
                 components.append(
                     ComponentInfo(
-                        name="topos.encoder",
+                        name="vision.encoder",
                         kind="absent",
                         backend="internvideo_next",
                         model_id=model_id,
@@ -557,7 +557,7 @@ def _select_components(
             if _hf_cached(model_id):
                 components.append(
                     ComponentInfo(
-                        name="topos.encoder",
+                        name="vision.encoder",
                         kind="in_process",
                         backend="dinov2",
                         model_id=model_id,
@@ -567,7 +567,7 @@ def _select_components(
             else:
                 components.append(
                     ComponentInfo(
-                        name="topos.encoder",
+                        name="vision.encoder",
                         kind="absent",
                         backend="dinov2",
                         model_id=model_id,
@@ -577,7 +577,7 @@ def _select_components(
         else:
             components.append(
                 ComponentInfo(
-                    name="topos.encoder",
+                    name="vision.encoder",
                     kind="not_measured",
                     backend=backend,
                     model_id="",
@@ -795,11 +795,11 @@ def _run_component_target(task: _ChildTask) -> dict[str, Any]:
     """In-child routine that imports, loads and exercises one component."""
     if task.component == "audition.stt":
         return _target_audition_stt(task)
-    if task.component == "vox.tts":
+    if task.component == "vocal.tts":
         return _target_vocal_tts(task)
     if task.component == "embedding":
         return _target_embedding(task)
-    if task.component == "topos.encoder":
+    if task.component == "vision.encoder":
         return _target_vision_encoder(task)
     if task.component == "audition.emotion":
         return _target_audition_emotion(task)
@@ -821,12 +821,12 @@ def _task_for_component(
             num_threads=int(section.get("sherpa_num_threads", 2)),
         )
 
-    if info.name == "vox.tts":
+    if info.name == "vocal.tts":
         section = info.config_section or {}
         model_id = info.model_id
         model_dir = section.get("sherpa_model_dir") or speech_model_dir(model_id)
         return _ChildTask(
-            component="vox.tts",
+            component="vocal.tts",
             backend="sherpa_onnx",
             model_id=model_id,
             model_dir=str(model_dir),
@@ -842,11 +842,11 @@ def _task_for_component(
             embedder_config=config,
         )
 
-    if info.name == "topos.encoder":
+    if info.name == "vision.encoder":
         section = info.config_section or {}
         weights_dir = section.get("encoder_local_dir") or default_weights_dir()
         return _ChildTask(
-            component="topos.encoder",
+            component="vision.encoder",
             backend=info.backend,
             model_id=info.model_id,
             device_preference=section.get("device", "auto"),
@@ -1423,7 +1423,7 @@ def _needs_for(
     enabled component is represented; those without a matching entry are emitted
     as uncalibrated so the fit report cannot falsely claim a clean fit.
     """
-    interactive_components = {"lingua", "audition.stt", "vox.tts"}
+    interactive_components = {"language", "audition.stt", "vocal.tts"}
     budget_domains = {b.name for b in budgets}
     needs: list[Need] = []
     for info in components:
@@ -1753,7 +1753,7 @@ def main(
     needs = _needs_for(entries, components, host, budgets)
 
     try:
-        report = fit_report(budgets, needs, pin="lingua")
+        report = fit_report(budgets, needs, pin="language")
         for line in report.lines():
             out(line)
     except Exception as exc:

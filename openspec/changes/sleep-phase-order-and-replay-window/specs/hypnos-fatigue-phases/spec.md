@@ -29,7 +29,7 @@ while the window is open.
 
 ### Requirement: Fatigue reset after the affective reset
 The sleep module SHALL reset the interoception module's fatigue accumulator to its baseline after the
-affective reset that ends the sleep, through the `hypnos.sleep.completed`
+affective reset that ends the sleep, through the `sleep.sleep.completed`
 event that follows it.
 
 #### Scenario: Fatigue resets after maintenance

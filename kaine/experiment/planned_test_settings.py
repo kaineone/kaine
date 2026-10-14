@@ -32,7 +32,7 @@ from kaine.storage import resolve
 
 SCHEMA = "kaine.planned_test_settings"
 SCHEMA_VERSION = 1
-PROCESSORS = ("topos", "audition", "soma")
+PROCESSORS = ("vision", "audition", "interoception")
 CONTROLS = ("matched", "pooled")
 STUDY_PREFIX = "workspace_mediation_"
 ROLES = ("preliminary", "pilot", "test", "positive_control")

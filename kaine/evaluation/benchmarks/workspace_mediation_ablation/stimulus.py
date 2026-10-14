@@ -99,7 +99,7 @@ LAG: int = 2
 class StimulusScript:
     """Deterministic per-tick inputs for the two measured processors.
 
-    ``soma_metrics`` is one metric dict per tick. ``topos_frames`` is one frame
+    ``interoception_metrics`` is one metric dict per tick. ``vision_frames`` is one frame
     vector per tick. ``background`` is one list of stand-in candidate events
     per tick.
     """
@@ -132,8 +132,8 @@ class MediationStimulus:
         if n_background < 0:
             raise ValueError(f"n_background must be >= 0, got {n_background}")
 
-        interoception_rng = random.Random(f"{seed}:{self.name}:soma")
-        vision_rng = random.Random(f"{seed}:{self.name}:topos")
+        interoception_rng = random.Random(f"{seed}:{self.name}:interoception")
+        vision_rng = random.Random(f"{seed}:{self.name}:vision")
         scenes_rng = random.Random(f"{seed}:{self.name}:scenes")
         background_rng = random.Random(f"{seed}:{self.name}:background")
 
@@ -182,8 +182,8 @@ class MediationStimulus:
             # They carry no information about either processor's input.
             tick_bg = [
                 Event(
-                    source="chronos",
-                    type="chronos.report",
+                    source="sequence",
+                    type="sequence.report",
                     payload={"harness": "background"},
                     salience=background_rng.uniform(0.05, 0.5),
                     timestamp=_BASE_EPOCH,

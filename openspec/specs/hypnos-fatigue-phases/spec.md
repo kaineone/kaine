@@ -4,18 +4,18 @@
 How fatigue drives the sleep module: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.
 ## Requirements
 ### Requirement: Fatigue-triggered maintenance with interval safety net
-The sleep module SHALL trigger offline maintenance when it observes a `soma.fatigue` event
+The sleep module SHALL trigger offline maintenance when it observes a `interoception.fatigue` event
 with `crossed == true`, and SHALL retain `interval_seconds` only as a max-interval
 safety net so maintenance still occurs if fatigue never crosses. Non-
 interruptibility, deferral, and operator-freeze preemption SHALL be preserved.
 
 #### Scenario: Crossed fatigue triggers maintenance
-- **WHEN** the sleep module observes `soma.fatigue` with `crossed == true` and no freeze is
+- **WHEN** the sleep module observes `interoception.fatigue` with `crossed == true` and no freeze is
   active
 - **THEN** a maintenance cycle begins
 
 #### Scenario: Safety-net interval still fires
-- **WHEN** no `soma.fatigue` crossing occurs for the full `interval_seconds`
+- **WHEN** no `interoception.fatigue` crossing occurs for the full `interval_seconds`
 - **THEN** a maintenance cycle begins anyway
 
 ### Requirement: Phase-1 oscillator frequency-reduction hook
@@ -37,7 +37,7 @@ during the maintenance cycle.
 The sleep module's phase 2 SHALL apply global activation downscaling to memory (scaling all
 activation weights by `downscale_factor` while preserving relative ordering) and
 SHALL open a replay window during which external perception is suspended. The
-`mnemos.replay` re-injection SHALL be driven within that window; before
+`episodic_memory.replay` re-injection SHALL be driven within that window; before
 `mnemos-replay` ships this drive is a no-op stub.
 
 #### Scenario: Downscaling preserves ordering

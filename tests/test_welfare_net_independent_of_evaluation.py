@@ -153,7 +153,7 @@ async def test_registry_does_not_build_a_second_welfare_observer(bus, tmp_path):
                 "welfare": True,
                 "coherence": False,
                 "replay": False,
-                "empatheia": False,
+                "social_cognition": False,
                 "voice_alignment_divergence": False,
                 "fatigue": False,
                 "prediction_error": False,
@@ -326,8 +326,8 @@ async def test_restarted_producer_does_not_replay_backlog(bus, tmp_path):
     for i in range(5):
         await bus.publish(
             validate_event(
-                source="mnemos",
-                type="mnemos.replay",
+                source="episodic_memory",
+                type="episodic_memory.replay",
                 payload={"memory_id": f"mem-0-{i}", "text": "x"},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -453,8 +453,8 @@ async def test_gray_zone_reaches_the_monitor_with_evaluation_off(bus, tmp_path):
         for i in range(5):
             await bus.publish(
                 validate_event(
-                    source="mnemos",
-                    type="mnemos.replay",
+                    source="episodic_memory",
+                    type="episodic_memory.replay",
                     payload={"memory_id": f"mem-{burst}-{i}", "text": "x"},
                     salience=0.1,
                     timestamp=datetime.now(timezone.utc),
@@ -509,8 +509,8 @@ async def test_cancel_during_emit_leaves_detector_state_consistent(bus, tmp_path
 
     def _replay(i):
         return validate_event(
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": f"m-{i}"},
             salience=0.1,
             timestamp=datetime.now(timezone.utc),

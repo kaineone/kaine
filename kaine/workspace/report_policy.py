@@ -27,10 +27,10 @@ Guards (reusing the executive design, never bypassing it):
     to back; a refractory interval prevents chatter even when eligible.
   - Two channels: internal ``think`` at a lower threshold (the saved, observed
     monologue) and external ``speak`` at the report threshold (rare).
-  - Never reports the entity's own output (source ``lingua``), and never reads a
+  - Never reports the entity's own output (source ``language``), and never reads a
     user-utterance / transcription event — report is self-initiated.
 
-Injectable exactly like the other policies (selected via ``[volition].policy``).
+Injectable exactly like the other policies (selected via ``[action_selection].policy``).
 """
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ class SelfInitiatedReportPolicy:
 
     def _clear_guards_on_own_output(self, snapshot: WorkspaceSnapshot) -> None:
         """Clear each guard when the entity's matching output is now accessed -
-        ``lingua.external`` realizes a prior ``speak``, ``lingua.internal`` a prior
+        ``language.external`` realizes a prior ``speak``, ``language.internal`` a prior
         ``think`` (keyed on channel so one does not clear the other)."""
         for _, event in snapshot.selected_events:
             if getattr(event, "source", None) != OWN_EXTERNAL_SPEECH_SOURCE:

@@ -57,12 +57,12 @@ class _MockBus:
 def _load_vision_section(tmp_path: Path, env: dict[str, str]) -> dict[str, object]:
     toml_path = tmp_path / "kaine.toml"
     toml_path.write_text(
-        '[topos]\nencoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"\n'
+        '[vision]\nencoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"\n'
     )
     with open(toml_path, "rb") as f:
         config = tomllib.load(f)
     normalized = kaine.storage.normalize_storage_paths(config, env)
-    return normalized["topos"]
+    return normalized["vision"]
 
 
 def _capture_vision(section: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
@@ -297,7 +297,7 @@ def test_vision_encoder_local_dir_uses_models_dir_without_a_data_root(
 
 
 def test_no_data_root_and_no_models_dir_leaves_the_config_unchanged(tmp_path: Path):
-    config = {"topos": {"encoder_local_dir": "state/models/x"}}
+    config = {"vision": {"encoder_local_dir": "state/models/x"}}
     assert kaine.storage.normalize_storage_paths(config, {}) is config
 
 

@@ -6,7 +6,7 @@ This page is for the operator installing and starting those services. The superv
 
 ## What the default entity needs
 
-Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
+Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[action_selection]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
 
 - Redis, the cycle's event bus.
 - Qdrant, which `scripts/first-boot.sh` requires even though the episodic memory module is off in the default profile.
@@ -72,7 +72,7 @@ KAINE_QDRANT_ARCHIVE=/path/to/qdrant-<arch>.tar.gz bash scripts/qdrant-bootstrap
 
 The archive is still checked against the same pinned sha256.
 
-On Termux, `bash scripts/redis-bootstrap.sh --native` uses the `redis` package (`pkg install redis` if it is missing). Qdrant has no Android build; set `[mnemos].backend = "sqlite_vec"` in `config/kaine.operator.toml` and skip Qdrant.
+On Termux, `bash scripts/redis-bootstrap.sh --native` uses the `redis` package (`pkg install redis` if it is missing). Qdrant has no Android build; set `[episodic_memory].backend = "sqlite_vec"` in `config/kaine.operator.toml` and skip Qdrant.
 
 ## Service helper
 
@@ -125,7 +125,7 @@ On NVIDIA it uses Unsloth Studio's `llama-server` (`~/.unsloth/llama.cpp/build/b
 
 ### Idle unload
 
-The shipped config sets `[lingua].model_server_sleep_idle_seconds = 600`. After 600 seconds with no requests, the server unloads the organ from VRAM. Set it to `-1` to keep the model loaded.
+The shipped config sets `[language].model_server_sleep_idle_seconds = 600`. After 600 seconds with no requests, the server unloads the organ from VRAM. Set it to `-1` to keep the model loaded.
 
 ### Organ formats
 
@@ -136,7 +136,7 @@ The shipped config sets `[lingua].model_server_sleep_idle_seconds = 600`. After 
 
 ### Served-alias check
 
-The server must list the organ under the exact value of `[lingua].model_id`. The bootstrap launches with `--alias` set to that value. The wizard checks this after launch and reports a mismatch between the served name and `[lingua].model_id`, so the first cycle does not hit a 404.
+The server must list the organ under the exact value of `[language].model_id`. The bootstrap launches with `--alias` set to that value. The wizard checks this after launch and reports a mismatch between the served name and `[language].model_id`, so the first cycle does not hit a 404.
 
 Chain-of-thought is suppressed at the server with `--reasoning-budget 0` and in requests with `chat_template_kwargs = {"enable_thinking": false}`, because the language module is an output organ that voices accessed content.
 
@@ -180,7 +180,7 @@ systemctl --user restart kaine-chatterbox.service   # Quadlet install only
 curl -s http://127.0.0.1:8883/
 ```
 
-Chatterbox needs a predefined voice id. With `[vox].predefined_voice_id` unset, the vocal module uses the first voice the server lists at startup. To use a particular one, set `[vox].predefined_voice_id` (or `[vox].default_voice`) in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory.
+Chatterbox needs a predefined voice id. With `[vocal].predefined_voice_id` unset, the vocal module uses the first voice the server lists at startup. To use a particular one, set `[vocal].predefined_voice_id` (or `[vocal].default_voice`) in `config/kaine.operator.toml` to a filename Chatterbox can find under its `voices/` directory.
 
 ### sherpa-onnx
 
@@ -190,7 +190,7 @@ To run STT and TTS inside KAINE instead of using Speaches and Chatterbox, set:
 [audition]
 backend = "sherpa_onnx"
 
-[vox]
+[vocal]
 backend = "sherpa_onnx"
 ```
 
@@ -204,7 +204,7 @@ The edge portability profiles (`tier1.toml`) use this path.
 
 ## Voice-alignment trainer
 
-Stage-2 voice-alignment training needs a separate trainer environment. Configure it in `[hypnos.voice_alignment]` in `config/kaine.operator.toml`:
+Stage-2 voice-alignment training needs a separate trainer environment. Configure it in `[sleep.voice_alignment]` in `config/kaine.operator.toml`:
 
 - `trainer_backend = "subprocess"` runs the trainer in a local Python environment; set `trainer_python` to its interpreter.
 - `trainer_backend = "job_queue"` plus the `kaine-trainer` compose service is for container hosts.

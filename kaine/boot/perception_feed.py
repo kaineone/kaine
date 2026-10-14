@@ -20,18 +20,18 @@ log = logging.getLogger(__name__)
 def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
-    stimulus_source = dict(feed.get("womb") or {})
+    stimulus_source = dict(feed.get("stimulus_source") or {})
     video = stimulus_source.pop("video", None)
     if video is not None and not isinstance(video, dict):
-        raise ValueError("[perception_feed.womb.video] must be a table")
+        raise ValueError("[perception_feed.stimulus_source.video] must be a table")
     audio = stimulus_source.pop("audio", None)
     if audio is not None and not isinstance(audio, dict):
-        raise ValueError("[perception_feed.womb.audio] must be a table")
-    # [perception_feed.womb.readout] belongs to the developmental-phase owner, which
+        raise ValueError("[perception_feed.stimulus_source.audio] must be a table")
+    # [perception_feed.stimulus_source.readout] belongs to the developmental-phase owner, which
     # validates it itself (DevelopmentReadoutConfig).
     readout = stimulus_source.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
-        raise ValueError("[perception_feed.womb.readout] must be a table")
+        raise ValueError("[perception_feed.stimulus_source.readout] must be a table")
     return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
 
 
@@ -52,8 +52,8 @@ def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
 def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourceClock, Callable[[], float]]:
     from kaine.modules.vision.feed import StimulusSourceClock
 
-    clock = feed.get("_shared_womb_clock")
-    lived = feed.get("_womb_lived_seconds")
+    clock = feed.get("_shared_stimulus_source_clock")
+    lived = feed.get("_stimulus_source_lived_seconds")
     if clock is not None and lived is not None:
         return (clock, lived)
     offset = _stimulus_source_lived_offset()
@@ -127,14 +127,14 @@ def _install_shared_stimulus_source_clock(
                     not_awake = 0.0
             return offset + max(0.0, elapsed - not_awake)
 
-    perception_feed["_shared_womb_clock"] = clock
-    perception_feed["_womb_lived_seconds"] = lived_provider
-    perception_feed["_womb_unawake"] = unawake
+    perception_feed["_shared_stimulus_source_clock"] = clock
+    perception_feed["_stimulus_source_lived_seconds"] = lived_provider
+    perception_feed["_stimulus_source_unawake"] = unawake
     if kaine_config is not None:
         target = kaine_config.setdefault("perception_feed", {})
-        target["_shared_womb_clock"] = clock
-        target["_womb_lived_seconds"] = lived_provider
-        target["_womb_unawake"] = unawake
+        target["_shared_stimulus_source_clock"] = clock
+        target["_stimulus_source_lived_seconds"] = lived_provider
+        target["_stimulus_source_unawake"] = unawake
 
 
 def bind_stimulus_source_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
@@ -142,7 +142,7 @@ def bind_stimulus_source_unawake_source(kaine_config: dict[str, Any] | None, fn:
 
     The cycle is built after the feed.
     """
-    holder = (kaine_config or {}).get("perception_feed", {}).get("_womb_unawake")
+    holder = (kaine_config or {}).get("perception_feed", {}).get("_stimulus_source_unawake")
     if isinstance(holder, dict):
         holder["fn"] = fn
 
@@ -173,7 +173,7 @@ def _plan_stimulus_source_world_transition(
 
     Returns ``(active, reason, log_level)``. The transition runs when the mode
     is ``playlist``, ``transition_seconds`` is above zero, the stage is embodied
-    with ``womb_t_at_birth``, ``womb_seed`` and the parameter digest recorded,
+    with ``stimulus_source_t_at_maturation``, ``stimulus_source_seed`` and the parameter digest recorded,
     and the configured stimulus source parameters still have the recorded digest. An
     unstaged, unborn or disabled case is reported at info; a born being missing
     its record, or a parameter mismatch, at warning. Invalid settings raise
@@ -324,7 +324,7 @@ def _transition_perceived(video_present: bool) -> bool:
 
 def _transition_event_publisher(bus: Any) -> Callable[[str, dict[str, Any]], None]:
     """Publish the transition's content-free outcome as ``perception.transition``
-    events on the perception stream (``perception.out``) through the bus.
+    events on the perception stream (``perceptual_locus.out``) through the bus.
 
     The controller reports from perception threads, so each event is handed to
     the event loop that was running when boot built the transition.
@@ -396,7 +396,7 @@ def _install_stimulus_source_world_transition(
 
     if stage_state is None:
         stage_state = _lifecycle_stage.read_stage(stage_path)
-    vision = (kaine_config or {}).get("topos") or {}
+    vision = (kaine_config or {}).get("vision") or {}
     transition = _build_stimulus_source_world_transition(
         perception_feed,
         playlist_clock,
@@ -409,10 +409,10 @@ def _install_stimulus_source_world_transition(
     )
     if transition is None:
         return None
-    perception_feed["_womb_world_transition"] = transition
+    perception_feed["_stimulus_source_world_transition"] = transition
     if kaine_config is not None:
         kaine_config.setdefault("perception_feed", {})
-        kaine_config["perception_feed"]["_womb_world_transition"] = transition
+        kaine_config["perception_feed"]["_stimulus_source_world_transition"] = transition
     return transition
 
 
@@ -439,7 +439,7 @@ def _build_perception_feed_video_factory(
     if mode == "screen":
         return _build_screen_source_factory(feed)
 
-    if mode == "womb":
+    if mode == "stimulus_source":
         params = _stimulus_source_params(feed)
         schedule = StimulusSourceSchedule(
             seed=int(feed.get("seed", 0)),
@@ -480,7 +480,7 @@ def _build_perception_feed_video_factory(
     shared_clock = feed.get("_shared_playlist_clock")
     # A born entity's viewing opens with the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves audio.
-    transition = feed.get("_womb_world_transition")
+    transition = feed.get("_stimulus_source_world_transition")
 
     def _playlist_factory(device, *, width, height):  # noqa: ANN001
         source = PlaylistSource(manifest, playlist_clock=shared_clock)
@@ -522,7 +522,7 @@ def _build_screen_source_factory(feed: dict[str, Any]) -> Any:
     spec = screen_capture_spec(target)  # platform auto-detected
     ffmpeg_path = str(scr.get("ffmpeg_path", "ffmpeg"))
 
-    # Native grab (topos-foveation): capture at the display's own resolution with
+    # Native grab (vision-foveation): capture at the display's own resolution with
     # no scale filter so the foveal crop carries true native detail. Detected once
     # at build time; on any platform without a probe (or if detection fails) it
     # falls back to the configured capture geometry with a logged note — honest
@@ -625,7 +625,7 @@ def _build_perception_feed_audio_factory(
 
     video = dict(feed.get("video") or {})
     audio = dict(feed.get("audio") or {})
-    if mode == "womb":
+    if mode == "stimulus_source":
         params = _stimulus_source_params(feed)
         sr = int(audio.get("sample_rate", sample_rate))
         ch = int(audio.get("channels", channels))
@@ -633,12 +633,12 @@ def _build_perception_feed_audio_factory(
         min_frames = _LOWPASS_TAPS - 1
         if fpb < min_frames:
             raise ValueError(
-                f"[perception_feed.womb] requires frames_per_block >= {min_frames} "
+                f"[perception_feed.stimulus_source] requires frames_per_block >= {min_frames} "
                 f"(the womb low-pass filter needs 128 samples of history); got {fpb}"
             )
         if params.lowpass_hz >= sr / 2.0:
             raise ValueError(
-                f"[perception_feed.womb] requires lowpass_hz < sample_rate/2; "
+                f"[perception_feed.stimulus_source] requires lowpass_hz < sample_rate/2; "
                 f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
             )
         schedule = StimulusSourceAudioSchedule(
@@ -683,7 +683,7 @@ def _build_perception_feed_audio_factory(
     shared_clock = feed.get("_shared_playlist_clock")
     # The programme's sound fades in after the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves video.
-    transition = feed.get("_womb_world_transition")
+    transition = feed.get("_stimulus_source_world_transition")
 
     def _playlist_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
         def _make(cb):  # noqa: ANN001, ANN202
@@ -720,7 +720,7 @@ def gather_perception_feed_descriptor(
     ``seeded`` returns the seed plus BOTH the video and the audio schedule (enough
     to regenerate the entity's full A/V input); for ``playlist`` the single
     manifest sha256 + per-item digests that pin both surfaces (enough to verify);
-    for ``off``/``live`` just the mode; for ``womb`` the parameters plus the
+    for ``off``/``live`` just the mode; for ``stimulus_source`` the parameters plus the
     video/audio schedules and the lived-seconds offset. A ``playlist`` descriptor
     also records ``transition_seconds``, ``transition_audio_fade_seconds`` and
     whether this boot plans the stimulus-source-to-world transition
@@ -736,7 +736,7 @@ def gather_perception_feed_descriptor(
     modules package (import-boundary contract). Mirrors ``_gather_model_ids``.
     """
     feed = config.get("perception_feed") or {}
-    vision = config.get("topos") or {}
+    vision = config.get("vision") or {}
     audition = config.get("audition") or {}
     mode = str(feed.get("mode", "off")).lower()
     descriptor: dict[str, Any] = {"mode": mode}
@@ -769,7 +769,7 @@ def gather_perception_feed_descriptor(
             base_strength=float(audio.get("base_strength", 0.3)),
             surprise_strength=float(audio.get("surprise_strength", 1.0)),
         ).as_descriptor()
-    elif mode == "womb":
+    elif mode == "stimulus_source":
         from kaine.lifecycle.stored_field_names import stimulus_source_params_record
         from kaine.modules.audition.feed import StimulusSourceAudioSchedule
         from kaine.modules.vision.feed import StimulusSourceSchedule
@@ -779,11 +779,11 @@ def gather_perception_feed_descriptor(
         descriptor["seed"] = seed
         try:
             params = _stimulus_source_params(feed)
-            descriptor["womb"] = stimulus_source_params_record(params)
+            descriptor["stimulus_source"] = stimulus_source_params_record(params)
         except Exception:
             # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.
-            descriptor["womb"] = {"invalid": True}
+            descriptor["stimulus_source"] = {"invalid": True}
         descriptor["video"] = StimulusSourceSchedule(
             seed=seed,
             width=int(vision.get("capture_width", 640)),
@@ -849,6 +849,6 @@ def gather_perception_feed_descriptor(
         "playlist": "playlist",
         "live": "camera",
         "screen": "screen",
-        "womb": "womb",
+        "stimulus_source": "stimulus_source",
     }.get(mode, mode)
     return descriptor

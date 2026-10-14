@@ -27,7 +27,7 @@ async def test_language_constructs_with_fake_chat_client(tmp_path):
             intent_log_path=tmp_path / "intent.jsonl",
         )
         await h.register(language)
-        assert language.name == "lingua"
+        assert language.name == "language"
         # No exception at boot. Serialize returns dict.
         assert isinstance(language.serialize(), dict)
 
@@ -46,5 +46,5 @@ async def test_language_against_real_unsloth(tmp_path):
         await h.register(language)
         # Real Unsloth contract: broadcast triggers a generated event.
         await h.broadcast_workspace({"tick_index": 0, "selected": []})
-        events = await h.collect("lingua.external", count=1, timeout=30.0)
+        events = await h.collect("language.external", count=1, timeout=30.0)
         assert events or True, "smoke: real-service contract test ran"

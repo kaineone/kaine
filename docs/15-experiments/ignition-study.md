@@ -8,7 +8,7 @@ The runner is `kaine/research/ignition_study/__main__.py` and `kaine/research/ig
 
 The runner follows a seed-and-branch plan:
 
-- One `gestation` step produces the seed entity and preserves it just after maturation.
+- One `development` step produces the seed entity and preserves it just after maturation.
 - `branch 0` and the `repeat` both start from that seed, with only the base modules.
 - For k = 1 to K, `branch k` starts from the seed with the base modules plus the first k modules of the order.
 - `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one entity forward through every step.
@@ -27,7 +27,7 @@ python tools/build_playlist_manifest.py --dir <films> --out <programme.toml>
 
 The study records the manifest's sha256, so changing the file voids the study.
 
-Research mode and unattended mode are separate supervision modes, and selecting both is a configuration error. On every step the study overlay enables the welfare safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the research event log, external utterance capture and the ignition log. It also forces `[research_event_log.nexus_record].enabled = false`, `[research_event_log.raw_archive].enabled = false` and `[evaluation].workspace_trajectory = false`, overriding the operator configuration so that those records stay off.
+Research mode and unattended mode are separate supervision modes, and selecting both is a configuration error. On every step the study overlay enables the welfare safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the research event log, external utterance capture and the ignition log. It also forces `[research_event_log.dashboard_record].enabled = false`, `[research_event_log.raw_archive].enabled = false` and `[evaluation].workspace_trajectory = false`, overriding the operator configuration so that those records stay off.
 
 The operator supplies the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped configuration, so research-mode boots also need state encryption: set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner never sends `SIGKILL`. Apart from an unviable developmental phase (described below), it stops an entity only after the entity's state has been preserved. See [Preservation and the safety net](../11-preservation.md).
 
@@ -48,7 +48,7 @@ python -m kaine.research.ignition_study init \
     [--study-dir /absolute/path]
 ```
 
-`init` creates `studies/<study-id>/` with `study.json` and the step directories `gestation/`, `branch/<k>/`, `repeat/` and `accumulate/`. Inside each step directory it creates a `config/` holding symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is recorded.
+`init` creates `studies/<study-id>/` with `study.json` and the step directories `development/`, `branch/<k>/`, `repeat/` and `accumulate/`. Inside each step directory it creates a `config/` holding symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is recorded.
 
 All four commands (`init`, `run`, `status`, `analyse`) load the configuration, install the data root (`[storage].data_root` or `KAINE_DATA_ROOT`), and resolve a relative `--study-dir` under it. An absolute path is used as given. When no configuration can be loaded, paths stay relative to the working directory and the command prints a note on stderr.
 
@@ -72,7 +72,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id>
 
 The runner runs one step at a time:
 
-1. `gestation`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `gestation_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `birth_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.womb].birth_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
+1. `development`: the developmental stimulus with automatic maturation. The step runs until the maturation gate allows maturation. With `min_lived_seconds = 86400` that takes at least 24 hours of awake time (entity time during which the entity is awake and the cycle is not frozen), and the hard budget is 96 hours (`--gestation-budget-seconds`). Developmental-phase progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) is saved in `development_progress.json`, keyed to the entity, so a developmental phase that spans a restart continues where it left off. Once the entity matures, the runner waits for the maturation bloom to end and then preserves it. The bloom ends at the stage file's `maturation_bloom_ends_at`; without that value the runner waits the step's `[perception_feed.stimulus_source].maturation_transition_seconds` plus a margin, or 30 seconds plus the margin when that value cannot be read.
 2. `branch 0` from the seed, with the base set.
 3. `repeat` from the seed, with the base set.
 4. For k = 1 to K: `branch k` from the seed with the base set plus the first k modules of the order, then `accumulate k` with the same modules, from `branch 0` (k = 1) or `accumulate k-1`.
@@ -93,10 +93,10 @@ Before each step the runner refuses to start if free space is below the larger o
 
 If a timeout preservation fails, the runner likewise leaves the entity running, records `failed:critical` with the cycle's pid, and exits 3.
 
-During a developmental-phase step the runner watches the developmental-phase readout's viability verdict (`state/lifecycle/gestation_viability.json`; see the [developmental phase](../06-operation/development.md#viability-watch)). When the verdict says the developmental phase cannot reach maturation, the runner:
+During a developmental-phase step the runner watches the developmental-phase readout's viability verdict (`state/lifecycle/development_viability.json`; see the [developmental phase](../06-operation/development.md#viability-watch)). When the verdict says the developmental phase cannot reach maturation, the runner:
 
 1. stops the cycle gracefully (SIGTERM) without requesting a preservation, because by operator policy an entity that does not complete the developmental phase is not preserved;
-2. records `failed:gestation_unviable` with the verdict under `viability`;
+2. records `failed:development_unviable` with the verdict under `viability`;
 3. writes `ENDED-NOTE.md` into the step directory with the rule, the evidence and what was done;
 4. halts the study.
 
@@ -121,7 +121,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id> --ret
 
 ### Module-specific behaviour
 
-With the default order, the [planning module](../09-modules/planning.md) is enabled from k = 3. With `[nous].drive_actions` on (the shipped default), the planning module's chosen actions become proposals that the action selection module realizes as `think`, `speak` or `rest` intents, under the same guards as every other intent. The [sleep module](../09-modules/sleep.md) accepts a rest request no more often than `requested_rest_min_interval_s`, and the [vocal module](../09-modules/vocal.md) marks the origin of speech that follows a planning module proposal. The planning module's learned transition model is preserved in each viewing's bundle, so later accumulate steps resume from what it has learned.
+With the default order, the [planning module](../09-modules/planning.md) is enabled from k = 3. With `[planning].drive_actions` on (the shipped default), the planning module's chosen actions become proposals that the action selection module realizes as `think`, `speak` or `rest` intents, under the same guards as every other intent. The [sleep module](../09-modules/sleep.md) accepts a rest request no more often than `requested_rest_min_interval_s`, and the [vocal module](../09-modules/vocal.md) marks the origin of speech that follows a planning module proposal. The planning module's learned transition model is preserved in each viewing's bundle, so later accumulate steps resume from what it has learned.
 
 If the [world model module](../09-modules/world-model.md) is enabled, the runner checks that the step's bundle `manifest.json` reports `world_model_captured: true`; otherwise the step fails as `failed:world_model_not_captured` or `failed:manifest_unreadable`. Each step record carries `world_model_captured` (null when the world model module is off).
 
@@ -180,7 +180,7 @@ For each viewing the report records:
 - the broadcast rate over unpaused programme time (sleep module replays and freezes are left out of the denominator);
 - broadcasts per film-minute bin, one bin per minute of `offset_s` for each film, with bins that have no programme coverage left out rather than counted as zero;
 - coalition size mean, median and p90;
-- each module's share: the fraction of broadcasts whose coalition contains the module, counted by member `source`, with the workspace-internal sources (`syneidesis`, `volition`) counted separately and never as faculties;
+- each module's share: the fraction of broadcasts whose coalition contains the module, counted by member `source`, with the workspace-internal sources (`workspace`, `action_selection`) counted separately and never as faculties;
 - the members' reported intensity (`member_salience`) mean, p50 and p90, by module;
 - the inhibited share;
 - picture-to-sound drift: the median and maximum absolute `programme.offset_s - audio.delivered_s` when recorded;

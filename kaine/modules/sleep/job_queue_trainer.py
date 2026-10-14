@@ -5,7 +5,7 @@
 
 JobQueueVoiceTrainer implements the same minimal Trainer protocol as
 :class:`~kaine.modules.sleep.subprocess_trainer.SubprocessVoiceTrainer` and the
-in-process trainer, so it drops into the same slot in ``boot.py::make_hypnos``.
+in-process trainer, so it drops into the same slot in ``boot.py::make_sleep``.
 Instead of running unsloth itself, it writes the same filesystem job spec into a
 shared jobs directory, marks the directory READY, and polls asynchronously for
 ``result.json`` produced by the ``kaine-trainer`` container service.
@@ -86,7 +86,7 @@ class JobQueueVoiceTrainer:
         if not base_path:
             raise SubprocessTrainerError(
                 "JobQueueVoiceTrainer needs base_model_path; set "
-                "[hypnos.voice_alignment].base_model_path"
+                "[sleep.voice_alignment].base_model_path"
             )
 
         out_dir = Path(config.adapter_output_dir)

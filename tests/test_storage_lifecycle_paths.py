@@ -63,7 +63,7 @@ def _root_args(tmp_path, *, dry_run=False):
         "[research_submission]\n"
         "enabled = false\n"
         # No Qdrant here: the runtime default backend would need a live store.
-        '[mnemos]\nbackend = "inmemory"\n[empatheia]\nbackend = "inmemory"\n',
+        '[episodic_memory]\nbackend = "inmemory"\n[social_cognition]\nbackend = "inmemory"\n',
         encoding="utf-8",
     )
     a = ["--config", str(cfg_path)]

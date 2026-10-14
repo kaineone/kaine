@@ -49,7 +49,7 @@ The one allowed dependency is the pure data module `kaine.cycle.types` (`Workspa
 
 ### Workspace and cognitive modules
 
-`kaine/workspace/` holds workspace selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals, such as affect arousal or the drive levels, receive them by dependency injection at boot: `kaine/boot/wiring.py` constructs the live `StateModulator`, and the cycle refreshes an `AffectStateProvider` each tick from `thymos.state`.
+`kaine/workspace/` holds workspace selection and the `RuleBasedSalience` factors. It must not import `kaine/modules/`. Salience factors that need module-produced signals, such as affect arousal or the drive levels, receive them by dependency injection at boot: `kaine/boot/wiring.py` constructs the live `StateModulator`, and the cycle refreshes an `AffectStateProvider` each tick from `affect.state`.
 
 There are no `ignore_imports` exceptions for this rule. Any `from kaine.modules... import ...` inside `kaine/workspace/` is a boundary violation.
 

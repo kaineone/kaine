@@ -104,12 +104,12 @@ def test_awareness_heading_in_prompt():
 def test_working_memory_includes_rendered_events():
     snap = _snap(
         [
-            ("a", _ev("soma", "soma.report", {"wellness": 0.8, "alerts": []}), 0.6),
+            ("a", _ev("interoception", "interoception.report", {"wellness": 0.8, "alerts": []}), 0.6),
             (
                 "b",
                 _ev(
-                    "thymos",
-                    "thymos.state",
+                    "affect",
+                    "affect.state",
                     {"state": {"valence": -0.3}, "drives": {}, "emotion": "wary"},
                 ),
                 0.7,
@@ -232,7 +232,7 @@ def test_transcription_redacted_in_logged_working_memory():
                 _ev("audition", "audition.transcription", {"text": marker}),
                 0.9,
             ),
-            ("b", _ev("soma", "soma.report", {"wellness": 0.8, "alerts": []}), 0.5),
+            ("b", _ev("interoception", "interoception.report", {"wellness": 0.8, "alerts": []}), 0.5),
         ]
     )
     ctx = ContextAssembler().assemble(
@@ -254,7 +254,7 @@ def test_redacted_bounded_rendering_preserves_selection_order():
     snap = _snap(
         [
             ("a", _ev("audition", "audition.transcription", {"text": long_text}), 0.9),
-            ("b", _ev("soma", "soma.report", {"wellness": 0.8, "alerts": []}), 0.5),
+            ("b", _ev("interoception", "interoception.report", {"wellness": 0.8, "alerts": []}), 0.5),
         ]
     )
     renderer = FaithfulRenderer()
@@ -297,7 +297,7 @@ def _make_language(bus, tmp_path, responses=None):
 async def _publish_intent(bus, kind, about):
     await bus.publish(
         Event(
-            source="volition",
+            source="action_selection",
             type=f"intent.{kind}",
             payload={"kind": kind, "about": about},
             salience=0.5,
@@ -342,7 +342,7 @@ async def test_rolling_latest_snapshot_conditions_speech(bus, tmp_path):
                 ],
                 "metadata": {},
             },
-            source="syneidesis",
+            source="workspace",
         )
         await wait_for(lambda: language._latest_snapshot is not None)
         await _publish_intent(bus, "speak", "are you awake")
@@ -378,7 +378,7 @@ async def test_empty_pooled_broadcast_keeps_the_cached_snapshot(bus, tmp_path):
                 ],
                 "metadata": {},
             },
-            source="syneidesis",
+            source="workspace",
         )
         await wait_for(lambda: language._latest_snapshot is not None)
         await bus.publish_workspace(
@@ -390,7 +390,7 @@ async def test_empty_pooled_broadcast_keeps_the_cached_snapshot(bus, tmp_path):
                 "selected": [],
                 "metadata": {"arm": "pooled"},
             },
-            source="syneidesis",
+            source="workspace",
         )
         await asyncio.sleep(0.15)
         assert language._latest_snapshot.tick_index == 5
@@ -420,7 +420,7 @@ def test_unknown_mode_falls_back_to_external_framing():
 def test_max_events_floored_to_one():
     # max_events <= 0 is clamped so a non-empty coalition still renders something.
     a = ContextAssembler(max_events=0)
-    snap = _snap([("e1", _ev("soma", "soma.report", {"wellness": 0.5, "alerts": []}), 0.9)])
+    snap = _snap([("e1", _ev("interoception", "interoception.report", {"wellness": 0.5, "alerts": []}), 0.9)])
     ctx = a.assemble(about="x", snapshot=snap, self_model={}, mode="external")
     assert "Soma reports" in ctx.working_memory
 
@@ -433,7 +433,7 @@ async def test_cache_loop_survives_malformed_broadcast(bus, tmp_path):
         await bus.client.xadd(
             "workspace.broadcast",
             {
-                "source": "syneidesis",
+                "source": "workspace",
                 "type": "workspace.broadcast",
                 "payload": "NOT_JSON{{{",
                 "salience": "0.5",
@@ -472,7 +472,7 @@ async def test_inhibited_broadcast_is_not_cached(bus, tmp_path):
                 "selected": [],
                 "metadata": {},
             },
-            source="syneidesis",
+            source="workspace",
         )
         await asyncio.sleep(0.15)
         assert language._latest_snapshot is None  # inhibited coalition not cached

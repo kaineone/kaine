@@ -195,7 +195,7 @@ class StimulusSourceClock:
         value = float(transition_seconds)
         if not math.isfinite(value) or value <= 0.0 or value > 30.0:
             raise ValueError("transition_seconds must be finite and in (0, 30]")
-        # womb_seconds() takes the same lock, so read it before locking.
+        # stimulus_source_seconds() takes the same lock, so read it before locking.
         start = self.stimulus_source_seconds()
         with self._lock:
             if self._maturation_start is not None or self._born:
@@ -204,7 +204,7 @@ class StimulusSourceClock:
             self._maturation_duration = value
 
     def maturation_end_stimulus_source_seconds(self) -> float | None:
-        """Return the stimulus source time at which the maturation bloom ends, or None before birth."""
+        """Return the stimulus source time at which the maturation bloom ends, or None before maturation."""
         with self._lock:
             if self._maturation_start is None:
                 return None
@@ -216,7 +216,7 @@ class StimulusSourceClock:
             self._born = True
 
     def maturation_progress(self) -> float | None:
-        """Return the maturation transition progress in [0, 1], or None before birth."""
+        """Return the maturation transition progress in [0, 1], or None before maturation."""
         with self._lock:
             if self._born:
                 return 1.0
@@ -510,7 +510,7 @@ class StimulusSourceProceduralSource:
         """Render ``frame(seed, i)`` as a BGR uint8 ndarray.
 
         Pure function of ``(seed, frame_index, params, lived_seconds,
-        birth_progress)``.
+        maturation_progress)``.
         """
         import colorsys
         import math

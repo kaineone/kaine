@@ -71,108 +71,108 @@ def test_verdict_passes_when_all_processors_pass():
 
 
 def test_verdict_fails_when_processor_missing():
-    records = [_result("topos", True), _result("audition", True)]
+    records = [_result("vision", True), _result("audition", True)]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert verdict["missing"] == ["soma"]
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "no result"
+    assert verdict["missing"] == ["interoception"]
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "no result"
 
 
 def test_verdict_fails_when_last_record_does_not_pass():
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True, effect=0.005, ig_with=0.015),
+        _result("interoception", True, effect=0.005, ig_with=0.015),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "the informative component was not detected"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "the informative component was not detected"
 
 
 def test_verdict_checks_every_record_for_each_processor():
     # An earlier failed record defeats a later passing terminal record.
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True, failed=True),
-        _result("soma", True),
+        _result("interoception", True, failed=True),
+        _result("interoception", True),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "the control failed"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "the control failed"
 
     # Two terminal records mean the control restarted.
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True),
-        _result("soma", True),
+        _result("interoception", True),
+        _result("interoception", True),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
+    assert "interoception" in verdict["not_passed"]
     assert (
-        verdict["reasons"]["soma"]
+        verdict["reasons"]["interoception"]
         == "more than one terminal record (the control restarted)"
     )
 
     # A cumulative record after the terminal record is a protocol violation.
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True),
-        _result("soma", True, final=False, n_reports=250),
+        _result("interoception", True),
+        _result("interoception", True, final=False, n_reports=250),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
+    assert "interoception" in verdict["not_passed"]
     assert (
-        verdict["reasons"]["soma"] == "a record follows the terminal record"
+        verdict["reasons"]["interoception"] == "a record follows the terminal record"
     )
 
     # A fresh control inside the same run_id creates more than one terminal record.
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True, n_reports=100, final=False),
-        _result("soma", True, n_reports=200, final=False),
-        _result("soma", True, n_reports=200),
-        _result("soma", True, n_reports=50, final=False),
-        _result("soma", True, n_reports=150),
+        _result("interoception", True, n_reports=100, final=False),
+        _result("interoception", True, n_reports=200, final=False),
+        _result("interoception", True, n_reports=200),
+        _result("interoception", True, n_reports=50, final=False),
+        _result("interoception", True, n_reports=150),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
+    assert "interoception" in verdict["not_passed"]
     assert (
-        verdict["reasons"]["soma"]
+        verdict["reasons"]["interoception"]
         == "more than one terminal record (the control restarted)"
     )
 
 
 def test_terminal_record_must_have_consistent_ig_fields():
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True, ig_with=0.03, ig_without=0.01),
+        _result("interoception", True, ig_with=0.03, ig_without=0.01),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
+    assert "interoception" in verdict["not_passed"]
     assert (
-        verdict["reasons"]["soma"]
+        verdict["reasons"]["interoception"]
         == "effect does not match ig_with minus ig_without"
     )
 
 
 def test_verdict_ignores_other_event_types():
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True),
-        {"event_type": "topos.report", "processor": "soma", "passed": False},
+        _result("interoception", True),
+        {"event_type": "vision.report", "processor": "interoception", "passed": False},
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is True
@@ -190,8 +190,8 @@ def test_main_returns_zero_for_passing_run(tmp_path, capsys):
 
 def test_main_returns_one_for_failing_run(tmp_path, capsys):
     root = tmp_path / "r1"
-    records = [_result(p, True, run_id="r1") for p in ("topos", "audition")]
-    records.append(_result("soma", False, run_id="r1", effect=0.001))
+    records = [_result(p, True, run_id="r1") for p in ("vision", "audition")]
+    records.append(_result("interoception", False, run_id="r1", effect=0.001))
     _write_run(root, "r1", records)
     assert main(["r1", "--root", str(root)]) == 1
     out = capsys.readouterr().out
@@ -216,32 +216,32 @@ def test_constants_match_the_module():
 
 def test_verdict_fails_when_the_last_record_marks_a_failure():
     records = [_result(p, True) for p in PROCESSORS]
-    records.append(_result("soma", False, failed=True))
+    records.append(_result("interoception", False, failed=True))
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "the control failed"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "the control failed"
 
 
 def test_verdict_fails_when_failed_is_true_even_if_passed_is_true():
     records = [_result(p, True) for p in PROCESSORS]
-    records.append(_result("soma", True, failed=True))
+    records.append(_result("interoception", True, failed=True))
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
+    assert "interoception" in verdict["not_passed"]
 
 
 def test_stale_cumulative_pass_fails_without_terminal_record():
     records = [
-        _result("topos", True),
+        _result("vision", True),
         _result("audition", True),
-        _result("soma", True),
-        _result("soma", True, final=False),
+        _result("interoception", True),
+        _result("interoception", True, final=False),
     ]
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "a record follows the terminal record"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "a record follows the terminal record"
 
 
 def test_passed_flag_is_not_trusted():
@@ -254,38 +254,38 @@ def test_passed_flag_is_not_trusted():
 
 def test_low_effect_fails():
     records = [_result(p, True) for p in PROCESSORS]
-    records[-1] = _result("soma", True, effect=0.005, ig_with=0.015)
+    records[-1] = _result("interoception", True, effect=0.005, ig_with=0.015)
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "the informative component was not detected"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "the informative component was not detected"
 
 
 def test_n_reports_below_min_reports_fails():
     records = [_result(p, True) for p in PROCESSORS]
-    records[-1] = _result("soma", True, n_reports=50)
+    records[-1] = _result("interoception", True, n_reports=50)
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "n_reports is below min_reports"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "n_reports is below min_reports"
 
 
 def test_non_finite_effect_fails():
     records = [_result(p, True) for p in PROCESSORS]
-    records[-1] = _result("soma", True, effect=float("nan"))
+    records[-1] = _result("interoception", True, effect=float("nan"))
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert "missing or not finite" in verdict["reasons"]["soma"]
+    assert "interoception" in verdict["not_passed"]
+    assert "missing or not finite" in verdict["reasons"]["interoception"]
 
 
 def test_min_effect_zero_fails():
     records = [_result(p, True) for p in PROCESSORS]
-    records[-1] = _result("soma", True, min_effect=0.0)
+    records[-1] = _result("interoception", True, min_effect=0.0)
     verdict = verdict_from_records(records)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "min_effect is not above 0"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "min_effect is not above 0"
 
 
 def test_parse_error_makes_run_fail(tmp_path, capsys):
@@ -350,13 +350,13 @@ def test_pooling_stops_once_min_reports_is_reached(tmp_path):
 def test_incomplete_run_inside_pool_fails_processor(tmp_path):
     r1_records = [_result(p, True, run_id="r1", n_reports=60) for p in PROCESSORS]
     r2_records = [_result(p, True, run_id="r2", n_reports=60) for p in PROCESSORS]
-    r2_records[-1] = _result("soma", False, run_id="r2", n_reports=60, failed=True)
+    r2_records[-1] = _result("interoception", False, run_id="r2", n_reports=60, failed=True)
     _write_run(tmp_path / "r1", "r1", r1_records)
     _write_run(tmp_path / "r2", "r2", r2_records)
     verdict = run_verdict(["r1", "r2"], root=tmp_path)
     assert verdict["passed"] is False
-    assert "soma" in verdict["not_passed"]
-    assert verdict["reasons"]["soma"] == "run r2: the control failed"
+    assert "interoception" in verdict["not_passed"]
+    assert verdict["reasons"]["interoception"] == "run r2: the control failed"
 
 
 def test_pooling_with_different_settings_fails(tmp_path):

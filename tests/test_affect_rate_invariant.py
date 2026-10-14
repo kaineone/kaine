@@ -23,7 +23,7 @@ async def bus():
     await bus.close()
 
 
-def _event(source="soma", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
+def _event(source="interoception", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
     return eid, Event(
         source=source,
         type=type_,
@@ -92,8 +92,8 @@ async def test_timer_publishes_state(bus: AsyncBus):
     await affect.initialize()
     try:
         await asyncio.sleep(0.25)
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        state_events = [e for _, e in entries if e.type == "thymos.state"]
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        state_events = [e for _, e in entries if e.type == "affect.state"]
         assert len(state_events) >= 2
     finally:
         await affect.shutdown()

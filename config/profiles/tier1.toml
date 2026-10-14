@@ -22,13 +22,13 @@ unsupported_modules = [
 ]
 oscillator_supported = true
 
-[lingua]
+[language]
 backend = "llama_cpp"   # 1–2B GGUF at chat pace
 
-[mnemos]
+[episodic_memory]
 backend = "sqlite_vec"  # in-process vector store
 
-[topos]
+[vision]
 # Vision is periodic, not streaming, at this tier. Pin the encoder to the CPU;
 # the workstation default targets a discrete GPU (cuda:1).
 device = "cpu"
@@ -42,14 +42,14 @@ emotion_device = "cpu"
 # Local speech recognition via sherpa-onnx (Tier 1 default; replaces Speaches).
 backend = "sherpa_onnx"
 
-[nous]
+[planning]
 # NumPy-only active inference backend (no JAX/pymdp dependency).
 backend = "numpy"
 
-[phantasia]
+[world_model]
 # NumPy engine for the DreamerV3 world model (no JAX dependency).
 engine = "numpy"
 
-[vox]
+[vocal]
 # Local speech synthesis via sherpa-onnx (Tier 1 default; replaces Chatterbox).
 backend = "sherpa_onnx"

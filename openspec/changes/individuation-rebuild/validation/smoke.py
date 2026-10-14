@@ -318,7 +318,7 @@ async def main_async(args: argparse.Namespace) -> int:
         )
         return 2
 
-    section = dict(kaine_config.get("lingua") or {})
+    section = dict(kaine_config.get("language") or {})
 
     # Baseline language module: no self-model, only the disclosure fact.
     language = make_language(_NullBus(), section)

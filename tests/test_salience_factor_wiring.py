@@ -47,8 +47,8 @@ def _event(source: str, intensity: float, payload=None, type_: str = "percept") 
 
 def _affect_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Event:
     return Event(
-        source="thymos",
-        type="thymos.state",
+        source="affect",
+        type="affect.state",
         payload={
             "state": {"valence": valence, "arousal": arousal, "dominance": dominance},
             "drives": drives or {},
@@ -61,23 +61,23 @@ def _affect_state(*, valence=0.0, arousal=0.3, dominance=0.0, drives=None) -> Ev
 # Per-module drive-tag declarations (from BaseModule.relieves_drives). The
 # action selection module's scaffolding source is added by build_drive_sources automatically.
 _MODULE_TAGS: dict[str, frozenset[str]] = {
-    "perception": frozenset({"curiosity", "boredom"}),
-    "topos": frozenset({"curiosity", "boredom"}),
-    "mnemos": frozenset({"curiosity", "boredom"}),
+    "perceptual_locus": frozenset({"curiosity", "boredom"}),
+    "vision": frozenset({"curiosity", "boredom"}),
+    "episodic_memory": frozenset({"curiosity", "boredom"}),
     "audition": frozenset({"curiosity", "boredom", "social_drive"}),
-    "mundus": frozenset({"curiosity", "boredom", "restlessness"}),
-    "nous": frozenset({"boredom"}),
-    "phantasia": frozenset({"boredom"}),
-    "lingua": frozenset({"boredom", "social_drive"}),
-    "empatheia": frozenset({"social_drive"}),
-    "chronos": frozenset({"social_drive"}),
-    "vox": frozenset({"social_drive", "restlessness"}),
-    "praxis": frozenset({"restlessness"}),
-    "soma": frozenset(),
-    "thymos": frozenset(),
-    "eidolon": frozenset(),
-    "hypnos": frozenset(),
-    "echo": frozenset(),
+    "embodiment": frozenset({"curiosity", "boredom", "restlessness"}),
+    "planning": frozenset({"boredom"}),
+    "world_model": frozenset({"boredom"}),
+    "language": frozenset({"boredom", "social_drive"}),
+    "social_cognition": frozenset({"social_drive"}),
+    "sequence": frozenset({"social_drive"}),
+    "vocal": frozenset({"social_drive", "restlessness"}),
+    "effectors": frozenset({"restlessness"}),
+    "interoception": frozenset(),
+    "affect": frozenset(),
+    "self_model": frozenset(),
+    "sleep": frozenset(),
+    "recorder": frozenset(),
 }
 _FULL_SOURCES = build_drive_sources(_MODULE_TAGS)
 
@@ -98,11 +98,11 @@ def test_provider_folds_latest_affect_state():
     provider.observe(
         [
             ("1-0", _affect_state(arousal=0.2, drives={"curiosity": 0.1})),
-            ("2-0", _event("perception", 0.5)),  # ignored (not thymos.state)
+            ("2-0", _event("perceptual_locus", 0.5)),  # ignored (not affect.state)
             ("3-0", _affect_state(arousal=0.9, drives={"curiosity": 0.8})),
         ]
     )
-    # The LAST thymos.state in the batch wins.
+    # The LAST affect.state in the batch wins.
     assert provider.dimensional_state().arousal == pytest.approx(0.9)
     assert provider.drive_values() == {"curiosity": 0.8}
 
@@ -110,7 +110,7 @@ def test_provider_folds_latest_affect_state():
 def test_provider_keeps_last_known_when_no_state_this_tick():
     provider = AffectStateProvider()
     provider.observe([("1-0", _affect_state(arousal=0.7))])
-    provider.observe([("2-0", _event("perception", 0.5))])
+    provider.observe([("2-0", _event("perceptual_locus", 0.5))])
     assert provider.dimensional_state().arousal == pytest.approx(0.7)
 
 
@@ -143,7 +143,7 @@ async def test_real_affect_factor_changes_selection_outcome():
     arousal both publishes the event AND yields a score distinct from the
     constant-1.0 placeholder.
     """
-    ev = _event("perception", 0.5)
+    ev = _event("perceptual_locus", 0.5)
 
     low = AffectStateProvider()
     low.observe([("0-0", _affect_state(arousal=0.0))])
@@ -226,10 +226,10 @@ async def test_static_fallback_reproduces_two_factor_selection_bit_for_bit():
     default to the real factors did not change scoring where static is chosen.
     """
     events = [
-        ("1-0", _event("perception", 0.9, payload={"a": 1})),
-        ("2-0", _event("soma", 0.4, payload={"b": 2})),
-        ("3-0", _event("perception", 0.9, payload={"a": 1})),  # repeat -> novelty decays
-        ("4-0", _event("topos", 0.7, payload={"c": 3})),
+        ("1-0", _event("perceptual_locus", 0.9, payload={"a": 1})),
+        ("2-0", _event("interoception", 0.4, payload={"b": 2})),
+        ("3-0", _event("perceptual_locus", 0.9, payload={"a": 1})),  # repeat -> novelty decays
+        ("4-0", _event("vision", 0.7, payload={"c": 3})),
     ]
 
     strategy = RuleBasedSalience(NoveltyTracker(window=4), StaticGoalScorer(), StaticAffectModulator())
@@ -250,8 +250,8 @@ async def test_real_four_factor_selection_is_deterministic():
     """Same events + same scripted affect/drives ⇒ identical selection, repeated
     (salience is a pure function of event + affect + drive state; no RNG/clock)."""
     events = [
-        ("1-0", _event("perception", 0.8, payload={"a": 1})),
-        ("2-0", _event("praxis", 0.8, payload={"b": 2})),
+        ("1-0", _event("perceptual_locus", 0.8, payload={"a": 1})),
+        ("2-0", _event("effectors", 0.8, payload={"b": 2})),
         ("3-0", _event("audition", 0.6, payload={"c": 3})),
     ]
     affect = _affect_state(arousal=0.7, drives={"curiosity": 0.9, "boredom": 0.2})
@@ -288,8 +288,8 @@ async def test_drive_relevance_prefers_source_serving_dominant_drive():
     drives = {"curiosity": 0.9, "boredom": 0.1, "social_drive": 0.0, "restlessness": 0.0}
     scorer = DriveRelevanceGoalScorer(lambda: drives, drive_sources=_FULL_SOURCES)
 
-    serving = await scorer.relevance(_event("perception", 0.5))  # serves curiosity
-    non_serving = await scorer.relevance(_event("praxis", 0.5))  # does not
+    serving = await scorer.relevance(_event("perceptual_locus", 0.5))  # serves curiosity
+    non_serving = await scorer.relevance(_event("effectors", 0.5))  # does not
 
     assert serving > non_serving
     # Bounded "around 1.0": serving source unattenuated at 1.0; floor = 1 - 0.5.
@@ -302,7 +302,7 @@ async def test_drive_relevance_prefers_source_serving_dominant_drive():
 @pytest.mark.asyncio
 async def test_drive_relevance_neutral_without_drives():
     scorer = DriveRelevanceGoalScorer(lambda: {}, drive_sources=_FULL_SOURCES)
-    assert await scorer.relevance(_event("praxis", 0.5)) == pytest.approx(1.0)
+    assert await scorer.relevance(_event("effectors", 0.5)) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -311,7 +311,7 @@ async def test_drive_relevance_neutral_when_all_drives_zero():
         lambda: {"curiosity": 0.0, "boredom": 0.0, "social_drive": 0.0, "restlessness": 0.0},
         drive_sources=_FULL_SOURCES,
     )
-    assert await scorer.relevance(_event("praxis", 0.5)) == pytest.approx(1.0)
+    assert await scorer.relevance(_event("effectors", 0.5)) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -325,7 +325,7 @@ async def test_drive_relevance_dominant_pick_is_deterministic():
         lambda: {"restlessness": 0.6, "curiosity": 0.6},
         drive_sources=_FULL_SOURCES,
     )
-    ev = _event("praxis", 0.5)  # serves restlessness, not curiosity
+    ev = _event("effectors", 0.5)  # serves restlessness, not curiosity
     assert await a.relevance(ev) == await b.relevance(ev)
 
 
@@ -342,7 +342,7 @@ def test_invalid_attenuation_rejected():
 
 
 def _cfg(**syn) -> dict:
-    return {"syneidesis": syn}
+    return {"workspace": syn}
 
 
 def test_make_salience_factors_shipped_defaults():
@@ -356,7 +356,7 @@ def test_make_salience_factors_shipped_defaults():
 
 def test_make_salience_factors_affect_static_is_a_downgrade():
     affect, goal, downgraded = make_salience_factors(
-        _cfg(**{"salience_thymos_factor": "static"}), AffectStateProvider()
+        _cfg(**{"salience_affect_factor": "static"}), AffectStateProvider()
     )
     assert isinstance(affect, StaticAffectModulator)
     assert any(AFFECT_FACTOR_LABEL in d for d in downgraded), downgraded
@@ -375,7 +375,7 @@ def test_make_salience_factors_goal_drive_relevance_activates_real_scorer():
 def test_make_salience_factors_unknown_affect_value_raises():
     with pytest.raises(ConfigurationError):
         make_salience_factors(
-            _cfg(**{"salience_thymos_factor": "bogus"}), AffectStateProvider()
+            _cfg(**{"salience_affect_factor": "bogus"}), AffectStateProvider()
         )
 
 
@@ -420,12 +420,12 @@ async def test_engine_calls_observer_before_select_with_sorted_batch():
 
     try:
         # Publish in reverse-canonical order; the engine sorts by (source, ...).
-        await bus.publish(_event("soma", 0.5))
+        await bus.publish(_event("interoception", 0.5))
         await bus.publish(_event("audition", 0.5))
         cycle = CognitiveCycle(
             bus=bus,
             workspace=RecordingWorkspace(),
-            registry=FakeRegistry(["soma.out", "audition.out"]),
+            registry=FakeRegistry(["interoception.out", "audition.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
             affect_observer=observer,
@@ -438,7 +438,7 @@ async def test_engine_calls_observer_before_select_with_sorted_batch():
     assert order == ["observe", "select"]
     # It receives the canonically-sorted batch (audition < interoception by source).
     sources = [ev.source for _, ev in seen[0]]
-    assert sources == sorted(sources) == ["audition", "soma"]
+    assert sources == sorted(sources) == ["audition", "interoception"]
 
 
 @pytest.mark.asyncio
@@ -451,12 +451,12 @@ async def test_engine_swallows_observer_exception_and_tick_continues():
         raise RuntimeError("observer blew up")
 
     try:
-        await bus.publish(_event("soma", 0.5))
+        await bus.publish(_event("interoception", 0.5))
         syn = FakeWorkspace()
         cycle = CognitiveCycle(
             bus=bus,
             workspace=syn,
-            registry=FakeRegistry(["soma.out"]),
+            registry=FakeRegistry(["interoception.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
             affect_observer=boom,

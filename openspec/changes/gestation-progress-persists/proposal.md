@@ -4,7 +4,7 @@ A developmental phase runs for many hours of awake time (the budget is 96 hours)
 
 ## What Changes
 
-- The readout saves its progress to `gestation_progress.json` beside its readout file: awake seconds, consecutive passes, the frequency-pull history, whether the marker was ever met, and the viability verdict, keyed by the same seed and self-rhythm identity as the stored baseline.
+- The readout saves its progress to `development_progress.json` beside its readout file: awake seconds, consecutive passes, the frequency-pull history, whether the marker was ever met, and the viability verdict, keyed by the same seed and self-rhythm identity as the stored baseline.
 - On construction it restores that progress when the key matches, and ignores it (with a log line) otherwise.
 - It saves after every scored withdrawal and every 60 seconds of awake time.
 
@@ -12,7 +12,7 @@ A developmental phase runs for many hours of awake time (the budget is 96 hours)
 
 ### Modified Capabilities
 
-- `gestational-stimulus`: developmental progress persists across restarts.
+- `developmental-stimulus`: developmental progress persists across restarts.
 
 ## Impact
 

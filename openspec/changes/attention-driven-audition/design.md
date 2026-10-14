@@ -82,7 +82,7 @@ differ.
 
 - The factory resolves `acoustic_encoder` through a small registry: name → constructor.
 - The SSL constructors check that their pinned weights are present before building, and raise a `ConfigurationError` naming the setup command when they are absent.
-- The plugin seam `audition.acoustic_encoder` passes an `AcousticEncoder` object into the constructor, exactly as `chronos.network` does. The loader's existing rules apply: declared seams only, one owner per seam, recorded in the manifest.
+- The plugin seam `audition.acoustic_encoder` passes an `AcousticEncoder` object into the constructor, exactly as `sequence.network` does. The loader's existing rules apply: declared seams only, one owner per seam, recorded in the manifest.
 
 ### Persistence keyed by encoder
 
@@ -96,7 +96,7 @@ The buffer summary stays a statistical descriptor. No raw audio or raw embedding
 
 ### Sleep
 
-The audition module gains the same `hypnos.out` consumer the vision module has. It sets `suspended` on both forward models while asleep. Inference continues and only adaptation pauses.
+The audition module gains the same `sleep.out` consumer the vision module has. It sets `suspended` on both forward models while asleep. Inference continues and only adaptation pauses.
 
 ### Self-supervised encoders
 

@@ -123,7 +123,7 @@ class _LightDeadMod(BaseModule):
     with an operator filesystem path in the message; recovers cleanly on the
     next restart so the incident closes with a 'recovered' restart record."""
 
-    name = "lingua"
+    name = "language"
 
     def __init__(self, bus, *, path_in_exc: str | None = None):
         super().__init__(bus)
@@ -156,7 +156,7 @@ class _LightDeadMod(BaseModule):
 
 
 class _HungMod(BaseModule):
-    name = "soma"
+    name = "interoception"
 
     async def initialize(self) -> None:
         await super().initialize()  # long-running workspace task keeps running
@@ -291,9 +291,9 @@ async def test_enabled_supervisor_disabled_log_writes_nothing_but_keeps_bus(bus,
     assert not incidents.exists() or list(incidents.glob("*.jsonl")) == []
     # Ephemeral bus events still published.
     types = [t for t, _ in published]
-    assert "spot.status" in types
-    assert "spot.log" in types
-    await registry.get("lingua").shutdown()
+    assert "supervisor.status" in types
+    assert "supervisor.log" in types
+    await registry.get("language").shutdown()
 
 
 # --------------------------------------------------------------------------- #
@@ -327,7 +327,7 @@ async def test_dead_module_exception_captured_and_path_scrubbed(bus, tmp_path):
     assert "/home/operator" not in d["exception_repr"]
     assert secret_path not in json.dumps(_read_records(incidents))
     # Shared fields present.
-    assert d["module"] == "lingua"
+    assert d["module"] == "language"
     assert d["incident_id"]
     assert d["ts"].endswith("+00:00")
     # Health metrics present.
@@ -335,7 +335,7 @@ async def test_dead_module_exception_captured_and_path_scrubbed(bus, tmp_path):
     assert "tasks_failed" in d and d["tasks_failed"] >= 1
     assert "tasks_total" in d and d["tasks_total"] >= 1
     assert isinstance(d["poll_index"], int) and d["poll_index"] >= 1
-    await registry.get("lingua").shutdown()
+    await registry.get("language").shutdown()
 
 
 async def test_hung_module_null_exception_repr(bus, tmp_path):
@@ -356,7 +356,7 @@ async def test_hung_module_null_exception_repr(bus, tmp_path):
     assert len(detects) == 1
     assert detects[0]["fault_class"] == "hung"
     assert detects[0]["exception_repr"] is None
-    await registry.get("soma").shutdown()
+    await registry.get("interoception").shutdown()
 
 
 # --------------------------------------------------------------------------- #
@@ -389,9 +389,9 @@ async def test_light_recover_full_lifecycle_shared_incident_id(bus, tmp_path):
     assert len(ids) == 1
 
     freeze = _by_transition(records, "freeze")[0]
-    assert freeze["source"] == "spot"
+    assert freeze["source"] == "supervisor"
     assert freeze["fault_type"] == "dead"
-    assert "lingua" in freeze["reason"]
+    assert "language" in freeze["reason"]
 
     restart = _by_transition(records, "restart")[0]
     assert restart["path"] == "light"
@@ -401,7 +401,7 @@ async def test_light_recover_full_lifecycle_shared_incident_id(bus, tmp_path):
     assert restart["max_attempts"] == 5
     assert restart["last_good_restored"] is False
     assert isinstance(restart["latency_ms"], (int, float))
-    await registry.get("lingua").shutdown()
+    await registry.get("language").shutdown()
 
 
 async def test_new_incident_gets_new_id_after_recovery(bus, tmp_path):
@@ -416,7 +416,7 @@ async def test_new_incident_gets_new_id_after_recovery(bus, tmp_path):
     await supervisor._incident_log.start()
     stop = asyncio.Event()
     await supervisor._poll_once(stop)  # incident #1 -> recovered
-    first_id = supervisor._incidents.get("lingua")
+    first_id = supervisor._incidents.get("language")
     assert first_id is None  # popped on recovery
 
     # Re-break the module and poll again.
@@ -430,7 +430,7 @@ async def test_new_incident_gets_new_id_after_recovery(bus, tmp_path):
     detects = _by_transition(_read_records(incidents), "detect")
     assert len(detects) == 2
     assert detects[0]["incident_id"] != detects[1]["incident_id"]
-    await registry.get("lingua").shutdown()
+    await registry.get("language").shutdown()
 
 
 # --------------------------------------------------------------------------- #
@@ -692,7 +692,7 @@ async def test_log_survives_reboot_and_clear_escalation(bus, tmp_path):
     stop = asyncio.Event()
     await supervisor._poll_once(stop)
     await supervisor._incident_log.stop()
-    await registry.get("lingua").shutdown()
+    await registry.get("language").shutdown()
 
     files_before = sorted(p.name for p in incidents.glob("incidents-*.jsonl"))
     records_before = _read_records(incidents)
@@ -716,7 +716,7 @@ async def test_log_survives_reboot_and_clear_escalation(bus, tmp_path):
     await supervisor2._incident_log.start()
     await supervisor2._poll_once(asyncio.Event())
     await supervisor2._incident_log.stop()
-    await reg2.get("lingua").shutdown()
+    await reg2.get("language").shutdown()
 
     records_run2 = _read_records(incidents)
     assert len(records_run2) > len(records_before)

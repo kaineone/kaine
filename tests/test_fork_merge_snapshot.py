@@ -27,7 +27,7 @@ def test_snapshot_roundtrip(tmp_path):
     snap = ForkSnapshot(
         parent_id=None,
         label="root",
-        modules={"soma": {"wellness": 0.9}, "chronos": {"steps": 12}},
+        modules={"interoception": {"wellness": 0.9}, "sequence": {"steps": 12}},
         adapters=["state/hypnos/adapters/a"],
         metadata={"note": "test"},
     )
@@ -35,7 +35,7 @@ def test_snapshot_roundtrip(tmp_path):
     target = tmp_path / snap.id / "snapshot.json"
     assert target.exists()
     raw = json.loads(target.read_text())
-    assert raw["modules"]["soma"]["wellness"] == 0.9
+    assert raw["modules"]["interoception"]["wellness"] == 0.9
     loaded = load_snapshot(tmp_path, snap.id)
     assert loaded.id == snap.id
     assert loaded.modules == snap.modules

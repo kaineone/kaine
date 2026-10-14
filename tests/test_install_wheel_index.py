@@ -982,7 +982,7 @@ def _assert_no_torch_and_dashboard_editable(
 
     for line in pip_log.splitlines():
         tokens = line.split()
-        if "-e" in tokens and any(t == ".[test,nexus]" for t in tokens):
+        if "-e" in tokens and any(t == ".[test,dashboard]" for t in tokens):
             break
     else:
         pytest.fail(
@@ -996,7 +996,7 @@ def _assert_no_torch_and_dashboard_editable(
 
 def test_install_sh_torch_free_extras_dashboard_does_not_install_torch(tmp_path: Path) -> None:
     proc, pip_log = _run_install(
-        tmp_path, ["--extras", "nexus", "--no-wizard"], installer="install.sh"
+        tmp_path, ["--extras", "dashboard", "--no-wizard"], installer="install.sh"
     )
     _assert_no_torch_and_dashboard_editable(proc, pip_log)
 

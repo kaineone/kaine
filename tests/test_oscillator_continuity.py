@@ -79,7 +79,7 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     engine_plugin = _PlanningEnginePlugin()
     osc_plugin = _FreshPlanningOscillatorPlugin()
     config = {
-        "modules": {"nous": True},
+        "modules": {"planning": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["nousengine", "nousosc"]},
     }
@@ -93,7 +93,7 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    original_planning = registry.get("nous")
+    original_planning = registry.get("planning")
     original_osc = original_planning.oscillator
     assert engine_plugin.calls == 1
     assert original_planning.engine.call_id == 1
@@ -101,12 +101,12 @@ async def test_plugin_oscillator_not_re_requested(monkeypatch, bus):
     assert osc_plugin.calls == 1
 
     supervisor = _supervisor(registry, config, bus)
-    first = await supervisor._restart_module("nous")
-    second = await supervisor._restart_module("nous")
+    first = await supervisor._restart_module("planning")
+    second = await supervisor._restart_module("planning")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
-    rebuilt_planning = registry.get("nous")
+    rebuilt_planning = registry.get("planning")
     assert engine_plugin.calls == 3
     assert rebuilt_planning.engine.call_id == 3
     assert osc_plugin.calls == 1
@@ -128,7 +128,7 @@ async def test_default_oscillator_continuity(monkeypatch, bus):
 
     engine_plugin = _PlanningEnginePlugin()
     config = {
-        "modules": {"nous": True, "chronos": True},
+        "modules": {"planning": True, "sequence": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["nousengine"]},
     }
@@ -142,27 +142,27 @@ async def test_default_oscillator_continuity(monkeypatch, bus):
 
     registry = build_registry(bus, config, plugins=loaded)
     original = {m.name: m.oscillator for m in registry.all_modules()}
-    assert original["nous"] is not None
-    assert original["chronos"] is not None
+    assert original["planning"] is not None
+    assert original["sequence"] is not None
     assert factory.calls == 2
 
     for _ in range(3):
-        original["nous"].step(0.5)
+        original["planning"].step(0.5)
 
     supervisor = _supervisor(registry, config, bus)
-    first = await supervisor._restart_module("nous")
-    second = await supervisor._restart_module("nous")
+    first = await supervisor._restart_module("planning")
+    second = await supervisor._restart_module("planning")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
     current = {m.name: m.oscillator for m in registry.all_modules()}
-    assert current["nous"] is original["nous"]
-    assert current["nous"].steps == [0.5, 0.5, 0.5]
-    assert current["chronos"] is original["chronos"]
+    assert current["planning"] is original["planning"]
+    assert current["planning"].steps == [0.5, 0.5, 0.5]
+    assert current["sequence"] is original["sequence"]
     assert factory.calls == 2
 
-    await _close_module(registry.get("nous"))
-    await _close_module(registry.get("chronos"))
+    await _close_module(registry.get("planning"))
+    await _close_module(registry.get("sequence"))
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,7 @@ async def test_light_restart_keeps_oscillator(monkeypatch, bus):
 
     engine_plugin = _PlanningEnginePlugin()
     config = {
-        "modules": {"nous": True, "chronos": True},
+        "modules": {"planning": True, "sequence": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["nousengine"]},
     }
@@ -190,17 +190,17 @@ async def test_light_restart_keeps_oscillator(monkeypatch, bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    original_sequence_osc = registry.get("chronos").oscillator
+    original_sequence_osc = registry.get("sequence").oscillator
     assert factory.calls == 2
 
     supervisor = _supervisor(registry, config, bus)
-    result = await supervisor._restart_module("chronos")
+    result = await supervisor._restart_module("sequence")
     assert result.ok and result.path == "light"
-    assert registry.get("chronos").oscillator is original_sequence_osc
+    assert registry.get("sequence").oscillator is original_sequence_osc
     assert factory.calls == 2
 
-    await _close_module(registry.get("chronos"))
-    await _close_module(registry.get("nous"))
+    await _close_module(registry.get("sequence"))
+    await _close_module(registry.get("planning"))
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ async def test_layer_disabled_no_oscillator_built(monkeypatch, bus):
 
     engine_plugin = _PlanningEnginePlugin()
     config = {
-        "modules": {"nous": True},
+        "modules": {"planning": True},
         "oscillator": {"enabled": False},
         "plugins": {"enabled": ["nousengine"]},
     }
@@ -226,19 +226,19 @@ async def test_layer_disabled_no_oscillator_built(monkeypatch, bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    assert registry.get("nous").oscillator is None
+    assert registry.get("planning").oscillator is None
     assert factory.calls == 0
 
     supervisor = _supervisor(registry, config, bus)
-    first = await supervisor._restart_module("nous")
-    second = await supervisor._restart_module("nous")
+    first = await supervisor._restart_module("planning")
+    second = await supervisor._restart_module("planning")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
-    assert registry.get("nous").oscillator is None
+    assert registry.get("planning").oscillator is None
     assert factory.calls == 0
 
-    await _close_module(registry.get("nous"))
+    await _close_module(registry.get("planning"))
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,7 @@ async def test_rewire_module_no_oscillator_build(monkeypatch, bus):
 
     engine_plugin = _PlanningEnginePlugin()
     config = {
-        "modules": {"nous": True, "chronos": True},
+        "modules": {"planning": True, "sequence": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["nousengine"]},
     }
@@ -271,11 +271,11 @@ async def test_rewire_module_no_oscillator_build(monkeypatch, bus):
     rewire_factory = _CountedDefaultOscFactory()
     monkeypatch.setattr("kaine.oscillator.make_oscillator", rewire_factory)
 
-    rewire_module(registry, "nous", config)
+    rewire_module(registry, "planning", config)
 
     assert rewire_factory.calls == 0
     for m in registry.all_modules():
         assert m.oscillator is original[m.name]
 
-    await _close_module(registry.get("nous"))
-    await _close_module(registry.get("chronos"))
+    await _close_module(registry.get("planning"))
+    await _close_module(registry.get("sequence"))

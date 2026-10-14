@@ -4,18 +4,18 @@ The interoception module is KAINE's sense of its own body. The compute host stan
 
 ## Status
 
-Implemented. The shipped `config/kaine.toml` sets `[modules].soma = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it.
+Implemented. The shipped `config/kaine.toml` sets `[modules].interoception = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it.
 
-The base module needs no optional extras. GPU metrics use `pynvml` on hosts with an NVIDIA GPU and are simply absent when it is unavailable. The forward model's continuous-time reservoir runs on the backend chosen by `[soma].cfc_backend`: `"numpy"` (default; needs neither `torch` nor `ncps`) or `"torch"` (needs the `core` extra). The self-rhythm needs the `oscillator` extra.
+The base module needs no optional extras. GPU metrics use `pynvml` on hosts with an NVIDIA GPU and are simply absent when it is unavailable. The forward model's continuous-time reservoir runs on the backend chosen by `[interoception].cfc_backend`: `"numpy"` (default; needs neither `torch` nor `ncps`) or `"torch"` (needs the `core` extra). The self-rhythm needs the `oscillator` extra.
 
 ## What Interoception does
 
 The interoception module is the architecture's analog of interoception, the sense of the body's physiological condition, and of the allostatic-interoceptive network that anticipates and regulates the body's needs. On each reading, every `read_interval_s` entity seconds, the interoception module:
 
-1. Reads the host metrics and computes wellness and the set of metrics strictly above their hard thresholds (`[soma.thresholds]`).
+1. Reads the host metrics and computes wellness and the set of metrics strictly above their hard thresholds (`[interoception.thresholds]`).
 2. Builds an 8-component feature vector, steps the forward model, and measures the prediction error.
 3. Computes the unexpected error, the part of each channel's error beyond what that channel usually shows, which drives fatigue and regulation.
-4. Publishes `soma.report`, and `soma.fatigue` or `soma.regulation` when they fire.
+4. Publishes `interoception.report`, and `interoception.fatigue` or `interoception.regulation` when they fire.
 
 ## Forward model
 
@@ -46,7 +46,7 @@ The interoception module reads the workspace broadcast stream (`on_workspace`). 
 
 ### Cross-module information gain
 
-Alongside each prediction, the readout also predicts from a null context. The interoception module's null context keeps two shares of the per-source and per-type components, the interoception module's own and the language organ's, and replaces every other source's share, and the count and intensity statistics, with their means over the contexts the interoception module has adopted since boot. The language organ's share is kept because its load on the host would otherwise let that share predict the interoception module's input. Each `soma.report` carries
+Alongside each prediction, the readout also predicts from a null context. The interoception module's null context keeps two shares of the per-source and per-type components, the interoception module's own and the language organ's, and replaces every other source's share, and the count and intensity statistics, with their means over the contexts the interoception module has adopted since boot. The language organ's share is kept because its load on the host would otherwise let that share predict the interoception module's input. Each `interoception.report` carries
 
 ```text
 context_gain = (null-context error − error) / running mean error
@@ -56,13 +56,13 @@ over the last `prediction_error_window` errors. It is `null` when the scored pre
 
 ## Intensity and the alert flag
 
-A `soma.report` is an alert when at least one host metric is strictly above its hard threshold in `[soma.thresholds]`. An alert is reported at `alert_salience`. Any other report is graded by the error ratio, the error over the mean of the last `prediction_error_window` errors (the current one included):
+A `interoception.report` is an alert when at least one host metric is strictly above its hard threshold in `[interoception.thresholds]`. An alert is reported at `alert_salience`. Any other report is graded by the error ratio, the error over the mean of the last `prediction_error_window` errors (the current one included):
 
 ```text
 baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 ```
 
-The payload's `alert` is true exactly on an alert, and `alerts` lists the metrics that crossed. `soma.fatigue` and `soma.regulation` are published at `alert_salience` and carry no `alert` flag, so they do not raise the access rate, whose phasic input counts only events marked `alert`. The affect module reads alert reports directly from `soma.out` and raises arousal by a fixed step on each one.
+The payload's `alert` is true exactly on an alert, and `alerts` lists the metrics that crossed. `interoception.fatigue` and `interoception.regulation` are published at `alert_salience` and carry no `alert` flag, so they do not raise the access rate, whose phasic input counts only events marked `alert`. The affect module reads alert reports directly from `interoception.out` and raises arousal by a fixed step on each one.
 
 ## Unexpected error, fatigue, and regulation
 
@@ -74,13 +74,13 @@ The interoception module learns, per channel, the expected absolute prediction e
 F(t+dt) = max(0, F(t) + e·dt − decay·dt)
 ```
 
-During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `soma.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
+During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `interoception.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
 
-`RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `soma.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. The interoception module never acts on its own advisories; the cognitive cycle and the sleep module decide what to do.
+`RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `interoception.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. The interoception module never acts on its own advisories; the cognitive cycle and the sleep module decide what to do.
 
 ## Developmental warm-up
 
-A newly booted or forked readout has not yet learned the host's baseline, so its early errors would otherwise trigger false advisories and inflate fatigue. While `warmup_active` is true, the interoception module withholds `soma.regulation` advisories (publishing `soma.regulation.withheld` instead) and reduces fatigue's input by the warming baseline, the mean of the accumulator's own recent inputs before this reading. A spike above the recent level still builds fatigue. The raw prediction error in `soma.report`, its intensity, and any hard-threshold breach are never gated; a breach overrides the warm-up on the action path.
+A newly booted or forked readout has not yet learned the host's baseline, so its early errors would otherwise trigger false advisories and inflate fatigue. While `warmup_active` is true, the interoception module withholds `interoception.regulation` advisories (publishing `interoception.regulation.withheld` instead) and reduces fatigue's input by the warming baseline, the mean of the accumulator's own recent inputs before this reading. A spike above the recent level still builds fatigue. The raw prediction error in `interoception.report`, its intensity, and any hard-threshold breach are never gated; a breach overrides the warm-up on the action path.
 
 Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning steps and `regulation_warmup_min_seconds` of entity time have passed since the interoception module's first reading. If `regulation_warmup_require_error_stabilized` is true, the variance of recent prediction errors must also fall below `regulation_warmup_stable_variance`. Once ended, warm-up does not return. Its state is per boot and per fork and is not serialized.
 
@@ -91,31 +91,31 @@ Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning
 | Host | `SystemMetricsReader` (`psutil`, optional `pynvml`) on the interoception module's own timer | The metrics |
 | `cycle.out` | `cycle.tick` | Reads `wall_duration_ms` for a rolling cycle-latency average, scaled to entity time |
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the readout's context |
-| `hypnos.out` | `hypnos.sleep.started` | Suspends readout learning and expected-error learning; fatigue decays three times faster |
-| `hypnos.out` | `hypnos.sleep.completed` | Resumes learning; resets the fatigue accumulator and the regulation detector |
+| `sleep.out` | `sleep.sleep.started` | Suspends readout learning and expected-error learning; fatigue decays three times faster |
+| `sleep.out` | `sleep.sleep.completed` | Resumes learning; resets the fatigue accumulator and the regulation detector |
 
 ## Outputs
 
-All events are published to the `soma.out` stream.
+All events are published to the `interoception.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `soma.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
-| `soma.fatigue` | `value`, `threshold`, `crossed: true` | `alert_salience` |
-| `soma.regulation` | `action`, `reason`, `severity` | `alert_salience` |
-| `soma.warmup.started` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | `baseline_salience` |
-| `soma.warmup.completed` | `samples_seen`, `lived_seconds` | `baseline_salience` |
-| `soma.regulation.withheld` | `would_be_action`, `prediction_error`, `sustain_elapsed_s`, `severity`, `reason: "warmup"` | `baseline_salience` |
+| `interoception.report` | `metrics`, `wellness`, `alerts`, `alert`, `prediction_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `unexpected_error`, `fatigue_value`, `fatigue_threshold`, `warmup_active` | `alert_salience` on an alert, otherwise graded by the error ratio |
+| `interoception.fatigue` | `value`, `threshold`, `crossed: true` | `alert_salience` |
+| `interoception.regulation` | `action`, `reason`, `severity` | `alert_salience` |
+| `interoception.warmup.started` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | `baseline_salience` |
+| `interoception.warmup.completed` | `samples_seen`, `lived_seconds` | `baseline_salience` |
+| `interoception.regulation.withheld` | `would_be_action`, `prediction_error`, `sustain_elapsed_s`, `severity`, `reason: "warmup"` | `baseline_salience` |
 
-`context_age_s` is the entity seconds since the interoception module received the broadcast it holds as context, or `null` before the first accessed broadcast. `lived_seconds` is the entity time since the interoception module's first reading in this boot. The cognitive cycle consumes only `soma.regulation`; `soma.regulation.withheld` is a record and changes nothing.
+`context_age_s` is the entity seconds since the interoception module received the broadcast it holds as context, or `null` before the first accessed broadcast. `lived_seconds` is the entity time since the interoception module's first reading in this boot. The cognitive cycle consumes only `interoception.regulation`; `interoception.regulation.withheld` is a record and changes nothing.
 
 ### Wellness
 
-`compute_wellness()` maps each present metric to `[0, 1]`, with 1 healthy (for example `1 - cpu_percent/100`), and takes a weighted mean with the `[soma.weights]` weights. A metric that fails to read is omitted and the weights are spread over those present. The affect module shifts valence by the wellness the interoception module reports.
+`compute_wellness()` maps each present metric to `[0, 1]`, with 1 healthy (for example `1 - cpu_percent/100`), and takes a weighted mean with the `[interoception.weights]` weights. A metric that fails to read is omitted and the weights are spread over those present. The affect module shifts valence by the wellness the interoception module reports.
 
 ## Sleep
 
-The interoception module keeps reading and reporting during sleep. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps, the expected-error statistics do not update, and the fatigue accumulator decays three times faster. `hypnos.sleep.completed` resets fatigue to zero and clears the regulation detector.
+The interoception module keeps reading and reporting during sleep. From `sleep.sleep.started` to `sleep.sleep.completed` the readout takes no learning steps, the expected-error statistics do not update, and the fatigue accumulator decays three times faster. `sleep.sleep.completed` resets fatigue to zero and clears the regulation detector.
 
 ## Persistence
 
@@ -135,7 +135,7 @@ The reservoir's hidden state, the held context, and the running statistics behin
 
 ## Configuration
 
-Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-a-configuration/modules.md) for the complete reference and [Configuration](../appendix-a-configuration/README.md) for conventions.
+Section `[interoception]` in `config/kaine.toml`. See [Module configuration](../appendix-a-configuration/modules.md) for the complete reference and [Configuration](../appendix-a-configuration/README.md) for conventions.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -148,7 +148,7 @@ Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-
 | `forward_model_units` | integer | `32` | Hidden units of the reservoir |
 | `prediction_error_window` | integer | `32` | Readings in the running mean of the error |
 | `fatigue_decay_per_s` | float | `0.01` | Decay rate of the fatigue accumulator per entity second; tripled during sleep |
-| `fatigue_maintenance_threshold` | float | `100.0` | Fatigue at which `soma.fatigue` fires |
+| `fatigue_maintenance_threshold` | float | `100.0` | Fatigue at which `interoception.fatigue` fires |
 | `regulation_sustain_window_s` | float | `30.0` | Entity seconds of sustained error per advisory step |
 | `regulation_threshold` | float | `0.5` | Error level that starts a regulation episode |
 | `expected_error_tau_s` | float | `600.0` | Time constant, in entity seconds, of each channel's expected error and spread |
@@ -163,9 +163,9 @@ Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-
 | `self_rhythm_step_hz` | float | `20.0` | Steps per entity second of the self-rhythm |
 | `self_rhythm_eta` | float | `0.0025` shipped; `0.0` when absent | Adaptation rate of the self-rhythm's period (`0` disables adaptation) |
 
-`[soma.thresholds]` holds the hard threshold per metric. Defaults: `cpu_percent = 90.0`, `ram_percent = 90.0`, `gpu_*_temp_c = 83.0`, `gpu_*_vram_percent = 92.0`, `cycle_latency_avg_ms = 600.0`. A `gpu_*` key matches every GPU.
+`[interoception.thresholds]` holds the hard threshold per metric. Defaults: `cpu_percent = 90.0`, `ram_percent = 90.0`, `gpu_*_temp_c = 83.0`, `gpu_*_vram_percent = 92.0`, `cycle_latency_avg_ms = 600.0`. A `gpu_*` key matches every GPU.
 
-`[soma.weights]` holds the wellness weight per metric. Defaults: `cpu_percent = 1.0`, `ram_percent = 1.0`, `cycle_latency_avg_ms = 1.0`. Only metrics with a normalization curve and a positive weight contribute.
+`[interoception.weights]` holds the wellness weight per metric. Defaults: `cpu_percent = 1.0`, `ram_percent = 1.0`, `cycle_latency_avg_ms = 1.0`. Only metrics with a normalization curve and a positive weight contribute.
 
 ## How it works
 
@@ -173,7 +173,7 @@ Section `[soma]` in `config/kaine.toml`. See [Module configuration](../appendix-
 graph TD
     SysMetrics["SystemMetricsReader\n(psutil + pynvml)"] -->|"read_metrics()"| InteroceptionTick["Interoception.tick_once()"]
     CycleOut["cycle.out / cycle.tick\n(wall_duration_ms)"] -->|rolling average| SysMetrics
-    SleepOut["hypnos.out"] -->|sleep.started / completed| InteroceptionTick
+    SleepOut["sleep.out"] -->|sleep.started / completed| InteroceptionTick
     WS["workspace broadcast"] -->|accessed members| Ctx["BroadcastContext\n24 components"]
 
     InteroceptionTick --> WellnessCalc["compute_wellness()"]
@@ -183,9 +183,9 @@ graph TD
     FwdModel -->|per-channel error| ExpModel["ExpectedErrorModel\nexpected plus band times spread"]
     ExpModel -->|unexpected error| FatigueAcc["FatigueAccumulator"]
     ExpModel -->|unexpected error| RegDet["RegulationDetector"]
-    FatigueAcc -->|threshold crossed| InteroceptionFatigue["soma.fatigue"]
-    RegDet -->|window completed| InteroceptionReg["soma.regulation"]
-    WellnessCalc --> InteroceptionReport["soma.report\nintensity, alert, context_gain"]
+    FatigueAcc -->|threshold crossed| InteroceptionFatigue["interoception.fatigue"]
+    RegDet -->|window completed| InteroceptionReg["interoception.regulation"]
+    WellnessCalc --> InteroceptionReport["interoception.report\nintensity, alert, context_gain"]
     AnomalyDet --> InteroceptionReport
     FwdModel -->|error, null-context error| InteroceptionReport
 ```
@@ -200,7 +200,7 @@ With `self_rhythm_enabled = true`, a fourth loop steps an oscillator at `self_rh
 
 The rhythm comes from a mean-field population with excitatory recurrence and fast, activity-dependent synaptic depression, the mechanism modeled for spontaneous rhythms in developing networks (Tabak et al. 2000), to which the architecture adds adaptive recovery. It runs at about 0.8 to 0.9 Hz, of the same order as human fetal breathing movements (about 44 per minute; Natale et al. 1988). Sixteen leaky integrate-and-fire units are driven by the population activity, and the interoception module's phase and amplitude come from that activity, band-limited over the last 8 s.
 
-In `womb` perception-feed mode, the simulated maternal heartbeat from `MaternalDriveProvider` enters through a weak, bounded input that cannot capture the rhythm unaided. The rhythm's period adapts slowly to its input at rate `self_rhythm_eta` (as in adaptive-frequency oscillators; Righetti, Buchli and Ijspeert 2006), so any shift toward the beat has to come from exposure. Nothing in the model sets a target frequency. See [the developmental phase](../06-operation/development.md#how-entrainment-is-measured) for how entrainment is measured.
+In `stimulus_source` perception-feed mode, the simulated maternal heartbeat from `MaternalDriveProvider` enters through a weak, bounded input that cannot capture the rhythm unaided. The rhythm's period adapts slowly to its input at rate `self_rhythm_eta` (as in adaptive-frequency oscillators; Righetti, Buchli and Ijspeert 2006), so any shift toward the beat has to come from exposure. Nothing in the model sets a target frequency. See [the developmental phase](../06-operation/development.md#how-entrainment-is-measured) for how entrainment is measured.
 
 A saved self-rhythm state from an earlier oscillator version, or one whose structural parameters differ, is ignored on restore and the rhythm starts fresh.
 
@@ -210,7 +210,7 @@ Add to your local `config/kaine.toml` (do not commit):
 
 ```toml
 [modules]
-soma = true
+interoception = true
 ```
 
 The interoception module needs no external service. GPU metrics appear when `pynvml` is installed. To change fatigue pressure, lower `fatigue_maintenance_threshold` or raise `fatigue_decay_per_s`.
@@ -249,12 +249,12 @@ The interoception module needs no external service. GPU metrics appear when `pyn
 | `tests/test_interoception_warmup.py` | Developmental warm-up |
 | `tests/test_interoception_self_rhythm.py` | Self-rhythm integration |
 | `tests/test_interoception_self_rhythm_boot.py` | Boot wiring of the self-rhythm loop |
-| `tests/test_cycle_interoception_regulation.py` | `CycleEngine.consume_soma_regulation` advisory handling |
+| `tests/test_cycle_interoception_regulation.py` | `CycleEngine.consume_interoception_regulation` advisory handling |
 | `tests/systems/test_interoception_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related
 
-- OpenSpec: `openspec/specs/soma/spec.md`
-- OpenSpec (predictive): `openspec/specs/soma-predictive/spec.md`
+- OpenSpec: `openspec/specs/interoception/spec.md`
+- OpenSpec (predictive): `openspec/specs/interoception-predictive/spec.md`
 - Related modules: [Sleep](sleep.md) (reads fatigue), [Affect](affect.md) (wellness and arousal), [Sequence](sequence.md) (the same reservoir pattern)
 - Cognitive cycle: [The cognitive cycle](../08-cognitive-cycle/README.md) and [The global workspace](../08-cognitive-cycle/global-workspace.md)

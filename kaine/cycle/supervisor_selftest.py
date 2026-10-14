@@ -3,7 +3,7 @@
 
 """The supervisor self-test for the unattended boot gate.
 
-Constructs a scratch supervisor from a real ``[spot]`` section, redirects every
+Constructs a scratch supervisor from a real ``[supervisor]`` section, redirects every
 stateful path to a temporary directory, registers a synthetic probe module,
 and drives one controlled failure through the full freeze/snapshot/restart/
 release/incident lifecycle.  The gate uses this to prove the supervisor's recovery
@@ -43,7 +43,7 @@ class SelftestResult:
 class _Probe(BaseModule):
     """Synthetic module that fails once on demand and is light-restartable."""
 
-    name = "spot_selftest_probe"
+    name = "supervisor_selftest_probe"
 
     def __init__(self, bus: Any) -> None:
         super().__init__(bus)

@@ -56,8 +56,8 @@ def _workspace(
             (
                 "1-0",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"k": 1},
                     salience=0.7 if not inhibited else 0.1,
                     timestamp=datetime.now(timezone.utc),
@@ -115,7 +115,7 @@ class NeverAlertDetector:
 def test_context_last_reading_before_any_broadcast() -> None:
     clock = _MutableClock(1.0)
     ctx = BroadcastContext(clock)
-    vec, null = ctx.context_and_null(("topos",))
+    vec, null = ctx.context_and_null(("vision",))
     assert vec is None
     assert null is None
     assert ctx.last_reading == (None, None)
@@ -132,7 +132,7 @@ def test_context_last_reading_after_inhibited_broadcast() -> None:
         metadata={},
     )
     ctx.observe(snapshot)
-    vec, null = ctx.context_and_null(("topos",))
+    vec, null = ctx.context_and_null(("vision",))
     assert vec is None
     assert null is None
     assert ctx.last_reading == (3, None)
@@ -147,8 +147,8 @@ def test_context_last_reading_after_accessed_then_inhibited() -> None:
             (
                 "1-0",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"k": 1},
                     salience=0.6,
                     timestamp=datetime.now(timezone.utc),
@@ -170,7 +170,7 @@ def test_context_last_reading_after_accessed_then_inhibited() -> None:
         metadata={},
     )
     ctx.observe(inhibited)
-    vec, null = ctx.context_and_null(("topos",))
+    vec, null = ctx.context_and_null(("vision",))
     assert vec is not None
     assert ctx.last_reading == (8, 2.5)
     assert vec[20] == pytest.approx(math.log1p(2.5))
@@ -204,8 +204,8 @@ async def test_interoception_prediction_stamp_end_to_end() -> None:
         clock.t = 14.0
         await interoception.tick_once()
 
-        events = await bus.read("soma.out", last_id="0")
-        reports = _typed_payloads(events, "soma.report")
+        events = await bus.read("interoception.out", last_id="0")
+        reports = _typed_payloads(events, "interoception.report")
         assert len(reports) == 3
         assert reports[0]["prediction_broadcast_tick"] is None
         assert reports[0]["prediction_context_age_s"] is None
@@ -304,8 +304,8 @@ async def test_vision_skip_clears_prediction_stamp(bus) -> None:
             (
                 "1-0",
                 Event(
-                    source="soma",
-                    type="soma.report",
+                    source="interoception",
+                    type="interoception.report",
                     payload={"k": 1},
                     salience=0.6,
                     timestamp=datetime.now(timezone.utc),
@@ -321,14 +321,14 @@ async def test_vision_skip_clears_prediction_stamp(bus) -> None:
     for _ in range(4):
         await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0")
-    reports = _typed_payloads(entries, "topos.report")
+    entries = await bus.read("vision.out", last_id="0")
+    reports = _typed_payloads(entries, "vision.report")
     assert len(reports) == 4
     assert reports[2]["prediction_broadcast_tick"] is None
     assert reports[3]["prediction_broadcast_tick"] == 7
 
 
-@pytest.mark.parametrize("event_type", ["soma.report", "topos.report", "audition.perception"])
+@pytest.mark.parametrize("event_type", ["interoception.report", "vision.report", "audition.perception"])
 def test_research_observer_copies_prediction_stamp(event_type: str) -> None:
     from kaine.evaluation.observers.research_event_observer import _apply_taxonomy_fields
 
@@ -341,7 +341,7 @@ def test_research_observer_copies_prediction_stamp(event_type: str) -> None:
     assert result["prediction_context_age_s"] == 2.5
 
 
-@pytest.mark.parametrize("event_type", ["soma.report", "topos.report", "audition.perception"])
+@pytest.mark.parametrize("event_type", ["interoception.report", "vision.report", "audition.perception"])
 @pytest.mark.parametrize("field", ["prediction_broadcast_tick", "prediction_context_age_s"])
 def test_log_schema_bounds_prediction_stamp(event_type: str, field: str) -> None:
     from kaine.experiment.log_schema import NONNEG, _bound_for

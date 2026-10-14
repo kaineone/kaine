@@ -53,7 +53,7 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-PROCESSORS: tuple[str, ...] = ("topos", "audition", "soma")
+PROCESSORS: tuple[str, ...] = ("vision", "audition", "interoception")
 POSITIVE_CONTROL_SOURCE: str = "positive_control"
 RESULT_EVENT_TYPE: str = "positive_control.result"
 LADDER_EVENT_TYPE: str = "positive_control.ladder"

@@ -15,11 +15,11 @@ The individuation test SHALL measure how far the entity's conditioned answers ha
 
 The reference SHALL be captured on the maturation gate's maturation transition, as soon as the organ is loaded and before the first post-maturation sleep, with n_b = 16 samples for each of the 12 battery prompts. Capture SHALL retry with backoff, and until a reference exists every look SHALL be inconclusive with reason "no reference". If an accepted adapter or a changed identity clause comes before the capture succeeds, the reference SHALL be stored with `reference_kind="capture"` and its timestamp and SHALL never be presented as a maturation reference. A `reconstructed` reference SHALL be taken only with explicit operator approval for that entity, and only when the records show no adapter older than `born_at` and a fresh-start self-model at maturation; any doubt SHALL fall back to `capture`.
 
-- A maturation request SHALL survive a restart through a durable marker, `state/individuation/birth_pending`.
+- A maturation request SHALL survive a restart through a durable marker, `state/individuation/maturation_pending`.
 - The marker SHALL be cleared when the capture succeeds or a completed sleep turns it into a capture reference.
 - The individuation evidence SHALL live at the fixed path `state/individuation/`, which is not configurable.
 
-The reference SHALL be one document in `state/individuation/reference.json` written atomically through the state encryptor, holding: `reference_id`, `reference_kind` (`birth`, `capture` or `reconstructed`), `captured_at`, `born_at`; the battery texts and battery digest; the conditions (model id, server build when the server reports one, temperature, `max_tokens`, `think`, persona template version, `persona_name`, embedder id and dimension); the conditioning (adapter manifest sha256 or "none", with a copy of a non-empty adapter file beside the reference, and the identity-clause inputs); and per prompt the samples `{text, seed, finish_reason, completion_tokens}` with their embeddings.
+The reference SHALL be one document in `state/individuation/reference.json` written atomically through the state encryptor, holding: `reference_id`, `reference_kind` (`maturation`, `capture` or `reconstructed`), `captured_at`, `born_at`; the battery texts and battery digest; the conditions (model id, server build when the server reports one, temperature, `max_tokens`, `think`, persona template version, `persona_name`, embedder id and dimension); the conditioning (adapter manifest sha256 or "none", with a copy of a non-empty adapter file beside the reference, and the identity-clause inputs); and per prompt the samples `{text, seed, finish_reason, completion_tokens}` with their embeddings.
 
 At every look the test SHALL re-embed the stored reference texts with the current embedder, so both arms share one feature map. The test SHALL refuse to compare against a reference whose battery digest or conditions other than the embedder differ from the current ones. In that case the reference sample SHALL be regenerated from the stored conditioning (the stored adapter copy and identity-clause inputs) under the current infrastructure, recorded with a new `reference_id` and the same `reference_kind`, and the ledger's look index, alpha spent and latch SHALL carry over unchanged.
 
@@ -126,7 +126,7 @@ Once a look is significant, the ledger SHALL record `individuated = true`, `latc
 - **THEN** the ledger read at startup reports the entity as individuated
 
 ### Requirement: The probe does not enter lived experience
-The probe SHALL build its request through the language module's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through the language module's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `lingua.*` or `*_speech` event. Probe answers SHALL never enter the entity's experience.
+The probe SHALL build its request through the language module's side-effect-free `probe_request(about, *, seed, max_tokens)` and send it through the language module's own chat client, which carries the current adapter resolver, with `cache_prompt` off and the probe's `max_tokens` (default 160). Working memory SHALL be `EMPTY_AWARENESS`, and the persona template, `persona_name`, model id, `think` flag, temperature, battery and embedder SHALL be held fixed between the reference and the current sample. The probe SHALL NOT call `speak()`, `think()` or `_produce`, SHALL NOT write the intent log, and SHALL NOT publish any `language.*` or `*_speech` event. Probe answers SHALL never enter the entity's experience.
 
 Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the request body and recorded in the encrypted sample record. Seeds SHALL NOT be reused between the reference and current samples. The test SHALL NOT rely on the server being deterministic.
 
@@ -136,7 +136,7 @@ Each request SHALL carry a fresh seed from `secrets.randbits(31)`, sent in the r
 
 #### Scenario: No speech reaches the bus
 - **WHEN** a probe run completes
-- **THEN** zero `lingua.*` and `*_speech` events were published during it
+- **THEN** zero `language.*` and `*_speech` events were published during it
 
 #### Scenario: The entity's adapter is applied
 - **WHEN** the entity has an accepted adapter and the probe sends a request
@@ -158,7 +158,7 @@ A run SHALL become `outcome="inconclusive"`, with a reason label, if any sample 
 - **THEN** the run is inconclusive because the sample would mix two entities
 
 ### Requirement: The probe yields to Language and skips when the organ is unloaded or the entity is asleep or paused
-A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, the sleep module is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no language module generation is in flight and no speech occurred in the last `lingua_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `hypnos.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
+A look SHALL be attempted 120 s after `sleep.sleep.completed` and on a daily timer. Before any request, the producer SHALL skip the look (logged, no report) unless a reference exists, warm-up is met, the conditioning digest changed, `min_look_interval_s` has elapsed, the organ is loaded, the sleep module is awake, the cycle is not paused or frozen, a semantic embedder is loaded, and the served adapter can be verified. An unreadable ledger is reported as inconclusive by the look itself and is not a skip condition. In hot-swap modes other than `organ_adapter`, once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. The producer SHALL send one request at a time and, before each request, wait until no language module generation is in flight and no speech occurred in the last `language_quiet_s` (default 10 s). A run that cannot finish within `run_deadline_s` (default 2700 s), or during which a `sleep.sleep.started`, an organ unload or a pause occurs, SHALL be aborted as inconclusive.
 
 #### Scenario: A sleeping entity is not probed
 - **WHEN** a look is due while the sleep module is asleep
@@ -173,11 +173,11 @@ A look SHALL be attempted 120 s after `hypnos.sleep.completed` and on a daily ti
 - **THEN** the look is skipped with reason `adapter_unverifiable` and no probe request is sent
 
 #### Scenario: The probe waits for Language
-- **WHEN** the language module is generating or spoke within the last `lingua_quiet_s`
-- **THEN** the next probe request is held until the language module has been quiet for `lingua_quiet_s`
+- **WHEN** the language module is generating or spoke within the last `language_quiet_s`
+- **THEN** the next probe request is held until the language module has been quiet for `language_quiet_s`
 
 #### Scenario: Sleep during a run aborts it
-- **WHEN** `hypnos.sleep.started` is observed while a run is in progress
+- **WHEN** `sleep.sleep.started` is observed while a run is in progress
 - **THEN** the run stops and is recorded as inconclusive
 
 ### Requirement: Individuation evidence respects mental privacy

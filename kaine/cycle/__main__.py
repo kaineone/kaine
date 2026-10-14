@@ -198,10 +198,10 @@ def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, st
         return (cfg, None)
 
     modules = kaine_config.get("modules") or {}
-    if not modules.get("lingua"):
+    if not modules.get("language"):
         return (
             None,
-            "[individuation] is enabled but [modules].lingua is disabled",
+            "[individuation] is enabled but [modules].language is disabled",
         )
 
     return (cfg, None)
@@ -260,15 +260,15 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     battery = load_battery(cfg.battery_path or None)
     validate_battery(battery)
 
-    language = registry.get("lingua")
-    self_model = registry.get("eidolon") if "eidolon" in registry else None
+    language = registry.get("language")
+    self_model = registry.get("self_model") if "self_model" in registry else None
     language.set_expects_self_model(self_model is not None)
     ensure_fact = (
         self_model.ensure_situation_fact if self_model is not None else language.add_situation_fact
     )
-    sleep = registry.get("hypnos") if "hypnos" in registry else None
+    sleep = registry.get("sleep") if "sleep" in registry else None
 
-    voice_cfg = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
+    voice_cfg = (kaine_config.get("sleep") or {}).get("voice_alignment") or {}
     adapter_output_dir = resolve(voice_cfg.get("adapter_output_dir", "state/hypnos/adapters"))
 
     per_request_adapter = (
@@ -281,7 +281,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
 
     from kaine.lifecycle.individuation_store import DEFAULT_ROOT
 
-    language_section = kaine_config.get("lingua") or {}
+    language_section = kaine_config.get("language") or {}
     served_identity = ServedOrganIdentity(
         chat_url=language_section.get("chat_url") or DEFAULT_CHAT_URL,
         api_key=language_section_api_key(language_section) or model_server_api_key(None),
@@ -322,7 +322,7 @@ def _affect_state_factory(registry):
 
     def _get():
         try:
-            affect = registry.get("thymos") if "thymos" in registry else None
+            affect = registry.get("affect") if "affect" in registry else None
         except Exception:
             affect = None
         if affect is None:
@@ -342,13 +342,13 @@ def _wire_vision_arousal(registry, affect_provider) -> bool:
     Attention-driven foveation couples the fovea *size* to arousal (Easterbrook
     narrowing) — a distinct visual coupling, not the workspace salience window.
     The composition root already holds the ``AffectStateProvider`` it refreshes
-    each tick from ``thymos.state``; this hands the vision module a read-only accessor to its
+    each tick from ``affect.state``; this hands the vision module a read-only accessor to its
     arousal in [0, 1] (dependency injection — the vision module never imports the workspace or
     the affect module). No-op unless the vision module is present with foveation enabled. Returns whether
     it wired, so the caller can ensure the provider is actually refreshed.
     """
     try:
-        vision = registry.get("topos") if "topos" in registry else None
+        vision = registry.get("vision") if "vision" in registry else None
     except Exception:
         vision = None
     if vision is None or not getattr(vision, "foveation_enabled", False):
@@ -363,7 +363,7 @@ def _wire_vision_arousal(registry, affect_provider) -> bool:
 def _wire_audition_arousal(registry, affect_provider) -> bool:
     """Give Audition the live affect module's arousal scalar that sizes the auditory window.
 
-    The auditory analog of ``_wire_topos_arousal``: general auditory perception
+    The auditory analog of ``_wire_vision_arousal``: general auditory perception
     couples the breadth of the auditory attentional window to arousal (Easterbrook
     narrowing). No-op unless Audition is present with general auditory perception
     enabled. Returns whether it wired, so the caller can ensure the provider is
@@ -388,7 +388,7 @@ def _sleep_state_factory(registry):
 
     def _get():
         out = {}
-        for name in ("nous", "mnemos", "thymos", "chronos", "eidolon"):
+        for name in ("planning", "episodic_memory", "affect", "sequence", "self_model"):
             if name not in registry:
                 continue
             try:
@@ -420,9 +420,9 @@ def _memory_source_factory(registry):
     than the threshold, or None (the observer then skips this tick). Lives at the
     entrypoint so kaine.evaluation imports no kaine.modules.* code.
     """
-    if "mnemos" not in registry:
+    if "episodic_memory" not in registry:
         return None
-    episodic_memory = registry.get("mnemos")
+    episodic_memory = registry.get("episodic_memory")
 
     class _EpisodicMemorySource:
         async def sample_old_memory(self, *, older_than_seconds: float):
@@ -457,11 +457,11 @@ def _cognitive_query_client_factory(registry, eval_cfg):
     question WITH the entity's recalled memories (the real stack's memory-
     augmented answer), distinct from the bare baseline client.
     """
-    if "mnemos" not in registry:
+    if "episodic_memory" not in registry:
         return None
     from kaine.modules.language.client import ChatRequest, OpenAIChatClient
 
-    episodic_memory = registry.get("mnemos")
+    episodic_memory = registry.get("episodic_memory")
     client = OpenAIChatClient(base_url=eval_cfg.chat_url, timeout_s=eval_cfg.chat_timeout_s)
     model = eval_cfg.chat_model_id
 
@@ -629,7 +629,7 @@ async def _supervise_welfare_producer(producer, state: dict, now: float) -> None
 # Modules whose factories read `[<module>.qdrant].api_key`. They all share the
 # single `[qdrant]` secret. Add to this tuple when a new qdrant-backed module
 # is introduced so the boot-time secrets merge keeps covering every consumer.
-_QDRANT_SECRET_CONSUMERS: tuple[str, ...] = ("mnemos", "empatheia")
+_QDRANT_SECRET_CONSUMERS: tuple[str, ...] = ("episodic_memory", "social_cognition")
 
 
 def _merge_qdrant_secret(
@@ -643,7 +643,7 @@ def _merge_qdrant_secret(
     Mirrors the Redis handling in ``load_bus_config``: the cycle config loader
     must surface the Qdrant key (``KAINE_QDRANT_API_KEY`` env first, then
     ``config/secrets.toml`` ``[qdrant].api_key``) into the ``[<module>.qdrant]``
-    section of every qdrant-backed consumer (``mnemos`` and ``empatheia``) so
+    section of every qdrant-backed consumer (``episodic_memory`` and ``social_cognition``) so
     each factory can forward it. The key never has to live in the git-tracked
     ``kaine.toml``. A per-consumer key already present there wins and is left
     intact. When nothing resolves, no empty value is injected, so the module
@@ -828,7 +828,7 @@ async def _write_runtime_state(
         supervisor_escalated = bool(read_escalation().escalated)
         if supervisor_escalated:
             supervisor_state = "critical"
-        elif control.frozen and control.source == "spot":
+        elif control.frozen and control.source == "supervisor":
             supervisor_state = "recovery"
     except Exception:
         log.debug("could not read spot state for runtime.json", exc_info=True)
@@ -926,10 +926,10 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
         if isinstance(value, str) and value:
             out[key] = value
 
-    language_model_id = (config.get("lingua") or {}).get("model_id")
-    _put("lingua", language_model_id)
+    language_model_id = (config.get("language") or {}).get("model_id")
+    _put("language", language_model_id)
     _put("evaluation_chat", eval_chat_model_id)
-    _put("topos_encoder", (config.get("topos") or {}).get("encoder_model_id"))
+    _put("topos_encoder", (config.get("vision") or {}).get("encoder_model_id"))
     from kaine.text_embedding import resolve_embedding_config
     cfg = resolve_embedding_config(config)
     _put("embedding_backend", cfg["backend"])
@@ -942,7 +942,7 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     # resolved repo revision (commit sha) for the served organ, pin it as a
     # covariate so a run records the EXACT published snapshot. Best-effort and
     # never crashes boot — a missing/unreadable state file simply contributes
-    # nothing. Records "lingua@<repo>" -> "<sha>" only for the served repo.
+    # nothing. Records "language@<repo>" -> "<sha>" only for the served repo.
     try:
         from kaine.organ_probe import read_revision_state
 
@@ -967,7 +967,7 @@ def _resolve_seed(config: dict[str, Any]) -> int:
 
 
 def _workspace_arm_kwargs(syn_cfg: dict[str, Any], run_ctx: Any) -> dict[str, Any]:
-    """The workspace arm from ``[syneidesis].arm`` (paper §6.3) and the run seed
+    """The workspace arm from ``[workspace].arm`` (paper §6.3) and the run seed
     the matched arm's draw is seeded from (``None`` before a run context exists)."""
     arm = str(syn_cfg.get("arm", "competitive")).strip().lower()
     seed = int(run_ctx.seed) if run_ctx is not None else None
@@ -982,13 +982,13 @@ def _resolve_boot_stage(
 ) -> tuple[lifecycle_stage.StageState, bool, bool]:
     """Resolve the developmental stage at boot.
 
-    Returns ``(stage_state, staging_enabled, is_fresh_gestation)``. When staging
+    Returns ``(stage_state, staging_enabled, is_fresh_development)``. When staging
     is disabled the entity runs un-staged exactly as today and the stage file is
     left untouched. When enabled, a fresh entity with no prior lived history
-    begins in ``gestation``; an entity with prior lived history (or an existing
+    begins in ``development``; an entity with prior lived history (or an existing
     stage file) defaults to ``embodied`` and is never regressed into the stimulus source.
-    ``is_fresh_gestation`` is true only when staging is enabled, no stage file
-    existed, and the resolved stage is ``gestation`` — the moment the stimulus source first
+    ``is_fresh_development`` is true only when staging is enabled, no stage file
+    existed, and the resolved stage is ``development`` — the moment the stimulus source first
     begins.
 
     If ``stage_override`` is provided it is returned directly and the stage file
@@ -1111,7 +1111,7 @@ def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> Non
 
 # Effectors that have nothing to act on in the stimulus source: the embodiment module has no world and
 # The vocal module has no air to speak into. Both are activated by the gate runner at maturation.
-DEVELOPMENT_DORMANT_EFFECTORS = ("mundus", "vox")
+DEVELOPMENT_DORMANT_EFFECTORS = ("embodiment", "vocal")
 
 
 def _hold_effectors_for_development(registry) -> list[str]:
@@ -1197,9 +1197,9 @@ def _start_development_owner(
     import math
 
     feed = dict(kaine_config.get("perception_feed") or {})
-    if str(feed.get("mode", "off")).lower() != "womb":
+    if str(feed.get("mode", "off")).lower() != "stimulus_source":
         return None
-    interoception = registry.get("soma") if "soma" in registry else None
+    interoception = registry.get("interoception") if "interoception" in registry else None
     drive = getattr(interoception, "maternal_drive", None) if interoception is not None else None
     if interoception is None or drive is None or getattr(interoception, "self_rhythm_state", None) is None:
         log.warning(
@@ -1214,7 +1214,7 @@ def _start_development_owner(
     stimulus_source_clock, _ = _shared_stimulus_source_objects(feed)
     params = _stimulus_source_params(feed)
     seed = int(feed.get("seed", 0))
-    config = DevelopmentReadoutConfig.from_dict((feed.get("womb") or {}).get("readout"))
+    config = DevelopmentReadoutConfig.from_dict((feed.get("stimulus_source") or {}).get("readout"))
 
     def beat_phase() -> float:
         return 2.0 * math.pi * float(heartbeat_phase(seed, stimulus_source_clock.stimulus_source_seconds(), params))
@@ -1241,7 +1241,7 @@ def _start_development_owner(
         # the experimenter, unpredictable to the entity.
         seed=seed,
     )
-    return asyncio.create_task(owner.run(stop_event), name="cycle.gestation")
+    return asyncio.create_task(owner.run(stop_event), name="cycle.development")
 
 
 def _start_stimulus_source_presence(
@@ -1250,16 +1250,16 @@ def _start_stimulus_source_presence(
     """Start the local stimulus source's presence publisher when a stimulus source clock is installed.
 
     ``build_registry`` installs the shared stimulus source clock only for
-    ``[perception_feed].mode = "womb"``; any other mode starts nothing.
+    ``[perception_feed].mode = "stimulus_source"``; any other mode starts nothing.
     """
-    clock = (kaine_config.get("perception_feed") or {}).get("_shared_womb_clock")
+    clock = (kaine_config.get("perception_feed") or {}).get("_shared_stimulus_source_clock")
     if clock is None:
         return None
     from kaine.cycle.stimulus_source_presence import StimulusSourcePresencePublisher
 
     return asyncio.create_task(
         StimulusSourcePresencePublisher(bus, clock).run(stop_event),
-        name="cycle.womb_presence",
+        name="cycle.stimulus_source_presence",
     )
 
 
@@ -1480,11 +1480,11 @@ async def _phase_preconditions(ctx: BootContext) -> int | None:
     # Evaluation sidecar config is loaded FIRST — before any resource opens (bus,
     # modules, runtime.json) — so a mismatched A/B baseline fails closed cleanly
     # with no half-booted entity and no stale runtime state. The baseline model
-    # DERIVES from [lingua].model_id and refuses an explicit divergent value.
-    language_model_id = (ctx.kaine_config.get("lingua") or {}).get("model_id")
+    # DERIVES from [language].model_id and refuses an explicit divergent value.
+    language_model_id = (ctx.kaine_config.get("language") or {}).get("model_id")
     # The A/B baseline talks to the SAME model server as the organ, so it needs
     # the same bearer key (keyed server like Unsloth Studio). Resolve it the same
-    # way make_lingua does — [lingua].api_key, else the env var — and derive the
+    # way make_language does — [language].api_key, else the env var — and derive the
     # eval key from it so organ and baseline authenticate identically.
     language_api_key = model_server_api_key(ctx.kaine_config)
     try:
@@ -1607,7 +1607,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
     # own idle Ollama models and never terminates a process; see preflight.py.
     gpu_cfg = GpuPreflightConfig.from_section(ctx.kaine_config.get("gpu_preflight") or {})
     if gpu_cfg.enabled:
-        organ_model = (ctx.kaine_config.get("lingua") or {}).get("model_id")
+        organ_model = (ctx.kaine_config.get("language") or {}).get("model_id")
         keep = [organ_model] if organ_model else []
         pf = run_preflight(
             gpu_cfg,
@@ -1628,7 +1628,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
     # way a prior boot came up silent. When the language module is enabled, probe the organ for
     # real content here and refuse to boot if it returns empty/unreachable. A
     # deliberately-voiceless boot must opt in via KAINE_ALLOW_MUTE_ORGAN=1.
-    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+    if (ctx.kaine_config.get("modules") or {}).get("language"):
         from kaine.organ_window_state import organ_unloaded
 
         if organ_unloaded():
@@ -1636,7 +1636,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
         else:
             from kaine.organ_probe import verify_organ_generates
 
-            language_cfg = ctx.kaine_config.get("lingua") or {}
+            language_cfg = ctx.kaine_config.get("language") or {}
             gate = await verify_organ_generates(
                 language_section_chat_url(language_cfg),
                 str(language_cfg.get("model_id") or ""),
@@ -1703,7 +1703,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
                 )
             )
         except Exception:
-            log.warning("could not publish stage.gestation.started", exc_info=True)
+            log.warning("could not publish stage.development.started", exc_info=True)
 
     async def _publish_lifecycle(type_: str, payload: dict[str, Any], salience: float) -> None:
         await ctx.bus.publish(_lifecycle_event(type_, payload, salience=salience))
@@ -1711,7 +1711,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
 
     # Stimulus source before spawn (maturation-gate-liveness 2.1): a gestating entity is
     # never spawned without a stimulus source that is ready. Hold here, before any module
-    # initializes, reporting stage.gestation.no_stimulus on every failed check.
+    # initializes, reporting stage.development.no_stimulus on every failed check.
     ctx.stimulus_source_ready = False
     if ctx.staging_enabled and ctx.stage_state.is_developing:
         from kaine.cycle.stimulus_source_watch import hold_until_stimulus_source_ready
@@ -1818,21 +1818,21 @@ async def _phase_maturation_gate(ctx: BootContext) -> int | None:
 
 
 async def _phase_workspace(ctx: BootContext) -> int | None:
-    """Build the coherence scorer, affect provider, salience factors, access rate and Syneidesis."""
+    """Build the coherence scorer, affect provider, salience factors, access rate and Workspace."""
 
     ctx.cycle_cfg = ctx.kaine_config.get("cycle") or {}
-    syn_cfg = ctx.kaine_config.get("syneidesis") or {}
+    syn_cfg = ctx.kaine_config.get("workspace") or {}
     # Oscillatory-binding coherence layer. `make_coherence_scorer` returns None
     # when [oscillator].enabled is false, in which case workspace selection is
     # bit-for-bit the pre-change behavior (no coherence factor, no metadata key).
     ctx.coherence_scorer = make_coherence_scorer(ctx.kaine_config)
     # Live four-factor salience (wire-salience-goal-thymos). Both real factors
     # read the entity's current affect/drives through an AffectStateProvider the
-    # engine refreshes each tick from thymos.state — dependency injection, so the
+    # engine refreshes each tick from affect.state — dependency injection, so the
     # workspace layer never imports kaine.modules. The affect factor ships LIVE
     # by default (the paper's real, already-tested StateModulator); the goal
     # factor is BUILT but ships on the static negative control by default, staged
-    # pending validation on logged runs (see config/kaine.toml [syneidesis]).
+    # pending validation on logged runs (see config/kaine.toml [workspace]).
     ctx.affect_provider = AffectStateProvider()
     affect_modulator, goal_scorer, downgraded_factors = make_salience_factors(
         ctx.kaine_config, ctx.affect_provider, drive_sources=drive_sources_for(ctx.registry)
@@ -1855,7 +1855,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     access_rate_cfg = AccessRateConfig.from_section(
         ctx.cycle_cfg.get("access_rate"),
         default_baseline=float(
-            (ctx.kaine_config.get("thymos") or {}).get("baseline_arousal", 0.3)
+            (ctx.kaine_config.get("affect") or {}).get("baseline_arousal", 0.3)
         ),
     )
     ctx.access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
@@ -1895,21 +1895,21 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
     # speak initiative; curiosity/boredom/restlessness → internal think).
     # Inhibition still gates everything (the action selection module checks `inhibited` first).
     # An operator can disable drive initiative — falling back to the plain
-    # default policy — via `[volition].drive_initiative = false`.
-    action_selection_cfg = ctx.kaine_config.get("volition") or {}
+    # default policy — via `[action_selection].drive_initiative = false`.
+    action_selection_cfg = ctx.kaine_config.get("action_selection") or {}
     policy_name = str(action_selection_cfg.get("policy", "")).strip().lower()
     drive_initiative = bool(action_selection_cfg.get("drive_initiative", True))
     # Operator-channel set is shared between social cognition attribution and the action selection module
-    # user-utterance detection. A single [empatheia].operator_sources key
+    # user-utterance detection. A single [social_cognition].operator_sources key
     # configures both.
-    social_cognition_cfg = ctx.kaine_config.get("empatheia") or {}
+    social_cognition_cfg = ctx.kaine_config.get("social_cognition") or {}
     _operator_sources_raw = social_cognition_cfg.get("operator_sources")
     operator_sources = None
     if _operator_sources_raw is not None:
         if not isinstance(_operator_sources_raw, list) or not all(
             isinstance(x, str) for x in _operator_sources_raw
         ):
-            raise ValueError("[empatheia].operator_sources must be a list of strings")
+            raise ValueError("[social_cognition].operator_sources must be a list of strings")
         operator_sources = list(_operator_sources_raw)
     # Sign act intents with the per-boot secret so the effectors module can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
@@ -1917,11 +1917,11 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
     intent_signer = IntentSigner(ctx.intent_secret, ctx.run_ctx.run_id)
 
     # The planning proposal realization wraps the chosen policy when the planning module is
-    # enabled. [nous].drive_actions (default true) disables the source for
+    # enabled. [planning].drive_actions (default true) disables the source for
     # ablation runs while still recording proposal outcomes.
     modules_cfg = ctx.kaine_config.get("modules") or {}
-    planning_cfg = ctx.kaine_config.get("nous") or {}
-    planning_enabled = bool(modules_cfg.get("nous", True))
+    planning_cfg = ctx.kaine_config.get("planning") or {}
+    planning_enabled = bool(modules_cfg.get("planning", True))
 
     def _wrap_policy(policy):
         if not planning_enabled:
@@ -1934,7 +1934,7 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
             speak_refractory_s=float(action_selection_cfg.get("speak_refractory_s", 8.0)),
             think_refractory_s=float(action_selection_cfg.get("think_refractory_s", 3.0)),
             rest_min_interval_s=float(
-                (ctx.kaine_config.get("hypnos") or {}).get(
+                (ctx.kaine_config.get("sleep") or {}).get(
                     "requested_rest_min_interval_s", 1800.0
                 )
             ),
@@ -1953,7 +1953,7 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
 
         _report_clock = ctx.registry.entity_clock.now if ctx.registry.entity_clock is not None else None
         # Interruptible utterances (PR #81) are opt-in: an absent
-        # [volition].interrupt_threshold keeps await-to-completion; a set
+        # [action_selection].interrupt_threshold keeps await-to-completion; a set
         # value must sit strictly above the report bar (enforced by the
         # policy itself).
         _interrupt_raw = action_selection_cfg.get("interrupt_threshold")
@@ -2000,9 +2000,9 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
 
 def _sleep_is_sleeping(registry: Any) -> bool:
     """Whether the sleep module is asleep now (False without the sleep module)."""
-    if "hypnos" not in registry:
+    if "sleep" not in registry:
         return False
-    return bool(registry.get("hypnos").is_sleeping)
+    return bool(registry.get("sleep").is_sleeping)
 
 
 async def _phase_cycle(ctx: BootContext) -> int | None:
@@ -2047,7 +2047,7 @@ async def _phase_cycle(ctx: BootContext) -> int | None:
         deterministic=bool(ctx.experiment_cfg.get("deterministic", False)),
         time_scale_controller=_make_time_scale_controller(ctx.cycle_cfg),
         # DI seam for the live salience factors: the engine refreshes the affect/
-        # drive snapshot from each tick's thymos.state. None when both factors are
+        # drive snapshot from each tick's affect.state. None when both factors are
         # the static negative control (then the tick is byte-identical).
         affect_observer=ctx.affect_observer,
         access_rate=ctx.access_rate,
@@ -2066,7 +2066,7 @@ async def _phase_supervision(ctx: BootContext) -> int | None:
     """Build the supervisor config, the fork manager and the module rebuilder."""
 
     # The module supervisor (cycle-layer component, not a registry module).
-    ctx.supervisor_cfg = SupervisorConfig.from_section(ctx.kaine_config.get("spot") or {})
+    ctx.supervisor_cfg = SupervisorConfig.from_section(ctx.kaine_config.get("supervisor") or {})
     lifecycle_cfg = ctx.kaine_config.get("lifecycle") or {}
     ctx.fork_manager = ForkManager(
         resolve(lifecycle_cfg.get("snapshots_path", "state/forks")),
@@ -2079,7 +2079,7 @@ async def _phase_supervision(ctx: BootContext) -> int | None:
 
 
 async def _phase_runtime_state(ctx: BootContext) -> int | None:
-    """Write the first runtime state for Nexus."""
+    """Write the first runtime state for Dashboard."""
 
     await _write_runtime_state(
         ctx.cycle,
@@ -2265,7 +2265,7 @@ async def _phase_supervisor(ctx: BootContext) -> int | None:
         rebuild_module=ctx.rebuild_module,
         bus=ctx.bus,
         on_halt=lambda: ctx.stop_event.set(),
-        # Best-effort tick<->poll bridge: lets a spot.incident annotation be
+        # Best-effort tick<->poll bridge: lets a supervisor.incident annotation be
         # located within the run by cycle tick, not just the supervisor's poll index.
         tick_index_provider=lambda: ctx.cycle.tick_index,
         escalate_on_crash=(ctx.supervision_mode == "unattended"),
@@ -2279,7 +2279,7 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
     # the divergence→preserve trigger and the welfare-protective response. Both
     # ship disabled; they reuse the same ForkManager + IncidentLog patterns as
     # the supervisor and never import kaine.evaluation (the welfare signal is read straight
-    # off soma.out via the shared core SustainedThresholdTracker).
+    # off interoception.out via the shared core SustainedThresholdTracker).
     from kaine.cycle.incident_log import IncidentLog
     from kaine.cycle.preservation_monitor import (
         DivergenceMonitor,
@@ -2377,7 +2377,7 @@ async def _phase_launch(ctx: BootContext) -> int | None:
         name="cycle.freeze_watch",
     )
     ctx.supervisor_task = (
-        asyncio.create_task(ctx.supervisor.run(ctx.stop_event), name="cycle.spot") if ctx.supervisor_cfg.enabled else None
+        asyncio.create_task(ctx.supervisor.run(ctx.stop_event), name="cycle.supervisor") if ctx.supervisor_cfg.enabled else None
     )
     ctx.divergence_task = (
         asyncio.create_task(ctx.divergence_monitor.run(ctx.stop_event), name="cycle.divergence_monitor")
@@ -2401,7 +2401,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
         is_paused=lambda: ctx.cycle.is_paused,
     )
     # Maturation transition (local-womb-feed 3.6): at maturation the local stimulus source blooms
-    # once over birth_transition_seconds, then falls silent.
+    # once over maturation_transition_seconds, then falls silent.
     # The individuation producer captures the maturation reference from the same hook.
     individuation_runtime = None
     if ctx.individuation_cfg is not None and ctx.individuation_cfg.enabled:
@@ -2416,7 +2416,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
             caretaker=ctx.caretaker,
         )
     _stimulus_source_feed = ctx.kaine_config.get("perception_feed") or {}
-    _maturation_clock = _stimulus_source_feed.get("_shared_womb_clock")
+    _maturation_clock = _stimulus_source_feed.get("_shared_stimulus_source_clock")
     _stimulus_source_maturation_hook = None
     if _maturation_clock is not None:
         from kaine.boot import _stimulus_source_params
@@ -2445,7 +2445,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
 
 
 async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
-    """Watch for stimulus source loss while gestating."""
+    """Watch for stimulus source loss while developing."""
     # Stimulus source loss (maturation-gate-liveness 2.2): freeze a gestating entity under
     # its own holder when the stimulus source stops, and release it when the stimulus source returns.
     ctx.stimulus_source_watch_task = None
@@ -2464,7 +2464,7 @@ async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
                 window_s=ctx.ds_config.stimulus_source_presence_window_seconds,
                 arm_timeout_seconds=ctx.ds_config.stimulus_source_arm_timeout_seconds,
             ).run(ctx.stop_event),
-            name="cycle.womb_watch",
+            name="cycle.stimulus_source_watch",
         )
 
 
@@ -2482,8 +2482,8 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
 
         streams: list[str] = []
         modules = ctx.kaine_config.get("modules") or {}
-        if modules.get("topos"):
-            streams.append("topos.out")
+        if modules.get("vision"):
+            streams.append("vision.out")
         if modules.get("audition"):
             streams.append("audition.out")
 
@@ -2507,8 +2507,8 @@ async def _phase_caretaker(ctx: BootContext) -> int | None:
 async def _phase_development(ctx: BootContext) -> int | None:
     """Start stimulus source presence and the developmental-phase owner."""
     # A running local stimulus source proves itself from real deliveries: presence events
-    # on gestation.out (the same contract an external provider uses), which the
-    # maturation gate reads to detect stimulus source loss. gestation.out is not a module
+    # on development.out (the same contract an external provider uses), which the
+    # maturation gate reads to detect stimulus source loss. development.out is not a module
     # stream, so presence never enters the workspace.
     ctx.stimulus_source_presence_task = _start_stimulus_source_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
@@ -2530,11 +2530,11 @@ async def _start_utterance_outcome(ctx: BootContext) -> None:
     Kept separate from `_phase_watchers` so a malformed reply-window value is
     handled inside the observer's guarded starter and never aborts boot.
     """
-    if (ctx.kaine_config.get("modules") or {}).get("lingua"):
+    if (ctx.kaine_config.get("modules") or {}).get("language"):
         ctx.utterance_outcome = await start_utterance_outcome_observer(
             ctx.bus,
             path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
-            language_section=ctx.kaine_config.get("lingua"),
+            language_section=ctx.kaine_config.get("language"),
         )
 
 
@@ -2667,7 +2667,7 @@ async def _shutdown(ctx: BootContext) -> None:
 
                 rec = read_escalation()
                 await ctx.caretaker.send_event(
-                    "supervision_lost" if rec.module == "spot" else "spot_escalation"
+                    "supervision_lost" if rec.module == "supervisor" else "spot_escalation"
                 )
         except Exception:
             log.warning("caretaker escalation notice failed", exc_info=True)
@@ -2879,7 +2879,7 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     from kaine.cycle.supervisor_selftest import check_supervisor_condition
     from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
-    supervisor = check_supervisor_condition(config.get("spot") or {})
+    supervisor = check_supervisor_condition(config.get("supervisor") or {})
     eight = check_input_condition(config)
 
     # Condition 7 must report on 1–6 and 8, but must not include itself.
@@ -2920,7 +2920,7 @@ def _record_unattended_gate(
             "conditions": conditions,
         }
 
-        supervisor_cfg = (config or {}).get("spot") or {}
+        supervisor_cfg = (config or {}).get("supervisor") or {}
         incident_log_cfg = supervisor_cfg.get("incident_log") or {}
         incident_path = str(
             resolve(incident_log_cfg.get("path", "state/cycle/incidents"))

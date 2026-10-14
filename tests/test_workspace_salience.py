@@ -14,7 +14,7 @@ from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 def _ev(intensity: float = 0.8, payload=None) -> Event:
     return Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload=payload or {"k": "v"},
         salience=intensity,

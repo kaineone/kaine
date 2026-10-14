@@ -18,8 +18,8 @@ from kaine.modules.vision.feed import StimulusSourceClock
 
 
 def test_stimulus_source_video_factory_returns_readable_bgr_frame():
-    feed = {"mode": "womb", "seed": 1}
-    factory = _build_perception_feed_video_factory("womb", feed, width=64, height=48)
+    feed = {"mode": "stimulus_source", "seed": 1}
+    factory = _build_perception_feed_video_factory("stimulus_source", feed, width=64, height=48)
     src = factory("ignored", width=64, height=48)
     src.open()
     ok, frame = src.read()
@@ -30,9 +30,9 @@ def test_stimulus_source_video_factory_returns_readable_bgr_frame():
 
 
 def test_stimulus_source_audio_factory_pcm_at_zero_has_expected_shape():
-    feed = {"mode": "womb", "seed": 1, "audio": {"sample_rate": 16000, "channels": 1}}
+    feed = {"mode": "stimulus_source", "seed": 1, "audio": {"sample_rate": 16000, "channels": 1}}
     factory = _build_perception_feed_audio_factory(
-        "womb", feed, sample_rate=16000, channels=1, frames_per_block=480
+        "stimulus_source", feed, sample_rate=16000, channels=1, frames_per_block=480
     )
     stream = factory(
         device="ignored",
@@ -50,14 +50,14 @@ def test_stimulus_source_factories_share_clock_when_installed():
     clock = StimulusSourceClock(lived_offset_seconds=0.0)
     lived = lambda: clock.stimulus_source_seconds()  # noqa: E731
     feed = {
-        "mode": "womb",
+        "mode": "stimulus_source",
         "seed": 1,
-        "_shared_womb_clock": clock,
-        "_womb_lived_seconds": lived,
+        "_shared_stimulus_source_clock": clock,
+        "_stimulus_source_lived_seconds": lived,
     }
-    vf = _build_perception_feed_video_factory("womb", feed, width=64, height=48)
+    vf = _build_perception_feed_video_factory("stimulus_source", feed, width=64, height=48)
     af = _build_perception_feed_audio_factory(
-        "womb", feed, sample_rate=16000, channels=1, frames_per_block=480
+        "stimulus_source", feed, sample_rate=16000, channels=1, frames_per_block=480
     )
     src = vf("x", width=64, height=48)
     stream = af(
@@ -75,10 +75,10 @@ def test_stimulus_source_factories_build_private_clock_without_shared_objects(tm
     from kaine.lifecycle import stage as stage_mod
 
     monkeypatch.setattr(stage_mod, "STAGE_PATH", tmp_path / "stage.json")
-    feed = {"mode": "womb", "seed": 1}
-    vf = _build_perception_feed_video_factory("womb", feed, width=64, height=48)
+    feed = {"mode": "stimulus_source", "seed": 1}
+    vf = _build_perception_feed_video_factory("stimulus_source", feed, width=64, height=48)
     af = _build_perception_feed_audio_factory(
-        "womb", feed, sample_rate=16000, channels=1, frames_per_block=480
+        "stimulus_source", feed, sample_rate=16000, channels=1, frames_per_block=480
     )
     src = vf("x", width=64, height=48)
     stream = af(
@@ -90,8 +90,8 @@ def test_stimulus_source_factories_build_private_clock_without_shared_objects(tm
     )
     assert src._clock is not None
     assert stream._clock is not None
-    assert "_shared_womb_clock" not in feed
-    assert "_womb_lived_seconds" not in feed
+    assert "_shared_stimulus_source_clock" not in feed
+    assert "_stimulus_source_lived_seconds" not in feed
 
 
 def test_install_shared_stimulus_source_clock_reads_stage_and_tracks_entity_clock(tmp_path, monkeypatch):
@@ -115,12 +115,12 @@ def test_install_shared_stimulus_source_clock_reads_stage_and_tracks_entity_cloc
     feed: dict[str, object] = {}
     cfg: dict[str, object] = {}
     _install_shared_stimulus_source_clock(feed, cfg, entity_clock, stage_path=stage_path)
-    clock = feed["_shared_womb_clock"]
-    lived = feed["_womb_lived_seconds"]
+    clock = feed["_shared_stimulus_source_clock"]
+    lived = feed["_stimulus_source_lived_seconds"]
     assert isinstance(clock, StimulusSourceClock)
     assert clock.stimulus_source_seconds() >= 500.0
-    assert cfg["perception_feed"]["_shared_womb_clock"] is clock
-    assert cfg["perception_feed"]["_womb_lived_seconds"] is lived
+    assert cfg["perception_feed"]["_shared_stimulus_source_clock"] is clock
+    assert cfg["perception_feed"]["_stimulus_source_lived_seconds"] is lived
     entity_clock.advance(10.0)
     assert lived() == pytest.approx(510.0, abs=0.001)
 
@@ -132,37 +132,37 @@ def test_install_shared_stimulus_source_clock_without_stage_offset_zero(tmp_path
     feed: dict[str, object] = {}
     cfg: dict[str, object] = {}
     _install_shared_stimulus_source_clock(feed, cfg, None)
-    assert feed["_womb_lived_seconds"]() == 0.0
-    assert feed["_shared_womb_clock"].stimulus_source_seconds() >= 0.0
+    assert feed["_stimulus_source_lived_seconds"]() == 0.0
+    assert feed["_shared_stimulus_source_clock"].stimulus_source_seconds() >= 0.0
 
 
 def test_stimulus_source_video_factory_raises_at_build_for_bad_config():
-    feed = {"mode": "womb", "womb": {"heartbeat_bpm": 500}}
+    feed = {"mode": "stimulus_source", "stimulus_source": {"heartbeat_bpm": 500}}
     with pytest.raises(ValueError):
-        _build_perception_feed_video_factory("womb", feed, width=64, height=48)
+        _build_perception_feed_video_factory("stimulus_source", feed, width=64, height=48)
 
 
 def test_stimulus_source_video_factory_raises_for_non_dict_video_section():
-    feed = {"mode": "womb", "womb": {"video": "not-a-table"}}
+    feed = {"mode": "stimulus_source", "stimulus_source": {"video": "not-a-table"}}
     with pytest.raises(ValueError):
-        _build_perception_feed_video_factory("womb", feed, width=64, height=48)
+        _build_perception_feed_video_factory("stimulus_source", feed, width=64, height=48)
 
 
 def test_stimulus_source_audio_factory_rejects_short_frames_per_block():
-    feed = {"mode": "womb", "audio": {"sample_rate": 16000, "channels": 1}}
+    feed = {"mode": "stimulus_source", "audio": {"sample_rate": 16000, "channels": 1}}
     with pytest.raises(ValueError):
         _build_perception_feed_audio_factory(
-            "womb", feed, sample_rate=16000, channels=1, frames_per_block=64
+            "stimulus_source", feed, sample_rate=16000, channels=1, frames_per_block=64
         )
 
 
 def test_gather_stimulus_source_descriptor():
-    config = {"perception_feed": {"mode": "womb", "seed": 3}}
+    config = {"perception_feed": {"mode": "stimulus_source", "seed": 3}}
     desc = gather_perception_feed_descriptor(config)
-    assert desc["mode"] == "womb"
-    assert desc["regime"] == "womb"
+    assert desc["mode"] == "stimulus_source"
+    assert desc["regime"] == "stimulus_source"
     assert desc["seed"] == 3
-    assert "heartbeat_bpm" in desc["womb"]
+    assert "heartbeat_bpm" in desc["stimulus_source"]
     assert "video" in desc
     assert "audio" in desc
     assert isinstance(desc["lived_offset_seconds"], float)
@@ -171,11 +171,11 @@ def test_gather_stimulus_source_descriptor():
 
 
 def test_gather_stimulus_source_descriptor_invalid_config_best_effort():
-    config = {"perception_feed": {"mode": "womb", "womb": {"heartbeat_bpm": 500}}}
+    config = {"perception_feed": {"mode": "stimulus_source", "stimulus_source": {"heartbeat_bpm": 500}}}
     desc = gather_perception_feed_descriptor(config)
-    assert desc["mode"] == "womb"
-    assert desc["regime"] == "womb"
-    assert desc["womb"] == {"invalid": True}
+    assert desc["mode"] == "stimulus_source"
+    assert desc["regime"] == "stimulus_source"
+    assert desc["stimulus_source"] == {"invalid": True}
 
 
 @pytest.mark.asyncio
@@ -183,8 +183,8 @@ async def test_check_perception_stimulus_source_passes():
     from kaine.preboot import check_perception
 
     config = {
-        "perception_feed": {"mode": "womb", "seed": 7},
-        "modules": {"topos": True, "audition": True},
+        "perception_feed": {"mode": "stimulus_source", "seed": 7},
+        "modules": {"vision": True, "audition": True},
     }
     rows = await check_perception(config)
     video_rows = [r for r in rows if "video" in r.name]
@@ -229,7 +229,7 @@ def test_build_registry_stimulus_source_mode_shares_one_clock_and_selects_virtua
 
         return factory
 
-    for name in ("topos", "audition"):
+    for name in ("vision", "audition"):
         monkeypatch.setitem(SIMPLE_FACTORIES, name, _recorder(name))
     monkeypatch.setattr("kaine.boot.registry.install_state_encryption", lambda cfg: None)
     monkeypatch.setattr("kaine.boot.registry._wire_self_hearing_gate", lambda reg: None)
@@ -239,8 +239,8 @@ def test_build_registry_stimulus_source_mode_shares_one_clock_and_selects_virtua
     monkeypatch.setattr("kaine.boot.registry._wire_oscillators", lambda reg, cfg: None)
 
     kaine_config = {
-        "modules": {"topos": True, "audition": True},
-        "perception_feed": {"mode": "womb", "seed": 5},
+        "modules": {"vision": True, "audition": True},
+        "perception_feed": {"mode": "stimulus_source", "seed": 5},
     }
     bus = AsyncBus(
         BusConfig(password="x", audit_required=False),
@@ -251,10 +251,10 @@ def test_build_registry_stimulus_source_mode_shares_one_clock_and_selects_virtua
     finally:
         asyncio.run(bus.close())
 
-    clock = kaine_config["perception_feed"]["_shared_womb_clock"]
+    clock = kaine_config["perception_feed"]["_shared_stimulus_source_clock"]
     assert isinstance(clock, StimulusSourceClock)
-    assert captured["topos"]["perception_feed"]["_shared_womb_clock"] is clock
-    assert captured["audition"]["perception_feed"]["_shared_womb_clock"] is clock
+    assert captured["vision"]["perception_feed"]["_shared_stimulus_source_clock"] is clock
+    assert captured["audition"]["perception_feed"]["_shared_stimulus_source_clock"] is clock
     assert clock.stimulus_source_seconds() >= 200.0
-    assert kaine_config["perception_feed"]["_womb_lived_seconds"]() >= 200.0
+    assert kaine_config["perception_feed"]["_stimulus_source_lived_seconds"]() >= 200.0
     assert perception_state.read_desired().locus == "virtual"

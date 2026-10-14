@@ -292,7 +292,7 @@ async def train_test_lora(
     pairs: list[DPOPair],
 ) -> dict[str, Any]:
     """Write a job-queue training job and return the trainer result + manifest."""
-    section = dict(kaine_config.get("hypnos", {}).get("voice_alignment") or {})
+    section = dict(kaine_config.get("sleep", {}).get("voice_alignment") or {})
     section.update(
         {
             "enabled": True,
@@ -328,7 +328,7 @@ async def resolve_lora_field(
     kaine_config: dict[str, Any],
 ) -> list[dict] | None:
     """Use the production resolver to verify the organ is running our adapter."""
-    organ_url = cfg.organ_url or (kaine_config.get("lingua") or {}).get("chat_url")
+    organ_url = cfg.organ_url or (kaine_config.get("language") or {}).get("chat_url")
     if not organ_url:
         return None
 
@@ -336,7 +336,7 @@ async def resolve_lora_field(
         adapter_output_dir=Path(cfg.adapter_output_dir),
         volume=Path(cfg.organ_adapters_dir),
         organ_url=organ_root_url(organ_url),
-        api_key=language_section_api_key(kaine_config.get("lingua") or {}),
+        api_key=language_section_api_key(kaine_config.get("language") or {}),
     )
 
     return await resolver.lora_field()

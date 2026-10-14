@@ -12,8 +12,13 @@ import time
 import pytest
 import redis
 
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import BusConfig
 from kaine.lifecycle import decommission
+
+# Old names come from the rename table, so the keys codemod leaves them alone.
+OLD_AFFECT = f"{next(k for k, e in legacy_names.MODULES.items() if e['new_key'] == 'affect')}.out"
+OLD_LANGUAGE_INTERNAL = legacy_aliases.old_stream_name("language.internal") or "language.internal"
 
 
 @pytest.fixture(scope="module")
@@ -74,9 +79,9 @@ def test_authenticated_client_clears_streams_and_rewrites_aof(requirepass_redis)
     cfg = BusConfig(host="127.0.0.1", port=requirepass_redis, password="s3cret")
     client = redis.Redis.from_url(cfg.url)
     client.flushdb()
-    client.xadd("thymos.out", {"data": "1"})
+    client.xadd(OLD_AFFECT, {"data": "1"})
     client.xadd("affect.out", {"data": "2"})
-    client.set("lingua.internal", "keep")
+    client.set(OLD_LANGUAGE_INTERNAL, "keep")
     client.set("operator:note", "keep")
 
     result = decommission.clear_entity_streams(
@@ -86,10 +91,10 @@ def test_authenticated_client_clears_streams_and_rewrites_aof(requirepass_redis)
     )
 
     assert result.failed is None
-    assert sorted(result.cleared) == ["affect.out", "thymos.out"]
-    assert client.exists("thymos.out") == 0
+    assert sorted(result.cleared) == sorted(["affect.out", OLD_AFFECT])
+    assert client.exists(OLD_AFFECT) == 0
     assert client.exists("affect.out") == 0
-    assert client.get("lingua.internal") == b"keep"
+    assert client.get(OLD_LANGUAGE_INTERNAL) == b"keep"
     assert client.get("operator:note") == b"keep"
     assert result.aof_rewrite in {"started", "already in progress"}
 
@@ -99,7 +104,7 @@ def test_wrong_password_fails_and_deletes_nothing(requirepass_redis):
     good = redis.Redis.from_url(
         BusConfig(host="127.0.0.1", port=requirepass_redis, password="s3cret").url
     )
-    good.xadd("thymos.out", {"data": "1"})
+    good.xadd(OLD_AFFECT, {"data": "1"})
 
     bad = redis.Redis.from_url(
         BusConfig(host="127.0.0.1", port=requirepass_redis, password="wrong").url
@@ -113,7 +118,7 @@ def test_wrong_password_fails_and_deletes_nothing(requirepass_redis):
     assert result.failed is not None
     assert result.failed.startswith("cannot reach or authenticate")
     assert result.cleared == []
-    assert good.exists("thymos.out") == 1
+    assert good.exists(OLD_AFFECT) == 1
 
 
 def test_no_password_fails_and_deletes_nothing(requirepass_redis):
@@ -121,7 +126,7 @@ def test_no_password_fails_and_deletes_nothing(requirepass_redis):
     good = redis.Redis.from_url(
         BusConfig(host="127.0.0.1", port=requirepass_redis, password="s3cret").url
     )
-    good.xadd("thymos.out", {"data": "1"})
+    good.xadd(OLD_AFFECT, {"data": "1"})
 
     bad = redis.Redis.from_url(
         BusConfig(host="127.0.0.1", port=requirepass_redis).url
@@ -135,4 +140,4 @@ def test_no_password_fails_and_deletes_nothing(requirepass_redis):
     assert result.failed is not None
     assert result.failed.startswith("cannot reach or authenticate")
     assert result.cleared == []
-    assert good.exists("thymos.out") == 1
+    assert good.exists(OLD_AFFECT) == 1

@@ -42,6 +42,8 @@ def test_no_bus_read_calls_in_cursor_advancing_code() -> None:
     kaine_dir = Path(__file__).resolve().parent.parent / "kaine"
     exempt = {
         kaine_dir / "dashboard" / "__main__.py",
+        # The conversation-history reader reads from "0" once; it advances no cursor.
+        kaine_dir / "dashboard" / "conversation.py",
     }
     pattern = re.compile(r"\b_?bus\.read\(")
     offenders: list[str] = []
@@ -65,7 +67,7 @@ def test_no_bus_read_calls_in_cursor_advancing_code() -> None:
 @pytest.mark.asyncio
 async def test_dashboard_bridge_advances_past_undecodable_batch() -> None:
     bus = _make_bus()
-    stream = "topos.out"
+    stream = "vision.out"
     bridge = BusBridge(bus, PrivacyFilter(), streams=[stream], read_count=64)
     client = bridge.add_client("diagnostics")
 
@@ -75,7 +77,7 @@ async def test_dashboard_bridge_advances_past_undecodable_batch() -> None:
     for _ in range(80):
         await bus.client.xadd(stream, {"junk": "x"})
 
-    report = _event("topos", "topos.report", {"change_score": 0.2})
+    report = _event("vision", "vision.report", {"change_score": 0.2})
     await bus.publish(report)
 
     for _ in range(5):
@@ -140,9 +142,9 @@ async def test_development_interoception_reader_advances_past_undecodable_batch(
     owner._interoception_cursor = "0-0"
 
     for _ in range(1100):
-        await bus.client.xadd("soma.out", {"junk": "x"})
+        await bus.client.xadd("interoception.out", {"junk": "x"})
 
-    await bus.publish(_event("soma", "soma.report", {"prediction_error": 0.5}))
+    await bus.publish(_event("interoception", "interoception.report", {"prediction_error": 0.5}))
 
     await owner._read_interoception_reports(10.0)
     await owner._read_interoception_reports(20.0)

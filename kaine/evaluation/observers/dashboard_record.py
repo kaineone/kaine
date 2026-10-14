@@ -6,7 +6,7 @@
 NEVER EXPORT-ELIGIBLE
 ---------------------
 This recorder subscribes to the same diagnostics streams as the dashboard bridge
-and writes one record per event to ``data/nexus_record/``.
+and writes one record per event to ``data/dashboard_record/``.
 
 - The dashboard record NEVER leaves the host.
 - The dashboard record is NEVER export-eligible: it writes outside
@@ -37,7 +37,7 @@ class DashboardRecord(StreamSubscriberObserver):
     """Local-only recorder of the filtered dashboard diagnostics display."""
 
     streams = diagnostics_streams()
-    name = "nexus_record"
+    name = "dashboard_record"
 
     def __init__(
         self,

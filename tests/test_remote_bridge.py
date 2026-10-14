@@ -303,7 +303,7 @@ async def test_transcript_forwards_entity_and_heard_lines(bus):
         async with websockets.connect(f"{url}/transcript") as ws:
             await _wait_for(lambda: len(bridge._transcript_queues) >= 1)
             await _publish(
-                bus, "lingua.external", "lingua", "external_speech", {"text": "hello operator"}
+                bus, "language.external", "language", "external_speech", {"text": "hello operator"}
             )
             await _publish(
                 bus,
@@ -322,14 +322,14 @@ async def test_transcript_forwards_entity_and_heard_lines(bus):
 
 
 # ---------------------------------------------------------------------------
-# Affect (/affect — read-only mood-ring feed from thymos.out)
+# Affect (/affect — read-only mood-ring feed from affect.out)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_affect_forwards_dimensional_state_line(bus):
     """A connected /affect client gets a JSON line with valence/arousal after a
-    matching thymos.state event is xadd-ed to thymos.out."""
+    matching affect.state event is xadd-ed to affect.out."""
     bridge = RemoteBridge(_config(), bus=bus)
     url = await _started(bridge)
     try:
@@ -337,9 +337,9 @@ async def test_affect_forwards_dimensional_state_line(bus):
             await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
-                "thymos.out",
-                "thymos",
-                "thymos.state",
+                "affect.out",
+                "affect",
+                "affect.state",
                 {
                     "state": {"valence": 0.42, "arousal": 0.66, "dominance": -0.1},
                     "emotion": "joy",
@@ -358,7 +358,7 @@ async def test_affect_forwards_dimensional_state_line(bus):
 
 @pytest.mark.asyncio
 async def test_affect_forwards_emotion_change_event(bus):
-    """thymos.emotion events also carry the nested state dict and are forwarded."""
+    """affect.emotion events also carry the nested state dict and are forwarded."""
     bridge = RemoteBridge(_config(), bus=bus)
     url = await _started(bridge)
     try:
@@ -366,9 +366,9 @@ async def test_affect_forwards_emotion_change_event(bus):
             await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
-                "thymos.out",
-                "thymos",
-                "thymos.emotion",
+                "affect.out",
+                "affect",
+                "affect.emotion",
                 {
                     "emotion": "fear",
                     "state": {"valence": -0.5, "arousal": 0.8, "dominance": -0.3},
@@ -383,7 +383,7 @@ async def test_affect_forwards_emotion_change_event(bus):
 
 
 def test_affect_line_returns_none_for_unrelated_stream_and_type():
-    """_affect_line forwards only thymos.out affect events; everything else is
+    """_affect_line forwards only affect.out affect events; everything else is
     None (never invents affect values)."""
     from datetime import datetime, timezone
 
@@ -392,7 +392,7 @@ def test_affect_line_returns_none_for_unrelated_stream_and_type():
 
     def _ev(type_: str, payload: dict) -> Event:
         return Event(
-            source="thymos",
+            source="affect",
             type=type_,
             payload=payload,
             salience=0.5,
@@ -401,21 +401,21 @@ def test_affect_line_returns_none_for_unrelated_stream_and_type():
 
     good = {"state": {"valence": 0.1, "arousal": 0.2}, "emotion": "calm"}
     # Right stream + type → a line.
-    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", good)) is not None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("affect.state", good)) is not None
     # Wrong stream → None.
-    assert RemoteBridge._affect_line("audition.out", _ev("thymos.state", good)) is None
+    assert RemoteBridge._affect_line("audition.out", _ev("affect.state", good)) is None
     # Wrong type on the right stream → None.
-    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.drive", good)) is None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("affect.drive", good)) is None
     # Right type but no nested state → None (never invent values).
-    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", {})) is None
+    assert RemoteBridge._affect_line(AFFECT_STREAM, _ev("affect.state", {})) is None
     # Right type, state present but missing arousal → None.
     assert (
-        RemoteBridge._affect_line(AFFECT_STREAM, _ev("thymos.state", {"state": {"valence": 0.1}}))
+        RemoteBridge._affect_line(AFFECT_STREAM, _ev("affect.state", {"state": {"valence": 0.1}}))
         is None
     )
     # No discrete label in payload → line omits "label" (only forwards what exists).
     line = RemoteBridge._affect_line(
-        AFFECT_STREAM, _ev("thymos.state", {"state": {"valence": 0.1, "arousal": 0.2}})
+        AFFECT_STREAM, _ev("affect.state", {"state": {"valence": 0.1, "arousal": 0.2}})
     )
     assert line is not None and "label" not in json.loads(line)
 
@@ -466,9 +466,9 @@ async def test_affect_respects_origin_allowlist(bus):
             await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
-                "thymos.out",
-                "thymos",
-                "thymos.state",
+                "affect.out",
+                "affect",
+                "affect.state",
                 {"state": {"valence": 0.0, "arousal": 0.3}, "emotion": "neutral"},
             )
             line = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
@@ -497,9 +497,9 @@ async def test_affect_respects_token_auth(bus):
             await _wait_for(lambda: len(bridge._affect_queues) >= 1)
             await _publish(
                 bus,
-                "thymos.out",
-                "thymos",
-                "thymos.state",
+                "affect.out",
+                "affect",
+                "affect.state",
                 {"state": {"valence": 0.2, "arousal": 0.4}, "emotion": "content"},
             )
             line = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
@@ -793,7 +793,7 @@ def test_parse_origins_maps_null_and_empty_to_none():
 @pytest.mark.asyncio
 async def test_oversized_image_is_dropped_without_reaching_vision(bus):
     """A frame whose declared size exceeds the pixel cap is dropped (counted)
-    without raising and without calling topos.process_frame."""
+    without raising and without calling vision.process_frame."""
     vision = _StubVision()
     bridge = RemoteBridge(_config(), bus=bus, vision=vision)
     url = await _started(bridge)

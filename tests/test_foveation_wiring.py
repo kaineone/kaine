@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Composition-root wiring of the fovea-size arousal seam (topos-foveation).
+"""Composition-root wiring of the fovea-size arousal seam (vision-foveation).
 
 The cognitive cycle holds the ``AffectStateProvider`` it refreshes each tick from
-``thymos.state``; ``_wire_vision_arousal`` hands the vision module a read-only accessor to its
+``affect.state``; ``_wire_vision_arousal`` hands the vision module a read-only accessor to its
 arousal so the fovea size tracks affect (Easterbrook narrowing) without the vision module
 importing the workspace or the affect module.
 """
@@ -19,7 +19,7 @@ from kaine.cycle.affect_state import AffectStateProvider
 
 
 class _FakeVision:
-    name = "topos"
+    name = "vision"
 
     def __init__(self, foveation_enabled: bool) -> None:
         self.foveation_enabled = foveation_enabled
@@ -44,8 +44,8 @@ def _affect_state_event(arousal: float) -> tuple[str, Event]:
     return (
         "1-0",
         Event(
-            source="thymos",
-            type="thymos.state",
+            source="affect",
+            type="affect.state",
             payload={"state": {"valence": 0.0, "arousal": arousal, "dominance": 0.0}},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -73,7 +73,7 @@ def test_foveation_on_wires_live_arousal():
     wired = _wire_vision_arousal(_FakeRegistry(**{_FakeVision.name: vision}), provider)
     assert wired is True
     assert vision.arousal_provider is not None
-    # Before any thymos.state, the accessor reports the affect module's baseline (0.3).
+    # Before any affect.state, the accessor reports the affect module's baseline (0.3).
     assert vision.arousal_provider() == 0.3
     # After a state update, the accessor reflects the live arousal.
     provider.observe([_affect_state_event(0.82)])

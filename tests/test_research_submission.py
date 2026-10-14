@@ -4,7 +4,7 @@
 """Tests for the research submission module.
 
 PARAMOUNT: the default (metrics) bundle must be allowlist-based and contain
-NONE of the deny patterns (intent_expression, episodic memory, qdrant, eidolon/self_model,
+NONE of the deny patterns (intent_expression, episodic memory, qdrant, self_model/self_model,
 conversation, replay). These tests verify the guarantee holds even when decoy
 sensitive files are present in eval_root.
 """
@@ -180,8 +180,8 @@ def test_preview_lists_contents_and_excluded_note(tmp_path: Path):
     # Must have the EXCLUDED note.
     assert "EXCLUDED" in text
     assert "intent log" in text.lower() or "intent_expression" in text.lower()
-    assert "memories" in text.lower() or "mnemos" in text.lower()
-    assert "self-model" in text.lower() or "eidolon" in text.lower()
+    assert "memories" in text.lower() or "episodic_memory" in text.lower()
+    assert "self-model" in text.lower() or "self_model" in text.lower()
     assert "conversation" in text.lower()
 
 
@@ -459,7 +459,7 @@ def _plant_out_of_range_run(eval_root: Path, run_id: str) -> None:
     _plant_run(eval_root, run_id, complete=True)
     (eval_root / "soma.report-2026-06-14.jsonl").write_text(
         json.dumps({
-            "run_id": run_id, "seq": 0, "event_type": "soma.report",
+            "run_id": run_id, "seq": 0, "event_type": "interoception.report",
             "prediction_error": -1.0,  # NONNEG range: must be >= 0.0
         }) + "\n",
         encoding="utf-8",
@@ -868,11 +868,11 @@ def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path, monkeypatc
 
 
 def _plant_interoception_out_of_range(eval_root: Path, run_id: str) -> None:
-    """Append one out-of-range soma.report record for run_id (its own file)."""
+    """Append one out-of-range interoception.report record for run_id (its own file)."""
     eval_root.mkdir(parents=True, exist_ok=True)
     with (eval_root / f"soma.report-{run_id}.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({
-            "run_id": run_id, "seq": 0, "event_type": "soma.report",
+            "run_id": run_id, "seq": 0, "event_type": "interoception.report",
             "prediction_error": -99.0,
         }) + "\n")
 
@@ -1028,7 +1028,7 @@ def test_cli_installs_encryptor_before_scan(tmp_path: Path, monkeypatch):
     eval_root.mkdir(parents=True)
     with (eval_root / "soma.report-2026-06-14.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(enc.encrypt_text(json.dumps({
-            "run_id": "run-enc-bad", "seq": 0, "event_type": "soma.report",
+            "run_id": "run-enc-bad", "seq": 0, "event_type": "interoception.report",
             "prediction_error": -5.0,
         })) + "\n")
 

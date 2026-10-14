@@ -11,7 +11,7 @@ import sys
 
 from kaine.extras import check, format_missing
 
-_missing = check({}, services={"nexus"})
+_missing = check({}, services={"dashboard"})
 if _missing:
     raise SystemExit(format_missing(_missing))
 del _missing
@@ -33,7 +33,7 @@ from kaine.config import load_kaine_config
 from kaine.dashboard.app import create_app, make_default_privacy_filter
 from kaine.dashboard.bridge import BusBridge
 from kaine.dashboard.config import DashboardConfigError, load_dashboard_config
-from kaine.dashboard.conversation import LANGUAGE_EXTERNAL_STREAM
+from kaine.dashboard.conversation import read_conversation_history
 from kaine.dashboard.health import load_health_prober
 from kaine.evaluation.stream_registry import diagnostics_streams
 from kaine.lifecycle.manager import ForkManager, merger_from_name
@@ -230,11 +230,7 @@ async def _build():
     bridge = BusBridge(bus, privacy, streams=DEFAULT_DIAGNOSTICS_STREAMS)
 
     async def history_loader(n: int) -> list[tuple[str, Event]]:
-        try:
-            return await bus.read(LANGUAGE_EXTERNAL_STREAM, last_id="0", count=n, block_ms=0)
-        except Exception:
-            logging.exception("conversation history backfill failed")
-            return []
+        return await read_conversation_history(bus, n)
 
     metrics_snapshot = make_metrics_snapshot()
 
@@ -262,7 +258,7 @@ async def _build():
         from kaine.bus.client import _encode_event
 
         event = Event(
-            source="nexus",
+            source="dashboard",
             type="cycle.set_rates",
             payload=payload,
             salience=0.1,
@@ -387,7 +383,7 @@ def main() -> int:
 
     if not (config.conversation_enabled or config.diagnostics_enabled):
         log.error(
-            "nexus: no console is enabled; set [nexus].diagnostics_enabled "
+            "nexus: no console is enabled; set [dashboard].diagnostics_enabled "
             "(or conversation_enabled) to true, since signing in would lead nowhere"
         )
         return 1
@@ -396,7 +392,7 @@ def main() -> int:
         if not config.non_loopback_allowed:
             log.error(
                 "nexus: refusing to bind non-loopback host %s without "
-                "[nexus].non_loopback_allowed = true",
+                "[dashboard].non_loopback_allowed = true",
                 config.host,
             )
             return 1
@@ -404,7 +400,7 @@ def main() -> int:
             log.error(
                 "nexus: refusing to bind non-loopback host %s without a "
                 "configured operator_token (KAINE_NEXUS_TOKEN or "
-                "config/secrets.toml [nexus] operator_token)",
+                "config/secrets.toml [dashboard] operator_token)",
                 config.host,
             )
             return 1

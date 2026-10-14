@@ -4,7 +4,7 @@
 """The episodic memory module replay engine.
 
 During an active sleep module maintenance window, the replay engine selects
-stored memory traces and publishes them as `mnemos.replay` events for
+stored memory traces and publishes them as `episodic_memory.replay` events for
 re-processing by the workspace (the planning module re-evaluates, the affect module re-appraises,
 the self-model module observes, the world model module extends).
 
@@ -13,12 +13,12 @@ where `recency` is normalised to [0, 1] across the candidate pool.
 
 Guard: `replay()` MUST be called from inside an active sleep module maintenance
 window (the `window_active` flag). The window is opened by the sleep module through
-`Mnemos.open_replay_window()` inside a sleep, immediately before phase 2's
+`EpisodicMemory.open_replay_window()` inside a sleep, immediately before phase 2's
 replay, and closed once replay is done. Calling it outside raises
 `ReplayWindowError` and emits nothing. This is a load-bearing safety
 invariant (paper §3.5: perception is suspended for the whole sleep).
 
-Redaction: each `mnemos.replay` event carries a full-content payload
+Redaction: each `episodic_memory.replay` event carries a full-content payload
 (`text` present) for re-injection into the cognitive loop.  A separate
 *observer* payload is produced with `text` stripped when `redact_content`
 is true, keeping memory content out of operational logs / sidecar streams.
@@ -54,7 +54,7 @@ class ReplayEntry:
 class ReplayEvent:
     """Pair of payloads produced for one replayed trace.
 
-    loop_payload carries full text; published as mnemos.replay on the
+    loop_payload carries full text; published as episodic_memory.replay on the
     workspace bus for cognitive re-processing.
     observer_payload has text stripped when redact_content is True;
     delivered to the sidecar replay observer.
@@ -174,11 +174,11 @@ class ReplayEngine:
 
     Tracks whether a sleep module maintenance window is currently active and,
     when asked to replay, selects traces from the short-term buffer /
-    storage and publishes `mnemos.replay` events.
+    storage and publishes `episodic_memory.replay` events.
 
     The window is opened and closed by the sleep module through
-    `Mnemos.open_replay_window()` and `Mnemos.close_replay_window()` around
-    phase 2's replay; `hypnos.sleep.completed` also closes it.
+    `EpisodicMemory.open_replay_window()` and `EpisodicMemory.close_replay_window()` around
+    phase 2's replay; `sleep.sleep.completed` also closes it.
     """
 
     def __init__(

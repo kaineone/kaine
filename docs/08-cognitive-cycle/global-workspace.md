@@ -41,10 +41,10 @@ score(e)    = clamp(T × C_g(priority(e)))
 | Symbol | Code | Value |
 |---|---|---|
 | `I(e)` | `event.salience` | The intensity the publishing module assigned when it published the event. The bus rejects values outside `[0, 1]`. |
-| `N(e)` | `NoveltyTracker.observe` | `max(0, 1 − r / W)`, where `r` counts earlier occurrences of the event's fingerprint among the last `W` scored candidates and `W` is `[syneidesis].novelty_window` (32). The fingerprint is a hash of the source, the type and the complete payload, so only an exact repeat is discounted. Every scored candidate enters the window, on broadcast ticks and on other ticks alike. |
+| `N(e)` | `NoveltyTracker.observe` | `max(0, 1 − r / W)`, where `r` counts earlier occurrences of the event's fingerprint among the last `W` scored candidates and `W` is `[workspace].novelty_window` (32). The fingerprint is a hash of the source, the type and the complete payload, so only an exact repeat is discounted. Every scored candidate enters the window, on broadcast ticks and on other ticks alike. |
 | `G(e)` | `GoalScorer.relevance` | 1 with the shipped static goal factor. See [The goal factor](#the-goal-factor). |
 | `T` | `AffectModulator.modulate` | The level gain, `0.2 + 0.8 × a`, where `a` is the current Affect arousal. It is the same for every candidate of a tick. |
-| `g` | `AffectModulator.contrast_gain` | The contrast gain, `arousal_contrast_gain × clamp((a − a0) / (1 − a0))`, with `a0` the baseline arousal (`[thymos].baseline_arousal`, 0.3) and `[syneidesis].arousal_contrast_gain` 8.0. It is 0 at or below baseline arousal. |
+| `g` | `AffectModulator.contrast_gain` | The contrast gain, `arousal_contrast_gain × clamp((a − a0) / (1 − a0))`, with `a0` the baseline arousal (`[affect].baseline_arousal`, 0.3) and `[workspace].arousal_contrast_gain` 8.0. It is 0 at or below baseline arousal. |
 
 `C_g` is the logistic rescaled so that it maps 0 to 0 and 1 to 1:
 
@@ -57,7 +57,7 @@ where `σ` is the logistic function. The code treats any gain at or below `1e-9`
 
 If the scorer raises for an event, that event gets score 0 and a warning is logged.
 
-With `[syneidesis].salience_thymos_factor = "static"`, the affect module's factor is the constant 1 with contrast gain 0, so the score equals the priority. That setting is a negative control and logs a degraded-mode warning.
+With `[workspace].salience_affect_factor = "static"`, the affect module's factor is the constant 1 with contrast gain 0, so the score equals the priority. That setting is a negative control and logs a degraded-mode warning.
 
 ### What the formula does and does not do
 
@@ -76,7 +76,7 @@ With the shipped values, resting arousal (0.3) gives `T = 0.44` and `g = 0`, so 
 
 ### The goal factor
 
-`[syneidesis].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note. The alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant affect module's drive `d` with value `v` and returns
+`[workspace].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note. The alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant affect module's drive `d` with value `v` and returns
 
 ```
 G(e) = 1 − v × (1 − relevance(e)) × 0.5
@@ -86,24 +86,24 @@ where `relevance(e)` is 1 when the event's source relieves `d` and 0 otherwise, 
 
 Each module class declares the drives its events relieve in `relieves_drives`. At boot `kaine/boot/wiring.py` builds the drive-to-source table from the registered modules' declarations, adds the action selection module (restlessness), and injects the table into the scorer, so the workspace never imports a module. A tag that is not one of the four drives (`curiosity`, `boredom`, `social_drive`, `restlessness`) fails the boot.
 
-Both live factors read affect and drives through an `AffectStateProvider` (`kaine/cycle/affect_state.py`), which the cycle refreshes each tick from the `thymos.state` events it already collects. Scoring is a function of the event and that snapshot, with no wall-clock reads and no random numbers.
+Both live factors read affect and drives through an `AffectStateProvider` (`kaine/cycle/affect_state.py`), which the cycle refreshes each tick from the `affect.state` events it already collects. Scoring is a function of the event and that snapshot, with no wall-clock reads and no random numbers.
 
 ## Coalition and access
 
 `kaine/workspace/core.py` · `Workspace._compose`
 
-The workspace sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[syneidesis].top_k` candidates (default 5) form the coalition. Then:
+The workspace sorts the candidates by score in decreasing order. The sort is stable, so equal scores keep the canonical order by source, type and bus entry id. The first `[workspace].top_k` candidates (default 5) form the coalition. Then:
 
 ```
 inhibited = best score < θ
 metadata["access_threshold"] = θ
 ```
 
-where `θ` is `[syneidesis].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, the workspace returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
+where `θ` is `[workspace].publication_threshold` (default 0.35), the access threshold. A coalition member is accessed when its own score reaches `θ` (a score equal to `θ` counts). A broadcast is accessed when at least one member is, which is the same as its best score reaching `θ`, so `inhibited` is false exactly when the broadcast is accessed. A member of an accessed broadcast whose score is below `θ` is broadcast but not accessed. With no candidates, the workspace returns an empty snapshot marked inhibited, whose metadata holds only the arm (the pooled arm below is the exception: its empty snapshot is not inhibited).
 
 Every broadcast with candidates carries the threshold in its metadata so that each module can tell accessed members from the rest of the coalition. When the coherence layer is on, the threshold applies to the coherence-adjusted scores.
 
-`syneidesis.set_publication_threshold(t)` changes the threshold at runtime; tests use it.
+`workspace.set_publication_threshold(t)` changes the threshold at runtime; tests use it.
 
 ## The broadcast
 
@@ -119,7 +119,7 @@ On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` wh
 | `metadata` | `access_threshold` (absent from an empty snapshot), and `coherence` when the coherence layer is on |
 | `selected` | The coalition members in rank order, each with `entry_id` (the same `<stream>:<entry_id>` id that keys its score), `source`, `type`, `salience` (the reported intensity), `payload`, `timestamp` and `causal_parent` |
 
-Only `source="syneidesis"` may publish to `workspace.broadcast`; any other source raises `ReservedStreamError`. Modules read the stream with `AsyncBus.subscribe_workspace_block`, advancing their own cursor.
+Only `source="workspace"` may publish to `workspace.broadcast`; any other source raises `ReservedStreamError`. Modules read the stream with `AsyncBus.subscribe_workspace_block`, advancing their own cursor.
 
 How modules use the broadcast depends on its state:
 
@@ -163,13 +163,13 @@ The vision module, the audition module's acoustic path and the interoception mod
 context_gain = (null error − error) / running mean error
 ```
 
-The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `topos` for the vision module, `audition` for the audition module, and `soma` and `lingua` for the interoception module, because the language organ's load on the host would otherwise let its share predict the interoception module's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
+The null context keeps the module's own share of the context and replaces the other sources' share with its mean over the contexts the module has adopted so far in the run. Components 0 to 3 are replaced by their running means, the additive components (4 to 19 and 23) by the kept sources' current share plus the mean of the other sources' share, and components 20 to 22 are kept. The context and its null are built from one reading of the clock, so they carry the same age. The kept sources are `vision` for the vision module, `audition` for the audition module, and `interoception` and `language` for the interoception module, because the language organ's load on the host would otherwise let its share predict the interoception module's input. The null prediction never trains the model. `context_gain` is `None` until a prediction formed with an adopted context has been scored.
 
 This per-report gain is the measurement the planned workspace-mediation test is built on. The positive control that checks the measure detects injected information is built as a study-mode facility (`[positive_control]`, off by default). See [For researchers](../14-for-researchers.md#the-planned-test).
 
 ### The arms of the planned test
 
-`[syneidesis].arm` selects the arm the live cycle runs (paper §6.3, A.8), and every broadcast records it in `metadata["arm"]`, which the research log copies.
+`[workspace].arm` selects the arm the live cycle runs (paper §6.3, A.8), and every broadcast records it in `metadata["arm"]`, which the research log copies.
 
 - `competitive`, the default, is selection and access as described above.
 - `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions. A matched selection whose context does not say whether the tick is a broadcast tick is refused. The generator's state is not saved: the draws reproduce within one uninterrupted run, and a restart or revive starts the stream again from the seed.
@@ -217,9 +217,9 @@ Two tests keep the toggle honest. With the layer disabled, an instance driven th
 
 `kaine/workspace/action_selection.py` · `kaine/workspace/report_policy.py`
 
-The cycle calls `ActionSelection.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `volition.out` and never calls an effector itself.
+The cycle calls `ActionSelection.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `action_selection.out` and never calls an effector itself.
 
-The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
+The policy is chosen by `[action_selection].policy` and `[action_selection].drive_initiative`:
 
 | Setting | Policy |
 |---|---|
@@ -227,14 +227,14 @@ The policy is chosen by `[volition].policy` and `[volition].drive_initiative`:
 | no `policy`, `drive_initiative = true` (the code default) | `DriveBiasedActionSelectionPolicy` |
 | no `policy`, `drive_initiative = false` | `DefaultActionSelectionPolicy` |
 
-When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `volition.proposal_outcome` events on `volition_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
+When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `action_selection.proposal_outcome` events on `action_selection_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
 
 ### The self-initiated report policy
 
 `SelfInitiatedReportPolicy` derives intents from the workspace's own state and never from a user utterance. On an accessed broadcast it:
 
 1. Clears the speak guard if the coalition contains the language organ's external speech, and the think guard if it contains its internal speech. Either guard is also cleared after 48 seconds of wall time, so a failed realization cannot mute the entity.
-2. Removes the language organ's own events (source `lingua`) from the coalition. If nothing is left, there is no intent. Otherwise the report signal is the highest score among the remaining members, and the signature is the `(source, type)` of that member.
+2. Removes the language organ's own events (source `language`) from the coalition. If nothing is left, there is no intent. Otherwise the report signal is the highest score among the remaining members, and the signature is the `(source, type)` of that member.
 3. Emits a `speak` intent when the signal reaches `report_threshold` (0.6), no speak is in flight, `speak_refractory_s` (8 entity seconds) has passed since the last speak, and the signature does not match the last spoken signature. A remembered signature stops blocking once it is older than `sig_expiry_s` (300 entity seconds in `thesis_test`; it never expires when unset).
 4. Otherwise emits a `think` intent when the signal reaches `think_threshold` (0.45), no think is in flight, and `think_refractory_s` (3 entity seconds) has passed. The think path has no signature check.
 
@@ -246,7 +246,7 @@ The bars are a heuristic stand-in for the report-or-act decision of the predicti
 
 `DefaultActionSelectionPolicy` answers a user utterance: it emits one `speak` intent when the coalition holds an `audition.transcription` event with non-empty text. It never forms a `speak` about the entity's own external speech, and it keeps a one-in-flight guard that clears when the entity's own `external_speech` appears in a later coalition or after 48 seconds of wall time.
 
-`DriveBiasedActionSelectionPolicy` extends it: a `thymos.drive` crossing in an accessed coalition becomes an intent. `social_drive` becomes `speak`, and a present user utterance always outranks it; `curiosity`, `boredom` and `restlessness` become `think`. `speak` and `think` have independent guards.
+`DriveBiasedActionSelectionPolicy` extends it: a `affect.drive` crossing in an accessed coalition becomes an intent. `social_drive` becomes `speak`, and a present user utterance always outranks it; `curiosity`, `boredom` and `restlessness` become `think`. `speak` and `think` have independent guards.
 
 ## Act intents and provenance
 
@@ -262,33 +262,33 @@ The action selection module attaches a provenance envelope to every `act` intent
 |---|---|---|
 | `<module>.out` | module to bus | All module outputs |
 | `workspace.broadcast` | cycle (as Workspace) to bus | `snapshot` JSON field, with no Event wrapper |
-| `volition.out` | cycle to bus | `intent.speak`, `intent.think`, `intent.act`, `intent.rest` |
-| `volition_feedback.out` | cycle to bus | `volition.proposal_outcome` |
+| `action_selection.out` | cycle to bus | `intent.speak`, `intent.think`, `intent.act`, `intent.rest` |
+| `action_selection_feedback.out` | cycle to bus | `action_selection.proposal_outcome` |
 | `cycle.control` | operator to bus | `cycle.set_rates` |
 | `cycle.out` | cycle to bus | `cycle.tick`, `cycle.rates`, `cycle.time_scale` |
 
 ## Configuration reference
 
-Selection keys live in `config/kaine.toml`; the `[volition]` values below are set by `config/profiles/thesis_test.toml` or are code defaults. See the [configuration reference](../appendix-a-configuration/README.md) for the full files.
+Selection keys live in `config/kaine.toml`; the `[action_selection]` values below are set by `config/profiles/thesis_test.toml` or are code defaults. See the [configuration reference](../appendix-a-configuration/README.md) for the full files.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `[syneidesis].top_k` | int | 5 | Coalition capacity |
-| `[syneidesis].publication_threshold` | float | 0.35 | The access threshold `θ` |
-| `[syneidesis].novelty_window` | int | 32 | Novelty window `W`, in scored candidates |
-| `[syneidesis].salience_thymos_factor` | string | `"state_modulator"` | Arousal level and contrast gain; `"static"` is the negative control |
-| `[syneidesis].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"drive_relevance"` enables the drive-relevance scorer |
-| `[syneidesis].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
-| `[syneidesis].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
-| `[thymos].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
-| `[volition].policy` | string | unset; `"self_initiated_report"` in `thesis_test` | Action-selection policy |
-| `[volition].drive_initiative` | bool | true; false in `thesis_test` | Use the drive-biased policy when no policy is named |
-| `[volition].report_threshold` | float | 0.6 | Speak bar |
-| `[volition].think_threshold` | float | 0.45 | Think bar |
-| `[volition].interrupt_threshold` | float | unset | Optional interrupt bar, above the speak bar |
-| `[volition].speak_refractory_s` | float | 8.0 | Minimum entity seconds between speak intents |
-| `[volition].think_refractory_s` | float | 3.0 | Minimum entity seconds between think intents |
-| `[volition].sig_expiry_s` | float | unset; 300.0 in `thesis_test` | Age at which a spoken signature stops blocking |
+| `[workspace].top_k` | int | 5 | Coalition capacity |
+| `[workspace].publication_threshold` | float | 0.35 | The access threshold `θ` |
+| `[workspace].novelty_window` | int | 32 | Novelty window `W`, in scored candidates |
+| `[workspace].salience_affect_factor` | string | `"state_modulator"` | Arousal level and contrast gain; `"static"` is the negative control |
+| `[workspace].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"drive_relevance"` enables the drive-relevance scorer |
+| `[workspace].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
+| `[workspace].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
+| `[affect].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
+| `[action_selection].policy` | string | unset; `"self_initiated_report"` in `thesis_test` | Action-selection policy |
+| `[action_selection].drive_initiative` | bool | true; false in `thesis_test` | Use the drive-biased policy when no policy is named |
+| `[action_selection].report_threshold` | float | 0.6 | Speak bar |
+| `[action_selection].think_threshold` | float | 0.45 | Think bar |
+| `[action_selection].interrupt_threshold` | float | unset | Optional interrupt bar, above the speak bar |
+| `[action_selection].speak_refractory_s` | float | 8.0 | Minimum entity seconds between speak intents |
+| `[action_selection].think_refractory_s` | float | 3.0 | Minimum entity seconds between think intents |
+| `[action_selection].sig_expiry_s` | float | unset; 300.0 in `thesis_test` | Age at which a spoken signature stops blocking |
 | `[oscillator].enabled` | bool | false | Coherence layer |
 | `[oscillator].plv_window` | int | 10 | Phase window in ticks (minimum 10) |
 | `[oscillator].coherence_floor` | float | 0.8 | Factor at PLV 0 |

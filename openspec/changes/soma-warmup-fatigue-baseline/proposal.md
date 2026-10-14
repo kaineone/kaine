@@ -11,7 +11,7 @@ During the interoception module's developmental warm-up, the fatigue accumulator
 
 ### Modified Capabilities
 
-- `soma-predictive`: the warming baseline is computed from the accumulator's input quantity.
+- `interoception-predictive`: the warming baseline is computed from the accumulator's input quantity.
 
 ## Impact
 

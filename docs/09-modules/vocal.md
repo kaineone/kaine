@@ -4,9 +4,9 @@ The vocal module is KAINE's voice. It turns the language organ's external speech
 
 ## Status
 
-The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vox = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
+The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
-`[vox].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vox.mirroring].enabled = false`).
+`[vocal].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vocal.mirroring].enabled = false`).
 
 During the developmental phase the vocal module is held dormant, since the developmental stimulus has no air to speak into, and the gate runner activates it at maturation. Inner speech is unaffected.
 
@@ -23,7 +23,7 @@ The sherpa-onnx backend has these limits:
 
 - Kokoro applies only `speed_factor` from the affect mapping and from mirroring; `temperature`, `exaggeration` and `cfg_weight` have no effect, and its speech is plain.
 - The voice is a preset speaker, so an entity moved from one backend to the other does not keep its voice.
-- `vox.synthesized` lists the parameters actually applied in `prosody_applied`: all four under Chatterbox, `["speed_factor"]` under Kokoro. Its `voice` field reads `"kokoro-en speaker N"` under sherpa-onnx.
+- `vocal.synthesized` lists the parameters actually applied in `prosody_applied`: all four under Chatterbox, `["speed_factor"]` under Kokoro. Its `voice` field reads `"kokoro-en speaker N"` under sherpa-onnx.
 
 ### Choosing a voice
 
@@ -40,7 +40,7 @@ An explicit voice always wins, in this order:
 | Chatterbox | `GET /get_predefined_voices` on the server, read once at startup. The upstream server ships 28 voices in its `voices/` directory, listed as `display_name` and `filename`. | Not reported. A `"female"` or `"male"` preference is logged as not applicable and the pick is made from all voices. With the upstream voices the pick is `Abigail.wav`. |
 | Kokoro (sherpa-onnx) | The speaker table of the pinned `kokoro-en` model (v0_19, 11 speakers) in `kaine/speech_manifest.py`, from the sherpa-onnx model documentation. | Encoded in the name prefix: the first letter is the accent (`a` American, `b` British), the second the gender (`f` female, `m` male). `"any"` and `"female"` give speaker 0 (`af`), `"male"` gives speaker 5 (`am_adam`). |
 
-The module logs the chosen voice once at startup, for example `vocal module voice: Abigail.wav (first of 28 shipped voices in sorted order)`. The `voice` field of `vox.synthesized` carries the Chatterbox filename, or `kokoro-en speaker N` under sherpa-onnx.
+The module logs the chosen voice once at startup, for example `vocal module voice: Abigail.wav (first of 28 shipped voices in sorted order)`. The `voice` field of `vocal.synthesized` carries the Chatterbox filename, or `kokoro-en speaker N` under sherpa-onnx.
 
 ### Fetching the model
 
@@ -58,14 +58,14 @@ Download models ahead of time with `python -m kaine.setup.speech_models [--tts I
 
 When [Language](language.md) realizes a `speak` intent, its text reaches the vocal module for synthesis. The vocal module:
 
-- reads `lingua.external` for the text to synthesize;
-- keeps the latest `thymos.state` from the [affect module](affect.md);
+- reads `language.external` for the text to synthesize;
+- keeps the latest `affect.state` from the [affect module](affect.md);
 - maps the affect to prosodic parameters (all four under Chatterbox, `speed_factor` only under Kokoro);
 - optionally blends in a bounded residual of the partner's prosody from `audition.prosody`, which fades after the partner stops speaking;
 - plays the audio on the operating system's audio device;
 - opens a `SpeakingGate` for the length of the clip plus a hangover, so that an open microphone does not pick up the entity's own voice;
 - optionally writes each clip to a bounded file sink;
-- publishes `vox.synthesized` with synthesis metadata and no audio.
+- publishes `vocal.synthesized` with synthesis metadata and no audio.
 
 In a study viewing the perceptual feed comes from files on the virtual locus, which keeps the real microphone off, so the entity does not hear its own voice.
 
@@ -73,21 +73,21 @@ In a study viewing the perceptual feed comes from files on the virtual locus, wh
 
 | Stream | Event type | Description |
 |---|---|---|
-| `lingua.external` | `external_speech` | Text to synthesize; each event starts one synthesis |
-| `thymos.out` | `thymos.state` | Latest valence, arousal and dominance for the prosody mapping |
+| `language.external` | `external_speech` | Text to synthesize; each event starts one synthesis |
+| `affect.out` | `affect.state` | Latest valence, arousal and dominance for the prosody mapping |
 | `audition.out` | `audition.prosody` | Numeric prosody features cached for mirroring (only when mirroring is on) |
 
 ## Outputs
 
 | Stream | Event type | Description |
 |---|---|---|
-| `vox.out` | `vox.synthesized` | `text_length`, `bytes_produced`, `voice`, `backend`, `prosody_applied`, `output_format`, `temperature`, `exaggeration`, `cfg_weight`, `speed_factor`, `latency_ms`, `success`, `origin` (when the utterance carries one, for example `nous`), and `error` on failure |
+| `vocal.out` | `vocal.synthesized` | `text_length`, `bytes_produced`, `voice`, `backend`, `prosody_applied`, `output_format`, `temperature`, `exaggeration`, `cfg_weight`, `speed_factor`, `latency_ms`, `success`, `origin` (when the utterance carries one, for example `planning`), and `error` on failure |
 
 Audio goes to the audio device and, optionally, to the file sink; it never goes on the bus.
 
 ## Configuration
 
-Full reference: [`[vox]` in the modules configuration](../appendix-a-configuration/modules.md).
+Full reference: [`[vocal]` in the modules configuration](../appendix-a-configuration/modules.md).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -102,7 +102,7 @@ Full reference: [`[vox]` in the modules configuration](../appendix-a-configurati
 | `default_voice` | string | unset | A voice the engine ships, named explicitly: a Chatterbox filename or display name, or a Kokoro speaker name such as `"af_sarah"`. Used when the backend-specific key above is unset. |
 | `voice_gender` | string | `"any"` | `"any"`, `"female"` or `"male"`. Filters the automatic pick where the engine reports gender (Kokoro); Chatterbox reports none. Any other value stops the boot with a configuration error. |
 | `output_format` | string | `"wav"` | Audio format |
-| `sink_path` | string | `"state/vox"` | Directory of the optional clip sink |
+| `sink_path` | string | `"state/vocal"` | Directory of the optional clip sink |
 | `sink_enabled` | bool | `false` | Write clips to disk, bounded by `retain_count` |
 | `retain_count` | int | `0` | Newest clips kept; `0` deletes each clip right after it is written |
 | `playback_enabled` | bool | `true` | Play audio on the audio device |
@@ -112,13 +112,13 @@ Full reference: [`[vox]` in the modules configuration](../appendix-a-configurati
 | `baseline_temperature` | float | `0.7` | Chatterbox temperature at neutral affect |
 | `baseline_exaggeration` | float | `0.5` | Exaggeration at neutral affect |
 | `baseline_cfg_weight` | float | `0.5` | CFG weight at neutral affect |
-| `baseline_salience` | float | `0.3` | Intensity of a successful `vox.synthesized` |
+| `baseline_salience` | float | `0.3` | Intensity of a successful `vocal.synthesized` |
 | `alert_salience` | float | `0.7` | Intensity of a failed synthesis (`success = false`) |
 | `request_timeout_s` | float | `120.0` | HTTP timeout per synthesis request |
-| `lingua_external_stream` | string | `"lingua.external"` | Stream read for text |
-| `thymos_state_stream` | string | `"thymos.out"` | Stream read for affect |
+| `language_external_stream` | string | `"language.external"` | Stream read for text |
+| `affect_state_stream` | string | `"affect.out"` | Stream read for affect |
 
-`[vox.mirroring]`:
+`[vocal.mirroring]`:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -158,7 +158,7 @@ The effective strength falls linearly to zero over `decay_s` seconds after the l
 
 ```mermaid
 flowchart LR
-    TS[thymos.state] -->|valence, arousal| AM[affect_to_chatterbox]
+    TS[affect.state] -->|valence, arousal| AM[affect_to_chatterbox]
     AM -->|ChatterboxParams| BP[blend_prosody\nif mirroring is on]
     AP[audition.prosody] -->|numeric features| BP
     BP -->|blended parameters| REQ[TTSRequest]
@@ -191,17 +191,17 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].vox = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
 2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`.
 3. Keep the [language module](language.md) on, since the vocal module speaks its output, and the [affect module](affect.md), since the vocal module's prosody follows its affect.
-4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vox.mirroring].enabled = true`.
+4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vocal.mirroring].enabled = true`.
 
 ## What Vocal keeps
 
-- Audio never goes on the bus; `vox.synthesized` carries numeric metadata such as `bytes_produced` and `latency_ms`.
+- Audio never goes on the bus; `vocal.synthesized` carries numeric metadata such as `bytes_produced` and `latency_ms`.
 - The file sink is off by default and, when on, is bounded by `retain_count`.
 - `predefined_voice_id` names a file in Chatterbox's voices directory that the operator manages; the filename stays out of version control.
-- The project ships no voice files. A voice picked automatically is one the engine ships, and its name appears only in the log and in `vox.synthesized`.
+- The project ships no voice files. A voice picked automatically is one the engine ships, and its name appears only in the log and in `vocal.synthesized`.
 - The prosody cached for mirroring is six numbers; no waveform is kept in the module's state.
 
 ## Tests
@@ -222,7 +222,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 ## Spec and related
 
-- Spec: `openspec/specs/vox/spec.md`
+- Spec: `openspec/specs/vocal/spec.md`
 - Prosodic mirroring spec: `openspec/specs/vox-prosodic-mirroring/spec.md`
 - Archived change: `openspec/changes/archive/2026-06-15-audio-out-playback` (playback reliability and device selection)
 - Change: `openspec/changes/vox-default-voice` (the shipped default voice, and the design of a later choice by the entity)

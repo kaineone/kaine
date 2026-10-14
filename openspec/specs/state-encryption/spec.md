@@ -6,7 +6,7 @@ At-rest encryption of the entity's cognitive-state files, how its key is supplie
 ## Requirements
 
 ### Requirement: Application-layer at-rest encryption for cognitive state files
-The `StateEncryptor` SHALL encrypt and decrypt the following at-rest state files using AES-256-GCM when `[security.state_encryption].enabled` is true: `state/eidolon/self_model.json`, all files under `state/phantasia/` (DreamerV3 checkpoints and latent states), and all sidecar JSONL files under `state/evaluation/observers/`. When `enabled` is false the `StateEncryptor` SHALL be a no-op pass-through so all existing code paths work unchanged. The shipped default SHALL enable encryption automatically when a key is resolvable, and SHALL warn loudly at boot when plaintext persistence is chosen.
+The `StateEncryptor` SHALL encrypt and decrypt the following at-rest state files using AES-256-GCM when `[security.state_encryption].enabled` is true: `state/self_model/self_model.json`, all files under `state/world_model/` (DreamerV3 checkpoints and latent states), and all sidecar JSONL files under `state/evaluation/observers/`. When `enabled` is false the `StateEncryptor` SHALL be a no-op pass-through so all existing code paths work unchanged. The shipped default SHALL enable encryption automatically when a key is resolvable, and SHALL warn loudly at boot when plaintext persistence is chosen.
 
 #### Scenario: State file is encrypted on write when enabled
 - **WHEN** `[security.state_encryption].enabled` is true and a state file is written
@@ -89,7 +89,7 @@ A component that reads `[security.state_encryption]` SHALL NOT treat a configura
 - **THEN** it refuses with a configuration error and exit status 6 before assessing divergence, capturing a backup or deleting anything, because it could neither read that state for the welfare assessment nor back it up faithfully
 
 ### Requirement: The intent-expression log is encrypted at rest
-When state encryption is enabled, every line the language module writes to `state/lingua/intent_expression.jsonl` SHALL be its own AES-256-GCM envelope. Every reader of that log and of its rotated corpus SHALL decrypt line by line, accepting legacy plaintext lines. On its first write under encryption, the language module SHALL rewrite a live log that holds plaintext lines so that every line is an envelope. The sleep module SHALL do the same for the entity's own rotated corpus files at sleep. Backups, `state/forks` and preservation bundles SHALL never be rewritten.
+When state encryption is enabled, every line the language module writes to `state/language/intent_expression.jsonl` SHALL be its own AES-256-GCM envelope. Every reader of that log and of its rotated corpus SHALL decrypt line by line, accepting legacy plaintext lines. On its first write under encryption, the language module SHALL rewrite a live log that holds plaintext lines so that every line is an envelope. The sleep module SHALL do the same for the entity's own rotated corpus files at sleep. Backups, `state/forks` and preservation bundles SHALL never be rewritten.
 
 #### Scenario: Lines are envelopes on disk
 - **WHEN** encryption is enabled and the language module logs an utterance

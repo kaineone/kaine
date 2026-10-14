@@ -1309,7 +1309,7 @@ async def test_deep_consolidation_protects_replayed_traces():
 
 
 async def test_episodic_memory_downscale_maps_events_to_protect(bus, monkeypatch):
-    """Mnemos.downscale maps ReplayEvent objects to core protect triples."""
+    """EpisodicMemory.downscale maps ReplayEvent objects to core protect triples."""
     core = EpisodicMemoryCore(FakeEmbedder(latent_dim=DIM), InMemoryStorage(latent_dim=DIM), entity_clock=_Clock())
     await core.initialize()
     m = EpisodicMemory(bus, core=core)

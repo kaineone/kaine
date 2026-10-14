@@ -3,9 +3,9 @@
 
 """Sleep cycle before/after snapshot recorder.
 
-Watches hypnos.out for the sleep lifecycle events. On hypnos.sleep.started,
+Watches sleep.out for the sleep lifecycle events. On sleep.sleep.started,
 captures the current registry state via the provided `state_provider`. On
-hypnos.sleep.completed, captures again and writes the pair.
+sleep.sleep.completed, captures again and writes the pair.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 
-SLEEP_STREAM = "hypnos.out"
+SLEEP_STREAM = "sleep.out"
 
 
 class SleepSnapshotRecorder(StreamSubscriberObserver):
@@ -42,19 +42,19 @@ class SleepSnapshotRecorder(StreamSubscriberObserver):
         self._pending_started_ts: str | None = None
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if event.type == "hypnos.sleep.started":
+        if event.type == "sleep.sleep.started":
             self._pending_before = self._capture_state()
             self._pending_started_ts = datetime.now(timezone.utc).isoformat()
             return
-        if event.type == "hypnos.sleep.completed":
+        if event.type == "sleep.sleep.completed":
             if self._pending_before is None:
-                # We missed the hypnos.sleep.started — record the after-only.
+                # We missed the sleep.sleep.started — record the after-only.
                 await self._sink.write(
                     {
                         "ts": datetime.now(timezone.utc).isoformat(),
                         "before": None,
                         "after": self._capture_state(),
-                        "warning": "no matching hypnos.sleep.started",
+                        "warning": "no matching sleep.sleep.started",
                     }
                 )
                 return

@@ -97,7 +97,7 @@ async def test_language_client_does_not_defer_when_window_idle(tmp_path, monkeyp
 
 def _ext_event(payload: dict) -> Event:
     return Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload=payload,
         salience=0.4,
@@ -130,7 +130,7 @@ async def test_ab_eval_skips_while_organ_unloaded(tmp_path, monkeypatch):
     await sink.start()
     try:
         await obs.handle(
-            "lingua.external", "1-0", _ext_event({"text": "hello", "user_input": "hi"})
+            "language.external", "1-0", _ext_event({"text": "hello", "user_input": "hi"})
         )
     finally:
         await sink.stop()
@@ -164,7 +164,7 @@ async def test_ab_eval_resumes_when_window_idle(tmp_path, monkeypatch):
     await sink.start()
     try:
         await obs.handle(
-            "lingua.external", "1-0", _ext_event({"text": "conditioned", "user_input": "hi"})
+            "language.external", "1-0", _ext_event({"text": "conditioned", "user_input": "hi"})
         )
     finally:
         await sink.stop()

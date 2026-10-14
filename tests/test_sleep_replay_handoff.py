@@ -74,8 +74,8 @@ async def test_phase_two_replays_what_phase_one_consolidated(bus: AsyncBus):
         assert p2.metadata["replay_events"] == 3
 
         # Gather replay events emitted on the bus.
-        bus_entries = await bus.read("mnemos.out", last_id="0")
-        replay_events = [e for _, e in bus_entries if e.type == "mnemos.replay"]
+        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
 
         assert {ev.payload["text"] for ev in replay_events} == {
             "trace 0",
@@ -129,15 +129,15 @@ async def test_later_consolidation_does_not_replay_an_earlier_batch(bus: AsyncBu
         events = await episodic_memory.replay_now()
         assert events == []
 
-        bus_entries = await bus.read("mnemos.out", last_id="0")
-        assert not any(e.type == "mnemos.replay" for _, e in bus_entries)
+        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        assert not any(e.type == "episodic_memory.replay" for _, e in bus_entries)
     finally:
         await episodic_memory.shutdown()
 
 
 @pytest.mark.asyncio
 async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
-    """hypnos.sleep.completed closes the window; the wake ends at downscale."""
+    """sleep.sleep.completed closes the window; the wake ends at downscale."""
     episodic_memory = await _new_episodic_memory(
         bus,
         capacity=8,
@@ -164,8 +164,8 @@ async def test_sleep_completed_drops_the_consolidated_batch(bus: AsyncBus):
         episodic_memory._handle_peer_event(
             episodic_memory._sleep_stream,
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -225,8 +225,8 @@ async def test_entry_stored_after_phase_one_is_replayed_with_the_batch(bus: Asyn
         assert p2.success
         assert p2.metadata["replay_events"] == 3
 
-        bus_entries = await bus.read("mnemos.out", last_id="0")
-        replay_events = [e for _, e in bus_entries if e.type == "mnemos.replay"]
+        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
 
         texts = sorted(ev.payload["text"] for ev in replay_events)
         assert texts == ["late trace", "trace 0", "trace 1"]

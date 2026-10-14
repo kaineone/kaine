@@ -5,7 +5,7 @@
 
 Each function here builds ONE named block of
 :meth:`~kaine.dashboard.health.prober.HealthProber.snapshot`'s result (the
-``spot``, ``preservation``, ``cycle_pacing``, ... keys the diagnostics
+``supervisor``, ``preservation``, ``cycle_pacing``, ... keys the diagnostics
 template renders). They take the specific config/paths they need as explicit
 arguments rather than an implicit ``self`` — ``HealthProber`` calls each as a
 thin one-line delegator so the caching/scheduling class (``prober.py``) stays
@@ -371,7 +371,7 @@ def perception_feed_block(
         sr, ch = audition_capture_geometry
         cfg = {
             "perception_feed": dict(perception_feed_cfg or {}),
-            "topos": {
+            "vision": {
                 "capture_width": w,
                 "capture_height": h,
             },
@@ -382,7 +382,7 @@ def perception_feed_block(
         }
         descriptor = gather_perception_feed_descriptor(cfg)
         mode = descriptor.get("mode", "off")
-        reproducible = mode in ("seeded", "playlist", "womb")
+        reproducible = mode in ("seeded", "playlist", "stimulus_source")
         return {
             "mode": mode,
             "reproducible": reproducible,
@@ -417,7 +417,7 @@ async def model_server_block(
 
     Surfaces the OpenAI-compatible model server (Unsloth Studio / llama.cpp)
     that serves the language module: its state (up/down/not_configured), the configured
-    served alias ([lingua].model_id), the port, and whether that alias is
+    served alias ([language].model_id), the port, and whether that alias is
     actually listed by the server. Mirrors the existing service-health blocks
     — purely a read: it probes ``/v1/models`` (via the shared verify probe),
     never starting/stopping the service.
@@ -463,7 +463,7 @@ async def model_server_block(
             listed = False
             detail = f"probe error: {type(exc).__name__}: {exc}"
     else:
-        detail = "no [lingua].model_id configured"
+        detail = "no [language].model_id configured"
 
     if listed is True:
         state = UP
@@ -522,7 +522,7 @@ def gpu_preflight_block(gpu_preflight_path: Path) -> dict[str, Any]:
 def episodic_memory_store_block(health_path: Path, episodic_memory_enabled: bool) -> dict[str, Any]:
     """Read-only episodic memory module store health from the shared health file.
 
-    Reads ``state/mnemos/store_health.json`` (written by the episodic memory module). Never raises;
+    Reads ``state/episodic_memory/store_health.json`` (written by the episodic memory module). Never raises;
     a missing, unreadable, or non-object file yields state ``"unknown"``.
     Surfaces only non-content operational state: import status, blocked sleep
     count, persist refusals, store size and budget.
@@ -572,7 +572,7 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
 
     State precedence:
       escalation.escalated  → "critical"
-      control.frozen and control.source == "spot"  → "recovery"
+      control.frozen and control.source == "supervisor"  → "recovery"
       else  → "ok"
 
     max_attempts: hardcoded default 5 (matches the supervisor's shipped default).
@@ -604,7 +604,7 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
         if (
             control is not None
             and control.frozen
-            and control.source == "spot"
+            and control.source == "supervisor"
         ):
             return {
                 "state": "recovery",
@@ -666,7 +666,7 @@ def module_states(
         }
         if module == "audition":
             row["capturing"] = bool(audio_active)
-        elif module == "topos":
+        elif module == "vision":
             row["capturing"] = bool(video_active)
         rows.append(row)
     return rows

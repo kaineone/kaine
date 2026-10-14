@@ -4,11 +4,11 @@
 # The run's seed comes from [experiment].seed; pilot run r of the tone variant shares its seed
 # with pilot run r of the three arms.
 
-[lingua]
+[language]
 # Greedy decoding in the planned runs (paper §6.1).
 temperature = 0.0
 
-[syneidesis]
+[workspace]
 arm = "competitive"
 
 [audition]

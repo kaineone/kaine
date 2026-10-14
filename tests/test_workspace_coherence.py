@@ -30,7 +30,7 @@ from kaine.workspace import (
 from kaine.workspace.coherence import CoherenceScorer
 
 
-def _ev(intensity: float, eid: str, source: str = "soma") -> tuple[str, Event]:
+def _ev(intensity: float, eid: str, source: str = "interoception") -> tuple[str, Event]:
     return eid, Event(
         source=source,
         type=f"t.{eid}",
@@ -56,10 +56,10 @@ def _strategy() -> RuleBasedSalience:
 async def test_selection_bit_for_bit_identical_when_disabled():
     """coherence=None ⇒ identical scores, selection, inhibition, no metadata."""
     events = [
-        _ev(0.9, "a", "soma"),
-        _ev(0.7, "b", "chronos"),
-        _ev(0.5, "c", "topos"),
-        _ev(0.3, "d", "thymos"),
+        _ev(0.9, "a", "interoception"),
+        _ev(0.7, "b", "sequence"),
+        _ev(0.5, "c", "vision"),
+        _ev(0.3, "d", "affect"),
     ]
 
     baseline = Workspace(strategy=_strategy(), top_k=3, publication_threshold=0.35)
@@ -72,7 +72,7 @@ async def test_selection_bit_for_bit_identical_when_disabled():
     # Even when phases are provided in context, a disabled layer ignores them.
     ctx = {
         "tick_index": 0,
-        "phases": {"soma": 0.1, "chronos": 0.1, "topos": 2.0, "thymos": 2.0},
+        "phases": {"interoception": 0.1, "sequence": 0.1, "vision": 2.0, "affect": 2.0},
     }
     snap_base = await baseline.select(list(events), context=dict(ctx))
     snap_off = await flagged_off.select(list(events), context=dict(ctx))
@@ -113,7 +113,7 @@ async def test_disabled_layer_bit_for_bit_identical_across_many_cycles():
 
     # Deterministic per-cycle inputs from a fixed seed.
     rng = random.Random(2027)
-    sources = ["soma", "chronos", "topos", "thymos"]
+    sources = ["interoception", "sequence", "vision", "affect"]
     for cycle in range(n_cycles):
         events = [
             _ev(round(rng.uniform(0.1, 0.95), 4), f"e{cycle}_{i}", sources[i])
@@ -147,8 +147,8 @@ async def test_disabled_layer_bit_for_bit_identical_across_many_cycles():
 async def test_disabled_multiplier_is_literal_no_op():
     """Disabled path: scores equal raw strategy scores (×1.0), no coherence key."""
     strategy = _strategy()
-    events = [_ev(0.6, "a", "soma"), _ev(0.4, "b", "chronos")]
-    ctx = {"tick_index": 0, "phases": {"soma": 0.3, "chronos": 1.7}}
+    events = [_ev(0.6, "a", "interoception"), _ev(0.4, "b", "sequence")]
+    ctx = {"tick_index": 0, "phases": {"interoception": 0.3, "sequence": 1.7}}
 
     # Compute the raw strategy scores directly (effective multiplier 1.0 target).
     raw = {}

@@ -62,7 +62,7 @@ out; nothing touches disk. The existing static-grep guard
 ## Encoding and the report
 
 The vision module encodes both views: the peripheral → a gist/context latent, the foveal patch
-→ a detail latent at the encoder's native size (efficient). The `topos.report`
+→ a detail latent at the encoder's native size (efficient). The `vision.report`
 carries both latents, each tagged `peripheral` / `foveal`, plus the **content-free
 fovea location** (normalized `(x, y)` and size in `[0, 1]`) — never pixels. When
 foveation is disabled the report is exactly today's single whole-frame latent.

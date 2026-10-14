@@ -347,8 +347,8 @@ def _host_two_gpus() -> dict[str, object]:
 def test_propose_allowed_only_cuda1():
     host = _host_two_gpus()
     p = propose_device_assignments(host, ["cuda:1"])
-    assert p["hypnos.voice_alignment.training_device"] == "cuda:1"
-    assert p["topos.device"] == "cuda:1"
+    assert p["sleep.voice_alignment.training_device"] == "cuda:1"
+    assert p["vision.device"] == "cuda:1"
     assert "cuda:0" not in p.values()
 
 
@@ -362,12 +362,12 @@ def test_propose_allowed_none_matches_old_behaviour():
     host = _host_two_gpus()
     old = propose_device_assignments(host)
     assert propose_device_assignments(host, None) == old
-    assert old["hypnos.voice_alignment.training_device"] == "cuda:0"
-    assert old["topos.device"] == "cuda:1"
+    assert old["sleep.voice_alignment.training_device"] == "cuda:0"
+    assert old["vision.device"] == "cuda:1"
 
 
 def test_fit_check_uses_floor_when_catalogue_missing():
-    assignments = {"hypnos.voice_alignment.training_device": "cuda:0"}
+    assignments = {"sleep.voice_alignment.training_device": "cuda:0"}
     inventory = [{"device": "cuda:0", "free_gb": 1.0}]
     issues = fit_check(assignments, inventory, {}, 2.0)
     assert len(issues) == 1
@@ -376,7 +376,7 @@ def test_fit_check_uses_floor_when_catalogue_missing():
 
 
 def test_fit_check_uses_measured_when_all_catalogued():
-    assignments = {"hypnos.voice_alignment.training_device": "cuda:0"}
+    assignments = {"sleep.voice_alignment.training_device": "cuda:0"}
     inventory = [{"device": "cuda:0", "free_gb": 5.0}]
     catalogue = {"voice_alignment": 4 * 1024**3}
     issues = fit_check(assignments, inventory, catalogue, 2.0)
@@ -410,7 +410,7 @@ def test_device_step_choice_excludes_failing_device():
         config=cfg,
         host=host,
         extra={
-            "catalogue": {"voice_alignment": 4 * 1024**3, "topos": 4 * 1024**3},
+            "catalogue": {"voice_alignment": 4 * 1024**3, "vision": 4 * 1024**3},
             "floor_gb": 2.0,
             "consumers": None,
         },
@@ -418,7 +418,7 @@ def test_device_step_choice_excludes_failing_device():
     step = device_step(propose_device_assignments)
     fields = step.fields(ctx)
     sleep_field = next(
-        f for f in fields if f.name == "hypnos.voice_alignment.training_device"
+        f for f in fields if f.name == "sleep.voice_alignment.training_device"
     )
     assert "cuda:0" not in sleep_field.choices
     assert "cuda:1" in sleep_field.choices
@@ -433,9 +433,9 @@ def test_device_step_choice_excludes_failing_device():
         defaults=False,
     )
     assert (
-        ctx.config["hypnos"]["voice_alignment"]["training_device"] == "cpu"
+        ctx.config["sleep"]["voice_alignment"]["training_device"] == "cpu"
     )
-    assert ctx.config["topos"]["device"] == "cuda:1"
+    assert ctx.config["vision"]["device"] == "cuda:1"
 
 
 def test_device_step_defaults_writes_cpu_for_failing_address():
@@ -473,7 +473,7 @@ def test_device_step_defaults_writes_cpu_for_failing_address():
         defaults=True,
     )
     assert (
-        ctx.config["hypnos"]["voice_alignment"]["training_device"] == "cpu"
+        ctx.config["sleep"]["voice_alignment"]["training_device"] == "cpu"
     )
 
 
@@ -518,5 +518,5 @@ def test_owned_changes_within_allowlist():
     assert changes.issubset(OWNED_KEYS)
     assert "hardware.allowed_devices" in changes
     assert "hardware.cpu_threads" in changes
-    assert "hypnos.voice_alignment.training_device" in changes
+    assert "sleep.voice_alignment.training_device" in changes
     assert "embedding.device" in changes

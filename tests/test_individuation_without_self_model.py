@@ -83,7 +83,7 @@ async def test_probe_sampler_without_self_model():
 
 def test_individuation_refusal_accepts_language_only():
     cfg, reason = _individuation_refusal(
-        {"individuation": {"enabled": True}, "modules": {"lingua": True}}
+        {"individuation": {"enabled": True}, "modules": {"language": True}}
     )
     assert cfg is not None
     assert reason is None

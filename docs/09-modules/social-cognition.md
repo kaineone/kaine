@@ -4,10 +4,10 @@ The social cognition module is KAINE's social-cognition module. It builds a mode
 
 ## Status
 
-The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].empatheia = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[empatheia].collection`).
+The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].social_cognition = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[social_cognition].collection`).
 
 - It reads Audition's `audition.emotion` events (the tone of voice) and, when speech-to-text is on, `audition.transcription`. In the base-thesis form speech-to-text is off, so tone events are its only input.
-- The production backend is Qdrant, on the same instance as the episodic memory module, in the collection `empatheia_agents`.
+- The production backend is Qdrant, on the same instance as the episodic memory module, in the collection `social_cognition_agents`.
 - The in-memory backend (`backend = "inmemory"`) needs no external service and is used in tests.
 - Agent identity is coarse. Every operator-facing channel maps to one agent, named by `speaker_label`, and every other channel gets its own `media:<channel>` agent. There is no speaker diarization.
 
@@ -15,8 +15,8 @@ The social cognition module is built and tested, and held: it is off in the ship
 
 The social cognition module keeps a probabilistic model of each agent and publishes two kinds of event.
 
-1. `empatheia.agent_model` reports numeric facts about one agent (familiarity, reliability, interaction count) after every update. The affect module reads the familiarity when `[thymos.coupling].enabled = true`.
-2. `empatheia.social_error` is published when an observed emotion deviates from the agent's model by more than `deviation_threshold`. It enters the workspace competition as a candidate whose intensity grows with the deviation, and it carries no behavioural data and no transcript text.
+1. `social_cognition.agent_model` reports numeric facts about one agent (familiarity, reliability, interaction count) after every update. The affect module reads the familiarity when `[affect.coupling].enabled = true`.
+2. `social_cognition.social_error` is published when an observed emotion deviates from the agent's model by more than `deviation_threshold`. It enters the workspace competition as a candidate whose intensity grows with the deviation, and it carries no behavioural data and no transcript text.
 
 The social cognition module stores emotion histograms and numeric summaries only. `_handle_transcription()` ignores the `text` field: it folds in a neutral observation with zero confidence, which moves the histogram toward neutral by the update rate (0.2) and counts one interaction.
 
@@ -35,27 +35,27 @@ A background task, `_audition_consumer_loop`, reads these events. An emotion eve
 
 | Stream | Event type | Payload fields | Intensity |
 |---|---|---|---|
-| `empatheia.out` | `empatheia.agent_model` | `agent_id`, `agent_label`, `familiarity`, `reliability`, `interaction_count`, and `source_label` of the triggering audio event | `baseline_salience + familiarity × (alert_salience − baseline_salience)` |
-| `empatheia.out` | `empatheia.social_error` | `agent_id`, `agent_label`, `salience`, `deviation_magnitude` | `baseline_salience + deviation × (alert_salience − baseline_salience)`, capped at 1 |
+| `social_cognition.out` | `social_cognition.agent_model` | `agent_id`, `agent_label`, `familiarity`, `reliability`, `interaction_count`, and `source_label` of the triggering audio event | `baseline_salience + familiarity × (alert_salience − baseline_salience)` |
+| `social_cognition.out` | `social_cognition.social_error` | `agent_id`, `agent_label`, `salience`, `deviation_magnitude` | `baseline_salience + deviation × (alert_salience − baseline_salience)`, capped at 1 |
 
 Both payloads hold identifiers and numbers only.
 
 ## Configuration
 
-All keys are under `[empatheia]` and `[empatheia.qdrant]`. The full reference is in [Modules](../appendix-a-configuration/modules.md).
+All keys are under `[social_cognition]` and `[social_cognition.qdrant]`. The full reference is in [Modules](../appendix-a-configuration/modules.md).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `backend` | string | `"qdrant"` | `"qdrant"` or `"inmemory"` (the constructor default is `"inmemory"`; the shipped file sets `"qdrant"`) |
-| `collection` | string | `"empatheia_agents"` | Qdrant collection for agent profiles |
+| `collection` | string | `"social_cognition_agents"` | Qdrant collection for agent profiles |
 | `speaker_label` | string | `"operator"` | Agent id for the operator-facing channels |
 | `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` | Channels attributed to the operator agent; any other channel becomes `media:<channel>`. The action selection module also uses this key to decide which audition sources are user utterances. The sequence module uses a fixed constant and ignores the key. |
-| `deviation_threshold` | float | `0.5` | Deviation above which `empatheia.social_error` is published; must lie in (0, 1] |
+| `deviation_threshold` | float | `0.5` | Deviation above which `social_cognition.social_error` is published; must lie in (0, 1] |
 | `baseline_salience` | float | `0.15` | Lowest intensity of the social cognition module's events |
 | `alert_salience` | float | `0.6` | Intensity at full familiarity or full deviation |
-| `[empatheia.qdrant].host` | string | `"127.0.0.1"` | Qdrant host |
-| `[empatheia.qdrant].port` | int | `6533` | Qdrant port |
-| `[empatheia.qdrant].api_key` | string | unset | Qdrant API key. The cycle resolves it from `KAINE_QDRANT_API_KEY` first, then from `[qdrant].api_key` in `config/secrets.toml`. The Qdrant backend refuses to start without it. |
+| `[social_cognition.qdrant].host` | string | `"127.0.0.1"` | Qdrant host |
+| `[social_cognition.qdrant].port` | int | `6533` | Qdrant port |
+| `[social_cognition.qdrant].api_key` | string | unset | Qdrant API key. The cycle resolves it from `KAINE_QDRANT_API_KEY` first, then from `[qdrant].api_key` in `config/secrets.toml`. The Qdrant backend refuses to start without it. |
 
 ## How it works
 
@@ -111,9 +111,9 @@ flowchart TD
     NEW -- yes --> UPD
     CREATE --> UPD[update_from_emotion\ncompute deviation]
     UPD --> PUT["store.put(model)"]
-    PUT --> AM[publish empatheia.agent_model]
+    PUT --> AM[publish social_cognition.agent_model]
     UPD --> DEV{deviation above threshold?}
-    DEV -- yes --> SE[publish empatheia.social_error]
+    DEV -- yes --> SE[publish social_cognition.social_error]
     DEV -- no --> SKIP_SE[no social_error]
 
     TRANS[audition.transcription] --> SRC2{source in operator_sources?}
@@ -135,7 +135,7 @@ An event with no `source_label` is attributed to the operator agent.
 
 ### Fork and merge
 
-`SocialCognitionMergeStrategy` in `kaine/lifecycle/strategies.py`, registered by `default_strategies()` under `empatheia`, merges two branches' profiles:
+`SocialCognitionMergeStrategy` in `kaine/lifecycle/strategies.py`, registered by `default_strategies()` under `social_cognition`, merges two branches' profiles:
 
 - `interaction_count` is summed, since both branches heard real interactions.
 - `emotion_histogram`, `behavioral_summary` and `reliability` are averaged, weighted by interaction count. A `behavioral_summary` entry missing or null on one branch, such as the `mean_prediction_error` of an agent that never had a defined error, is absent rather than 0, so the merged entry takes the other branch's value; an entry held by neither branch stays absent.
@@ -145,7 +145,7 @@ The merged profiles travel in the merged snapshot. Restoring it loads them into 
 
 ### Affect coupling
 
-When `[thymos.coupling].enabled = true` (it ships `false`), the affect module caches the `familiarity` of each `empatheia.agent_model` and folds a perceived speaker emotion into its own appraisal with the weight
+When `[affect.coupling].enabled = true` (it ships `false`), the affect module caches the `familiarity` of each `social_cognition.agent_model` and folds a perceived speaker emotion into its own appraisal with the weight
 
 ```
 weight = min(coupling_ceiling, coupling_base + familiarity × coupling_familiarity_gain)
@@ -153,7 +153,7 @@ weight = min(coupling_ceiling, coupling_base + familiarity × coupling_familiari
 
 with `coupling_base = 0.05`, `coupling_familiarity_gain = 0.10` and `coupling_ceiling = 0.15` by default. The perceived emotion enters the appraisal and is never written to the entity's valence, arousal or dominance directly. See [the affect module](affect.md).
 
-Each `empatheia.agent_model` carries the `source_label` of the audio event that updated the model. The affect module caches the familiarity under that label as well as under `agent_id` (`operator` or `media:<channel>`), and looks it up by the perceived emotion's `source_label`, so a familiar channel raises the weight.
+Each `social_cognition.agent_model` carries the `source_label` of the audio event that updated the model. The affect module caches the familiarity under that label as well as under `agent_id` (`operator` or `media:<channel>`), and looks it up by the perceived emotion's `source_label`, so a familiar channel raises the weight.
 
 ## Key files
 
@@ -163,13 +163,13 @@ Each `empatheia.agent_model` carries the `source_label` of the audio event that 
 | `kaine/modules/social_cognition/agent.py` | `AgentModel`: histogram, updates, `familiarity()`, deviation |
 | `kaine/modules/social_cognition/store.py` | `AgentStore` protocol, `InMemoryAgentStore`, `QdrantAgentStore` |
 | `kaine/lifecycle/strategies.py` | `SocialCognitionMergeStrategy` |
-| `kaine/boot/factories/social_cognition.py` | `make_empatheia()` and the Qdrant sub-table |
+| `kaine/boot/factories/social_cognition.py` | `make_social_cognition()` and the Qdrant sub-table |
 
 ## Enabling
 
 1. Start the Qdrant container that the episodic memory module uses, or set `backend = "inmemory"`.
-2. In the operator file `config/kaine.operator.toml`, set `[modules].empatheia = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
-3. Optionally turn on the affect module's coupling with `[thymos.coupling].enabled = true`.
+2. In the operator file `config/kaine.operator.toml`, set `[modules].social_cognition = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+3. Optionally turn on the affect module's coupling with `[affect.coupling].enabled = true`.
 
 To try the agent model by hand:
 
@@ -189,7 +189,7 @@ print(model.familiarity())  # about 0.072 after one interaction
 - `_handle_transcription()` ignores the `text` field.
 - `_handle_emotion()` reads the `category` string and two numbers.
 - `AgentModel.to_dict()` serializes the histogram, the behavioural summary and the numeric fields.
-- The `empatheia.social_error` payload holds `agent_id`, `agent_label`, `salience` and `deviation_magnitude`.
+- The `social_cognition.social_error` payload holds `agent_id`, `agent_label`, `salience` and `deviation_magnitude`.
 
 ## Tests
 
@@ -203,5 +203,5 @@ print(model.familiarity())  # about 0.072 after one interaction
 
 ## Spec and related
 
-- Primary spec: `openspec/specs/empatheia/spec.md`
+- Primary spec: `openspec/specs/social-cognition/spec.md`
 - Related modules: [Audition](audition.md) publishes `audition.emotion`; [Affect](affect.md) reads familiarity for affect coupling; [Episodic memory](episodic-memory.md) shares the Qdrant instance.

@@ -28,9 +28,9 @@ log = logging.getLogger(__name__)
 #: Modules awaiting a wetware seam conversion.
 PENDING_CONVERSIONS: dict[str, str] = {
     "audition_frontend": "hybrid-wetware-conversions",
-    "phantasia_surprise": "hybrid-wetware-conversions",
-    "volition": "hybrid-wetware-conversions",
-    "thymos": "hybrid-wetware-conversions",
+    "world_model_surprise": "hybrid-wetware-conversions",
+    "action_selection": "hybrid-wetware-conversions",
+    "affect": "hybrid-wetware-conversions",
 }
 
 #: 64 electrodes, channel 0 reserved.
@@ -189,7 +189,7 @@ class Cl1Plugin:
                     ", ".join(converted) if converted else "none",
                     ", ".join(oscillators) if oscillators else "none",
                 )
-            if "nous" in converted:
+            if "planning" in converted:
                 if overlay.planning_mode == "drive":
                     log.warning(
                         "CL1 Nous runs in DRIVE mode: the substrate's policy proposal chooses "

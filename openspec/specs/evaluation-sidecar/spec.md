@@ -63,13 +63,13 @@ instantiate when enabled without the evaluation layer importing any module.
 
 - **WHEN** the sidecar is built with a `memory_source` and a
   `cognitive_query_client` and the corresponding flags enabled
-- **THEN** the `memory_probes` and `eidolon_accuracy` observers are included
+- **THEN** the `memory_probes` and `self_model_accuracy` observers are included
 - **AND** with neither provided they are skipped, and the sidecar still starts
 
 ### Requirement: A/B-divergence baseline uses the language organ's model
 
 The evaluation A/B-divergence baseline SHALL run the same model as the language
-organ. `[evaluation].chat_model_id` SHALL derive from `[lingua].model_id` when not
+organ. `[evaluation].chat_model_id` SHALL derive from `[language].model_id` when not
 explicitly set, and SHALL fail closed when explicitly set to a different value:
 the cycle SHALL refuse to boot with a clear operator message naming both values,
 before any resource (bus, modules, runtime state) is opened. This holds because
@@ -80,17 +80,17 @@ conditioning.
 #### Scenario: Baseline derives from the organ when unset
 
 - **WHEN** `[evaluation].chat_model_id` is absent
-- **THEN** the A/B baseline uses `[lingua].model_id`
+- **THEN** the A/B baseline uses `[language].model_id`
 
 #### Scenario: Explicit matching value is accepted
 
-- **WHEN** `[evaluation].chat_model_id` equals `[lingua].model_id`
+- **WHEN** `[evaluation].chat_model_id` equals `[language].model_id`
 - **THEN** the configuration loads normally
 
 #### Scenario: Explicit divergent value fails closed
 
 - **WHEN** `[evaluation].chat_model_id` is set to a value different from
-  `[lingua].model_id`
+  `[language].model_id`
 - **THEN** the cycle refuses to boot with a clear error naming both values
 - **AND** no bus connection, module, or runtime state file has been created
 
@@ -194,7 +194,7 @@ a single shared definition so the control and observer cannot drift apart.
 The control SHALL read approximately zero when the two arms are conditioned
 identically (negative control) and large when a known conditioning difference is
 injected (positive control). Adding the control SHALL NOT change the behavior of
-the live `ABDivergenceObserver`, which continues to sample `lingua.external`
+the live `ABDivergenceObserver`, which continues to sample `language.external`
 while running.
 
 #### Scenario: Identical/empty conditioning reads ~zero (negative)

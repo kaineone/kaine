@@ -10,19 +10,19 @@ from kaine.config import deep_merge, load_kaine_config
 
 
 def test_deep_merge_override_scalar_wins():
-    base = {"modules": {"soma": False}, "lingua": {"model_id": "a"}}
-    override = {"lingua": {"model_id": "b"}}
+    base = {"modules": {"interoception": False}, "language": {"model_id": "a"}}
+    override = {"language": {"model_id": "b"}}
     merged = deep_merge(base, override)
-    assert merged["lingua"]["model_id"] == "b"
+    assert merged["language"]["model_id"] == "b"
     # base untouched
-    assert base["lingua"]["model_id"] == "a"
+    assert base["language"]["model_id"] == "a"
 
 
 def test_deep_merge_nested_tables_merge_not_replace():
-    base = {"hypnos": {"voice_alignment": {"training_device": "cpu", "lora_rank": 8}}}
-    override = {"hypnos": {"voice_alignment": {"training_device": "cuda:0"}}}
+    base = {"sleep": {"voice_alignment": {"training_device": "cpu", "lora_rank": 8}}}
+    override = {"sleep": {"voice_alignment": {"training_device": "cuda:0"}}}
     merged = deep_merge(base, override)
-    va = merged["hypnos"]["voice_alignment"]
+    va = merged["sleep"]["voice_alignment"]
     assert va["training_device"] == "cuda:0"  # override wins
     assert va["lora_rank"] == 8  # sibling preserved
 
@@ -46,7 +46,7 @@ def test_load_returns_shipped_when_no_operator_file(tmp_path: Path):
     shipped.write_text("[modules]\nsoma = false\n")
     op = tmp_path / "kaine.operator.toml"  # does not exist
     cfg = load_kaine_config(shipped, op)
-    assert cfg["modules"]["soma"] is False
+    assert cfg["modules"]["interoception"] is False
 
 
 def test_load_merges_operator_over_shipped(tmp_path: Path):
@@ -55,9 +55,9 @@ def test_load_merges_operator_over_shipped(tmp_path: Path):
     op = tmp_path / "kaine.operator.toml"
     op.write_text("[modules]\nsoma = true\n")
     cfg = load_kaine_config(shipped, op)
-    assert cfg["modules"]["soma"] is True
+    assert cfg["modules"]["interoception"] is True
     # sibling key from shipped preserved
-    assert cfg["modules"]["lingua"] is False
+    assert cfg["modules"]["language"] is False
 
 
 def test_operator_file_does_not_mutate_shipped_on_disk(tmp_path: Path):
@@ -77,4 +77,4 @@ def test_load_tolerates_malformed_operator_file(tmp_path: Path):
     op.write_text("this is not = = valid toml [[[")
     cfg = load_kaine_config(shipped, op)
     # falls back to shipped, does not raise
-    assert cfg["modules"]["soma"] is False
+    assert cfg["modules"]["interoception"] is False

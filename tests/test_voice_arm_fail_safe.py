@@ -72,7 +72,7 @@ def test_live_log_path_is_directory_counts_as_spoken(tmp_path):
 
 def test_unreadable_voice_paths_config_counts_as_spoken_and_diverged(tmp_path):
     root = _state(tmp_path)
-    vp = voice_paths_for({"lingua": "not-a-table"}, root)
+    vp = voice_paths_for({"language": "not-a-table"}, root)
     assert vp.unreadable is True
     result = assess_divergence(state_root=root, voice_paths=vp)
     assert result.diverged

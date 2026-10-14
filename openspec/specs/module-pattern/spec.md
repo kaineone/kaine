@@ -16,8 +16,8 @@ attached `AsyncBus`.
 - **THEN** instantiation raises `TypeError`
 
 #### Scenario: publish routes to the module's stream
-- **WHEN** a module named `echo` calls `self.publish("test.type", {"v": 1}, salience=0.5)`
-- **THEN** an event with `source="echo"` is added to the `echo.out`
+- **WHEN** a module named `recorder` calls `self.publish("test.type", {"v": 1}, salience=0.5)`
+- **THEN** an event with `source="recorder"` is added to the `recorder.out`
   stream
 
 ### Requirement: BaseModule consumes workspace broadcasts
@@ -60,12 +60,12 @@ registry such that the next call to `active_streams()` reflects the
 change.
 
 #### Scenario: Registered module appears in active_streams
-- **WHEN** a module named `chronos` is registered with the registry
-- **THEN** `registry.active_streams()` contains `"chronos.out"`
+- **WHEN** a module named `sequence` is registered with the registry
+- **THEN** `registry.active_streams()` contains `"sequence.out"`
 
 #### Scenario: Unregistered module disappears
-- **WHEN** `registry.unregister("chronos")` is called
-- **THEN** `registry.active_streams()` no longer contains `"chronos.out"`
+- **WHEN** `registry.unregister("sequence")` is called
+- **THEN** `registry.active_streams()` no longer contains `"sequence.out"`
 
 #### Scenario: Duplicate registration rejected
 - **WHEN** a module is registered twice under the same name
@@ -124,10 +124,10 @@ substitute a freshly rebuilt module without re-registering. It SHALL raise if th
 name is not present or the replacement's `name` differs.
 
 #### Scenario: Replace swaps the instance
-- **WHEN** `replace("mnemos", new_mnemos)` is called and a `mnemos` is registered
-- **THEN** `get("mnemos")` returns the new instance
+- **WHEN** `replace("episodic_memory", new_episodic_memory)` is called and a `episodic_memory` is registered
+- **THEN** `get("episodic_memory")` returns the new instance
 
 #### Scenario: Replace rejects a name mismatch
-- **WHEN** `replace("mnemos", a_vox_instance)` is called
+- **WHEN** `replace("episodic_memory", a_vocal_instance)` is called
 - **THEN** it raises rather than registering a mismatched instance
 

@@ -324,7 +324,7 @@ def entity_locations(
             "self_model",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "eidolon.persistence_path", "state/eidolon/self_model.json"),
+                _cfg(config, "self_model.persistence_path", "state/eidolon/self_model.json"),
                 directory=True,
             ),
             "self-understanding and identity history (cognitive state)",
@@ -338,7 +338,7 @@ def entity_locations(
             "language",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "lingua.intent_log_path", "state/lingua/intent_expression.jsonl"),
+                _cfg(config, "language.intent_log_path", "state/lingua/intent_expression.jsonl"),
                 directory=True,
             ),
             "the language module's intent log and monologue (cognitive state)",
@@ -348,7 +348,7 @@ def entity_locations(
 
     # 3. language outcomes
     language_dir = resolve(
-        _cfg(config, "lingua.intent_log_path", "state/lingua/intent_expression.jsonl"),
+        _cfg(config, "language.intent_log_path", "state/lingua/intent_expression.jsonl"),
         directory=True,
     )
     locations.append(
@@ -376,7 +376,7 @@ def entity_locations(
             resolve(
                 _cfg(
                     config,
-                    "hypnos.voice_alignment.adapter_output_dir",
+                    "sleep.voice_alignment.adapter_output_dir",
                     "state/hypnos/adapters",
                 )
             ),
@@ -415,7 +415,7 @@ def entity_locations(
             "world_model",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "phantasia.checkpoint_path", "state/phantasia/world_model.ckpt"),
+                _cfg(config, "world_model.checkpoint_path", "state/phantasia/world_model.ckpt"),
                 directory=True,
             ),
             "learned world-model weights",
@@ -425,7 +425,7 @@ def entity_locations(
 
     # 8. episodic memory sqlite
     db_bases = resolve(
-        _cfg(config, "mnemos.db_path", "state/mnemos/mnemos.db")
+        _cfg(config, "episodic_memory.db_path", "state/mnemos/mnemos.db")
     )
     sqlite_paths: list[Path] = []
     for db_path in db_bases:
@@ -475,7 +475,6 @@ def entity_locations(
                     "stage.json",
                     "birth_request.json",
                     "birth_ack.json",
-                    "birth_pending",
                     "maturation_pending",
                     "gestation_readout.json",
                     "gestation_progress.json",
@@ -504,7 +503,7 @@ def entity_locations(
             "effectors.files",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "praxis.sandbox_path", "state/praxis/files")
+                _cfg(config, "effectors.sandbox_path", "state/praxis/files")
             ),
             "files the entity wrote",
             bundle_dir="locations/effectors.files",
@@ -519,7 +518,7 @@ def entity_locations(
             resolve(
                 _cfg(
                     config,
-                    "praxis.notification_fallback_log",
+                    "effectors.notification_fallback_log",
                     "state/praxis/notifications.log",
                 )
             ),
@@ -533,19 +532,19 @@ def entity_locations(
         Location(
             "vocal.audio",
             DELETE,
-            resolve(_cfg(config, "vox.sink_path", "state/vox")),
+            resolve(_cfg(config, "vocal.sink_path", "state/vox")),
             "rendered speech audio (output, not state)",
         )
     )
 
     # 16-17. sleep voice alignment jobs
     trainer_workdir_paths = resolve(
-        _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs")
+        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs")
     )
     job_paths = resolve(
         _cfg(
             config,
-            "hypnos.voice_alignment.trainer_jobs_dir",
+            "sleep.voice_alignment.trainer_jobs_dir",
             "state/hypnos/voice_align_jobs",
         )
     )
@@ -590,7 +589,7 @@ def entity_locations(
     organ_paths = resolve(
         _cfg(
             config,
-            "hypnos.voice_alignment.organ_adapters_dir",
+            "sleep.voice_alignment.organ_adapters_dir",
             "/organ-adapters",
         )
     )
@@ -714,14 +713,14 @@ def entity_locations(
     dashboard_log_dir = _rebase(
         _cfg(
             config,
-            "research_event_log.nexus_record.log_dir",
+            "research_event_log.dashboard_record.log_dir",
             "data/nexus_record",
         ),
         state_root=state_root,
         data_root=data_root,
     )
     dashboard_paths = (dashboard_log_dir,)
-    if _cfg(config, "nexus.dev_content_override", False):
+    if _cfg(config, "dashboard.dev_content_override", False):
         locations.append(
             Location(
                 "dashboard.record",
@@ -893,7 +892,7 @@ def entity_locations(
             "effectors.audit",
             RETAIN,
             resolve(
-                _cfg(config, "praxis.audit_log_path", "state/praxis/audit.log")
+                _cfg(config, "effectors.audit_log_path", "state/praxis/audit.log")
             ),
             "record of the entity's actions, no content",
         )
@@ -1218,7 +1217,7 @@ def delete_roots(
         add(merged_path)
 
     organ_path = _rebase(
-        _cfg(config, "hypnos.voice_alignment.organ_adapters_dir", "/organ-adapters"),
+        _cfg(config, "sleep.voice_alignment.organ_adapters_dir", "/organ-adapters"),
         state_root=state_root,
         data_root=data_root,
     )
@@ -1229,7 +1228,7 @@ def delete_roots(
         add(organ_path)
 
     trainer_workdir_path = _rebase(
-        _cfg(config, "hypnos.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
+        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
         state_root=state_root,
         data_root=data_root,
     )
@@ -1240,7 +1239,7 @@ def delete_roots(
         add(trainer_workdir_path)
 
     trainer_jobs_path = _rebase(
-        _cfg(config, "hypnos.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
+        _cfg(config, "sleep.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
         state_root=state_root,
         data_root=data_root,
     )

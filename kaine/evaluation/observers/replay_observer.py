@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Replay observer — logs mnemos.replay and phantasia.scenario events.
+"""Replay observer — logs episodic_memory.replay and world_model.scenario events.
 
 Privacy design (§4.4 / §5)
 --------------------------
@@ -13,8 +13,8 @@ operational logs.
 ``redact_content = false``: full payload (including ``text``) is logged.
 This must be explicitly opted in.
 
-Source streams: ``mnemos.out`` (type ``mnemos.replay``) and
-``phantasia.out`` (type ``phantasia.scenario``).  When either stream
+Source streams: ``episodic_memory.out`` (type ``episodic_memory.replay``) and
+``world_model.out`` (type ``world_model.scenario``).  When either stream
 produces no events the observer runs silently — it never errors.
 """
 
@@ -30,8 +30,8 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 _REDACTED_DROP = frozenset({"text"})
-_EPISODIC_MEMORY_STREAM = "mnemos.out"
-_WORLD_MODEL_STREAM = "phantasia.out"
+_EPISODIC_MEMORY_STREAM = "episodic_memory.out"
+_WORLD_MODEL_STREAM = "world_model.out"
 
 
 class _SingleStreamReplayObserver(StreamSubscriberObserver):
@@ -74,7 +74,7 @@ class _SingleStreamReplayObserver(StreamSubscriberObserver):
 
 
 class ReplayObserver:
-    """Composite observer: mnemos.replay + phantasia.scenario streams.
+    """Composite observer: episodic_memory.replay + world_model.scenario streams.
 
     Exposes the same ``start``/``stop`` lifecycle as BaseObserver so the
     SidecarRegistry can manage it uniformly.
@@ -93,7 +93,7 @@ class ReplayObserver:
             bus,
             sink,
             source_stream=_EPISODIC_MEMORY_STREAM,
-            accepted_types=frozenset({"mnemos.replay"}),
+            accepted_types=frozenset({"episodic_memory.replay"}),
             redact_content=redact_content,
             name="replay_mnemos",
         )
@@ -101,7 +101,7 @@ class ReplayObserver:
             bus,
             sink,
             source_stream=_WORLD_MODEL_STREAM,
-            accepted_types=frozenset({"phantasia.scenario"}),
+            accepted_types=frozenset({"world_model.scenario"}),
             redact_content=redact_content,
             name="replay_phantasia",
         )

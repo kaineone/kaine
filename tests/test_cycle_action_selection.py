@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The cognitive cycle invokes the action selection module after the experiential broadcast and
-publishes intents to volition.out, gated by inhibition."""
+publishes intents to action_selection.out, gated by inhibition."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -89,7 +89,7 @@ async def test_non_inhibited_disposed_snapshot_publishes_speak_intent():
         entries = await bus.read(ACTION_SELECTION_STREAM, last_id="0")
         assert len(entries) == 1
         _, event = entries[0]
-        assert event.source == "volition"
+        assert event.source == "action_selection"
         assert event.type == "intent.speak"
         assert event.payload["kind"] == "speak"
         assert event.payload["about"] == "hello kaine"

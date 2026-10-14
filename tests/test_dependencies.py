@@ -34,17 +34,17 @@ def test_implied_external_deps_maps_modules():
     # Redis is always implied; language→model_server, the episodic memory and social cognition modules→qdrant,
     # audition→speaches, vocal→chatterbox.
     assert implied_external_deps({}) == ["redis"]
-    assert set(implied_external_deps({"lingua": True})) == {"redis", "model_server"}
-    assert set(implied_external_deps({"mnemos": True})) == {"redis", "qdrant"}
-    assert set(implied_external_deps({"empatheia": True})) == {"redis", "qdrant"}
+    assert set(implied_external_deps({"language": True})) == {"redis", "model_server"}
+    assert set(implied_external_deps({"episodic_memory": True})) == {"redis", "qdrant"}
+    assert set(implied_external_deps({"social_cognition": True})) == {"redis", "qdrant"}
     assert set(implied_external_deps({"audition": True})) == {"redis", "speaches"}
-    assert set(implied_external_deps({"vox": True})) == {"redis", "chatterbox"}
+    assert set(implied_external_deps({"vocal": True})) == {"redis", "chatterbox"}
 
 
 def test_detect_only_needed_deps(monkeypatch):
     monkeypatch.setattr(deps, "_binary_present", lambda b: False)
     monkeypatch.setattr(deps, "_port_listening", lambda p, **k: False)
-    statuses = detect_dependencies({"lingua": True})
+    statuses = detect_dependencies({"language": True})
     names = {s.spec.name for s in statuses}
     assert names == {"redis", "model_server"}  # qdrant/speaches/chatterbox not needed
     assert all(s.running is False for s in statuses)
@@ -53,7 +53,7 @@ def test_detect_only_needed_deps(monkeypatch):
 def test_detect_running_is_satisfied(monkeypatch):
     monkeypatch.setattr(deps, "_binary_present", lambda b: False)
     monkeypatch.setattr(deps, "_port_listening", lambda p, **k: True)
-    statuses = detect_dependencies({"mnemos": True})
+    statuses = detect_dependencies({"episodic_memory": True})
     assert all(s.satisfied for s in statuses)
 
 
@@ -79,7 +79,7 @@ def test_provision_running_dep_is_not_offered(monkeypatch):
     buf, out = _sink()
     ans = _Answers([])
     _provision_dependencies(
-        {"modules": {"lingua": True}}, input_fn=ans, out=out, defaults=False
+        {"modules": {"language": True}}, input_fn=ans, out=out, defaults=False
     )
     text = "".join(buf)
     assert "already running" in text
@@ -101,7 +101,7 @@ def test_provision_command_runs_on_consent(monkeypatch):
     # only redis prompts and runs on consent.
     ans = _Answers(["y"])
     _provision_dependencies(
-        {"modules": {"lingua": True}}, input_fn=ans, out=out, defaults=False
+        {"modules": {"language": True}}, input_fn=ans, out=out, defaults=False
     )
     assert len(ran) == 1
     assert all(k.get("shell") is True for _c, k in ran)
@@ -118,7 +118,7 @@ def test_provision_command_skipped_without_consent(monkeypatch):
     buf, out = _sink()
     ans = _Answers(["n"])
     _provision_dependencies(
-        {"modules": {"lingua": True}}, input_fn=ans, out=out, defaults=False
+        {"modules": {"language": True}}, input_fn=ans, out=out, defaults=False
     )
     assert ran == []
     assert "Run later" in "".join(buf)
@@ -134,7 +134,7 @@ def test_provision_guide_only_never_runs(monkeypatch):
     buf, out = _sink()
     ans = _Answers([])  # vocal → chatterbox is guide-only: no prompt
     _provision_dependencies(
-        {"modules": {"vox": True}}, input_fn=ans, out=out, defaults=False
+        {"modules": {"vocal": True}}, input_fn=ans, out=out, defaults=False
     )
     text = "".join(buf)
     assert ran == []  # guide services are never auto-run
@@ -156,7 +156,7 @@ def test_provision_never_crashes_on_failure(monkeypatch):
     ans = _Answers(["y", "y"])
     # Must not raise.
     _provision_dependencies(
-        {"modules": {"lingua": True}}, input_fn=ans, out=out, defaults=False
+        {"modules": {"language": True}}, input_fn=ans, out=out, defaults=False
     )
     assert "provisioning failed" in "".join(buf)
 
@@ -170,7 +170,7 @@ def test_provision_defaults_shows_but_does_not_run(monkeypatch):
     )
     buf, out = _sink()
     _provision_dependencies(
-        {"modules": {"lingua": True}}, input_fn=lambda _p: "", out=out, defaults=True
+        {"modules": {"language": True}}, input_fn=lambda _p: "", out=out, defaults=True
     )
     assert ran == []
     assert "command:" in "".join(buf)
@@ -186,7 +186,7 @@ def test_qdrant_probed_on_kaine_port_by_default(monkeypatch) -> None:
         return False
 
     monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
-    statuses = detect_dependencies({"mnemos": True})
+    statuses = detect_dependencies({"episodic_memory": True})
     assert 6533 in probed
     assert 6333 not in probed
     qdrant = next(s for s in statuses if s.spec.name == "qdrant")
@@ -203,7 +203,7 @@ def test_qdrant_probed_on_configured_port(monkeypatch) -> None:
         return False
 
     monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
-    detect_dependencies({"mnemos": True}, qdrant_port=7000)
+    detect_dependencies({"episodic_memory": True}, qdrant_port=7000)
     assert 7000 in probed
     assert 6533 not in probed
 
@@ -219,7 +219,7 @@ def test_provision_dependencies_reads_qdrant_port_from_config(monkeypatch) -> No
 
     monkeypatch.setattr("kaine.setup.dependencies._port_listening", fake)
     _provision_dependencies(
-        {"modules": {"mnemos": True}, "mnemos": {"qdrant": {"port": 7100}}},
+        {"modules": {"episodic_memory": True}, "episodic_memory": {"qdrant": {"port": 7100}}},
         input_fn=lambda _p: "",
         out=lambda _s: None,
         defaults=True,
@@ -228,7 +228,7 @@ def test_provision_dependencies_reads_qdrant_port_from_config(monkeypatch) -> No
 
     probed.clear()
     _provision_dependencies(
-        {"modules": {"empatheia": True}, "empatheia": {"qdrant": {"port": 7200}}},
+        {"modules": {"social_cognition": True}, "social_cognition": {"qdrant": {"port": 7200}}},
         input_fn=lambda _p: "",
         out=lambda _s: None,
         defaults=True,

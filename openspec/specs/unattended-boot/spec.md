@@ -36,10 +36,10 @@ An unattended boot SHALL evaluate the research safety net's five conditions — 
 - **THEN** the boot proceeds as a plain autonomous cycle with no experiment record and no admissibility requirements applied
 
 ### Requirement: Condition six — Supervisor armed and self-tested
-An unattended boot SHALL require that `[spot].enabled` is true, that the restart ladder has at least one rung, that the escalation state path and the incident log are writable, and that the supervisor's selftest passes within its bounded window, all before any entity module is constructed.
+An unattended boot SHALL require that `[supervisor].enabled` is true, that the restart ladder has at least one rung, that the escalation state path and the incident log are writable, and that the supervisor's selftest passes within its bounded window, all before any entity module is constructed.
 
 #### Scenario: Supervisor disabled
-- **WHEN** an unattended boot finds `[spot].enabled = false`
+- **WHEN** an unattended boot finds `[supervisor].enabled = false`
 - **THEN** condition 6 fails with the reason "not enabled" and the boot refuses with exit code `6`
 
 #### Scenario: Supervisor selftest fails
@@ -92,7 +92,7 @@ While an unattended start is unacknowledged, the dashboard SHALL show a standing
 - **THEN** reminders continue and the entity keeps running unchanged
 
 ### Requirement: Condition eight — continuous input
-An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seeded`, `womb`, or `screen`; that `topos` or `audition` is enabled to perceive it; and that a probe reads one frame or audio block from the configured source. `off` SHALL fail because the entity would be senseless, and `playlist` SHALL fail because a playlist ends. The probe SHALL write nothing and SHALL drop the data it reads.
+An unattended boot SHALL require that `[perception_feed].mode` is `live`, `seeded`, `stimulus_source`, or `screen`; that `vision` or `audition` is enabled to perceive it; and that a probe reads one frame or audio block from the configured source. `off` SHALL fail because the entity would be senseless, and `playlist` SHALL fail because a playlist ends. The probe SHALL write nothing and SHALL drop the data it reads.
 
 #### Scenario: Feed off
 - **WHEN** an unattended boot finds `[perception_feed].mode = "off"`

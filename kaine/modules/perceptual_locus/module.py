@@ -4,16 +4,16 @@
 """PerceptualLocusLocus — applies entity-initiated perceptual-locus switches.
 
 The operator sets the locus directly through the dashboard; this module is the path by
-which the *entity* may switch its own locus, via an `intent.perception.switch`
+which the *entity* may switch its own locus, via an `intent.perceptual_locus.switch`
 intent from the action selection module. Every such switch is gated (policy + operator lock +
 inhibition + minimum dwell), audited onto the bus, and — when applied — writes
 the new locus to perception desired-state so the vision module and Audio-In rebind (the real
 camera/mic go dark on a move to `virtual`).
 
-**Producer gap (deferred virtual-world embodiment):** The `intent.perception.switch`
+**Producer gap (deferred virtual-world embodiment):** The `intent.perceptual_locus.switch`
 event type consumed by this module has no producer yet. The action selection module only emits
 `intent.speak`, `intent.think`, and `intent.act`; nothing in the current build
-emits `intent.perception.switch`. As a result the entity-initiated self-switch
+emits `intent.perceptual_locus.switch`. As a result the entity-initiated self-switch
 path cannot fire from the entity. The `allow_self_switch` config knob (default
 ``False``) is reserved for deferred virtual-world embodiment work and should
 remain ``False`` until that work lands. Locus changes are operator-driven (via
@@ -34,11 +34,11 @@ from kaine.workspace.action_selection import ACTION_SELECTION_STREAM
 
 log = logging.getLogger(__name__)
 
-_SWITCH_TYPE = "intent.perception.switch"
+_SWITCH_TYPE = "intent.perceptual_locus.switch"
 
 
 class PerceptualLocus(BaseModule):
-    name: ClassVar[str] = "perception"
+    name: ClassVar[str] = "perceptual_locus"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def __init__(
@@ -125,11 +125,11 @@ class PerceptualLocus(BaseModule):
             ps.write_desired_locus(requested, path=self._desired_path)
             self._last_switch_at = self._clock.now()
             await self.publish(
-                "perception.locus.changed",
+                "perceptual_locus.changed",
                 {"locus": requested, "by": "entity"}, salience=0.5)
             log.info("perception: entity switched locus -> %s", requested)
         else:
             await self.publish(
-                "perception.locus.denied",
+                "perceptual_locus.denied",
                 {"requested": requested, "reason": reason}, salience=0.3)
             log.info("perception: denied self-switch -> %s (%s)", requested, reason)

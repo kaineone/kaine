@@ -149,7 +149,7 @@ def check_corpus_ceiling(
         log.warning(
             "Intent log corpus size is %d bytes (%.3f GB), at or above %.0f%% "
             "of the configured ceiling of %d bytes (%.3f GB); config key: "
-            "[hypnos.voice_alignment].corpus_ceiling_gb=%.2f",
+            "[sleep.voice_alignment].corpus_ceiling_gb=%.2f",
             corpus_bytes,
             corpus_bytes / (1024**3),
             warn_fraction * 100,

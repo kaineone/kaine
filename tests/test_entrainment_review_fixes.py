@@ -24,7 +24,7 @@ def _interoception_section() -> dict[str, Any]:
     path = Path(__file__).parents[1] / "config" / "kaine.toml"
     if path.exists():
         with path.open("rb") as f:
-            return dict(tomllib.load(f).get("soma", {}))
+            return dict(tomllib.load(f).get("interoception", {}))
     return {
         "self_rhythm_enabled": False,
         "self_rhythm_eta": 0.0025,

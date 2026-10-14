@@ -19,7 +19,7 @@ SCRIPT = REPO_ROOT / "scripts" / "sleep_external_train.py"
 @pytest.fixture
 def mod():
     spec = importlib.util.spec_from_file_location(
-        "hypnos_external_train", SCRIPT
+        "sleep_external_train", SCRIPT
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

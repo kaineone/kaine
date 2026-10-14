@@ -137,8 +137,8 @@ def _unfrozen_clock(u: _Mono) -> UnfrozenClock:
 async def _push_interoception(bus: AsyncBus, prediction_error: float, warmup_active: bool = False):
     await bus.publish(
         validate_event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"prediction_error": prediction_error, "warmup_active": warmup_active},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -425,7 +425,7 @@ async def test_observer_extreme_vad_pauses_during_freeze():
     )
 
     await obs._handle_affect(
-        "1-0", _event("thymos", "thymos.state", {"state": {"valence": -0.9, "arousal": 0.9}})
+        "1-0", _event("affect", "affect.state", {"state": {"valence": -0.9, "arousal": 0.9}})
     )
     control_state.freeze(reason="test", source="operator")
     for t_s in (1.0, 61.0, 120.0):
@@ -460,7 +460,7 @@ async def test_observer_fatigue_pauses_during_freeze():
     )
 
     await obs._handle_interoception(
-        "1-0", _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0})
+        "1-0", _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0})
     )
     control_state.freeze(reason="test", source="operator")
     for t_s in (1.0, 61.0, 120.0):
@@ -496,7 +496,7 @@ async def test_observer_corrupt_control_file_counts_and_records_once(tmp_path):
 
     await obs._handle_interoception(
         "1-0",
-        _event("soma", "soma.fatigue", {"value": 105.0, "threshold": 100.0}),
+        _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0}),
     )
     await obs._tick()
     await obs._tick()
@@ -532,7 +532,7 @@ async def test_input_loss_watcher_staleness_pauses_during_freeze(tmp_path):
     calls: list[None] = []
     watcher = InputLossWatcher(
         _SimpleBus(("1-0", None)),
-        ["topos.out"],
+        ["vision.out"],
         threshold_s=1.0,
         poll_s=0.01,
         on_loss=_record_into(calls),
@@ -780,7 +780,7 @@ async def test_observer_sustained_distress_fires_by_wall_time_while_sampling_thr
 
     u.value = 0.0
     await obs._handle_interoception(
-        "1-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+        "1-0", _event("interoception", "interoception.report", {"prediction_error": 0.9})
     )
 
     control_state.freeze(reason="test", source="operator")
@@ -788,7 +788,7 @@ async def test_observer_sustained_distress_fires_by_wall_time_while_sampling_thr
         u.value = t_s
         await obs._handle_interoception(
             f"{int(t_s)}-0",
-            _event("soma", "soma.report", {"prediction_error": 0.9}),
+            _event("interoception", "interoception.report", {"prediction_error": 0.9}),
         )
         await obs._tick()
         if t_s < 30.0:
@@ -828,12 +828,12 @@ async def test_observer_sustained_distress_fires_once_on_dense_unfrozen_samples(
 
     u.value = 0.0
     await obs._handle_interoception(
-        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+        "0-0", _event("interoception", "interoception.report", {"prediction_error": 0.9})
     )
     for t_s in range(1, 31):
         u.value = float(t_s)
         await obs._handle_interoception(
-            f"{t_s}-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+            f"{t_s}-0", _event("interoception", "interoception.report", {"prediction_error": 0.9})
         )
         if t_s < 30:
             assert not any(
@@ -922,19 +922,19 @@ async def test_input_loss_baseline_failure_retried_and_leftover_not_fresh():
     calls: list[None] = []
     watcher = InputLossWatcher(
         _FlakyBus(("1-0", None)),
-        ["topos.out"],
+        ["vision.out"],
         threshold_s=1.0,
         poll_s=0.01,
         on_loss=_record_into(calls),
         unfrozen_clock=_unfrozen_clock(u),
     )
     await watcher._baseline()  # fails
-    assert "topos.out" not in watcher._baselined
+    assert "vision.out" not in watcher._baselined
 
     # First poll retries the baseline; the leftover entry is anchored.
     u.value = 0.2
     assert not await watcher._poll_once(0)
-    assert "topos.out" in watcher._baselined
+    assert "vision.out" in watcher._baselined
     assert not calls
 
     # Silence grows in unfrozen time; crosses the threshold exactly.
@@ -1085,7 +1085,7 @@ async def test_monitor_retries_an_unreadable_incident_whose_write_failed(bus, tm
 
 @pytest.mark.asyncio
 async def test_observer_null_error_is_no_distress_sample():
-    """A soma.report with prediction_error None is not a distress sample:
+    """A interoception.report with prediction_error None is not a distress sample:
     it neither extends nor resets an active sustained-distress episode."""
     u = _Mono(0.0)
     sink = FakeSink()
@@ -1105,7 +1105,7 @@ async def test_observer_null_error_is_no_distress_sample():
 
     u.value = 0.0
     await obs._handle_interoception(
-        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+        "0-0", _event("interoception", "interoception.report", {"prediction_error": 0.9})
     )
     assert obs._interoceptive_distress.active_since is not None
 
@@ -1113,7 +1113,7 @@ async def test_observer_null_error_is_no_distress_sample():
         u.value = float(t_s)
         await obs._handle_interoception(
             f"{t_s}-0",
-            _event("soma", "soma.report", {"prediction_error": None}),
+            _event("interoception", "interoception.report", {"prediction_error": None}),
         )
 
     assert obs._interoceptive_distress.active_since is not None
@@ -1123,7 +1123,7 @@ async def test_observer_null_error_is_no_distress_sample():
     )
 
     await obs._handle_interoception(
-        "11-0", _event("soma", "soma.report", {"prediction_error": 0.0})
+        "11-0", _event("interoception", "interoception.report", {"prediction_error": 0.0})
     )
     assert obs._interoceptive_distress.active_since is None
 
@@ -1188,7 +1188,7 @@ async def test_monitor_null_mid_batch_keeps_the_loop_and_cursor(bus):
     await _push_interoception(bus, 0.9)
     await mon._poll_once(stop)
 
-    entries = await bus.read("soma.out", last_id="0")
+    entries = await bus.read("interoception.out", last_id="0")
     assert mon._cursor == entries[-1][0]
     assert mon._distress.active_since is not None
 
@@ -1217,8 +1217,8 @@ async def test_monitor_missing_error_key_counts_as_zero(bus):
     u.value = 1.0
     await bus.publish(
         validate_event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"warmup_active": False},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -1253,14 +1253,14 @@ async def test_observer_null_run_then_silence_still_fires():
 
     u.value = 0.0
     await obs._handle_interoception(
-        "0-0", _event("soma", "soma.report", {"prediction_error": 0.9})
+        "0-0", _event("interoception", "interoception.report", {"prediction_error": 0.9})
     )
 
     for t_s in range(1, 11):
         u.value = float(t_s)
         await obs._handle_interoception(
             f"{t_s}-0",
-            _event("soma", "soma.report", {"prediction_error": None}),
+            _event("interoception", "interoception.report", {"prediction_error": None}),
         )
 
     u.value = 31.0

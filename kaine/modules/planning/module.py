@@ -11,22 +11,22 @@ replaces the retired NARS/ONA symbolic reasoner (archived under
 Each global broadcast from the planning module:
 
 - drives the :class:`ActiveInferenceEngine` (snapshot → posterior + EFE policy),
-- publishes ``nous.belief`` (PRESERVED contract shape so the episodic memory module / the self-model module /
+- publishes ``planning.belief`` (PRESERVED contract shape so the episodic memory module / the self-model module /
   the workspace consumers keep working) with redefined semantics: ``statement`` =
   the dominant latent-factor label, ``frequency`` = posterior expectation,
   ``confidence`` = 1 − normalised entropy, ``kind`` = ``"belief"``,
-- publishes ``nous.policy`` (selected policy + expected free energy + horizon),
+- publishes ``planning.policy`` (selected policy + expected free energy + horizon),
 - emits the chosen epistemic / communicative action as an ``intent.act`` event
   through the action selection module's intent path — NEVER a direct effector call. The workspace
   inhibition + the effectors module's whitelists remain in control of all outward action; the planning module
   proposes, the executive disposes.
 
 On an EFE timeout the engine returns the last posterior; the planning module publishes a
-``nous.timeout`` diagnostic (salience 0.3) and does not block the cycle.
+``planning.timeout`` diagnostic (salience 0.3) and does not block the cycle.
 
 On a non-timeout inference crash the engine returns stale priors and sets
-``EngineResult.error=True``; the planning module publishes a ``nous.error`` diagnostic and
-skips publishing ``nous.belief`` / ``nous.policy`` for that cycle — stale
+``EngineResult.error=True``; the planning module publishes a ``planning.error`` diagnostic and
+skips publishing ``planning.belief`` / ``planning.policy`` for that cycle — stale
 priors are never re-broadcast as a fresh computation.
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ from kaine.modules.planning.engine import (
 from kaine.workspace.action_selection import ACTION_SELECTION_FEEDBACK_STREAM
 
 log = logging.getLogger(__name__)
-SLEEP_OUT_STREAM = "hypnos.out"
+SLEEP_OUT_STREAM = "sleep.out"
 
 # Map an engine action name → a proposal kind for the action selection module's proposal path.
 # `request_think` is epistemic (internal elaboration) → a `think` proposal.
@@ -64,7 +64,7 @@ _ACTION_TO_PROPOSAL_KIND: dict[str, str] = {
 
 
 class Planning(BaseModule):
-    name: ClassVar[str] = "nous"
+    name: ClassVar[str] = "planning"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom"})
 
     def holds_external_resources(self) -> bool:
@@ -133,7 +133,7 @@ class Planning(BaseModule):
             self._step_counter += 1
             if result.error:
                 # Non-timeout crash: stale priors must NOT be re-published as a
-                # fresh computation. Surface a nous.error diagnostic instead so
+                # fresh computation. Surface a planning.error diagnostic instead so
                 # downstream (the self-model module, the episodic memory module, the workspace) see the gap rather
                 # than acting on fabricated belief/policy.
                 await self._publish_error(result)
@@ -162,7 +162,7 @@ class Planning(BaseModule):
             else self._baseline_salience
         )
         await self.publish(
-            "nous.belief",
+            "planning.belief",
             {
                 "statement": label,
                 "kind": "belief",
@@ -178,7 +178,7 @@ class Planning(BaseModule):
         except (IndexError, ValueError):
             efe = 0.0
         await self.publish(
-            "nous.policy",
+            "planning.policy",
             {
                 "policy": result.action,
                 "expected_free_energy": efe,
@@ -221,7 +221,7 @@ class Planning(BaseModule):
             + preference * (self._alert_salience - self._baseline_salience)
         )
         await self.publish(
-            "nous.proposal",
+            "planning.proposal",
             {
                 "proposal_id": proposal_id,
                 "action": result.action,
@@ -236,7 +236,7 @@ class Planning(BaseModule):
             self._recent_proposals.popitem(last=False)
 
     async def _apply_taken_action_feedback(self) -> None:
-        """Read volition.proposal_outcome and hypnos.rest_request, then record the taken action.
+        """Read action_selection.proposal_outcome and sleep.rest_request, then record the taken action.
 
         Called at the start of every workspace tick, before the engine step.
         """
@@ -266,7 +266,7 @@ class Planning(BaseModule):
                 self._sleep_cursor = sleep_last
 
         for _eid, event in feedback_entries:
-            if event.type != "volition.proposal_outcome":
+            if event.type != "action_selection.proposal_outcome":
                 continue
             payload = event.payload
             pid = payload.get("proposal_id")
@@ -283,7 +283,7 @@ class Planning(BaseModule):
                 self._pending_taken = action_index
 
         for _eid, event in sleep_entries:
-            if event.type != "hypnos.rest_request":
+            if event.type != "sleep.rest_request":
                 continue
             payload = event.payload
             pid = payload.get("proposal_id")
@@ -340,7 +340,7 @@ class Planning(BaseModule):
             log.warning("record_taken_action(%s) failed", action_index, exc_info=True)
 
     async def _publish_error(self, result: EngineResult) -> None:
-        """Publish a nous.error diagnostic on an inference crash.
+        """Publish a planning.error diagnostic on an inference crash.
 
         Belief and policy are NOT published on an error cycle — the stale
         priors held by the engine are returned from step() but they represent
@@ -349,7 +349,7 @@ class Planning(BaseModule):
         downstream consumers (the self-model module, the episodic memory module, the workspace).
         """
         await self.publish(
-            "nous.error",
+            "planning.error",
             {
                 "error_reason": result.error_reason,
                 "elapsed_ms": float(result.elapsed_ms),
@@ -361,7 +361,7 @@ class Planning(BaseModule):
 
     async def _publish_timeout(self, result: EngineResult) -> None:
         await self.publish(
-            "nous.timeout",
+            "planning.timeout",
             {
                 "elapsed_ms": float(result.elapsed_ms),
                 "num_factors": len(result.posterior),

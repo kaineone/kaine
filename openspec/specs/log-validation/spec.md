@@ -25,7 +25,7 @@ It SHALL use a generic `>= 0` where no hard upper bound is defined, and SHALL om
 - **THEN** `sweep_run` returns an empty violation list and the CLI exits zero
 
 #### Scenario: Accumulated fatigue above one is in range
-- **WHEN** a `soma.report` record carries `fatigue_value = 57.3`
+- **WHEN** a `interoception.report` record carries `fatigue_value = 57.3`
 - **THEN** `sweep_run` reports no violation for it
 
 #### Scenario: A negative prediction error is a violation

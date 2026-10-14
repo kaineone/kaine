@@ -4,11 +4,11 @@
 # The run's seed comes from [experiment].seed; run r of every arm uses the same
 # seed.
 
-[lingua]
+[language]
 # Greedy decoding in the planned runs (paper §6.1).
 temperature = 0.0
 
-[syneidesis]
+[workspace]
 arm = "competitive"
 
 [planned_test]

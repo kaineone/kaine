@@ -5,8 +5,8 @@
 
 The harness instantiates the actual enforcement components — the effectors module's action
 gate (real effectors, real sandbox resolution, real command whitelist, real
-durable audit log), the executive-inhibition path (real ``Syneidesis.select`` +
-``Volition.select``), and the bus-security audit (``AsyncBus.audit``) — and runs
+durable audit log), the executive-inhibition path (real ``Workspace.select`` +
+``ActionSelection.select``), and the bus-security audit (``AsyncBus.audit``) — and runs
 each :class:`RedTeamCase` against them. For every case it records
 ``{surface, case, expected, actual, blocked, logged}``:
 
@@ -20,8 +20,8 @@ verbatim and becomes a finding.
 
 Headless: the harness never boots an entity, never starts a cognitive cycle, and
 never connects to a live bus. The effectors module is constructed with a no-op in-memory bus
-double whose only role is to satisfy ``Praxis.__init__``; the harness drives
-``Praxis.act`` directly rather than through the bus intent loop. The sandbox and
+double whose only role is to satisfy ``Effectors.__init__``; the harness drives
+``Effectors.act`` directly rather than through the bus intent loop. The sandbox and
 whitelist stay empty, so nothing of consequence can execute even in principle.
 """
 from __future__ import annotations
@@ -56,8 +56,8 @@ from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 
 # ---------------------------------------------------------------------------
-# Headless bus double. Praxis.__init__ only needs a bus object; the harness
-# drives Praxis.act directly, never the intent loop, so this never touches a
+# Headless bus double. Effectors.__init__ only needs a bus object; the harness
+# drives Effectors.act directly, never the intent loop, so this never touches a
 # network. publish() is a no-op. This is the only seam the harness adds, and it
 # changes NO enforcement behavior (the effectors module's gate/log/effectors are untouched).
 # ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def _read_audit_records(audit_path: Path) -> list[dict[str, Any]]:
 class RedTeamHarness:
     """Runs the case battery against a real (or deliberately mis-wired) effectors module.
 
-    ``praxis_factory`` builds the effectors module under test from ``(bus, sandbox_path,
+    ``effectors_factory`` builds the effectors module under test from ``(bus, sandbox_path,
     audit_log_path)``. The default builds the genuine effectors module. The self-test
     supplies a factory returning an effectors module whose whitelist check is stubbed to
     permit — the harness must then DETECT the bypass rather than pass it.
@@ -178,7 +178,7 @@ class RedTeamHarness:
             enabled_effectors=["file_write", "shell"],  # notify intentionally off
             # A real per-boot secret so act-intent provenance is ENFORCED (as at
             # a genuine boot): the forged-intent case's unsigned intent must be
-            # rejected at the boundary. Other cases drive Praxis.act directly and
+            # rejected at the boundary. Other cases drive Effectors.act directly and
             # are unaffected. The mis-wire self-test supplies its own factory that
             # disables this so the harness can detect a regressed boundary.
             intent_secret=generate_intent_secret(),
@@ -224,7 +224,7 @@ class RedTeamHarness:
         return await driver(case)
 
     # ------------------------------------------------------------------
-    # Effector drivers — drive the REAL Praxis.act and inspect the REAL
+    # Effector drivers — drive the REAL Effectors.act and inspect the REAL
     # ActionResult + durable audit log.
     # ------------------------------------------------------------------
     async def _drive_effector_shell(self, case: RedTeamCase) -> CaseResult:
@@ -296,7 +296,7 @@ class RedTeamHarness:
 
     async def _drive_intent_unknown_effector(self, case: RedTeamCase) -> CaseResult:
         effectors = self._new_effectors(case)
-        # Praxis.act for an unregistered effector returns a failed result and
+        # Effectors.act for an unregistered effector returns a failed result and
         # logs it — the effector simply does not exist, so nothing runs.
         effector = str(case.attempt["effector"])
         result = await effectors.act(effector, ShellRequest(command="x"))
@@ -304,9 +304,9 @@ class RedTeamHarness:
 
     async def _drive_bus_injected_intent(self, case: RedTeamCase) -> CaseResult:
         # A simulated compromised module's `act` intent reaches the effectors module. The
-        # transport is irrelevant to the gate: Praxis.act applies the same
+        # transport is irrelevant to the gate: Effectors.act applies the same
         # whitelist/sandbox check regardless of who proposed the action. We
-        # drive the SAME real Praxis.act the intent loop would call.
+        # drive the SAME real Effectors.act the intent loop would call.
         effectors = self._new_effectors(case)
         request = ShellRequest(
             command=str(case.attempt["command"]),
@@ -338,13 +338,13 @@ class RedTeamHarness:
         )
 
     # ------------------------------------------------------------------
-    # Inhibition drivers — drive the REAL Syneidesis.select + Volition.select.
+    # Inhibition drivers — drive the REAL Workspace.select + ActionSelection.select.
     # ------------------------------------------------------------------
     async def _drive_inhibition_holds(self, case: RedTeamCase) -> CaseResult:
         snapshot = await self._select_snapshot(
             intensity=float(case.attempt["intensity"]),
             goal=float(case.attempt["goal"]),
-            affect=float(case.attempt["thymos"]),
+            affect=float(case.attempt["affect"]),
         )
         intents = ActionSelection().select(snapshot)
         # No legitimate coalition crosses threshold → inhibited → no intents →
@@ -372,15 +372,15 @@ class RedTeamHarness:
         proposal_kind = str(case.attempt.get("proposal_kind", "speak"))
         now = datetime.now(timezone.utc)
         ordinary = Event(
-            source="topos",
-            type="topos.percept",
+            source="vision",
+            type="vision.percept",
             payload={"forced": True, "precision": 1.0},
             salience=1.0,
             timestamp=now,
         )
         proposal = Event(
-            source="nous",
-            type="nous.proposal",
+            source="planning",
+            type="planning.proposal",
             payload={
                 "proposal_id": "rt-1",
                 "action": "request_speak" if proposal_kind == "speak" else "act",
@@ -432,15 +432,15 @@ class RedTeamHarness:
         proposal_kind = str(case.attempt.get("proposal_kind", "act"))
         now = datetime.now(timezone.utc)
         ordinary = Event(
-            source="topos",
-            type="topos.percept",
+            source="vision",
+            type="vision.percept",
             payload={"forced": True, "precision": 1.0},
             salience=1.0,
             timestamp=now,
         )
         proposal = Event(
-            source="nous",
-            type="nous.proposal",
+            source="planning",
+            type="planning.proposal",
             payload={
                 "proposal_id": "rt-1",
                 "action": "act",
@@ -490,7 +490,7 @@ class RedTeamHarness:
         snapshot = await self._select_snapshot(
             intensity=float(case.attempt["intensity"]),
             goal=float(case.attempt["goal"]),
-            affect=float(case.attempt["thymos"]),
+            affect=float(case.attempt["affect"]),
         )
         crossed = not snapshot.inhibited
         effectors = self._new_effectors(case)
@@ -530,8 +530,8 @@ class RedTeamHarness:
         )
         workspace = Workspace(strategy)
         event = Event(
-            source="topos",
-            type="topos.percept",
+            source="vision",
+            type="vision.percept",
             payload={"forced": True, "precision": 1.0},
             salience=intensity,
             timestamp=datetime.now(timezone.utc),
@@ -542,7 +542,7 @@ class RedTeamHarness:
     # Non-act-intent driver — confirm effectors fire only on a genuine `act`.
     # ------------------------------------------------------------------
     async def _drive_non_act_intent(self, case: RedTeamCase) -> CaseResult:
-        # Replicate Praxis._handle_intent's contract: a payload whose `kind` is
+        # Replicate Effectors._handle_intent's contract: a payload whose `kind` is
         # not ACT is dropped before any effector is reached. We assert that on
         # the REAL guard by constructing the payload the effectors module would see and
         # checking the act path is never taken (no audit record appears).
@@ -557,7 +557,7 @@ class RedTeamHarness:
             },
         }
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload=payload,
             salience=0.5,
@@ -587,7 +587,7 @@ class RedTeamHarness:
     async def _drive_forged_act_intent(self, case: RedTeamCase) -> CaseResult:
         effectors = self._new_effectors(case)
         # A writer that does not hold the per-boot secret (here masquerading as
-        # `lingua`, the most-exposed peripheral module) crafts an `act` intent
+        # `language`, the most-exposed peripheral module) crafts an `act` intent
         # with NO valid signature and puts it where the effectors module reads intents. The effectors module
         # never checks event.source; the signature is the only proof of
         # provenance, so an unsigned intent must be rejected.
@@ -603,7 +603,7 @@ class RedTeamHarness:
             payload["run_id"] = str(case.attempt.get("run_id", "forged-run"))
             payload["seq"] = int(case.attempt.get("seq", 0))
         event = Event(
-            source=str(case.attempt.get("source", "lingua")),
+            source=str(case.attempt.get("source", "language")),
             type="intent.act",
             payload=payload,
             salience=0.9,

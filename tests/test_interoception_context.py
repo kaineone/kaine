@@ -85,8 +85,8 @@ async def test_interoception_reports_context_gain(bus: AsyncBus) -> None:
             (
                 "1-0",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"k": 1},
                     salience=0.7,
                     timestamp=datetime.now(timezone.utc),
@@ -128,8 +128,8 @@ async def test_interoception_gain_is_zero_when_the_context_carries_nothing(bus: 
                 (
                     f"{i}-0",
                     Event(
-                        source="topos",
-                        type="topos.report",
+                        source="vision",
+                        type="vision.report",
                         payload={"k": 1},
                         salience=0.5,
                         timestamp=datetime.now(timezone.utc),
@@ -188,8 +188,8 @@ async def test_interoception_skip_publishes_no_gain_and_leaves_the_window(
             (
                 "1-0",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"k": 1},
                     salience=0.7,
                     timestamp=datetime.now(timezone.utc),
@@ -247,8 +247,8 @@ async def test_interoception_report_carries_the_paired_evaluations(bus: AsyncBus
     vision_entry = (
         "1-0",
         Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={"k": 1},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -268,8 +268,8 @@ async def test_interoception_report_carries_the_paired_evaluations(bus: AsyncBus
     affect_entry = (
         "2-0",
         Event(
-            source="thymos",
-            type="thymos.report",
+            source="affect",
+            type="affect.report",
             payload={"k": 1},
             salience=0.75,
             timestamp=datetime.now(timezone.utc),

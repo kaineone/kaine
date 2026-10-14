@@ -49,7 +49,7 @@ def _clip(x: float, lo: float, hi: float) -> float:
 
 
 class Affect(BaseModule):
-    name: ClassVar[str] = "thymos"
+    name: ClassVar[str] = "affect"
 
     def __init__(
         self,
@@ -63,10 +63,10 @@ class Affect(BaseModule):
         goals: Optional[GoalLedger] = None,
         baseline_salience: float = 0.1,
         alert_salience: float = 0.7,
-        interoception_stream: str = "soma.out",
-        sequence_stream: str = "chronos.out",
-        episodic_memory_stream: str = "mnemos.out",
-        action_selection_stream: str = "volition.out",
+        interoception_stream: str = "interoception.out",
+        sequence_stream: str = "sequence.out",
+        episodic_memory_stream: str = "episodic_memory.out",
+        action_selection_stream: str = "action_selection.out",
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.05,
@@ -174,7 +174,7 @@ class Affect(BaseModule):
         # Transient perceived-emotion signal folded into appraisal (decays).
         # None until the first audition.emotion arrives while coupling enabled.
         self._perceived_emotion: Optional[dict[str, float]] = None
-        # Goal-significance method flag, disclosed in thymos.emotion events.
+        # Goal-significance method flag, disclosed in affect.emotion events.
         self._goal_method = "unavailable"
         # Drive-to-source table and dominant-drive selector, injected at cycle
         # assembly so the affect module never imports the workspace.
@@ -184,13 +184,13 @@ class Affect(BaseModule):
         ] = None
         # Streams for coupling inputs (populated in initialize).
         self._audition_emotion_stream = "audition.out"
-        self._social_cognition_agent_model_stream = "empatheia.out"
+        self._social_cognition_agent_model_stream = "social_cognition.out"
         # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
         # audition acoustic onsets) arouses the entity, scaled by the normalised
         # prediction error, mirroring the interoception module's alert→arousal path.
         # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
         # startle does not require the emotion-coupling path to be enabled).
-        self._vision_stream = "topos.out"
+        self._vision_stream = "vision.out"
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
         # Gain on the normalised-surprise → arousal nudge (per alert event). The
         # per-event contribution is capped so arousal BUILDS over sustained surprise
@@ -288,7 +288,7 @@ class Affect(BaseModule):
             self._episodic_memory_stream,
             self._action_selection_stream,
         ]
-        # Perception→arousal streams are read unconditionally (topos.out always;
+        # Perception→arousal streams are read unconditionally (vision.out always;
         # audition.out carries both perception and, when coupling is on, emotion).
         peer_streams.append(self._vision_stream)
         peer_streams.append(self._audition_emotion_stream)
@@ -374,7 +374,7 @@ class Affect(BaseModule):
         )
         for crossing in crossings:
             await self.publish(
-                "thymos.drive",
+                "affect.drive",
                 {"drive": crossing.name, "value": crossing.value, "alert": True},
                 salience=self._alert_salience,
             )
@@ -398,7 +398,7 @@ class Affect(BaseModule):
         # valence follows learning progress.
         if emotion != self._last_emotion:
             await self.publish(
-                "thymos.emotion",
+                "affect.emotion",
                 {
                     "emotion": emotion.value,
                     "alert": emotion != CategoricalEmotion.NEUTRAL,
@@ -503,7 +503,7 @@ class Affect(BaseModule):
         # Norm compatibility: fixed 0.0 — not a real measurement.
         # The self-model module's norm signals are not yet wired; until they are, the DISGUST
         # classification branch (norm <= -0.4) is unreachable by design.
-        # The published thymos.emotion event carries norm_compatibility_available=False
+        # The published affect.emotion event carries norm_compatibility_available=False
         # so consumers know this dimension is unavailable, not zero.
         norm = 0.0
         # Perceived-emotion appraisal contribution (thymos-emergent-affect-coupling).
@@ -552,7 +552,7 @@ class Affect(BaseModule):
             return
         self._last_publish_at = now
         await self.publish(
-            "thymos.state",
+            "affect.state",
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
@@ -635,7 +635,7 @@ class Affect(BaseModule):
         # Perception→arousal coupling: ALL perceptual reports update the
         # pooled prediction-error trackers and relieve curiosity by learning
         # progress; alerts additionally relieve boredom and arouse the entity.
-        if event.type in ("topos.report", "audition.perception"):
+        if event.type in ("vision.report", "audition.perception"):
             payload = event.payload or {}
 
             def _to_error(value: object) -> float | None:
@@ -686,7 +686,7 @@ class Affect(BaseModule):
                         arousal=self._perception_arousal_gain * surprise,
                     )
             return
-        if stream == self._interoception_stream and event.type == "soma.report":
+        if stream == self._interoception_stream and event.type == "interoception.report":
             wellness = event.payload.get("wellness")
             try:
                 w = float(wellness)
@@ -698,7 +698,7 @@ class Affect(BaseModule):
             alerts = event.payload.get("alerts") or []
             if alerts:
                 self._state = self._state.nudged(arousal=0.05)
-        elif stream == self._sequence_stream and event.type == "chronos.report":
+        elif stream == self._sequence_stream and event.type == "sequence.report":
             tsli = event.payload.get("time_since_last_interaction_s")
             if isinstance(tsli, (int, float)) and math.isfinite(tsli):
                 if not self._interaction_seen:
@@ -706,7 +706,7 @@ class Affect(BaseModule):
                 elif self._last_tsli is not None and tsli < self._last_tsli:
                     self._drives.relieve("social_drive", 1.0)
                 self._last_tsli = float(tsli)
-        elif stream == self._episodic_memory_stream and event.type == "mnemos.recall":
+        elif stream == self._episodic_memory_stream and event.type == "episodic_memory.recall":
             intensity = float(event.payload.get("max_affect_intensity", 0.0))
             if intensity > 0:
                 self._state = self._state.nudged(
@@ -719,7 +719,7 @@ class Affect(BaseModule):
             self._record_perceived_emotion(event)
         elif (
             stream == self._social_cognition_agent_model_stream
-            and event.type == "empatheia.agent_model"
+            and event.type == "social_cognition.agent_model"
         ):
             agent_id = event.payload.get("agent_id")
             familiarity = event.payload.get("familiarity")
@@ -759,7 +759,7 @@ class Affect(BaseModule):
         pleasantness, intensity, _ = vad
 
         # Familiarity: use the source_label as the agent identifier; fall back
-        # to coupling_base when no prior empatheia.agent_model has arrived.
+        # to coupling_base when no prior social_cognition.agent_model has arrived.
         agent_id = str(event.payload.get("source_label", ""))
         familiarity = self._familiarity_cache.get(agent_id, 0.0)
 
@@ -804,7 +804,7 @@ class Affect(BaseModule):
         self._perceived_emotion = None
 
         await self.publish(
-            "thymos.state",
+            "affect.state",
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
@@ -818,7 +818,7 @@ class Affect(BaseModule):
     async def add_goal(self, description: str, *, priority: float = 0.5) -> str:
         goal = self._goals.add(description, priority=priority)
         await self.publish(
-            "thymos.goal",
+            "affect.goal",
             {
                 "action": "added",
                 "id": goal.id,
@@ -832,7 +832,7 @@ class Affect(BaseModule):
     async def complete_goal(self, goal_id: str) -> None:
         goal = self._goals.complete(goal_id)
         await self.publish(
-            "thymos.goal",
+            "affect.goal",
             {
                 "action": "completed",
                 "id": goal.id,
@@ -844,7 +844,7 @@ class Affect(BaseModule):
     async def abandon_goal(self, goal_id: str) -> None:
         goal = self._goals.abandon(goal_id)
         await self.publish(
-            "thymos.goal",
+            "affect.goal",
             {
                 "action": "abandoned",
                 "id": goal.id,
@@ -901,5 +901,5 @@ class Affect(BaseModule):
                     if isinstance(v, (int, float))
                 }
         if "goals" in state:
-            # A restore is not a lifecycle change: no thymos.goal events.
+            # A restore is not a lifecycle change: no affect.goal events.
             self._goals.load_dict(state["goals"])

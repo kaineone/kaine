@@ -13,7 +13,7 @@ from kaine.workspace.salience import RuleBasedSalience, arousal_contrast
 from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 
-def _ev(intensity: float = 0.8, source: str = "soma", payload=None) -> Event:
+def _ev(intensity: float = 0.8, source: str = "interoception", payload=None) -> Event:
     return Event(
         source=source,
         type="t",
@@ -113,7 +113,7 @@ async def test_steady_source_does_not_suppress_alerts():
 
     for i in range(600):
         await strategy.score(
-            _ev(0.1, source="thymos", payload={"i": i}), context={}
+            _ev(0.1, source="affect", payload={"i": i}), context={}
         )
         if i % 10 == 9:
             score = await strategy.score(

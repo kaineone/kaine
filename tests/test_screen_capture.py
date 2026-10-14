@@ -158,7 +158,7 @@ def test_read_before_open_is_false():
 
 
 # --------------------------------------------------------------------------- #
-# native passthrough + resolution detection (topos-foveation)
+# native passthrough + resolution detection (vision-foveation)
 # --------------------------------------------------------------------------- #
 
 

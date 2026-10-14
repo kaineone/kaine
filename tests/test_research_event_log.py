@@ -261,15 +261,15 @@ async def test_research_log_off_when_only_evaluation_on(tmp_path):
 
 @pytest.mark.asyncio
 async def test_affect_state_record_has_vad_no_affect_reason():
-    """6.3 — thymos.state → VAD/emotion kept, affect_reason stripped."""
+    """6.3 — affect.state → VAD/emotion kept, affect_reason stripped."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "thymos.out",
+        "affect.out",
         _event(
-            "thymos",
-            "thymos.state",
+            "affect",
+            "affect.state",
             {
                 "state": {"valence": 0.4, "arousal": 0.2, "dominance": -0.1},
                 "drives": {"curiosity": 0.7},
@@ -281,7 +281,7 @@ async def test_affect_state_record_has_vad_no_affect_reason():
     await _run(obs)
     assert len(sink.rows) == 1
     rec = sink.rows[0]
-    assert rec["event_type"] == "thymos.state"
+    assert rec["event_type"] == "affect.state"
     assert rec["state"]["valence"] == pytest.approx(0.4)
     assert rec["emotion"] == "calm"
     assert "affect_reason" not in rec
@@ -291,15 +291,15 @@ async def test_affect_state_record_has_vad_no_affect_reason():
 
 @pytest.mark.asyncio
 async def test_episodic_memory_replay_text_redacted():
-    """6.4 — mnemos.replay → memory ids + affect kept, text dropped."""
+    """6.4 — episodic_memory.replay → memory ids + affect kept, text dropped."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "mnemos.out",
+        "episodic_memory.out",
         _event(
-            "mnemos",
-            "mnemos.replay",
+            "episodic_memory",
+            "episodic_memory.replay",
             {
                 "memory_ids": ["m1", "m2"],
                 "max_affect_intensity": 0.8,
@@ -337,13 +337,13 @@ async def test_audition_transcription_never_logged():
 
 @pytest.mark.asyncio
 async def test_embodiment_visual_raw_never_logged():
-    """6.6 — mundus.visual.raw is not in the taxonomy → no record."""
+    """6.6 — embodiment.visual.raw is not in the taxonomy → no record."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "mundus.out",
-        _event("mundus", "mundus.visual.raw", {"frame": [0, 1, 2, 3]}),
+        "embodiment.out",
+        _event("embodiment", "embodiment.visual.raw", {"frame": [0, 1, 2, 3]}),
     )
     await _run(obs)
     assert sink.rows == []
@@ -351,15 +351,15 @@ async def test_embodiment_visual_raw_never_logged():
 
 @pytest.mark.asyncio
 async def test_effectors_action_content_stripped():
-    """6.7 — praxis.action → metadata kept, content/body/stdout stripped."""
+    """6.7 — effectors.action → metadata kept, content/body/stdout stripped."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "praxis.out",
+        "effectors.out",
         _event(
-            "praxis",
-            "praxis.action",
+            "effectors",
+            "effectors.action",
             {
                 "action_family": "file",
                 "effector": "write_file",
@@ -389,12 +389,12 @@ async def test_content_fields_absent_from_every_record():
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
-    # soma.report carries an extra content field that must be scrubbed.
+    # interoception.report carries an extra content field that must be scrubbed.
     bus.push(
-        "soma.out",
+        "interoception.out",
         _event(
-            "soma",
-            "soma.report",
+            "interoception",
+            "interoception.report",
             {
                 "prediction_error": 0.3,
                 "wellness": 0.9,
@@ -416,17 +416,17 @@ async def test_content_fields_absent_from_every_record():
 
 @pytest.mark.asyncio
 async def test_interoception_unexpected_error_is_recorded():
-    """soma.report's unexpected_error (the error beyond the interoception module's learned
+    """interoception.report's unexpected_error (the error beyond the interoception module's learned
     expected band, which drives sleep pressure) reaches the research log;
     a non-allowlisted field does not."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "soma.out",
+        "interoception.out",
         _event(
-            "soma",
-            "soma.report",
+            "interoception",
+            "interoception.report",
             {
                 "prediction_error": 0.4,
                 "unexpected_error": 0.07,
@@ -447,15 +447,15 @@ async def test_interoception_unexpected_error_is_recorded():
 
 @pytest.mark.asyncio
 async def test_self_model_drift_scalar_only_no_self_model():
-    """6.15 — eidolon.drift → scalars kept, no self-model doc."""
+    """6.15 — self_model.drift → scalars kept, no self-model doc."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "eidolon.out",
+        "self_model.out",
         _event(
-            "eidolon",
-            "eidolon.drift",
+            "self_model",
+            "self_model.drift",
             {
                 "score": 0.42,
                 "significant": True,
@@ -475,15 +475,15 @@ async def test_self_model_drift_scalar_only_no_self_model():
 
 @pytest.mark.asyncio
 async def test_embodiment_proprio_no_raw_coordinates():
-    """mundus.proprio → opaque position hash + region label, never x/y/z."""
+    """embodiment.proprio → opaque position hash + region label, never x/y/z."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "mundus.out",
+        "embodiment.out",
         _event(
-            "mundus",
-            "mundus.proprio",
+            "embodiment",
+            "embodiment.proprio",
             {"x": 128.5, "y": 64.0, "z": 22.0, "region_label": "Sandbox"},
         ),
     )
@@ -508,16 +508,16 @@ async def test_workspace_broadcast_metadata_only():
     bus.push(
         "workspace.broadcast",
         _event(
-            "syneidesis",
+            "workspace",
             "workspace.broadcast",
             {
                 "tick_index": 7,
                 "inhibited": False,
-                "salience_scores": {"thymos": 0.6},
+                "salience_scores": {"affect": 0.6},
                 "selected": [
                     {
-                        "source": "thymos",
-                        "type": "thymos.state",
+                        "source": "affect",
+                        "type": "affect.state",
                         "salience": 0.6,
                         "causal_parent": None,
                         "payload": {"text": "SECRET workspace content"},
@@ -532,8 +532,8 @@ async def test_workspace_broadcast_metadata_only():
     assert rec["event_type"] == "workspace.broadcast"
     assert rec["tick_index"] == 7
     assert rec["inhibited"] is False
-    assert rec["entries"][0]["source"] == "thymos"
-    assert rec["entries"][0]["type"] == "thymos.state"
+    assert rec["entries"][0]["source"] == "affect"
+    assert rec["entries"][0]["type"] == "affect.state"
     assert "payload" not in rec["entries"][0]
     serialized = json.dumps(rec)
     assert "SECRET workspace content" not in serialized
@@ -541,20 +541,20 @@ async def test_workspace_broadcast_metadata_only():
 
 @pytest.mark.asyncio
 async def test_supervisor_incident_captured_with_incident_id():
-    """freeze-run-annotation — spot.incident is captured into a record carrying
+    """freeze-run-annotation — supervisor.incident is captured into a record carrying
     incident_id + operational fields, with content/paths absent."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "spot.out",
+        "supervisor.out",
         _event(
-            "spot",
-            "spot.incident",
+            "supervisor",
+            "supervisor.incident",
             {
                 "incident_id": "inc-123",
                 "transition": "detect",
-                "module": "lingua",
+                "module": "language",
                 "fault_class": "dead",
                 "exception_repr": "FileNotFoundError: <PATH>",
                 "poll_index": 3,
@@ -565,11 +565,11 @@ async def test_supervisor_incident_captured_with_incident_id():
     await _run(obs)
     assert len(sink.rows) == 1
     rec = sink.rows[0]
-    assert rec["event_type"] == "spot.incident"
+    assert rec["event_type"] == "supervisor.incident"
     assert rec["incident_id"] == "inc-123"
     assert rec["tick_index"] == 41
     assert rec["transition"] == "detect"
-    assert rec["module"] == "lingua"
+    assert rec["module"] == "language"
     assert rec["fault_class"] == "dead"
     assert rec["poll_index"] == 3
     assert _no_content_anywhere(rec)
@@ -577,20 +577,20 @@ async def test_supervisor_incident_captured_with_incident_id():
 
 @pytest.mark.asyncio
 async def test_supervisor_incident_subtype_prefix_captured():
-    """The spot.incident.* prefix family also routes to the spot.incident
+    """The supervisor.incident.* prefix family also routes to the supervisor.incident
     taxonomy entry."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "spot.out",
+        "supervisor.out",
         _event(
-            "spot",
-            "spot.incident.restart",
+            "supervisor",
+            "supervisor.incident.restart",
             {
                 "incident_id": "inc-9",
                 "transition": "restart",
-                "module": "soma",
+                "module": "interoception",
                 "outcome": "recovered",
                 "path": "light",
             },
@@ -606,7 +606,7 @@ async def test_supervisor_incident_subtype_prefix_captured():
 
 @pytest.mark.asyncio
 async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
-    """When a run context is set, the captured spot.incident record is stamped
+    """When a run context is set, the captured supervisor.incident record is stamped
     with the run's run_id (via the A1 sink stamping) — the run<->incident link.
     Without a context, no run_id is added."""
     from kaine.experiment.run_context import (
@@ -621,11 +621,11 @@ async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
     sink = AsyncJsonlSink(tmp_path / "no_run", name="research_events", flush_interval_s=0.05)
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "spot.out",
+        "supervisor.out",
         _event(
-            "spot",
-            "spot.incident",
-            {"incident_id": "inc-A", "transition": "freeze", "module": "lingua"},
+            "supervisor",
+            "supervisor.incident",
+            {"incident_id": "inc-A", "transition": "freeze", "module": "language"},
         ),
     )
     await sink.start()
@@ -636,7 +636,7 @@ async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
     files = list((tmp_path / "no_run").glob("research_events-*.jsonl"))
     assert files
     rows = [json.loads(ln) for ln in files[0].read_text().splitlines() if ln.strip()]
-    inc = next(r for r in rows if r.get("event_type") == "spot.incident")
+    inc = next(r for r in rows if r.get("event_type") == "supervisor.incident")
     assert inc["incident_id"] == "inc-A"
     assert "run_id" not in inc
 
@@ -653,11 +653,11 @@ async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
         sink2 = AsyncJsonlSink(tmp_path / "with_run", name="research_events", flush_interval_s=0.05)
         obs2 = ResearchEventObserver(bus2, sink2, poll_interval_s=0.02)
         bus2.push(
-            "spot.out",
+            "supervisor.out",
             _event(
-                "spot",
-                "spot.incident",
-                {"incident_id": "inc-B", "transition": "detect", "module": "soma"},
+                "supervisor",
+                "supervisor.incident",
+                {"incident_id": "inc-B", "transition": "detect", "module": "interoception"},
             ),
         )
         await sink2.start()
@@ -668,7 +668,7 @@ async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
         files2 = list((tmp_path / "with_run").glob("research_events-*.jsonl"))
         assert files2
         rows2 = [json.loads(ln) for ln in files2[0].read_text().splitlines() if ln.strip()]
-        inc2 = next(r for r in rows2 if r.get("event_type") == "spot.incident")
+        inc2 = next(r for r in rows2 if r.get("event_type") == "supervisor.incident")
         assert inc2["incident_id"] == "inc-B"
         assert inc2["run_id"] == "runX"
     finally:
@@ -678,20 +678,20 @@ async def test_supervisor_incident_record_stamped_with_run_id(tmp_path):
 
 @pytest.mark.asyncio
 async def test_supervisor_incident_content_field_never_logged():
-    """A content field smuggled into a spot.incident payload never reaches the
+    """A content field smuggled into a supervisor.incident payload never reaches the
     record (allowlist-by-construction)."""
     bus = FakeBus()
     sink = FakeSink()
     obs = ResearchEventObserver(bus, sink, poll_interval_s=0.02)
     bus.push(
-        "spot.out",
+        "supervisor.out",
         _event(
-            "spot",
-            "spot.incident",
+            "supervisor",
+            "supervisor.incident",
             {
                 "incident_id": "inc-C",
                 "transition": "detect",
-                "module": "lingua",
+                "module": "language",
                 "internal_speech": "PRIVATE inner monologue",
                 "text": "PRIVATE text",
             },
@@ -804,8 +804,8 @@ async def test_raw_archive_starts_and_writes_verbatim_with_full_attestation(tmp_
     bus = FakeBus()
     sink = AsyncJsonlSink(tmp_path / "raw", name="raw_bus_archive", flush_interval_s=0.05)
     bus.push(
-        "lingua.out",
-        _event("lingua", "external_speech", {"text": "VERBATIM conversation text"}),
+        "language.out",
+        _event("language", "external_speech", {"text": "VERBATIM conversation text"}),
     )
     consumer = RawBusArchiveConsumer(bus, sink, cfg)
     await sink.start()
@@ -1058,14 +1058,14 @@ def test_intent_speak_think_act_survive_taxonomy():
         ("think", "intent.think"),
         ("act", "intent.act"),
     ):
-        payload = {"kind": kind, "about_tag": "soma:report", "effector": "vox"}
+        payload = {"kind": kind, "about_tag": "interoception:report", "effector": "vocal"}
         record = _taxonomy_record(event_type, payload)
         assert record["kind"] == kind
-        assert record["about_tag"] == "soma:report"
+        assert record["about_tag"] == "interoception:report"
     # The phantom prefix key is gone; unknown intent subtypes are not logged.
     from kaine.evaluation.observers.research_event_observer import _allowed_fields
 
-    assert _allowed_fields("volition.intent") is None
+    assert _allowed_fields("action_selection.intent") is None
     assert _allowed_fields("intent.teleport") is None
 
 
@@ -1073,10 +1073,10 @@ def test_planning_action_event_types_in_taxonomy():
     from kaine.evaluation.observers.research_event_observer import _allowed_fields
 
     for event_type in (
-        "nous.proposal",
+        "planning.proposal",
         "intent.rest",
-        "volition.proposal_outcome",
-        "hypnos.rest_request",
+        "action_selection.proposal_outcome",
+        "sleep.rest_request",
     ):
         assert _allowed_fields(event_type) is not None, event_type
 
@@ -1100,11 +1100,11 @@ def test_workspace_selected_yields_coalition_metadata():
     snapshot = {
         "tick_index": 42,
         "inhibited": False,
-        "salience_scores": {"soma:report": 0.7},
+        "salience_scores": {"interoception:report": 0.7},
         "selected": [
             {
-                "source": "soma",
-                "type": "soma.report",
+                "source": "interoception",
+                "type": "interoception.report",
                 "salience": 0.7,
                 "causal_parent": None,
                 "payload": {"secret": "never-logged"},
@@ -1113,7 +1113,7 @@ def test_workspace_selected_yields_coalition_metadata():
     }
     record = _workspace_metadata_record(snapshot)
     assert record["tick_index"] == 42
-    assert record["entries"][0]["source"] == "soma"
+    assert record["entries"][0]["source"] == "interoception"
     assert record["entries"][0]["salience"] == 0.7
     # Entry payload/content is NEVER copied.
     assert "payload" not in record["entries"][0]
@@ -1144,7 +1144,7 @@ def test_audition_perception_numeric_fields_logged_item_dropped():
 
 
 def test_processor_reports_carry_alert_and_context_gain():
-    for event_type in ("topos.report", "soma.report"):
+    for event_type in ("vision.report", "interoception.report"):
         record = _taxonomy_record(
             event_type,
             {
@@ -1161,14 +1161,14 @@ def test_processor_reports_carry_alert_and_context_gain():
         assert record["null_prediction_error"] == 0.5
         assert record["mean_prediction_error"] == 0.8
 
-    assert _taxonomy_record("chronos.report", {"alert": True})["alert"] is True
+    assert _taxonomy_record("sequence.report", {"alert": True})["alert"] is True
 
 
 def test_positive_control_result_is_logged():
     from kaine.modules.positive_control import RESULT_FIELDS
 
     payload = {
-        "processor": "topos",
+        "processor": "vision",
         "n_reports": 5,
         "min_reports": 100,
         "ig_with": 0.1,
@@ -1248,13 +1248,13 @@ def test_workspace_selected_events_key_no_longer_used():
         _workspace_metadata_record,
     )
 
-    record = _workspace_metadata_record({"selected_events": [{"source": "soma"}]})
+    record = _workspace_metadata_record({"selected_events": [{"source": "interoception"}]})
     assert "entries" not in record
 
 
 def test_sleep_sleep_started_started_at():
     # Real producer payload (kaine/modules/sleep/module.py).
-    record = _taxonomy_record("hypnos.sleep.started", {"started_at": 1717.5})
+    record = _taxonomy_record("sleep.sleep.started", {"started_at": 1717.5})
     assert record["started_at"] == 1717.5
 
 
@@ -1265,7 +1265,7 @@ def test_affect_emotion_emotion_field_retained():
         "scores": {"curiosity": 0.8, "distress": 0.1},
         "norm_compatibility_available": True,
     }
-    record = _taxonomy_record("thymos.emotion", payload)
+    record = _taxonomy_record("affect.emotion", payload)
     assert record["emotion"] == "curiosity"
     assert record["scores"]["curiosity"] == 0.8
     assert record["norm_compatibility_available"] is True
@@ -1280,20 +1280,20 @@ def test_vision_report_fields_and_no_scene_change():
         "habituation_score": 0.77,
         "alert": False,
     }
-    record = _taxonomy_record("topos.report", payload)
+    record = _taxonomy_record("vision.report", payload)
     assert record["prediction_error"] == 0.21
     assert record["normalised_error"] == 0.13
     assert record["change_score"] == 0.04
     assert record["habituation_score"] == 0.77
     assert record["alert"] is False
-    # The producer-less topos.scene_change entry is gone entirely.
+    # The producer-less vision.scene_change entry is gone entirely.
     from kaine.evaluation.observers.research_event_observer import (
         _TAXONOMY,
         _allowed_fields,
     )
 
-    assert "topos.scene_change" not in _TAXONOMY
-    assert _allowed_fields("topos.scene_change") is None
+    assert "vision.scene_change" not in _TAXONOMY
+    assert _allowed_fields("vision.scene_change") is None
 
 
 def test_sequence_report_content_free_allowlist():
@@ -1308,7 +1308,7 @@ def test_sequence_report_content_free_allowlist():
         "temporal_context": ["SECRET", "LATENT", "TEXT"],
         "feature_vector": [0.1, 0.2, 0.3],
     }
-    record = _taxonomy_record("chronos.report", payload)
+    record = _taxonomy_record("sequence.report", payload)
     assert record["anomaly_score"] == 0.42
     assert record["rumination_detected"] is False
     assert record["time_since_last_interaction_s"] == 312.0
@@ -1319,7 +1319,7 @@ def test_sequence_report_content_free_allowlist():
 def test_sequence_out_in_curated_streams():
     from kaine.evaluation.observers.research_event_observer import _CURATED_STREAMS
 
-    assert "chronos.out" in _CURATED_STREAMS
+    assert "sequence.out" in _CURATED_STREAMS
 
 
 def test_no_latent_field_in_any_taxonomy_allowlist():
@@ -1338,15 +1338,15 @@ def test_audition_prosody_hz_fields():
 
 
 def test_raw_bus_archive_language_aggregate():
-    """The language module now publishes an aggregate lingua.out stream; the raw archive
+    """The language module now publishes an aggregate language.out stream; the raw archive
     follows the canonical module stream set, not the mode-specific split."""
     from kaine.evaluation.observers.raw_bus_archive_consumer import (
         _MODULE_OUT_STREAMS,
     )
 
-    assert "lingua.out" in _MODULE_OUT_STREAMS
-    assert "lingua.external" not in _MODULE_OUT_STREAMS
-    assert "lingua.internal" not in _MODULE_OUT_STREAMS
+    assert "language.out" in _MODULE_OUT_STREAMS
+    assert "language.external" not in _MODULE_OUT_STREAMS
+    assert "language.internal" not in _MODULE_OUT_STREAMS
 
 
 @pytest.mark.asyncio
@@ -1363,7 +1363,7 @@ async def test_observer_drains_streams_on_stop():
     event = Event(
         source="positive_control",
         type="positive_control.result",
-        payload={"processor": "topos", "n_reports": 5, "final": True},
+        payload={"processor": "vision", "n_reports": 5, "final": True},
         salience=0.0,
         timestamp=datetime.now(timezone.utc),
     )
@@ -1387,7 +1387,7 @@ async def test_welfare_blind_sensor_advisories_captured_with_exact_allowlist():
             "welfare",
             "welfare.blind_sensor",
             {
-                "processor": "topos",
+                "processor": "vision",
                 "undefined_samples": 4,
                 "undefined_seconds": 30.0,
                 "blind_sensor_samples": 0,
@@ -1416,7 +1416,7 @@ async def test_welfare_blind_sensor_advisories_captured_with_exact_allowlist():
 
     rec = sink.rows[0]
     assert rec["event_type"] == "welfare.blind_sensor"
-    assert rec["processor"] == "topos"
+    assert rec["processor"] == "vision"
     assert rec["undefined_samples"] == 4
     assert rec["undefined_seconds"] == 30.0
     assert rec["blind_sensor_samples"] == 0

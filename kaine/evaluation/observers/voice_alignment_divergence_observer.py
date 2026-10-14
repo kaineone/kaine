@@ -3,10 +3,10 @@
 
 """Voice-alignment divergence observer.
 
-Subscribes to ``hypnos.out`` for ``hypnos.sleep.completed`` events and writes
+Subscribes to ``sleep.out`` for ``sleep.sleep.completed`` events and writes
 one JSONL record per sleep summarising the voice-alignment phase.
 
-Record fields and their source in the ``hypnos.sleep.completed`` payload:
+Record fields and their source in the ``sleep.sleep.completed`` payload:
 
 - ``adapter_accepted`` — from ``voice_alignment.accepted``
 - ``capability_loss`` — from ``voice_alignment.capability_loss``
@@ -24,7 +24,7 @@ Record fields and their source in the ``hypnos.sleep.completed`` payload:
 The free-text reason is never recorded because these records are eligible for
 the metrics-only research bundle.
 
-If the event type is not ``hypnos.sleep.completed``, the payload has no
+If the event type is not ``sleep.sleep.completed``, the payload has no
 ``voice_alignment`` dict, or the voice-alignment phase result in ``phases``
 carries ``metadata.skipped``, the observer writes nothing.  A missing
 voice-alignment phase (older producers) does not prevent recording.
@@ -41,7 +41,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_SLEEP_STREAM = "hypnos.out"
+_SLEEP_STREAM = "sleep.out"
 
 
 def outcome_category(accepted: object, reason: object, samples_used: object) -> str:
@@ -69,7 +69,7 @@ class VoiceAlignmentDivergenceObserver(StreamSubscriberObserver):
         self._sink = sink
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if event.type != "hypnos.sleep.completed":
+        if event.type != "sleep.sleep.completed":
             return
         payload = event.payload or {}
         va = payload.get("voice_alignment")

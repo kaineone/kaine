@@ -14,10 +14,11 @@ A cycle run needs a stable identity before its data can be trusted. This page ex
 - `seed`: the integer pinned by `set_global_seed`.
 - `started_at`: an ISO-8601 UTC timestamp.
 - `git_sha`: a best-effort short git revision. Resolution never raises. When git is unavailable it falls back to the `KAINE_GIT_SHA` environment variable baked into container images at build time (`ARG GIT_SHA` sets `ENV KAINE_GIT_SHA`), so containerized manifests carry provenance without a `.git` directory.
-- `model_ids`: the configured model ids from the documented model keys only (`lingua`, `evaluation_chat`, `topos_encoder`, `embedding_backend`, `embedding_model_id`, `audition_stt` and `audition_emotion`), plus `lingua_revision`, the organ repository's commit sha, when the downloader recorded one. Hostnames, paths and voice names are never included.
+- `model_ids`: the configured model ids from the documented model keys only (`language`, `evaluation_chat`, `vision_encoder`, `embedding_backend`, `embedding_model_id`, `audition_stt` and `audition_emotion`), plus `language_revision`, the organ repository's commit sha, when the downloader recorded one. Hostnames, paths and voice names are never included.
 - `config_digest`: the `sha256` of the resolved config, truncated, so two runs can be compared for "same config" without storing the config itself.
+- `config_key_scheme`: `2` for runs whose configuration uses the functional module names. A manifest without the field was written with the old names (scheme 1), so a `config_digest` from one scheme is never equal to one from the other, even for the same settings.
 - `kaine_version`.
-- `perception_feed`: the reproducible perception-feed descriptor, a small dict shaped `{"mode": "off"|"live"|"seeded"|"playlist"|"womb"|"screen", "regime": ..., ...}` (mode `live` has regime `"camera"`). For `seeded` it carries the seed and schedule parameters, enough to regenerate the stream. For `playlist` it carries the manifest sha256, per-item digests and the transition settings, enough to verify the stimulus without holding its content. `womb` carries the developmental stimulus parameters and the awake-time offset, and `screen` its capture parameters. Mode `off` produces `{"mode": "off"}`. An empty dict means the descriptor was unavailable and carries no feed signature. The caller gathers this at the cycle/boot layer and passes it in as data, keeping `kaine.experiment` boundary-neutral.
+- `perception_feed`: the reproducible perception-feed descriptor, a small dict shaped `{"mode": "off"|"live"|"seeded"|"playlist"|"stimulus_source"|"screen", "regime": ..., ...}` (mode `live` has regime `"camera"`). For `seeded` it carries the seed and schedule parameters, enough to regenerate the stream. For `playlist` it carries the manifest sha256, per-item digests and the transition settings, enough to verify the stimulus without holding its content. `stimulus_source` carries the developmental stimulus parameters and the awake-time offset, and `screen` its capture parameters. Mode `off` produces `{"mode": "off"}`. An empty dict means the descriptor was unavailable and carries no feed signature. The caller gathers this at the cycle/boot layer and passes it in as data, keeping `kaine.experiment` boundary-neutral.
 - `plugins`: identifiers of loaded plugins, if any.
 - `timing`: the timing parameters used by the run.
 - `revived_from`: when the run was revived from a preservation, the preservation id, or the bundle name if the id is not set.
@@ -117,12 +118,12 @@ The ranges are taken from the producing modules and the research event taxonomy.
 | `familiarity_scalar` | `[0, 1]` | social cognition |
 | `wellness` | `[0, 1]` | interoception report |
 | `fatigue_value` | `[0, ∞)` | interoception report |
-| `error_magnitude`, `phantasia.world_error.error` | `[0, ∞)` | non-negative magnitudes |
+| `error_magnitude`, `world_model.world_error.error` | `[0, ∞)` | non-negative magnitudes |
 | `unexpected_error` | `[0, ∞)` | non-negative magnitude |
 | `cycle.tick` `access_drive` | `[0, 1]` | cycle access drive |
 | `cycle.tick` `experiential_rate_hz` | `[0, ∞)` | cycle timing |
 | `cycle.tick` `processing_rate_hz` | `[0, ∞)` | cycle timing |
-| `nous.proposal` `preference` | `[0, 1]` | planning proposal |
+| `planning.proposal` `preference` | `[0, 1]` | planning proposal |
 | `audition.emotion` `confidence` | `[0, 1]` | audition emotion |
 
 Omitted as undefined: `expected_free_energy` (a signed scalar with no documented range), and latency / elapsed / duration / count fields beyond the generic non-negative case.

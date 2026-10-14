@@ -162,10 +162,10 @@ async def test_module_round_trip_with_disclosure(bus):
             wav, sample_rate, source_label="test"
         )
 
-        vocal_entries = await bus.read("vox.out", last_id="0", count=50)
+        vocal_entries = await bus.read("vocal.out", last_id="0", count=50)
         vocal_payload = None
         for _id, event in vocal_entries:
-            if event.type == "vox.synthesized":
+            if event.type == "vocal.synthesized":
                 vocal_payload = _decode_payload(event.payload)
                 break
         assert vocal_payload is not None

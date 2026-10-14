@@ -10,7 +10,7 @@ The rest of the threshold contrast (theta_band, b_band, the bias-corrected local
 ## What Changes
 
 - `BroadcastContext` records the tick of every broadcast it receives, accessed or inhibited, and the tick and context age at each reading of the context.
-- The vision module (`topos.report`), the audition module (`audition.perception`) and the interoception module (`soma.report`) put on each report `prediction_broadcast_tick`, the tick of the latest broadcast the processor had received when it formed the prediction this report scores, and `prediction_context_age_s`, the age of the context that prediction used. Both are null when the report scores no prediction; the age alone is null when the processor held no context when forming it.
+- The vision module (`vision.report`), the audition module (`audition.perception`) and the interoception module (`interoception.report`) put on each report `prediction_broadcast_tick`, the tick of the latest broadcast the processor had received when it formed the prediction this report scores, and `prediction_context_age_s`, the age of the context that prediction used. Both are null when the report scores no prediction; the age alone is null when the processor held no context when forming it.
 - The curated research log copies both fields on the three report types; the range sweep bounds both below by 0.
 - The calibration tool's blocked reason for theta_band and b_band names the licence question instead of the missing records.
 
@@ -22,5 +22,5 @@ The rest of the threshold contrast (theta_band, b_band, the bias-corrected local
 
 ## Impact
 
-- Changed: `kaine/modules/context.py`, `kaine/modules/{topos,audition,soma}/module.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, `kaine/experiment/calibrate.py`, docs, tests.
+- Changed: `kaine/modules/context.py`, `kaine/modules/{vision,audition,interoception}/module.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, `kaine/experiment/calibrate.py`, docs, tests.
 - Ordinary boots: each processor report gains two numeric fields; nothing else changes.

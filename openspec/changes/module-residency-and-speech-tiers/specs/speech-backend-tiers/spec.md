@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Speech ladders over the existing backends
-KAINE SHALL define the speech ladders as ordered `(backend, model id)` rungs over the existing `[vox].backend` and `[audition].backend` values and the sherpa-onnx model ids, heaviest first:
+KAINE SHALL define the speech ladders as ordered `(backend, model id)` rungs over the existing `[vocal].backend` and `[audition].backend` values and the sherpa-onnx model ids, heaviest first:
 
 - TTS: `chatterbox`, then `sherpa_onnx` with `kokoro-en`;
 - STT: `speaches` (faster-whisper `medium.en`), then `sherpa_onnx` with `moonshine-base-en`, then `sherpa_onnx` with `moonshine-tiny-en`.

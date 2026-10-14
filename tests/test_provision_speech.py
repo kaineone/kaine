@@ -89,7 +89,7 @@ def test_aux_models_omits_speaches_and_chatterbox_when_sherpa_selected() -> None
             "backend": "sherpa_onnx",
             "stt_model_id": "Systran/faster-distil-whisper-medium.en",
         },
-        "vox": {"backend": "sherpa_onnx"},
+        "vocal": {"backend": "sherpa_onnx"},
     }
     models = provision.aux_models(cfg)
     repos = {m.repo for m in models}

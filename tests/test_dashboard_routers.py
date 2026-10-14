@@ -95,17 +95,17 @@ async def _make_client(
 
 def test_conversation_sleep_state_follows_sleep_lifecycle():
     """The sleep badge must react to the canonical sleep module's lifecycle event types
-    (hypnos.sleep.started/completed), not the old began_rest/ended_rest variants
+    (sleep.sleep.started/completed), not the old began_rest/ended_rest variants
     The sleep module never emits."""
     state = ConversationState()
     assert state.sleeping is False
-    state.update_from_sleep("hypnos.sleep.started")
+    state.update_from_sleep("sleep.sleep.started")
     assert state.sleeping is True
-    state.update_from_sleep("hypnos.sleep.completed")
+    state.update_from_sleep("sleep.sleep.completed")
     assert state.sleeping is False
     # The old, wrong type must NOT toggle the badge (guards against regression).
-    state.update_from_sleep("hypnos.sleep.started")
-    state.update_from_sleep("hypnos.began_rest")
+    state.update_from_sleep("sleep.sleep.started")
+    state.update_from_sleep("sleep.began_rest")
     assert state.sleeping is True
 
 
@@ -128,8 +128,8 @@ async def test_console_does_not_render_transcript_text():
     # external nor internal — which strictly preserves the privacy invariant that
     # the entity's internal monologue is never shown.
     history = [
-        ("1-0", _event("lingua", "external_speech", {"text": "hi there"})),
-        ("2-0", _event("lingua", "internal_speech", {"text": "should not appear"})),
+        ("1-0", _event("language", "external_speech", {"text": "hi there"})),
+        ("2-0", _event("language", "internal_speech", {"text": "should not appear"})),
     ]
     client, app = await _make_client(history=history)
     async with client:
@@ -144,7 +144,7 @@ async def test_console_does_not_render_transcript_text():
 async def test_diagnostics_route_has_no_message_text(tmp_path):
     fm = ForkManager(tmp_path)
     client, app = await _make_client(
-        history=[("1-0", _event("lingua", "external_speech", {"text": "secret message"}))],
+        history=[("1-0", _event("language", "external_speech", {"text": "secret message"}))],
         metrics={"cycle.processing_hz": 3.333},
         fork_manager=fm,
     )
@@ -195,7 +195,7 @@ async def test_forks_endpoint_lists_snapshots(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"wellness": 0.9}
@@ -224,7 +224,7 @@ async def test_post_fork_creates_new_snapshot(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"v": 1}
@@ -318,7 +318,7 @@ async def test_post_merge_accepts_valid_merge_form_ids(tmp_path):
 
 
 class _InteroceptionOnlyModule:
-    name = "soma"
+    name = "interoception"
 
     def serialize(self):
         return {"v": 1}
@@ -339,8 +339,8 @@ async def test_post_merge_two_world_model_world_models_requires_choice(tmp_path)
     fm = ForkManager(tmp_path)
     snap_a = fm.snapshot(_InteroceptionOnlyRegistry(), label="a")
     snap_b = fm.snapshot(_InteroceptionOnlyRegistry(), label="b")
-    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
-    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
+    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "world_model")
+    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "world_model")
     a_ph_dir.mkdir(parents=True, exist_ok=True)
     b_ph_dir.mkdir(parents=True, exist_ok=True)
     (a_ph_dir / "world_model.ckpt").write_bytes(b"a-model")
@@ -363,8 +363,8 @@ async def test_post_merge_two_world_model_world_models_choice_b(tmp_path):
     fm = ForkManager(tmp_path)
     snap_a = fm.snapshot(_InteroceptionOnlyRegistry(), label="a")
     snap_b = fm.snapshot(_InteroceptionOnlyRegistry(), label="b")
-    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "phantasia")
-    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "phantasia")
+    a_ph_dir = artifacts_dir(tmp_path, snap_a.id, "world_model")
+    b_ph_dir = artifacts_dir(tmp_path, snap_b.id, "world_model")
     a_ph_dir.mkdir(parents=True, exist_ok=True)
     b_ph_dir.mkdir(parents=True, exist_ok=True)
     (a_ph_dir / "world_model.ckpt").write_bytes(b"a-model")
@@ -383,7 +383,7 @@ async def test_post_merge_two_world_model_world_models_choice_b(tmp_path):
             )
     assert r.status_code == 200, r.text
     merged_id = r.json()["id"]
-    merged_ph = artifacts_dir(tmp_path, merged_id, "phantasia") / "world_model.ckpt"
+    merged_ph = artifacts_dir(tmp_path, merged_id, "world_model") / "world_model.ckpt"
     assert merged_ph.read_bytes() == b"b-model"
 
 
@@ -392,7 +392,7 @@ async def test_post_fork_with_time_scale_stores_timing_profile(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"v": 1}
@@ -433,7 +433,7 @@ async def test_post_fork_rejects_nonpositive_time_scale(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"v": 1}
@@ -462,7 +462,7 @@ async def test_post_fork_without_time_scale_has_no_timing(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"v": 1}
@@ -497,7 +497,7 @@ async def test_forks_json_surfaces_timing_profile(tmp_path):
     fm = ForkManager(tmp_path)
 
     class FakeMod:
-        name = "soma"
+        name = "interoception"
 
         def serialize(self):
             return {"v": 1}
@@ -567,8 +567,8 @@ async def test_health_endpoint_shape():
         return UP, "ok"
 
     prober = _prober(
-        {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)],
+        {"episodic_memory": True},
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=up_probe)],
     )
     client, app = await _make_client(health_prober=prober)
     async with client:
@@ -605,8 +605,8 @@ async def test_push_snapshots_periodically_pushes_combined_snapshot():
         return UP, "ok"
 
     prober = _prober(
-        {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)],
+        {"episodic_memory": True},
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=up_probe)],
     )
     bridge = BusBridge(FakeBus(), PrivacyFilter(), streams=[])
     client = bridge.add_client("diagnostics")
@@ -623,8 +623,8 @@ async def test_push_snapshots_periodically_pushes_combined_snapshot():
     )
     try:
         _, event = await asyncio.wait_for(client.queue.get(), timeout=2.0)
-        assert event.source == "nexus"
-        assert event.type == "nexus.snapshot"
+        assert event.source == "dashboard"
+        assert event.type == "dashboard.snapshot"
         assert event.payload["metrics"] == {"a": 1}
         assert event.payload["health"]["dependencies"][0]["status"] == UP
     finally:
@@ -711,8 +711,8 @@ async def test_health_disabled_module_is_not_configured():
         raise AssertionError("probe ran for a disabled module")
 
     prober = _prober(
-        {"vox": False},
-        [DependencySpec(name="Chatterbox", role="Vocal", module="vox", probe=should_not_run)],
+        {"vocal": False},
+        [DependencySpec(name="Chatterbox", role="Vocal", module="vocal", probe=should_not_run)],
     )
     snap = await prober.snapshot(force=True)
     dep = snap["dependencies"][0]
@@ -745,10 +745,10 @@ async def test_health_timeout_does_not_block_other_probes():
         return UP, "fast"
 
     prober = _prober(
-        {"nous": True, "mnemos": True},
+        {"planning": True, "episodic_memory": True},
         [
-            DependencySpec(name="ONA", role="Planning", module="nous", probe=hangs),
-            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=quick),
+            DependencySpec(name="ONA", role="Planning", module="planning", probe=hangs),
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=quick),
         ],
         probe_timeout_s=0.05,
     )
@@ -768,8 +768,8 @@ async def test_health_results_cached_within_ttl():
         return UP, "ok"
 
     prober = _prober(
-        {"mnemos": True},
-        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=counting)],
+        {"episodic_memory": True},
+        [DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=counting)],
         cache_ttl_s=60.0,
     )
     await prober.snapshot()
@@ -784,7 +784,7 @@ async def test_health_board_rendered_on_diagnostics_page():
         return UP, "PING ok"
 
     prober = _prober(
-        {"mnemos": True},
+        {"episodic_memory": True},
         [DependencySpec(name="Redis", role="bus", module=None, probe=up_probe)],
     )
     client, app = await _make_client(health_prober=prober)
@@ -805,7 +805,7 @@ async def test_console_renders_health_in_sidebar():
         return UP, "PING ok"
 
     prober = _prober(
-        {"mnemos": True},
+        {"episodic_memory": True},
         [DependencySpec(name="Redis", role="bus", module=None, probe=up_probe)],
     )
     client, app = await _make_client(health_prober=prober)
@@ -904,26 +904,26 @@ async def test_pages_share_dashboard_layout_marker():
 @pytest.mark.asyncio
 async def test_module_states_from_runtime_and_perception(tmp_path):
     runtime = tmp_path / "cycle_runtime.json"
-    runtime.write_text(json.dumps({"modules": ["mnemos", "nous"], "tick_index": 5}))
+    runtime.write_text(json.dumps({"modules": ["episodic_memory", "planning"], "tick_index": 5}))
 
     async def up_probe():
         return UP, "ok"
 
     prober = HealthProber(
-        modules_enabled={"mnemos": True, "nous": True, "praxis": False},
+        modules_enabled={"episodic_memory": True, "planning": True, "effectors": False},
         dependencies=[
-            DependencySpec(name="Qdrant", role="EpisodicMemory", module="mnemos", probe=up_probe)
+            DependencySpec(name="Qdrant", role="EpisodicMemory", module="episodic_memory", probe=up_probe)
         ],
         cache_ttl_s=0.0,
         cycle_runtime_path=runtime,
     )
     snap = await prober.snapshot(force=True)
     mods = {m["name"]: m for m in snap["modules"]}
-    assert mods["mnemos"]["enabled"] and mods["mnemos"]["initialized"]
-    assert mods["nous"]["enabled"] and mods["nous"]["initialized"]
+    assert mods["episodic_memory"]["enabled"] and mods["episodic_memory"]["initialized"]
+    assert mods["planning"]["enabled"] and mods["planning"]["initialized"]
     # Disabled module: enabled False, not initialized.
-    assert mods["praxis"]["enabled"] is False
-    assert mods["praxis"]["initialized"] is False
+    assert mods["effectors"]["enabled"] is False
+    assert mods["effectors"]["initialized"] is False
 
 
 def test_charts_served_locally_no_cdn():
@@ -1076,8 +1076,8 @@ async def test_health_json_supervisor_block_ok_when_no_files(tmp_path):
     """No state files → supervisor block state is 'ok'."""
     prober = _supervisor_prober(tmp_path)
     snap = await prober.snapshot(force=True)
-    assert "spot" in snap
-    s = snap["spot"]
+    assert "supervisor" in snap
+    s = snap["supervisor"]
     assert s["state"] == "ok"
     assert s["module"] is None
     assert s["attempts"] == 0
@@ -1088,17 +1088,17 @@ async def test_health_json_supervisor_block_ok_when_no_files(tmp_path):
 
 @pytest.mark.asyncio
 async def test_health_json_supervisor_block_recovery(tmp_path):
-    """Control file with frozen=true and source='spot' → state 'recovery'."""
+    """Control file with frozen=true and source='supervisor' → state 'recovery'."""
     ctrl = {
         "frozen": True,
         "frozen_at": "2026-06-07T12:00:00+00:00",
         "reason": "restarting soma",
-        "source": "spot",
+        "source": "supervisor",
     }
     (tmp_path / "control.json").write_text(json.dumps(ctrl))
     prober = _supervisor_prober(tmp_path)
     snap = await prober.snapshot(force=True)
-    s = snap["spot"]
+    s = snap["supervisor"]
     assert s["state"] == "recovery"
     assert s["message"] == "restarting soma"
     assert s["since"] == "2026-06-07T12:00:00+00:00"
@@ -1109,7 +1109,7 @@ async def test_health_json_supervisor_block_critical(tmp_path):
     """Escalation file with escalated=true → state 'critical'."""
     esc = {
         "escalated": True,
-        "module": "nous",
+        "module": "planning",
         "attempts": 5,
         "snapshot_id": "snap-abc",
         "escalated_at": "2026-06-07T11:59:00+00:00",
@@ -1118,9 +1118,9 @@ async def test_health_json_supervisor_block_critical(tmp_path):
     (tmp_path / "escalation.json").write_text(json.dumps(esc))
     prober = _supervisor_prober(tmp_path)
     snap = await prober.snapshot(force=True)
-    s = snap["spot"]
+    s = snap["supervisor"]
     assert s["state"] == "critical"
-    assert s["module"] == "nous"
+    assert s["module"] == "planning"
     assert s["attempts"] == 5
     assert s["snapshot_id"] == "snap-abc"
     assert s["message"] == "nous failed 5 times; halting"
@@ -1129,7 +1129,7 @@ async def test_health_json_supervisor_block_critical(tmp_path):
 
 @pytest.mark.asyncio
 async def test_health_json_supervisor_via_endpoint(tmp_path):
-    """health.json HTTP endpoint includes a 'spot' key with valid state."""
+    """health.json HTTP endpoint includes a 'supervisor' key with valid state."""
     prober = _supervisor_prober(tmp_path)
     client, app = await _make_client(health_prober=prober)
     async with client:
@@ -1139,8 +1139,8 @@ async def test_health_json_supervisor_via_endpoint(tmp_path):
             )
         assert r.status_code == 200
         data = r.json()
-        assert "spot" in data
-        assert data["spot"]["state"] in ("ok", "recovery", "critical")
+        assert "supervisor" in data
+        assert data["supervisor"]["state"] in ("ok", "recovery", "critical")
 
 
 @pytest.mark.asyncio
@@ -1158,10 +1158,10 @@ async def test_diagnostics_page_has_supervisor_alert_overlay(tmp_path):
 
 
 def test_supervisor_out_in_default_diagnostics_streams():
-    """spot.out must be in DEFAULT_DIAGNOSTICS_STREAMS."""
+    """supervisor.out must be in DEFAULT_DIAGNOSTICS_STREAMS."""
     import kaine.dashboard.__main__ as dashboard_main
 
-    assert "spot.out" in dashboard_main.DEFAULT_DIAGNOSTICS_STREAMS
+    assert "supervisor.out" in dashboard_main.DEFAULT_DIAGNOSTICS_STREAMS
 
 
 # ---- Entity-care (read-only welfare/divergence block) --------------------

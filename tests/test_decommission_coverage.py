@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+from kaine import legacy_aliases
 from kaine.lifecycle import decommission
 from kaine.lifecycle.decommission import (
     _qdrant_api_key,
@@ -18,7 +19,7 @@ from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
 # This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
-_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+_NO_QDRANT = {"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}}
 
 
 @pytest.fixture(autouse=True)
@@ -175,24 +176,25 @@ def test_other_entity_fork_is_kept(tmp_path):
 
 def test_qdrant_in_use_and_api_key_resolution(tmp_path):
     """qdrant_in_use detects the backend and _qdrant_api_key resolves keys."""
-    on = {"modules": {"mnemos": True}}
-    assert qdrant_in_use({**on, "mnemos": {"backend": "qdrant"}}) is True
+    on = {"modules": {"episodic_memory": True}}
+    assert qdrant_in_use({**on, "episodic_memory": {"backend": "qdrant"}}) is True
     # A module that is not enabled never counts, whatever its backend says.
-    assert qdrant_in_use({"mnemos": {"backend": "qdrant"}}) is False
-    assert qdrant_in_use({"modules": {"mnemos": False}, "mnemos": {"backend": "qdrant"}}) is False
+    assert qdrant_in_use({"episodic_memory": {"backend": "qdrant"}}) is False
+    assert qdrant_in_use({"modules": {"episodic_memory": False}, "episodic_memory": {"backend": "qdrant"}}) is False
     # An enabled module without a backend key uses the runtime default, Qdrant.
-    assert qdrant_in_use({**on, "mnemos": {}}) is True
+    assert qdrant_in_use({**on, "episodic_memory": {}}) is True
     assert qdrant_in_use({**on}) is True
-    assert qdrant_in_use({**on, "mnemos": {"backend": "sqlite_vec"}}) is False
-    # The renamed module key counts too.
-    assert qdrant_in_use({"modules": {"episodic_memory": True}}) is True
+    assert qdrant_in_use({**on, "episodic_memory": {"backend": "sqlite_vec"}}) is False
+    # The module key from before the rename counts too.
+    old_key = next(f for f in legacy_aliases.name_forms("episodic_memory") if f != "episodic_memory")
+    assert qdrant_in_use({"modules": {old_key: True}}) is True
     # A module the tier does not support never counts.
     assert (
         qdrant_in_use(
             {
-                "modules": {"empatheia": True},
-                "empatheia": {"backend": "qdrant"},
-                "tier": {"unsupported_modules": ["empatheia"]},
+                "modules": {"social_cognition": True},
+                "social_cognition": {"backend": "qdrant"},
+                "tier": {"unsupported_modules": ["social_cognition"]},
             }
         )
         is False
@@ -217,7 +219,7 @@ def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
     (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
     (state_root / "eidolon" / "self_model.json").write_text("{}", encoding="utf-8")
 
-    cfg = {"modules": {"mnemos": True}, "mnemos": {"backend": "qdrant"}}
+    cfg = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "qdrant"}}
     collection = decommission._episodic_memory_collection_names(cfg)[0]
 
     class FakeClient:
@@ -272,7 +274,7 @@ def test_shared_organ_volume_keeps_other_entities_files(tmp_path):
         data_root=tmp_path / "data",
         qdrant_cfg={
             **_NO_QDRANT,
-            "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+            "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
         },
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
@@ -289,7 +291,7 @@ def test_shared_organ_volume_keeps_other_entities_files(tmp_path):
         state_root=state_root,
         qdrant_cfg={
             **_NO_QDRANT,
-            "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+            "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
         },
     )
     assert not (organ / "active-1.gguf").exists()

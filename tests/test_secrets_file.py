@@ -41,7 +41,7 @@ api_key = "REPLACE-ME-WITH-THE-KEY-IN-compose-env"
 # host = "127.0.0.1"
 # port = 6533
 
-[nexus]
+[dashboard]
 # Operator token for the Nexus web UI / diagnostics. Must be at least 32 characters.
 # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 # operator_token = "<32+ random characters>"
@@ -135,9 +135,9 @@ def test_toml_upsert_dashboard_token_parses_and_comment_remains(tmp_path):
     path = tmp_path / "secrets.toml"
     path.write_text(EXAMPLE_TOML, newline="")
     token = "tok_" + "a" * 40
-    upsert_toml_field(path, "nexus", "operator_token", token)
+    upsert_toml_field(path, "dashboard", "operator_token", token)
 
-    assert read_toml_field(path, "nexus", "operator_token") == token
+    assert read_toml_field(path, "dashboard", "operator_token") == token
 
     lines = _read(path).splitlines()
     comment_lines = [ln for ln in lines if ln.strip().startswith("# operator_token")]
@@ -159,10 +159,10 @@ def test_toml_missing_table_appended(tmp_path):
 def test_toml_dotted_table_works(tmp_path):
     path = tmp_path / "secrets.toml"
     path.write_text(EXAMPLE_TOML, newline="")
-    upsert_toml_field(path, "mnemos.qdrant", "api_key", "dotted-key")
-    assert read_toml_field(path, "mnemos.qdrant", "api_key") == "dotted-key"
+    upsert_toml_field(path, "episodic_memory.qdrant", "api_key", "dotted-key")
+    assert read_toml_field(path, "episodic_memory.qdrant", "api_key") == "dotted-key"
     text = _read(path)
-    assert "[mnemos.qdrant]" in text
+    assert "[episodic_memory.qdrant]" in text
     assert 'api_key = "dotted-key"' in text
 
 
@@ -235,8 +235,8 @@ def test_read_toml_missing_table(tmp_path):
 
 def test_read_toml_commented_field(tmp_path):
     path = tmp_path / "secrets.toml"
-    path.write_text('[nexus]\n# operator_token = "x"\n', newline="")
-    assert read_toml_field(path, "nexus", "operator_token") is None
+    path.write_text('[dashboard]\n# operator_token = "x"\n', newline="")
+    assert read_toml_field(path, "dashboard", "operator_token") is None
 
 
 def test_read_toml_after_upsert(tmp_path):
@@ -258,7 +258,7 @@ def test_cli_toml_stdin_stores_value_without_echo(tmp_path):
             "kaine.secrets_file",
             "toml",
             str(path),
-            "nexus",
+            "dashboard",
             "operator_token",
             "-",
         ],
@@ -270,7 +270,7 @@ def test_cli_toml_stdin_stores_value_without_echo(tmp_path):
     assert result.returncode == 0
     assert value not in result.stdout
     assert value not in result.stderr
-    assert read_toml_field(path, "nexus", "operator_token") == value
+    assert read_toml_field(path, "dashboard", "operator_token") == value
 
 
 def test_cli_bad_value_exits_two_without_echo(tmp_path):
@@ -283,7 +283,7 @@ def test_cli_bad_value_exits_two_without_echo(tmp_path):
             "kaine.secrets_file",
             "toml",
             str(path),
-            "nexus",
+            "dashboard",
             "operator_token",
             value,
         ],
@@ -299,28 +299,28 @@ def test_cli_bad_value_exits_two_without_echo(tmp_path):
 
 def test_toml_insert_at_eof_without_newline(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    path.write_bytes(b'[redis]\npassword = "x"\n\n[nexus]')
-    upsert_toml_field(path, "nexus", "operator_token", "abc123")
+    path.write_bytes(b'[redis]\npassword = "x"\n\n[dashboard]')
+    upsert_toml_field(path, "dashboard", "operator_token", "abc123")
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     assert data["redis"]["password"] == "x"
-    assert data["nexus"]["operator_token"] == "abc123"
+    assert data["dashboard"]["operator_token"] == "abc123"
 
 
 def test_toml_refuses_inline_table(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    original = 'nexus = { host = "x" }\n'
+    original = 'dashboard = { host = "x" }\n'
     path.write_bytes(original.encode("utf-8"))
     with pytest.raises(ValueError, match="refusing to edit"):
-        upsert_toml_field(path, "nexus", "operator_token", "abc")
+        upsert_toml_field(path, "dashboard", "operator_token", "abc")
     assert _read(path) == original
 
 
 def test_toml_refuses_dotted_keys(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    original = 'nexus.host = "x"\n'
+    original = 'dashboard.host = "x"\n'
     path.write_bytes(original.encode("utf-8"))
     with pytest.raises(ValueError, match="refusing to edit"):
-        upsert_toml_field(path, "nexus", "operator_token", "abc")
+        upsert_toml_field(path, "dashboard", "operator_token", "abc")
     assert _read(path) == original
 
 
@@ -335,39 +335,39 @@ def test_toml_refuses_multiline_string_value(tmp_path: Path) -> None:
 
 def test_toml_refuses_malformed_file(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    original = "[nexus\n"
+    original = "[dashboard\n"
     path.write_bytes(original.encode("utf-8"))
     with pytest.raises(ValueError, match="refusing to edit"):
-        upsert_toml_field(path, "nexus", "operator_token", "abc")
+        upsert_toml_field(path, "dashboard", "operator_token", "abc")
     assert _read(path) == original
 
 
 def test_toml_header_inside_multiline_string_not_used(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    original = '[a]\nnote = """\n[nexus]\n"""\n'
+    original = '[a]\nnote = """\n[dashboard]\n"""\n'
     path.write_bytes(original.encode("utf-8"))
     value = "op-123"
     try:
-        upsert_toml_field(path, "nexus", "operator_token", value)
+        upsert_toml_field(path, "dashboard", "operator_token", value)
     except ValueError:
         return
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    assert data["nexus"]["operator_token"] == value
-    assert data["a"]["note"] == "[nexus]\n"
+    assert data["dashboard"]["operator_token"] == value
+    assert data["a"]["note"] == "[dashboard]\n"
 
 
 def test_error_messages_never_contain_value(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    path.write_bytes(b'nexus = { host = "x" }\n')
+    path.write_bytes(b'dashboard = { host = "x" }\n')
     value = "super-secret-token"
     with pytest.raises(ValueError) as excinfo:
-        upsert_toml_field(path, "nexus", "operator_token", value)
+        upsert_toml_field(path, "dashboard", "operator_token", value)
     assert value not in str(excinfo.value)
 
 
 def test_no_temp_files_left(tmp_path: Path) -> None:
     path = tmp_path / "secrets.toml"
-    upsert_toml_field(path, "nexus", "operator_token", "abc")
+    upsert_toml_field(path, "dashboard", "operator_token", "abc")
     leftovers = [
         name
         for name in path.parent.iterdir()

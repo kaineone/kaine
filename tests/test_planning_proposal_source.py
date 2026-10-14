@@ -39,15 +39,15 @@ def _event(
 
 
 def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
-    return ("s1", _event("soma", "soma.report", {"wellness": value}))
+    return ("s1", _event("interoception", "interoception.report", {"wellness": value}))
 
 
 def _own_speech() -> tuple[str, Event]:
-    return ("e2", _event("lingua", "external_speech", {"text": "I said this"}))
+    return ("e2", _event("language", "external_speech", {"text": "I said this"}))
 
 
 def _own_internal_speech() -> tuple[str, Event]:
-    return ("i1", _event("lingua", "internal_speech", {"text": "monologue"}))
+    return ("i1", _event("language", "internal_speech", {"text": "monologue"}))
 
 
 def _user_comm(text: str = "Hello", salience: float = 0.5) -> tuple[str, Event]:
@@ -73,8 +73,8 @@ def _proposal(
     return (
         "p-" + proposal_id,
         _event(
-            "nous",
-            "nous.proposal",
+            "planning",
+            "planning.proposal",
             {
                 "proposal_id": proposal_id,
                 "action": action,
@@ -128,7 +128,7 @@ def test_conscious_think_proposal_emits_think_intent_from_planning():
     assert len(intents) == 1
     intent = intents[0]
     assert intent.kind == THINK
-    assert intent.origin == "nous"
+    assert intent.origin == "planning"
     assert intent.about
     assert intent.entry_id == "s1"
     assert v.proposal_outcomes(snap) == [
@@ -215,7 +215,7 @@ def test_rest_proposal_emits_rest_intent_without_signature():
     assert len(intents) == 1
     assert intents[0].kind == REST
     assert intents[0].about == "rest"
-    assert intents[0].origin == "nous"
+    assert intents[0].origin == "planning"
     assert intents[0].proposal_id == "p1"
     assert intents[0].sig is None
     # Rest outcomes are forwarded to the sleep module; realization is decided there.
@@ -273,16 +273,16 @@ def test_run_action_selection_publishes_outcome_but_no_intent_on_inhibited_snaps
     asyncio.run(CognitiveCycle._run_action_selection(fake, snap))
 
     out_events = [e for e in bus.events if e.type.startswith("intent.")]
-    feedback_events = [e for e in bus.events if e.type == "volition.proposal_outcome"]
+    feedback_events = [e for e in bus.events if e.type == "action_selection.proposal_outcome"]
     assert out_events == []
-    # The bus maps a source to "<source>.out": nothing may land on volition.out
+    # The bus maps a source to "<source>.out": nothing may land on action_selection.out
     # on an inhibited snapshot, so the outcome must come from its own source.
     from kaine.bus.schema import module_stream
 
-    assert not [e for e in bus.events if module_stream(e.source) == "volition.out"]
+    assert not [e for e in bus.events if module_stream(e.source) == "action_selection.out"]
     assert len(feedback_events) == 1
-    assert feedback_events[0].source == "volition_feedback"
-    assert module_stream(feedback_events[0].source) == "volition_feedback.out"
+    assert feedback_events[0].source == "action_selection_feedback"
+    assert module_stream(feedback_events[0].source) == "action_selection_feedback.out"
     assert feedback_events[0].salience == 0.0
     assert feedback_events[0].payload == {
         "proposal_id": "p1",
@@ -305,9 +305,9 @@ def test_language_ignores_rest_intent():
 
     fake = FakeLanguage()
     rest_event = _event(
-        "volition",
+        "action_selection",
         "intent.rest",
-        {"kind": "rest", "about": "rest", "origin": "nous"},
+        {"kind": "rest", "about": "rest", "origin": "planning"},
     )
     asyncio.run(Language._dispatch_intent(fake, rest_event))
     assert fake.calls == []
@@ -327,14 +327,14 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
     # is armed externally.
     snap1 = _snapshot(
         [
-            ("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.6)),
+            ("s1", _event("interoception", "interoception.report", {"wellness": 0.6}, salience=0.6)),
             _proposal("p1", "speak", preference=0.9),
         ]
     )
     intents1 = v.select(snap1)
     assert len(intents1) == 1
     assert intents1[0].kind == SPEAK
-    assert intents1[0].origin == "nous"
+    assert intents1[0].origin == "planning"
 
     # t=40: a user utterance would normally make the default policy speak, but
     # the inner policy's own guard is still armed from the planning module's speak at t=0.
@@ -381,21 +381,21 @@ def test_report_policy_think_dropped_while_source_think_guard_armed():
     # report policy's think refractory.
     snap1 = _snapshot(
         [
-            ("s1", _event("soma", "soma.report", {"wellness": 0.2}, salience=0.2)),
+            ("s1", _event("interoception", "interoception.report", {"wellness": 0.2}, salience=0.2)),
             _proposal("p1", "think", preference=0.9),
         ]
     )
     intents1 = v.select(snap1)
     assert len(intents1) == 1
     assert intents1[0].kind == THINK
-    assert intents1[0].origin == "nous"
+    assert intents1[0].origin == "planning"
     assert v.proposal_outcomes(snap1)[0]["reason"] == "realized"
 
     # Tick 2: the report now crosses the think threshold, but the report
     # policy's own in-flight guard and refractory block a new think.
     clock.advance(0.3)
     snap2 = _snapshot(
-        [("s2", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.6))]
+        [("s2", _event("interoception", "interoception.report", {"wellness": 0.6}, salience=0.6))]
     )
     assert v.select(snap2) == []
 
@@ -418,14 +418,14 @@ def test_report_policy_speak_refractory_after_planning_speak():
     # is realized rather than superseded by a report speak.
     snap1 = _snapshot(
         [
-            ("s1", _event("soma", "soma.report", {"wellness": 0.3}, salience=0.3)),
+            ("s1", _event("interoception", "interoception.report", {"wellness": 0.3}, salience=0.3)),
             _proposal("p1", "speak", preference=0.9),
         ]
     )
     intents1 = v.select(snap1)
     assert len(intents1) == 1
     assert intents1[0].kind == SPEAK
-    assert intents1[0].origin == "nous"
+    assert intents1[0].origin == "planning"
     assert v.proposal_outcomes(snap1)[0]["reason"] == "realized"
 
     # Clear the in-flight guard with own external speech, but stay inside the
@@ -435,7 +435,7 @@ def test_report_policy_speak_refractory_after_planning_speak():
     assert not inner.speak_in_flight
 
     snap2 = _snapshot(
-        [("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.6))]
+        [("s1", _event("interoception", "interoception.report", {"wellness": 0.6}, salience=0.6))]
     )
     # The speak refractory holds; the report policy may still think instead.
     assert SPEAK not in [i.kind for i in v.select(snap2)]
@@ -443,7 +443,7 @@ def test_report_policy_speak_refractory_after_planning_speak():
     # Past the refractory window, the report speak is emitted.
     clock.advance(8.0)
     snap3 = _snapshot(
-        [("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.6))]
+        [("s1", _event("interoception", "interoception.report", {"wellness": 0.6}, salience=0.6))]
     )
     intents3 = v.select(snap3)
     assert len(intents3) == 1
@@ -501,7 +501,7 @@ def test_speak_referent_skips_entitys_own_external_speech():
     v = ActionSelection(policy=source)
 
     own = _own_speech()  # most salient, but must not be the referent
-    interoception = ("s1", _event("soma", "soma.report", {"wellness": 0.6}, salience=0.4))
+    interoception = ("s1", _event("interoception", "interoception.report", {"wellness": 0.6}, salience=0.4))
     snap = _snapshot([own, interoception, _proposal("p1", "speak")])
     intents = v.select(snap)
     assert len(intents) == 1
@@ -566,7 +566,7 @@ def test_plain_callable_fallback_filters_inner_intents():
     snap1 = _snapshot([_interoception_report(), _proposal("p1", "speak")])
     intents1 = v.select(snap1)
     assert len(intents1) == 1
-    assert intents1[0].origin == "nous"
+    assert intents1[0].origin == "planning"
 
     clock.advance(1.0)
     snap2 = _snapshot([])
@@ -624,14 +624,14 @@ def test_wrapped_policy_never_sees_proposals():
         )
         snap = _snapshot(
             [
-                ("s1", _event("soma", "soma.report", {"wellness": 0.2}, salience=0.2)),
+                ("s1", _event("interoception", "interoception.report", {"wellness": 0.2}, salience=0.2)),
                 _proposal("p1", "think", preference=0.9, salience=0.9),
             ]
         )
         return v.select(snap), v.proposal_outcomes(snap)
 
     on_intents, on_outcomes = run(True)
-    assert [(i.kind, i.origin, i.entry_id) for i in on_intents] == [(THINK, "nous", "s1")]
+    assert [(i.kind, i.origin, i.entry_id) for i in on_intents] == [(THINK, "planning", "s1")]
     assert on_outcomes[0]["reason"] == "realized"
 
     off_intents, off_outcomes = run(False)

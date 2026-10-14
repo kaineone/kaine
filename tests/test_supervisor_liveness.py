@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Spot.assess — crash-primary, hang-gated, sleep-gated liveness model."""
+"""Supervisor.assess — crash-primary, hang-gated, sleep-gated liveness model."""
 from __future__ import annotations
 
 import asyncio
@@ -120,13 +120,13 @@ async def test_sleep_gate_suppresses_hung(bus):
         mod._last_heartbeat -= 1000.0
 
         class _Sleep(BaseModule):
-            name = "hypnos"
+            name = "sleep"
             is_sleeping = True
 
         registry = ModuleRegistry()
-        registry.register(mod if mod.name == "hypnos" else _Sleep(bus))
+        registry.register(mod if mod.name == "sleep" else _Sleep(bus))
         supervisor = _make_supervisor(registry, lambda: 0.0)
-        # hypnos.is_sleeping True -> hang suppressed.
+        # sleep.is_sleeping True -> hang suppressed.
         assert supervisor.assess(mod).state == "alive"
     finally:
         await mod.shutdown()

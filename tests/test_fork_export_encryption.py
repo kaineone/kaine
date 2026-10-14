@@ -35,7 +35,7 @@ def _snap() -> ForkSnapshot:
     return ForkSnapshot(
         parent_id=None,
         label="root",
-        modules={"soma": {"wellness": 0.9}, "chronos": {"steps": 12}},
+        modules={"interoception": {"wellness": 0.9}, "sequence": {"steps": 12}},
         adapters=["state/hypnos/adapters/a"],
         metadata={"note": "fork export"},
     )
@@ -54,7 +54,7 @@ def test_fork_bundle_encrypted_on_disk(monkeypatch, tmp_path):
     target = tmp_path / snap.id / "snapshot.json"
     raw = target.read_bytes()
     # The bundle is not human-readable JSON.
-    assert b'"soma"' not in raw
+    assert b'"interoception"' not in raw
     assert b"wellness" not in raw
     import json
 
@@ -69,7 +69,7 @@ def test_fork_import_with_correct_key(monkeypatch, tmp_path):
 
     restored = load_snapshot(tmp_path, snap.id)
     assert restored.id == snap.id
-    assert restored.modules["soma"]["wellness"] == 0.9
+    assert restored.modules["interoception"]["wellness"] == 0.9
     assert restored.metadata["note"] == "fork export"
 
 
@@ -94,5 +94,5 @@ def test_fork_bundle_plaintext_when_disabled(tmp_path):
     save_snapshot(tmp_path, snap)
     target = tmp_path / snap.id / "snapshot.json"
     raw = json.loads(target.read_text())
-    assert raw["modules"]["soma"]["wellness"] == 0.9
+    assert raw["modules"]["interoception"]["wellness"] == 0.9
     assert load_snapshot(tmp_path, snap.id).id == snap.id

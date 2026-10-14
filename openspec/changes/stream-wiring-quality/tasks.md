@@ -1,8 +1,8 @@
 ## 1. Language stream wiring
 
-- [x] 1.1 Add an aggregate `lingua.out` publish in `kaine/modules/language/module.py` using `self.publish` with a lightweight event containing `mode`, `text`, and metadata; verify `tests/test_language_module.py` still passes.
-- [x] 1.2 Replace the literal `"lingua.internal"` at line ~394 with the `INTERNAL_STREAM` constant and verify no hard-coded language module stream literals remain in the module.
-- [x] 1.3 Update `tests/test_config_stream_wiring.py` to include `mundus`, `perception`, `empatheia` and to treat the language module's aggregate `lingua.out` as a real producer.
+- [x] 1.1 Add an aggregate `language.out` publish in `kaine/modules/language/module.py` using `self.publish` with a lightweight event containing `mode`, `text`, and metadata; verify `tests/test_language_module.py` still passes.
+- [x] 1.2 Replace the literal `"language.internal"` at line ~394 with the `INTERNAL_STREAM` constant and verify no hard-coded language module stream literals remain in the module.
+- [x] 1.3 Update `tests/test_config_stream_wiring.py` to include `embodiment`, `perception`, `social_cognition` and to treat the language module's aggregate `language.out` as a real producer.
 
 ## 2. Canonical stream names
 

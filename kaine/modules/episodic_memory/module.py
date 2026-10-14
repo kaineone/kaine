@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 
 class EpisodicMemory(BaseModule):
-    name: ClassVar[str] = "mnemos"
+    name: ClassVar[str] = "episodic_memory"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
     preservation_state_key: ClassVar[str | None] = "memory_state"
 
@@ -80,8 +80,8 @@ class EpisodicMemory(BaseModule):
         # Persisted-store budget in bytes (paper A.10, Table A1 row B).
         storage_budget_bytes: int = 10 * 1024**3,
         # Peer stream names for the affect module + the sleep module window tracking
-        affect_stream: str = "thymos.out",
-        sleep_stream: str = "hypnos.out",
+        affect_stream: str = "affect.out",
+        sleep_stream: str = "sleep.out",
         # Shared subjective clock (injected at boot). The spontaneous-recall
         # cooldown is a cognitive throttle, so it runs in subjective time: at
         # time_scale != 1.0 the recall_cooldown_s window dilates with the rest
@@ -110,7 +110,7 @@ class EpisodicMemory(BaseModule):
         # the first recall fires so the very first cued tick is not suppressed.
         self._last_recall_monotonic: float | None = None
 
-        # Affect state cache — updated whenever thymos.state arrives.
+        # Affect state cache — updated whenever affect.state arrives.
         # Stored as plain numerics (intensity + VAD) — no raw sense data.
         self._cached_affect: dict[str, Any] | None = None
 
@@ -250,11 +250,11 @@ class EpisodicMemory(BaseModule):
         return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
 
     # ------------------------------------------------------------------
-    # The affect module's subscription (thymos.state) + the sleep module's sleep-end tracking
+    # The affect module's subscription (affect.state) + the sleep module's sleep-end tracking
     # ------------------------------------------------------------------
 
     async def _peer_consumer_loop(self) -> None:
-        """Background loop: read thymos.out for affect and hypnos.out for sleep end."""
+        """Background loop: read affect.out for affect and sleep.out for sleep end."""
         try:
             while not self._stopped.is_set():
                 progressed = False
@@ -279,7 +279,7 @@ class EpisodicMemory(BaseModule):
             raise
 
     def _handle_peer_event(self, stream: str, event: Event) -> None:
-        if stream == self._affect_stream and event.type == "thymos.state":
+        if stream == self._affect_stream and event.type == "affect.state":
             state_dict = event.payload.get("state") or {}
             try:
                 # Cache affect as plain numerics only (VAD + derived intensity).
@@ -294,18 +294,18 @@ class EpisodicMemory(BaseModule):
                     "dominance": dominance,
                 }
             except Exception:
-                log.warning("mnemos: failed to parse thymos.state payload", exc_info=True)
+                log.warning("mnemos: failed to parse affect.state payload", exc_info=True)
         elif stream == self._sleep_stream:
             # The window is opened by the sleep module through open_replay_window(),
             # so a late sleep.started on the bus cannot reopen it after the sleep ended.
-            if event.type == "hypnos.sleep.completed":
+            if event.type == "sleep.sleep.completed":
                 self._replay_engine.close_window()
                 self._core.clear_last_consolidated()
                 log.debug("mnemos: Hypnos maintenance window closed")
 
     @property
     def cached_affect(self) -> dict[str, Any] | None:
-        """Current cached affect state (intensity + VAD), or None before first thymos.state."""
+        """Current cached affect state (intensity + VAD), or None before first affect.state."""
         return self._cached_affect
 
     @property
@@ -327,7 +327,7 @@ class EpisodicMemory(BaseModule):
         Selects traces from the whole wake just ended (paper A.10): the
         short-term buffer plus every trace persisted since the last
         downscaling (``await self._core.wake_pool()``), publishes them as
-        ``mnemos.replay`` events, and returns the list of published events.
+        ``episodic_memory.replay`` events, and returns the list of published events.
 
         Raises `ReplayWindowError` unless the sleep module has opened the replay window (`open_replay_window()`).
         """
@@ -364,10 +364,10 @@ class EpisodicMemory(BaseModule):
         # Delegate selection + guard to the engine.  ReplayWindowError propagates.
         events = self._replay_engine.replay(candidates)
 
-        # Publish each selected trace as a mnemos.replay event on the bus.
+        # Publish each selected trace as a episodic_memory.replay event on the bus.
         for rev in events:
             await self.publish(
-                "mnemos.replay",
+                "episodic_memory.replay",
                 rev.loop_payload,
                 salience=self._baseline_salience,
             )
@@ -390,7 +390,7 @@ class EpisodicMemory(BaseModule):
                 exc,
             )
             await self.publish(
-                "mnemos.recall",
+                "episodic_memory.recall",
                 {
                     "count": 0,
                     "collection": collection,
@@ -406,7 +406,7 @@ class EpisodicMemory(BaseModule):
             self._alert_salience if summary.max_affect_intensity >= 0.5 else self._baseline_salience
         )
         await self.publish(
-            "mnemos.recall",
+            "episodic_memory.recall",
             {
                 "count": summary.count,
                 "collection": summary.collection,
@@ -617,7 +617,7 @@ class EpisodicMemory(BaseModule):
 
         if not isinstance(self._core._storage, InMemoryStorage):
             raise RuntimeError(
-                "Mnemos.deserialize received a memory capture but the backend is "
+                "EpisodicMemory.deserialize received a memory capture but the backend is "
                 "not InMemoryStorage; use the async revive path "
                 "(import_preservation_state) which can drive the remote store — "
                 "refusing to silently drop captured memories."
@@ -640,7 +640,7 @@ class EpisodicMemory(BaseModule):
         except StopIteration as stop:
             return stop.value
         raise RuntimeError(
-            "Mnemos._drive_sync: coroutine awaited real I/O; use the async "
+            "EpisodicMemory._drive_sync: coroutine awaited real I/O; use the async "
             "import_preservation_state path instead"
         )
 
@@ -661,7 +661,7 @@ class EpisodicMemory(BaseModule):
         capture = state.get("memory_state")
         if capture is None:
             raise RuntimeError(
-                "Mnemos.import_preservation_state: capture has no memory_state — "
+                "EpisodicMemory.import_preservation_state: capture has no memory_state — "
                 "refusing to revive a memory-less lesser individual"
             )
         return await self._core.import_state(capture)
@@ -678,7 +678,7 @@ class EpisodicMemory(BaseModule):
 _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "audition.transcription",
-        "mundus.visual.raw",
+        "embodiment.visual.raw",
     }
 )
 
@@ -739,7 +739,7 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             # its verbatim payload (raw sense data must not persist into memory).
             pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
             continue
-        if event.type == "mnemos.replay":
+        if event.type == "episodic_memory.replay":
             # Storing the text would nest the old trace inside the new one on every sleep.
             pieces.append(f"{event.source}:{event.type}=<replay of {event.payload.get('memory_id')}>")
             continue

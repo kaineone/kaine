@@ -174,7 +174,7 @@ def test_root_redirects_when_conversation_disabled():
 
 def test_bad_access_env_raises(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text("[nexus]\n")
+    p.write_text("[dashboard]\n")
     monkeypatch.setenv("KAINE_NEXUS_ACCESS", "bogus")
 
     with pytest.raises(DashboardConfigError) as exc:
@@ -185,7 +185,7 @@ def test_bad_access_env_raises(monkeypatch, tmp_path):
 
 def test_empty_access_env_keeps_toml_value(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text('[nexus]\naccess = "open"\n')
+    p.write_text('[dashboard]\naccess = "open"\n')
     monkeypatch.setenv("KAINE_NEXUS_ACCESS", "")
 
     cfg = load_dashboard_config(path=p)
@@ -194,7 +194,7 @@ def test_empty_access_env_keeps_toml_value(monkeypatch, tmp_path):
 
 def test_extra_hosts_extend_allowlist_and_origins(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text("[nexus]\nport = 8088\n")
+    p.write_text("[dashboard]\nport = 8088\n")
     monkeypatch.setenv(
         "KAINE_NEXUS_EXTRA_HOSTS",
         "kaine-box.tail1234.ts.net, 100.64.0.7",
@@ -209,7 +209,7 @@ def test_extra_hosts_extend_allowlist_and_origins(monkeypatch, tmp_path):
 
 def test_invalid_extra_host_raises(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text("[nexus]\n")
+    p.write_text("[dashboard]\n")
     monkeypatch.setenv("KAINE_NEXUS_EXTRA_HOSTS", "bad_host!")
 
     with pytest.raises(DashboardConfigError) as exc:
@@ -220,7 +220,7 @@ def test_invalid_extra_host_raises(monkeypatch, tmp_path):
 
 def test_published_port_added_to_extra_origins(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text("[nexus]\nport = 8088\n")
+    p.write_text("[dashboard]\nport = 8088\n")
     monkeypatch.setenv("KAINE_NEXUS_EXTRA_HOSTS", "kaine-box.tail1234.ts.net")
     monkeypatch.setenv("KAINE_NEXUS_PUBLISHED_PORT", "9099")
 
@@ -231,7 +231,7 @@ def test_published_port_added_to_extra_origins(monkeypatch, tmp_path):
 def test_committed_config_ships_open_access():
     path = Path(__file__).parent.parent / "config" / "kaine.toml"
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    assert raw["nexus"]["access"] == "open"
+    assert raw["dashboard"]["access"] == "open"
 
 
 def test_main_open_non_loopback_without_token_starts(monkeypatch):
@@ -322,7 +322,7 @@ def test_read_only_blocks_any_control_route():
 
 def test_read_only_env_override(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
-    p.write_text("[nexus]\n")
+    p.write_text("[dashboard]\n")
     monkeypatch.setenv("KAINE_NEXUS_READ_ONLY", "1")
 
     cfg = load_dashboard_config(path=p)

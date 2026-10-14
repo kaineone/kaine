@@ -20,20 +20,20 @@ def _now() -> datetime:
 
 def test_valid_event_roundtrips():
     event = Event(
-        source="soma",
+        source="interoception",
         type="wellness.update",
         payload={"score": 0.82},
         salience=0.3,
         timestamp=_now(),
     )
-    assert event.source == "soma"
+    assert event.source == "interoception"
     assert event.causal_parent is None
 
 
 def test_salience_out_of_range_rejected():
     with pytest.raises(EventValidationError):
         validate_event(
-            source="soma",
+            source="interoception",
             type="wellness.update",
             payload={},
             salience=1.5,
@@ -44,7 +44,7 @@ def test_salience_out_of_range_rejected():
 def test_negative_salience_rejected():
     with pytest.raises(EventValidationError):
         validate_event(
-            source="soma",
+            source="interoception",
             type="wellness.update",
             payload={},
             salience=-0.01,
@@ -65,7 +65,7 @@ def test_missing_source_rejected():
 def test_naive_timestamp_rejected():
     with pytest.raises(EventValidationError):
         validate_event(
-            source="soma",
+            source="interoception",
             type="t",
             payload={},
             salience=0.5,
@@ -85,20 +85,20 @@ def test_whitespace_in_source_rejected():
 
 
 def test_module_stream_naming():
-    assert module_stream("soma") == "soma.out"
-    assert module_stream("chronos") == "chronos.out"
+    assert module_stream("interoception") == "interoception.out"
+    assert module_stream("sequence") == "sequence.out"
     assert module_stream(WORKSPACE_SOURCE) == WORKSPACE_STREAM
 
 
 def test_workspace_stream_reserved():
     with pytest.raises(ReservedStreamError):
-        ensure_writable(WORKSPACE_STREAM, "soma")
+        ensure_writable(WORKSPACE_STREAM, "interoception")
     ensure_writable(WORKSPACE_STREAM, WORKSPACE_SOURCE)
 
 
 def test_event_is_immutable():
     event = Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload={},
         salience=0.5,

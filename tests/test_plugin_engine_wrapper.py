@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""tests for the nous.engine_wrapper plugin seam (OpenSpec plugin-engine-wrapper)."""
+"""tests for the planning.engine_wrapper plugin seam (OpenSpec plugin-engine-wrapper)."""
 
 import asyncio
 import inspect
@@ -91,16 +91,16 @@ def test_wrapper_receives_the_default_engine_built_from_config():
 def test_wrapper_returning_a_non_engine_fails_naming_the_plugin():
     pytest.importorskip("pymdp")
     plugin = _Plugin(
-        {"nous.engine_wrapper"},
-        {"nous": {"engine_wrapper": lambda eng: object()}},
+        {"planning.engine_wrapper"},
+        {"planning": {"engine_wrapper": lambda eng: object()}},
     )
     ep = FakeEP("wrapper_plugin", lambda: plugin, FakeDist())
     lp = load_plugins(
         {"plugins": {"enabled": ["wrapper_plugin"]}},
-        known_modules=["nous"],
+        known_modules=["planning"],
         entry_points=_eps(ep),
     )
-    inj = lp.injections_for("nous")
+    inj = lp.injections_for("planning")
     bus = _bus()
     try:
         with pytest.raises(ConfigurationError, match="wrapper_plugin"):
@@ -116,16 +116,16 @@ def test_wrapper_exception_becomes_plugin_error():
         raise RuntimeError("nope")
 
     plugin = _Plugin(
-        {"nous.engine_wrapper"},
-        {"nous": {"engine_wrapper": bad_wrap}},
+        {"planning.engine_wrapper"},
+        {"planning": {"engine_wrapper": bad_wrap}},
     )
     ep = FakeEP("boom_plugin", lambda: plugin, FakeDist())
     lp = load_plugins(
         {"plugins": {"enabled": ["boom_plugin"]}},
-        known_modules=["nous"],
+        known_modules=["planning"],
         entry_points=_eps(ep),
     )
-    inj = lp.injections_for("nous")
+    inj = lp.injections_for("planning")
     bus = _bus()
     try:
         with pytest.raises(PluginError, match="boom_plugin"):
@@ -136,22 +136,22 @@ def test_wrapper_exception_becomes_plugin_error():
 
 def test_non_callable_wrapper_rejected_at_injection():
     plugin = _Plugin(
-        {"nous.engine_wrapper"},
-        {"nous": {"engine_wrapper": 42}},
+        {"planning.engine_wrapper"},
+        {"planning": {"engine_wrapper": 42}},
     )
     ep = FakeEP("bad_plugin", lambda: plugin, FakeDist())
     lp = load_plugins(
         {"plugins": {"enabled": ["bad_plugin"]}},
-        known_modules=["nous"],
+        known_modules=["planning"],
         entry_points=_eps(ep),
     )
     with pytest.raises(PluginError, match="non-callable"):
-        lp.injections_for("nous")
+        lp.injections_for("planning")
 
 
 def test_engine_and_wrapper_together_rejected_at_load():
-    replacer = _Plugin({"nous.engine"}, {})
-    wrapper = _Plugin({"nous.engine_wrapper"}, {})
+    replacer = _Plugin({"planning.engine"}, {})
+    wrapper = _Plugin({"planning.engine_wrapper"}, {})
     eps = _eps(
         FakeEP("replacer", lambda: replacer, FakeDist()),
         FakeEP("wrapper", lambda: wrapper, FakeDist()),
@@ -159,7 +159,7 @@ def test_engine_and_wrapper_together_rejected_at_load():
     with pytest.raises(PluginError) as exc_info:
         load_plugins(
             {"plugins": {"enabled": ["replacer", "wrapper"]}},
-            known_modules=["nous"],
+            known_modules=["planning"],
             entry_points=eps,
         )
     msg = str(exc_info.value)

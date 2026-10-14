@@ -60,9 +60,9 @@ These packages are only installed when you select an extra, for example `pip ins
 | `memory` | `qdrant-client` | Apache-2.0 | Yes |
 | `memory` | `sentence-transformers` | Apache-2.0 | Yes |
 | `memory-edge` | `sqlite-vec` | see upstream | check upstream |
-| `nexus` | `fastapi` | MIT | Yes |
-| `nexus` | `uvicorn` | BSD-3-Clause | Yes |
-| `nexus` | `jinja2` | BSD-3-Clause | Yes |
+| `dashboard` | `fastapi` | MIT | Yes |
+| `dashboard` | `uvicorn` | BSD-3-Clause | Yes |
+| `dashboard` | `jinja2` | BSD-3-Clause | Yes |
 | `nvidia` | `pynvml` | MIT per upstream; unverified | Yes |
 | `reasoning` | `inferactively-pymdp` | MIT | Yes |
 | `reasoning` | `jax[cpu]` | Apache-2.0 | Yes |

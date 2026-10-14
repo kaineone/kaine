@@ -18,7 +18,7 @@ from kaine.memory_kinds import (
 )
 
 # This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
-_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+_NO_QDRANT = {"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}}
 
 HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
@@ -142,8 +142,8 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
-            "modules": {"mnemos": True},
-            "mnemos": {
+            "modules": {"episodic_memory": True},
+            "episodic_memory": {
                 "qdrant": {
                     "host": "127.0.0.1",
                     "port": 6533,
@@ -191,8 +191,8 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
-            "modules": {"mnemos": True},
-            "mnemos": {
+            "modules": {"episodic_memory": True},
+            "episodic_memory": {
                 "qdrant": {
                     "host": "127.0.0.1",
                     "port": 6533,

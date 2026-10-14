@@ -1,7 +1,7 @@
 ## 1. Advisories
 
 - [x] 1.1 `UndefinedRunTracker`, `SilenceTracker` and the advisory constants in `kaine.lifecycle.welfare_signal`
-- [x] 1.2 The welfare observer follows `topos.out` and `audition.out` from their tail, ignores reports from before its start, and publishes the blind and silent advisories and their clears content-free, also to its rollup
+- [x] 1.2 The welfare observer follows `vision.out` and `audition.out` from their tail, ignores reports from before its start, and publishes the blind and silent advisories and their clears content-free, also to its rollup
 - [x] 1.3 `[evaluation.welfare].blind_sensor_samples`, default 0 (one distress duration, on the read clock and on the reports' timestamps)
 - [x] 1.4 A reset line in the rollup at each observer start
 - [x] 1.5 Tracking runs after the stream handler and cannot skip the interoception module's distress handling

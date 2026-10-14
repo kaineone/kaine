@@ -16,12 +16,12 @@ def test_canonical_names_match_module_packages():
     Documented non-package names (no kaine/modules/<name>/ package exists,
     by design):
 
-    - ``cycle``, ``volition``, ``spot``: cycle-layer components, not
+    - ``cycle``, ``action_selection``, ``supervisor``: cycle-layer components, not
       module packages.
     - ``welfare``, ``preservation``, ``individuation``: lifecycle streams,
       not module packages.
 
-    Documented package exclusion: ``echo`` is a test-only single-file module
+    Documented package exclusion: ``recorder`` is a test-only single-file module
     (kaine/modules/recorder.py, not a package) and is deliberately excluded
     from the research streams. ``perception_prng`` is an implementation
     detail of ``perception``, not a research stream source.
@@ -34,13 +34,13 @@ def test_canonical_names_match_module_packages():
 
     non_package_names = {
         "cycle",  # cycle-layer component
-        "volition",  # cycle-layer component
-        "spot",  # cycle-layer component
+        "action_selection",  # cycle-layer component
+        "supervisor",  # cycle-layer component
         "welfare",  # lifecycle stream
         "preservation",  # lifecycle stream
         "individuation",  # lifecycle stream
     }
-    test_only_excluded_packages = {"echo", "perception_prng"}
+    test_only_excluded_packages = {"recorder", "perception_prng"}
 
     modules_dir = Path(importlib.import_module("kaine.modules").__file__).parent
     on_disk = {
@@ -66,52 +66,52 @@ def test_effective_memberships_are_golden():
     golden_curated = frozenset(
         {
             "cycle.out",
-            "volition.out",
-            "volition_feedback.out",
+            "action_selection.out",
+            "action_selection_feedback.out",
             "positive_control.out",
-            "soma.out",
-            "chronos.out",
-            "topos.out",
-            "phantasia.out",
-            "nous.out",
-            "thymos.out",
+            "interoception.out",
+            "sequence.out",
+            "vision.out",
+            "world_model.out",
+            "planning.out",
+            "affect.out",
             "audition.out",
-            "mnemos.out",
-            "hypnos.out",
-            "eidolon.out",
-            "empatheia.out",
-            "praxis.out",
-            "spot.out",
-            "perception.out",
-            "mundus.out",
+            "episodic_memory.out",
+            "sleep.out",
+            "self_model.out",
+            "social_cognition.out",
+            "effectors.out",
+            "supervisor.out",
+            "perceptual_locus.out",
+            "embodiment.out",
             "welfare.out",
             "preservation.out",
             "individuation.out",
         } | {PERCEPTION_FEED_STREAM}
     )
 
-    # Raw archive: full canonical set (the language module now publishes aggregate lingua.out).
-    golden_raw_archive = frozenset(golden_curated | {"lingua.out", "vox.out"})
+    # Raw archive: full canonical set (the language module now publishes aggregate language.out).
+    golden_raw_archive = frozenset(golden_curated | {"language.out", "vocal.out"})
 
     # Diagnostics: cycle.out + high-signal module streams + workspace.broadcast.
     golden_diagnostics = frozenset(
         {
             "cycle.out",
-            "soma.out",
-            "chronos.out",
-            "topos.out",
-            "phantasia.out",
-            "nous.out",
-            "thymos.out",
+            "interoception.out",
+            "sequence.out",
+            "vision.out",
+            "world_model.out",
+            "planning.out",
+            "affect.out",
             "audition.out",
-            "lingua.out",
-            "vox.out",
-            "mnemos.out",
-            "hypnos.out",
-            "eidolon.out",
-            "empatheia.out",
-            "praxis.out",
-            "spot.out",
+            "language.out",
+            "vocal.out",
+            "episodic_memory.out",
+            "sleep.out",
+            "self_model.out",
+            "social_cognition.out",
+            "effectors.out",
+            "supervisor.out",
             "workspace.broadcast",
         }
     )
@@ -131,9 +131,9 @@ def test_registry_invariants():
     names = list(CANONICAL_MODULE_NAMES)
     assert len(names) == len(set(names)), "duplicate module names in registry"
     assert canonical_module_streams() == tuple(module_stream(n) for n in names)
-    # lingua.out IS in the canonical set; the language module publishes an aggregate there
-    # in addition to the mode-specific lingua.external / lingua.internal streams.
-    assert "lingua.out" in canonical_module_streams()
+    # language.out IS in the canonical set; the language module publishes an aggregate there
+    # in addition to the mode-specific language.external / language.internal streams.
+    assert "language.out" in canonical_module_streams()
 
 
 def test_diagnostics_streams_are_known():

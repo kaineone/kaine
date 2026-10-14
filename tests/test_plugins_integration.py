@@ -56,10 +56,10 @@ class _SequenceNetworkPlugin:
         self.calls = 0
 
     def seams(self, config):
-        return frozenset({"chronos.network"})
+        return frozenset({"sequence.network"})
 
     def injections(self, module, config):
-        if module == "chronos":
+        if module == "sequence":
             self.calls += 1
             return {"network": self._network_factory()}
         return {}
@@ -169,10 +169,10 @@ class _PlanningEnginePlugin:
         self.calls = 0
 
     def seams(self, config):
-        return frozenset({"nous.engine"})
+        return frozenset({"planning.engine"})
 
     def injections(self, module, config):
-        if module == "nous":
+        if module == "planning":
             self.calls += 1
             return {"engine": _FakePlanningEngine(self.calls)}
         return {}
@@ -188,10 +188,10 @@ class _FreshPlanningOscillatorPlugin:
         self.calls = 0
 
     def seams(self, config):
-        return frozenset({"oscillator.nous"})
+        return frozenset({"oscillator.planning"})
 
     def make_oscillator(self, module, config, defaults):
-        if module != "nous":
+        if module != "planning":
             return None
         self.calls += 1
         return _CallCountingOscillator(self.calls)
@@ -203,7 +203,7 @@ class _DummyForkManager:
 
 
 # ---------------------------------------------------------------------------
-# 4.4  build_registry with a plugin filling chronos.network
+# 4.4  build_registry with a plugin filling sequence.network
 # ---------------------------------------------------------------------------
 
 
@@ -218,18 +218,18 @@ async def test_build_registry_plugin_fills_sequence_network(caplog, bus):
             _FakeEP("chronosnet", lambda: plugin, dist=_FakeDist("pkg", "1.2.3"))
         ),
     )
-    config = {"modules": {"chronos": True}}
+    config = {"modules": {"sequence": True}}
     with caplog.at_level(logging.WARNING, logger="kaine.plugins"):
         registry = build_registry(bus, config, plugins=lp)
-    sequence = registry.get("chronos")
+    sequence = registry.get("sequence")
     assert sequence._network is plugin_net
     assert any(
-        "plugin chronosnet fills chronos.network" in rec.message
+        "plugin chronosnet fills sequence.network" in rec.message
         for rec in caplog.records
     )
 
     default_registry = build_registry(bus, config, plugins=None)
-    default_sequence = default_registry.get("chronos")
+    default_sequence = default_registry.get("sequence")
     assert not default_sequence._network_injected
 
 
@@ -250,21 +250,21 @@ async def test_supervisor_restart_re_requests_fresh_plugin_network(bus):
         ),
     )
     config = {
-        "modules": {"chronos": True},
-        "chronos": {"forward_prediction": True},
+        "modules": {"sequence": True},
+        "sequence": {"forward_prediction": True},
     }
     registry = build_registry(bus, config, plugins=lp)
     rebuild = _make_rebuild_module(bus, config, registry, None)
 
     instances = []
     for _ in range(2):
-        sequence = rebuild("chronos")
+        sequence = rebuild("sequence")
         await sequence.initialize()
         await sequence.on_workspace(_empty_snapshot())
         instances.append(sequence)
 
     # One request at boot plus one per restart, each a fresh object.
-    boot_network = registry.get("chronos")._network
+    boot_network = registry.get("sequence")._network
     networks = [boot_network, instances[0]._network, instances[1]._network]
     assert len({id(n) for n in networks}) == 3
     assert plugin.calls == 3
@@ -281,7 +281,7 @@ async def test_supervisor_restart_re_requests_fresh_plugin_network(bus):
 async def test_plugin_oscillator_attached_without_snntorch(monkeypatch, bus):
     monkeypatch.setattr("kaine.oscillator.snntorch_available", lambda: False)
     osc = _RecordingOscillator()
-    plugin = _OscillatorPlugin("chronos", osc)
+    plugin = _OscillatorPlugin("sequence", osc)
     lp = load_plugins(
         {"plugins": {"enabled": ["oscplugin"]}, "oscillator": {"enabled": True}},
         known_modules=known_module_names(),
@@ -300,18 +300,18 @@ async def test_plugin_oscillator_attached_without_snntorch(monkeypatch, bus):
     monkeypatch.setattr(BaseModule, "attach_oscillator", _recording_attach)
 
     config = {
-        "modules": {"chronos": True, "soma": True},
+        "modules": {"sequence": True, "interoception": True},
         "oscillator": {"enabled": True},
     }
     build_registry(bus, config, plugins=lp)
 
-    assert ("chronos", osc) in attached
-    assert not any(name == "soma" for name, _ in attached)
+    assert ("sequence", osc) in attached
+    assert not any(name == "interoception" for name, _ in attached)
 
 
 @pytest.mark.asyncio
 async def test_plugin_oscillator_none_raises_plugin_error(bus):
-    plugin = _OscillatorPlugin("chronos", None)
+    plugin = _OscillatorPlugin("sequence", None)
     lp = load_plugins(
         {"plugins": {"enabled": ["badosc"]}, "oscillator": {"enabled": True}},
         known_modules=known_module_names(),
@@ -320,7 +320,7 @@ async def test_plugin_oscillator_none_raises_plugin_error(bus):
         ),
     )
     config = {
-        "modules": {"chronos": True},
+        "modules": {"sequence": True},
         "oscillator": {"enabled": True},
     }
     with pytest.raises(PluginError, match="returned None"):
@@ -328,9 +328,9 @@ async def test_plugin_oscillator_none_raises_plugin_error(bus):
 
 
 def test_two_plugins_claim_same_oscillator_seam():
-    p1 = _OscillatorPlugin("chronos", _RecordingOscillator())
-    p2 = _OscillatorPlugin("chronos", _RecordingOscillator())
-    with pytest.raises(PluginError, match="both declare seam oscillator.chronos"):
+    p1 = _OscillatorPlugin("sequence", _RecordingOscillator())
+    p2 = _OscillatorPlugin("sequence", _RecordingOscillator())
+    with pytest.raises(PluginError, match="both declare seam oscillator.sequence"):
         load_plugins(
             {"plugins": {"enabled": ["osc1", "osc2"]}, "oscillator": {"enabled": True}},
             known_modules=known_module_names(),
@@ -367,7 +367,7 @@ def test_manifest_records_plugin_metadata():
         "chronosnet": {
             "distribution": "my-dist",
             "version": "1.2.3",
-            "seams": ["chronos.network"],
+            "seams": ["sequence.network"],
             "observes_cycle": False,
         }
     }
@@ -412,9 +412,9 @@ def test_cycle_main_catches_plugin_error(monkeypatch, capsys):
 @pytest.mark.parametrize(
     "module,key",
     [
-        ("chronos", "network"),
-        ("soma", "forward_model"),
-        ("nous", "engine"),
+        ("sequence", "network"),
+        ("interoception", "forward_model"),
+        ("planning", "engine"),
     ],
 )
 async def test_none_injection_fails_closed(module, key, bus):
@@ -485,7 +485,7 @@ async def test_supervisor_planning_heavy_restart_refreshes_engine_keeps_oscillat
     engine_plugin = _PlanningEnginePlugin()
     osc_plugin = _FreshPlanningOscillatorPlugin()
     config = {
-        "modules": {"nous": True},
+        "modules": {"planning": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["nousengine", "nousosc"]},
     }
@@ -499,19 +499,19 @@ async def test_supervisor_planning_heavy_restart_refreshes_engine_keeps_oscillat
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    planning = registry.get("nous")
+    planning = registry.get("planning")
     assert engine_plugin.calls == 1
     assert planning.engine.call_id == 1
     assert planning._oscillator is not None and planning._oscillator.call_id == 1
     boot_oscillator = planning._oscillator
 
     supervisor = _supervisor(registry, config, bus)
-    first = await supervisor._restart_module("nous")
-    second = await supervisor._restart_module("nous")
+    first = await supervisor._restart_module("planning")
+    second = await supervisor._restart_module("planning")
     assert first.ok and first.path == "heavy"
     assert second.ok and second.path == "heavy"
 
-    planning = registry.get("nous")
+    planning = registry.get("planning")
     assert engine_plugin.calls == 3
     assert planning.engine.call_id == 3
     assert osc_plugin.calls == 1
@@ -525,7 +525,7 @@ async def test_supervisor_sequence_light_restart_keeps_same_network(bus):
     """The sequence module restarts in place: it keeps its injected network and the plugin
     is not asked again."""
     network_plugin = _SequenceNetworkPlugin(_FakeNetwork)
-    config = {"modules": {"chronos": True}, "plugins": {"enabled": ["chronosnet"]}}
+    config = {"modules": {"sequence": True}, "plugins": {"enabled": ["chronosnet"]}}
     loaded = load_plugins(
         config,
         known_modules=known_module_names(),
@@ -535,13 +535,13 @@ async def test_supervisor_sequence_light_restart_keeps_same_network(bus):
     )
 
     registry = build_registry(bus, config, plugins=loaded)
-    before = registry.get("chronos")._network
+    before = registry.get("sequence")._network
     assert network_plugin.calls == 1
 
     supervisor = _supervisor(registry, config, bus)
-    result = await supervisor._restart_module("chronos")
+    result = await supervisor._restart_module("sequence")
     assert result.ok and result.path == "light"
     assert network_plugin.calls == 1
-    assert registry.get("chronos")._network is before
+    assert registry.get("sequence")._network is before
 
-    await _close_module(registry.get("chronos"))
+    await _close_module(registry.get("sequence"))

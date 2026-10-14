@@ -144,7 +144,7 @@ def test_evaluate_safety_net(monkeypatch):
         },
         "evaluation": {"enabled": True},
         "individuation": {"enabled": True},
-        "modules": {"lingua": True, "eidolon": True},
+        "modules": {"language": True, "self_model": True},
     }
     monkeypatch.setattr(
         "kaine.cycle.research_gate.run_preflight_self_check",

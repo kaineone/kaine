@@ -16,8 +16,8 @@ Wall-clock latency fields (`wall_duration_ms`, `slip_ms`) are explicitly EXCLUDE
 from the identity comparison — they are physical host measurements and are not
 part of the reproducibility guarantee.
 
-The harness drives the REAL `Syneidesis` (rule-based salience) and the REAL
-`Volition` over a deterministic in-memory bus. The bus uses caller-supplied,
+The harness drives the REAL `Workspace` (rule-based salience) and the REAL
+`ActionSelection` over a deterministic in-memory bus. The bus uses caller-supplied,
 fixed entry ids so the selected-entry identity is meaningful across runs — a
 time-based bus id (as Redis/fakeredis assigns) would be nondeterministic by
 construction and would defeat the very property under test, so the harness
@@ -56,7 +56,7 @@ class ScriptedBus:
 
     Module streams are pre-seeded with caller-supplied, FIXED entry ids so that
     reading is reproducible across runs (unlike a time-based Redis id). Published
-    events (workspace.broadcast and volition.out) are captured in order.
+    events (workspace.broadcast and action_selection.out) are captured in order.
     """
 
     def __init__(self, streams: dict[str, list[tuple[str, Event]]]) -> None:
@@ -92,7 +92,7 @@ class ScriptedBus:
         return f"{event.source}-pub"
 
     async def publish_workspace(
-        self, snapshot: dict[str, Any], source: str = "syneidesis"
+        self, snapshot: dict[str, Any], source: str = "workspace"
     ) -> str:
         self.workspace_broadcasts.append(snapshot)
         return "workspace-pub"
@@ -149,14 +149,14 @@ def _scripted_streams() -> dict[str, list[tuple[str, Event]]]:
         "audition.out": [
             ("1-0", _make_event("audition", "audition.transcription", 0.62, "hello kaine")),
         ],
-        "chronos.out": [
-            ("1-0", _make_event("chronos", "chronos.tick", 0.50, "rhythm")),
+        "sequence.out": [
+            ("1-0", _make_event("sequence", "sequence.tick", 0.50, "rhythm")),
         ],
-        "soma.out": [
-            ("1-0", _make_event("soma", "soma.state", 0.50, "interoception")),
+        "interoception.out": [
+            ("1-0", _make_event("interoception", "interoception.state", 0.50, "interoception")),
         ],
-        "topos.out": [
-            ("1-0", _make_event("topos", "topos.place", 0.30, "here")),
+        "vision.out": [
+            ("1-0", _make_event("vision", "vision.place", 0.30, "here")),
         ],
     }
 
@@ -192,7 +192,7 @@ async def _run_trajectory(*, n_ticks: int, seed: int) -> dict[str, Any]:
         await cycle.tick()
     return {
         "broadcasts": [_normalize_broadcast(b) for b in bus.workspace_broadcasts],
-        "intents": [_normalize_intent(e) for e in bus.published.get("volition", [])],
+        "intents": [_normalize_intent(e) for e in bus.published.get("action_selection", [])],
         # Engine-published cycle.tick events stamped from _now() — the logical
         # clock in deterministic mode (excluding latency payload fields).
         "tick_stamps": [e.timestamp.isoformat() for e in bus.published.get("cycle", [])],
@@ -262,7 +262,7 @@ async def test_different_seeds_same_scripted_stimulus_documents_seed_independenc
     The keystone above proves SAME seed → SAME trajectory. A natural follow-up is
     "different seeds → different trajectories". But the scripted-stimulus harness
     here drives only the REAL `RuleBasedSalience` (novelty + static goal/affect
-    scorers) and the REAL rule-based `Volition` — none of which consult the global
+    scorers) and the REAL rule-based `ActionSelection` — none of which consult the global
     RNG. The salience scoring, canonical tie-break, inhibition, and the action selection module's
     policy are all deterministic FUNCTIONS of the input events; the seed feeds
     `set_global_seed` but no scored path samples from it on this fixed stimulus.
@@ -345,7 +345,7 @@ async def test_logical_timestamps_equal_base_epoch_plus_tick_times_period():
         assert ev.timestamp == BASE_EPOCH + timedelta(seconds=i * period_s)
     # The action selection module's intents (also engine-published) carry the logical stamp of the
     # tick that produced them — a value strictly derived from the tick index.
-    for ev in bus.published.get("volition", []):
+    for ev in bus.published.get("action_selection", []):
         delta = ev.timestamp - BASE_EPOCH
         ticks = delta.total_seconds() / period_s
         assert abs(ticks - round(ticks)) < 1e-9, "intent stamp is a whole-tick logical time"

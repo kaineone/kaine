@@ -16,14 +16,14 @@ async def test_build_registry_from_minimal_config():
         registry = build_registry(
             h.bus,
             {
-                "modules": {"soma": True, "chronos": True, "topos": False},
-                "soma": {
+                "modules": {"interoception": True, "sequence": True, "vision": False},
+                "interoception": {
                     "read_interval_s": 1.0,
                     "cycle_latency_target_ms": 300.0,
                     "baseline_salience": 0.1,
                     "alert_salience": 0.7,
                 },
-                "chronos": {
+                "sequence": {
                     "cfc_units": 32,
                     "baseline_salience": 0.1,
                     "alert_salience": 0.7,
@@ -31,9 +31,9 @@ async def test_build_registry_from_minimal_config():
                 },
             },
         )
-        assert "soma" in registry
-        assert "chronos" in registry
-        assert "topos" not in registry
+        assert "interoception" in registry
+        assert "sequence" in registry
+        assert "vision" not in registry
 
 
 @pytest.mark.asyncio
@@ -50,8 +50,8 @@ async def test_build_registry_rejects_unknown_config_key():
             build_registry(
                 h.bus,
                 {
-                    "modules": {"soma": True},
-                    "soma": {
+                    "modules": {"interoception": True},
+                    "interoception": {
                         "baseline_salience": 0.1,
                         "bogus_key": True,
                     },

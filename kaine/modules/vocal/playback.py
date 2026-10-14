@@ -116,7 +116,7 @@ class SoundDevicePlayer:
 class TeePlayer:
     """Plays through the primary player AND mirrors each clip to a tap.
 
-    Used by ``Vox.add_playback_tap`` (e.g. the remote bridge streaming
+    Used by ``Vocal.add_playback_tap`` (e.g. the remote bridge streaming
     speech to operator clients). The primary plays first and its errors
     propagate exactly as before; a failing tap is logged and never breaks
     local playback.

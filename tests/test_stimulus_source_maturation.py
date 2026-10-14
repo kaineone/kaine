@@ -419,7 +419,7 @@ def test_boot_clock_marked_born_when_stage_embodied(
     )
     feed: dict[str, Any] = {}
     _install_shared_stimulus_source_clock(feed, None, None, stage_path=path)
-    assert feed["_shared_womb_clock"].born()
+    assert feed["_shared_stimulus_source_clock"].born()
 
 
 def test_boot_clock_not_born_when_stage_developing(
@@ -432,7 +432,7 @@ def test_boot_clock_not_born_when_stage_developing(
     )
     feed: dict[str, Any] = {}
     _install_shared_stimulus_source_clock(feed, None, None, stage_path=path)
-    assert not feed["_shared_womb_clock"].born()
+    assert not feed["_shared_stimulus_source_clock"].born()
 
 
 @pytest.mark.parametrize("bad", [0.0, -1.0, 31.0])
@@ -440,5 +440,5 @@ def test_maturation_transition_seconds_is_bounded(bad) -> None:
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
     with pytest.raises(ValueError):
-        StimulusSourceParams.from_sections({"birth_transition_seconds": bad}, None, None)
+        StimulusSourceParams.from_sections({"maturation_transition_seconds": bad}, None, None)
     assert StimulusSourceParams.from_sections(None, None, None).maturation_transition_seconds == 5.0

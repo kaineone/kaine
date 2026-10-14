@@ -94,11 +94,11 @@ async def test_attribution_passthrough_to_summary(tmp_path):
     class _AttrStub:
         @property
         def running_total(self):
-            return {"soma": 7, "thymos": 3}
+            return {"interoception": 7, "affect": 3}
 
         @property
         def current_hour_counts(self):
-            return {"soma": 1}
+            return {"interoception": 1}
 
     app = FastAPI()
     app.include_router(
@@ -108,5 +108,5 @@ async def test_attribution_passthrough_to_summary(tmp_path):
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get("/diagnostics/evaluation/summary.json")
     data = r.json()
-    assert data["attribution_total"]["soma"] == 7
-    assert data["attribution_hour"]["soma"] == 1
+    assert data["attribution_total"]["interoception"] == 7
+    assert data["attribution_hour"]["interoception"] == 1

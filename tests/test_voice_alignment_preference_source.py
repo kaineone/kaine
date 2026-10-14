@@ -128,11 +128,11 @@ async def test_preference_source_none_skips_training_but_emits_divergence(
     assert cd["divergence_rate"] == 1.0
 
     # The bus event also carries the metric inside the phase metadata.
-    entries = await bus.read("hypnos.out", count=10)
+    entries = await bus.read("sleep.out", count=10)
     payloads = [
         event.payload
         for _entry_id, event in entries
-        if event.type == "hypnos.sleep.completed"
+        if event.type == "sleep.sleep.completed"
     ]
     assert len(payloads) == 1
     phase = _voice_alignment_phase(payloads[0])

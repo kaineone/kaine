@@ -4,9 +4,9 @@ The sequence module is KAINE's temporal prediction. Its input is the workspace i
 
 ## Status
 
-Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `thesis_test` profile, which enables the sequence module (`chronos = true`).
+Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `thesis_test` profile, which enables the sequence module (`sequence = true`).
 
-- The reservoir backend is `[chronos].cfc_backend`: `"numpy"` (shipped default; needs neither `torch` nor `ncps`) or `"torch"` (uses `ncps.torch.CfC` and needs the `core` extra).
+- The reservoir backend is `[sequence].cfc_backend`: `"numpy"` (shipped default; needs neither `torch` nor `ncps`) or `"torch"` (uses `ncps.torch.CfC` and needs the `core` extra).
 - The network runs on the CPU by policy, whatever the host. It is small enough that a GPU adds nothing, and the CPU keeps the cycle's timing predictable. A warning is logged if the selected device is not `cpu`.
 - Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in `thesis_test`. With it off, the sequence module reports only at its baseline or alert level.
 
@@ -21,7 +21,7 @@ On every broadcast it receives (`on_workspace`), the sequence module:
 3. With forward prediction on, predicts the current vector from the previous hidden state through an online linear readout, measures the error, and takes one learning step.
 4. Scores the hidden state for anomaly and for recurrence.
 5. Reads the time since the last interaction.
-6. Publishes `chronos.report`.
+6. Publishes `sequence.report`.
 
 Inhibited broadcasts reach the sequence module as well as accessed ones, so the whole broadcast sequence is predicted, and content that did not gain access can still influence later processing through the sequence module's reports.
 
@@ -71,7 +71,7 @@ An alert is reported at `alert_salience`. With forward prediction on, any other 
 baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 ```
 
-Without a temporal error, a report that is not an alert is at `baseline_salience`. Every `chronos.report` carries `alert`, and the access rate's phasic input counts only reports whose `alert` is true. Because the graded intensity reaches the alert level at a ratio of 2 while the shipped alert criterion is a ratio of 3, a report with a ratio between 2 and 3 is reported at the alert level without being an alert.
+Without a temporal error, a report that is not an alert is at `baseline_salience`. Every `sequence.report` carries `alert`, and the access rate's phasic input counts only reports whose `alert` is true. Because the graded intensity reaches the alert level at a ratio of 2 while the shipped alert criterion is a ratio of 3, a report with a ratio between 2 and 3 is reported at the alert level without being an alert.
 
 ### Recurrence detection
 
@@ -84,29 +84,29 @@ The sequence module reads the configured user-input streams (default `audition.o
 - The event type must be in `interaction_event_types` (default `audition.transcription` and `audition.emotion`); an `audition.transcription` must also have non-empty `text`.
 - The event's `payload.source_label` must be one of the operator sources (`live_mic`, `microphone`, `remote`).
 
-`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in the sequence module; it does not read `[empatheia].operator_sources`, which the action selection and social cognition modules use. `time_since_last_interaction_s` is measured on the entity clock and is `inf` until the first interaction. The affect module reads it for the social drive.
+`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in the sequence module; it does not read `[social_cognition].operator_sources`, which the action selection and social cognition modules use. `time_since_last_interaction_s` is measured on the entity clock and is `inf` until the first interaction. The affect module reads it for the social drive.
 
 ## Inputs
 
 | Source | Mechanism | Purpose |
 |---|---|---|
-| Workspace broadcast | `on_workspace(snapshot)` | Every broadcast, accessed or inhibited; one `chronos.report` per broadcast |
+| Workspace broadcast | `on_workspace(snapshot)` | Every broadcast, accessed or inhibited; one `sequence.report` per broadcast |
 | `user_input_streams` (default `audition.out`) | Operator speech, as above | Resets the interaction clock |
-| `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends and resumes the readout's learning |
+| `sleep.out` | `sleep.sleep.started` / `sleep.sleep.completed` | Suspends and resumes the readout's learning |
 
 ## Outputs
 
-All events are published to the `chronos.out` stream.
+All events are published to the `sequence.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `chronos.report` | `alert`, `temporal_context`, `anomaly_score`, `habituation_score`, `rumination_detected`, `time_since_last_interaction_s`, `feature_vector`, `temporal_prediction_error` | `alert_salience` on an alert; otherwise graded by the error ratio, or `baseline_salience` without a temporal error |
+| `sequence.report` | `alert`, `temporal_context`, `anomaly_score`, `habituation_score`, `rumination_detected`, `time_since_last_interaction_s`, `feature_vector`, `temporal_prediction_error` | `alert_salience` on an alert; otherwise graded by the error ratio, or `baseline_salience` without a temporal error |
 
 `temporal_context` is the reservoir's hidden state (`cfc_units` components). `rumination_detected` is the recurrence flag. `temporal_prediction_error` is 0.0 when forward prediction is off and on the first broadcast.
 
 ## Sleep
 
-The cycle keeps broadcasting during sleep, so the sequence module keeps featurizing, advancing the reservoir, predicting, and reporting. From `hypnos.sleep.started` to `hypnos.sleep.completed` the readout takes no learning steps.
+The cycle keeps broadcasting during sleep, so the sequence module keeps featurizing, advancing the reservoir, predicting, and reporting. From `sleep.sleep.started` to `sleep.sleep.completed` the readout takes no learning steps.
 
 ## Persistence
 
@@ -130,7 +130,7 @@ The hidden state and the window of recent intervals are runtime state: they star
 
 ## Configuration
 
-Section `[chronos]` in `config/kaine.toml`. For the full reference see the [module configuration appendix](../appendix-a-configuration/modules.md).
+Section `[sequence]` in `config/kaine.toml`. For the full reference see the [module configuration appendix](../appendix-a-configuration/modules.md).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -159,12 +159,12 @@ graph TD
     CfC -->|previous hidden| Head["ForwardPredictionHead\nonline SGD"]
     FV -->|actual| TPE["temporal_prediction_error"]
     Head -->|predicted| TPE
-    Anomaly --> Report["chronos.report\nintensity, alert"]
+    Anomaly --> Report["sequence.report\nintensity, alert"]
     Rec --> Report
     TPE --> Report
     UserIn["audition.out"] -->|operator speech| IdleTime["time_since_last_interaction_s"]
     IdleTime --> Report
-    SleepOut["hypnos.out"] -->|sleep.started / completed| Head
+    SleepOut["sleep.out"] -->|sleep.started / completed| Head
 ```
 
 ## Key files
@@ -184,9 +184,9 @@ Add to your local `config/kaine.toml` (do not commit):
 
 ```toml
 [modules]
-chronos = true
+sequence = true
 
-[chronos]
+[sequence]
 forward_prediction = true
 ```
 
@@ -206,7 +206,7 @@ The sequence module needs no external service.
 
 ## Spec and related
 
-- OpenSpec: [`openspec/specs/chronos/spec.md`](../../openspec/specs/chronos/spec.md)
-- OpenSpec (predictive): [`openspec/specs/chronos-predictive/spec.md`](../../openspec/specs/chronos-predictive/spec.md)
+- OpenSpec: [`openspec/specs/sequence/spec.md`](../../openspec/specs/sequence/spec.md)
+- OpenSpec (predictive): [`openspec/specs/sequence-predictive/spec.md`](../../openspec/specs/sequence-predictive/spec.md)
 - Related modules: [Affect](affect.md) (social drive), [Sleep](sleep.md) (sleep), [Interoception](interoception.md) (the same reservoir pattern), [Planning](planning.md)
 - Cognitive cycle: [The cognitive cycle](../08-cognitive-cycle/README.md) and [The global workspace](../08-cognitive-cycle/global-workspace.md)

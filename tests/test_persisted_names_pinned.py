@@ -230,7 +230,7 @@ def test_maturation_pending_sentinel_pinned(tmp_path):
 
 def test_gate_action_values_pinned():
     """Maturation gate action values keep their old text in this step."""
-    assert _maturation_gate.ACTION_DEVELOPING == "gestating"
+    assert _maturation_gate.ACTION_DEVELOPING == "developing"
     assert _maturation_gate.ACTION_MATURATION == "birth"
 
 

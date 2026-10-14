@@ -5,10 +5,10 @@ The system SHALL decide individuation and divergence through one pure decision f
 
 - `individuated` is the ledger latch, or a latest scored report with `significant == true`.
 - Unreadable individuation evidence counts as individuated: a ledger, reference or report line that cannot be decrypted or parsed.
-- `diverged = individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`.
+- `diverged = individuated OR consolidation_diverged OR self_model_drift OR adapters_present`.
 - The p-value threshold α_k, the effect floor `effect_min` and the warm-up floors SHALL apply only inside the individuation decision, and SHALL NOT be applied again by either consumer.
 - A non-significant, inconclusive, stale, un-warmed or missing individuation result SHALL NOT suppress the consolidation, self-model or adapter arms.
-- The freshness digest and the adapter arm read the configured `[hypnos.voice_alignment].adapter_output_dir`, the same directory the producer uses.
+- The freshness digest and the adapter arm read the configured `[sleep.voice_alignment].adapter_output_dir`, the same directory the producer uses.
 - The baseline SHALL be the entity's own reference (never the bare or pretrained organ). When individuation is not established and no other arm holds, the decommission summary SHALL say why (no reference, not warmed up, inconclusive, stale, or not significant) and advise treating the entity as mature if unsure.
 
 #### Scenario: The two consumers never disagree on a fixed report

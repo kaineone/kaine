@@ -251,7 +251,7 @@ class LlamaCppChatClient:
     GGML/NEON runtime (no Ollama/torch server, no network) so it ports down to a
     ~512 MB-class SBC or a retired phone under a userland like Termux (openspec
     runtime-backends). Selecting a backend never changes the language module's published
-    events — it emits the same ``lingua.speech`` / evaluation events under either
+    events — it emits the same ``language.speech`` / evaluation events under either
     backend; only the implementation of the organ differs.
 
     ``llama_cpp`` is imported lazily inside :meth:`_ensure_llama`, so a Tier-2
@@ -381,7 +381,7 @@ def build_chat_client_registry(
     """
     from kaine.modules.backends import BackendRegistry
 
-    registry: BackendRegistry[ChatClient] = BackendRegistry("lingua", default="openai")
+    registry: BackendRegistry[ChatClient] = BackendRegistry("language", default="openai")
 
     def _http() -> ChatClient:
         return OpenAIChatClient(base_url=chat_url, api_key=api_key, timeout_s=timeout_s)

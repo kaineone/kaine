@@ -81,7 +81,7 @@ def _cfg(**overrides):
         },
         "backends": {},
         "oscillators": {
-            "modules": ["chronos"],
+            "modules": ["sequence"],
             "channels_per_module": 4,
         },
     }
@@ -227,25 +227,25 @@ def test_shared_drive_is_more_coherent(substrate):
 
 def test_plugin_declares_oscillator_seams():
     plugin = Cl1Plugin()
-    assert plugin.seams(_cfg()) == {"oscillator.chronos"}
+    assert plugin.seams(_cfg()) == {"oscillator.sequence"}
 
     cfg = _cfg(
-        backends={"chronos": "cl1"},
+        backends={"sequence": "cl1"},
         substrate={
             "target": "simulator",
             "accelerated_time": True,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"chronos": 12},
+            "territories": {"sequence": 12},
         },
     )
-    assert plugin.seams(cfg) == {"chronos.network", "oscillator.chronos"}
+    assert plugin.seams(cfg) == {"sequence.network", "oscillator.sequence"}
 
 
 def test_plugin_channel_budget():
     plugin = Cl1Plugin()
     cfg = _cfg(
-        oscillators={"modules": ["chronos", "soma"], "channels_per_module": 32},
+        oscillators={"modules": ["sequence", "interoception"], "channels_per_module": 32},
     )
     with pytest.raises(ValueError, match="channels"):
         plugin.seams(cfg)
@@ -264,7 +264,7 @@ def test_real_time_oscillators_warn_instead_of_refusing(caplog):
         },
     )
     with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
-        assert plugin.seams(cfg) == frozenset({"oscillator.chronos"})
+        assert plugin.seams(cfg) == frozenset({"oscillator.sequence"})
         plugin.seams(cfg)
     warnings = [r for r in caplog.records if "real time" in r.getMessage()]
     assert len(warnings) == 1
@@ -282,15 +282,15 @@ def test_make_oscillator_reuses_its_territory():
     )
     p = Cl1Plugin()
     try:
-        o1 = p.make_oscillator("chronos", _cfg(), {"plv_window": 12})
-        o2 = p.make_oscillator("chronos", _cfg(), {"plv_window": 12})
+        o1 = p.make_oscillator("sequence", _cfg(), {"plv_window": 12})
+        o2 = p.make_oscillator("sequence", _cfg(), {"plv_window": 12})
         assert isinstance(o1, WetwareOscillator)
         assert isinstance(o2, WetwareOscillator)
-        assert list(p.territory_map()) == ["oscillator.chronos"]
-        assert len(p.territory_map()["oscillator.chronos"]) == 4
+        assert list(p.territory_map()) == ["oscillator.sequence"]
+        assert len(p.territory_map()["oscillator.sequence"]) == 4
 
         with pytest.raises(ValueError):
-            p.make_oscillator("soma", _cfg(), {})
+            p.make_oscillator("interoception", _cfg(), {})
     finally:
         p.close()
         clsim.clear_simulator_data_source()
@@ -318,12 +318,12 @@ async def test_oscillator_attaches_through_kaines_loader():
     from kaine.plugins import load_plugins
 
     cfg = {
-        "modules": {"chronos": True},
+        "modules": {"sequence": True},
         "oscillator": {"enabled": True},
         "plugins": {"enabled": ["cl1"], "cl1": _cfg()},
     }
     plugins = load_plugins(cfg, known_modules=known_module_names())
-    assert plugins.manifest_entry()["cl1"]["seams"] == ["oscillator.chronos"]
+    assert plugins.manifest_entry()["cl1"]["seams"] == ["oscillator.sequence"]
 
     bus = AsyncBus(
         BusConfig(password="x", audit_required=False),
@@ -331,7 +331,7 @@ async def test_oscillator_attaches_through_kaines_loader():
     )
     try:
         reg = build_registry(bus, cfg, plugins=plugins)
-        osc = reg.get("chronos").oscillator
+        osc = reg.get("sequence").oscillator
         assert type(osc).__name__ == "WetwareOscillator"
         for _ in range(3):
             osc.step(0.5)

@@ -42,8 +42,8 @@ async def test_episodic_memory_short_term_accepts_external_speech():
         # the episodic memory module observes the bus; a language module external_speech event should
         # land in its short-term buffer (or at least not crash the module).
         await h.inject_to_stream(
-            "lingua.external",
-            source="lingua",
+            "language.external",
+            source="language",
             type="external_speech",
             payload={"text": "hello world"},
         )

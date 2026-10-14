@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Self-model (state/eidolon/self_model.json) at-rest encryption.
+"""Self-model (state/self_model/self_model.json) at-rest encryption.
 
 Verifies that when state encryption is enabled the on-disk self-model is
 AES-256-GCM encrypted (unreadable without the key) and round-trips correctly

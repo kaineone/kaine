@@ -90,8 +90,8 @@ async def _publish(bus: AsyncBus, source: str, eid: str, salience: float) -> Non
 async def test_coherence_metadata_present_when_enabled():
     bus = await _make_bus()
     try:
-        await _publish(bus, "soma", "a", 0.9)
-        await _publish(bus, "chronos", "b", 0.8)
+        await _publish(bus, "interoception", "a", 0.9)
+        await _publish(bus, "sequence", "b", 0.8)
 
         # Advance fake oscillators so phases differ between the two modules.
         osc_interoception = FakeOscillator()
@@ -102,10 +102,10 @@ async def test_coherence_metadata_present_when_enabled():
 
         registry = _PhaseRegistry(
             modules=[
-                _PhaseModule("soma", osc_interoception),
-                _PhaseModule("chronos", osc_sequence),
+                _PhaseModule("interoception", osc_interoception),
+                _PhaseModule("sequence", osc_sequence),
             ],
-            streams=["soma.out", "chronos.out"],
+            streams=["interoception.out", "sequence.out"],
         )
         scorer = CoherenceScorer(
             plv_window=10, coherence_floor=0.8, coherence_ceiling=1.25
@@ -138,10 +138,10 @@ async def test_coherence_metadata_present_when_enabled():
 async def test_coherence_metadata_absent_when_disabled():
     bus = await _make_bus()
     try:
-        await _publish(bus, "soma", "a", 0.9)
+        await _publish(bus, "interoception", "a", 0.9)
         registry = _PhaseRegistry(
-            modules=[_PhaseModule("soma", FakeOscillator())],
-            streams=["soma.out"],
+            modules=[_PhaseModule("interoception", FakeOscillator())],
+            streams=["interoception.out"],
         )
         syn = Workspace(
             strategy=_strategy(), top_k=5, publication_threshold=0.0

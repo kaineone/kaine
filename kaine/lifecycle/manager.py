@@ -358,8 +358,8 @@ class ForkManager:
                 b_identity,
             )
 
-        a_ph_dir = find_artifacts_dir(self._root, snap_a.id, "phantasia")
-        b_ph_dir = find_artifacts_dir(self._root, snap_b.id, "phantasia")
+        a_ph_dir = find_artifacts_dir(self._root, snap_a.id, "world_model")
+        b_ph_dir = find_artifacts_dir(self._root, snap_b.id, "world_model")
         a_has = a_ph_dir.is_dir() and not a_ph_dir.is_symlink()
         b_has = b_ph_dir.is_dir() and not b_ph_dir.is_symlink()
         if a_has and b_has and world_model_from is None:
@@ -456,7 +456,7 @@ class ForkManager:
         b_paths = _artifact_dirs_by_module(b_root)
         sources: dict[str, str] = {}
         for name in sorted(a_paths.keys() | b_paths.keys()):
-            if name == legacy_aliases.map_module_key("phantasia") and a_has and b_has:
+            if name == legacy_aliases.map_module_key("world_model") and a_has and b_has:
                 chosen = "a" if world_model_from == "a" else "b"
                 src = a_ph_dir if chosen == "a" else b_ph_dir
             elif name in a_paths:

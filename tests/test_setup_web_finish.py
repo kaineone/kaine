@@ -248,7 +248,7 @@ def test_save_creates_token_and_note_omits_it(tmp_path, monkeypatch):
 
     with _saved_client(app) as client:
         assert secrets_path.exists()
-        token = secrets_file.read_toml_field(secrets_path, "nexus", "operator_token")
+        token = secrets_file.read_toml_field(secrets_path, "dashboard", "operator_token")
         assert isinstance(token, str)
         assert len(token) >= 32
 
@@ -411,7 +411,7 @@ def test_finish_token_reads_the_configured_secrets_file(tmp_path, monkeypatch):
     monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
     secrets_path = tmp_path / "custom-secrets.toml"
     token = "t" * 40
-    secrets_path.write_text(f'[nexus]\noperator_token = "{token}"\n', encoding="utf-8")
+    secrets_path.write_text(f'[dashboard]\noperator_token = "{token}"\n', encoding="utf-8")
     app = _mk_app(
         tmp_path,
         secrets_path=secrets_path,
@@ -432,7 +432,7 @@ def test_finish_token_refuses_an_unsaved_session(tmp_path, monkeypatch):
     token_value = "unsaved-token-value-with-enough-characters-12345"
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
-        f'[nexus]\noperator_token = "{token_value}"\n', encoding="utf-8"
+        f'[dashboard]\noperator_token = "{token_value}"\n', encoding="utf-8"
     )
     app = _mk_app(
         tmp_path,
@@ -533,7 +533,7 @@ def test_relative_secrets_path_resolved_against_repo_root(tmp_path, monkeypatch)
         assert not (other_cwd / "config" / "secrets.toml").exists()
         resolved = repo_root / "config" / "secrets.toml"
         assert resolved.exists()
-        token = secrets_file.read_toml_field(resolved, "nexus", "operator_token")
+        token = secrets_file.read_toml_field(resolved, "dashboard", "operator_token")
         assert isinstance(token, str)
 
         r = client.post(
@@ -555,7 +555,7 @@ def test_finish_routes_use_configured_config_paths(tmp_path, monkeypatch):
         services_up_fn=lambda: {name: False for name in SERVICE_PORTS},
     )
     shipped = tmp_path / "custom-shipped.toml"
-    shipped.write_text("[nexus]\nport = 12345\n", encoding="utf-8")
+    shipped.write_text("[dashboard]\nport = 12345\n", encoding="utf-8")
     app.state.setup.shipped_config_path = shipped
     default_config = tmp_path / "config" / "kaine.toml"
     if default_config.exists():

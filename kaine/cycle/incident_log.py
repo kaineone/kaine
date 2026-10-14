@@ -6,8 +6,8 @@
 The supervisor already executes a well-defined fault-recovery lifecycle (detect a crash or
 hang -> freeze the cycle -> snapshot last-good state -> run the restart ladder ->
 escalate). Every step has observable side effects, but none of them survive a
-clean boot: the crash exception read in ``Spot.assess`` was historically
-discarded, the ``spot.status`` / ``spot.log`` bus events are an ephemeral Redis
+clean boot: the crash exception read in ``Supervisor.assess`` was historically
+discarded, the ``supervisor.status`` / ``supervisor.log`` bus events are an ephemeral Redis
 ring buffer trimmed on every publish, and the two durable files that do persist
 (``state/cycle/escalation.json`` and ``state/cycle/control.json``) are wiped on
 every clean boot by ``clear_escalation()`` / ``unfreeze()`` in the entrypoint.

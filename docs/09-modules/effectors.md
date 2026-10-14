@@ -4,7 +4,7 @@ The effectors module is KAINE's action module. It realizes `act` intents from th
 
 ## Status
 
-The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].praxis = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
+The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].effectors = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
 
 The effectors module is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on the effectors module would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 
@@ -12,7 +12,7 @@ In the base-thesis form the action selection module derives only speak and think
 
 ## What it does
 
-The effectors module acts only on `act` intents from `volition.out`; it never acts on the broadcast itself. The action selection module forms intents only from accessed broadcasts, so an inhibited broadcast leads to no action. Two checks stand between an intent and an effector:
+The effectors module acts only on `act` intents from `action_selection.out`; it never acts on the broadcast itself. The action selection module forms intents only from accessed broadcasts, so an inhibited broadcast leads to no action. Two checks stand between an intent and an effector:
 
 1. the operator's effector whitelist (`enabled_effectors`) and each effector's own rules (the file sandbox, the shell command whitelist);
 2. a provenance check: the action selection module signs each `act` intent with a per-boot HMAC secret held in the cycle process, and the effectors module verifies the signature before anything else. An unsigned, forged or replayed intent is dropped and logged as `provenance_rejected`.
@@ -21,35 +21,35 @@ The effectors module acts only on `act` intents from `volition.out`; it never ac
 
 | Stream | Event | Description |
 |---|---|---|
-| `volition.out` | an intent with `kind == "act"` | Carries `effector`, `params` and a provenance envelope (`run_id`, `seq`, `sig`) |
+| `action_selection.out` | an intent with `kind == "act"` | Carries `effector`, `params` and a provenance envelope (`run_id`, `seq`, `sig`) |
 
 ## Outputs
 
 | Stream | Event type | Description |
 |---|---|---|
-| `praxis.out` | `praxis.action` | The result of each effector call: `effector`, `success`, `elapsed_ms`, `error`, `blocked`, and `provenance_rejected` on a provenance failure. Intensity is `baseline_salience` on success and `alert_salience` on failure. |
+| `effectors.out` | `effectors.action` | The result of each effector call: `effector`, `success`, `elapsed_ms`, `error`, `blocked`, and `provenance_rejected` on a provenance failure. Intensity is `baseline_salience` on success and `alert_salience` on failure. |
 
 ## Configuration
 
 Full reference: [Configuration reference](../appendix-a-configuration/modules.md).
 
-`[praxis]`:
+`[effectors]`:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `sandbox_path` | string | `"state/praxis/files"` | Root directory for `file_write`, resolved through `kaine.storage.resolve`; paths that escape it are rejected |
-| `audit_log_path` | string | `"state/praxis/audit.log"` | Append-only, hash-chained JSONL audit log |
+| `sandbox_path` | string | `"state/effectors/files"` | Root directory for `file_write`, resolved through `kaine.storage.resolve`; paths that escape it are rejected |
+| `audit_log_path` | string | `"state/effectors/audit.log"` | Append-only, hash-chained JSONL audit log |
 | `notification_command` | string | `"notify-send"` | Command used for desktop notifications |
-| `notification_fallback_log` | string | `"state/praxis/notifications.log"` | Log written when the notification command is absent |
+| `notification_fallback_log` | string | `"state/effectors/notifications.log"` | Log written when the notification command is absent |
 | `max_file_bytes` | int | `1048576` | Largest content one `file_write` may write (1 MiB) |
 | `baseline_salience` | float | `0.3` | Intensity of a successful action |
 | `alert_salience` | float | `0.7` | Intensity of a failed, blocked or rejected action |
 | `enabled_effectors` | list of strings | `[]` | The effector whitelist. An effector not listed here is blocked before it runs and is logged. |
 
-Shell commands are whitelisted one sub-table each, `[praxis.shell_whitelist.<command>]`:
+Shell commands are whitelisted one sub-table each, `[effectors.shell_whitelist.<command>]`:
 
 ```toml
-[praxis.shell_whitelist.echo]
+[effectors.shell_whitelist.echo]
 arg_patterns = ["[A-Za-z0-9]+"]
 timeout_s = 2.0
 description = "echo a single alphanumeric token"
@@ -61,15 +61,15 @@ An entry pins the exact command name, one regular expression per argument positi
 
 ### Intent loop
 
-At `initialize()`, the effectors module moves its cursor to the newest `volition.out` entry, so it realizes only intents formed after boot, and starts `_intent_loop()`. For each `act` intent it:
+At `initialize()`, the effectors module moves its cursor to the newest `action_selection.out` entry, so it realizes only intents formed after boot, and starts `_intent_loop()`. For each `act` intent it:
 
 1. verifies the provenance signature and the replay guard, and drops the intent as `provenance_rejected` if either fails, before any effector code runs;
-2. looks the effector up in `_REQUEST_TYPES`, which maps a name to its request type. An unknown name is dropped with a log warning only, with no audit record and no `praxis.action`;
+2. looks the effector up in `_REQUEST_TYPES`, which maps a name to its request type. An unknown name is dropped with a log warning only, with no audit record and no `effectors.action`;
 3. builds the typed request from `params`;
 4. in `act()`, checks the effector name against `enabled_effectors`. An effector that is not listed is recorded as a blocked failure, published at `alert_salience` and appended to the audit log;
 5. calls `effector.act(request)`;
 6. appends the result to the audit log;
-7. publishes `praxis.action`.
+7. publishes `effectors.action`.
 
 ### Effectors
 
@@ -97,7 +97,7 @@ The replay guard is per boot and in-process. The effectors module keeps, for eac
 
 `ActionAuditLog` writes one JSON object per line with single-line appends. Each record holds `timestamp`, `effector`, `request` (with content fields removed), `success`, `elapsed_ms`, `error`, `blocked` and `provenance_rejected`. The log is hash-chained: each line stores `prev_hash` and `this_hash`, starting from a genesis hash, and `verify()` detects a broken chain. The file is created with mode `0600` and synced after each append. Content fields such as `content`, `body` and `stdout` are removed before logging, and a provenance rejection records only the effector name and a generic reason. The log is never pruned automatically.
 
-`praxis.action` events carry the same fields as the audit record minus the request, so an observer can see that an action ran or was refused but not its parameters.
+`effectors.action` events carry the same fields as the audit record minus the request, so an observer can see that an action ran or was refused but not its parameters.
 
 ### Scope
 
@@ -105,9 +105,9 @@ The effectors module plays no audio (that is [the vocal module](vocal.md)), make
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].praxis = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].effectors = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
 2. List the effectors that may run in `enabled_effectors`, for example `["file_write", "notify"]`.
-3. Add any shell commands under `[praxis.shell_whitelist]`, as narrowly as the use allows.
+3. Add any shell commands under `[effectors.shell_whitelist]`, as narrowly as the use allows.
 4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one the effectors module starts and never runs anything.
 5. Optionally install `libnotify` (`notify-send`) for desktop notifications.
 
@@ -137,5 +137,5 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 
 ## Spec and related
 
-- Spec: `openspec/specs/praxis/spec.md`
+- Spec: `openspec/specs/effectors/spec.md`
 - See also: [Planning](planning.md) for proposals, the [cognitive cycle](../08-cognitive-cycle/README.md) for how intents are formed, and [Vocal](vocal.md) for audio output.

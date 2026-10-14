@@ -219,7 +219,7 @@ def test_make_vocal_sherpa_failure_records_and_returns_none(bus, monkeypatch):
 
     result = make_vocal(bus, {"backend": "sherpa_onnx"})
     assert result is None
-    failure = _backend_failure("vox", "sherpa_onnx")
+    failure = _backend_failure("vocal", "sherpa_onnx")
     assert failure is not None
     assert "model files missing" in str(failure.get("reason") if isinstance(failure, dict) else failure)
 
@@ -281,14 +281,14 @@ async def test_build_registry_registers_audition_despite_sherpa_failure(bus, mon
     monkeypatch.setattr("kaine.extras.check", lambda cfg: [])
 
     config = {
-        "modules": {"audition": True, "vox": True},
+        "modules": {"audition": True, "vocal": True},
         "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
-        "vox": {},
+        "vocal": {},
         "perception_feed": {},
     }
     registry = await _call_build_registry(bus, config)
     assert "audition" in registry
-    assert "vox" in registry
+    assert "vocal" in registry
     assert registry.get("audition")._transcription_enabled is False
     assert registry.get("audition")._backend == "sherpa_onnx"
 
@@ -305,9 +305,9 @@ async def test_build_registry_refuses_boot_when_sherpa_package_missing(bus, monk
     monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
 
     config = {
-        "modules": {"audition": True, "vox": True},
+        "modules": {"audition": True, "vocal": True},
         "audition": {"backend": "sherpa_onnx", "transcription_enabled": True},
-        "vox": {},
+        "vocal": {},
         "perception_feed": {},
     }
     with pytest.raises(ConfigurationError, match="speech-edge"):
@@ -423,7 +423,7 @@ def test_extras_audition_sherpa_requires_transcription_enabled():
 def test_extras_vocal_sherpa_normalised():
     from kaine.extras import _vocal_sherpa
 
-    assert _vocal_sherpa({"vox": {"backend": "sherpa_onnx"}})
-    assert _vocal_sherpa({"vox": {"backend": "Sherpa_ONNX "}})
-    assert not _vocal_sherpa({"vox": {}})
-    assert not _vocal_sherpa({"vox": {"backend": "chatterbox"}})
+    assert _vocal_sherpa({"vocal": {"backend": "sherpa_onnx"}})
+    assert _vocal_sherpa({"vocal": {"backend": "Sherpa_ONNX "}})
+    assert not _vocal_sherpa({"vocal": {}})
+    assert not _vocal_sherpa({"vocal": {"backend": "chatterbox"}})

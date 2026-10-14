@@ -111,8 +111,8 @@ def test_encode_snapshot_maps_salience_and_source():
     gm = build_generative_model()
     snap = _Snap(
         [
-            _Ev("soma", {}, 0.95),  # high salience, perception cluster
-            _Ev("thymos", {"state": {"valence": 0.5, "arousal": 0.8}}, 0.3),
+            _Ev("interoception", {}, 0.95),  # high salience, perception cluster
+            _Ev("affect", {"state": {"valence": 0.5, "arousal": 0.8}}, 0.3),
         ]
     )
     obs = encode_snapshot(snap, gm)
@@ -168,7 +168,7 @@ def test_factor_growth_seam_documented():
     )
 
     grown = register_event_cluster(
-        DEFAULT_EVENT_CLUSTERS, source="praxis", label="cluster_action"
+        DEFAULT_EVENT_CLUSTERS, source="effectors", label="cluster_action"
     )
     assert "cluster_action" in grown
     # The model can be rebuilt over the grown cluster set.

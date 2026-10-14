@@ -5,7 +5,7 @@
 
 A persistent, one-way developmental arc: a mind spends its **developmental phase** in the stimulus source and is
 **born** into the embodied world exactly once. The only legal transition is
-``gestation -> embodied``; there is NO path back to the stimulus source (a mind matures
+``development -> embodied``; there is NO path back to the stimulus source (a mind matures
 once and never regresses).
 
 The stage is a small file-backed per-fork state (mirroring
@@ -18,7 +18,7 @@ Boot defaults encode a NORMATIVE invariant (spec: *A first-class, monotonic
 developmental stage*):
 
   - a genuinely fresh entity (no stage file, no prior lived history) begins in
-    ``gestation``;
+    ``development``;
   - an entity with prior lived history (an existing fork / preservation record)
     but no stage file defaults to ``embodied`` — a mind that has already lived
     is NEVER regressed into a stimulus source.
@@ -139,7 +139,7 @@ def _coerce_stage(value: Any) -> str:
     """Coerce a persisted stage value.
 
     An unrecognized value stops the boot instead of reading as embodied.
-    A stored ``gestation`` keeps reading as the developmental stage after the rename.
+    A stored ``development`` keeps reading as the developmental stage after the rename.
     """
     if not isinstance(value, str):
         raise StageValueError(value)
@@ -153,7 +153,7 @@ def _coerce_stage(value: Any) -> str:
 
 
 def _coerce_lived_seconds(value: Any) -> float:
-    """Defensive coerce: a corrupt value can only delay birth."""
+    """Defensive coerce: a corrupt value can only delay maturation."""
     if isinstance(value, bool):
         return 0.0
     try:
@@ -166,7 +166,7 @@ def _coerce_lived_seconds(value: Any) -> float:
 
 
 def _coerce_sleep_count(value: Any) -> int:
-    """Defensive coerce: a corrupt value can only delay birth."""
+    """Defensive coerce: a corrupt value can only delay maturation."""
     if isinstance(value, bool) or not isinstance(value, int):
         return 0
     if value < 0:
@@ -175,7 +175,7 @@ def _coerce_sleep_count(value: Any) -> int:
 
 
 def _coerce_sleep_cursor(value: Any) -> str | None:
-    """Defensive coerce: a corrupt cursor is treated as a fresh gestation."""
+    """Defensive coerce: a corrupt cursor is treated as a fresh development."""
     if not isinstance(value, str):
         return None
     if not re.fullmatch(r"^\d+-\d+$", value):
@@ -223,16 +223,16 @@ def _coerce_maturation_bloom_ends_at(value: Any) -> str | None:
 class StageState:
     """The persisted developmental stage.
 
-    ``stage``                — ``gestation`` | ``embodied``.
-    ``gestation_started_at`` — ISO time the developmental phase began (the C3 lived-time anchor).
+    ``stage``                — ``development`` | ``embodied``.
+    ``development_started_at`` — ISO time the developmental phase began (the C3 lived-time anchor).
     ``born_at``              — ISO time of the maturation transition (None until born).
     ``lived_seconds``        — cumulative subjective lived time in the developmental phase.
     ``sleep_count``          — cumulative sleep completions.
-    ``hypnos_cursor``        — last scanned ``hypnos.out`` stream id.
-    ``womb_t_at_birth``      — stimulus source time in seconds when the maturation bloom ended (None until recorded).
-    ``womb_seed``            — procedural stimulus source seed active at maturation (None until recorded).
-    ``womb_params_digest``   — sha256 hex digest of the stimulus source parameters active at maturation (None until recorded).
-    ``birth_bloom_ends_at``  — UTC wall time when the maturation bloom ends (ISO-8601, None until recorded).
+    ``sleep_cursor``        — last scanned ``sleep.out`` stream id.
+    ``stimulus_source_t_at_maturation``      — stimulus source time in seconds when the maturation bloom ended (None until recorded).
+    ``stimulus_source_seed``            — procedural stimulus source seed active at maturation (None until recorded).
+    ``stimulus_source_params_digest``   — sha256 hex digest of the stimulus source parameters active at maturation (None until recorded).
+    ``maturation_bloom_ends_at``  — UTC wall time when the maturation bloom ends (ISO-8601, None until recorded).
     """
 
     stage: str = DEVELOPMENT
@@ -331,9 +331,9 @@ def resolve_boot_stage(
     """Resolve the developmental stage at boot, enforcing the boot invariants.
 
     - An existing stage file is authoritative (a fork inherits it verbatim).
-    - No stage file + prior lived history => ``embodied`` (NEVER ``gestation``):
+    - No stage file + prior lived history => ``embodied`` (NEVER ``development``):
       a mind that has already lived is never regressed into a stimulus source.
-    - No stage file + genuinely fresh => ``gestation``, anchoring the lived-time
+    - No stage file + genuinely fresh => ``development``, anchoring the lived-time
       clock at ``now``.
 
     This function does not write; the caller persists the resolved stage.
@@ -352,7 +352,7 @@ def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> Sta
 
     Monotonic and one-shot: an already-``embodied`` state is returned UNCHANGED
     (idempotent — maturation fires at most once), and there is no inverse. The
-    caller checks :func:`birth_is_new` to decide whether to fire the maturation event.
+    caller checks :func:`maturation_is_new` to decide whether to fire the maturation event.
     """
     if state.is_embodied:
         return state
@@ -360,7 +360,7 @@ def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> Sta
 
 
 def maturation_is_new(before: StageState, after: StageState) -> bool:
-    """True iff ``after`` represents a fresh gestation->embodied transition of
+    """True iff ``after`` represents a fresh development->embodied transition of
     ``before`` — the one-shot guard the maturation event/handoff keys off."""
     return before.is_developing and after.is_embodied
 

@@ -52,7 +52,7 @@ from kaine.experiment.verdict import Outcome
 
 # A real in-memory episodic memory module builder, constructed HERE in the test so the import of
 # kaine.modules.* lives in the test module, not the eval package (sidecar
-# boundary). Injected into the memory runner via mnemos_builder.
+# boundary). Injected into the memory runner via episodic_memory_builder.
 async def _build_real_episodic_memory():
     from kaine.modules.episodic_memory.memory import EpisodicMemoryCore
     from kaine.modules.episodic_memory.storage import InMemoryStorage
@@ -311,7 +311,7 @@ async def test_all_runners_are_offline_no_network(monkeypatch):
 def test_runner_modules_have_no_top_level_kaine_modules_import():
     """The runner modules must not import kaine.modules at top level (the sidecar
     convention): the memory runner's import of the real episodic memory module is lazy / function-local
-    inside ``_default_mnemos_builder``, and the real episodic memory module is otherwise injected.
+    inside ``_default_episodic_memory_builder``, and the real episodic memory module is otherwise injected.
 
     A source-level check (not an import-time sys.modules check), because the
     evaluation PACKAGE __init__ already eagerly imports the wider package tree for

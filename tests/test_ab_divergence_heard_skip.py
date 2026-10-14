@@ -58,13 +58,13 @@ async def test_ab_divergence_records_skip_for_heard_reply(monkeypatch):
         client=client,
     )
     event = Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload={"text": "hello"},
         salience=0.6,
         timestamp=datetime.now(timezone.utc),
     )
-    await obs.handle("lingua.external", "1-0", event)
+    await obs.handle("language.external", "1-0", event)
 
     assert len(sink.records) == 1
     record = sink.records[0]

@@ -147,7 +147,7 @@ def test_phasic_input_intermediate_value():
 
 def test_max_report_salience_returns_highest():
     events = [
-        _event("topos", 0.2),
+        _event("vision", 0.2),
         _event("aisthesis", 0.9),
         _event("mneme", 0.6),
     ]
@@ -157,14 +157,14 @@ def test_max_report_salience_returns_highest():
 def test_max_report_salience_ignores_excluded_sources():
     events = [
         _event("cycle", 1.0),
-        _event("syneidesis", 1.0),
-        _event("topos", 0.6),
+        _event("workspace", 1.0),
+        _event("vision", 0.6),
     ]
     assert max_report_salience(events) == pytest.approx(0.6)
 
 
 def test_max_report_salience_none_when_only_excluded():
-    events = [_event("cycle", 1.0), _event("syneidesis", 0.8)]
+    events = [_event("cycle", 1.0), _event("workspace", 0.8)]
     assert max_report_salience(events) is None
 
 
@@ -205,7 +205,7 @@ def test_controller_phasic_peak_decays():
     ctrl = AccessRateController(cfg)
     # Spike tick.
     ctrl.step(
-        events=[_event("topos", 1.0)],
+        events=[_event("vision", 1.0)],
         arousal=0.3,
         dt_s=0.1,
         resting_hz=3.333,
@@ -233,7 +233,7 @@ def test_controller_drive_is_max_not_sum():
     ctrl = AccessRateController(cfg)
     # tonic ~0.4, phasic input ~0.3 -> max should be 0.4
     drive, _effective = ctrl.step(
-        events=[_event("topos", 0.65)],
+        events=[_event("vision", 0.65)],
         arousal=0.58,
         dt_s=0.1,
         resting_hz=3.333,
@@ -247,7 +247,7 @@ def test_controller_disabled_returns_zero_drive_and_resting():
     ctrl = AccessRateController(cfg)
     ctrl.phasic = 0.9  # should be reset
     drive, effective = ctrl.step(
-        events=[_event("topos", 1.0)],
+        events=[_event("vision", 1.0)],
         arousal=1.0,
         dt_s=0.1,
         resting_hz=3.333,
@@ -262,7 +262,7 @@ def test_controller_resting_at_or_above_ceiling_returns_resting():
     cfg = AccessRateConfig(enabled=True)
     ctrl = AccessRateController(cfg)
     drive, effective = ctrl.step(
-        events=[_event("topos", 1.0)],
+        events=[_event("vision", 1.0)],
         arousal=1.0,
         dt_s=0.1,
         resting_hz=12.0,
@@ -292,7 +292,7 @@ def test_log_schema_bounds_the_access_drive():
 
 
 def test_max_report_salience_ignores_non_alerts():
-    events = [_event("topos", 0.9, alert=False), _event("audition", 0.6)]
+    events = [_event("vision", 0.9, alert=False), _event("audition", 0.6)]
     result = max_report_salience(events)
     assert result == pytest.approx(0.6)
 
@@ -317,8 +317,8 @@ def test_max_report_salience_counts_module_alert_level_events():
         (
             "0-0",
             Event(
-                source="thymos",
-                type="thymos.drive",
+                source="affect",
+                type="affect.drive",
                 payload={"drive": "boredom", "value": 0.9, "alert": True},
                 salience=0.7,
                 timestamp=datetime.now(timezone.utc),
@@ -327,8 +327,8 @@ def test_max_report_salience_counts_module_alert_level_events():
         (
             "0-0",
             Event(
-                source="thymos",
-                type="thymos.drive",
+                source="affect",
+                type="affect.drive",
                 payload={"drive": "curiosity", "value": 0.5},
                 salience=0.9,
                 timestamp=datetime.now(timezone.utc),

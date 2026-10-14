@@ -13,9 +13,9 @@ from kaine.setup.steps import Field, Step, StepContext
 from kaine.storage import resolve
 
 COMPONENT_OF_ADDRESS = {
-    "hypnos.voice_alignment.training_device": "voice_alignment",
-    "topos.device": "topos",
-    "phantasia.training_device": "phantasia",
+    "sleep.voice_alignment.training_device": "voice_alignment",
+    "vision.device": "vision",
+    "world_model.training_device": "world_model",
     "embedding.device": "embedding",
     "audition.emotion_device": "emotion",
 }
@@ -359,8 +359,8 @@ def device_step(
 
         hardware = ctx.config.setdefault("hardware", {})
         hardware["devices"] = {
-            "organ": final["hypnos.voice_alignment.training_device"],
-            "vision": final["topos.device"],
+            "organ": final["sleep.voice_alignment.training_device"],
+            "vision": final["vision.device"],
         }
 
     return Step(
