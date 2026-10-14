@@ -1013,13 +1013,6 @@ _STATE_SUBTREES = tuple(
     ]
 )
 
-# Files under state/cycle that belong to the entity run (not the dir itself,
-# which may hold operator config we leave alone — but these are entity files).
-_CYCLE_FILES = ("runtime.json",)
-
-# Other entity files, relative to state_root, that must be removed.
-_STATE_FILES = (Path("preservation") / "divergence_edge.json",)
-
 
 def delete_entity_state(
     *,
