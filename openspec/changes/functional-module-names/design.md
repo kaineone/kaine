@@ -827,6 +827,31 @@ checkpoint load and the dashboard smoke.
   storage key `nexus.preservation.events` are operator/UI names. Keep rules hold
   them through the keys step so the server, its documentation and the browser keep
   agreeing; PR 7 renames them with the other UI strings.
+- **The operator step (PR 7).** The UI names move on both sides in one change,
+  with a reader for whatever a running browser or an operator file still holds:
+  - The session-key header becomes `X-Dashboard-Session-Key`. The server also
+    accepts `X-Nexus-Session-Key` until the alias release and logs one
+    deprecation line per process the first time it sees it; the browser sends
+    only the new header. Sessions live in memory, so an upgrade signs every
+    browser out and the cookie is renamed outright.
+  - Browser storage (`kaine.nexus.sessionKey`, `nexus.preservation.events`):
+    the page reads the new key, falls back to the old one, writes the new one
+    and removes the old one on first load. One small helper does this for both
+    keys.
+  - `compose/kaine.yml` reads each variable as
+    `${NEW:-${OLD:-default}}`, so an operator's `compose/.env` written before
+    the rename keeps working; the container sees only the new name.
+  - The record volume keeps its name in compose and in quadlet: renaming the
+    `.volume` unit would change the podman volume name and orphan the recorded
+    data. The dashboard container unit is renamed; the installer refuses while
+    the old unit is active and removes the old unit file it installed.
+  - `--serve-nexus` stays a hidden alias in the headless-host script, warning
+    once; `--db-gestation` and `--gestation-budget-seconds` already have
+    argparse aliases.
+  - Runtime keys and the health block key in `OPERATOR_EXACT` change on the
+    writer and the reader together, and a reader that can meet a file written
+    before the upgrade (the supervisor fields in `runtime.json`) falls back to
+    the old key.
 
 ### PR sequence
 

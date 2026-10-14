@@ -79,7 +79,8 @@ fixtures. The failure SHALL name each file and line.
 
 ### Requirement: Deprecated operator names are read for a bounded window
 Old config tables, keys and values, operator environment variables, CLI flags,
-plugin seams, the `nexus` pip extra and the `python -m kaine.nexus` entry point
+plugin seams, the `nexus` pip extra, the `python -m kaine.nexus` entry point,
+the dashboard's session-key header and the variables in `compose/.env`
 SHALL keep working under their old names, each use logging one warning line
 that names the new name and the last release that reads the old one. That
 release SHALL be the second release after the one that ships the rename, and
@@ -95,6 +96,18 @@ both set and differ, startup SHALL fail without printing either value.
 - **WHEN** `KAINE_MUNDUS_OPERATOR_APPROVED=1` and
   `KAINE_EMBODIMENT_OPERATOR_APPROVED=0` are both set
 - **THEN** startup fails and the embodiment module does not start
+
+#### Scenario: A browser sends the old session-key header
+- **WHEN** a page loaded before the upgrade sends `X-Nexus-Session-Key` with a
+  valid session key
+- **THEN** the dashboard accepts it and logs one deprecation line naming
+  `X-Dashboard-Session-Key`
+
+#### Scenario: Browser storage under an old key
+- **WHEN** the dashboard page loads in a browser that holds a value under an
+  old storage key and none under the new key
+- **THEN** the page reads that value, writes it under the new key and removes
+  the old key
 
 ### Requirement: Recorded datasets stay readable under old names
 Readers of recorded datasets (research event log, raw bus archive, dashboard

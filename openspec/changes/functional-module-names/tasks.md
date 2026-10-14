@@ -50,9 +50,12 @@
 
 ## 8. Operator surface (PR 7)
 
-- [ ] 8.1 Environment variables, CLI flags, the `dashboard` extra with `nexus` kept as an alias, the `python -m kaine.nexus` shim.
-- [ ] 8.2 Quadlet and compose names; volume names unchanged; the installer removes the old unit it installed.
-- [ ] 8.3 Dashboard UI strings.
+- [ ] 8.0 Prerequisites: the dashboard accepts the old session-key header `X-Nexus-Session-Key` beside the new `X-Dashboard-Session-Key` for the deprecation window, logging one line per process, and the browser sends the new one; the browser reads each storage key under its new name, falls back to the old name, writes the new name and removes the old one on first load; the compose file falls back to each old variable in `compose/.env`; the headless-host script keeps `--serve-nexus` as a hidden alias that warns; the record volume keeps its name; the queued matches are decided.
+- [ ] 8.1 Environment variables, CLI flags and their help text, the `dashboard` extra with `nexus` kept as an alias, the `python -m kaine.nexus` shim.
+- [ ] 8.2 Quadlet and compose names; volume names unchanged; the installer refuses while the old unit runs and removes the old unit file it installed.
+- [ ] 8.3 Dashboard UI strings: the JavaScript globals, the session-key header, the browser storage keys, the session cookie, the `OPERATOR_EXACT` strings (template variables, the health block key, the runtime keys the supervisor banner reads), display labels and operator-facing messages.
+- [ ] 8.4 Follow-ups from the 6b review: the old-stream cleanup and its preboot row take "now" from the Redis clock (`TIME`), and the preboot path treats an unreadable newest entry as recent; setup returns "conflict" with a clear message when the secrets file has both the new and the old dashboard table.
+- [ ] 8.5 Proof: the operator guard is clean, the gate is green, a dashboard smoke passes with the new header and storage keys, and a sweep of the test diffs finds no old and new literals that collapsed into one name.
 
 ## 9. Persisted names (PR 8)
 
