@@ -200,9 +200,8 @@ def test_main_warns_before_deleting_sleep_or_external_history(monkeypatch):
 
     main(["--delete"], client=client, input_fn=input_fn, out=out)
     warning = (
-        "Deleting these also removes, from the dashboard's conversation history, "
-        "what the entity said before the rename, and the old sleep events the "
-        "language module reads when it first looks for the last sleep index. "
+        "Deleting these also removes the old sleep events the language module "
+        "reads when it first looks for the last sleep index. "
         "Research logs on disk are not affected.\n"
     )
     confirm = "Type DELETE 1 OLD STREAMS to delete them"
@@ -230,3 +229,38 @@ def test_main_keeps_a_recently_written_old_stream_without_asking(monkeypatch):
     assert "recently written (kept)" in text
     assert "Nothing to delete." in text
     assert old in client._streams
+
+
+def test_main_warns_about_conversation_history_and_sleep_events(monkeypatch):
+    now_ms = int(time.time() * 1000)
+    sleep_old = legacy_aliases.old_stream_name("sleep.out")
+    external_old = legacy_aliases.old_stream_name("language.external")
+    client = _FakeClient()
+    for name in (sleep_old, external_old):
+        client.xadd(name, {"x": "1"}, id=f"{now_ms - 20 * 60 * 1000}-0")
+    monkeypatch.setattr(
+        "kaine.bus.legacy_streams.legacy_aliases.scope_done", lambda _scope: True
+    )
+
+    out = _Recorder()
+    main(["--delete"], client=client, input_fn=lambda _p: "no", out=out)
+    text = "".join(out.lines)
+    assert "what the entity said before the rename" in text
+    assert "the old sleep events the language module reads" in text
+    assert "Research logs on disk are not affected." in text
+
+
+class _UnreadableNewestClient(_FakeClient):
+    def xrevrange(self, key, max="+", min="-", count=None):
+        raise RuntimeError("cannot read the newest entry")
+
+
+def test_an_old_stream_of_unknown_age_is_kept():
+    old = legacy_aliases.old_stream_name("sleep.out")
+    client = _UnreadableNewestClient()
+    client.xadd(old, {"x": "1"}, id="1000-0")
+    now_ms = int(time.time() * 1000)
+    entries = survey(client, now_ms=now_ms)
+    entry = next(e for e in entries if e.old == old)
+    assert not deletable([entry], now_ms=now_ms)
+    assert _render_status(entry, now_ms) == "recently written (kept)"

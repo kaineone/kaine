@@ -61,6 +61,8 @@ def stream_map() -> list[tuple[str, str]]:
 
 
 def survey(client, *, now_ms=None) -> list[OldStream]:
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
     entries: list[OldStream] = []
     for old, new in stream_map():
         present = bool(client.exists(old))
@@ -82,7 +84,8 @@ def survey(client, *, now_ms=None) -> list[OldStream]:
                             entry_id = entry_id.decode("utf-8", "replace")
                         last_entry_ms = int(entry_id.split("-", 1)[0])
                 except Exception:
-                    last_entry_ms = 0
+                    # Age unknown: count it as just written so it is kept.
+                    last_entry_ms = now_ms
         entries.append(
             OldStream(
                 old=old,
@@ -197,11 +200,20 @@ def main(argv=None, *, client=None, input_fn=input, out=sys.stdout, err=sys.stde
         deletable_names = {entry.old for entry in to_delete}
         sleep_old = legacy_aliases.old_stream_name("sleep.out")
         external_old = legacy_aliases.old_stream_name("language.external")
-        if (sleep_old in deletable_names) or (external_old in deletable_names):
+        losses = []
+        if external_old in deletable_names:
+            losses.append(
+                "from the dashboard's conversation history, what the entity said "
+                "before the rename"
+            )
+        if sleep_old in deletable_names:
+            losses.append(
+                "the old sleep events the language module reads when it first looks "
+                "for the last sleep index"
+            )
+        if losses:
             out.write(
-                "Deleting these also removes, from the dashboard's conversation history, "
-                "what the entity said before the rename, and the old sleep events the "
-                "language module reads when it first looks for the last sleep index. "
+                f"Deleting these also removes {', and '.join(losses)}. "
                 "Research logs on disk are not affected.\n"
             )
 

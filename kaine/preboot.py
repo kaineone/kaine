@@ -70,6 +70,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -1131,7 +1132,8 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
                                 entry_id = entry_id.decode("utf-8", "replace")
                             last_entry_ms = int(entry_id.split("-", 1)[0])
                     except Exception:
-                        last_entry_ms = 0
+                        # Age unknown: count it as just written.
+                        last_entry_ms = int(time.time() * 1000)
             entries.append(
                 legacy_streams.OldStream(
                     old=old,
