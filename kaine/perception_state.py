@@ -51,7 +51,7 @@ LOCI = ("physical", "virtual", "off")
 # Who holds the locus lock. The operator's dashboard lock and the developmental
 # gate's developmental confinement (`developmental-maturation-gate`) both set
 # `locus_locked`, but a refused self-switch must be attributed HONESTLY — a
-# gestating entity is confined by the developmental gate, not by the operator.
+# developing entity is confined by the developmental gate, not by the operator.
 # Defaults to `operator` so an unmarked lock reads as before.
 LOCKED_BY = ("operator", "development")
 

@@ -91,7 +91,7 @@ def _install_shared_stimulus_source_clock(
         if stage_state.is_embodied:
             clock.mark_born()
             log.warning(
-                "perception_feed mode is stimulus source but the entity is already born; "
+                "perception_feed mode is stimulus source but the entity has already matured; "
                 "the stimulus source delivers nothing. Choose another perception mode."
             )
     else:
@@ -99,7 +99,7 @@ def _install_shared_stimulus_source_clock(
         if file_stage_state is not None and file_stage_state.is_embodied:
             clock.mark_born()
             log.warning(
-                "perception_feed mode is stimulus source but the entity is already born; "
+                "perception_feed mode is stimulus source but the entity has already matured; "
                 "the stimulus source delivers nothing. Choose another perception mode."
             )
 
@@ -175,7 +175,7 @@ def _plan_stimulus_source_world_transition(
     is ``playlist``, ``transition_seconds`` is above zero, the stage is embodied
     with ``stimulus_source_t_at_maturation``, ``stimulus_source_seed`` and the parameter digest recorded,
     and the configured stimulus source parameters still have the recorded digest. An
-    unstaged, unborn or disabled case is reported at info; a born being missing
+    unstaged, not yet matured or disabled case is reported at info; a matured entity missing
     its record, or a parameter mismatch, at warning. Invalid settings raise
     ``ValueError``.
     """
@@ -193,7 +193,7 @@ def _plan_stimulus_source_world_transition(
     if stage_state is None:
         return False, "no developmental stage is on record", logging.INFO
     if not stage_state.is_embodied:
-        return False, "the entity is not born yet", logging.INFO
+        return False, "the entity has not matured yet", logging.INFO
     missing = [
         name
         for name in ("stimulus_source_t_at_maturation", "stimulus_source_seed", "stimulus_source_params_digest")
@@ -203,12 +203,12 @@ def _plan_stimulus_source_world_transition(
         if getattr(stage_state, "born_at", None) is None:
             return (
                 False,
-                "the entity was never born from the stimulus source (no maturation on record)",
+                "the entity never matured from the stimulus source (no maturation on record)",
                 logging.INFO,
             )
         return (
             False,
-            "the entity is born but its stage has no stimulus source maturation record "
+            "the entity has matured but its stage has no stimulus source maturation record "
             f"(missing {', '.join(missing)})",
             logging.WARNING,
         )
@@ -228,7 +228,7 @@ def _plan_stimulus_source_world_transition(
             "reproduced",
             logging.WARNING,
         )
-    return True, "the entity was born from the stimulus source and its maturation state is recorded", logging.INFO
+    return True, "the entity matured from the stimulus source and its maturation state is recorded", logging.INFO
 
 
 def _build_stimulus_source_world_transition(
@@ -478,7 +478,7 @@ def _build_perception_feed_video_factory(
     # Shared start-clock injected by build_registry so video and audio stay on the
     # same item (playlist-realtime-av-sync). None -> a private clock (standalone).
     shared_clock = feed.get("_shared_playlist_clock")
-    # A born entity's viewing opens with the stimulus-source-to-world crossfade when boot
+    # A matured entity's viewing opens with the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves audio.
     transition = feed.get("_stimulus_source_world_transition")
 

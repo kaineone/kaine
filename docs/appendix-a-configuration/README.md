@@ -134,5 +134,6 @@ The detailed reference is split across these pages:
 - [Perception feed and sleep](perception-and-sleep.md): `[perception_feed]`, `[perception_feed.stimulus_source]`, `[perception_preview]`, `[sleep]`, and `[sleep.voice_alignment]`.
 - [Lifecycle, evaluation and research](lifecycle-and-research.md): `[evaluation]`, `[individuation]`, `[lifecycle]`, `[developmental_stage]`, `[caretaker]`, `[preservation]`, `[research]`, `[transfer]`, `[research_submission]`, `[research_event_log]`, and `[ignition_log]`.
 - [Security and Dashboard](security-and-dashboard.md): `[dashboard]`, `[security.state_encryption]`, and related security settings.
+- [Deprecated names](deprecated-names.md): the names from before the module rename that are still read, and the last release that reads them.
 
 For the structure and behaviour of individual modules, see the module pages under [The modules](../09-modules/README.md).

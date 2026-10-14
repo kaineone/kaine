@@ -54,7 +54,7 @@ It SHALL compare branch k against branch 0, branch 0 against the repeat, and acc
 ## ADDED Requirements
 
 ### Requirement: The seed is the entity at the moment it matures
-The study SHALL gestate one entity in the local stimulus source with automatic maturation. It SHALL preserve that entity once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
+The study SHALL develop one entity in the local stimulus source with automatic maturation. It SHALL preserve that entity once the maturation transition has completed, and SHALL use that preservation as the start of every branch step and of the repeat. The seed SHALL record the stimulus source's time at maturation.
 
 #### Scenario: Maturation needs no operator
 - **WHEN** the seed's maturation gate passes

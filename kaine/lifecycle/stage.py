@@ -3,8 +3,8 @@
 
 """The entity's first-class developmental stage (`developmental-maturation-gate`).
 
-A persistent, one-way developmental arc: a mind spends its **developmental phase** in the stimulus source and is
-**born** into the embodied world exactly once. The only legal transition is
+A persistent, one-way developmental arc: a mind spends its **developmental phase** in the stimulus source and
+**matures** into the embodied world exactly once. The only legal transition is
 ``development -> embodied``; there is NO path back to the stimulus source (a mind matures
 once and never regresses).
 

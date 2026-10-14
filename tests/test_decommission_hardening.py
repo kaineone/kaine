@@ -47,7 +47,7 @@ def _seed(state_root, rel, content=None):
 def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
     """Tier 0 with no Qdrant endpoint never contacts Qdrant and finishes cleanly."""
     op = tmp_path / "op.toml"
-    op.write_text("[modules]\nmnemos = true\nempatheia = true\n", encoding="utf-8")
+    op.write_text("[modules]\nepisodic_memory = true\nsocial_cognition = true\n", encoding="utf-8")
     config = load_runtime_config(
         PROJECT_ROOT / "config" / "kaine.toml",
         op,
@@ -89,9 +89,9 @@ def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
 
 
 def test_base_profile_with_memory_enabled_uses_qdrant(tmp_path):
-    """The default base profile routes episodic memory to Qdrant when mnemos is enabled."""
+    """The default base profile routes episodic memory to Qdrant when episodic memory is enabled."""
     op = tmp_path / "op.toml"
-    op.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
+    op.write_text("[modules]\nepisodic_memory = true\n", encoding="utf-8")
     config = load_runtime_config(
         PROJECT_ROOT / "config" / "kaine.toml",
         op,
@@ -560,7 +560,7 @@ class _FakeQdrant:
 def test_tier0_with_shipped_endpoint_and_reachable_qdrant_is_clean(tmp_path, monkeypatch):
     """Tier 0 keeps shipped endpoints but does not use Qdrant."""
     op = tmp_path / "op.toml"
-    op.write_text("[modules]\nmnemos = true\nempatheia = true\n", encoding="utf-8")
+    op.write_text("[modules]\nepisodic_memory = true\nsocial_cognition = true\n", encoding="utf-8")
     config = load_runtime_config(
         PROJECT_ROOT / "config" / "kaine.toml",
         op,

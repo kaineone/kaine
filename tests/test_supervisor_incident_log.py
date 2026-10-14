@@ -4,7 +4,7 @@
 """supervisor durable incident log — one JSONL record per lifecycle transition.
 
 Covers the spec-delta scenarios in
-``openspec/changes/spot-incident-log/specs/spot-supervisor/spec.md``:
+``openspec/changes/archive/2026-06-14-spot-incident-log/specs/spot-supervisor/spec.md``:
 
 * Log survives reboot + ``clear_escalation()`` does not touch it.
 * Disabled supervisor writes nothing.

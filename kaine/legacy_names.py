@@ -13,7 +13,7 @@ codemod scopes are complete; the guard ``tests/test_module_names_guard.py`` read
 SCOPES = ("prose", "identifiers", "keys", "operator", "persisted")
 
 SCOPE_STATUS = {
-    "prose": "pending",
+    "prose": "done",
     "identifiers": "done",
     "keys": "done",
     "operator": "done",
@@ -22,9 +22,14 @@ SCOPE_STATUS = {
 
 # The last release that still reads old operator-facing names (config tables and
 # keys, environment variables, CLI flags, plugin seams). Deprecation warnings name
-# it. Placeholder until the close-out step (task 10.2) fixes it: the second release
-# after the one that ships the rename, and no earlier than 90 days after it.
-ALIAS_LAST_RELEASE = "27.01"
+# it. The rule: the second release after the one that ships the rename, and no
+# earlier than 90 days after it. The rename ships in the first release after
+# 26.06.0a1, which is 26.10 at the earliest; 90 days after the end of October 2026
+# falls at the end of January 2027, so 27.02 is the first release name that meets
+# the 90-day floor for a 26.10 release. functional-module-names-drop-aliases checks
+# both conditions against the releases actually cut before it removes anything,
+# and moves this value later if they are not met.
+ALIAS_LAST_RELEASE = "27.02"
 
 MODULES = {
     "topos": {
@@ -1254,8 +1259,12 @@ EXCLUDED_GLOBS = (
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.
-    "openspec/changes/functional-module-names/",
+    "openspec/changes/functional-module-names-drop-aliases/",
     "docs/appendix-e-module-names.md",
+    # The changelog keeps its history in the names of its time, and its [Unreleased] entry names the deprecated ones.
+    "CHANGELOG.md",
+    # Generated from this table by tools/maintainer/gen_deprecated_names.py; it lists the old names on purpose.
+    "docs/appendix-a-configuration/deprecated-names.md",
     # The agent tooling under .claude/ holds third-party OpenSpec command and skill templates.
     ".claude/",
     # Licence and notice files are never touched by the codemod,
@@ -1420,6 +1429,23 @@ SURVEY_THIRD_PARTY_PREFIXES = (
 GUARD_NAMES = tuple(
     sorted(e["old_class"] for k, e in MODULES.items() if k not in GUARDED)
 )
+
+# Identifiers built on an old module key that stay for good. The dashboard record keeps
+# its data directory name because the record volume is mounted on it.
+GUARD_KEPT_IDENTIFIERS = ("nexus_record",)
+
+# Specs whose requirements describe how old names are read. In these files an old
+# name is allowed only inside a section whose heading contains one of
+# OLD_NAME_SECTION_MARKERS (case-insensitive), or on a line that ends with
+# OLD_NAME_LINE_MARKER; everywhere else in them the guard applies as usual.
+OLD_NAME_SECTION_FILES = (
+    "openspec/specs/module-naming/spec.md",
+    "openspec/specs/configuration-loading/spec.md",
+    "openspec/specs/developmental-stage/spec.md",
+    "openspec/specs/entity-preservation/spec.md",
+)
+OLD_NAME_SECTION_MARKERS = ("old name", "old module name", "legacy", "alias", "deprecated", "before the rename")
+OLD_NAME_LINE_MARKER = "<!-- old-names -->"
 
 CONFIG_TABLES = tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()

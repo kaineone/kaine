@@ -908,7 +908,7 @@ def calibrate(
             theta_eff = None
 
     # ------------------------------------------------------------------
-    # Tone analysis minimum effect
+    # Tone analysis minimum effect (count only tone events after T_learn)
     # ------------------------------------------------------------------
     tone_statistics: list[float | None] | None = None
     min_effect_tone: float | None = None
@@ -918,13 +918,18 @@ def calibrate(
         tone_error = "the plan names no tone-variant pilot runs (paper A.8)"
     elif n_counted < n_cal:
         tone_error = "depends on pilots"
+    elif t_learn_s is None:
+        tone_error = "depends on t_learn_s"
     else:
         stats: list[float | None] = []
         events_by_pilot: list[list[ToneEvent]] = []
         for index in counted_indices:
             run_id = pilots[index][TONE]
             try:
-                events = tone_events(_flatten_records(records_by_run[run_id]))
+                events = tone_events(
+                    _flatten_records(records_by_run[run_id]),
+                    t_learn_s=t_learn_s,
+                )
                 events_by_pilot.append(events)
                 stats.append(run_statistic(events))
             except ToneAnalysisError as exc:
@@ -946,6 +951,7 @@ def calibrate(
     if tone_error is not None:
         tone_bins_error = tone_error
     else:
+        # Pool the counted pilots' tone events after T_learn (paper A.8).
         try:
             tone_bins = quintile_edges(
                 [e.error_ratio for events in events_by_pilot for e in events]

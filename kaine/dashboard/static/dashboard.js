@@ -594,7 +594,7 @@
         { key: "before", label: "before", stroke: "#6D748C" },
         { key: "after", label: "after", stroke: "#E0913A" },
       ]);
-      // Eidolon accuracy.
+      // Self-model accuracy.
       seriesChart("chart-self-model", data.self_model_accuracy || [], [
         { key: "aggregate", label: "accuracy", stroke: "#9EA5BA" },
       ]);
@@ -792,7 +792,7 @@
   window.DashboardControls = { attach: attach };
 })();
 
-/* ---- Supervisor supervisor alert (border + banner + console) ------------------- */
+/* ---- Supervisor alert (border + banner + console) ------------------- */
 (function () {
   var MAX_LOG_LINES = 200;
 
@@ -963,7 +963,7 @@
         holdersEl.textContent = sources.length ? ("held by: " + sources.join(", ")) : "";
       }
       currentOverridable = sources.filter(function (s) {
-        return ["welfare", "gestation", "programme_end"].indexOf(s) !== -1;
+        return ["welfare", "development", "programme_end"].indexOf(s) !== -1;
       });
       if (overrideBtn) {
         if (currentOverridable.length) {
@@ -1251,7 +1251,7 @@
   // state by priority OFFLINE > FROZEN > SLEEPING > AWAKE.
   //   running  — cycle_status === "running" (from the pushed metrics snapshot)
   //   frozen   — operator freeze / experiential-loop paused (metrics.frozen)
-  //   sleeping — Hypnos asleep (sleep.sleep.started/completed events)
+  //   sleeping — the sleep module asleep (sleep.sleep.started/completed events)
   // All three are metadata-only; none carries cognitive content.
   var chip = { running: false, frozen: false, sleeping: false };
   var lastChipState = null;
@@ -1267,7 +1267,7 @@
   function computeChipState() {
     if (!chip.running) return "offline";   // no cognitive cycle → OFFLINE
     if (chip.frozen) return "frozen";       // running but experiential loop paused
-    if (chip.sleeping) return "sleeping";   // running + Hypnos asleep
+    if (chip.sleeping) return "sleeping";   // running + the sleep module asleep
     return "awake";                          // running, not frozen, not sleeping
   }
 
@@ -1282,7 +1282,7 @@
   }
 
   // Input setters — each records one input and recomputes the single chip
-  // state. Called from the metrics snapshot (running/frozen) and the hypnos
+  // state. Called from the metrics snapshot (running/frozen) and the sleep module's
   // sleep/wake events (sleeping).
   function setSleep(isSleeping) { chip.sleeping = !!isSleeping; renderChip(); }
   function setRunning(isRunning) { chip.running = !!isRunning; renderChip(); }

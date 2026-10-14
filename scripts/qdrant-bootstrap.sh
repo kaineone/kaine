@@ -51,7 +51,7 @@ done
 
 # Qdrant has no Android build; on Termux the memory backend is sqlite_vec.
 if is_termux; then
-  echo "==> Qdrant has no Android build. On Termux use [mnemos].backend = \"sqlite_vec\" (phase 3)."
+  echo "==> Qdrant has no Android build. On Termux use [episodic_memory].backend = \"sqlite_vec\" (phase 3)."
   exit 0
 fi
 

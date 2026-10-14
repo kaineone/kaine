@@ -524,7 +524,7 @@ native_bootstrap_qdrant() {
   local rotate="${3:-0}"
 
   if is_termux; then
-    echo "==> Qdrant has no Android build. On Termux use [mnemos].backend = \"sqlite_vec\" (phase 3)."
+    echo "==> Qdrant has no Android build. On Termux use [episodic_memory].backend = \"sqlite_vec\" (phase 3)."
     return 0
   fi
 

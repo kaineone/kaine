@@ -483,7 +483,7 @@ def _t_self_model_self_model(payload: dict[str, Any]) -> str:
         f"{k} {_fmt(v)}" for k, v in sorted(personality.items())
     ) if personality else "none"
     return (
-        f"Self-model self-model: {len(values)} values, {len(norms)} norms, "
+        f"Self-model: {len(values)} values, {len(norms)} norms, "
         f"personality [{pers_str}], {n_caps} capabilities."
     )
 

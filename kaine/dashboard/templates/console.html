@@ -8,7 +8,7 @@
 <div class="rail__status">
   <span class="rail__label">Status</span>
   {# Four-state chip: OFFLINE > FROZEN > SLEEPING > AWAKE, computed live from
-     the cycle_status + freeze flag (metrics push) and Hypnos sleep/wake events
+     the cycle_status + freeze flag (metrics push) and the sleep module's sleep/wake events
      by DashboardVitals. The page-load DEFAULT is OFFLINE: before any live data
      arrives we do NOT know a cycle is up, so the old "awake" default was
      wrong (it read awake with nothing running). DashboardVitals overwrites this
@@ -119,7 +119,7 @@
   // Presence board: the ferrofluid visualizer (LevelMeter, GPL-3.0, vendored at
   // /static/vendor/viz.js, which imports the 1.3MB three.module.js). Renders a
   // calm idle/"waiting" state with NO entity running; shifts its mood-ring from
-  // live thymos affect when a cycle is up. We never synthesize affect — the
+  // live affect module state when a cycle is up. We never synthesize affect — the
   // idle look is the honest no-entity state.
   //
   // The import is LAZY (task 1.6): it is deferred to requestIdleCallback (with

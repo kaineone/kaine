@@ -202,7 +202,7 @@ def test_load_security_state_encryption_config_propagates_shape_error(
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "kaine.toml").write_text(
-        '[modules]\nsoma = false\n[security.state_encryption]\nenabled = "true"\n'
+        '[modules]\ninteroception = false\n[security.state_encryption]\nenabled = "true"\n'
     )
     (config_dir / "kaine.operator.toml").write_text("")
     monkeypatch.chdir(tmp_path)

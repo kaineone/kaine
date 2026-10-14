@@ -8,7 +8,7 @@
 # What this script does, in order:
 #   1. Confirms the operator-present gate.
 #   2. Asserts required services (Redis, Qdrant) are reachable.
-#   3. Asserts external runtime endpoints (Lingua / Audio In / Audio Out)
+#   3. Asserts external runtime endpoints (language / audio in / audio out)
 #      resolve to loopback addresses per shipped config.
 #   4. Prints the next manual steps for the operator and exits 0.
 #
@@ -122,10 +122,10 @@ The cognitive cycle is NOT running. To boot KAINE for the first time:
   1. Read FIRST_BOOT.md end-to-end.
   2. Enable the modules you intend to boot with in config/kaine.toml
      ([modules] section — all are false by default).
-  3. Confirm Praxis shell whitelist is what you want (empty by default).
+  3. Confirm the effectors shell whitelist is what you want (empty by default).
   4. Start the bus AUDIT trail, then start each module in the order
      documented in FIRST_BOOT.md.
-  5. Connect Nexus and watch the first ticks.
+  5. Connect the dashboard and watch the first ticks.
 
 KAINE first boot is a one-way door. Take your time.
 EOF

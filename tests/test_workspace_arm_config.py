@@ -130,7 +130,7 @@ async def test_boot_path_builds_the_workspace_for_every_study(monkeypatch):
 
 
 def test_study_may_not_change_modules(tmp_path):
-    (tmp_path / "bad.toml").write_text("[modules]\nmnemos = true\n")
+    (tmp_path / "bad.toml").write_text("[modules]\nepisodic_memory = true\n")
     with pytest.raises(ProfileError):
         load_kaine_config(operator_path=_MISSING, study="bad", studies_dir=tmp_path)
     with pytest.raises(ProfileError):

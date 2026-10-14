@@ -247,3 +247,64 @@ def test_empty_stream_or_entry_part_is_refused():
         records[1]["entries"][0]["entry_id"] = bad_entry_id
         with pytest.raises(ToneAnalysisError):
             tone_events(records)
+
+
+def test_tone_events_filters_after_t_learn():
+    records = _run(2, 1, 2, 1)
+    tone_index = 0
+    for rec in records:
+        if rec["event_type"] == "audition.emotion":
+            rec["entity_time_s"] = float(tone_index + 1)
+            tone_index += 1
+
+    events = tone_events(records, t_learn_s=2.0)
+    assert len(events) == 2
+    assert [e.emotional for e in events] == [False, False]
+    assert [e.accessed for e in events] == [True, False]
+
+
+def test_tone_run_statistic_uses_only_after_t_learn():
+    early = _run(2, 2, 2, 0)  # would give statistic +1.0 if counted
+    late = _run(2, 0, 2, 2)   # statistic -1.0
+
+    tone_index = 0
+    for rec in early:
+        if rec["event_type"] == "audition.emotion":
+            rec["entity_time_s"] = float(tone_index + 1)
+            tone_index += 1
+
+    tone_index = 0
+    for rec in late:
+        # Distinct ids, so the early broadcasts cannot mark a late event accessed.
+        if rec["event_type"] == "audition.emotion":
+            rec["entry_id"] = rec["entry_id"].replace("audition.out:", "audition.out:late")
+            rec["entity_time_s"] = float(100.0 + tone_index + 1)
+            tone_index += 1
+        else:
+            entry = rec["entries"][0]
+            new_id = entry["entry_id"].replace("audition.out:", "audition.out:late")
+            rec["salience_scores"] = {new_id: rec["salience_scores"][entry["entry_id"]]}
+            entry["entry_id"] = new_id
+
+    all_records = early + late
+    filtered_statistic = run_statistic(tone_events(all_records, t_learn_s=50.0))
+    late_only_statistic = run_statistic(tone_events(late))
+    assert filtered_statistic == pytest.approx(late_only_statistic)
+
+
+def test_tone_events_requires_entity_time_s_when_t_learn_given():
+    records = _run(1, 0, 0, 0)
+    with pytest.raises(ToneAnalysisError, match="entity_time_s"):
+        tone_events(records, t_learn_s=0.0)
+
+    assert len(tone_events(records)) == 1
+
+
+def test_tone_events_rejects_invalid_entity_time_s():
+    for bad in (float("inf"), float("nan"), True):
+        records = _run(1, 0, 0, 0)
+        for rec in records:
+            if rec["event_type"] == "audition.emotion":
+                rec["entity_time_s"] = bad
+        with pytest.raises(ToneAnalysisError, match="entity_time_s"):
+            tone_events(records, t_learn_s=0.0)

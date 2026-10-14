@@ -481,14 +481,14 @@ class Audition(BaseModule):
                                     self._forward_model.suspended = True
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = True
-                                log.debug("audition: adaptation suspended (sleep sleep started)")
+                                log.debug("audition: adaptation suspended (sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = False
-                                log.debug("audition: adaptation resumed (sleep sleep completed)")
+                                log.debug("audition: adaptation resumed (sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
@@ -990,6 +990,7 @@ class Audition(BaseModule):
             "prediction_error": prediction_error if error_defined else None,
             "tone_error_ratio": error_ratio,
             "tone_rule": self._tone_rule,
+            "entity_time_s": self._clock.now(),  # tone events count only after T_learn, measured in entity time (paper Appendix A.8)
             "classified": not degraded,
         }
         # Surface the degraded flag so downstream consumers (for example
@@ -1024,6 +1025,7 @@ class Audition(BaseModule):
             "latency_ms": 0.0,
             "error": f"{type(exc).__name__}: {exc}",
             "tone_rule": self._tone_rule,
+            "entity_time_s": self._clock.now(),  # tone events count only after T_learn, measured in entity time (paper Appendix A.8)
             "classified": False,
         }
         if graded:

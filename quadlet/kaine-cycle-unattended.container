@@ -13,7 +13,7 @@
 #   6. Supervisor enabled and its scratch freeze/restart self-test passing
 #   7. a content-free start notice accepted by a [caretaker] channel
 #   8. a continuous perception input delivering a frame or audio block
-#   9. individuation producer enabled ([individuation].enabled and the lingua module)
+#   9. individuation producer enabled ([individuation].enabled and the language module)
 #
 # A refusal exits 6 and leaves the unit failed; the entity stays down.
 # scripts/install-quadlet.sh NEVER installs this file. Install it deliberately
@@ -44,7 +44,7 @@ Volume=kaine-trajectory.volume:/app/data/workspace_trajectory
 Volume=kaine-backups.volume:/app/backups
 # Film-aligned ignition log research data (durable, never raw sense data).
 Volume=kaine-ignition.volume:/app/data/ignition
-# Local-only Nexus record (privacy-filtered display stream); never exported.
+# Local-only dashboard record (privacy-filtered display stream); never exported.
 # About 2 GB per four-hour viewing.
 Volume=kaine-nexus-record.volume:/app/data/nexus_record
 Tmpfs=/app/state/perceptual_locus

@@ -9,7 +9,7 @@
 # - Locates the hardware-appropriate server binary (Unsloth Studio's llama-server
 #   on NVIDIA, the unsloth-core build on AMD; honors KAINE_MODEL_SERVER_BIN).
 # - Launches it against the downloaded organ GGUF under the EXACT
-#   [lingua].model_id alias, with chain-of-thought suppressed, on the configured
+#   [language].model_id alias, with chain-of-thought suppressed, on the configured
 #   port; supervises it; health-gates on /v1/models listing the alias.
 # - NEVER silently installs the multi-GB server toolchain: if the binary is
 #   absent it prints install guidance and exits non-zero.

@@ -255,7 +255,7 @@ If a deployed adapter misbehaves:
 2. `rm -rf state/sleep/adapters/<bad-timestamp>/`
 3. Re-point `current` to the previous accepted adapter:
    ```bash
-   ln -snfr state/hypnos/adapters/<previous> state/hypnos/adapters/current
+   ln -snfr state/sleep/adapters/<previous> state/sleep/adapters/current
    ```
 4. Reload the language module's backing service.
 5. Restart KAINE.

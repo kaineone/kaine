@@ -350,12 +350,12 @@ class Sequence(BaseModule):
                                 self._in_sleep = True
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = True
-                                log.debug("sequence: adaptation suspended (sleep sleep started)")
+                                log.debug("sequence: adaptation suspended (sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._pred_head is not None:
                                     self._pred_head.suspended = False
-                                log.debug("sequence: adaptation resumed (sleep sleep completed)")
+                                log.debug("sequence: adaptation resumed (sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:

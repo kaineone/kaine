@@ -727,7 +727,7 @@ def preview(bundle: Bundle) -> str:
         "  - intent log (state/language/intent_expression.jsonl)",
         "    REASON: embeds user/bystander utterances and entity internal monologue.",
         "  - EpisodicMemory/Qdrant memories (verbatim transcripts and episodic records).",
-        "  - Self-model self-model (state/self_model/self_model.json).",
+        "  - Self-model (state/self_model/self_model.json).",
         "  - Conversation content (any turn text).",
         "  - Replay logs (may contain verbatim memory text when replay_redact_content=false).",
         "  - Local-only raw bus archive (state/research/raw_bus_archive/): verbatim",

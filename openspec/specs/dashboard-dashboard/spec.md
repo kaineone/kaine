@@ -233,7 +233,7 @@ The dashboard's snapshot-merge form SHALL offer a labelled choice of which paren
 - **THEN** the request body contains no `world_model_from` key
 
 #### Scenario: A refusal shows its reason
-- **WHEN** the merge API answers `409` with detail "both parents carry a Phantasia world model; ..."
+- **WHEN** the merge API answers `409` with detail "both parents carry a world model; ..."
 - **THEN** the form's status shows `409` and that detail text
 
 ### Requirement: Resume releases only the operator's own freeze

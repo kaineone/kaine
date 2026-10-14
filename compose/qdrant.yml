@@ -1,4 +1,4 @@
-# KAINE-owned Qdrant vector store for Mnemos.
+# KAINE-owned Qdrant vector store for the episodic memory module.
 #
 # Same safe-by-default posture as compose/redis.yml: mandatory API key,
 # loopback-only port mapping, persistent named volume.

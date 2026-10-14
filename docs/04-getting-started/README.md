@@ -212,8 +212,8 @@ bash scripts/install.sh --python /path/to/python3.12
 Examples:
 
 ```bash
-bash scripts/install.sh --extras core,memory        # CPU entity, no Nexus/vision
-bash scripts/install.sh --extras nexus              # lean operator console only
+bash scripts/install.sh --extras core,memory        # CPU entity, no dashboard/vision
+bash scripts/install.sh --extras dashboard          # lean operator console only
 bash scripts/install.sh --extras full               # desktop default
 bash scripts/install.sh --research                  # base install + .[perception]
 ```

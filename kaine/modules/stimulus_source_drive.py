@@ -4,7 +4,7 @@
 """Maternal-drive provider for the self-rhythm oscillator.
 
 The maternal heartbeat is an *external* drive (Van Leeuwen 2009; Webb 2015).
-The drive is bounded to protect a captive newborn: it presents a rhythm but
+The drive is bounded to protect a developing entity, which cannot move away from it: it presents a rhythm but
 never forces the endogenous oscillator to phase-lock.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ class MaternalDriveProvider:
         self, clock: Any, params: StimulusSourceParams, *, seed: int, scale: float
     ) -> None:
         # The initial scale is required, never defaulted: the provider drives a
-        # gestating entity's endogenous rhythm from the moment the interoception module starts, so
+        # developing entity's endogenous rhythm from the moment the interoception module starts, so
         # it must begin at the configured usual drive (the readout's
         # baseline_drive_fraction), not at the bound a perturbation probe uses.
         self._clock = clock

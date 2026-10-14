@@ -141,6 +141,7 @@ def tone_events(
     records: Iterable[Mapping[str, Any]],
     *,
     tone_rule: str = TONE_VARIANT_RULE,
+    t_learn_s: float | None = None,
 ) -> list[ToneEvent]:
     """Extract classified tone events and their access status.
 
@@ -148,9 +149,17 @@ def tone_events(
     then returns one ``ToneEvent`` per classified ``audition.emotion`` record in
     input order. Unclassified events are skipped; malformed records raise.
 
+    When ``t_learn_s`` is not ``None``, only events whose ``entity_time_s`` is
+    strictly greater than ``t_learn_s`` are returned. This implements the planned
+    test's rule that tone events count only after the learning period ``T_learn``,
+    measured in entity time (paper Appendix A.8). In this mode every classified
+    tone record must carry a finite ``entity_time_s``; otherwise a
+    ``ToneAnalysisError`` is raised.
+
     Raises:
         ToneAnalysisError: if a tone record is missing required fields, has an
-            unexpected rule, or carries a non-finite / negative normalised error.
+            unexpected rule, carries a non-finite / negative normalised error, or
+            (when ``t_learn_s`` is given) has no finite ``entity_time_s``.
     """
     records = list(records)
     accessed = accessed_members(records)
@@ -165,6 +174,19 @@ def tone_events(
             raise ToneAnalysisError("tone event classified must be a bool")
         if not classified:
             continue
+
+        if t_learn_s is not None:
+            entity_time_s = record.get("entity_time_s")
+            if (
+                not isinstance(entity_time_s, (int, float))
+                or isinstance(entity_time_s, bool)
+                or not math.isfinite(entity_time_s)
+            ):
+                raise ToneAnalysisError(
+                    "tone event has no entity_time_s: the record predates tone timestamps and cannot be counted after T_learn; re-record the run"
+                )
+            if entity_time_s <= t_learn_s:
+                continue
 
         rule = record.get("tone_rule")
         if rule != tone_rule:

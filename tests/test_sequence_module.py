@@ -322,7 +322,7 @@ async def test_adaptation_suspended_during_sleep(bus: AsyncBus):
     # Second tick during the sleep module — adapt should not be called
     await sequence.on_workspace(_empty_snapshot(tick=1))
     after_count = len(head.adapt_calls)
-    assert after_count == before_count, "adapt() must not be called during Sleep sleep"
+    assert after_count == before_count, "adapt() must not be called during sleep"
 
 
 @pytest.mark.asyncio

@@ -131,7 +131,7 @@ def test_hardware_cpu_threads_string_rejected(tmp_path: Path):
 def test_modules_must_be_table(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         'modules = []\n',
     )
     with pytest.raises(ConfigShapeError, match=r"modules.*expected.*table"):
@@ -141,8 +141,8 @@ def test_modules_must_be_table(tmp_path: Path):
 def test_modules_toggle_string_rejected(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
-        '[modules]\nsoma = "SECRETVOICE"\n',
+        '[modules]\ninteroception = false\n',
+        '[modules]\ninteroception = "SECRETVOICE"\n',
     )
     with pytest.raises(ConfigShapeError, match=r"modules\.interoception.*expected.*bool") as exc_info:
         load_kaine_config(shipped, op, strict_operator=True)
@@ -152,8 +152,8 @@ def test_modules_toggle_string_rejected(tmp_path: Path):
 def test_modules_toggle_int_rejected(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
-        '[modules]\nsoma = 1\n',
+        '[modules]\ninteroception = false\n',
+        '[modules]\ninteroception = 1\n',
     )
     with pytest.raises(ConfigShapeError, match=r"modules\.interoception.*expected.*bool") as exc_info:
         load_kaine_config(shipped, op, strict_operator=True)
@@ -163,7 +163,7 @@ def test_modules_toggle_int_rejected(tmp_path: Path):
 def test_tier_must_be_table(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         'tier = "tier0"\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier.*expected.*table"):
@@ -173,7 +173,7 @@ def test_tier_must_be_table(tmp_path: Path):
 def test_tier_name_must_be_string(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[tier]\nname = 123\nunsupported_modules = []\noscillator_supported = false\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier\.name.*expected.*string") as exc_info:
@@ -184,7 +184,7 @@ def test_tier_name_must_be_string(tmp_path: Path):
 def test_tier_unsupported_modules_must_be_list(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[tier]\nname = "tier0"\nunsupported_modules = "SECRETVOICE"\noscillator_supported = false\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier\.unsupported_modules.*expected.*list") as exc_info:
@@ -195,7 +195,7 @@ def test_tier_unsupported_modules_must_be_list(tmp_path: Path):
 def test_tier_unsupported_modules_elements_must_be_strings(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[tier]\nname = "tier0"\nunsupported_modules = ["language", 123]\noscillator_supported = false\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier\.unsupported_modules.*expected.*string") as exc_info:
@@ -206,7 +206,7 @@ def test_tier_unsupported_modules_elements_must_be_strings(tmp_path: Path):
 def test_tier_oscillator_supported_must_be_bool(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = "true"\n',
     )
     with pytest.raises(ConfigShapeError, match=r"tier\.oscillator_supported.*expected.*bool") as exc_info:
@@ -217,7 +217,7 @@ def test_tier_oscillator_supported_must_be_bool(tmp_path: Path):
 def test_oscillator_must_be_table(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         'oscillator = true\n',
     )
     with pytest.raises(ConfigShapeError, match=r"oscillator.*expected.*table"):
@@ -227,7 +227,7 @@ def test_oscillator_must_be_table(tmp_path: Path):
 def test_oscillator_enabled_must_be_bool(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[oscillator]\nenabled = "SECRETVOICE"\n',
     )
     with pytest.raises(ConfigShapeError, match=r"oscillator\.enabled.*expected.*bool") as exc_info:
@@ -238,7 +238,7 @@ def test_oscillator_enabled_must_be_bool(tmp_path: Path):
 def test_deployment_tier_must_be_string(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[deployment]\ntier = 2\n',
     )
     with pytest.raises(ConfigShapeError, match=r"deployment\.tier.*expected.*string") as exc_info:
@@ -249,7 +249,7 @@ def test_deployment_tier_must_be_string(tmp_path: Path):
 def test_security_state_encryption_enabled_must_be_bool(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[security.state_encryption]\nenabled = "SECRETVOICE"\n',
     )
     with pytest.raises(ConfigShapeError, match=r"security\.state_encryption\.enabled.*expected.*bool") as exc_info:
@@ -260,7 +260,7 @@ def test_security_state_encryption_enabled_must_be_bool(tmp_path: Path):
 def test_unknown_sections_pass_through(tmp_path: Path):
     shipped, op = _write_config(
         tmp_path,
-        '[modules]\nsoma = false\n',
+        '[modules]\ninteroception = false\n',
         '[foo]\nbar = 123\nbaz = "hello"\n',
     )
     cfg = load_kaine_config(shipped, op, strict_operator=True)

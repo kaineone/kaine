@@ -217,7 +217,7 @@ var scenarios = [
     worldModel: "",
     response: {
       status: 409,
-      json: async function () { return { detail: "both parents carry a WorldModel world model; choose" }; }
+      json: async function () { return { detail: "both parents carry a world model; choose" }; }
     },
     setup: function (sandbox) {
       var els = sandbox._elements;
@@ -233,7 +233,7 @@ var scenarios = [
       var status = sandbox.document.getElementById("merge-status");
       var text = status.textContent;
       if (text.indexOf("409") === -1) throw new Error("expected 409 in status, got " + JSON.stringify(text));
-      if (text.indexOf("both parents carry a WorldModel world model; choose") === -1) {
+      if (text.indexOf("both parents carry a world model; choose") === -1) {
         throw new Error("expected detail in status, got " + JSON.stringify(text));
       }
     }

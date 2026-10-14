@@ -115,7 +115,7 @@ While the entity runs unattended, the cycle SHALL send a best-effort caretaker n
 
 #### Scenario: Supervisor escalates
 - **WHEN** the supervisor escalates during an unattended run
-- **THEN** a caretaker notice is sent with the event kind "spot escalation"
+- **THEN** a caretaker notice is sent with the event kind "supervisor escalation"
 
 #### Scenario: Camera unplugged
 - **WHEN** the only input stops delivering for longer than the input-loss threshold

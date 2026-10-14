@@ -48,7 +48,7 @@ def test_research_main_rejects_malformed_operator_overlay(tmp_path, monkeypatch)
     _write_configs(
         tmp_path,
         base="[research_submission]\nenabled = false\n",
-        operator='[modules]\nsoma = "false"\n',
+        operator='[modules]\ninteroception = "false"\n',
     )
 
     out = io.StringIO()
@@ -78,7 +78,7 @@ def test_decommission_main_rejects_malformed_overlay(tmp_path, monkeypatch):
     _write_configs(
         tmp_path,
         base="[research_submission]\nenabled = false\n",
-        operator='[modules]\nsoma = "false"\n',
+        operator='[modules]\ninteroception = "false"\n',
     )
 
     state_root = tmp_path / "state"
@@ -232,7 +232,7 @@ def test_research_main_unparsable_operator_toml(tmp_path, monkeypatch):
     _write_configs(
         tmp_path,
         base="[research_submission]\nenabled = false\n",
-        operator="[modules]\nsoma = \n",
+        operator="[modules]\ninteroception = \n",
     )
     out = io.StringIO()
     err = io.StringIO()
@@ -251,7 +251,7 @@ def test_decommission_main_unparsable_operator_toml(tmp_path, monkeypatch):
     _write_configs(
         tmp_path,
         base="[research_submission]\nenabled = false\n",
-        operator="[modules]\nsoma = \n",
+        operator="[modules]\ninteroception = \n",
     )
     state_root = tmp_path / "state"
     state_root.mkdir()

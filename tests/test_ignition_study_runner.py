@@ -157,7 +157,7 @@ STANDIN_SCRIPT = textwrap.dedent(
         write_json(state_dir / "runtime.json", runtime)
 
         if not is_viewing:
-            # Born: the stage file names when the maturation bloom ends (already
+            # Matured: the stage file names when the maturation bloom ends (already
             # over unless IGNITION_STANDIN_BLOOM_SECONDS puts it ahead), or
             # omits the field when IGNITION_STANDIN_BLOOM_SECONDS is "none".
             (study_dir / "embodied_at.txt").write_text(str(time.time()))
@@ -483,7 +483,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
         ("branch", 2),
         ("accumulate", None),
     ]
-    # The seed is born automatically; the entity in the seed never waits on
+    # The seed matures automatically; the entity in the seed never waits on
     # an operator acknowledgement.
     seed_overlay = _read_overlay(study_dir / "development")
     assert seed_overlay["developmental_stage"]["require_operator_ack_for_maturation"] is False
@@ -1240,7 +1240,7 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
     runtime_path.parent.mkdir(parents=True)
     stage_path = line_dir / "state" / "lifecycle" / "stage.json"
     stage_path.parent.mkdir(parents=True)
-    # The earlier child was born and its bloom is long over.
+    # The earlier child has matured and its bloom is long over.
     stage_path.write_text(
         json.dumps({"stage": "embodied", "maturation_bloom_ends_at": "2000-01-01T00:00:00+00:00"})
     )

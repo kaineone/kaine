@@ -7,7 +7,7 @@ board's dependency probes and per-block snapshot builders.
 Answers the operator's first question during bring-up: *what is running,
 degraded, down, or simply not configured?* — without reading logs.
 
-Design constraints (see openspec/changes/nexus-dashboard-polish):
+Design constraints (see openspec/changes/archive/2026-06-07-nexus-dashboard-polish):
 
   * Probes run **concurrently** with a bounded **per-probe timeout**, so a
     hung dependency never blocks the page or the other probes.

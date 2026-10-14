@@ -16,7 +16,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | stream-wiring-quality | 18/20 (90%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
 | adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
-| functional-module-names | 41/45 (91%) | Replace the Greek and Latin module names with the paper's functional names (Vision, Affect, Episodic memory, Workspace and the rest) and the developmental terms (developmental phase, stimulus source, maturation, entity) through one reviewed codemod, reading old operator names for two releases and preserved state and recorded datasets under old names for good. Design only. |
+| functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
@@ -74,7 +74,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | blind-sensor-advisory | 10/10 (100%) | A processor whose readings stay undefined raises a content-free `welfare.blind_sensor` advisory on `welfare.out`, and one that stops publishing raises `welfare.sensor_silent`, each with a clear; the protective monitor does not act on them, the research log records them and the dashboard entity-care panel lists the processors that are blind or silent now. |
 | pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
 | threshold-contrast-inputs | 6/6 (100%) | The vision, audition and interoception modules' reports name the broadcast that preceded the prediction they score and the age of the context it used, the records the contrast at threshold groups and bins by; the threshold band itself waits on an operator decision, since the authors' rdrobust package is GPL-3.0-only. |
-| tone-analysis-inputs | 13/13 (100%) | The tone variant of the on arm (every tone event graded by the tone error ratio alone), the error ratio and the entry ids the tone analysis reads from the research log, the tone analysis's two sign tests (the difference and its adjusted difference over the tone bins), and the tone bins and both tone minimum effects from the tone-variant pilot runs. |
+| tone-analysis-inputs | 18/18 (100%) | The tone variant of the on arm (every tone event graded by the tone error ratio alone), the error ratio and the entry ids the tone analysis reads from the research log, the tone analysis's two sign tests (the difference and its adjusted difference over the tone bins), and the tone bins and both tone minimum effects from the tone-variant pilot runs. |
 | salience-score-keys | 11/11 (100%) | The cycle names each candidate `<stream>:<entry_id>`, so two streams that issue the same bus entry id in one millisecond no longer share one slot in the broadcast's score table; entry ids order within a tick as (ms, seq), and the tone analysis joins on the qualified id. |
 | rd-bandwidth-cleanroom | 9/9 (100%) | A clean-room implementation, from Calonico, Cattaneo and Titiunik (2014) and its supplement only, of the robust bias-corrected regression discontinuity and its MSE-optimal bandwidths; the contrast at threshold with its band, age bins and minimum effect, so a complete settings record is possible. |
 | mnemos-trace-strength | 10/10 (100%) | Each episodic memory trace carries a strength that sleep downscales by the number of traces the wake stored, replayed traces keep theirs, sleep prunes at a floor and to an operator storage budget, recall ranks by strength times similarity, and replay draws on the whole wake just ended (paper A.10). |
@@ -102,6 +102,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 76 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 76 active changes, 269 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

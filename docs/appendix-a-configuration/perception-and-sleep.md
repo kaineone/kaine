@@ -26,7 +26,7 @@ In `screen` and `live` mode, the feed also enables capture for the vision and au
 | `mode` | string | `"off"` | `"off"`, `"seeded"`, `"playlist"`, `"live"`, `"screen"`, or `"stimulus_source"`. |
 | `seed` | integer | `0` | For `seeded` mode: the shared seed for both vision and audio generators and for cross-modal surprise events. |
 | `playlist_manifest` | string | `""` | For `playlist` mode: path to the checksummed manifest. |
-| `transition_seconds` | float | `20.0` | When a playlist is born from the stimulus source, the crossfade from the stimulus source's last field to the programme's first frame lasts this long; programme time starts when it ends. Needs the maturation record in the stage file. `0` disables the crossfade. |
+| `transition_seconds` | float | `20.0` | When a playlist follows maturation in the stimulus source, the crossfade from the stimulus source's last field to the programme's first frame lasts this long; programme time starts when it ends. Needs the maturation record in the stage file. `0` disables the crossfade. |
 | `transition_audio_fade_seconds` | float | `3.0` | Programme sound fades in over this duration once it starts. `0` = no fade. |
 
 ### `[perception_feed.video]`

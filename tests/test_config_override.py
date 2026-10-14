@@ -43,7 +43,7 @@ def test_deep_merge_does_not_mutate_inputs():
 
 def test_load_returns_shipped_when_no_operator_file(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text("[modules]\nsoma = false\n")
+    shipped.write_text("[modules]\ninteroception = false\n")
     op = tmp_path / "kaine.operator.toml"  # does not exist
     cfg = load_kaine_config(shipped, op)
     assert cfg["modules"]["interoception"] is False
@@ -51,9 +51,9 @@ def test_load_returns_shipped_when_no_operator_file(tmp_path: Path):
 
 def test_load_merges_operator_over_shipped(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text("[modules]\nsoma = false\nlingua = false\n")
+    shipped.write_text("[modules]\ninteroception = false\nlanguage = false\n")
     op = tmp_path / "kaine.operator.toml"
-    op.write_text("[modules]\nsoma = true\n")
+    op.write_text("[modules]\ninteroception = true\n")
     cfg = load_kaine_config(shipped, op)
     assert cfg["modules"]["interoception"] is True
     # sibling key from shipped preserved
@@ -62,17 +62,17 @@ def test_load_merges_operator_over_shipped(tmp_path: Path):
 
 def test_operator_file_does_not_mutate_shipped_on_disk(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped_text = "[modules]\nsoma = false\n"
+    shipped_text = "[modules]\ninteroception = false\n"
     shipped.write_text(shipped_text)
     op = tmp_path / "kaine.operator.toml"
-    op.write_text("[modules]\nsoma = true\n")
+    op.write_text("[modules]\ninteroception = true\n")
     load_kaine_config(shipped, op)
     assert shipped.read_text() == shipped_text
 
 
 def test_load_tolerates_malformed_operator_file(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text("[modules]\nsoma = false\n")
+    shipped.write_text("[modules]\ninteroception = false\n")
     op = tmp_path / "kaine.operator.toml"
     op.write_text("this is not = = valid toml [[[")
     cfg = load_kaine_config(shipped, op)

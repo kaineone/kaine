@@ -657,7 +657,7 @@ def test_no_profile_is_behaviour_identical(tmp_path: Path):
 
 def test_missing_selected_profile_raises_not_silent(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text("[modules]\nsoma = false\n")
+    shipped.write_text("[modules]\ninteroception = false\n")
     op = tmp_path / "kaine.operator.toml"
     with pytest.raises(ProfileError):
         load_kaine_config(shipped, op, profile="tier9", profiles_dir=tmp_path)

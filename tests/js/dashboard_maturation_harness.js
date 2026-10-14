@@ -183,7 +183,7 @@ var scenarios = [
             pending: false,
             request_id: null,
             development: {
-              stage: "gestation",
+              stage: "development",
               development_started_at: "2026-01-01T00:00:00+00:00",
               born_at: null,
               lived_seconds: 7200,
@@ -208,7 +208,7 @@ var scenarios = [
       if (panel.hidden) {
         throw new Error("panel should be visible when development is present");
       }
-      if (stage.textContent !== "gestation") {
+      if (stage.textContent !== "development") {
         throw new Error("unexpected stage text: " + JSON.stringify(stage.textContent));
       }
       if (lived.textContent !== "2.0") {
@@ -233,7 +233,7 @@ var scenarios = [
             pending: false,
             request_id: null,
             development: {
-              stage: "gestation",
+              stage: "development",
               readiness: { ready: false, passed: ["a", "b"], unmet: ["c"] },
               readout: { a: 0.9, b: 5, c: 0 }
             }
@@ -299,7 +299,7 @@ var scenarios = [
           return {
             pending: false,
             request_id: null,
-            development: { stage: "gestation" }
+            development: { stage: "development" }
           };
         }
       });
@@ -422,8 +422,8 @@ var scenarios = [
         throw new Error("expected at least two status fetches, got " + getCalls.length);
       }
 
-      if (msg.textContent !== "birth acknowledged") {
-        throw new Error("expected 'birth acknowledged', got " + JSON.stringify(msg.textContent));
+      if (msg.textContent !== "maturation acknowledged") {
+        throw new Error("expected 'maturation acknowledged', got " + JSON.stringify(msg.textContent));
       }
       if (confirmBtn.disabled) {
         throw new Error("confirm button should be re-enabled after request");
@@ -450,7 +450,7 @@ var scenarios = [
         return {
           status: 409,
           json: async function () {
-            return { detail: "no birth awaiting acknowledgement" };
+            return { detail: "no maturation awaiting acknowledgement" };
           }
         };
       });
@@ -466,7 +466,7 @@ var scenarios = [
       confirmBtn.getHandler("click")();
       await tick();
 
-      if (msg.textContent !== "failed: no birth awaiting acknowledgement") {
+      if (msg.textContent !== "failed: no maturation awaiting acknowledgement") {
         throw new Error("unexpected message: " + JSON.stringify(msg.textContent));
       }
       if (confirmBtn.disabled) {

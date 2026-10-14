@@ -53,6 +53,32 @@ The public brand is **26.06.0a1**; pip normalizes this to `26.6.0a1` (expected).
   log rotation, git-sha provenance via a build-time env var, quadlet parity,
   and the qdrant healthcheck fixed in committed compose.
 
+### Functional module names (October 2026)
+- The modules take the functional names the paper uses (#483 to #504 and this
+  change). Topos is now the vision module, Soma interoception, Chronos sequence,
+  Thymos affect, Hypnos sleep, Mnemos episodic memory, Phantasia the world
+  model, Lingua language, Vox vocal, Nous planning, Volition action selection,
+  Eidolon the self-model, Empatheia social cognition, Syneidesis the workspace,
+  Praxis the effectors, Mundus embodiment, Perception the perceptual locus, Spot
+  the supervisor, Nexus the dashboard and Echo the recorder. The developmental
+  terms change with them: gestation is the developmental phase, the womb is the
+  stimulus source and birth is maturation.
+- Old configuration tables and keys, environment variables, command-line flags,
+  the `kaine[nexus]` extra and `python -m kaine.nexus` are still read until
+  release 27.02, each with a deprecation line in the log.
+  `docs/appendix-a-configuration/deprecated-names.md` lists every one of them.
+  The follow-up change `functional-module-names-drop-aliases` removes them after
+  that release.
+- The cycle moves an existing state tree to the new names when it starts, with
+  a manifest that resumes an interrupted move and a `--revert` command
+  (`python -m kaine.lifecycle.rename_state`). Preservation bundles, snapshots,
+  checkpoints and recorded datasets are never rewritten and stay readable.
+  Rolling back to a release from before the rename is not supported; take a
+  backup before upgrading.
+- The dashboard container is now `kaine-dashboard`. Its record volume and data
+  directory (`data/nexus_record`) keep their names, so recorded data stays
+  where it is.
+
 ## [26.06.0a1] — 2026-06-07
 
 **First public alpha.** The architecture is feature-complete and tested in-tree.

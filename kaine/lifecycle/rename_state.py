@@ -292,6 +292,56 @@ def _removable(path: Path) -> bool:
     return not _is_mount(path) and os.access(path.parent, os.W_OK)
 
 
+def _removable_dirs(path: Path) -> list[Path]:
+    """Directories under and including ``path`` that can safely be removed.
+
+    Never follows symlinks and never descends into a mount point.  A directory is
+    returned only when its whole subtree contains no file, no symlink and no mount
+    point.  The directory itself is also omitted when it is a mount point.  The
+    resulting list is ordered deepest first so ``os.rmdir`` can remove parents
+    after children.
+    """
+
+    def _collect(dir_path: Path) -> tuple[list[Path], bool]:
+        if _is_mount(dir_path):
+            return [], False
+        try:
+            st = os.lstat(dir_path)
+        except (OSError, ValueError):
+            return [], False
+        if not stat.S_ISDIR(st.st_mode):
+            return [], False
+        try:
+            with os.scandir(dir_path) as it:
+                entries = [Path(e.path) for e in it]
+        except OSError:
+            return [], False
+        result: list[Path] = []
+        has_mount_or_data = False
+        for child in entries:
+            if _is_mount(child):
+                has_mount_or_data = True
+                continue
+            try:
+                cst = os.lstat(child)
+            except (OSError, ValueError):
+                has_mount_or_data = True
+                continue
+            if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
+                has_mount_or_data = True
+                continue
+            child_dirs, child_removable = _collect(child)
+            result.extend(child_dirs)
+            if not child_removable:
+                has_mount_or_data = True
+        if not has_mount_or_data:
+            result.append(dir_path)
+            return result, True
+        return result, False
+
+    return _collect(path)[0]
+
+
 def _remove_vacant_step(rel: str) -> dict:
     """Build a pending remove_vacant step dict."""
     return {"kind": "remove_vacant", "path": rel, "status": "pending"}
@@ -644,7 +694,7 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
             created = _created_dirs_for_dst(root, new_key, planned)
             steps.append(_move_step(old_key, new_key, created))
         elif _vacant_old(old_dir):
-            if _removable(old_dir):
+            if _removable(old_dir) and _removable_dirs(old_dir):
                 steps.append(_remove_vacant_step(old_key))
         elif _vacant_new(new_dir) and not _is_mount(new_dir):
             _plan_merge(root, old_key, new_key, planned, steps)
@@ -925,7 +975,7 @@ def _run_move(root: Path, step: dict) -> None:
 
 
 def _run_remove_vacant(root: Path, step: dict) -> None:
-    """Remove a vacant directory tree bottom-up, leaving mount points alone."""
+    """Remove a vacant directory tree, leaving any mount points alone."""
     rel = step["path"]
     path = _safe_path(root, rel, what="remove_vacant")
     _refuse_symlink(path, what="remove_vacant")
@@ -943,8 +993,6 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
         log.info("remove_vacant: %s is a mount point; leaving it", rel)
         return
 
-    to_remove: list[Path] = []
-
     def _refuse(what: Path, why: str) -> None:
         # Raised from the step, so the manifest stays in progress and the start
         # stops with the refusal; nothing but empty directories was removed.
@@ -953,7 +1001,7 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
             "move its content aside and re-run"
         )
 
-    def _collect(dir_path: Path) -> None:
+    def _scan(dir_path: Path) -> None:
         try:
             with os.scandir(dir_path) as it:
                 entries = [Path(e.path) for e in it]
@@ -970,39 +1018,25 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
                 _refuse(child, exc.strerror or type(exc).__name__)
             if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
                 _refuse(child, "it holds data")
-            _collect(child)
-        to_remove.append(dir_path)
+            _scan(child)
 
-    _collect(path)
+    _scan(path)
 
-    to_remove.sort(key=lambda p: len(p.parts), reverse=True)
+    to_remove = _removable_dirs(path)
     removed: list[str] = list(step.get("removed") or [])
     for dir_path in to_remove:
         try:
             os.rmdir(dir_path)
-            rel_removed = dir_path.relative_to(Path(root).resolve()).as_posix()
-            if rel_removed not in removed:
-                removed.append(rel_removed)
-            # Recorded in the manifest with the step, so a revert recreates every
-            # directory this step removed, not only the top one.
-            step["removed"] = removed
         except FileNotFoundError:
             continue
         except OSError as exc:
-            # Only a directory still holding an empty mount point (which is never
-            # removed) may stay; anything else stops the run.
-            try:
-                with os.scandir(dir_path) as it:
-                    left = [Path(e.path) for e in it]
-            except OSError:
-                left = []
-            if left and all(_is_mount(c) and _empty_dir(c) for c in left):
-                log.info(
-                    "remove_vacant: leaving %s, which holds an empty mount point",
-                    dir_path.relative_to(Path(root).resolve()),
-                )
-                continue
             _refuse(dir_path, exc.strerror or type(exc).__name__)
+        rel_removed = dir_path.relative_to(Path(root).resolve()).as_posix()
+        if rel_removed not in removed:
+            removed.append(rel_removed)
+        # Recorded in the manifest with the step, so a revert recreates every
+        # directory this step removed, not only the top one.
+        step["removed"] = removed
 
 
 def _run_stage(root: Path, step: dict) -> None:

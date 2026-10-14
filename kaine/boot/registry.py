@@ -195,7 +195,7 @@ def build_registry(
                 "private clocks (video/audio may drift)",
                 exc_info=True,
             )
-        # Stimulus-source-to-world transition (womb-to-world-transition): a born entity's
+        # Stimulus-source-to-world transition (womb-to-world-transition): a matured entity's
         # viewing opens with a crossfade from the stimulus source's last field to the
         # programme's first frame. Building it pauses the shared clock under
         # `transition` before any surface reads, so programme time zero is the

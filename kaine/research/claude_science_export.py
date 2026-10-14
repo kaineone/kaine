@@ -502,7 +502,7 @@ def _render_readme(
         "",
         "- intent log / internal monologue (Language intent_expression and the rotated intent_log corpus)",
         "- EpisodicMemory/Qdrant memories (verbatim transcripts, episodic records)",
-        "- Self-model self-model",
+        "- Self-model",
         "- conversation content (any turn text)",
         "- replay logs",
         (
@@ -586,7 +586,7 @@ def preview_project(project: ClaudeScienceProject) -> str:
         "EXCLUDED by construction (never in a Claude Science export):",
         "  - intent log / internal monologue (Language intent_expression.jsonl)",
         "  - EpisodicMemory/Qdrant memories (verbatim transcripts and episodic records)",
-        "  - Self-model self-model (state/self_model/self_model.json)",
+        "  - Self-model (state/self_model/self_model.json)",
         "  - conversation content (any turn text)",
         "  - replay logs",
         "  - the LOCAL-ONLY raw bus archive (state/research/raw_bus_archive/),",

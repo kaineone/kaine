@@ -134,7 +134,7 @@
     fetch(STATUS_URL, { cache: "no-store" })
       .then(function (resp) {
         if (!resp.ok) {
-          throw new Error("birth status fetch failed");
+          throw new Error("maturation status fetch failed");
         }
         return resp.json();
       })
@@ -177,7 +177,7 @@
         })
           .then(function (resp) {
             if (resp.ok) {
-              showAckMessage("birth acknowledged");
+              showAckMessage("maturation acknowledged");
               resetConfirm();
               refresh();
               return;

@@ -877,12 +877,12 @@ class Vision(BaseModule):
                                 self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
-                                log.debug("vision: adaptation suspended (sleep sleep started)")
+                                log.debug("vision: adaptation suspended (sleep started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False
-                                log.debug("vision: adaptation resumed (sleep sleep completed)")
+                                log.debug("vision: adaptation resumed (sleep completed)")
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:

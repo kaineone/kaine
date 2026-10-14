@@ -198,7 +198,7 @@ The owner reviewed this design and decided:
   table, so old and new names are both covered. Hard-coded subpaths go.
 - **Backup.**
   - The backup gains the sqlite-vec store, the stage and developmental files, the
-    praxis files and notifications, the voice outcomes and measures, the
+    effectors files and notifications, the voice outcomes and measures, the
     consolidation record, every snapshot of this entity, the merged adapters, the
     active organ adapter, the raw bus archive and the external utterances.
   - A Qdrant export failure becomes fatal: the run stops before anything is

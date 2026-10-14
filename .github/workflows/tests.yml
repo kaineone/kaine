@@ -103,7 +103,7 @@ jobs:
         # so a subprocess `python -m kaine.cycle` fails to import. -e puts the whole
         # source tree on the path, matching how the suite is run locally.
         #
-        # Extras: ~30 tests hard-require optional deps (opencv for foveation/topos,
+        # Extras: ~30 tests hard-require optional deps (opencv for foveation/vision,
         # pymdp+jax for active-inference, librosa for prosody, snnTorch for the
         # oscillator) and ModuleNotFoundError rather than skip when they are absent,
         # so the suite is only green with them installed. The heavy/fragile extras
@@ -121,7 +121,7 @@ jobs:
           # from source here. The audio packages the suite needs are installed
           # directly below, as wheels.
           python -m pip install $CONSTRAINT \
-            -e ".[test,browser-test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]" \
+            -e ".[test,browser-test,core,memory,memory-edge,dashboard,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]" \
             librosa av webrtcvad soundfile
 
       - name: Show installed torch version

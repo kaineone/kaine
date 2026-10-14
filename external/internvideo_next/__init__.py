@@ -6,8 +6,9 @@
 # This package holds a BYTE-IDENTICAL copy of the upstream modeling source so the
 # encoder can be loaded with `trust_remote_code=False` from a local directory —
 # no code is fetched or executed from the Hugging Face hub at runtime. See
-# `kaine/modules/topos/internvideo_next_loader.py` for the offline, no-remote-code
-# loader and design.md §5 of the topos-temporal-video-encoder change.
+# `kaine/modules/vision/internvideo_next_loader.py` for the offline, no-remote-code
+# loader and design.md §5 of the topos-temporal-video-encoder change
+# (openspec/changes/archive/2026-09-08-topos-temporal-video-encoder/).
 #
 # The upstream `.py` files in this directory are intentionally left byte-identical
 # to the pinned revision (no injected headers) so the provenance diff against the

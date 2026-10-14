@@ -40,7 +40,7 @@ def test_preserved_entity_defaults_to_embodied_never_development(tmp_path: Path)
 def test_existing_stage_file_is_authoritative_fork_inherits(tmp_path: Path) -> None:
     p = _p(tmp_path)
     st.write_stage(st.StageState(stage=st.DEVELOPMENT, development_started_at="t0"), p)
-    # A fork of a gestating entity gestates...
+    # A fork of a developing entity stays in the developmental phase...
     inherited = st.resolve_boot_stage(has_prior_lived_history=True, path=p)
     assert inherited.stage == st.DEVELOPMENT
     # ...and a fork of an embodied entity is embodied.

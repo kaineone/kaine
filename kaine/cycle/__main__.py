@@ -1193,7 +1193,7 @@ def _start_development_owner(
     *,
     is_paused: Callable[[], bool],
 ) -> "asyncio.Task[None] | None":
-    """Start the developmental readout owner for a gestating entity in the local stimulus source.
+    """Start the developmental readout owner for a developing entity in the local stimulus source.
 
     It needs the interoception module's self-rhythm and its maternal-drive provider. Without them
     there is nothing to measure: the readout stays absent and the maturation
@@ -1452,7 +1452,7 @@ async def _phase_stage(ctx: BootContext) -> int | None:
 
     # Developmental stage resolution. Done early so the developmental phase can gate locus and
     # embodiment before any module opens. With staging off (the shipped
-    # default) a boot is unaffected; with it on, a fresh spawn gestates even
+    # default) a boot is unaffected; with it on, a fresh spawn starts in the developmental phase even
     # beside other entities' records, and anything that has lived does not.
     ctx.stage_state, ctx.staging_enabled, ctx.fresh_development = _resolve_start_stage(ctx.kaine_config, ctx.revive, ctx.identity)
     if ctx.revive is not None and ctx.revive.stage_state is not None:
@@ -1609,7 +1609,7 @@ async def _phase_gates(ctx: BootContext) -> int | None:
 
     # Cooperative GPU headroom pre-flight (opt-in via [gpu_preflight].enabled).
     # Runs BEFORE the bus/modules open so a starved host refuses to boot cleanly
-    # rather than OOM-killing a just-born entity mid-init. It evicts only KAINE's
+    # rather than OOM-killing a just-spawned entity mid-init. It evicts only KAINE's
     # own idle Ollama models and never terminates a process; see preflight.py.
     gpu_cfg = GpuPreflightConfig.from_section(ctx.kaine_config.get("gpu_preflight") or {})
     if gpu_cfg.enabled:
@@ -1692,7 +1692,7 @@ async def _phase_bus(ctx: BootContext) -> int | None:
 
 
 async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
-    """Announce a fresh developmental phase and hold a gestating entity until the stimulus source is ready."""
+    """Announce a fresh developmental phase and hold a developing entity until the stimulus source is ready."""
 
     # Emit the first-developmental-phase event now that the bus exists. This is the only
     # lifecycle event that fires at boot; the gate loop emits the rest on a
@@ -1715,7 +1715,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
         await ctx.bus.publish(_lifecycle_event(type_, payload, salience=salience))
     ctx._publish_lifecycle = _publish_lifecycle
 
-    # Stimulus source before spawn (maturation-gate-liveness 2.1): a gestating entity is
+    # Stimulus source before spawn (maturation-gate-liveness 2.1): a developing entity is
     # never spawned without a stimulus source that is ready. Hold here, before any module
     # initializes, reporting stage.development.no_stimulus on every failed check.
     ctx.stimulus_source_ready = False
@@ -1762,7 +1762,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
 
 
 async def _phase_registry(ctx: BootContext) -> int | None:
-    """Build and initialize the modules, hold effectors while gestating, and apply a revive."""
+    """Build and initialize the modules, hold effectors while developing, and apply a revive."""
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
@@ -2401,7 +2401,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
     """Wire the maturation gate's pause sources and maturation hooks, and start the gate and individuation tasks."""
     # Time not awake is not lived time: the runner subtracts the subjective time
     # the cycle spends frozen or asleep (paper A.7).
-    # A frozen entity is never born, whoever froze it.
+    # A frozen entity never matures, whoever froze it.
     ctx.gate_runner.set_pause_sources(
         paused_seconds=ctx.cycle.unawake_subjective_seconds,
         is_paused=lambda: ctx.cycle.is_paused,
@@ -2452,7 +2452,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
 
 async def _phase_stimulus_source_watch(ctx: BootContext) -> int | None:
     """Watch for stimulus source loss while developing."""
-    # Stimulus source loss (maturation-gate-liveness 2.2): freeze a gestating entity under
+    # Stimulus source loss (maturation-gate-liveness 2.2): freeze a developing entity under
     # its own holder when the stimulus source stops, and release it when the stimulus source returns.
     ctx.stimulus_source_watch_task = None
     if ctx.staging_enabled and ctx.stage_state.is_developing:
