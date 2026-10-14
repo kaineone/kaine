@@ -351,7 +351,7 @@ The dashboard entity-care panel reads the latest individuation state and shows, 
 
 All observers write through a shared sink with daily rotation. Files are written to `<evaluation_logs>/<subdir>/<name>-<YYYY-MM-DD>.jsonl`, for example `data/evaluation/coherence/coherence-2026-10-01.jsonl`. The sink is asynchronous, encrypts each line when state encryption is on, and logs a write failure without crashing.
 
-Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every file (research records are never deleted automatically). A positive value prunes files older than that many days.
+Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every file (research records are never deleted automatically). A positive value prunes files older than that many days. Decommission is the one exception: ending an entity backs up and then deletes its raw bus archive and external utterances, which hold its words verbatim, and its replay records when `replay_redact_content` is off. Content-free metrics and welfare events are kept. See [Preservation](../11-preservation.md#what-decommission-removes-keeps-and-backs-up).
 
 ## Configuration reference
 

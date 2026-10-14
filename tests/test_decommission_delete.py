@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -16,14 +17,22 @@ from kaine.memory_kinds import (
     strength_key,
 )
 
+# This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
+_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+
 HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 def _seed(state_root: Path) -> None:
-    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json", "forks/f.json"):
+    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json"):
         p = state_root / path
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("{}", encoding="utf-8")
+    fork_snap = state_root / "forks" / "s1"
+    fork_snap.mkdir(parents=True, exist_ok=True)
+    (fork_snap / "snapshot.json").write_text(
+        json.dumps({"id": "s1", "metadata": {}}), encoding="utf-8"
+    )
     (state_root / "hypnos" / "adapters").mkdir(parents=True, exist_ok=True)
     (state_root / "hypnos" / "adapters" / "a.bin").write_bytes(b"w")
     (state_root / "cycle").mkdir(parents=True, exist_ok=True)
@@ -40,16 +49,20 @@ def test_dry_run_removes_nothing(tmp_path):
     state_root = tmp_path / "state"
     _seed(state_root)
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, dry_run=True
+        state_root=state_root, qdrant_cfg=_NO_QDRANT, dry_run=True
     )
     assert result.dry_run is True
     assert result.removed_paths == []
     # Everything still on disk.
     assert (state_root / "eidolon" / "f.json").exists()
     assert (state_root / "hypnos" / "adapters" / "a.bin").exists()
+    assert (state_root / "forks" / "s1").exists()
     # The would-remove report lists the intended subtrees.
     joined = " ".join(result.would_remove_paths)
-    assert str(state_root / "eidolon") in joined and "forks" in joined and "adapters" in joined
+    # Without an identity no fork snapshot is attributed to this entity, so
+    # forks/s1 is kept and does not appear here.
+    assert str(state_root / "eidolon") in joined and "adapters" in joined
+    assert "forks" not in joined
 
 
 def test_delete_removes_only_intended_paths(tmp_path):
@@ -57,14 +70,15 @@ def test_delete_removes_only_intended_paths(tmp_path):
     _seed(state_root)
     result = delete_entity_state(
         state_root=state_root,
-        qdrant_cfg={"mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
+        qdrant_cfg=_NO_QDRANT,
         dry_run=False,
     )
     # Intended subtrees gone.
     assert not (state_root / "eidolon").exists()
     assert not (state_root / "lingua").exists()
     assert not (state_root / "perception").exists()
-    assert not (state_root / "forks").exists()
+    assert (state_root / "forks" / "s1").exists()  # no identity -> cannot attribute
+    assert (state_root / "forks").is_dir()
     assert not (state_root / "hypnos" / "adapters").exists()
     assert not (state_root / "cycle" / "runtime.json").exists()
     # Operator file preserved.
@@ -77,7 +91,7 @@ def test_delete_removes_only_intended_paths(tmp_path):
 def test_delete_handles_missing_state(tmp_path):
     state_root = tmp_path / "state"  # never created
     result = delete_entity_state(
-        state_root=state_root, qdrant_cfg={}, dry_run=False
+        state_root=state_root, qdrant_cfg=_NO_QDRANT, dry_run=False
     )
     # No on-disk removals, no crash.
     assert result.removed_paths == []
@@ -128,6 +142,7 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
+            "modules": {"mnemos": True},
             "mnemos": {
                 "qdrant": {
                     "host": "127.0.0.1",
@@ -176,6 +191,7 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
     result = delete_entity_state(
         state_root=state_root,
         qdrant_cfg={
+            "modules": {"mnemos": True},
             "mnemos": {
                 "qdrant": {
                     "host": "127.0.0.1",

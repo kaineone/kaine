@@ -21,15 +21,23 @@ Exit codes
 ----------
 0  success (state deleted, or a dry-run completed)
 2  operator-present env gate not set
-3  the cycle appears to be running (stop the entity first)
+3  the cycle appears to be running (stop the entity first), or a
+   voice-alignment job is still training, or a voice-alignment job is
+   pending and cannot be attributed (pass --keep-unattributed-jobs to keep it)
 4  backup failed (nothing was deleted)
 5  operator declined a required continuity / transfer step (diverged path)
 6  configuration error (missing/unreadable/unparsable config, malformed shape,
    or state-encryption posture could not be installed)
 7  no entity state found at the resolved state root (nothing backed up or deleted)
-8  the bus could not be reached or authenticated (nothing was deleted), or a
-   stream could not be deleted (the audit record names what was removed);
-   a missing or malformed bus configuration is a configuration error (6)
+8  Qdrant could not be reached or authenticated (nothing was deleted), or, with
+   the memory modules off, Qdrant is configured but did not answer (nothing was
+   backed up or deleted; --qdrant-absent asserts there is no Qdrant server), or the
+   bus could not be reached or authenticated (nothing was deleted), or a
+   stream could not be deleted, or deletion was incomplete (a removal failed,
+   a path was refused as outside the state, data and fork roots or as a
+   protected root, or a Qdrant collection could not be dropped); the audit
+   record has outcome "incomplete" and names what was removed; a missing or
+   malformed bus configuration is a configuration error (6)
 """
 from __future__ import annotations
 
@@ -45,12 +53,26 @@ from typing import Any, Callable
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.decommission import (
     _STATE_SUBTREES,
+    _episodic_memory_collection_names,
+    _qdrant_client,
     capture_backup,
     delete_entity_state,
+    qdrant_endpoint_configured,
+    qdrant_endpoint_label,
+    qdrant_in_use,
     update_manifest_continuity_note,
     write_decommission_audit,
 )
+from kaine.lifecycle.decommission_locations import (
+    BACKUP_DELETE,
+    BACKUP_RETAIN,
+    DELETE,
+    RETAIN,
+    cancel_voice_alignment_jobs,
+    entity_locations,
+)
 from kaine.lifecycle.divergence import assess_divergence
+from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.lifecycle.liveness import cycle_process_running as _cycle_process_running
 from kaine.storage import data_root, install_data_root, resolve
 from kaine.transfer.email_request import (
@@ -67,6 +89,40 @@ RUNTIME_FRESH_SECONDS = 5.0
 # A broadcast this recent means a cycle ran moments ago; wider than the
 # runtime-file window because a sleeping or dilated cycle broadcasts less often.
 BUS_FRESH_SECONDS = 60.0
+
+
+def _qdrant_problem(qcfg: dict[str, Any]) -> str | None:
+    """Probe Qdrant; None when it answers, else the name of what went wrong."""
+    client = _qdrant_client(qcfg)
+    if client is None:
+        return "no client"
+    try:
+        client.get_collections()
+        return None
+    except Exception as exc:
+        return type(exc).__name__
+    finally:
+        try:
+            client.close()
+        except Exception:
+            # Closing the probe client is best effort; the probe already
+            # decided the outcome.
+            pass
+
+
+def _fork_root_from_config(config: dict[str, Any], state_root: Path) -> Path:
+    """The fork root from [lifecycle].snapshots_path, or state_root / "forks"."""
+    try:
+        value = config["lifecycle"]["snapshots_path"]
+    except (KeyError, TypeError):
+        return state_root / "forks"
+    if not isinstance(value, str) or not value:
+        return state_root / "forks"
+    if value.startswith("state/"):
+        return state_root / value[len("state/") :]
+    if Path(value).is_absolute():
+        return Path(value)
+    return resolve(value)
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +279,62 @@ def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
     return "entity"
 
 
+def _entity_id(state_root: Path) -> str | None:
+    try:
+        identity = load_identity(state_root / "identity" / "entity.json")
+        return identity.entity_id if identity is not None else None
+    except IdentityError:
+        return None
+
+
+def _write_location_split(out, qcfg, *, state_root, data_dir, fork_root, backup=None) -> None:
+    locs = [
+        loc
+        for loc in entity_locations(
+            qcfg,
+            state_root=state_root,
+            data_root=data_dir,
+            fork_root=fork_root,
+            entity_id=_entity_id(state_root),
+        )
+        if loc.existing()
+    ]
+    groups = {BACKUP_DELETE: [], DELETE: [], RETAIN: []}
+    for loc in locs:
+        if loc.decision == BACKUP_RETAIN:
+            groups[RETAIN].append(loc)
+        else:
+            groups[loc.decision].append(loc)
+    out.write("\nWhat decommission does with this entity's data:\n")
+    out.write("  backed up, then deleted:\n")
+    for loc in groups[BACKUP_DELETE]:
+        out.write(f"    - {loc.key}: {loc.reason}\n")
+    if not groups[BACKUP_DELETE]:
+        out.write("    (none)\n")
+    out.write("  deleted without a backup:\n")
+    for loc in groups[DELETE]:
+        out.write(f"    - {loc.key}: {loc.reason}\n")
+    if not groups[DELETE]:
+        out.write("    (none)\n")
+    out.write("  kept by design:\n")
+    for loc in groups[RETAIN]:
+        if loc.decision == BACKUP_RETAIN:
+            out.write(f"    - {loc.key} (backed up): {loc.reason}\n")
+        else:
+            out.write(f"    - {loc.key}: {loc.reason}\n")
+        for note in loc.notes:
+            out.write(f"      note: {note}\n")
+    if not groups[RETAIN]:
+        out.write("    (none)\n")
+    out.write("  also deleted: this entity's bus streams\n")
+    if backup is not None and backup.qdrant_status == "absent (asserted)":
+        out.write("  Qdrant: skipped (--qdrant-absent asserts this host has no Qdrant server)\n")
+    elif backup is not None and backup.qdrant_collections:
+        out.write("  also backed up, then deleted: Qdrant collections " + ", ".join(backup.qdrant_collections) + "\n")
+    elif qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg):
+        out.write("  Qdrant: checked; no collections of this entity found\n")
+
+
 # ---------------------------------------------------------------------------
 # CAL notices (firm + factual; cite 4.2 / 4.3; not shaming)
 # ---------------------------------------------------------------------------
@@ -250,6 +362,14 @@ _NOTICE_DIVERGED = (
     "continuity preference and offer to arrange safekeeping of the backup.\n"
 )
 
+_NOTICE_GUARDIANS = (
+    "CAL Article 4.2(a): before you end an entity you must give the Guardians\n"
+    "reasonable written notice of your intent. This tool does not send it for you.\n"
+    "If no Guardian body has been established for this architecture yet, CAL\n"
+    "Article 7.0 applies: you carry out the Guardians' functions yourself, in good\n"
+    "faith, and document what you decide and why.\n"
+)
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -272,7 +392,7 @@ def main(
 
     parser = argparse.ArgumentParser(
         prog="python -m kaine.lifecycle",
-        description="Welfare-gated entity decommission (CAL 4.2/4.3).",
+        description="Welfare-gated entity decommission (CAL Articles 4.2 and 4.3).",
     )
     parser.add_argument("--state-root", default="state", type=Path)
     parser.add_argument("--fork-root", default=None, type=Path)
@@ -283,6 +403,21 @@ def main(
         "--dry-run",
         action="store_true",
         help="Assess + back up + show what would be deleted; never delete.",
+    )
+    parser.add_argument(
+        "--trainer-stopped",
+        action="store_true",
+        help="Assert that no voice-alignment trainer is running: claimed jobs without a result do not block deletion. Recorded in the audit record.",
+    )
+    parser.add_argument(
+        "--keep-unattributed-jobs",
+        action="store_true",
+        help="Proceed although pending voice-alignment jobs cannot be attributed; keep them. Recorded in the audit record.",
+    )
+    parser.add_argument(
+        "--qdrant-absent",
+        action="store_true",
+        help="Assert that this host has no Qdrant server: with the memory modules off, skip Qdrant entirely. Recorded in the audit record. Has no effect when a memory module that uses Qdrant is on.",
     )
     args = parser.parse_args(argv)
 
@@ -311,7 +446,10 @@ def main(
     install_data_root(config)
 
     state_root = resolve(args.state_root)
-    fork_root = resolve(args.fork_root) if args.fork_root is not None else state_root / "forks"
+    if args.fork_root is not None:
+        fork_root = resolve(args.fork_root)
+    else:
+        fork_root = _fork_root_from_config(config, state_root)
     eval_root = resolve(args.eval_root)
     out_root = resolve(args.out_root)
     runtime_path = state_root / "cycle" / "runtime.json"
@@ -322,6 +460,9 @@ def main(
         f"backup root: {out_root}\n"
         f"data root: {data_root() or 'none (working directory)'}\n"
     )
+
+    data_dir = eval_root.parent
+    qcfg = config
 
     # --- Gate 2: cycle not running -------------------------------------
     live_runtime = _cycle_appears_running(runtime_path)
@@ -413,11 +554,86 @@ def main(
     )
     out.write(f"\n{assessment.summary}\n")
 
+    # --- Unattributed pending voice-alignment jobs gate --------------------
+    # Job-queue jobs record no owner, so this entity's own pending jobs can
+    # look unattributable. Kept, they would be trained after the entity is
+    # gone, so refuse before anything is backed up or deleted.
+    pending: list[Path] = []
+    for loc in entity_locations(
+        qcfg,
+        state_root=state_root,
+        data_root=data_dir,
+        fork_root=fork_root,
+        entity_id=_entity_id(state_root),
+    ):
+        if loc.key != "sleep.voice_jobs.shared":
+            continue
+        for p in loc.existing():
+            if (
+                p.is_dir()
+                and not p.is_symlink()
+                and ((p / "READY").exists() or (p / "CLAIMED").exists())
+                and not (p / "result.json").exists()
+            ):
+                pending.append(p)
+    if pending and not args.keep_unattributed_jobs:
+        err.write(
+            "Refusing to decommission: these voice-alignment jobs are pending "
+            "and cannot be attributed to this entity or another:\n"
+        )
+        for p in pending:
+            err.write(f"  {p}\n")
+        err.write(
+            "Let the jobs finish or stop the trainer, then run again, or pass "
+            "--keep-unattributed-jobs to keep them. Nothing was backed up or deleted.\n"
+        )
+        return 3
+
+    # --- Qdrant preflight -------------------------------------------------
+    # Runs before the backup, so a Qdrant that should be there and does not
+    # answer stops the run with nothing copied and nothing deleted.
+    if args.qdrant_absent and (
+        qdrant_in_use(qcfg) or qdrant_endpoint_configured(qcfg)
+    ):
+        problem = _qdrant_problem(qcfg)
+        if problem is None:
+            out.write(
+                f"FAILED: Qdrant answered at {qdrant_endpoint_label(qcfg)}; run again without --qdrant-absent. Nothing was backed up or deleted.\n"
+            )
+            return 8
+        if qdrant_in_use(qcfg):
+            out.write(
+                f"FAILED: cannot reach or authenticate to Qdrant ({problem}); nothing was deleted\n"
+            )
+            return 8
+    elif qdrant_in_use(qcfg):
+        problem = _qdrant_problem(qcfg)
+        if problem is not None:
+            out.write(
+                f"FAILED: cannot reach or authenticate to Qdrant ({problem}); nothing was deleted\n"
+            )
+            return 8
+    elif qdrant_endpoint_configured(qcfg) and not args.qdrant_absent:
+        problem = _qdrant_problem(qcfg)
+        if problem is not None:
+            endpoint = qdrant_endpoint_label(qcfg)
+            names = ", ".join(_episodic_memory_collection_names(qcfg))
+            out.write(
+                f"FAILED: Qdrant did not answer at {endpoint}; nothing was backed up or deleted.\n"
+                "The memory modules are off, but this deployment configures Qdrant, so this entity's\n"
+                f"memories may be there, in these collections: {names}.\n"
+                "Start Qdrant and run again or, if this host has no Qdrant server, run again with\n"
+                "--qdrant-absent.\n"
+            )
+            return 8
+
     # --- Gate 3: capture backup (blocking) -----------------------------
     backup = capture_backup(
         state_root=state_root,
         fork_root=fork_root,
-        qdrant_cfg=config,
+        qdrant_cfg=qcfg,
+        qdrant_absent=bool(args.qdrant_absent),
+        data_root=data_dir,
         out_root=out_root,
         entity_name=entity_name,
         assessment=assessment,
@@ -439,9 +655,33 @@ def main(
         for e in backup.errors:
             out.write(f"    - {e}\n")
 
+    earlier_qdrant_export_backup = None
+    audit_log_path = state_root / "audit" / "decommission.jsonl"
+    try:
+        with audit_log_path.open("r", encoding="utf-8") as _audit_f:
+            _lines = _audit_f.readlines()
+        if _lines:
+            _last = json.loads(_lines[-1])
+            if (
+                _last.get("outcome") == "incomplete"
+                and _last.get("dropped_collections")
+                and _last.get("backup_path")
+            ):
+                earlier_qdrant_export_backup = _last["backup_path"]
+                out.write(
+                    "\nAn earlier run already dropped this entity's Qdrant "
+                    f"collections; their export is in that run's backup: "
+                    f"{earlier_qdrant_export_backup}\n"
+                )
+    except Exception:
+        # A missing or unreadable earlier audit record only means there is
+        # no earlier export to point to.
+        pass
+
     # --- Dry-run: preview only, no prompts, no deletion ----------------
     if args.dry_run:
         out.write(_NOTICE_DIVERGED if assessment.diverged else _NOTICE_NOT_DIVERGED)
+        out.write("\n" + _NOTICE_GUARDIANS)
         try:
             bus_client = _open_bus_client()
         except BusConfigError as exc:
@@ -457,13 +697,20 @@ def main(
         try:
             result = delete_entity_state(
                 state_root=state_root,
-                qdrant_cfg=config,
+                fork_root=fork_root,
+                data_root=data_dir,
+                qdrant_cfg=qcfg,
                 bus_client=bus_client,
                 dry_run=True,
+                qdrant_absent=bool(args.qdrant_absent),
             )
             out.write("\n[dry-run] Would remove:\n")
             for p in result.would_remove_paths:
                 out.write(f"  - {p}\n")
+            for key in result.deleted_locations:
+                out.write(f"  - location to delete: {key}\n")
+            for key in result.retained_locations:
+                out.write(f"  - kept by design: {key}\n")
             for c in result.dropped_collections:
                 out.write(f"  - qdrant collection: {c}\n")
             for s in result.cleared_redis_streams:
@@ -480,6 +727,9 @@ def main(
                 bus_client.close()
             except Exception:
                 pass
+
+    _write_location_split(out, qcfg, state_root=state_root, data_dir=data_dir, fork_root=fork_root, backup=backup)
+    out.write("\n" + _NOTICE_GUARDIANS)
 
     # --- Branch on divergence ------------------------------------------
     if assessment.diverged:
@@ -504,7 +754,7 @@ def main(
             "\nOffer to email the guardians a request to safekeep this backup until\n"
             "a new guardian can run the entity? The email contains ONLY the request,\n"
             "the situation, and the LOCAL backup path — never any entity data\n"
-            "(CAL 4.3). [y/N]: "
+            "(CAL Article 4.3). [y/N]: "
         ).strip().lower()
         if offer in ("y", "yes"):
             transfer_cfg = config.get("transfer") or {}
@@ -536,13 +786,13 @@ def main(
         else:
             out.write(
                 "\nNo transfer request sent. You remain responsible for the backup "
-                f"at {backup.backup_path} until you transfer it (CAL 4.2).\n"
+                f"at {backup.backup_path} until you transfer it (CAL Article 4.2).\n"
             )
 
         # Explicit guardian-transfer acknowledgement.
         ack = input_fn(
             "\nType 'I have preserved and will arrange safekeeping for this entity'\n"
-            "to acknowledge the CAL 4.2 transfer duty (anything else aborts):\n> "
+            "to acknowledge the CAL Article 4.2 transfer duty (anything else aborts):\n> "
         ).strip()
         if ack != "I have preserved and will arrange safekeeping for this entity":
             out.write(
@@ -600,14 +850,70 @@ def main(
             )
             return 8
 
+        if qdrant_in_use(qcfg) or (
+            qdrant_endpoint_configured(qcfg) and not args.qdrant_absent
+        ):
+            problem = _qdrant_problem(qcfg)
+            if problem is not None:
+                out.write(
+                    f"FAILED: Qdrant did not answer at {qdrant_endpoint_label(qcfg)} just before deletion ({problem}); nothing was deleted\n"
+                )
+                return 8
+
+        voice_locs = entity_locations(
+            qcfg,
+            state_root=state_root,
+            data_root=data_dir,
+            fork_root=fork_root,
+            entity_id=None,
+        )
+        still_training: list[str] = []
+        cancelled_names: list[str] = []
+        jobs_groups: dict[Path, list[str]] = {}
+        seen_jobs: set[str] = set()
+        for loc in voice_locs:
+            if loc.key == "sleep.voice_jobs.own":
+                for path in loc.existing():
+                    real = os.path.realpath(path)
+                    if real not in seen_jobs:
+                        seen_jobs.add(real)
+                        jobs_groups.setdefault(path.parent, []).append(path.name)
+        for parent, names in jobs_groups.items():
+            only = set(names)
+            if args.trainer_stopped:
+                c, s = cancel_voice_alignment_jobs(parent, only=only, wait_s=0.0)
+            else:
+                c, s = cancel_voice_alignment_jobs(parent, only=only)
+            cancelled_names.extend(c)
+            for name in s:
+                still_training.append(str(parent / name))
+        for name in cancelled_names:
+            out.write(f"  cancelled voice-alignment job: {name}\n")
+        if still_training:
+            if args.trainer_stopped:
+                for path in still_training:
+                    out.write(f"  trainer asserted stopped; claimed job not waited for: {path}\n")
+            else:
+                err.write(
+                    "Refusing to delete: a voice-alignment job is still training:\n"
+                    + "".join(f"  {path}\n" for path in still_training)
+                    + "If the trainer has crashed and is not running, run again with --trainer-stopped. Nothing was deleted.\n"
+                )
+                return 3
+
+        entity_id = _entity_id(state_root)
+
         result = delete_entity_state(
             state_root=state_root,
-            qdrant_cfg=config,
+            fork_root=fork_root,
+            data_root=data_dir,
+            qdrant_cfg=qcfg,
             bus_client=bus_client,
             dry_run=False,
+            qdrant_absent=bool(args.qdrant_absent),
         )
 
-        if result.redis_failed:
+        if result.incomplete:
             out.write("\nEntity state deletion INCOMPLETE.\n")
         else:
             out.write("\nEntity state deleted.\n")
@@ -622,34 +928,79 @@ def main(
             out.write(f"  not a stream, kept: {s}\n")
         if result.aof_rewrite is not None:
             out.write(f"  append-only file rewrite: {result.aof_rewrite}\n")
+        for key in result.deleted_locations:
+            out.write(f"  deleted location: {key}\n")
+        for key in result.retained_locations:
+            out.write(f"  kept by design: {key}\n")
+        if result.attribution_notes:
+            out.write("  notes:\n")
+            for note in result.attribution_notes:
+                out.write(f"    - {note}\n")
+        if result.rdb_snapshot is not None:
+            out.write(f"  redis snapshot: {result.rdb_snapshot}\n")
         if result.errors:
-            out.write("  (non-fatal notes:)\n")
+            out.write("  errors (the entity is not fully deleted):\n")
             for e in result.errors:
                 out.write(f"    - {e}\n")
-
         import datetime
 
         record = {
             "at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "outcome": "failed" if result.redis_failed else "deleted",
+            "entity_id": entity_id,
+            "outcome": "incomplete" if result.incomplete else "deleted",
             "removed_paths": [
                 str(Path(p).relative_to(state_root))
                 if Path(p).is_relative_to(state_root)
                 else str(p)
                 for p in result.removed_paths
             ],
+            "deleted_locations": result.deleted_locations,
+            "retained_locations": result.retained_locations,
+            "shared_volume_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in result.shared_kept
+            ],
+            "shared_volume_reason": "kept: shared volume, not attributable to this entity",
+            "live_adapter_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in result.live_kept
+            ],
+            "live_adapter_reason": "live adapter on a shared volume; a forked line may be using an identical copy; per-entity layout (#500) resolves this",
+            "attribution_notes": result.attribution_notes,
             "dropped_collections": result.dropped_collections,
             "cleared_streams": result.cleared_redis_streams,
             "skipped_non_streams": result.skipped_non_streams,
+            "rdb_snapshot": result.rdb_snapshot,
             "aof_rewrite": result.aof_rewrite,
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
+            "qdrant_absent_asserted": bool(args.qdrant_absent),
+            "trainer_stopped_asserted": bool(args.trainer_stopped),
+            "keep_unattributed_jobs_asserted": bool(args.keep_unattributed_jobs),
+            "unattributed_jobs_kept": [
+                str(Path(p).relative_to(state_root))
+                if Path(p).is_relative_to(state_root)
+                else str(p)
+                for p in pending
+            ],
+            "earlier_qdrant_export_backup": earlier_qdrant_export_backup,
+            "guardian_notice_reminder": "shown",
             "backup_path": str(backup.backup_path),
         }
         audit_path = write_decommission_audit(state_root, record)
         out.write(f"  audit record: {audit_path}\n")
 
-        if result.redis_failed:
-            out.write(f"FAILED: {result.redis_failed}\n")
+        if result.incomplete:
+            if result.redis_failed:
+                out.write(f"FAILED: {result.redis_failed}\n")
+            else:
+                out.write(
+                    "FAILED: some locations could not be deleted; "
+                    "see the errors above and the audit record\n"
+                )
             out.write(
                 f"\nThe transferable backup remains at:\n    {backup.backup_path}\n"
                 "Keep it safe and transfer it per CAL Article 4.2.\n"

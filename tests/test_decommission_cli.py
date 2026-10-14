@@ -132,12 +132,19 @@ def _hermetic_bus_client(monkeypatch):
     )
 
 
-def _args(tmp_path, *, dry_run=False, eval_root=None):
+def _args(tmp_path, *, dry_run=False, eval_root=None, extra_config=""):
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "kaine.toml"
     cfg_path.write_text(
-        "# minimal config\n[research_submission]\nenabled = false\n",
+        "# minimal config\n[research_submission]\nenabled = false\n"
+        # The runtime default memory backend is Qdrant; these tests keep none.
+        + (
+            ""
+            if "[mnemos]" in extra_config
+            else '[mnemos]\nbackend = "inmemory"\n[empatheia]\nbackend = "inmemory"\n'
+        )
+        + extra_config,
         encoding="utf-8",
     )
     a = [
@@ -210,6 +217,154 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
     text = audit_path.read_text(encoding="utf-8")
     assert '{"x":1}' not in text
     assert "Kaine Nova" not in text
+
+
+def test_guardian_notice_shown_on_every_path(tmp_path, monkeypatch):
+    """The CAL Article 4.2(a) reminder is printed before the first prompt and in a dry run, and the audit notes it."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+
+    def _input(prompt=""):
+        # Mark each prompt in the output so the test can see what was shown before it.
+        out.write("<<PROMPT>>")
+        return next(answers, "")
+
+    rc = main(
+        _args(tmp_path),
+        input_fn=_input,
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 0, out.getvalue()
+    text = out.getvalue()
+    notice_idx = text.find("CAL Article 4.2(a)")
+    final_idx = text.find("<<PROMPT>>")
+    assert notice_idx != -1
+    assert final_idx != -1
+    assert notice_idx < final_idx
+    assert "Article 7.0" in text
+
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    record = json.loads(audit_path.read_text(encoding="utf-8").strip().splitlines()[0])
+    assert record["guardian_notice_reminder"] == "shown"
+
+    dry_root = tmp_path / "dry"
+    _seed_state(dry_root / "state")
+    out2 = io.StringIO()
+    rc2 = main(
+        _args(dry_root, dry_run=True),
+        input_fn=_scripted_input([]),
+        out=out2,
+        err=io.StringIO(),
+    )
+    assert rc2 == 0, out2.getvalue()
+    assert "CAL Article 4.2(a)" in out2.getvalue()
+    assert "Article 7.0" in out2.getvalue()
+
+
+def test_running_voice_alignment_job_refuses(tmp_path, monkeypatch):
+    """A voice-alignment job still training stops decommission before anything is deleted."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+
+    adapter_store = tmp_path / "state" / "hypnos" / "adapters"
+    adapter_store.mkdir(parents=True)
+    own_job = jobs_dir / "j1"
+    own_job.mkdir(parents=True)
+    (own_job / "job.json").write_text(
+        json.dumps(
+            {
+                "adapter_output_dir": str(adapter_store.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__.cancel_voice_alignment_jobs",
+        lambda path, **kw: (["j1"], ["j1"]),
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    rc = main(
+        _args(
+            tmp_path,
+            extra_config=f'[hypnos.voice_alignment]\ntrainer_jobs_dir = "{jobs_dir}"\n',
+        ),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 3, out.getvalue() + err.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
+    assert "voice-alignment job is still training" in err.getvalue()
+
+
+def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
+    """Qdrant that cannot be reached at deletion time fails the run with nothing deleted."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    class FailingQdrant:
+        def get_collections(self):
+            raise RuntimeError("connection refused")
+
+        def close(self):
+            pass
+
+    class WorkingQdrant:
+        def get_collections(self):
+            return SimpleNamespace(collections=[])
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "kaine.lifecycle.__main__._qdrant_client",
+        lambda cfg: FailingQdrant(),
+    )
+    monkeypatch.setattr(
+        "kaine.lifecycle.decommission._qdrant_client",
+        lambda cfg: WorkingQdrant(),
+    )
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+    cli_args = _args(
+        tmp_path,
+        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+    )
+    # Module toggles come from the operator overlay (the default profile
+    # leaves the episodic memory module off).
+    (tmp_path / "config" / "kaine.operator.toml").write_text(
+        "[modules]\nmnemos = true\n", encoding="utf-8"
+    )
+    rc = main(
+        cli_args,
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue() + err.getvalue()
+    assert "Qdrant" in out.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
 
 
 def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
@@ -660,3 +815,513 @@ def test_empty_subtree_dirs_only_refuses_decommission(tmp_path, monkeypatch):
     assert rc == 7
     assert "no entity state found" in err.getvalue().lower()
     assert not out_root.exists() or not any(out_root.iterdir())
+
+
+def test_location_split_printed_before_confirmation(tmp_path, monkeypatch):
+    """The location split is printed before any confirmation prompt."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+
+    def _input(prompt=""):
+        out.write("<<PROMPT>>")
+        return next(answers, "")
+
+    rc = main(
+        _args(tmp_path),
+        input_fn=_input,
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 0, out.getvalue()
+    text = out.getvalue()
+    split_idx = text.find("What decommission does with this entity's data:")
+    prompt_idx = text.find("<<PROMPT>>")
+    assert split_idx != -1
+    assert prompt_idx != -1
+    assert split_idx < prompt_idx
+    assert "backed up, then deleted:" in text
+    assert "- self_model:" in text
+    assert "- language:" in text
+    assert "kept by design:" in text
+
+
+def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
+    """A permission error during deletion exits 8 and writes an incomplete outcome to the audit log."""
+    import shutil
+
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    out = io.StringIO()
+    answers = [
+        "I acknowledge the CAL welfare terms",  # ack
+        "Kaine Nova",  # confirmation token (entity name)
+    ]
+    real_rmtree = shutil.rmtree
+
+    def guarded_rmtree(path, *args, **kwargs):
+        if Path(path).name == "eidolon":
+            raise PermissionError(path)
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr("kaine.lifecycle.decommission.shutil.rmtree", guarded_rmtree)
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(answers),
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 8, out.getvalue()
+    assert "INCOMPLETE" in out.getvalue()
+    assert (tmp_path / "state" / "eidolon").exists()
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["outcome"] == "incomplete"
+
+
+def _snapshot_tree(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_module_off_unreachable_qdrant_refuses_before_anything(tmp_path, monkeypatch):
+    """CLI refuses to run when Qdrant is unreachable; nothing is touched."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue()
+    text = out.getvalue()
+    assert "nothing was backed up or deleted" in text
+    assert "127.0.0.1:1" in text
+    assert "--qdrant-absent" in text
+    assert _snapshot_tree(tmp_path / "state") == before
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+    backup_root = tmp_path / "backups"
+    assert not backup_root.exists() or not any(backup_root.iterdir())
+
+
+def test_qdrant_absent_flag_skips_qdrant_and_deletes(tmp_path, monkeypatch):
+    """--qdrant-absent makes one CLI probe call and deletes state."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    calls_cli = []
+    calls_lib = []
+
+    def recording_cli_factory(cfg):
+        calls_cli.append(cfg)
+        return None
+
+    def recording_lib_factory(cfg):
+        calls_lib.append(cfg)
+        return None
+
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", recording_lib_factory)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", recording_cli_factory)
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n') + ["--qdrant-absent"],
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 0, out.getvalue() + err.getvalue()
+    assert len(calls_cli) == 1
+    assert calls_lib == []
+    assert not (tmp_path / "state" / "eidolon").exists()
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["qdrant_absent_asserted"] is True
+    assert record["outcome"] == "deleted"
+    assert "Qdrant: skipped" in out.getvalue()
+
+
+def test_qdrant_absent_does_not_override_a_module_that_is_on(tmp_path, monkeypatch):
+    """--qdrant-absent is not allowed when a memory module is actually enabled."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: None)
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
+    out = io.StringIO()
+    err = io.StringIO()
+    base_args = _args(
+        tmp_path,
+        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+    )
+    (tmp_path / "config" / "kaine.operator.toml").write_text(
+        "[modules]\nmnemos = true\n", encoding="utf-8"
+    )
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        base_args + ["--qdrant-absent"],
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue()
+    assert _snapshot_tree(tmp_path / "state") == before
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+
+
+def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkeypatch):
+    """A stuck claimed job is reported; --trainer-stopped lets deletion proceed."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    jobs_dir = tmp_path / "state" / "jobs"
+    job = jobs_dir / "job7"
+    job.mkdir(parents=True)
+    (job / "CLAIMED").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+
+    adapter_store = tmp_path / "state" / "hypnos" / "adapters"
+    adapter_store.mkdir(parents=True)
+    (job / "job.json").write_text(
+        json.dumps(
+            {
+                "adapter_output_dir": str(adapter_store.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from kaine.lifecycle.decommission_locations import cancel_voice_alignment_jobs as _real_cancel
+
+    def _fast_cancel(path, **kw):
+        kw["wait_s"] = 0.0
+        kw["poll_s"] = 0.0
+        return _real_cancel(path, **kw)
+
+    monkeypatch.setattr("kaine.lifecycle.__main__.cancel_voice_alignment_jobs", _fast_cancel)
+
+    extra_config = (
+        f'[hypnos.voice_alignment]\n'
+        f'trainer_jobs_dir = "{jobs_dir.as_posix()}"\n'
+        f'trainer_workdir = "{(tmp_path / "state" / "work").as_posix()}"\n'
+    )
+    args = _args(tmp_path, extra_config=extra_config)
+    answers = [
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ]
+
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(args, input_fn=_scripted_input(answers), out=out, err=err)
+    assert rc == 3, f"{out.getvalue()}\n{err.getvalue()}"
+    err_text = err.getvalue()
+    assert str(job) in err_text
+    assert "--trainer-stopped" in err_text
+    assert (tmp_path / "state" / "eidolon").exists()
+
+    out2 = io.StringIO()
+    err2 = io.StringIO()
+    rc2 = main(
+        [a if a != str(tmp_path / "backups") else str(tmp_path / "backups2") for a in args]
+        + ["--trainer-stopped"],
+        input_fn=_scripted_input(answers),
+        out=out2,
+        err=err2,
+    )
+    assert rc2 == 0, f"{out2.getvalue()}\n{err2.getvalue()}"
+    assert "claimed job not waited for" in out2.getvalue()
+
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record.get("trainer_stopped_asserted") is True
+
+    # The second run's own backup holds the stuck job's directory.
+    backup_root = tmp_path / "backups2"
+    assert backup_root.exists()
+    found = False
+    for entity_dir in backup_root.iterdir():
+        if not entity_dir.is_dir():
+            continue
+        for path in entity_dir.rglob("*"):
+            if path.is_file():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if "SECRET pairs" in text:
+                    found = True
+                    break
+        if found:
+            break
+    assert found
+
+
+def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch):
+    """If Qdrant fails the final probe, local state is kept and the CLI exits 8."""
+    import io
+
+
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    model_path = tmp_path / "state" / "eidolon" / "self_model.json"
+    original_bytes = model_path.read_bytes()
+
+    config_path = tmp_path / "config" / "kaine.operator.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
+
+    class Reachable:
+        def get_collections(self):
+            class Collections:
+                collections = []
+            return Collections()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: Reachable())
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: Reachable())
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    call_count = 0
+
+    def input_fn(prompt=""):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
+        return next(answers)
+
+    rc = main(
+        _args(
+            tmp_path,
+            extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+        ),
+        input_fn=input_fn,
+        out=out,
+        err=err,
+    )
+    text = out.getvalue() + err.getvalue()
+    assert rc == 8, text
+    assert "just before deletion" in text
+    assert model_path.exists()
+    assert model_path.read_bytes() == original_bytes
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert not audit_path.exists()
+
+
+def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
+    """--qdrant-absent fails when Qdrant is actually reachable."""
+    import io
+    from pathlib import Path
+
+
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+
+    def snapshot_files(root):
+        snapshot = {}
+        for p in Path(root).rglob("*"):
+            if p.is_file():
+                snapshot[str(p.relative_to(root))] = p.read_bytes()
+        return snapshot
+
+    before = snapshot_files(tmp_path / "state")
+
+    class Reachable:
+        def get_collections(self):
+            class Collections:
+                collections = []
+            return Collections()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: Reachable())
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: Reachable())
+
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter([
+        "I acknowledge the CAL welfare terms",
+        "Kaine Nova",
+    ])
+    rc = main(
+        _args(
+            tmp_path,
+            extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+        ) + ["--qdrant-absent"],
+        input_fn=lambda prompt="": next(answers),
+        out=out,
+        err=err,
+    )
+    text = out.getvalue() + err.getvalue()
+    assert rc == 8, text
+    assert "Qdrant answered at 127.0.0.1:1" in text
+    assert "run again without --qdrant-absent" in text
+    after = snapshot_files(tmp_path / "state")
+    assert before == after
+    backups = tmp_path / "backups"
+    entries = list(backups.iterdir()) if backups.exists() else []
+    assert entries == []
+
+
+def test_unattributable_pending_job_refuses_before_anything(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job.mkdir(parents=True)
+    (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
+    (job / "READY").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+    before = {p: p.read_bytes() for p in (tmp_path / "state").rglob("*") if p.is_file()}
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out,
+        err=err,
+    )
+    after = {p: p.read_bytes() for p in (tmp_path / "state").rglob("*") if p.is_file()}
+    assert rc == 3
+    assert str(job) in err.getvalue()
+    assert "--keep-unattributed-jobs" in err.getvalue()
+    assert after == before
+    assert not (job / "CANCELLED").exists()
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+    backups = tmp_path / "backups"
+    assert not backups.exists() or not any(backups.rglob("*"))
+
+
+def test_keep_unattributed_jobs_flag_proceeds_and_records(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job.mkdir(parents=True)
+    (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
+    (job / "READY").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path) + ["--keep-unattributed-jobs"],
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out,
+        err=err,
+    )
+    assert rc == 0, f"out={out.getvalue()!r} err={err.getvalue()!r}"
+    assert job.exists()
+    assert (job / "pairs.jsonl").read_text() == "SECRET pairs\n"
+    audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
+    assert audit_path.exists()
+    lines = audit_path.read_text().strip().splitlines()
+    record = json.loads(lines[-1])
+    assert record["keep_unattributed_jobs_asserted"] is True
+    assert "hypnos/voice_align_jobs/q1" in record["unattributed_jobs_kept"]
+
+
+def test_attributable_pending_job_is_still_cancelled(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    adapters = tmp_path / "state" / "hypnos" / "adapters"
+    adapters.mkdir(parents=True)
+    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job.mkdir(parents=True)
+    (job / "job.json").write_text(
+        json.dumps({"adapter_output_dir": str(adapters.resolve())})
+    )
+    (job / "READY").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out,
+        err=err,
+    )
+    assert rc == 0, f"out={out.getvalue()!r} err={err.getvalue()!r}"
+    assert not job.exists()
+    backups = tmp_path / "backups"
+    assert backups.exists()
+    found = any(
+        p.is_file() and b"SECRET pairs" in p.read_bytes()
+        for p in backups.rglob("*")
+    )
+    assert found
+
+
+def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
+    """With the module off and an endpoint configured, the CLI re-probe just before deletion stops the run."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+
+    class _Reachable:
+        def get_collections(self):
+            return SimpleNamespace(collections=[])
+
+        def close(self):
+            pass
+
+    # The deletion itself would still reach Qdrant through the library
+    # factory, so only the CLI re-probe can stop this run.
+    monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: _Reachable())
+    monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: _Reachable())
+    _seed_state(tmp_path / "state")
+    before = (tmp_path / "state" / "eidolon" / "self_model.json").read_bytes()
+    out = io.StringIO()
+    err = io.StringIO()
+    answers = iter(["I acknowledge the CAL welfare terms", "Kaine Nova"])
+    first = [True]
+
+    def _input_fn(prompt=""):
+        if first[0]:
+            first[0] = False
+            # The first prompt comes after the backup: Qdrant now stops
+            # answering the CLI's probe.
+            monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: None)
+        return next(answers, "")
+
+    rc = main(
+        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
+        input_fn=_input_fn,
+        out=out,
+        err=err,
+    )
+    assert rc == 8, out.getvalue() + err.getvalue()
+    assert "just before deletion" in out.getvalue()
+    assert (tmp_path / "state" / "eidolon" / "self_model.json").read_bytes() == before
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
