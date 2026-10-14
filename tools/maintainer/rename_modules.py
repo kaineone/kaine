@@ -2242,6 +2242,33 @@ def _replacement_for(
 # --------------------------------------------------------------------------- #
 
 
+def marked_old_name_lines(text: str, markers: tuple[str, ...], line_marker: str) -> set[int]:
+    """Return 1-based line numbers allowed to contain old module names.
+
+    A Markdown section started by a level-1 to level-3 heading is allowed
+    when its heading contains one of *markers* (case-insensitive).  Lines
+    inside fenced code blocks do not start sections.  In addition, any
+    line whose stripped text ends with *line_marker* is allowed.
+    """
+    lower_markers = tuple(marker.lower() for marker in markers)
+    allowed: set[int] = set()
+    in_fence = False
+    section_marked = False
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            if re.match(r"^#{1,3}\s", raw_line):
+                section_marked = any(marker in raw_line.lower() for marker in lower_markers)
+        if section_marked:
+            allowed.add(line_no)
+        if line_marker and stripped.endswith(line_marker):
+            allowed.add(line_no)
+    return allowed
+
+
 def _mask_excluded_regions(rel_path: str, text: str, table) -> list[tuple[int, int]]:
     blocked: list[tuple[int, int]] = []
     if os.path.basename(rel_path) == "CHANGELOG.md":
@@ -2253,6 +2280,25 @@ def _mask_excluded_regions(rel_path: str, text: str, table) -> list[tuple[int, i
 
     if rel_path.lower().endswith(".toml"):
         blocked.extend(_excluded_toml_values(text, table))
+
+    section_files = getattr(table, "OLD_NAME_SECTION_FILES", ())
+    if rel_path in section_files:
+        markers = getattr(table, "OLD_NAME_SECTION_MARKERS", ())
+        line_marker = getattr(table, "OLD_NAME_LINE_MARKER", "")
+        allowed_lines = marked_old_name_lines(text, markers, line_marker)
+        if allowed_lines:
+            line_start = 0
+            line_no = 1
+            while line_start < len(text):
+                line_end = text.find("\n", line_start)
+                if line_end == -1:
+                    line_end = len(text)
+                if line_no in allowed_lines:
+                    blocked.append((line_start, line_end))
+                line_no += 1
+                if line_end == len(text):
+                    break
+                line_start = line_end + 1
 
     return blocked
 

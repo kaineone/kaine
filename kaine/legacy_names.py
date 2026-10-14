@@ -1261,11 +1261,6 @@ EXCLUDED_GLOBS = (
     # These documents record the rename itself and must keep the old names.
     "openspec/changes/functional-module-names-drop-aliases/",
     "docs/appendix-e-module-names.md",
-    # The specs archived from the rename state how the old names are read, so they name them.
-    "openspec/specs/module-naming/spec.md",
-    "openspec/specs/configuration-loading/spec.md",
-    "openspec/specs/developmental-stage/spec.md",
-    "openspec/specs/entity-preservation/spec.md",
     # The changelog keeps its history in the names of its time, and its [Unreleased] entry names the deprecated ones.
     "CHANGELOG.md",
     # Generated from this table by tools/maintainer/gen_deprecated_names.py; it lists the old names on purpose.
@@ -1438,6 +1433,19 @@ GUARD_NAMES = tuple(
 # Identifiers built on an old module key that stay for good. The dashboard record keeps
 # its data directory name because the record volume is mounted on it.
 GUARD_KEPT_IDENTIFIERS = ("nexus_record",)
+
+# Specs whose requirements describe how old names are read. In these files an old
+# name is allowed only inside a section whose heading contains one of
+# OLD_NAME_SECTION_MARKERS (case-insensitive), or on a line that ends with
+# OLD_NAME_LINE_MARKER; everywhere else in them the guard applies as usual.
+OLD_NAME_SECTION_FILES = (
+    "openspec/specs/module-naming/spec.md",
+    "openspec/specs/configuration-loading/spec.md",
+    "openspec/specs/developmental-stage/spec.md",
+    "openspec/specs/entity-preservation/spec.md",
+)
+OLD_NAME_SECTION_MARKERS = ("old name", "old module name", "legacy", "alias", "deprecated", "before the rename")
+OLD_NAME_LINE_MARKER = "<!-- old-names -->"
 
 CONFIG_TABLES = tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()

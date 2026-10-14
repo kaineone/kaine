@@ -50,7 +50,7 @@ identifiers, keys, operator, persisted). It SHALL NOT change files under
 vendored or third-party code, `data/`, `state/`, `backups/`, `secrets/`,
 `.git/`, the K1-Jev question and prompt text, data files under `eval_probes/`,
 active change directory names, or entity-facing text. It SHALL change an
-English-word name (`spot`, `echo`, `being`, `perception`) only in the contexts
+English-word name (`spot`, `echo`, `being`, `perception`) only in the contexts <!-- old-names -->
 its rules list, and SHALL list every undecided match in its report without
 changing it. It SHALL refuse to apply a rename that would bind a new name
 already bound in the same file, except through an alias the table defines.

@@ -9,7 +9,7 @@
 - [ ] 2.3 Remove the `kaine[nexus]` extra and the `kaine.nexus` and `kaine.lifecycle.mnemos_recover` shims.
 - [ ] 2.4 Remove the old session-key header and the browser storage migration.
 - [ ] 2.5 `compose/kaine.yml` reads only the new variable names.
-- [ ] 2.6 Remove the operator entries from `kaine/legacy_names.py` and the exclusions that only they needed (the configuration-loading spec once its old-name requirement is removed); the module-names guard keeps passing.
+- [ ] 2.6 Remove the operator entries from `kaine/legacy_names.py` and the exclusions that only they needed (the configuration-loading spec leaves `OLD_NAME_SECTION_FILES` once its old-name requirement is removed); the module-names guard keeps passing.
 
 ## 3. Tests and docs
 

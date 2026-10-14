@@ -274,12 +274,12 @@ tree by its artifacts under either the old or the new paths.
 
 ### Requirement: An unrecognized stored stage value fails closed
 When the stage file holds a `stage` value that is not one of the known stage
-values (`development`, `embodied`, or the old value `gestation` read through
+values (`development`, `embodied`, or the old value `gestation` read through <!-- old-names -->
 its alias), or is not a string, the stage reader SHALL refuse it and the cycle
 SHALL refuse to boot with a configuration-style error that names the file and
 the offending value (as its `repr`, truncated to 64 characters). The reader
 SHALL NOT read such a value as `embodied` or as `development`. This holds
-whether or not the `gestation` alias exists.
+whether or not the `gestation` alias exists. <!-- old-names -->
 
 #### Scenario: A garbled stage value stops the boot
 - **WHEN** `state/lifecycle/stage.json` holds `"stage": "embodid"`
