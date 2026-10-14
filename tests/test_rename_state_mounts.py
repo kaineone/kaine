@@ -212,12 +212,12 @@ def test_a_mount_point_inside_the_old_directory_is_refused(tmp_path, monkeypatch
     root = tmp_path / "state"
     mounts = _mount_checker(monkeypatch)
     _write(root / OLD["sleep"] / "organ_window.json", b"window")
-    (root / OLD["sleep"] / "adapters").mkdir(parents=True)
+    _write(root / OLD["sleep"] / "adapters" / "a.gguf", b"adapter")
     mounts.add((root / OLD["sleep"] / "adapters").resolve())
     (root / "sleep" / "voice_align_jobs").mkdir(parents=True)
     mounts.add((root / "sleep" / "voice_align_jobs").resolve())
     before = _snapshot(root)
-    with pytest.raises(rename_state.RenameStateError, match="mount point"):
+    with pytest.raises(rename_state.RenameStateError, match="mount holding data"):
         rename_state.migrate(root, no_qdrant=True)
     assert _snapshot(root) == before
 
@@ -240,6 +240,121 @@ def test_an_old_directory_that_is_itself_a_mount_point_is_refused(tmp_path, monk
     _write(root / OLD["sleep"] / "organ_window.json", b"window")
     mounts.add((root / OLD["sleep"]).resolve())
     before = _snapshot(root)
-    with pytest.raises(rename_state.RenameStateError, match="mount point"):
+    with pytest.raises(rename_state.RenameStateError, match="mount holding data"):
         rename_state.migrate(root, no_qdrant=True)
     assert _snapshot(root) == before
+
+
+def _refuses_unchanged(root):
+    before = _snapshot(root)
+    with pytest.raises(rename_state.RenameStateError, match="mount holding data"):
+        rename_state.migrate(root, no_qdrant=True)
+    assert _snapshot(root) == before
+    assert not (root / ".rename_state").exists()
+
+
+def test_an_old_store_mount_holding_data_beside_an_empty_new_directory_refuses(tmp_path, monkeypatch):
+    """(a) An old episodic memory directory that is a mount holding the database."""
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    old_store = root / OLD["episodic_memory"]
+    _write(old_store / "memory.db", b"SQLite format 3\x00 rows")
+    mounts.add(old_store.resolve())
+    (root / "episodic_memory").mkdir(parents=True)
+    _refuses_unchanged(root)
+
+
+def test_an_old_adapters_mount_holding_data_beside_an_empty_new_directory_refuses(tmp_path, monkeypatch):
+    """(b) An old adapters mount with data beside an empty new sleep directory."""
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "adapters" / "a.gguf", b"adapter")
+    mounts.add((root / OLD["sleep"] / "adapters").resolve())
+    (root / "sleep").mkdir(parents=True)
+    _refuses_unchanged(root)
+
+
+def test_an_old_jobs_mount_holding_data_beside_a_new_directory_with_data_refuses(tmp_path, monkeypatch):
+    """(c) An old voice-alignment jobs mount with jobs beside a new sleep directory with data."""
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "voice_align_jobs" / "job1.json", b"{}")
+    mounts.add((root / OLD["sleep"] / "voice_align_jobs").resolve())
+    _write(root / "sleep" / "organ_window.json", b"window")
+    before = _snapshot(root)
+    with pytest.raises(rename_state.RenameStateError):
+        rename_state.migrate(root, no_qdrant=True)
+    assert _snapshot(root) == before
+
+
+def test_an_old_jobs_mount_holding_data_is_refused_without_a_new_directory(tmp_path, monkeypatch):
+    """A plain rename would carry the mount to the new path for one boot only."""
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "organ_window.json", b"window")
+    _write(root / OLD["sleep"] / "voice_align_jobs" / "job1.json", b"{}")
+    mounts.add((root / OLD["sleep"] / "voice_align_jobs").resolve())
+    _refuses_unchanged(root)
+
+
+def test_an_empty_old_mount_point_is_still_vacant(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    _write(root / OLD["sleep"] / "organ_window.json", b"window")
+    (root / OLD["sleep"] / "voice_align_jobs").mkdir(parents=True)
+    mounts.add((root / OLD["sleep"] / "voice_align_jobs").resolve())
+    (root / "sleep" / "voice_align_jobs").mkdir(parents=True)
+    mounts.add((root / "sleep" / "voice_align_jobs").resolve())
+    result = rename_state.migrate(root, no_qdrant=True)
+    assert result.status == "migrated"
+    files, _dirs = _snapshot(root)
+    assert files["sleep/organ_window.json"] == b"window"
+
+
+def test_a_removal_that_meets_data_refuses_and_leaves_the_manifest_in_progress(tmp_path, monkeypatch):
+    """Data that appears in an old directory between planning and removal stops the run."""
+    import json
+
+    root = tmp_path / "state"
+    _mount_checker(monkeypatch)
+    (root / OLD["perceptual_locus"]).mkdir(parents=True)
+    (root / "perceptual_locus").mkdir(parents=True)
+    original = rename_state._run_step
+
+    def write_then_run(r, step, qdrant):
+        if step["kind"] == "remove_vacant":
+            _write(root / OLD["perceptual_locus"] / "late.json", b"late")
+        return original(r, step, qdrant)
+
+    monkeypatch.setattr(rename_state, "_run_step", write_then_run)
+    with pytest.raises(rename_state.RenameStateError, match="holds data"):
+        rename_state.migrate(root, no_qdrant=True)
+    assert (root / OLD["perceptual_locus"] / "late.json").read_bytes() == b"late"
+    manifest = json.loads((root / ".rename_state" / "manifest.json").read_text())
+    assert manifest["status"] == "in_progress"
+
+
+def test_the_mount_table_parser_unescapes_spaces(monkeypatch):
+    import io
+
+    line = "36 35 98:0 /src /mnt/state\\040dir rw,relatime - ext4 /dev/root rw\n"
+    monkeypatch.setattr("builtins.open", lambda *a, **k: io.StringIO(line))
+    assert rename_state._mountinfo_points() == {"/mnt/state dir"}
+
+
+def test_a_removal_that_cannot_remove_an_empty_directory_refuses(tmp_path, monkeypatch):
+    import errno
+    import os
+
+    root = tmp_path / "state"
+    _mount_checker(monkeypatch)
+    (root / OLD["perceptual_locus"]).mkdir(parents=True)
+    (root / "perceptual_locus").mkdir(parents=True)
+
+    def refuse_rmdir(path, *args, **kwargs):
+        raise PermissionError(errno.EPERM, "Operation not permitted", str(path))
+
+    monkeypatch.setattr(os, "rmdir", refuse_rmdir)
+    with pytest.raises(rename_state.RenameStateError, match="cannot remove"):
+        rename_state.migrate(root, no_qdrant=True)
+    assert (root / OLD["perceptual_locus"]).is_dir()

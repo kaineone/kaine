@@ -7,7 +7,6 @@ Safe to interrupt and re-run; ``--revert`` restores the original tree.
 """
 
 import argparse
-import errno
 import hashlib
 import json
 import logging
@@ -203,16 +202,31 @@ def _refuse_symlink(path: Path, *, what: str) -> None:
         )
 
 
-def _vacant(path: Path) -> bool:
-    """Return True when ``path`` is a mount point or an empty directory tree.
+def _empty_dir(path: Path) -> bool:
+    """Whether ``path`` is a real directory with no entries at all."""
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISDIR(st.st_mode):
+            return False
+        with os.scandir(path) as it:
+            return next(it, None) is None
+    except (OSError, ValueError):
+        return False
 
-    A directory is vacant when every entry is itself vacant.  Files, symlinks
-    or any other non-directory entry make a directory non-vacant.  Mount
-    points are considered vacant but are never descended into.
+
+def _vacant_tree(path: Path, *, mount_with_data_ok: bool) -> bool:
+    """Whether ``path`` holds no data of the state tree.
+
+    A real directory is vacant when every entry is itself vacant; a file, a
+    symlink or any other entry is data. A mount point is never descended into:
+    on the new side (``mount_with_data_ok``) the runtime's mount counts as vacant
+    whatever it holds, because its content belongs to its volume (the compose
+    trainer-jobs volume); on the old side a mount is vacant only when it is
+    empty, so a mount holding data is never mistaken for an empty leftover.
     """
     path = Path(path)
     if _is_mount(path):
-        return True
+        return True if mount_with_data_ok else _empty_dir(path)
     try:
         st = os.lstat(path)
     except (OSError, ValueError):
@@ -222,11 +236,54 @@ def _vacant(path: Path) -> bool:
     try:
         with os.scandir(path) as it:
             for entry in it:
-                if not _vacant(Path(entry.path)):
+                if not _vacant_tree(Path(entry.path), mount_with_data_ok=mount_with_data_ok):
                     return False
     except OSError:
         return False
     return True
+
+
+def _vacant_old(path: Path) -> bool:
+    """Old side: only empty directories and empty mount points."""
+    return _vacant_tree(path, mount_with_data_ok=False)
+
+
+def _vacant_new(path: Path) -> bool:
+    """New side: empty directories and the runtime's mount points."""
+    return _vacant_tree(path, mount_with_data_ok=True)
+
+
+def _nested_mount_with_data(path: Path) -> Path | None:
+    """The first mount point below ``path`` that holds data, or None.
+
+    Mount points are not descended into, and symlinks are not followed.
+    """
+    try:
+        with os.scandir(path) as it:
+            entries = [Path(e.path) for e in it]
+    except OSError:
+        return None
+    for child in sorted(entries):
+        if _is_mount(child):
+            if not _empty_dir(child):
+                return child
+            continue
+        try:
+            st = os.lstat(child)
+        except OSError:
+            continue
+        if stat.S_ISDIR(st.st_mode):
+            found = _nested_mount_with_data(child)
+            if found is not None:
+                return found
+    return None
+
+
+def _refuse_mount_with_data(root: Path, old_rel: str, new_rel: str) -> None:
+    raise RenameStateError(
+        f"rename_state: {old_rel} under {root} is a mount holding data; mount it at "
+        f"{new_rel} instead and re-run"
+    )
 
 
 def _removable(path: Path) -> bool:
@@ -485,19 +542,18 @@ def _plan_merge(
         if _is_mount(Path(entry.path)):
             # A mount point cannot be renamed and its content is not the tree's to
             # move. Mounted at the new path as well, it is the runtime's and is left
-            # alone; otherwise the operator mounts it at the new path instead.
-            if _is_mount(target_path):
+            # alone when it is empty; a mount holding data is the operator's to
+            # mount at the new path.
+            if _empty_dir(Path(entry.path)):
+                # An empty mount point holds nothing to move; it is left where it is.
                 continue
-            raise RenameStateError(
-                f"rename_state: {child_rel} under {root} is a mount point; mount it at "
-                f"{target_rel} instead and re-run"
-            )
+            _refuse_mount_with_data(root, child_rel, target_rel)
         if not target_path.exists():
             created = _created_dirs_for_dst(root, target_rel, planned)
             steps.append(_move_step(child_rel, target_rel, created))
         elif _is_mount(target_path):
             if (
-                _vacant(Path(entry.path))
+                _vacant_old(Path(entry.path))
                 and entry.is_dir(follow_symlinks=False)
                 and not _is_mount(Path(entry.path))
             ):
@@ -508,7 +564,7 @@ def _plan_merge(
                 "and hold data; move one aside and re-run"
             )
         elif (
-            _vacant(target_path)
+            _vacant_new(target_path)
             and not _is_mount(target_path)
             and entry.is_dir(follow_symlinks=False)
             and not _is_mount(Path(entry.path))
@@ -568,6 +624,8 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
             ) from exc
         if not stat.S_ISDIR(old_st.st_mode):
             continue
+        if _is_mount(old_dir) and not _empty_dir(old_dir):
+            _refuse_mount_with_data(root, old_key, new_key)
         if _is_mount(old_dir) and not new_dir.exists():
             # A mount point cannot be renamed; the operator mounts the volume at
             # the new path instead.
@@ -576,12 +634,19 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
                 f"{new_key} instead and re-run"
             )
         if not new_dir.exists():
+            # Renaming the directory would carry a mount below it to the new path
+            # for this boot only; a mount holding data is mounted at its new path
+            # by the operator instead.
+            nested = _nested_mount_with_data(old_dir)
+            if nested is not None:
+                rel = nested.relative_to(root).as_posix()
+                _refuse_mount_with_data(root, rel, new_key + rel[len(old_key):])
             created = _created_dirs_for_dst(root, new_key, planned)
             steps.append(_move_step(old_key, new_key, created))
-        elif _vacant(old_dir):
+        elif _vacant_old(old_dir):
             if _removable(old_dir):
                 steps.append(_remove_vacant_step(old_key))
-        elif _vacant(new_dir) and not _is_mount(new_dir):
+        elif _vacant_new(new_dir) and not _is_mount(new_dir):
             _plan_merge(root, old_key, new_key, planned, steps)
             if _removable(old_dir):
                 steps.append(_remove_vacant_step(old_key))
@@ -878,29 +943,34 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
         log.info("remove_vacant: %s is a mount point; leaving it", rel)
         return
 
-    leave_if_busy = (errno.EBUSY, errno.EPERM, errno.EACCES, errno.ENOTEMPTY)
     to_remove: list[Path] = []
 
-    def _collect(dir_path: Path) -> bool:
+    def _refuse(what: Path, why: str) -> None:
+        # Raised from the step, so the manifest stays in progress and the start
+        # stops with the refusal; nothing but empty directories was removed.
+        raise RenameStateError(
+            f"rename_state: cannot remove {what.relative_to(Path(root).resolve())} ({why}); "
+            "move its content aside and re-run"
+        )
+
+    def _collect(dir_path: Path) -> None:
         try:
             with os.scandir(dir_path) as it:
-                for entry in it:
-                    child = Path(entry.path)
-                    if _is_mount(child):
-                        continue
-                    cst = os.lstat(child)
-                    if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
-                        return False
-                    if not _collect(child):
-                        return False
-        except OSError:
-            return False
+                entries = [Path(e.path) for e in it]
+        except OSError as exc:
+            _refuse(dir_path, exc.strerror or type(exc).__name__)
+        for child in entries:
+            if _is_mount(child):
+                if not _empty_dir(child):
+                    _refuse(child, "a mount holding data")
+                continue
+            cst = os.lstat(child)
+            if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
+                _refuse(child, "it holds data")
+            _collect(child)
         to_remove.append(dir_path)
-        return True
 
-    if not _collect(path):
-        log.warning("remove_vacant: %s holds a non-vacant entry; leaving it", rel)
-        return
+    _collect(path)
 
     to_remove.sort(key=lambda p: len(p.parts), reverse=True)
     removed: list[str] = list(step.get("removed") or [])
@@ -916,13 +986,20 @@ def _run_remove_vacant(root: Path, step: dict) -> None:
         except FileNotFoundError:
             continue
         except OSError as exc:
-            rel_path = dir_path.relative_to(root)
-            if exc.errno in leave_if_busy:
-                log.info("remove_vacant: leaving %s (%s)", rel_path, exc.strerror)
-            else:
-                log.warning(
-                    "remove_vacant: failed to remove %s (%s)", rel_path, exc.strerror
+            # Only a directory still holding an empty mount point (which is never
+            # removed) may stay; anything else stops the run.
+            try:
+                with os.scandir(dir_path) as it:
+                    left = [Path(e.path) for e in it]
+            except OSError:
+                left = []
+            if left and all(_is_mount(c) and _empty_dir(c) for c in left):
+                log.info(
+                    "remove_vacant: leaving %s, which holds an empty mount point",
+                    dir_path.relative_to(Path(root).resolve()),
                 )
+                continue
+            _refuse(dir_path, exc.strerror or type(exc).__name__)
 
 
 def _run_stage(root: Path, step: dict) -> None:
