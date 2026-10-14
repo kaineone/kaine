@@ -78,6 +78,7 @@ def _build_evaluation_tree(
     with_tone: bool = False,
     with_threshold: bool = False,
     tone_rule: str = "error_ratio",
+    early_tone_events: bool = False,
     wrong_entity_time_run: str | None = None,
     wrong_pc_sha_run_processor: tuple[str, str] | None = None,
     wrong_study_run_arm: tuple[str, str] | None = None,
@@ -303,6 +304,44 @@ def _build_evaluation_tree(
             c_index = 0 if counted_index is None else counted_index
             emotional_accessed = 10 + c_index
             neutral_accessed = 6
+            if early_tone_events:
+                for k in range(40):
+                    entry_id = f"audition.out:early-{k}-0"
+                    _append_record(
+                        tone_path,
+                        {
+                            "run_id": tone_run_id,
+                            "event_type": "audition.emotion",
+                            "source": "audition",
+                            "entry_id": entry_id,
+                            "category": "happy",
+                            "classified": True,
+                            "tone_rule": tone_rule,
+                            "tone_error_ratio": 50.0 + k,
+                            "entity_time_s": 0.0,
+                        },
+                    )
+                    _append_record(
+                        tone_path,
+                        {
+                            "run_id": tone_run_id,
+                            "event_type": "workspace.broadcast",
+                            "arm": "competitive",
+                            "coalition_capacity": 5,
+                            "inhibited": False,
+                            "access_threshold": 0.35,
+                            "salience_scores": {entry_id: 0.9},
+                            "entries": [
+                                {
+                                    "entry_id": entry_id,
+                                    "source": "audition",
+                                    "type": "audition.emotion",
+                                    "salience": 0.5,
+                                }
+                            ],
+                        },
+                    )
+
             for k in range(40):
                 entry_id = f"audition.out:{k}-0"
                 if k < 20:
@@ -322,6 +361,7 @@ def _build_evaluation_tree(
                         "classified": True,
                         "tone_rule": tone_rule,
                         "tone_error_ratio": 0.1 * (k % 20),
+                        "entity_time_s": 1_000_000.0 + k,
                     },
                 )
                 _append_record(
@@ -717,7 +757,12 @@ def test_calibrate_sets_the_tone_minimum_effect(tmp_path: Path) -> None:
         run_id = pilot["runs"][TONE]["run_id"]
         by_stream = load_records_for_runs([run_id], root=root)
         tone_records = _flatten_records(by_stream[run_id])
-        adjusted.append(adjusted_statistic(tone_events(tone_records), record["values"]["tone_bins"]))
+        adjusted.append(
+            adjusted_statistic(
+                tone_events(tone_records, t_learn_s=record["values"]["t_learn_s"]),
+                record["values"]["tone_bins"],
+            )
+        )
 
     assert record["values"]["tone_adjusted_statistics"] == pytest.approx(adjusted)
     expected_adjusted_sd = statistics.stdev(adjusted)
@@ -833,3 +878,35 @@ def test_calibrate_completes_with_threshold_and_tone(tmp_path: Path) -> None:
     assert values["min_effect_threshold_contrast"] == pytest.approx(
         0.5 * statistics.stdev(defined)
     )
+
+
+def test_calibrate_ignores_tone_events_before_t_learn(tmp_path: Path) -> None:
+    plan_early, root_early = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, early_tone_events=True
+    )
+    record_early = calibrate(plan_early, root=root_early, n_cal=4, mser_ignore_end=5)
+
+    plan_late, root_late = _build_evaluation_tree(
+        tmp_path, n_pilots=5, with_tone=True, early_tone_events=False
+    )
+    record_late = calibrate(plan_late, root=root_late, n_cal=4, mser_ignore_end=5)
+
+    for key in ("tone_statistics", "tone_bins", "tone_adjusted_statistics"):
+        assert record_early["values"][key] == pytest.approx(record_late["values"][key])
+
+    for key in ("min_effect_tone", "min_effect_tone_adjusted"):
+        assert record_early["values"][key] == pytest.approx(record_late["values"][key])
+
+    assert record_early["blocked"].get("tone_error") is None
+    assert record_late["blocked"].get("tone_error") is None
+
+
+def test_calibrate_blocks_the_tone_section_without_t_learn(tmp_path: Path) -> None:
+    # Tone events count only after T_learn (paper A.8), so without T_learn the
+    # tone statistics and bins stay blocked instead of counting every event.
+    plan, root = _build_evaluation_tree(tmp_path, n_pilots=5, with_tone=True)
+    record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=None)
+    assert record["values"]["t_learn_s"] is None
+    assert record["blocked"]["min_effect_tone"] == "depends on t_learn_s"
+    assert record["values"]["tone_statistics"] is None
+    assert record["values"]["tone_bins"] is None

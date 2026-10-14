@@ -1202,3 +1202,22 @@ async def test_default_failed_classification_is_unchanged(bus: AsyncBus):
         assert emo.salience == pytest.approx(audition._alert_salience)
     finally:
         await audition.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_audition_emotion_payload_carries_entity_time_s(bus):
+    audition = _make_audition(bus)
+    await audition.initialize()
+    try:
+
+        class FixedClock:
+            def now(self) -> float:
+                return 12345.5
+
+        audition._clock = FixedClock()
+        await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
+        entries = await bus.read("audition.out", last_id="0", count=10)
+        emo = next(e for _, e in entries if e.type == "audition.emotion")
+        assert emo.payload["entity_time_s"] == 12345.5
+    finally:
+        await audition.shutdown()

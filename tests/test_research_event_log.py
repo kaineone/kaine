@@ -1579,3 +1579,31 @@ def test_workspace_metadata_record_copies_entry_id():
 
 def test_audition_emotion_tone_error_ratio_bound():
     assert _bound_for("audition.emotion", "tone_error_ratio") == NONNEG
+
+
+def test_audition_emotion_record_keeps_entity_time_s(tmp_path):
+    observer = ResearchEventObserver(
+        bus=None, sink=AsyncJsonlSink(tmp_path / "re", name="research_events")
+    )
+    event = Event(
+        timestamp=datetime.now(timezone.utc),
+        source="audition",
+        type="audition.emotion",
+        salience=0.8,
+        payload={
+            "category": "happy",
+            "confidence": 0.9,
+            "scores": {"happy": 0.9},
+            "alert": True,
+            "tone_error_ratio": 0.3,
+            "tone_rule": "error_ratio",
+            "classified": True,
+            "entity_time_s": 12.5,
+            "latency_ms": 12.0,
+        },
+    )
+    record = observer._build_record(event, "audition.out:5-0")
+    assert record is not None
+    assert record["entry_id"] == "audition.out:5-0"
+    assert record["entity_time_s"] == 12.5
+    assert "latency_ms" not in record
