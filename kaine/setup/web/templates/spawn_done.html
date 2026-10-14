@@ -6,10 +6,10 @@
 <div class="result" role="status" aria-live="polite">
   {% if outcome == "ready" %}
     <p>The entity is running.</p>
-    <p><a href="{{ nexus_url }}">Open Nexus</a></p>
+    <p><a href="{{ dashboard_url }}">Open Dashboard</a></p>
   {% elif outcome == "starting" %}
-    <p>The cycle started (pid {{ pid }}) and has not reported ready yet; watch Nexus.</p>
-    <p><a href="{{ nexus_url }}">Open Nexus</a></p>
+    <p>The cycle started (pid {{ pid }}) and has not reported ready yet; watch the dashboard.</p>
+    <p><a href="{{ dashboard_url }}">Open Dashboard</a></p>
   {% else %}
     <p>The cycle stopped during start-up (exit {{ code }}: {{ explanation }}).</p>
     {% for line in error_summary %}

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 [Unit]
-Description=KAINE Nexus web UI (always-up, holds no entity)
+Description=KAINE dashboard web UI (always-up, holds no entity)
 Requires=kaine-redis.service kaine-qdrant.service
 After=kaine-redis.service kaine-qdrant.service
 

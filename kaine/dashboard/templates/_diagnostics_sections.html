@@ -30,7 +30,7 @@
         Freezing suspends the experiential loop — the entity's subjective time stops
         while you work on the system. It is a humane pause, not a shutdown; resume
         continues exactly where it left off, and live perception is released while
-        frozen. Resume releases only your own freeze. Welfare, gestation and end-of-programme freezes stay until you override them by name.
+        frozen. Resume releases only your own freeze. Welfare, development and end-of-programme freezes stay until you override them by name.
       </p>
       <p>status:
         <strong id="freeze-status">{{ "frozen" if freeze_frozen else "running" }}</strong>
@@ -88,14 +88,14 @@
       </div>
       {% endif %}
       <div id="chart-rate" class="chart" data-empty="waiting for cycle stream…"></div>
-      <h3>Thymos affect — valence / arousal / dominance (live)</h3>
-      <div id="chart-affect" class="chart" data-empty="waiting for thymos affect…"></div>
+      <h3>Affect — valence / arousal / dominance (live)</h3>
+      <div id="chart-affect" class="chart" data-empty="waiting for affect…"></div>
       <h3>salience (live)</h3>
       <div id="chart-salience" class="chart" data-empty="waiting for events…"></div>
       <h3>PLV coherence — oscillatory layer (live)</h3>
       <p class="muted" style="font-size:0.8rem">Requires oscillatory layer enabled. Flat when disabled.</p>
       <div id="chart-coherence" class="chart" data-empty="waiting for workspace broadcast…"></div>
-      <h3>Soma fatigue accumulator (live)</h3>
+      <h3>Interoception fatigue accumulator (live)</h3>
       <div id="chart-fatigue" class="chart" data-empty="waiting for interoception.report…"></div>
     </section>
 
@@ -149,7 +149,7 @@
               <td>{{ fork.timestamp }}</td>
               <td>
                 {% if fork.metadata is defined and fork.metadata is mapping and fork.metadata["planning.merge_warning"] is defined and fork.metadata["planning.merge_warning"] %}
-                  <span title="Nous policy divergence detected on merge — posterior beliefs clashed across branches">&#9888; merge-warning</span>
+                  <span title="Planning policy divergence detected on merge — posterior beliefs clashed across branches">&#9888; merge-warning</span>
                 {% endif %}
               </td>
             </tr>

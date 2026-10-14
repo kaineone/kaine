@@ -85,7 +85,7 @@ async def test_diagnostics_layout_in_real_browser():
                 config=config,
                 health_prober=_TallHealth(),
             )
-            client.base_url = httpx.URL("http://nexus.test")
+            client.base_url = httpx.URL("http://dashboard.test")
 
             async with app.router.lifespan_context(app):
                 async with client:
@@ -115,12 +115,12 @@ async def test_diagnostics_layout_in_real_browser():
                             body=resp.content,
                         )
 
-                    await page.route("http://nexus.test/**", handler)
+                    await page.route("http://dashboard.test/**", handler)
 
                     errors = []
                     page.on("pageerror", lambda e: errors.append(str(e)))
 
-                    await page.goto("http://nexus.test/diagnostics/")
+                    await page.goto("http://dashboard.test/diagnostics/")
                     await page.wait_for_load_state("load")
 
                     data = await page.evaluate(

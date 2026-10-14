@@ -264,3 +264,43 @@ def test_an_old_stream_of_unknown_age_is_kept():
     entry = next(e for e in entries if e.old == old)
     assert not deletable([entry], now_ms=now_ms)
     assert _render_status(entry, now_ms) == "recently written (kept)"
+
+
+def test_redis_now_ms_reads_the_server_clock():
+    class StringTimeClient:
+        def time(self):
+            return ("1700000000", "999999")
+
+    class RaisingClient:
+        def time(self):
+            raise RuntimeError("redis down")
+
+    assert legacy_streams.redis_now_ms(StringTimeClient()) == 1_700_000_000_999
+    local_approx = legacy_streams.redis_now_ms(RaisingClient())
+    assert abs(local_approx - int(time.time() * 1000)) < 5000
+
+
+def test_main_uses_the_redis_clock(monkeypatch):
+    server_now_ms = int(time.time() * 1000) - 60 * 60 * 1000
+
+    class _ClockBehindClient(_FakeClient):
+        def time(self):
+            return (server_now_ms // 1000, (server_now_ms % 1000) * 1000)
+
+    old = legacy_aliases.old_stream_name("sleep.out")
+    client = _ClockBehindClient()
+    client.xadd(old, {"x": "1"}, id=f"{server_now_ms - 5 * 60 * 1000}-0")
+    monkeypatch.setattr(
+        "kaine.bus.legacy_streams.legacy_aliases.scope_done", lambda _scope: True
+    )
+
+    out = _Recorder()
+
+    def input_fn(prompt):
+        raise AssertionError("no confirmation expected")
+
+    assert main(["--delete"], client=client, input_fn=input_fn, out=out) == 0
+    text = "".join(out.lines)
+    assert "recently written (kept)" in text
+    assert "Nothing to delete." in text
+    assert old in client._streams

@@ -161,19 +161,19 @@ var scenarios = [
   {
     name: "login success",
     setup: function (sandbox) {
-      var submitBtn = makeElement("nexus-submit", { disabled: false });
-      var form = makeElement("nexus-login-form", {
+      var submitBtn = makeElement("dashboard-submit", { disabled: false });
+      var form = makeElement("dashboard-login-form", {
         action: "/auth/login",
         querySelector: function () {
           return submitBtn;
         }
       });
-      var tokenInput = makeElement("nexus-login-token", { value: "operator" });
-      var errorEl = makeElement("nexus-login-error");
+      var tokenInput = makeElement("dashboard-login-token", { value: "operator" });
+      var errorEl = makeElement("dashboard-login-error");
 
-      sandbox._elements["nexus-login-form"] = form;
-      sandbox._elements["nexus-login-token"] = tokenInput;
-      sandbox._elements["nexus-login-error"] = errorEl;
+      sandbox._elements["dashboard-login-form"] = form;
+      sandbox._elements["dashboard-login-token"] = tokenInput;
+      sandbox._elements["dashboard-login-error"] = errorEl;
       sandbox._setResponse({
         status: 200,
         json: async function () {
@@ -182,7 +182,7 @@ var scenarios = [
       });
     },
     run: async function (sandbox) {
-      var form = sandbox.document.getElementById("nexus-login-form");
+      var form = sandbox.document.getElementById("dashboard-login-form");
       var handler = form.getHandler("submit");
       if (!handler) {
         throw new Error("submit handler not captured");
@@ -206,19 +206,19 @@ var scenarios = [
   {
     name: "login with redirect '//evil.example'",
     setup: function (sandbox) {
-      var submitBtn = makeElement("nexus-submit", { disabled: false });
-      var form = makeElement("nexus-login-form", {
+      var submitBtn = makeElement("dashboard-submit", { disabled: false });
+      var form = makeElement("dashboard-login-form", {
         action: "/auth/login",
         querySelector: function () {
           return submitBtn;
         }
       });
-      var tokenInput = makeElement("nexus-login-token", { value: "operator" });
-      var errorEl = makeElement("nexus-login-error");
+      var tokenInput = makeElement("dashboard-login-token", { value: "operator" });
+      var errorEl = makeElement("dashboard-login-error");
 
-      sandbox._elements["nexus-login-form"] = form;
-      sandbox._elements["nexus-login-token"] = tokenInput;
-      sandbox._elements["nexus-login-error"] = errorEl;
+      sandbox._elements["dashboard-login-form"] = form;
+      sandbox._elements["dashboard-login-token"] = tokenInput;
+      sandbox._elements["dashboard-login-error"] = errorEl;
       sandbox._setResponse({
         status: 200,
         json: async function () {
@@ -227,7 +227,7 @@ var scenarios = [
       });
     },
     run: async function (sandbox) {
-      var form = sandbox.document.getElementById("nexus-login-form");
+      var form = sandbox.document.getElementById("dashboard-login-form");
       form.getHandler("submit")({ preventDefault: function () {} });
       await tick();
       if (
@@ -243,19 +243,19 @@ var scenarios = [
   {
     name: "login 401",
     setup: function (sandbox) {
-      var submitBtn = makeElement("nexus-submit", { disabled: false });
-      var form = makeElement("nexus-login-form", {
+      var submitBtn = makeElement("dashboard-submit", { disabled: false });
+      var form = makeElement("dashboard-login-form", {
         action: "/auth/login",
         querySelector: function () {
           return submitBtn;
         }
       });
-      var tokenInput = makeElement("nexus-login-token", { value: "operator" });
-      var errorEl = makeElement("nexus-login-error");
+      var tokenInput = makeElement("dashboard-login-token", { value: "operator" });
+      var errorEl = makeElement("dashboard-login-error");
 
-      sandbox._elements["nexus-login-form"] = form;
-      sandbox._elements["nexus-login-token"] = tokenInput;
-      sandbox._elements["nexus-login-error"] = errorEl;
+      sandbox._elements["dashboard-login-form"] = form;
+      sandbox._elements["dashboard-login-token"] = tokenInput;
+      sandbox._elements["dashboard-login-error"] = errorEl;
       sandbox._setResponse({
         status: 401,
         json: async function () {
@@ -264,10 +264,10 @@ var scenarios = [
       });
     },
     run: async function (sandbox) {
-      var form = sandbox.document.getElementById("nexus-login-form");
+      var form = sandbox.document.getElementById("dashboard-login-form");
       form.getHandler("submit")({ preventDefault: function () {} });
       await tick();
-      var errorEl = sandbox.document.getElementById("nexus-login-error");
+      var errorEl = sandbox.document.getElementById("dashboard-login-error");
       if (errorEl.textContent !== "Invalid token.") {
         throw new Error(
           "expected error 'Invalid token.', got " +
@@ -305,10 +305,10 @@ var scenarios = [
       if (typeof headers.get !== "function") {
         throw new Error("recorded headers is not a Headers instance");
       }
-      if (headers.get("x-nexus-session-key") !== "K1") {
+      if (headers.get("x-dashboard-session-key") !== "K1") {
         throw new Error(
           "missing X-Dashboard-Session-Key, got " +
-            headers.get("x-nexus-session-key")
+            headers.get("x-dashboard-session-key")
         );
       }
       if (headers.get("content-type") !== "application/json") {
@@ -333,10 +333,10 @@ var scenarios = [
       await sandbox.fetch("/diagnostics/metrics.json", { method: "GET" });
       var call = sandbox._fetchCalls[sandbox._fetchCalls.length - 1];
       var headers = call.init && call.init.headers;
-      if (headers && headers.get("x-nexus-session-key")) {
+      if (headers && headers.get("x-dashboard-session-key")) {
         throw new Error(
           "unexpected key header on GET: " +
-            headers.get("x-nexus-session-key")
+            headers.get("x-dashboard-session-key")
         );
       }
     }
@@ -356,10 +356,10 @@ var scenarios = [
       await sandbox.fetch("https://other.example/x", { method: "POST" });
       var call = sandbox._fetchCalls[sandbox._fetchCalls.length - 1];
       var headers = call.init && call.init.headers;
-      if (headers && headers.get("x-nexus-session-key")) {
+      if (headers && headers.get("x-dashboard-session-key")) {
         throw new Error(
           "unexpected key header for cross-origin: " +
-            headers.get("x-nexus-session-key")
+            headers.get("x-dashboard-session-key")
         );
       }
     }
@@ -413,8 +413,8 @@ var scenarios = [
     name: "logout button click",
     setup: function (sandbox) {
       sandbox.localStorage.setItem(STORAGE_KEY, "K1");
-      var logoutBtn = makeElement("nexus-logout");
-      sandbox._elements["nexus-logout"] = logoutBtn;
+      var logoutBtn = makeElement("dashboard-logout");
+      sandbox._elements["dashboard-logout"] = logoutBtn;
       sandbox._setResponse({
         status: 200,
         json: async function () {
@@ -423,7 +423,7 @@ var scenarios = [
       });
     },
     run: async function (sandbox) {
-      var btn = sandbox.document.getElementById("nexus-logout");
+      var btn = sandbox.document.getElementById("dashboard-logout");
       var handler = btn.getHandler("click");
       if (!handler) {
         throw new Error("logout click handler not attached");
@@ -468,7 +468,7 @@ var scenarios = [
       sandbox.window.EventSource = FakeES;
       sandbox._fakeEventSourceClass = FakeES;
       sandbox._now = 0;
-      sandbox.__nexusAuthNow = function () {
+      sandbox.__dashboardAuthNow = function () {
         return sandbox._now;
       };
       sandbox._setResponse({

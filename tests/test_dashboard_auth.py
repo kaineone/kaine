@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import logging
 import time
 
 import httpx
@@ -14,6 +15,7 @@ from starlette.responses import HTMLResponse
 
 from kaine.dashboard.app import create_app
 from kaine.dashboard.auth import (
+    LEGACY_SESSION_KEY_HEADERS,
     SESSION_COOKIE,
     SESSION_KEY_HEADER,
     DashboardAuthError,
@@ -1024,3 +1026,70 @@ def test_landing_path_follows_mounted_console():
 
     assert landing_path(DashboardConfig(conversation_enabled=True)) == "/"
     assert landing_path(DashboardConfig(conversation_enabled=False)) == "/diagnostics/"
+
+
+def test_new_session_key_header_authorizes_post():
+    config = DashboardConfig(operator_token=TOKEN)
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    key = r.json()["session_key"]
+
+    post = client.post("/api/gated", headers={SESSION_KEY_HEADER: key})
+    assert post.status_code == 200
+
+
+def test_legacy_session_key_header_authorizes_and_warns_once(caplog, monkeypatch):
+    monkeypatch.setattr("kaine.dashboard.auth._LOGGED_LEGACY_HEADERS", set())
+
+    config = DashboardConfig(operator_token=TOKEN)
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    key = r.json()["session_key"]
+
+    with caplog.at_level(logging.WARNING):
+        post = client.post("/api/gated", headers={LEGACY_SESSION_KEY_HEADERS[0]: key})
+    assert post.status_code == 200
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    message = warnings[0].message
+    assert SESSION_KEY_HEADER in message
+    assert LEGACY_SESSION_KEY_HEADERS[0] in message
+    assert key not in message
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        post2 = client.post("/api/gated", headers={LEGACY_SESSION_KEY_HEADERS[0]: key})
+    assert post2.status_code == 200
+    assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
+
+def test_missing_session_key_header_rejects_post():
+    config = DashboardConfig(operator_token=TOKEN)
+    app = _wired_app(config)
+    client = TestClient(app, base_url="http://127.0.0.1:8088")
+
+    r = client.post(
+        "/auth/login",
+        data={"token": TOKEN},
+        headers=JSON_ACCEPT,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+
+    post = client.post("/api/gated")
+    assert post.status_code == 401

@@ -23,9 +23,12 @@ def test_base_template_loads_auth_script_first():
     scripts = re.findall(r"<script\b[^>]*>", head, re.IGNORECASE | re.DOTALL)
     assert scripts, "expected at least one <script> in <head>"
 
-    first_script = scripts[0]
-    assert "/static/dashboard_auth.js" in first_script, (
-        "dashboard_auth.js must be the first script loaded in <head>"
+    # The storage helper only defines a function and fetches nothing, so it may
+    # load first; dashboard_auth.js must still wrap fetch before any other script.
+    others = [s for s in scripts if "/static/dashboard_legacy_storage.js" not in s]
+    assert others, "expected dashboard_auth.js in <head>"
+    assert "/static/dashboard_auth.js" in others[0], (
+        "dashboard_auth.js must be the first script loaded in <head> after the storage helper"
     )
 
 

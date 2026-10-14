@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from kaine import legacy_aliases
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _QUADLET_SRC = _REPO_ROOT / "quadlet"
 _SCRIPT_SRC = _REPO_ROOT / "scripts" / "install-quadlet.sh"
@@ -395,3 +397,167 @@ def test_explicit_generator_not_executable_aborts(tmp_path: Path):
     assert result.returncode != 0
     assert f"generator not executable: {missing_gen}" in result.stderr
     assert _empty_dir(dest)
+
+
+OLD = next(f for f in legacy_aliases.name_forms("dashboard") if f != "dashboard")
+OLD_UNIT = f"kaine-{OLD}.container"
+OLD_SERVICE = f"kaine-{OLD}.service"
+
+
+def _write_fake_systemctl(tmp_path: Path) -> Path:
+    script = tmp_path / "systemctl"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        'code_file="${FAKE_SYSTEMCTL_CODE_FILE:-/dev/null}"\n'
+        'if [[ -f "$code_file" ]]; then\n'
+        '  exit "$(cat "$code_file")"\n'
+        "fi\n"
+        "exit 0\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+def _make_dest_with_old_unit(dest: Path, content: str) -> Path:
+    dest.mkdir(parents=True, exist_ok=True)
+    old_path = dest / OLD_UNIT
+    old_path.write_text(content)
+    return old_path
+
+
+def test_install_removes_old_renamed_unit_when_inactive(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(
+        dest,
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+    )
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("3")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not old_path.exists()
+    assert (dest / "kaine-dashboard.container").exists()
+    assert f"removed old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout
+
+
+def test_install_refuses_when_old_renamed_unit_still_active(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(
+        dest,
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+    )
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("0")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 1
+    assert old_path.exists()
+    assert "systemctl --user stop" in result.stderr
+    assert not (dest / "kaine-dashboard.container").exists()
+
+
+def test_install_leaves_unmanaged_old_unit_in_place(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(dest, "[Container]\n")
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("3")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+    assert "left" in result.stderr
+    assert "it was not installed by this script" in result.stderr
+    assert (dest / "kaine-dashboard.container").exists()
+
+
+def test_install_dry_run_reports_old_renamed_unit_removal(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    checkout = tmp_path / "checkout"
+    script = _make_checkout(checkout)
+    dest = tmp_path / "dest"
+    old_path = _make_dest_with_old_unit(
+        dest,
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n",
+    )
+    code_file = tmp_path / "systemctl.code"
+    code_file.write_text("3")
+    fake_systemctl = _write_fake_systemctl(tmp_path)
+
+    result = _run(
+        script,
+        "--root",
+        str(checkout),
+        "--dest",
+        str(dest),
+        "--generator",
+        "none",
+        "--dry-run",
+        cwd=checkout,
+        env={
+            "KAINE_SYSTEMCTL": str(fake_systemctl),
+            "FAKE_SYSTEMCTL_CODE_FILE": str(code_file),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert old_path.exists()
+    assert f"would remove old unit {OLD_UNIT} (renamed to kaine-dashboard.container)" in result.stdout

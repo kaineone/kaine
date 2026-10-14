@@ -60,9 +60,21 @@ def stream_map() -> list[tuple[str, str]]:
     return sorted(pairs)
 
 
+def redis_now_ms(client) -> int:
+    """Return the Redis server's current time in milliseconds.
+
+    Falls back to the local clock if the Redis TIME command is unavailable.
+    """
+    try:
+        seconds, microseconds = client.time()
+        return int(seconds) * 1000 + int(microseconds) // 1000
+    except Exception:
+        return int(time.time() * 1000)
+
+
 def survey(client, *, now_ms=None) -> list[OldStream]:
     if now_ms is None:
-        now_ms = int(time.time() * 1000)
+        now_ms = redis_now_ms(client)
     entries: list[OldStream] = []
     for old, new in stream_map():
         present = bool(client.exists(old))
@@ -179,7 +191,7 @@ def main(argv=None, *, client=None, input_fn=input, out=sys.stdout, err=sys.stde
             return 8
 
     try:
-        now_ms = int(time.time() * 1000)
+        now_ms = redis_now_ms(client)
         entries = survey(client, now_ms=now_ms)
         for entry in entries:
             out.write(f"  {entry.old:<32} -> {entry.new:<32} {_render_status(entry, now_ms)}\n")

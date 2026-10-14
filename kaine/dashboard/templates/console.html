@@ -1,5 +1,5 @@
 {% extends "_base.html" %}
-{% block title %}{{ entity_name }} — Nexus console{% endblock %}
+{% block title %}{{ entity_name }} — dashboard console{% endblock %}
 
 {# The left rail carries the wordmark, the four-state status chip, and in-page
    jump-nav to every section group. The console scrolls to its right. #}
@@ -48,7 +48,7 @@
    COLLAPSED here (the console is a glanceable, single-screen surface); the
    standalone /diagnostics and /diagnostics/evaluation pages leave it unset, so
    they render fully expanded. JS auto-expands + flashes a board when it becomes
-   relevant (see NexusConsole in the scripts block). #}
+   relevant (see the console script in the scripts block). #}
 {% set console_view = true %}
 <div class="page page--console">
 
@@ -189,7 +189,7 @@
         });
       }
       // NOTE: speech-level input (meter.pushAudio) is intentionally left
-      // unconnected — Nexus exposes no audio-level seam and we never stream raw
+      // unconnected — the dashboard exposes no audio-level seam and we never stream raw
       // audio (zero-raw-persistence). The fluid undulates calmly without it.
     });
   }

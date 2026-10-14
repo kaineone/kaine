@@ -1,12 +1,12 @@
-{# Mnemos store health. `mnemos_store` is the HealthProber snapshot block:
+{# Episodic memory store health. `episodic_memory_store` is the HealthProber snapshot block:
    {state, import_pending, blocked_sleeps, persist_refusals, store_bytes,
    budget_bytes, message, since}. The operator's signal for interrupted imports,
    persist refusals, and store size versus budget. Non-content operational data
    only. Defensive: missing block -> unknown. #}
-<section id="mnemos-store" class="panel" data-readonly="true">
+<section id="episodic-memory-store" class="panel" data-readonly="true">
   <h3>Memory store</h3>
-  {% if mnemos_store %}
-    {% set ms = mnemos_store %}
+  {% if episodic_memory_store %}
+    {% set ms = episodic_memory_store %}
     {% set chip = "up" if ms.state == "ok" else ("degraded" if ms.state == "warning" else ("down" if ms.state == "critical" else "unknown")) %}
     <p>
       state: <span class="chip {{ chip }}">{{ ms.state }}</span>

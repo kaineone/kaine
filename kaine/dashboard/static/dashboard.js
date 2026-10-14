@@ -132,7 +132,7 @@
   };
 
   function attach() {
-    var el = document.getElementById("nexus-conn");
+    var el = document.getElementById("dashboard-conn");
     if (!el || !window.DashboardStream) return;
     el.removeAttribute("hidden");
     var label = el.querySelector(".conn-status__label");
@@ -570,7 +570,7 @@
 
   // Evaluation: batch summary.json → time-series + bar charts.
   async function attachEvaluation(summaryUrl) {
-    ["chart-ab", "chart-voice", "chart-eidolon"].forEach(function (id) {
+    ["chart-ab", "chart-voice", "chart-self-model"].forEach(function (id) {
       showEmpty(document.getElementById(id));
     });
     let data;
@@ -595,7 +595,7 @@
         { key: "after", label: "after", stroke: "#E0913A" },
       ]);
       // Eidolon accuracy.
-      seriesChart("chart-eidolon", data.self_model_accuracy || [], [
+      seriesChart("chart-self-model", data.self_model_accuracy || [], [
         { key: "aggregate", label: "accuracy", stroke: "#9EA5BA" },
       ]);
     }
@@ -1064,6 +1064,15 @@
   var MAX = 50;
   var STORE_KEY = "dashboard.preservation.events";
 
+  // Move a value stored under the key's old name before the rename (first load only).
+  if (window.DashboardLegacyStorage) {
+    try {
+      window.DashboardLegacyStorage.migrate(window.sessionStorage, STORE_KEY);
+    } catch (e) {
+      // Storage unavailable; nothing to migrate.
+    }
+  }
+
   // EXACT allowlist mirrored from HealthProber._PRESERVATION_ALLOWED_FIELDS.
   // Anything outside this set is never read or rendered — no content can leak.
   function renderLine(logEl, ev) {
@@ -1211,7 +1220,7 @@
 
 /* ---- Live cycle vitals (run identity / pacing / modules / banner / awake) --
    The cycle/run-identity/pacing/module panels are server-rendered ONCE at page
-   load. Without this, opening Nexus BEFORE starting the cycle leaves those
+   load. Without this, opening the dashboard BEFORE starting the cycle leaves those
    panels frozen on their dead "not running" snapshot forever — the operator
    has to reload the page. This refreshes them in place: a ONE-SHOT fetch of
    /diagnostics/metrics.json + /diagnostics/health.json for the first paint,

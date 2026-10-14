@@ -14,6 +14,9 @@
 #   is missing, naming the bootstrap step that creates each.
 # - Verifies the rendered units with the podman quadlet generator if found.
 # - Never enables, starts, or restarts any unit.
+# - Removes a unit this script installed under a name that was since renamed
+#   (kaine-nexus.container is now kaine-dashboard.container), and refuses
+#   while the old service is still active.
 #
 # Options:
 #   --root DIR       checkout root (default: the checkout containing this script)
@@ -163,6 +166,32 @@ else
   echo "install-quadlet: generator not executable: $GEN" >&2
   exit 1
 fi
+
+# The dashboard unit was renamed from kaine-nexus.container to
+# kaine-dashboard.container. Remove the old unit this script installed, but
+# only when its service is not running. This list goes with the alias release.
+OLD_UNITS=("kaine-nexus.container")
+SYSTEMCTL="${KAINE_SYSTEMCTL:-systemctl}"
+
+for old in "${OLD_UNITS[@]}"; do
+  old_path="$DEST/$old"
+  [[ -e "$old_path" ]] || continue
+  service="${old%.container}.service"
+  if command -v "$SYSTEMCTL" >/dev/null && "$SYSTEMCTL" --user is-active --quiet "$service" >/dev/null 2>&1; then
+    echo "install-quadlet: $service is still running under its old name; stop it first: systemctl --user stop $service" >&2
+    exit 1
+  fi
+  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.4' "$old_path"; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "would remove old unit $old (renamed to kaine-dashboard.container)"
+    else
+      rm -f "$old_path"
+      echo "removed old unit $old (renamed to kaine-dashboard.container)"
+    fi
+  else
+    echo "install-quadlet: left $DEST/$old in place; it was not installed by this script" >&2
+  fi
+done
 
 if [[ $DRY_RUN -eq 1 ]]; then
   for name in "${rendered[@]}"; do

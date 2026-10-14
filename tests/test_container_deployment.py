@@ -33,7 +33,11 @@ import yaml
 from kaine import legacy_names
 
 _DASHBOARD_COMMAND_MODULE = next(
-    e["old"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
+    e["new"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
+)
+# The old dashboard variable a compose/.env written before the rename may still set.
+_OLD_HOST_PORT_VAR = next(
+    e["old"] for e in legacy_names.ENV_VARS if e["new"] == "KAINE_DASHBOARD_HOST_PORT"
 )
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -214,7 +218,10 @@ def test_compose_dashboard_has_privacy_hardening_environment():
     assert "KAINE_DASHBOARD_TOKEN" in env
     # Allowed Origins must reflect the host-published port, not the in-container 8088.
     assert "KAINE_DASHBOARD_ALLOWED_ORIGINS" in env
-    assert "${KAINE_DASHBOARD_HOST_PORT:-8088}" in env["KAINE_DASHBOARD_ALLOWED_ORIGINS"]
+    assert (
+        f"${{KAINE_DASHBOARD_HOST_PORT:-${{{_OLD_HOST_PORT_VAR}:-8088}}}}"
+        in env["KAINE_DASHBOARD_ALLOWED_ORIGINS"]
+    )
 
 
 def test_cycle_and_dashboard_depend_on_healthy_data_services():

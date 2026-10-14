@@ -37,7 +37,7 @@
       <dt>consolidation divergence rate</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_rate) if entity_care.signals.consolidation_divergence_rate is not none else "—" }}</dd>
       <dt>consolidation divergence magnitude</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_magnitude) if entity_care.signals.consolidation_divergence_magnitude is not none else "—" }}</dd>
       <dt>consolidation divergence over threshold</dt><dd>{{ "yes" if entity_care.signals.consolidation_divergence_signal else "no" }}</dd>
-      <dt>eidolon drift count</dt><dd>{{ entity_care.signals.self_model_drift_count }}</dd>
+      <dt>self-model drift count</dt><dd>{{ entity_care.signals.self_model_drift_count }}</dd>
       <dt>identity-history length</dt><dd>{{ entity_care.signals.self_model_identity_history_len }}</dd>
       <dt>voice adapters present</dt><dd>{{ "yes" if entity_care.signals.sleep_adapters_present else "no" }}</dd>
     </dl>

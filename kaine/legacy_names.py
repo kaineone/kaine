@@ -987,11 +987,37 @@ RESOLUTIONS = [
         "why": "fallback to the old variable in an operator's compose/.env, read until the alias release",
     },
     {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["pyproject.toml"],
+        "pattern": r"^nexus = \[\"kaine\[dashboard\]\"\]",
+        "why": "the old pip extra, kept as an alias of the dashboard extra until the alias release",
+    },
+    {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["scripts/prepare-headless-host.sh"],
+        "pattern": r"--serve-nexus(?:\)| is deprecated)",
+        "why": "the old flag, accepted with a warning until the alias release",
+    },
+    {
         "name": "birth",
         "action": "keep",
         "files": ["tests/test_ignition_study_runner.py"],
         "pattern": r"wait_for_request\(state_dir, \"birth\"",
         "why": "the stored preservation reason the runner requests, which moves with the persisted names",
+    },
+    {
+        "name": "gestation",
+        "action": "keep",
+        "pattern": r"\"locked_by\": \"gestation\"",
+        "why": "the stored lock holder value, which moves with the persisted names",
+    },
+    {
+        "name": "gestation",
+        "action": "keep",
+        "pattern": r"gestation_started_at",
+        "why": "stored request field, which moves with the persisted names",
     },
     {
         "name": "birth",
@@ -1196,6 +1222,11 @@ EXCLUDED_GLOBS = (
     # on purpose.
     "tests/test_legacy_streams_cleanup.py",
     "tests/test_keys_flip_dry_boot.py",
+    # PR 7: the browser storage helper and its tests name the old storage keys on
+    # purpose, so a browser that still holds them is migrated.
+    "kaine/dashboard/static/dashboard_legacy_storage.js",
+    "tests/js/dashboard_legacy_storage_harness.js",
+    "tests/test_dashboard_legacy_storage_js.py",
     # Golden pins on stored names that never change.
     "tests/test_stimulus_source_params_digest.py",
     # These documents record the rename itself and must keep the old names.

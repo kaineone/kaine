@@ -1097,8 +1097,12 @@ def check_storage(config: dict[str, Any], *, disk_usage=None) -> list[CheckResul
     ]
 
 
-async def _probe_old_streams() -> list[legacy_streams.OldStream]:
-    """List the old-named streams that remain on the KAINE Redis after the keys rename."""
+async def _probe_old_streams() -> tuple[list[legacy_streams.OldStream], int]:
+    """List old-named streams remaining on the KAINE Redis and return the server's time.
+
+    Returns a pair ``(entries, now_ms)`` where ``now_ms`` is the Redis server's
+    clock in milliseconds at the start of the probe.
+    """
     import redis.asyncio as aioredis
 
     from kaine.bus.config import load_bus_config
@@ -1111,6 +1115,12 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
         socket_timeout=BUS_PROBE_TIMEOUT_S,
     )
     try:
+        try:
+            seconds, microseconds = await client.time()
+            now_ms = int(seconds) * 1000 + int(microseconds) // 1000
+        except Exception:
+            now_ms = int(time.time() * 1000)
+
         entries: list[legacy_streams.OldStream] = []
         for old, new in legacy_streams.stream_map():
             present = bool(await client.exists(old))
@@ -1133,7 +1143,7 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
                             last_entry_ms = int(entry_id.split("-", 1)[0])
                     except Exception:
                         # Age unknown: count it as just written.
-                        last_entry_ms = int(time.time() * 1000)
+                        last_entry_ms = now_ms
             entries.append(
                 legacy_streams.OldStream(
                     old=old,
@@ -1145,7 +1155,7 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
                     last_entry_ms=last_entry_ms,
                 )
             )
-        return entries
+        return entries, now_ms
     finally:
         try:
             await client.close()
@@ -1167,7 +1177,7 @@ async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
     if probe is None:
         probe = _probe_old_streams
     try:
-        entries = await asyncio.wait_for(probe(), timeout=BUS_PROBE_TIMEOUT_S)
+        entries, now_ms = await asyncio.wait_for(probe(), timeout=BUS_PROBE_TIMEOUT_S)
     except Exception as exc:
         return [
             CheckResult(
@@ -1177,7 +1187,7 @@ async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
                 detail=f"could not check for old-named streams ({type(exc).__name__})",
             )
         ]
-    to_delete = legacy_streams.deletable(entries)
+    to_delete = legacy_streams.deletable(entries, now_ms=now_ms)
     if to_delete:
         total = sum(entry.memory_bytes for entry in to_delete)
         first = to_delete[0].old

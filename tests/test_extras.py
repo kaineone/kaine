@@ -6,12 +6,14 @@ import importlib
 import importlib.util
 import io
 import sys
+import tomllib
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from kaine import extras as extras_module
+from kaine import legacy_aliases
 from kaine.boot import ConfigurationError, build_registry
 from kaine.extras import Missing, check, format_missing
 from tests._module_packages import identifier_for_key
@@ -565,3 +567,14 @@ def test_torch_requirement_fallback_to_project_dependencies(tmp_path):
     wheel_index = _load_wheel_index()
     spec = wheel_index.torch_requirement(pyproject)
     assert spec == "torch>=2.0"
+
+
+def test_dashboard_extra_and_legacy_reference():
+    old = next(f for f in legacy_aliases.name_forms("dashboard") if f != "dashboard")
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    with open(pyproject, "rb") as fh:
+        data = tomllib.load(fh)
+    extras = data["project"]["optional-dependencies"]
+    assert "dashboard" in extras
+    assert old in extras
+    assert extras[old] == ["kaine[dashboard]"]

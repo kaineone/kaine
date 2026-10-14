@@ -973,3 +973,21 @@ def test_cli_setup_refuses_an_old_table_without_a_token(tmp_path, monkeypatch):
     status = _ensure_dashboard_token(secrets_path, out=lines.append)
     assert status == "conflict"
     assert secrets_path.read_bytes() == before
+
+
+def test_cli_setup_refuses_dashboard_and_old_table_together(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    token = "t" * 40
+    secrets_path.write_text(
+        f'[dashboard]\noperator_token = "{token}"\n\n[{OLD_TABLE}]\noperator_token = "{token}"\n'
+    )
+    before = secrets_path.read_bytes()
+    lines = []
+    status = _ensure_dashboard_token(secrets_path, out=lines.append)
+    output = "".join(lines)
+    assert status == "conflict"
+    assert secrets_path.read_bytes() == before
+    assert "[dashboard]" in output
+    assert f"[{OLD_TABLE}]" in output
+    assert token not in output

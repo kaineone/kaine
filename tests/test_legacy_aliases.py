@@ -31,6 +31,7 @@ def test_scope_done_follows_scope_status(monkeypatch) -> None:
 
 def test_active_filters_by_scope(monkeypatch) -> None:
     _set_scope(monkeypatch, "keys")
+    _pin_pending(monkeypatch, "operator")
     entries = (
         {"old": "a", "new": "b", "scope": "keys"},
         {"old": "c", "new": "d", "scope": "operator"},

@@ -91,6 +91,17 @@ def ensure_dashboard_token(
         )
         return "error"
 
+    tables = _table_names(secrets_path)
+    if "dashboard" in tables:
+        for form in legacy_aliases.name_forms("dashboard"):
+            if form != "dashboard" and form in tables:
+                out(
+                    f"{secrets_path} has both [dashboard] and [{form}] tables; the dashboard "
+                    f"refuses such a file. Move operator_token into [dashboard], delete [{form}], "
+                    "then re-run setup. Nothing written.\n"
+                )
+                return "conflict"
+
     if existing_table is not None and isinstance(existing_value, str) and existing_value.strip():
         # Never overwrite an operator's token, but say so when the dashboard would
         # refuse it rather than reporting it as fine.

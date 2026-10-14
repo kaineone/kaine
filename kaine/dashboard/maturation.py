@@ -114,8 +114,10 @@ def build_maturation_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics")
 
+    @router.get("/maturation.json", include_in_schema=False)
+    @router.get("/maturation")
     @router.get("/birth.json", include_in_schema=False)
-    @router.get("/birth")
+    @router.get("/birth", include_in_schema=False)
     async def maturation_json():
         return JSONResponse(
             maturation_snapshot(
@@ -126,7 +128,8 @@ def build_maturation_router(
             headers=NO_CACHE,
         )
 
-    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)])
+    @router.post("/maturation/ack", dependencies=[Depends(require_operator_token)])
+    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False)
     async def maturation_ack(body: AckBody):
         request = read_request(path=request_path)
         if request is None:

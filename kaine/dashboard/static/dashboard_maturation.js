@@ -18,7 +18,7 @@
   var ACK_CANCEL_ID = "dev-ack-cancel";
   var ACK_MSG_ID = "dev-ack-msg";
   var STATUS_URL = "/diagnostics/maturation.json";
-  var ACK_URL = "/diagnostics/birth/ack";
+  var ACK_URL = "/diagnostics/maturation/ack";
   var POLL_MS = 5000;
 
   function byId(id) {
