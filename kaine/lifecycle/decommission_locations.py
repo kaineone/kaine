@@ -617,6 +617,8 @@ def entity_locations(
                     live_organ_paths.append(linked)
                     live_organ_set.add(linked)
             except Exception:
+                # An unreadable manifest names no file; active.json alone
+                # stays live (kept), which is the safe side.
                 pass
     own_organ_paths = [p for p in own_organ_paths if p not in live_organ_set]
 
