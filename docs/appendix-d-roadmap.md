@@ -51,6 +51,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | third-party-font-notices | 4/4 (100%) | The vendored dashboard fonts ship their copyright notices and licence text, and the third-party notices name the fonts on disk. |
 | decommission-clears-bus-streams | 8/8 (100%) | Decommission deletes the entity's bus streams by their real names. |
 | decommission-complete-coverage | 21/21 (100%) | Decommission backs up, deletes or keeps every location of an entity's data, by a reviewed decision for each. |
+| per-entity-shared-volumes | 0/6 (0%) | Shared adapter and job volumes keep each entity's files under its own id, so ownership is structural. |
 | context-age-from-publication | 4/4 (100%) | Context age is entity time since the broadcast's publication. |
 | research-log-access-fields | 4/4 (100%) | The research log carries the access and context fields the planned test reads. |
 | awake-time-excludes-sleep | 4/4 (100%) | Awake time excludes sleep as well as freezes. |
@@ -101,6 +102,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 75 active changes, 268 archived changes and 104 capability specs.
+The roadmap contains 76 active changes, 268 archived changes and 104 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
