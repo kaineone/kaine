@@ -180,6 +180,12 @@ PLANNED_TEST_REFUSED_EXIT = 12
 STAGE_REFUSED_EXIT = 13
 
 
+# Exit code when the state tree cannot be renamed to the functional module names
+# (an old and a new name for one item, or a migration step that failed); nothing
+# was changed by a refusal.
+RENAME_REFUSED_EXIT = 14
+
+
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
 
@@ -3037,6 +3043,19 @@ def main(argv: list[str] | None = None) -> int:
     root = install_data_root(config)
     if root is not None:
         log.info("growing data under %s", root)
+
+    import sqlite3
+
+    from kaine.lifecycle import rename_state
+
+    try:
+        rename_state.migrate_at_boot(config, resolve(Path("state")))
+    except rename_state.RenameStateError as exc:
+        sys.stderr.write(f"kaine.cycle: state rename refused: {exc}\n")
+        return RENAME_REFUSED_EXIT
+    except (OSError, sqlite3.Error, ImportError) as exc:
+        sys.stderr.write(f"kaine.cycle: state rename failed: {type(exc).__name__}: {exc}\n")
+        return RENAME_REFUSED_EXIT
 
     # Fail closed on an unrecognized stored stage value before anything reads or
     # writes the stage file. An unreadable file keeps its fail-safe reading.

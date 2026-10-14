@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import quote, urlsplit
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
 from kaine.cycle.preserve_watch import read_request, read_result
@@ -136,11 +136,42 @@ class StudyRunner:
         self.disk_usage = disk_usage or shutil.disk_usage
         self.cycle_alive = cycle_alive or _cycle_process_alive
         self._lock_fd: Any | None = None
+        self._move_old_line_dirs()
         self._load_state()
 
     # --------------------------------------------------------------------- #
     # State
     # --------------------------------------------------------------------- #
+
+    def _move_old_line_dirs(self) -> None:
+        for entry in legacy_aliases.active(legacy_names.STAGE_VALUES):
+            old = entry["old"]
+            new = entry["new"]
+            old_dir = self.study_dir / old
+            if not (old_dir.is_symlink() or old_dir.exists()):
+                continue
+            if old_dir.is_symlink():
+                raise StudyError(
+                    f"study {self.study_dir}: {old}/ is a symlink; move it aside and re-run"
+                )
+            new_dir = self.study_dir / new
+            if new_dir.exists():
+                raise StudyError(
+                    f"study {self.study_dir} holds both {old}/ and {new}/; move one aside and re-run"
+                )
+            os.rename(old_dir, new_dir)
+            log.info("Renamed study line directory %s -> %s", old_dir, new_dir)
+
+    def _map_bundle_path(self, path: str) -> str:
+        p = Path(path)
+        for entry in legacy_aliases.active(legacy_names.STAGE_VALUES):
+            old_dir = self.study_dir / entry["old"]
+            try:
+                rel = p.relative_to(old_dir)
+            except ValueError:
+                continue
+            return str(self.study_dir / entry["new"] / rel)
+        return path
 
     def _load_state(self) -> None:
         self.steps: list[dict[str, Any]] = []
@@ -150,9 +181,14 @@ class StudyRunner:
                 if not line:
                     continue
                 try:
-                    self.steps.append(json.loads(line))
+                    record = json.loads(line)
                 except json.JSONDecodeError:
                     log.warning("Ignoring malformed steps.jsonl line: %s", line)
+                    continue
+                record = legacy_aliases.map_study_step(record)
+                if isinstance(record.get("bundle"), str):
+                    record["bundle"] = self._map_bundle_path(record["bundle"])
+                self.steps.append(record)
 
         self.line_bundles: dict[tuple[str, int], str | None] = {}
         self.completed_steps: set[tuple[str, int]] = set()
@@ -1000,7 +1036,7 @@ class StudyRunner:
             return "failed:stale_bundle"
 
         expected_reason = "maturation" if step_kind == "development" else "programme end"
-        if request.reason != expected_reason:
+        if legacy_aliases.map_stored_value(request.reason) != expected_reason:
             return f"failed:reason:{request.reason}"
 
         return "complete"

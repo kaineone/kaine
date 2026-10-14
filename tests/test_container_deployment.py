@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kaine import legacy_names
+from kaine import legacy_aliases, legacy_names
 
 _DASHBOARD_COMMAND_MODULE = next(
     e["new"] for e in legacy_names.PACKAGING if e["kind"] == "module_shim" and e["old"].count(".") == 1
@@ -341,11 +341,14 @@ def test_no_durable_bind_or_volume_mounts_a_raw_sense_path():
             if is_tmpfs:
                 yield target
 
-    # The cycle's only perception scratch is tmpfs (either declaration form).
+    # The cycle's only perception scratch, the perceptual locus module's state
+    # directory, is tmpfs (either declaration form).
     cycle = doc["services"]["kaine-cycle"]
-    assert any("perception" in t for t in _tmpfs_targets(cycle))
-    # And no named volume backs it.
-    assert not any("perception" in nv for nv in named_volumes)
+    assert any(t.endswith("/state/perceptual_locus") for t in _tmpfs_targets(cycle))
+    # And no named volume backs it under either of its names.
+    assert not any(
+        form in nv for nv in named_volumes for form in legacy_aliases.name_forms("perceptual_locus")
+    )
 
 
 # --------------------------------------------------------------------------

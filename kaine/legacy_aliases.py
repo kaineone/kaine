@@ -753,7 +753,7 @@ def name_forms(name: str) -> tuple[str, ...]:
 
 
 def map_study_plan(plan: dict) -> dict:
-    """Map module names inside a study plan when the keys scope is done.
+    """Map module and persisted names inside a study plan when their scopes are done.
 
     The stored study.json is never rewritten; this maps on read.
     """
@@ -764,7 +764,56 @@ def map_study_plan(plan: dict) -> dict:
         value = mapped.get(key)
         if isinstance(value, list):
             mapped[key] = map_module_list(value)
+
+    if scope_done("persisted"):
+        redis = mapped.get("redis")
+        if isinstance(redis, dict):
+            redis = dict(redis)
+            db = redis.get("db")
+            if isinstance(db, dict):
+                redis["db"] = {map_stored_value(k): v for k, v in db.items()}
+            mapped["redis"] = redis
+
+        collections = mapped.get("collections")
+        if isinstance(collections, dict):
+            mapped["collections"] = {map_stored_value(k): v for k, v in collections.items()}
+
+        voice_alignment_steps = mapped.get("voice_alignment_steps")
+        if isinstance(voice_alignment_steps, list):
+            mapped["voice_alignment_steps"] = [
+                {**step, "line": map_stored_value(step["line"])}
+                if isinstance(step, dict) and isinstance(step.get("line"), str)
+                else step
+                for step in voice_alignment_steps
+            ]
+
+        for entry in active(_table().STAGE_VALUES):
+            old_key = f"{entry['old']}_budget_seconds"
+            new_key = f"{entry['new']}_budget_seconds"
+            if old_key in mapped:
+                if new_key not in mapped:
+                    mapped[new_key] = mapped.pop(old_key)
+                else:
+                    mapped.pop(old_key)
+                    _warn_record_both(old_key, new_key)
+
     return mapped
+
+
+def map_study_step(record: dict) -> dict:
+    """Map persisted names inside a recorded study step.
+
+    ``steps.jsonl`` is append-only and never rewritten; this maps on read.
+    """
+    if not scope_done("persisted"):
+        return record
+    mapped = dict(record)
+    for key in ("line", "outcome"):
+        value = mapped.get(key)
+        if isinstance(value, str):
+            mapped[key] = map_stored_value(value)
+    return mapped
+
 
 
 def map_freeze_source(source):

@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
+from kaine import legacy_names
+
 from kaine.lifecycle.identity import (
     IDENTITY_PATH,
     OWN_LIVED_ARTIFACTS,
@@ -48,15 +50,19 @@ def test_identity_path_is_relative():
 
 
 def test_own_lived_artifacts_listing(tmp_path):
-    assert OWN_LIVED_ARTIFACTS == (
-        Path("lifecycle/stage.json"),
-        Path("world_model/world_model.ckpt"),
-        Path("world_model/world_model.ckpt"),
-        Path("sleep/consolidation_divergence.json"),
-        Path("sleep/consolidation_divergence.json"),
-        Path("perception/desired.json"),
-        Path("perceptual_locus/desired.json"),
-    )
+    # Each lived artifact under its old name, then its new name; the old names come
+    # from the table so a rename run cannot collapse the two.
+    def _entry(new):
+        return next(e for e in legacy_names.LIVED_ARTIFACTS if e["new"] == new)
+
+    expected = [Path("lifecycle/stage.json")]
+    for new in (
+        "world_model/world_model.ckpt",
+        "sleep/consolidation_divergence.json",
+        "perceptual_locus/desired.json",
+    ):
+        expected += [Path(_entry(new)["old"]), Path(new)]
+    assert OWN_LIVED_ARTIFACTS == tuple(expected)
     stage = tmp_path / "lifecycle" / "stage.json"
     stage.parent.mkdir(parents=True)
     stage.write_text("{}")

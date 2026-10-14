@@ -104,7 +104,13 @@ def renamed_repo(tmp_path, monkeypatch, rename_modules):
             [
                 "--apply",
                 "--scope",
-                "keys",
+                # Every config-reaching scope the table marks done: the keys run
+                # renames tables and keys, the persisted run renames stored paths
+                # and the switches named like sidecar directories.
+                ",".join(
+                    scope for scope in ("keys", "persisted")
+                    if legacy_names.SCOPE_STATUS.get(scope) == "done"
+                ) or "keys",
                 "--root",
                 str(repo),
                 "--table",

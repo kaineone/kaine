@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Pins for names that must stay byte-identical until the persisted rename step."""
+"""Pins for stored names: each matches the rename table, under the old name until the
+persisted step and under the new name after it. The helpers accept either spelling,
+because a codemod run rewrites the names the tests pass them."""
 
 import dataclasses
 import inspect
@@ -34,7 +36,7 @@ PERSISTED_DONE = legacy_names.SCOPE_STATUS.get("persisted") == "done"
 def _state_path(old_rel: str) -> str:
     """Return 'state/' plus the table entry for *old_rel*, using the old or new name."""
     for entry in legacy_names.STATE_PATHS + legacy_names.LIVED_ARTIFACTS:
-        if entry["old"] == old_rel:
+        if old_rel in (entry["old"], entry["new"]):
             return "state/" + (entry["new"] if PERSISTED_DONE else entry["old"])
     raise AssertionError(f"no table entry for {old_rel}")
 
@@ -42,7 +44,7 @@ def _state_path(old_rel: str) -> str:
 def _collection(old: str) -> str:
     """Return the collection name for *old*, using the old or new name."""
     for entry in legacy_names.COLLECTIONS:
-        if entry["old"] == old:
+        if old in (entry["old"], entry["new"]):
             return entry["new"] if PERSISTED_DONE else entry["old"]
     raise AssertionError(old)
 
@@ -237,7 +239,7 @@ def test_gate_action_values_pinned():
 def _stored_tag(old: str) -> str:
     """Return the stored tag for *old*, using the old or new spelling."""
     for entry in legacy_names.STORED_TAGS:
-        if entry["old"] == old:
+        if old in (entry["old"], entry["new"]):
             return entry["new"] if PERSISTED_DONE else entry["old"]
     raise AssertionError(f"no STORED_TAGS entry for {old}")
 

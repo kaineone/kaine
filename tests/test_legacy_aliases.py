@@ -361,6 +361,7 @@ def test_map_stream(monkeypatch) -> None:
 
 def test_map_record(monkeypatch) -> None:
     _set_scope(monkeypatch, "keys")
+    _pin_pending(monkeypatch, "persisted")
     record = {
         "event_type": "thymos.state",
         "source": "soma",

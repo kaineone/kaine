@@ -20,6 +20,8 @@ from kaine.lifecycle import preservation, stage
 from kaine.security import crypto
 from kaine.security.crypto import CryptoConfig, StateEncryptor
 
+OLD_DEVELOPMENT = next(e["old"] for e in legacy_names.STAGE_VALUES if e["new"] == "development")
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SHIPPED_CONFIG = _REPO_ROOT / "config" / "kaine.toml"
 
@@ -37,7 +39,7 @@ def _hermetic_cwd(tmp_path: Path, monkeypatch) -> None:
         "embod1ed",
         "embodied\x00",
         "adolescence",
-        "development",
+        "larval",
         42,
         3.5,
         None,
@@ -164,15 +166,17 @@ def test_revive_refuses_unrecognized_bundle_stage(tmp_path: Path, monkeypatch) -
 def test_never_regress_with_synthetic_alias(monkeypatch) -> None:
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(stage, "STAGES", ("development", "embodied"))
+    assert stage._coerce_stage(OLD_DEVELOPMENT) == "development"
     assert stage._coerce_stage("development") == "development"
-    assert stage._coerce_stage("development") == "development"
-    assert stage.StageState.from_dict({"stage": "development"}).stage == "development"
+    assert stage.StageState.from_dict({"stage": OLD_DEVELOPMENT}).stage == "development"
     with pytest.raises(stage.StageValueError):
         stage._coerce_stage("larval")
 
 
-def test_pending_scope_keeps_development_readable() -> None:
-    assert legacy_names.SCOPE_STATUS.get("persisted") != "done"
+def test_old_stored_stage_value_reads_as_development() -> None:
+    """A stage file written before the rename still reads as the developmental stage."""
+    assert legacy_names.SCOPE_STATUS.get("persisted") == "done"
+    assert stage._coerce_stage(OLD_DEVELOPMENT) == "development"
     assert stage._coerce_stage("development") == "development"
 
 

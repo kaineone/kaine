@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 import stat
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -1083,6 +1084,47 @@ def _format_step(step: dict) -> str:
     if kind == "qdrant_alias":
         return f"qdrant_alias: {step['alias']} -> {step['collection']}"
     return f"{kind}: {step}"
+
+
+def migrate_at_boot(config: Mapping[str, Any], state_root: Path) -> RenameResult:
+    """Migrate the live state tree before the cycle reads it.
+
+    Safe to call on every boot: a tree that is already migrated returns a
+    ``noop`` result without writing anything. When Qdrant is configured, this
+    function builds a client, performs the migration with alias updates, and
+    closes the client afterwards.
+    """
+    state_root = Path(state_root)
+    if not state_root.exists():
+        return RenameResult("noop", ())
+
+    from kaine.lifecycle import decommission
+
+    qdrant_in_use = decommission.qdrant_in_use(config)
+    if qdrant_in_use:
+        client = decommission._qdrant_client(config)
+        if client is None:
+            raise RenameStateError(
+                "rename_state: Qdrant is in use but no client could be built; "
+                "check [episodic_memory.qdrant] and re-run"
+            )
+        adapter = QdrantClientAliases(client)
+        try:
+            result = migrate(state_root, qdrant=adapter)
+        finally:
+            try:
+                client.close()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("rename_state: ignoring Qdrant client close error: %s", exc)
+    else:
+        result = migrate(state_root, no_qdrant=True)
+
+    if result.status != "noop":
+        log.info("rename_state: %s; %d steps", result.status, len(result.steps))
+        for step in result.steps:
+            log.info("rename_state: %s", _format_step(step))
+
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
