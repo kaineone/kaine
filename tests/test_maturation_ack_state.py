@@ -92,7 +92,7 @@ def test_invalid_development_started_at_type_reads_as_none(tmp_path):
     request_path = tmp_path / "birth_request.json"
     request_path.write_text(
         '{"request_id": "a" * 32, "requested_at": "2024-01-01T00:00:00+00:00", '
-        '"gestation_started_at": 123}',
+        '"development_started_at": 123}',
         encoding="utf-8",
     )
     assert read_request(request_path) is None

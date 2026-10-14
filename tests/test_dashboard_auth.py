@@ -635,9 +635,9 @@ def test_login_page_has_csp_and_external_script_only():
     assert "form-action 'self'" in csp
 
     body = r.text
-    assert 'id="nexus-login-form"' in body
-    assert 'id="nexus-login-token"' in body
-    assert 'id="nexus-login-error"' in body
+    assert 'id="dashboard-login-form"' in body
+    assert 'id="dashboard-login-token"' in body
+    assert 'id="dashboard-login-error"' in body
     assert 'action="/auth/login"' in body
     assert 'method="post"' in body
     assert 'type="password"' in body

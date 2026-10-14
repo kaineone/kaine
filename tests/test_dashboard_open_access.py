@@ -175,7 +175,7 @@ def test_root_redirects_when_conversation_disabled():
 def test_bad_access_env_raises(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_ACCESS", "bogus")
+    monkeypatch.setenv("KAINE_DASHBOARD_ACCESS", "bogus")
 
     with pytest.raises(DashboardConfigError) as exc:
         load_dashboard_config(path=p)
@@ -186,7 +186,7 @@ def test_bad_access_env_raises(monkeypatch, tmp_path):
 def test_empty_access_env_keeps_toml_value(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text('[dashboard]\naccess = "open"\n')
-    monkeypatch.setenv("KAINE_NEXUS_ACCESS", "")
+    monkeypatch.setenv("KAINE_DASHBOARD_ACCESS", "")
 
     cfg = load_dashboard_config(path=p)
     assert cfg.access == "open"
@@ -196,7 +196,7 @@ def test_extra_hosts_extend_allowlist_and_origins(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text("[dashboard]\nport = 8088\n")
     monkeypatch.setenv(
-        "KAINE_NEXUS_EXTRA_HOSTS",
+        "KAINE_DASHBOARD_EXTRA_HOSTS",
         "kaine-box.tail1234.ts.net, 100.64.0.7",
     )
 
@@ -210,7 +210,7 @@ def test_extra_hosts_extend_allowlist_and_origins(monkeypatch, tmp_path):
 def test_invalid_extra_host_raises(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_EXTRA_HOSTS", "bad_host!")
+    monkeypatch.setenv("KAINE_DASHBOARD_EXTRA_HOSTS", "bad_host!")
 
     with pytest.raises(DashboardConfigError) as exc:
         load_dashboard_config(path=p)
@@ -221,8 +221,8 @@ def test_invalid_extra_host_raises(monkeypatch, tmp_path):
 def test_published_port_added_to_extra_origins(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text("[dashboard]\nport = 8088\n")
-    monkeypatch.setenv("KAINE_NEXUS_EXTRA_HOSTS", "kaine-box.tail1234.ts.net")
-    monkeypatch.setenv("KAINE_NEXUS_PUBLISHED_PORT", "9099")
+    monkeypatch.setenv("KAINE_DASHBOARD_EXTRA_HOSTS", "kaine-box.tail1234.ts.net")
+    monkeypatch.setenv("KAINE_DASHBOARD_PUBLISHED_PORT", "9099")
 
     cfg = load_dashboard_config(path=p)
     assert any(entry == "http://kaine-box.tail1234.ts.net:9099" for entry in cfg.allowed_origins)
@@ -290,7 +290,7 @@ def test_read_only_blocks_cycle_rates_and_publisher_not_called():
         headers={"Origin": "http://127.0.0.1:8088"},
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "Nexus is in read-only mode: controls are off"
+    assert r.json()["detail"] == "Dashboard is in read-only mode: controls are off"
     publisher.assert_not_called()
 
 
@@ -317,13 +317,13 @@ def test_read_only_blocks_any_control_route():
 
     r = client.post("/forks", json={}, headers={"Origin": "http://127.0.0.1:8088"})
     assert r.status_code == 403
-    assert r.json()["detail"] == "Nexus is in read-only mode: controls are off"
+    assert r.json()["detail"] == "Dashboard is in read-only mode: controls are off"
 
 
 def test_read_only_env_override(monkeypatch, tmp_path):
     p = tmp_path / "kaine.toml"
     p.write_text("[dashboard]\n")
-    monkeypatch.setenv("KAINE_NEXUS_READ_ONLY", "1")
+    monkeypatch.setenv("KAINE_DASHBOARD_READ_ONLY", "1")
 
     cfg = load_dashboard_config(path=p)
     assert cfg.read_only is True

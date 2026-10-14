@@ -80,7 +80,7 @@ async def test_not_started_without_a_self_rhythm_and_says_why(caplog) -> None:
             is_paused=lambda: False,
         )
     assert task is None
-    assert any("gestation readout unavailable" in r.getMessage() for r in caplog.records)
+    assert any("development readout unavailable" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio

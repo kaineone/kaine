@@ -495,7 +495,7 @@ async def test_freeze_watch_development_only_does_not_touch_perception(freeze_lo
         stack=(
             {
                 "source": DEVELOPMENT_FREEZE_SOURCE,
-                "reason": "womb lost",
+                "reason": "stimulus source lost",
                 "frozen_at": "x",
             },
         ),
@@ -554,7 +554,7 @@ async def test_freeze_watch_perception_reconciled_while_paused(freeze_loop_env):
         stack=(
             {
                 "source": DEVELOPMENT_FREEZE_SOURCE,
-                "reason": "womb lost",
+                "reason": "stimulus source lost",
                 "frozen_at": "x",
             },
         ),
@@ -570,7 +570,7 @@ async def test_freeze_watch_perception_reconciled_while_paused(freeze_loop_env):
         stack=(
             {
                 "source": DEVELOPMENT_FREEZE_SOURCE,
-                "reason": "womb lost",
+                "reason": "stimulus source lost",
                 "frozen_at": "x",
             },
             {"source": "operator", "reason": "hold", "frozen_at": "y"},
@@ -586,7 +586,7 @@ async def test_freeze_watch_perception_reconciled_while_paused(freeze_loop_env):
         stack=(
             {
                 "source": DEVELOPMENT_FREEZE_SOURCE,
-                "reason": "womb lost",
+                "reason": "stimulus source lost",
                 "frozen_at": "x",
             },
         ),

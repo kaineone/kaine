@@ -62,7 +62,7 @@
   {% endif %}
 
   {# The module grid is always rendered (the prober always returns a module
-     list) so NexusVitals can rebuild its cells live from health.modules plus
+     list) so DashboardVitals can rebuild its cells live from health.modules plus
      recent per-module bus activity — a publishing module is never shown idle. #}
   <h3 id="module-grid-heading"{% if not (health and health.modules) %} hidden{% endif %}>modules</h3>
   <div class="module-grid" id="module-grid">

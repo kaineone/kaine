@@ -70,7 +70,7 @@ def test_operator_lock_behavior_unchanged(desired_path: Path) -> None:
 
 def test_unknown_locus_in_development_lock_resolves_to_virtual(desired_path: Path) -> None:
     desired_path.write_text(
-        '{"locus": "unknown_place", "locus_locked": true, "locked_by": "gestation"}'
+        '{"locus": "unknown_place", "locus_locked": true, "locked_by": "development"}'
     )
     state = read_desired(desired_path)
     assert state.locus == "virtual"

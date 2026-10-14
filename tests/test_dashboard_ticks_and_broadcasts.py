@@ -261,7 +261,7 @@ async def test_chart_routing_in_real_browser():
             page = await browser.new_page(viewport={"width": 1600, "height": 1000})
 
             config = DashboardConfig(
-                host_allowlist=("127.0.0.1", "localhost", "test", "nexus.test"),
+                host_allowlist=("127.0.0.1", "localhost", "test", "dashboard.test"),
             )
             client, app = await _make_client(
                 config=config,
@@ -307,7 +307,7 @@ async def test_chart_routing_in_real_browser():
 
                     results = await page.evaluate(
                         """(msgs) => {
-                            const routing = window.NexusChartRouting;
+                            const routing = window.DashboardChartRouting;
                             return msgs.map(m => routing.chartSamples(m));
                         }""",
                         [
@@ -354,7 +354,7 @@ async def test_live_series_batches_redraws_in_real_browser():
             page = await browser.new_page(viewport={"width": 1600, "height": 1000})
 
             config = DashboardConfig(
-                host_allowlist=("127.0.0.1", "localhost", "test", "nexus.test"),
+                host_allowlist=("127.0.0.1", "localhost", "test", "dashboard.test"),
             )
             client, app = await _make_client(
                 config=config,
@@ -400,14 +400,14 @@ async def test_live_series_batches_redraws_in_real_browser():
 
                     count = await page.evaluate(
                         """() => {
-                            if (typeof uPlot === "undefined" || typeof window.NexusLiveSeries === "undefined") {
+                            if (typeof uPlot === "undefined" || typeof window.DashboardLiveSeries === "undefined") {
                                 return null;
                             }
                             const div = document.createElement("div");
                             div.style.width = "400px";
                             div.style.height = "200px";
                             document.body.appendChild(div);
-                            const series = new window.NexusLiveSeries(div, [{label: "x", stroke: "#000"}]);
+                            const series = new window.DashboardLiveSeries(div, [{label: "x", stroke: "#000"}]);
                             series.push(Date.now() / 1000, [1]);
                             return new Promise(resolve => {
                                 requestAnimationFrame(() => {

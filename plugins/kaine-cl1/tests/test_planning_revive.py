@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("kaine", reason="kaine boot tests require kaine package")
 pytest.importorskip("fakeredis", reason="kaine boot tests require fakeredis")
-pytest.importorskip("pymdp", reason="KAINE's Nous engine needs pymdp")
+pytest.importorskip("pymdp", reason="KAINE's Planning engine needs pymdp")
 
 os.environ.setdefault("CL_SDK_ACCELERATED_TIME", "1")
 os.environ.setdefault("CL_SDK_VISUALISATION", "0")

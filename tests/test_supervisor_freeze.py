@@ -175,7 +175,7 @@ async def test_development_only_freeze_crashed_module_recovered(bus, tmp_path, m
 
     monkeypatch.setattr(control_state, "freeze", freeze_recorder)
 
-    control_state.freeze(reason="gestation hold", source="gestation")
+    control_state.freeze(reason="development hold", source="gestation")
 
     stop = asyncio.Event()
     await supervisor._poll_once(stop)
@@ -204,7 +204,7 @@ async def test_development_only_freeze_hung_module_supervisor_ignores(bus, tmp_p
     supervisor = _supervisor(registry, fm, bus)
     monkeypatch.setattr(supervisor, "_sleeping", lambda: False)
 
-    control_state.freeze(reason="gestation hold", source="gestation")
+    control_state.freeze(reason="development hold", source="gestation")
     pre_stack = tuple(control_state.read_control().stack)
 
     freeze_calls = []
@@ -245,7 +245,7 @@ async def test_welfare_plus_development_freeze_supervisor_stays_out(bus, tmp_pat
         reason="welfare hold", path=control_state.CONTROL_PATH, source="welfare"
     )
     control_state.push_freeze(
-        reason="gestation hold", path=control_state.CONTROL_PATH, source="gestation"
+        reason="development hold", path=control_state.CONTROL_PATH, source="gestation"
     )
     pre_stack = tuple(control_state.read_control().stack)
 
@@ -303,8 +303,8 @@ async def test_hung_module_ignored_while_supervisor_entry_sits_on_development(
     supervisor = _supervisor(registry, ForkManager(tmp_path / "forks"), bus)
     monkeypatch.setattr(supervisor, "_sleeping", lambda: False)
 
-    control_state.push_freeze(reason="womb lost", source="gestation")
-    control_state.push_freeze(reason="spot: other crashed", source="supervisor")
+    control_state.push_freeze(reason="stimulus source lost", source="gestation")
+    control_state.push_freeze(reason="supervisor: other crashed", source="supervisor")
     pre_stack = tuple(control_state.read_control().stack)
 
     await supervisor._poll_once(asyncio.Event())

@@ -79,7 +79,7 @@ async def test_diagnostics_layout_in_real_browser():
             page = await browser.new_page(viewport={"width": 1600, "height": 1000})
 
             config = DashboardConfig(
-                host_allowlist=("127.0.0.1", "localhost", "test", "nexus.test"),
+                host_allowlist=("127.0.0.1", "localhost", "test", "dashboard.test"),
             )
             client, app = await _make_client(
                 config=config,

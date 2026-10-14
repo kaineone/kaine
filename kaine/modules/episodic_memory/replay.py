@@ -235,7 +235,7 @@ class ReplayEngine:
         """
         if not self._window_active:
             raise ReplayWindowError(
-                "replay() called outside an active Hypnos maintenance window; "
+                "replay() called outside an active Sleep maintenance window; "
                 "replay events are never published while awake"
             )
         selected = select_traces(

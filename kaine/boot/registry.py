@@ -278,7 +278,7 @@ def build_registry(
             entity_clock=entity_clock,
         )
         registry.register(sleep)
-        log.info("registered module hypnos")
+        log.info("registered module sleep")
     _wire_self_hearing_gate(registry)
     _wire_language_self_model(registry)
     _wire_language_organ_adapter(registry, kaine_config)

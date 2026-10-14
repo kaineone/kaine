@@ -290,7 +290,7 @@ def test_load_world_model_selects_numpy_and_rejects_bogus_engine():
     numpy_wm = load_world_model("dreamerv3", 6, engine="numpy", **kwargs)
     assert isinstance(numpy_wm, NumpyDreamerV3WorldModel)
 
-    with pytest.raises(ValueError, match=r"unknown phantasia engine 'bogus'"):
+    with pytest.raises(ValueError, match=r"unknown world model engine 'bogus'"):
         load_world_model("dreamerv3", 6, engine="bogus", **kwargs)
 
     fake_wm = load_world_model("fake", 6, engine="bogus")

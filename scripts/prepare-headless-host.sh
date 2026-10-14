@@ -76,7 +76,7 @@ Phases:
 Options:
   --dry-run       Print every action without performing any.
   --swap-size SZ  Swapfile size for /swapfile (default 16G; e.g. 8G, 32G).
-  --serve-nexus   Opt in to `tailscale serve --bg 8088` for the dashboard
+  --serve-dashboard   Opt in to `tailscale serve --bg 8088` for the dashboard
                   (runs with --phase2 or --all; only attempted when
                   tailscale is installed and up; changes what other
                   tailnet devices can reach).
@@ -628,7 +628,7 @@ step_headless_switch() {
 # and up, otherwise a clearly-reported skip.
 step_tailscale_serve() {
     if (( SERVE_NEXUS == 0 )); then
-        record "tailscale-serve" "SKIPPED" "opt-in step not requested (pass --serve-nexus to serve the dashboard on :8088 over the tailnet)"
+        record "tailscale-serve" "SKIPPED" "opt-in step not requested (pass --serve-dashboard to serve the dashboard on :8088 over the tailnet)"
         return 0
     fi
     if ! command -v tailscale >/dev/null 2>&1; then
@@ -706,7 +706,7 @@ parse_args() {
             --dry-run)
                 DRY_RUN=1
                 ;;
-            --serve-nexus)
+            --serve-dashboard)
                 SERVE_NEXUS=1
                 ;;
             --swap-size)
@@ -751,7 +751,7 @@ main() {
     printf '%s: phase=%s dry-run=%s swap-size=%s serve-nexus=%s\n' \
         "$SCRIPT_NAME" "$PHASE" "$DRY_RUN" "$SWAP_SIZE" "$SERVE_NEXUS"
     if [[ "$PHASE" == "1" && "$SERVE_NEXUS" == "1" ]]; then
-        printf '%s: note: --serve-nexus takes effect in phase 2 (--phase2 or --all); it will not run in this phase-1 pass.\n' "$SCRIPT_NAME" >&2
+        printf '%s: note: --serve-dashboard takes effect in phase 2 (--phase2 or --all); it will not run in this phase-1 pass.\n' "$SCRIPT_NAME" >&2
     fi
 
     if (( DRY_RUN == 1 )); then

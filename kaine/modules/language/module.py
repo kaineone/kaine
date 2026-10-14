@@ -88,7 +88,7 @@ class Language(BaseModule):
             client.set_lora_resolver(resolver)
         else:
             log.info(
-                "lingua backend %r does not support per-request adapters",
+                "language backend %r does not support per-request adapters",
                 type(client).__name__,
             )
 
@@ -324,7 +324,7 @@ class Language(BaseModule):
                     try:
                         snap = self._snapshot_from_payload(payload)
                     except Exception:
-                        log.debug("lingua snapshot cache decode failed", exc_info=True)
+                        log.debug("language snapshot cache decode failed", exc_info=True)
                         continue
                     # Only cache non-inhibited coalitions: the entity speaks from
                     # what was accessed and not inhibited.
@@ -336,7 +336,7 @@ class Language(BaseModule):
             except Exception:
                 # Transient bus error: log once and re-subscribe after a short
                 # backoff rather than freezing _latest_snapshot forever.
-                log.warning("lingua snapshot cache loop error; restarting", exc_info=True)
+                log.warning("language snapshot cache loop error; restarting", exc_info=True)
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.5)
                 except asyncio.TimeoutError:
@@ -380,7 +380,7 @@ class Language(BaseModule):
         try:
             recent_sleep = await self._bus.client.xrevrange("sleep.out", count=200)
         except Exception as exc:
-            log.debug("hypnos sleep_index backfill failed: %s", exc)
+            log.debug("sleep sleep_index backfill failed: %s", exc)
             recent_sleep = []
         # xrevrange is newest first: the first sleep_index found is the latest.
 
@@ -408,7 +408,7 @@ class Language(BaseModule):
                     )
                 except Exception as exc:
                     log.debug(
-                        "hypnos sleep_index backfill from old stream %s failed: %s",
+                        "sleep sleep_index backfill from old stream %s failed: %s",
                         old_sleep_stream,
                         exc,
                     )
@@ -424,7 +424,7 @@ class Language(BaseModule):
             asyncio.create_task(self._self_model_cache_loop(), name=f"{self.name}-self-model-cache")
         )
         self._tasks.append(
-            asyncio.create_task(self._sleep_cache_loop(), name=f"{self.name}-hypnos-cache")
+            asyncio.create_task(self._sleep_cache_loop(), name=f"{self.name}-sleep-cache")
         )
 
     async def shutdown(self) -> None:
@@ -432,7 +432,7 @@ class Language(BaseModule):
         try:
             await self._chat_client.aclose()
         except Exception:
-            log.warning("lingua chat client close failed", exc_info=True)
+            log.warning("language chat client close failed", exc_info=True)
 
     def probe_self_model(self) -> dict | None:
         """The self-model the probe conditions on; None until the self-model module's snapshot has arrived, or a minimal model when no self-model is expected."""
@@ -632,7 +632,7 @@ class Language(BaseModule):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.exception("lingua failed to realize %s intent", kind)
+            log.exception("language failed to realize %s intent", kind)
             # C3: content-free realization-failed audit event — mode and
             # reason class ONLY; never the text, prompt, or any payload that
             # was headed for generation. Guards are cleared by the
@@ -645,7 +645,7 @@ class Language(BaseModule):
                     {"mode": kind, "reason_class": type(exc).__name__},
                 )
             except Exception:
-                log.warning("lingua: realization_failed publish failed", exc_info=True)
+                log.warning("language: realization_failed publish failed", exc_info=True)
 
     async def _settle_gen_task(self) -> None:
         """Await the held generation, converting a preemptive cancellation into
@@ -679,7 +679,7 @@ class Language(BaseModule):
                     pass
                 raise
         except Exception:
-            log.exception("lingua generation task failed")
+            log.exception("language generation task failed")
 
     async def _cancel_gen_task(self) -> None:
         """Best-effort cancel of any in-flight generation (shutdown path)."""
@@ -701,7 +701,7 @@ class Language(BaseModule):
         try:
             self._intent_log.record_preemption(mode=mode or "external", tick=tick)
         except Exception:
-            log.exception("lingua preemption record failed")
+            log.exception("language preemption record failed")
 
     async def _write_mode_record(self, stream: str, type_: str, payload: dict[str, Any]) -> None:
         await self._bus.client.xadd(

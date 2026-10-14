@@ -12,10 +12,10 @@
 </head>
 <body data-nexus-layout="dashboard">
   {# Fixed full-window alert border — JS drives data-state; CSS paints it. #}
-  <div id="spot-alert" class="spot-alert" data-state="ok" aria-hidden="true"></div>
+  <div id="supervisor-alert" class="supervisor-alert" data-state="ok" aria-hidden="true"></div>
   {# Diagnostics-stream connection indicator (task 1.4): live / reconnecting /
      paused, so a dropped link is visible rather than silently freezing the UI
-     on stale numbers. Starts hidden — NexusConn.attach() reveals it, and only
+     on stale numbers. Starts hidden — DashboardConn.attach() reveals it, and only
      pages that open the diagnostics stream (console, diagnostics) call it;
      the evaluation page (batch data only, no live stream) never shows it. #}
   <div id="nexus-conn" class="conn-status" data-state="connecting" aria-live="polite"

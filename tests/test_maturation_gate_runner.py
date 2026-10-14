@@ -149,7 +149,7 @@ def _make_registry(
     world_model.successful_training_passes = consolidation_passes
     embodiment = MagicMock()
     # Public embodiment module API the gate uses (operator approval itself is read from
-    # KAINE_MUNDUS_OPERATOR_APPROVED; tests that need it set the variable).
+    # KAINE_EMBODIMENT_OPERATOR_APPROVED; tests that need it set the variable).
     embodiment.enabled_by_config = embodiment_enabled
     embodiment.probe_available = AsyncMock(
         return_value=embodiment_enabled and embodiment_approved and embodiment_reachable
@@ -502,7 +502,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavaila
 
 @pytest.mark.asyncio
 async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -550,7 +550,7 @@ async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -644,7 +644,7 @@ def _make_registry_with_embodiment(embodiment: _RecordingEmbodiment) -> Any:
 async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlocks_as_development(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
@@ -703,7 +703,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
 async def test_maturation_deferred_when_embodiment_activate_fails(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     readout = {
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,

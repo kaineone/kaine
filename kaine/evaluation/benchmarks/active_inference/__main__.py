@@ -45,7 +45,7 @@ def _build_tasks(names: list[str] | None):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m kaine.evaluation.benchmarks.active_inference",
-        description="Offline benchmark: Nous active inference vs an RL baseline.",
+        description="Offline benchmark: Planning active inference vs an RL baseline.",
     )
     parser.add_argument(
         "--seeds",

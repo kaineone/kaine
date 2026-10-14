@@ -270,7 +270,7 @@ def _evaluate_c1(
     pe = _num(readout.get("womb_prediction_error"))
     if pe is None or pe > t.stimulus_source_prediction_error_ceiling:
         return ConditionResult(
-            "C1_regulation_baseline", False, "womb prediction error above ceiling"
+            "C1_regulation_baseline", False, "stimulus source prediction error above ceiling"
         )
 
     rtb = _num(readout.get("return_to_baseline_seconds"))
@@ -380,7 +380,7 @@ def embodiment_available(
 ) -> bool:
     """Whether the entity can actually be born into an embodied world: the embodiment module's
     existing two-layer gate (``[embodiment].enabled`` config layer AND
-    ``KAINE_MUNDUS_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
+    ``KAINE_EMBODIMENT_OPERATOR_APPROVED=1`` operator layer) AND reachability. This
     is READ as a precondition; the gate never flips the embodiment module on."""
     return bool(embodiment_enabled) and bool(operator_approved) and bool(reachable)
 

@@ -271,7 +271,7 @@ class Supervisor:
                 )
             )
         except Exception:
-            log.debug("spot publish failed (%s)", type_, exc_info=True)
+            log.debug("supervisor publish failed (%s)", type_, exc_info=True)
 
     # Operational, non-sensitive incident fields that may ride the bus event
     # into the curated research log. Deliberately an allowlist: anything not
@@ -313,7 +313,7 @@ class Supervisor:
         try:
             value = self._tick_index_provider()
         except Exception:
-            log.debug("spot tick_index provider raised", exc_info=True)
+            log.debug("supervisor tick_index provider raised", exc_info=True)
             return None
         if value is None:
             return None
@@ -378,7 +378,7 @@ class Supervisor:
                     modules_serialized_ok += 1
             byte_size = self._snapshot_byte_size(snap.id)
         except Exception:
-            log.warning("spot snapshot failed (%s)", label, exc_info=True)
+            log.warning("supervisor snapshot failed (%s)", label, exc_info=True)
         finally:
             duration_ms = (time.monotonic() - start) * 1000.0
             await self._write_incident_record(
@@ -428,7 +428,7 @@ class Supervisor:
         try:
             await self._incident_log.write(record)
         except Exception:
-            log.warning("spot incident record write failed", exc_info=True)
+            log.warning("supervisor incident record write failed", exc_info=True)
 
     class _RestartResult(NamedTuple):
         ok: bool
@@ -500,7 +500,7 @@ class Supervisor:
                 path=self._escalation_path,
             )
         except Exception:
-            log.critical("spot failed to write escalation.json", exc_info=True)
+            log.critical("supervisor failed to write escalation.json", exc_info=True)
         await self._write_incident_record(
             {
                 "incident_id": incident_id,
@@ -526,7 +526,7 @@ class Supervisor:
             try:
                 self._on_halt()
             except Exception:
-                log.warning("spot on_halt callback failed", exc_info=True)
+                log.warning("supervisor on_halt callback failed", exc_info=True)
 
     async def _shutdown_all(self) -> None:
         for module in shutdown_order(self._registry.all_modules()):
@@ -534,7 +534,7 @@ class Supervisor:
                 await module.shutdown()
             except Exception:
                 log.warning(
-                    "spot shutdown of %s failed", module.name, exc_info=True
+                    "supervisor shutdown of %s failed", module.name, exc_info=True
                 )
 
     async def escalate_supervision_lost(self, reason: str) -> None:
@@ -547,7 +547,7 @@ class Supervisor:
         """
         snapshot_id: Optional[str] = None
         try:
-            snapshot_id = await self._snapshot("spot-supervision-lost", "supervisor", None)
+            snapshot_id = await self._snapshot("supervisor-supervision-lost", "supervisor", None)
             await self._shutdown_all()
             await self._escalate(
                 "supervisor",
@@ -555,14 +555,14 @@ class Supervisor:
                 snapshot_id,
                 None,
                 message=(
-                    f"Spot's supervision stopped ({reason}). Entity state saved "
+                    f"Supervisor's supervision stopped ({reason}). Entity state saved "
                     f"(snapshot {snapshot_id}). An unattended entity does not run "
-                    f"without its supervisor. Restart the cycle once Spot is healthy."
+                    f"without its supervisor. Restart the cycle once Supervisor is healthy."
                 ),
             )
             self.escalated = True
         except Exception:
-            log.critical("spot failed to escalate supervision loss", exc_info=True)
+            log.critical("supervisor failed to escalate supervision loss", exc_info=True)
 
     # --- recovery (one incident per poll) ---------------------------------
 
@@ -579,7 +579,7 @@ class Supervisor:
                 "tasks_total": int(h.get("tasks_total", 0)),
             }
         except Exception:
-            log.debug("spot health() read failed for %s", module.name, exc_info=True)
+            log.debug("supervisor health() read failed for %s", module.name, exc_info=True)
             return {"heartbeat_age_s": 0.0, "tasks_failed": 0, "tasks_total": 0}
 
     async def _poll_once(self, stop_event: asyncio.Event) -> None:
@@ -637,7 +637,7 @@ class Supervisor:
                     "poll_index": self.poll_index,
                 }
             )
-            freeze_reason = f"spot: {name} {state}"
+            freeze_reason = f"supervisor: {name} {state}"
             control_state.freeze(
                 reason=freeze_reason, path=self._control_path, source="supervisor"
             )
@@ -664,7 +664,7 @@ class Supervisor:
             )
             if incident.attempts == 0:
                 incident.last_good = await self._snapshot(
-                    f"spot-pre-restart:{name}", name, incident_id
+                    f"supervisor-pre-restart:{name}", name, incident_id
                 )
             incident.attempts += 1
             restart_start = time.monotonic()
@@ -707,7 +707,7 @@ class Supervisor:
                 return  # one incident per poll
             if incident.attempts >= self._config.max_restart_attempts:
                 final_snap = await self._snapshot(
-                    f"spot-escalation:{name}", name, incident_id
+                    f"supervisor-escalation:{name}", name, incident_id
                 )
                 snapshot_id = final_snap or incident.last_good
                 await self._shutdown_all()
@@ -737,7 +737,7 @@ class Supervisor:
         try:
             await self._incident_log.start()
         except Exception:
-            log.warning("spot incident log failed to start", exc_info=True)
+            log.warning("supervisor incident log failed to start", exc_info=True)
         try:
             while not stop_event.is_set():
                 try:
@@ -745,7 +745,7 @@ class Supervisor:
                 except Exception:
                     # Who watches the watchdog: an internal error must halt
                     # loudly, not die silently.
-                    log.critical("spot poll crashed; halting", exc_info=True)
+                    log.critical("supervisor poll crashed; halting", exc_info=True)
                     if self._escalate_on_crash:
                         await self.escalate_supervision_lost("supervision loop crashed")
                     self.escalated = True
@@ -754,7 +754,7 @@ class Supervisor:
                             self._on_halt()
                         except Exception:
                             log.warning(
-                                "spot on_halt callback failed", exc_info=True
+                                "supervisor on_halt callback failed", exc_info=True
                             )
                     stop_event.set()
                     return
@@ -770,4 +770,4 @@ class Supervisor:
             try:
                 await self._incident_log.stop()
             except Exception:
-                log.warning("spot incident log failed to stop", exc_info=True)
+                log.warning("supervisor incident log failed to stop", exc_info=True)

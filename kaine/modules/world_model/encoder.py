@@ -106,7 +106,7 @@ def encode_snapshot(snapshot: WorkspaceSnapshot) -> list[float]:
                 # this shape of failure previously indicated a real producer/
                 # consumer event-contract bug elsewhere in the workspace.
                 log.debug(
-                    "phantasia encoder: malformed affect.state affect fields",
+                    "world model encoder: malformed affect.state affect fields",
                     exc_info=True,
                 )
 

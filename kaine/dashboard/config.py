@@ -37,7 +37,7 @@ class DashboardConfig:
     read_only: bool = False
     # Operator authentication. Empty string means no token is configured;
     # state-changing endpoints and privileged read surfaces return 401.
-    # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [dashboard] operator_token.
+    # Loaded from KAINE_DASHBOARD_TOKEN env or config/secrets.toml [dashboard] operator_token.
     operator_token: str = field(default="", repr=False)
     # CSRF/Origin protection. Defaults cover loopback-only operation.
     allowed_origins: tuple[str, ...] = (
@@ -222,7 +222,7 @@ def _raise_if_config_token(section: Any, file: Path) -> None:
     if token and str(token).strip():
         raise DashboardConfigError(
             f"non-empty operator_token in config file {file}: "
-            "move it to config/secrets.toml or set KAINE_NEXUS_TOKEN"
+            "move it to config/secrets.toml or set KAINE_DASHBOARD_TOKEN"
         )
 
 
@@ -255,7 +255,7 @@ def load_dashboard_config(
             overlay = tomllib.loads(operator_target.read_text(encoding="utf-8"))
         except Exception as e:
             raise DashboardConfigError(
-                f"malformed Nexus operator overlay: {operator_target}"
+                f"malformed Dashboard operator overlay: {operator_target}"
             ) from e
         overlay = _normalize_dashboard_layer(overlay, operator_target)
 
@@ -271,39 +271,39 @@ def load_dashboard_config(
     # Deployment overrides. A container mounts the baked, always-current kaine.toml
     # and expresses its handful of deployment-specific deltas through the environment
     # rather than a hand-maintained parallel copy of the whole config (which silently
-    # drifts from the source of truth). KAINE_NEXUS_HOST / KAINE_NEXUS_PORT bind all
+    # drifts from the source of truth). KAINE_DASHBOARD_HOST / KAINE_DASHBOARD_PORT bind all
     # interfaces inside the container — the shipped default 127.0.0.1 is unreachable
     # via the published port mapping — while the compose publish rule keeps external
-    # exposure loopback-only. KAINE_NEXUS_CONVERSATION_ENABLED toggles the
+    # exposure loopback-only. KAINE_DASHBOARD_CONVERSATION_ENABLED toggles the
     # conversation surface (the only [dashboard] delta with no other env knob).
-    host = _env("KAINE_NEXUS_HOST")
-    port = _env("KAINE_NEXUS_PORT")
+    host = _env("KAINE_DASHBOARD_HOST")
+    port = _env("KAINE_DASHBOARD_PORT")
     if host or port:
         config = replace(
             config,
             host=host or config.host,
             port=int(port) if port else config.port,
         )
-    conversation = _env_flag("KAINE_NEXUS_CONVERSATION_ENABLED")
+    conversation = _env_flag("KAINE_DASHBOARD_CONVERSATION_ENABLED")
     if conversation is not None:
         config = replace(config, conversation_enabled=conversation)
 
-    non_loopback = _env_flag("KAINE_NEXUS_NON_LOOPBACK_ALLOWED")
+    non_loopback = _env_flag("KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED")
     if non_loopback is not None:
         config = replace(config, non_loopback_allowed=non_loopback)
 
-    read_only = _env_flag("KAINE_NEXUS_READ_ONLY")
+    read_only = _env_flag("KAINE_DASHBOARD_READ_ONLY")
     if read_only is not None:
         config = replace(config, read_only=read_only)
 
-    access_env = _env("KAINE_NEXUS_ACCESS")
+    access_env = _env("KAINE_DASHBOARD_ACCESS")
     if access_env is not None and access_env.strip():
         access_env = access_env.strip()
         config = replace(
             config, access=_validate_access(access_env, "[dashboard].access")
         )
 
-    env_token = (_env("KAINE_NEXUS_TOKEN") or "").strip()
+    env_token = (_env("KAINE_DASHBOARD_TOKEN") or "").strip()
     if env_token:
         config = replace(config, operator_token=env_token)
     else:
@@ -313,7 +313,7 @@ def load_dashboard_config(
                 secrets_raw = tomllib.loads(secrets_target.read_text(encoding="utf-8"))
             except Exception as e:
                 raise DashboardConfigError(
-                    f"malformed Nexus secrets file: {secrets_target}"
+                    f"malformed Dashboard secrets file: {secrets_target}"
                 ) from e
             # Name the file by role, never by path: the path is derived from the secrets location.
             secrets_raw = _normalize_secrets_layer(secrets_raw)
@@ -328,7 +328,7 @@ def load_dashboard_config(
             "operator token is shorter than 32 characters; generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
         )
 
-    origins_env = _env("KAINE_NEXUS_ALLOWED_ORIGINS")
+    origins_env = _env("KAINE_DASHBOARD_ALLOWED_ORIGINS")
     if origins_env is not None:
         config = replace(
             config,
@@ -344,9 +344,9 @@ def load_dashboard_config(
             ),
         )
 
-    extra_hosts_env = _env("KAINE_NEXUS_EXTRA_HOSTS")
+    extra_hosts_env = _env("KAINE_DASHBOARD_EXTRA_HOSTS")
     extra_hosts = _parse_extra_hosts(extra_hosts_env)
-    published_port_env = _env("KAINE_NEXUS_PUBLISHED_PORT")
+    published_port_env = _env("KAINE_DASHBOARD_PUBLISHED_PORT")
     published_port = (
         int(published_port_env.strip())
         if published_port_env is not None and published_port_env.strip()
@@ -356,7 +356,7 @@ def load_dashboard_config(
         for h in extra_hosts:
             if not _is_valid_host(h):
                 raise DashboardConfigError(
-                    f"KAINE_NEXUS_EXTRA_HOSTS entry {h!r} is not a valid host name or IP literal"
+                    f"KAINE_DASHBOARD_EXTRA_HOSTS entry {h!r} is not a valid host name or IP literal"
                 )
 
         hosts_list = list(config.host_allowlist)

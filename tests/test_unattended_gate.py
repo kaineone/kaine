@@ -165,7 +165,7 @@ def test_unattended_gate_built_rejects_mismatched_number():
 def test_unattended_gate_message_contains_failure_and_no_override():
     result = evaluate_unattended_gate(_all_pass_net())
     msg = result.message()
-    assert "  6: Spot armed and self-tested — " in msg
+    assert "  6: Supervisor armed and self-tested — " in msg
     assert "An unattended boot has no override." in msg
 
 
@@ -177,7 +177,7 @@ def test_unattended_gate_checks_keys_in_order():
         "3_logging_active",
         "4_preserve_revive_round_trip",
         "5_encryption_satisfied",
-        "6_Spot_armed_and_self_tested",
+        "6_Supervisor_armed_and_self_tested",
         "7_caretaker_told",
         "8_continuous_input",
         "9_individuation_wired",
@@ -207,9 +207,9 @@ def test_evaluate_unattended_gate_includes_supervisor_condition(monkeypatch):
         cycle_main, "_evaluate_research_safety_net", fake_research_net
     )
 
-    passing = Condition(6, "Spot armed and self-tested", True, "")
+    passing = Condition(6, "Supervisor armed and self-tested", True, "")
     failing = Condition(
-        6, "Spot armed and self-tested", False, "not enabled"
+        6, "Supervisor armed and self-tested", False, "not enabled"
     )
 
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
     )()
 
     supervisor = Condition(
-        number=6, name="Spot armed and self-tested", ok=True, reason=""
+        number=6, name="Supervisor armed and self-tested", ok=True, reason=""
     )
     eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
     seven = Condition(number=7, name="caretaker told", ok=True, reason="")
@@ -368,7 +368,7 @@ def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch)
     )()
 
     supervisor = Condition(
-        number=6, name="Spot armed and self-tested", ok=True, reason=""
+        number=6, name="Supervisor armed and self-tested", ok=True, reason=""
     )
     eight_ok = Condition(number=8, name="continuous input", ok=True, reason="")
 

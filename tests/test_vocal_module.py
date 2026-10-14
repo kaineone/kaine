@@ -183,7 +183,7 @@ async def test_language_external_event_triggers_synthesis(bus: AsyncBus, tmp_pat
                 "salience": "0.4",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "causal_parent": "",
-                "payload": json.dumps({"text": "hello from lingua", "mode": "external"}),
+                "payload": json.dumps({"text": "hello from language", "mode": "external"}),
             },
         )
         for _ in range(50):
@@ -191,7 +191,7 @@ async def test_language_external_event_triggers_synthesis(bus: AsyncBus, tmp_pat
             if vocal.tts_client.requests:
                 break
         assert len(vocal.tts_client.requests) == 1
-        assert vocal.tts_client.requests[0].text == "hello from lingua"
+        assert vocal.tts_client.requests[0].text == "hello from language"
     finally:
         await vocal.shutdown()
 
@@ -259,7 +259,7 @@ async def test_serialize_roundtrips_affect(bus: AsyncBus, tmp_path: Path):
     assert fresh.current_affect.arousal == 0.7
 
 
-REAL_TTS_ENV = "KAINE_VOX_RUN_REAL"
+REAL_TTS_ENV = "KAINE_VOCAL_RUN_REAL"
 
 
 @pytest.mark.skipif(

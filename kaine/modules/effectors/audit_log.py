@@ -166,7 +166,7 @@ class ActionAuditLog:
             finally:
                 os.close(fd)
         except Exception:
-            log.exception("praxis audit log write failed")
+            log.exception("effectors audit log write failed")
             return
 
     def verify(self) -> AuditChainResult:

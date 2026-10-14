@@ -213,7 +213,7 @@ async def test_preservation_plaintext_not_removed(real_encryptor, monkeypatch, t
     ind_root.mkdir(parents=True)
     save_ledger(
         IndividuationPaths(root=ind_root),
-        Ledger(reference_id="birth-ref", individuated=True),
+        Ledger(reference_id="maturation-ref", individuated=True),
     )
 
     real_rmtree = __import__("shutil").rmtree

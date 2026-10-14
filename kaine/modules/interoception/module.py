@@ -321,7 +321,7 @@ class Interoception(BaseModule):
         )
         self._tasks.append(
             asyncio.create_task(
-                self._sleep_event_loop(), name=f"{self.name}-hypnos-consumer"
+                self._sleep_event_loop(), name=f"{self.name}-sleep-consumer"
             )
         )
         if self._self_rhythm is not None:
@@ -375,14 +375,14 @@ class Interoception(BaseModule):
             # The control already has a terminal record; do not publish another.
             return
         log.error(
-            "soma: positive control %s; it is switched off for this run",
+            "interoception: positive control %s; it is switched off for this run",
             reason,
         )
         try:
             await publish_result(self._bus, control.failure_result())
         except Exception:
             log.error(
-                "soma: could not publish the positive control's failure record; "
+                "interoception: could not publish the positive control's failure record; "
                 "the run has no terminal record and cannot pass",
                 exc_info=True,
             )
@@ -396,7 +396,7 @@ class Interoception(BaseModule):
         try:
             control.prepare(self._forward_model)
         except Exception:
-            log.exception("soma: positive control failed")
+            log.exception("interoception: positive control failed")
             await self._fail_positive_control(control, "raised")
             return
         if not self._pc_queue.submit(
@@ -442,7 +442,7 @@ class Interoception(BaseModule):
             if result is not None and self._positive_control is control:
                 await publish_result(self._bus, result)
         except Exception:
-            log.exception("soma: positive control failed")
+            log.exception("interoception: positive control failed")
             await self._fail_positive_control(control, "raised")
 
     async def finish_positive_control(self) -> None:
@@ -475,7 +475,7 @@ class Interoception(BaseModule):
             await publish_result(self._bus, control.final_result())
         except Exception:
             log.error(
-                "soma: could not publish the positive control's terminal record; "
+                "interoception: could not publish the positive control's terminal record; "
                 "the run cannot pass",
                 exc_info=True,
             )
@@ -653,7 +653,7 @@ class Interoception(BaseModule):
                 salience=self._baseline_salience,
             )
             log.info(
-                "soma developmental warm-up STARTED "
+                "interoception developmental warm-up STARTED "
                 "(min_samples=%d, min_seconds=%.0f): withholding cold-start "
                 "allostatic actions until the forward model learns the host "
                 "baseline; the prediction-error signal and hard thresholds are "
@@ -672,7 +672,7 @@ class Interoception(BaseModule):
             fatigue_input = max(0.0, action_error - baseline)
             if fatigue_input < action_error:
                 log.debug(
-                    "soma warm-up: fatigue input damped %.4f -> %.4f "
+                    "interoception warm-up: fatigue input damped %.4f -> %.4f "
                     "(warming baseline=%.4f)",
                     action_error,
                     fatigue_input,
@@ -683,7 +683,7 @@ class Interoception(BaseModule):
         fatigue_crossed = self._fatigue.update(fatigue_input, now=now)
         if gate and raw_would_cross and not fatigue_would_cross:
             log.info(
-                "soma warm-up: fatigue accumulator would have crossed the "
+                "interoception warm-up: fatigue accumulator would have crossed the "
                 "maintenance threshold on cold-start error alone (raw "
                 "prediction_error=%.4f) but the dampened input held it below; "
                 "no premature maintenance forced",
@@ -791,7 +791,7 @@ class Interoception(BaseModule):
                 salience=self._baseline_salience,
             )
             log.info(
-                "soma warm-up WITHHELD allostatic advisory %r "
+                "interoception warm-up WITHHELD allostatic advisory %r "
                 "(prediction_error=%.4f, sustained=%.1fs): cold-start model "
                 "ignorance, no concurrent hard-threshold breach",
                 withheld_advisory["action"],
@@ -816,7 +816,7 @@ class Interoception(BaseModule):
                 salience=self._baseline_salience,
             )
             log.info(
-                "soma developmental warm-up COMPLETED "
+                "interoception developmental warm-up COMPLETED "
                 "(samples_seen=%d, lived_seconds=%.1f): normal allostatic "
                 "regulation and full fatigue accrual resume",
                 self._samples_seen,
@@ -831,7 +831,7 @@ class Interoception(BaseModule):
                 try:
                     await self.tick_once()
                 except Exception:
-                    log.exception("soma producer iteration failed")
+                    log.exception("interoception producer iteration failed")
                 try:
                     # Interoception sampling cadence — a cognitive rhythm, so
                     # the SUBJECTIVE read_interval_s maps to real_interval /
@@ -921,7 +921,7 @@ class Interoception(BaseModule):
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("soma cycle consumer iteration failed")
+                    log.exception("interoception cycle consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -944,7 +944,7 @@ class Interoception(BaseModule):
                                 self._in_sleep = True
                                 self._fatigue.faster_decay = True
                                 log.debug(
-                                    "soma: _in_hypnos=True (sleep.sleep.started)"
+                                    "interoception: _in_sleep=True (sleep.sleep.started)"
                                 )
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
@@ -953,7 +953,7 @@ class Interoception(BaseModule):
                                 self._fatigue_threshold_emitted = False
                                 self._regulation.reset()
                                 log.debug(
-                                    "soma: _in_hypnos=False (sleep.sleep.completed); "
+                                    "interoception: _in_sleep=False (sleep.sleep.completed); "
                                     "fatigue reset"
                                 )
                     else:
@@ -961,7 +961,7 @@ class Interoception(BaseModule):
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("soma hypnos consumer iteration failed")
+                    log.exception("interoception sleep consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -1004,7 +1004,7 @@ class Interoception(BaseModule):
                 )
             elif hasattr(fm, "reservoir_seed"):
                 log.warning(
-                    "soma: snapshot has no reservoir seed; the reservoir is new"
+                    "interoception: snapshot has no reservoir seed; the reservoir is new"
                 )
             if "forward_model" in state:
                 try:

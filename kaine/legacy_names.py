@@ -980,6 +980,26 @@ RESOLUTIONS = [
         "why": "the supervisor, in an operator-facing message, label or UI name",
     },
     {
+        "name": "nexus",
+        "action": "keep",
+        "files": ["compose/*.yml"],
+        "pattern": r"\$\{KAINE_DASHBOARD_[A-Z_]+:-\$\{KAINE_NEXUS_[A-Z_]+:-[^}]*\}\}",
+        "why": "fallback to the old variable in an operator's compose/.env, read until the alias release",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "files": ["tests/test_ignition_study_runner.py"],
+        "pattern": r"wait_for_request\(state_dir, \"birth\"",
+        "why": "the stored preservation reason the runner requests, which moves with the persisted names",
+    },
+    {
+        "name": "birth",
+        "action": "keep",
+        "pattern": r"birth_bloom_ends_at",
+        "why": "stored stage field, which moves with the persisted names",
+    },
+    {
         "name": "echo",
         "action": "keep",
         "pattern": r"\becho >>",

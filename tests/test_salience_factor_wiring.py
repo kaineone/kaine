@@ -197,7 +197,7 @@ def test_deliberate_downgrade_emits_degraded_warning(caplog):
             NoveltyTracker(),
             StaticGoalScorer(),
             StaticAffectModulator(),
-            downgraded_factors=["thymos_modulation (set to static)"],
+            downgraded_factors=["affect_modulation (set to static)"],
         )
     combined = " ".join(r.message for r in caplog.records)
     assert "negative control" in combined

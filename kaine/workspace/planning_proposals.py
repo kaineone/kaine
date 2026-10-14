@@ -219,10 +219,10 @@ class PlanningProposalSource:
         passed: list[Intent] = []
         for intent in inner_intents:
             if intent.kind == SPEAK and self._speak_in_flight:
-                log.debug("Dropping inner speak intent while Nous speak guard is armed")
+                log.debug("Dropping inner speak intent while Planning speak guard is armed")
                 continue
             if intent.kind == THINK and self._think_in_flight:
-                log.debug("Dropping inner think intent while Nous think guard is armed")
+                log.debug("Dropping inner think intent while Planning think guard is armed")
                 continue
             passed.append(intent)
         return passed

@@ -1,6 +1,6 @@
 {# Evaluation boards. Shared by /diagnostics/evaluation/ and the unified
    console at `/`. Architecture-thesis instrumentation — NO message text shown.
-   `metrics` is the evaluation aggregate (see kaine.evaluation.nexus_tab); on
+   `metrics` is the evaluation aggregate (see kaine.evaluation.dashboard_tab); on
    the console it is aliased from the `evaluation` context var. Panel/chart ids
    are wired by dashboard.js — do not rename. #}
 
@@ -41,7 +41,7 @@
       <table>
         <thead><tr><th>ts</th><th>aggregate</th></tr></thead>
         <tbody>
-          {% for row in metrics.eidolon_accuracy[-20:] %}
+          {% for row in metrics.self_model_accuracy[-20:] %}
             <tr>
               <td>{{ row.ts }}</td>
               <td>{{ "%.3f"|format(row.aggregate) if row.aggregate is not none else "" }}</td>
@@ -136,7 +136,7 @@
 
     <section class="panel">
       <h2>Nous policy (active inference)</h2>
-      {% set np = metrics.nous_policy %}
+      {% set np = metrics.planning_policy %}
       {% if np and np.source != "none" %}
         <p class="muted">{{ np.n }} policy events in rollup · source: {{ np.source }}</p>
         <dl class="kv">

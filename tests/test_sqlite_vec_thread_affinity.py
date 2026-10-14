@@ -121,7 +121,7 @@ async def test_shutdown_closes_on_the_owning_thread(tmp_path: Path, caplog):
     assert "sqlite-vec close failed" not in caplog.text
     # The owning worker thread is gone once the store is shut down.
     assert not [
-        t for t in threading.enumerate() if t.name.startswith("mnemos-sqlite")
+        t for t in threading.enumerate() if t.name.startswith("episodic-memory-sqlite")
     ]
     # A closed store refuses work instead of touching a dead connection.
     with pytest.raises(StorageError):

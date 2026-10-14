@@ -79,7 +79,7 @@ class SocialCognition(BaseModule):
         elif backend == "qdrant":
             if not qdrant_api_key:
                 raise ValueError(
-                    "Empatheia backend=qdrant requires qdrant_api_key — "
+                    "Social cognition backend=qdrant requires qdrant_api_key — "
                     "set [qdrant].api_key in config/secrets.toml"
                 )
             from kaine.text_embedding import make_text_embedder
@@ -126,7 +126,7 @@ class SocialCognition(BaseModule):
         self._tasks.append(
             asyncio.create_task(
                 self._audition_consumer_loop(),
-                name="empatheia-audition-consumer",
+                name="social-cognition-audition-consumer",
             )
         )
 
@@ -135,7 +135,7 @@ class SocialCognition(BaseModule):
         try:
             await self._store.shutdown()
         except Exception:
-            log.warning("empatheia store shutdown failed", exc_info=True)
+            log.warning("social cognition store shutdown failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Workspace broadcast (optional: update on workspace context)
@@ -344,7 +344,7 @@ class SocialCognition(BaseModule):
         the store's contents. Returns the number of profiles restored.
         """
         if not getattr(self._store, "_initialized", False):
-            raise RuntimeError("Empatheia store has not been initialized")
+            raise RuntimeError("Social cognition store has not been initialized")
         profiles = state.get("profiles") or {}
         models = [AgentModel.from_dict(d) for d in profiles.values()]
         await self._store.replace_all(models)

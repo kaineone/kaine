@@ -64,7 +64,7 @@ def _switch(locked_by: str):
 def test_development_lock_denial_is_attributed_to_the_gate() -> None:
     allowed, reason = _switch("gestation")
     assert allowed is False
-    assert "gestation" in reason and "operator" not in reason
+    assert "development" in reason and "operator" not in reason
 
 
 def test_operator_lock_denial_unchanged() -> None:

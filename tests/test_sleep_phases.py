@@ -492,7 +492,7 @@ async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     entries = await bus.read("sleep.out", last_id="0", count=20)
     types = [e.type for _, e in entries]
     assert "sleep.sleep.completed" in types, (
-        "sleep.sleep.completed must be published so Soma can reset fatigue"
+        "sleep.sleep.completed must be published so Interoception can reset fatigue"
     )
 
     await bus.close()

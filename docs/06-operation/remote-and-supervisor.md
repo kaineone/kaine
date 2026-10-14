@@ -108,5 +108,5 @@ Enable the supervisor with `[supervisor].enabled = true` in `config/kaine.operat
 The [dashboard](../05-dashboard.md) diagnostics page (`/diagnostics/`) shows three supervisor indicators:
 
 - A pulsing border around the whole window, yellow while a recovery is in progress and red after an escalation, when the operator must act. With no fault there is no border.
-- A text banner below the header with the state (`SPOT RECOVERY` or `SPOT CRITICAL`) and the affected module.
+- A text banner below the header with the state (`SUPERVISOR RECOVERY` or `SUPERVISOR CRITICAL`) and the affected module.
 - The supervisor console panel, a live log fed from the `supervisor.out` stream that shows each fault detection, restart attempt and outcome.

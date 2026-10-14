@@ -648,7 +648,7 @@ The embodiment module is the body-agnostic embodiment control plane. It routes p
 | `mirror_speech` | boolean | `true` | Forward the language module's external speech to the body as local-chat `say` actions. |
 | `speech_stream` | string | `"language.external"` | Stream observed for speech to mirror. |
 
-Three gates must all be true before any action reaches a body: the module toggle `[modules].embodiment = true`, the config flag `[embodiment].enabled = true`, and the environment variable `KAINE_MUNDUS_OPERATOR_APPROVED=1`.
+Three gates must all be true before any action reaches a body: the module toggle `[modules].embodiment = true`, the config flag `[embodiment].enabled = true`, and the environment variable `KAINE_EMBODIMENT_OPERATOR_APPROVED=1`.
 
 Exposure flags are read from the selected adapter's `[embodiment.<adapter>]` table as `expose_<name>` booleans. A name the body declares as a continuous channel sets that channel's exposure; a name it declares as an action family sets that family's exposure; any other name refuses boot. With the `stub` body, for example, `expose_drive = true` exposes the `drive` channel.
 

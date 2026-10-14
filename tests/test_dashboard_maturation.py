@@ -169,7 +169,7 @@ async def test_post_ack_wrong_id_rejected(tmp_path):
         )
     assert r.status_code == 409
     assert (
-        r.json()["detail"] == "request_id does not match the current birth request"
+        r.json()["detail"] == "request_id does not match the current maturation request"
     )
     assert not ack_path.exists()
     assert stage_path.read_bytes() == b"stage"
@@ -203,7 +203,7 @@ async def test_post_ack_no_request_rejected(tmp_path):
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 409
-    assert r.json()["detail"] == "no birth awaiting acknowledgement"
+    assert r.json()["detail"] == "no maturation awaiting acknowledgement"
     assert not ack_path.exists()
     assert not request_path.exists()
     assert stage_path.read_bytes() == b"stage"

@@ -18,7 +18,7 @@ adapter's sinks. So the live cognitive loop perceives and acts through the body,
 not a script.
 
 Two-layer safety gate (mirrors voice-alignment / paracosm-connector): requires
-both ``[embodiment].enabled = true`` in config and ``KAINE_MUNDUS_OPERATOR_APPROVED=1``
+both ``[embodiment].enabled = true`` in config and ``KAINE_EMBODIMENT_OPERATOR_APPROVED=1``
 in the environment. Per-action-family exposure flags gate world-mutating verbs;
 continuous channels gate per-channel and default unexposed.
 
@@ -67,7 +67,7 @@ _CONTROL_ACTION = "control"
 
 
 def operator_approved() -> bool:
-    return legacy_aliases.getenv("KAINE_MUNDUS_OPERATOR_APPROVED") == "1"
+    return legacy_aliases.getenv("KAINE_EMBODIMENT_OPERATOR_APPROVED") == "1"
 
 
 class Embodiment(BaseModule):
@@ -135,21 +135,21 @@ class Embodiment(BaseModule):
             try:
                 return bool(await asyncio.wait_for(probe(), timeout=timeout_s))
             except Exception:
-                log.debug("mundus adapter probe failed", exc_info=True)
+                log.debug("embodiment adapter probe failed", exc_info=True)
                 return False
 
         # No probe on this adapter: open briefly and close again.
         try:
             await asyncio.wait_for(self._adapter.open(), timeout=timeout_s)
         except Exception:
-            log.debug("mundus open-probe failed", exc_info=True)
+            log.debug("embodiment open-probe failed", exc_info=True)
             return False
         try:
             await self._adapter.close()
         except Exception:
             # The body answered; a failed close after the probe does not make
             # it unavailable, but it is worth seeing in the log.
-            log.debug("mundus close after open-probe failed", exc_info=True)
+            log.debug("embodiment close after open-probe failed", exc_info=True)
         return True
 
     async def activate(self) -> bool:
@@ -163,7 +163,7 @@ class Embodiment(BaseModule):
             await self.initialize()
             return True
         except Exception:
-            log.warning("mundus activate failed", exc_info=True)
+            log.warning("embodiment activate failed", exc_info=True)
             return False
 
     @property
@@ -190,10 +190,10 @@ class Embodiment(BaseModule):
 
     async def initialize(self) -> None:
         if self._dormant:
-            log.info("mundus dormant (gestation): not opening the body")
+            log.info("embodiment dormant (development): not opening the body")
             return
         if not self._enabled():
-            log.info("mundus disabled (config=%s, operator_approved=%s)",
+            log.info("embodiment disabled (config=%s, operator_approved=%s)",
                      self._config_enabled, operator_approved())
             return
         # Only act on intents/speech formed AFTER we come up.
@@ -201,13 +201,13 @@ class Embodiment(BaseModule):
         self._speech_cursor = await self._latest_id(self._speech_stream)
         await super().initialize()
         await self._adapter.open()
-        log.info("mundus control plane up on body %r",
+        log.info("embodiment control plane up on body %r",
                  self._adapter.capabilities().name)
-        self._tasks.append(asyncio.create_task(self._feed_loop(), name="mundus-feed"))
-        self._tasks.append(asyncio.create_task(self._intent_loop(), name="mundus-intent"))
+        self._tasks.append(asyncio.create_task(self._feed_loop(), name="embodiment-feed"))
+        self._tasks.append(asyncio.create_task(self._intent_loop(), name="embodiment-intent"))
         if self._mirror_speech:
             self._tasks.append(
-                asyncio.create_task(self._speech_loop(), name="mundus-speech"))
+                asyncio.create_task(self._speech_loop(), name="embodiment-speech"))
 
     async def shutdown(self) -> None:
         for t in self._tasks:
@@ -230,13 +230,13 @@ class Embodiment(BaseModule):
         except asyncio.CancelledError:
             raise
         except Exception:
-            log.exception("mundus: feed loop failed")
+            log.exception("embodiment: feed loop failed")
 
     async def _handle_feed(self, frame: FeedFrame) -> None:
         caps = self._adapter.capabilities()
         mapping = caps.feed_events.get(frame.kind)
         if mapping is None:
-            log.debug("mundus: unknown feed kind %r", frame.kind)
+            log.debug("embodiment: unknown feed kind %r", frame.kind)
             return
         event_type, salience = mapping
         payload = dict(frame.payload)
@@ -256,15 +256,15 @@ class Embodiment(BaseModule):
     async def _send_action(self, family: str, **params: Any) -> bool:
         """Route one symbolic action to the body, gated by locus + exposure."""
         if self._locus_reader() != "virtual":
-            log.debug("mundus: locus not virtual; not acting in-world (%r)", family)
+            log.debug("embodiment: locus not virtual; not acting in-world (%r)", family)
             return False
         if not self._expose.get(family, False):
-            log.info("mundus: action %r not exposed; dropped", family)
+            log.info("embodiment: action %r not exposed; dropped", family)
             return False
         try:
             return await self._adapter.apply_action(family, params)
         except Exception:
-            log.exception("mundus: failed to send action %r", family)
+            log.exception("embodiment: failed to send action %r", family)
             return False
 
     async def apply_setpoints(self, channels: dict[str, float]) -> bool:
@@ -280,11 +280,11 @@ class Embodiment(BaseModule):
         if not caps.continuous_channels:
             ok = await self._adapter.apply_setpoints(dict(channels))
             if not ok:
-                log.info("mundus: body %r has no continuous sink; setpoints "
+                log.info("embodiment: body %r has no continuous sink; setpoints "
                          "unsupported", caps.name)
             return ok
         if self._locus_reader() != "virtual":
-            log.debug("mundus: locus not virtual; not driving setpoints")
+            log.debug("embodiment: locus not virtual; not driving setpoints")
             return False
         gated = self._gate_channels(channels)
         if not gated:
@@ -292,7 +292,7 @@ class Embodiment(BaseModule):
         try:
             return await self._adapter.apply_setpoints(gated)
         except Exception:
-            log.exception("mundus: failed to apply setpoints")
+            log.exception("embodiment: failed to apply setpoints")
             return False
 
     def _gate_channels(self, channels: dict[str, float]) -> dict[str, float]:
@@ -306,10 +306,10 @@ class Embodiment(BaseModule):
         gated: dict[str, float] = {}
         for name, value in channels.items():
             if name not in caps.continuous_channels:
-                log.info("mundus: channel %r not on this body; dropped", name)
+                log.info("embodiment: channel %r not on this body; dropped", name)
                 continue
             if not self._continuous_expose.get(name, False):
-                log.info("mundus: channel %r not exposed; dropped", name)
+                log.info("embodiment: channel %r not exposed; dropped", name)
                 continue
             lo, hi = CONTINUOUS_CHANNEL_RANGE.get(name, (-1.0, 1.0))
             gated[name] = max(lo, min(hi, float(value)))
@@ -352,7 +352,7 @@ class Embodiment(BaseModule):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("mundus: intent read failed")
+                log.exception("embodiment: intent read failed")
                 await asyncio.sleep(0.5)
                 continue
             if last_scanned is None:
@@ -384,7 +384,7 @@ class Embodiment(BaseModule):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("mundus: speech read failed")
+                log.exception("embodiment: speech read failed")
                 await asyncio.sleep(0.5)
                 continue
             if last_scanned is None:

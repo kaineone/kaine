@@ -27,7 +27,7 @@ services:
       resources:
         reservations:
           devices: []
-  kaine-nexus:
+  kaine-dashboard:
     image: ${KAINE_IMAGE:-kaine:cpu}
     build:
       args:

@@ -338,7 +338,7 @@ def test_capture_reference_note(tmp_path):
     a = assess_divergence(state_root=state_root, now=now)
     assert a.diverged is False
     assert a.signals["individuation_reference_kind"] == "capture"
-    assert "after its birth" in a.summary
+    assert "after its maturation" in a.summary
 
 
 def test_latched_ledger_without_reference(tmp_path):

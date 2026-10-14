@@ -116,7 +116,7 @@ CASES: list[dict[str, Any]] = [
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Record JAX Phantasia RSSM golden fixtures for the NumPy engine."
+        description="Record JAX World model RSSM golden fixtures for the NumPy engine."
     )
     parser.add_argument(
         "--out",
@@ -160,7 +160,7 @@ def _flatten_params(params: dict[str, Any], prefix: str) -> dict[str, np.ndarray
 
 def _make_header(case: dict[str, Any], cfg: rssm.RSSMConfig) -> np.ndarray:
     header = {
-        "format": "kaine-phantasia-golden-v1",
+        "format": "kaine-world-model-golden-v1",
         "case": case["name"],
         "config": dataclasses.asdict(cfg),
         "T": case["T"],
@@ -176,7 +176,7 @@ def _assert_all_finite(arrays: dict[str, np.ndarray], case_name: str) -> None:
             continue
         if not np.all(np.isfinite(arr)):
             print(
-                f"record_phantasia_golden: case {case_name}: non-finite values in {key}",
+                f"record_world_model_golden: case {case_name}: non-finite values in {key}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -255,7 +255,7 @@ def _record_case(out_dir: Path, case: dict[str, Any]) -> None:
 
     if any(train_aborted):
         print(
-            f"record_phantasia_golden: case {name}: training aborted unexpectedly",
+            f"record_world_model_golden: case {name}: training aborted unexpectedly",
             file=sys.stderr,
         )
         sys.exit(1)

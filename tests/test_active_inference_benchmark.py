@@ -317,7 +317,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
         "from kaine.entity",
         # constructing the live planning *module* (the engine alone is allowed)
         "Planning(",
-        "import Nous",
+        "import Planning",
     )
     for mod in (envs, rl_baseline, metrics, aif_agent, runner, cli):
         src = inspect.getsource(mod)

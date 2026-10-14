@@ -247,8 +247,8 @@ def test_stimulus_source_is_continuous_input():
     # when its sources deliver.
     def _check(config: dict[str, Any]) -> list[CheckResult]:
         return [
-            CheckResult("perception", "video womb", "PASS", ""),
-            CheckResult("perception", "audio womb", "PASS", ""),
+            CheckResult("perception", "video stimulus source", "PASS", ""),
+            CheckResult("perception", "audio stimulus source", "PASS", ""),
         ]
 
     cond = check_input_condition(

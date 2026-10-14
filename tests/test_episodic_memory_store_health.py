@@ -98,7 +98,7 @@ def test_episodic_memory_store_block_states(tmp_path):
 
 async def test_health_prober_episodic_memory_store(tmp_path):
     """The health prober includes the episodic memory module's store block under its canonical key."""
-    assert "mnemos_store" in diagnostics.HEALTH_BLOCK_KEYS
+    assert "episodic_memory_store" in diagnostics.HEALTH_BLOCK_KEYS
 
     health_path = tmp_path / "store_health.json"
     health_path.write_text(
@@ -121,10 +121,10 @@ async def test_health_prober_episodic_memory_store(tmp_path):
         episodic_memory_store_health_path=health_path,
     )
     snapshot = await prober.snapshot(force=True)
-    assert "mnemos_store" in snapshot
-    assert snapshot["mnemos_store"]["state"] == "critical"
-    assert snapshot["mnemos_store"]["import_pending"] is True
-    assert snapshot["mnemos_store"]["blocked_sleeps"] == 2
+    assert "episodic_memory_store" in snapshot
+    assert snapshot["episodic_memory_store"]["state"] == "critical"
+    assert snapshot["episodic_memory_store"]["import_pending"] is True
+    assert snapshot["episodic_memory_store"]["blocked_sleeps"] == 2
 
 
 def test_episodic_memory_store_template_critical(tmp_path):
@@ -132,7 +132,7 @@ def test_episodic_memory_store_template_critical(tmp_path):
     env = Environment(loader=FileSystemLoader("kaine/dashboard/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
     html = template.render(
-        **{"mnemos_store": {
+        **{"episodic_memory_store": {
             "state": "critical",
             "import_pending": True,
             "blocked_sleeps": 1,
@@ -151,7 +151,7 @@ def test_episodic_memory_store_template_unavailable(tmp_path):
     """The episodic memory module's store template shows unavailable when the block is missing."""
     env = Environment(loader=FileSystemLoader("kaine/dashboard/templates"), autoescape=select_autoescape(["html"]))
     template = env.get_template("_episodic_memory_store.html")
-    html = template.render(**{"mnemos_store": None})
+    html = template.render(**{"episodic_memory_store": None})
     assert "unavailable" in html.lower()
 
 

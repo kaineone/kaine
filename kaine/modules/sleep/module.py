@@ -272,7 +272,7 @@ class Sleep(BaseModule):
         # promise). Due-ness itself is judged on the scheduler's (subjective)
         # clock; this loop only polls often enough to notice.
         self._tasks.append(
-            asyncio.create_task(self._maintenance_poll_loop(), name="hypnos-maintenance-poll")
+            asyncio.create_task(self._maintenance_poll_loop(), name="sleep-maintenance-poll")
         )
         # Ignition-audit cursors: seed to the current stream tails (mirrors the
         # _interoception_cursor seeding below) — each sleep then reads everything new
@@ -307,7 +307,7 @@ class Sleep(BaseModule):
                 entry_id = entry_id.decode()
             self._action_selection_cursor = entry_id
         self._tasks.append(
-            asyncio.create_task(self._action_selection_consumer_loop(), name="hypnos-volition-consumer")
+            asyncio.create_task(self._action_selection_consumer_loop(), name="sleep-action-selection-consumer")
         )
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
@@ -321,7 +321,7 @@ class Sleep(BaseModule):
                     entry_id = entry_id.decode()
                 self._interoception_cursor = entry_id
             self._tasks.append(
-                asyncio.create_task(self._interoception_consumer_loop(), name="hypnos-soma-consumer")
+                asyncio.create_task(self._interoception_consumer_loop(), name="sleep-interoception-consumer")
             )
 
     async def shutdown(self) -> None:
@@ -342,7 +342,7 @@ class Sleep(BaseModule):
             sleep_task.cancel()
             done, pending = await asyncio.wait({sleep_task}, timeout=_SHUTDOWN_WAIT_S)
             if pending:
-                log.warning("hypnos: shutdown wait expired with sleep still pending")
+                log.warning("sleep: shutdown wait expired with sleep still pending")
             for task in done:
                 # Retrieve the exception so it is not reported at garbage collection.
                 if not task.cancelled():
@@ -353,7 +353,7 @@ class Sleep(BaseModule):
             done, pending = await asyncio.wait(held, timeout=_SHUTDOWN_WAIT_S)
             if pending:
                 log.warning(
-                    "hypnos: shutdown wait expired with %d held task(s) still pending",
+                    "sleep: shutdown wait expired with %d held task(s) still pending",
                     len(pending),
                 )
             for task in done:
@@ -404,12 +404,12 @@ class Sleep(BaseModule):
                                 continue
                             if fatigue_trigger:
                                 log.info(
-                                    "hypnos: interoception.fatigue crossed=true — "
+                                    "sleep: interoception.fatigue crossed=true — "
                                     "triggering fatigue-driven maintenance"
                                 )
                             else:
                                 log.info(
-                                    "hypnos: interoception.regulation request_maintenance "
+                                    "sleep: interoception.regulation request_maintenance "
                                     "— triggering regulation-driven maintenance"
                                 )
                             # L3 — hold the task reference (no GC mid-sleep)
@@ -421,14 +421,14 @@ class Sleep(BaseModule):
                                 self._sleep_pending = True
                                 self._sleep_task = asyncio.create_task(
                                     self._fatigue_triggered_enter_sleep(),
-                                    name="hypnos-fatigue-sleep",
+                                    name="sleep-fatigue-sleep",
                                 )
                     else:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("hypnos soma consumer iteration failed")
+                    log.exception("sleep interoception consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -463,7 +463,7 @@ class Sleep(BaseModule):
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    log.exception("hypnos volition consumer iteration failed")
+                    log.exception("sleep action selection consumer iteration failed")
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
@@ -474,9 +474,9 @@ class Sleep(BaseModule):
             self._fatigue_triggered_sleep = True
             await self.enter_sleep()
         except SleepBusyError:
-            log.debug("hypnos: fatigue trigger: already sleeping")
+            log.debug("sleep: fatigue trigger: already sleeping")
         except Exception:
-            log.exception("hypnos: fatigue-triggered sleep failed")
+            log.exception("sleep: fatigue-triggered sleep failed")
         finally:
             # L3 — clear the trigger wrapper's in-flight annotation
             # (_sleep_pending) once the sleep settles, so a later fatigue
@@ -502,7 +502,7 @@ class Sleep(BaseModule):
                 salience=0.0,
             )
         except Exception:
-            log.warning("hypnos: rest_request publish failed", exc_info=True)
+            log.warning("sleep: rest_request publish failed", exc_info=True)
 
     async def _handle_rest_request(self, payload: dict[str, Any]) -> None:
         """Accept or refuse a planning/action selection module rest request.
@@ -519,7 +519,7 @@ class Sleep(BaseModule):
         if self._sleep_lock.locked() or self._sleep_pending:
             await self._publish_rest_request(False, "busy", origin, proposal_id)
             log.debug(
-                "hypnos: rest request refused (reason=busy, origin=%s, proposal_id=%s)",
+                "sleep: rest request refused (reason=busy, origin=%s, proposal_id=%s)",
                 origin, proposal_id,
             )
             return
@@ -529,7 +529,7 @@ class Sleep(BaseModule):
         if last is not None and (now - last) < self._requested_rest_min_interval_s:
             await self._publish_rest_request(False, "too_soon", origin, proposal_id)
             log.debug(
-                "hypnos: rest request refused (reason=too_soon, origin=%s, proposal_id=%s)",
+                "sleep: rest request refused (reason=too_soon, origin=%s, proposal_id=%s)",
                 origin, proposal_id,
             )
             return
@@ -541,7 +541,7 @@ class Sleep(BaseModule):
         self._requested_sleep_trigger = True
         self._sleep_task = asyncio.create_task(
             self._requested_enter_sleep(origin, proposal_id),
-            name="hypnos-requested-sleep",
+            name="sleep-requested-sleep",
         )
 
     async def _requested_enter_sleep(self, origin: Any, proposal_id: Any) -> None:
@@ -553,13 +553,13 @@ class Sleep(BaseModule):
             await self.enter_sleep(trigger="requested")
         except SleepBusyError:
             log.debug(
-                "hypnos: requested sleep: already sleeping (origin=%s, proposal_id=%s)",
+                "sleep: requested sleep: already sleeping (origin=%s, proposal_id=%s)",
                 origin, proposal_id,
             )
             await self._publish_rest_request(False, "busy", origin, proposal_id)
         except Exception:
             log.exception(
-                "hypnos: requested sleep failed (origin=%s, proposal_id=%s)",
+                "sleep: requested sleep failed (origin=%s, proposal_id=%s)",
                 origin, proposal_id,
             )
             if self._requested_rest_accepted:
@@ -575,7 +575,7 @@ class Sleep(BaseModule):
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
-            raise SleepBusyError("Hypnos sleep is already in progress")
+            raise SleepBusyError("Sleep sleep is already in progress")
 
         async with self._sleep_lock:
             self._suspend_perception()
@@ -621,15 +621,15 @@ class Sleep(BaseModule):
             # Honest degradation: nothing remembered → restore falls back to
             # 'physical' (the old behavior).
             self._pre_sleep_locus = None
-            log.debug("hypnos: could not read pre-sleep locus", exc_info=True)
+            log.debug("sleep: could not read pre-sleep locus", exc_info=True)
         try:
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus("off", path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> off (sleep)")
+            log.debug("sleep: perceptual locus -> off (sleep)")
         except Exception:
             log.warning(
-                "hypnos: perception suspension (write_desired_locus) failed",
+                "sleep: perception suspension (write_desired_locus) failed",
                 exc_info=True,
             )
         # Pause the shared playlist clock under the sleep module's holder. A missing
@@ -638,7 +638,7 @@ class Sleep(BaseModule):
             try:
                 self._playlist_clock.pause("sleep")
             except Exception:
-                log.warning("hypnos: playlist clock pause failed", exc_info=True)
+                log.warning("sleep: playlist clock pause failed", exc_info=True)
 
     def _restore_perception(self) -> None:
         """Restore the remembered pre-sleep locus when sleep ends
@@ -652,10 +652,10 @@ class Sleep(BaseModule):
             from kaine.perception_state import write_desired_locus
 
             write_desired_locus(locus, path=self._perception_desired_path)
-            log.debug("hypnos: perception locus -> %s (sleep ended)", locus)
+            log.debug("sleep: perceptual locus -> %s (sleep ended)", locus)
         except Exception:
             log.warning(
-                "hypnos: perception restore (write_desired_locus) failed",
+                "sleep: perception restore (write_desired_locus) failed",
                 exc_info=True,
             )
         # Resume the shared playlist clock under the sleep module's holder so the
@@ -665,7 +665,7 @@ class Sleep(BaseModule):
             try:
                 self._playlist_clock.resume("sleep")
             except Exception:
-                log.warning("hypnos: playlist clock resume failed", exc_info=True)
+                log.warning("sleep: playlist clock resume failed", exc_info=True)
 
     async def _reinject_association(self, scenario: dict[str, Any]) -> None:
         """Re-inject a phase-3 cross-period association into the workspace.
@@ -690,7 +690,7 @@ class Sleep(BaseModule):
         try:
             method()
         except Exception:
-            log.warning("hypnos: opening Phantasia's scenario window failed", exc_info=True)
+            log.warning("sleep: opening World model's scenario window failed", exc_info=True)
 
     def _close_world_model_window(self) -> None:
         """Close the world model module's scenario window after phases 2 and 3."""
@@ -700,7 +700,7 @@ class Sleep(BaseModule):
         try:
             method()
         except Exception:
-            log.warning("hypnos: closing Phantasia's scenario window failed", exc_info=True)
+            log.warning("sleep: closing World model's scenario window failed", exc_info=True)
 
     async def _run_final_affective_reset(self) -> PhaseResult:
         """Run phase 5, the affective reset, so that a cancel cannot interrupt it.
@@ -830,7 +830,7 @@ class Sleep(BaseModule):
                 # to rotate".
                 corpus_summary["error"] = f"{type(exc).__name__}: {exc}"
                 log.warning(
-                    "hypnos: intent log corpus rotation/ceiling check failed",
+                    "sleep: intent log corpus rotation/ceiling check failed",
                     exc_info=True,
                 )
 
@@ -891,7 +891,7 @@ class Sleep(BaseModule):
                         )
                 except Exception:
                     log.warning(
-                        "hypnos: voice measures computation failed",
+                        "sleep: voice measures computation failed",
                         exc_info=True,
                     )
                     rotation_failed = True
@@ -912,7 +912,7 @@ class Sleep(BaseModule):
                     )
                 except Exception:
                     log.warning(
-                        "hypnos: failed to write measurement_failed marker",
+                        "sleep: failed to write measurement_failed marker",
                         exc_info=True,
                     )
         finally:
@@ -1000,7 +1000,7 @@ class Sleep(BaseModule):
         try:
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
-            log.warning("hypnos: ignition audit step failed (continuing)", exc_info=True)
+            log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
         # Publishing sleep.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (interoception._sleep_event_loop handles this event).
         await self.publish("sleep.sleep.completed", summary, salience=salience)
@@ -1112,7 +1112,7 @@ class Sleep(BaseModule):
             )
             payload = report.as_payload()
         except Exception as exc:
-            log.warning("hypnos: ignition audit failed (continuing)", exc_info=True)
+            log.warning("sleep: ignition audit failed (continuing)", exc_info=True)
             payload = {
                 "sleep_index": self._sleep_count,
                 "realized_total": 0,
@@ -1137,7 +1137,7 @@ class Sleep(BaseModule):
             )
         except Exception:
             log.warning(
-                "hypnos: ignition-audit publish failed (continuing)",
+                "sleep: ignition-audit publish failed (continuing)",
                 exc_info=True,
             )
         return payload
@@ -1225,7 +1225,7 @@ class Sleep(BaseModule):
             )
         except Exception:
             log.warning(
-                "hypnos: consolidation-divergence publish failed (continuing)",
+                "sleep: consolidation-divergence publish failed (continuing)",
                 exc_info=True,
             )
         return pairs, payload
@@ -1481,11 +1481,11 @@ class Sleep(BaseModule):
                 )
             except Exception as exc:
                 log.warning(
-                    "hypnos: malformed schedule in snapshot; starting a fresh interval: %s",
+                    "sleep: malformed schedule in snapshot; starting a fresh interval: %s",
                     exc,
                 )
         else:
-            log.info("hypnos: snapshot has no schedule; starting a fresh interval")
+            log.info("sleep: snapshot has no schedule; starting a fresh interval")
 
     async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """M2: guarantee ``sleep.sleep.completed`` is published.
@@ -1507,9 +1507,9 @@ class Sleep(BaseModule):
             return await self._run_pipeline_inner(trigger=trigger)
         except BaseException as exc:
             if isinstance(exc, Exception):
-                log.exception("hypnos: sleep pipeline aborted")
+                log.exception("sleep: sleep pipeline aborted")
             else:
-                log.warning("hypnos: sleep pipeline cancelled (%s)", type(exc).__name__)
+                log.warning("sleep: sleep pipeline cancelled (%s)", type(exc).__name__)
             publish = asyncio.ensure_future(
                 self.publish(
                     "sleep.sleep.completed",
@@ -1523,7 +1523,7 @@ class Sleep(BaseModule):
             try:
                 await asyncio.shield(publish)
             except Exception:
-                log.exception("hypnos: aborted-sleep completed publish also failed")
+                log.exception("sleep: aborted-sleep completed publish also failed")
             raise
 
     async def _fatigue_triggered_enter_sleep(self) -> None:
@@ -1550,7 +1550,7 @@ class Sleep(BaseModule):
             # for this period; the running sleep covers the maintenance.
             pass
         except Exception:
-            log.exception("hypnos: interval-triggered sleep failed")
+            log.exception("sleep: interval-triggered sleep failed")
         finally:
             self._sleep_pending = False
 
@@ -1571,17 +1571,17 @@ class Sleep(BaseModule):
                     and not self._sleep_pending
                 ):
                     log.info(
-                        "hypnos: rest scheduler reports sleep due — "
+                        "sleep: rest scheduler reports sleep due — "
                         "triggering interval-based maintenance"
                     )
                     self._sleep_pending = True
                     self._sleep_task = asyncio.create_task(
                         self._interval_triggered_enter_sleep(),
-                        name="hypnos-interval-sleep",
+                        name="sleep-interval-sleep",
                     )
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("hypnos maintenance poll iteration failed")
+                log.exception("sleep maintenance poll iteration failed")
                 await asyncio.sleep(1.0)

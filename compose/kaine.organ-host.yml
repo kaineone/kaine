@@ -19,7 +19,7 @@ services:
   kaine-model-server:
     profiles: [disabled-organ-host]
 
-  kaine-nexus:
+  kaine-dashboard:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

@@ -527,7 +527,7 @@ async def test_snapshot_all_ok(bus, tmp_path):
         bus=bus,
     )
     await supervisor._incident_log.start()
-    await supervisor._snapshot("spot-pre-restart:ok", "ok", "iid-1")
+    await supervisor._snapshot("supervisor-pre-restart:ok", "ok", "iid-1")
     await supervisor._incident_log.stop()
     await log.stop()
 
@@ -538,7 +538,7 @@ async def test_snapshot_all_ok(bus, tmp_path):
     assert s["modules_serialized_ok"] == 2
     assert s["snapshot_id"]
     assert s["byte_size"] > 0
-    assert s["label"] == "spot-pre-restart:ok"
+    assert s["label"] == "supervisor-pre-restart:ok"
     assert s["encrypted"] is False
     assert isinstance(s["duration_ms"], (int, float))
 
@@ -562,7 +562,7 @@ async def test_snapshot_partial_serialize_error(bus, tmp_path):
         bus=bus,
     )
     await supervisor._incident_log.start()
-    await supervisor._snapshot("spot-pre-restart:bad", "bad", "iid-2")
+    await supervisor._snapshot("supervisor-pre-restart:bad", "bad", "iid-2")
     await supervisor._incident_log.stop()
 
     s = _by_transition(_read_records(incidents), "snapshot")[0]
@@ -594,7 +594,7 @@ async def test_snapshot_whole_failure_writes_null_id(bus, tmp_path):
         bus=bus,
     )
     await supervisor._incident_log.start()
-    result = await supervisor._snapshot("spot-pre-restart:ok", "ok", "iid-3")
+    result = await supervisor._snapshot("supervisor-pre-restart:ok", "ok", "iid-3")
     await supervisor._incident_log.stop()
 
     assert result is None
@@ -631,7 +631,7 @@ async def test_encrypted_deployment_records_encrypted_true(bus, tmp_path, monkey
         bus=bus,
     )
     await supervisor._incident_log.start()
-    await supervisor._snapshot("spot-pre-restart:ok", "ok", "iid-enc")
+    await supervisor._snapshot("supervisor-pre-restart:ok", "ok", "iid-enc")
     await supervisor._incident_log.stop()
 
     # Raw on-disk lines are NOT human-readable JSON.
@@ -663,7 +663,7 @@ async def test_plaintext_deployment_records_encrypted_false(bus, tmp_path):
         bus=bus,
     )
     await supervisor._incident_log.start()
-    await supervisor._snapshot("spot-pre-restart:ok", "ok", "iid-plain")
+    await supervisor._snapshot("supervisor-pre-restart:ok", "ok", "iid-plain")
     await supervisor._incident_log.stop()
 
     f = sorted(incidents.glob("incidents-*.jsonl"))[0]

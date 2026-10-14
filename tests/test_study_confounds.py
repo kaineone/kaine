@@ -312,7 +312,7 @@ async def test_vocal_dormant_suppresses_output_and_resumes(bus, tmp_path):
         vocal.set_dormant(True)
         assert vocal.dormant
 
-        result = await vocal.synthesize_text("hello womb")
+        result = await vocal.synthesize_text("hello stimulus source")
         assert result.bytes_produced == 0
         assert vocal._suppressed_while_dormant == 1
         assert player.played == []

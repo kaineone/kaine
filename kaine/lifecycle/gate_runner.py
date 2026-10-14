@@ -234,7 +234,7 @@ class MaturationGateRunner:
 
             self._stage = replace(self._stage, sleep_count=total, hypnos_cursor=cursor)
         except Exception:
-            log.warning("maturation gate: failed to count hypnos sleeps", exc_info=True)
+            log.warning("maturation gate: failed to count sleep sleeps", exc_info=True)
 
     def _blocked_reason(self) -> str | None:
         """Why the gate may not count sleeps or evaluate now; None when it may.
@@ -310,7 +310,7 @@ class MaturationGateRunner:
             return None
         except Exception:
             log.debug(
-                "maturation gate: womb readiness readout failed closed",
+                "maturation gate: stimulus source readiness readout failed closed",
                 exc_info=True,
             )
             return None
@@ -395,7 +395,7 @@ class MaturationGateRunner:
         blocked = self._blocked_reason()
         if blocked == "no_stimulus_source_feed":
             # Loud, repeated warning: never a silent senseless hold.
-            log.warning("stage.development.no_stimulus: gestation active but no womb feed configured")
+            log.warning("stage.development.no_stimulus: development active but no stimulus source feed configured")
             await self._publish(
                 STAGE_DEVELOPMENT_NO_STIMULUS,
                 development_no_stimulus_payload(),
@@ -430,7 +430,7 @@ class MaturationGateRunner:
                 try:
                     clear_request(self._maturation_request_path)
                 except OSError as exc:
-                    log.warning("could not clear stale birth request: %s", exc)
+                    log.warning("could not clear stale maturation request: %s", exc)
                 self._maturation_request = None
                 self._awaiting_ack_logged = False
             _set_status(
@@ -455,7 +455,7 @@ class MaturationGateRunner:
                 paused = True
             if paused:
                 if not self._maturation_deferred_logged:
-                    log.info("birth deferred: the entity is frozen")
+                    log.info("maturation deferred: the entity is frozen")
                     self._maturation_deferred_logged = True
                 _set_status(
                     readiness=readiness,
@@ -504,11 +504,11 @@ class MaturationGateRunner:
                 try:
                     clear_request(self._maturation_request_path)
                 except OSError as exc:
-                    log.warning("could not clear stale birth request: %s", exc)
+                    log.warning("could not clear stale maturation request: %s", exc)
                 self._maturation_request = None
                 self._awaiting_ack_logged = False
             if not self._awaiting_embodiment_logged:
-                log.warning("stage.maturation.ready: awaiting embodiment (Mundus not available)")
+                log.warning("stage.maturation.ready: awaiting embodiment (Embodiment not available)")
                 self._awaiting_embodiment_logged = True
             await self._publish(
                 STAGE_MATURATION_READY,
@@ -527,14 +527,14 @@ class MaturationGateRunner:
                     req = new_request(self._stage.gestation_started_at)
                     write_request(req, self._maturation_request_path)
                     self._maturation_request = req
-                    log.info("operator birth acknowledgement requested: %s", req.request_id)
+                    log.info("operator maturation acknowledgement requested: %s", req.request_id)
                 except (OSError, ValueError) as exc:
                     log.warning(
-                        "could not write birth request; treating as no operator ack: %s",
+                        "could not write maturation request; treating as no operator ack: %s",
                         exc,
                     )
             if not self._awaiting_ack_logged:
-                log.warning("stage.maturation.ready: awaiting operator ack for supervised birth")
+                log.warning("stage.maturation.ready: awaiting operator ack for supervised maturation")
                 self._awaiting_ack_logged = True
             await self._publish(
                 STAGE_MATURATION_READY,
@@ -569,7 +569,7 @@ class MaturationGateRunner:
             vocal = self._registry.get("vocal")
             if hasattr(vocal, "set_dormant"):
                 vocal.set_dormant(False)
-                log.info("birth: vox activated")
+                log.info("maturation: vocal activated")
         if "embodiment" in self._registry:
             embodiment = self._registry.get("embodiment")
             try:
@@ -577,7 +577,7 @@ class MaturationGateRunner:
             except Exception:
                 ok = False
             if not ok:
-                log.warning("maturation gate: Mundus activation failed; deferring birth")
+                log.warning("maturation gate: Embodiment activation failed; deferring maturation")
                 await self._publish(
                     STAGE_MATURATION_READY,
                     maturation_ready_payload(
@@ -608,7 +608,7 @@ class MaturationGateRunner:
             clear_request(self._maturation_request_path)
             clear_ack(self._maturation_ack_path)
         except OSError as exc:
-            log.warning("could not clear birth acknowledgement files after birth: %s", exc)
+            log.warning("could not clear maturation acknowledgement files after maturation: %s", exc)
         self._maturation_request = None
 
         # Unlock the developmental phase locus lock. The unlock is attributed to the developmental phase,
@@ -616,13 +616,13 @@ class MaturationGateRunner:
         try:
             write_desired_locus("virtual", locked=False, locked_by="gestation")
         except Exception:
-            log.warning("could not unlock gestation locus after birth", exc_info=True)
+            log.warning("could not unlock development locus after maturation", exc_info=True)
 
         if self._on_maturation is not None:
             try:
                 self._on_maturation()
             except Exception:
-                log.warning("maturation gate: birth hook raised; continuing birth", exc_info=True)
+                log.warning("maturation gate: maturation hook raised; continuing maturation", exc_info=True)
 
         await self._publish(
             STAGE_MATURATION,

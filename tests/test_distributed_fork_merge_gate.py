@@ -48,7 +48,7 @@ def _parent_and_fork(tmp_path: Path) -> tuple[ForkManager, str, str]:
     parent = mgr.snapshot(
         FakeRegistry([FakeModule("self_model", {"name": "Kaine Doe"})]), label="parent"
     )
-    fork = mgr.fork(parent.id, label="temp-being")
+    fork = mgr.fork(parent.id, label="temp-entity")
     return mgr, parent.id, fork.id
 
 

@@ -120,12 +120,12 @@ def test_working_memory_includes_rendered_events():
     ctx = ContextAssembler().assemble(
         about="are you there", snapshot=snap, self_model={}, mode="external"
     )
-    assert "Soma reports wellness" in ctx.prompt
-    assert "Thymos state" in ctx.prompt
+    assert "Interoception reports wellness" in ctx.prompt
+    assert "Affect state" in ctx.prompt
     assert 'Speech heard: "are you there"' in ctx.prompt
     assert "are you there" in ctx.prompt  # the triggering input too
     assert AWARENESS_HEADING in ctx.prompt
-    assert "Soma reports" in ctx.working_memory  # exposed for the eval log
+    assert "Interoception reports" in ctx.working_memory  # exposed for the eval log
 
 
 def test_empty_snapshot_uses_empty_awareness():
@@ -422,7 +422,7 @@ def test_max_events_floored_to_one():
     a = ContextAssembler(max_events=0)
     snap = _snap([("e1", _ev("interoception", "interoception.report", {"wellness": 0.5, "alerts": []}), 0.9)])
     ctx = a.assemble(about="x", snapshot=snap, self_model={}, mode="external")
-    assert "Soma reports" in ctx.working_memory
+    assert "Interoception reports" in ctx.working_memory
 
 
 @pytest.mark.asyncio

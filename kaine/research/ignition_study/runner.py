@@ -212,7 +212,7 @@ class StudyRunner:
                 revived_from: str | None = None
             elif line in ("branch", "repeat"):
                 if seed is None:
-                    raise StudyError("gestation has not completed")
+                    raise StudyError("development has not completed")
                 revived_from = seed
             elif line == "accumulate":
                 if k == 1:
@@ -347,7 +347,7 @@ class StudyRunner:
             seconds = float(_stimulus_source_params(feed).maturation_transition_seconds)
         except Exception as exc:
             log.warning(
-                "birth bloom length unresolved (%s); waiting the %.0f s maximum",
+                "maturation bloom length unresolved (%s); waiting the %.0f s maximum",
                 type(exc).__name__,
                 MATURATION_BLOOM_MAX_SECONDS,
             )
@@ -492,7 +492,7 @@ class StudyRunner:
         ):
             adopted = self._adopt_maturation_preservation(line_dir, modules_set)
             if adopted is not None:
-                log.info("Adopting the recorded birth preservation %s", adopted["bundle"])
+                log.info("Adopting the recorded maturation preservation %s", adopted["bundle"])
                 return self._finish_record(adopted)
 
         overlay_toml = dumps(overlay)
@@ -652,7 +652,7 @@ class StudyRunner:
                             )
                             if not ok:
                                 log.error(
-                                    "Birth preservation request did not succeed for %s",
+                                    "Maturation preservation request did not succeed for %s",
                                     line,
                                 )
 
@@ -760,7 +760,7 @@ class StudyRunner:
                     # A verdict that exists but cannot be read is retried next
                     # poll; say so instead of treating it silently as none.
                     log.warning(
-                        "Gestation viability verdict for %s step %s could not be read",
+                        "Development viability verdict for %s step %s could not be read",
                         line,
                         k,
                         exc_info=True,
@@ -769,7 +769,7 @@ class StudyRunner:
                 if isinstance(viability_data, dict) and viability_data.get("verdict") == "unviable":
                     unviable_verdict = viability_data
                     log.warning(
-                        "Gestation viability watch declared unviable for %s step %s "
+                        "Development viability watch declared unviable for %s step %s "
                         "(rule %s): %s",
                         line,
                         k,
@@ -782,7 +782,7 @@ class StudyRunner:
                     unviable_terminated = True
                 except Exception:
                     log.warning(
-                        "Failed to terminate gestation process for %s step %s",
+                        "Failed to terminate development process for %s step %s",
                         line,
                         k,
                         exc_info=True,
@@ -821,7 +821,7 @@ class StudyRunner:
                 )
             except Exception:
                 log.warning(
-                    "Failed to write unviable gestation note for %s step %s",
+                    "Failed to write unviable development note for %s step %s",
                     line,
                     k,
                     exc_info=True,
@@ -1226,7 +1226,7 @@ def _write_unviable_note(
         else f"- evidence: {evidence}"
     )
     text = (
-        f"# Gestation ended: it could not reach birth\n\n"
+        f"# Development ended: it could not reach maturation\n\n"
         f"- When: {when}\n"
         f"- Line: {line}\n"
         f"- Step: {step}\n"
@@ -1237,12 +1237,12 @@ def _write_unviable_note(
         f"- Lived hours: {lived_hours}\n\n"
         f"## Evidence\n\n{evidence_lines}\n\n"
         f"## What happened\n\n"
-        f"The gestation owner's viability watch judged, from the entrainment "
-        f"measurements, that the being could not complete gestation within its "
+        f"The development owner's viability watch judged, from the entrainment "
+        f"measurements, that the entity could not complete development within its "
         f"budget. The cycle was stopped without a preservation bundle (operator "
-        f"policy for entities that do not complete gestation). All of this "
+        f"policy for entities that do not complete development). All of this "
         f"step's data is kept in this directory.\n\n"
-        f"See the gestation chapter of the KAINE book (Readiness markers; How "
+        f"See the development chapter of the KAINE book (Readiness markers; How "
         f"entrainment is measured; Viability watch).\n"
     )
     _write_text_atomic(note_path, text)

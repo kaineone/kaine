@@ -130,11 +130,11 @@ def build_maturation_router(
     async def maturation_ack(body: AckBody):
         request = read_request(path=request_path)
         if request is None:
-            raise HTTPException(status_code=409, detail="no birth awaiting acknowledgement")
+            raise HTTPException(status_code=409, detail="no maturation awaiting acknowledgement")
         if body.request_id != request.request_id:
             raise HTTPException(
                 status_code=409,
-                detail="request_id does not match the current birth request",
+                detail="request_id does not match the current maturation request",
             )
 
         ack = MaturationAck(
@@ -142,7 +142,7 @@ def build_maturation_router(
             acknowledged_at=datetime.now(timezone.utc).isoformat(),
         )
         write_ack(ack, path=ack_path)
-        log.info("operator acknowledged birth")
+        log.info("operator acknowledged maturation")
         return JSONResponse(
             maturation_snapshot(
                 request_path=request_path,

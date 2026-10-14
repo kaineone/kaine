@@ -5,13 +5,13 @@
 
 A single bearer-token scheme protects every state-changing endpoint and every
 privileged read surface. The token is configured in ``DashboardConfig.operator_token``
-(populated from ``KAINE_NEXUS_TOKEN`` or ``config/secrets.toml``) and is never
+(populated from ``KAINE_DASHBOARD_TOKEN`` or ``config/secrets.toml``) and is never
 logged.
 
 Browser clients that cannot send custom headers authenticate via a short-lived
 session cookie established through ``/login``. Because cookies are shared across
 all ports of a host, state-changing requests additionally require a per-session
-key delivered once at login and sent in ``X-Nexus-Session-Key``.
+key delivered once at login and sent in ``X-Dashboard-Session-Key``.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from kaine.dashboard.config import DashboardConfig
 log = logging.getLogger(__name__)
 
 _AUTH_HEADER_PREFIX = "Bearer "
-SESSION_COOKIE = "kaine_nexus_session"
-SESSION_KEY_HEADER = "X-Nexus-Session-Key"
+SESSION_COOKIE = "kaine_dashboard_session"
+SESSION_KEY_HEADER = "X-Dashboard-Session-Key"
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _MAX_RATE_LIMIT_KEYS = 1024
 _MAX_LOGIN_BODY_BYTES = 4096
@@ -227,13 +227,13 @@ def require_operator_token(request: Request) -> None:
 
     A valid Bearer token authenticates any HTTP method. Otherwise a valid
     session cookie is sufficient for safe (read) methods; unsafe methods also
-    require the matching ``X-Nexus-Session-Key`` header.
+    require the matching ``X-Dashboard-Session-Key`` header.
     """
     config: Optional[DashboardConfig] = getattr(getattr(request, "app", None), "state", None)
     if config is not None:
         config = getattr(config, "config", None)
     if not isinstance(config, DashboardConfig):
-        log.warning("nexus auth: missing NexusConfig in app.state")
+        log.warning("dashboard auth: missing DashboardConfig in app.state")
         raise DashboardAuthError()
 
     if config.access == "open":
@@ -242,7 +242,7 @@ def require_operator_token(request: Request) -> None:
     expected = config.operator_token
     if not expected:
         # No token configured: every privileged request is rejected.
-        log.warning("nexus auth: request rejected because operator_token is not configured")
+        log.warning("dashboard auth: request rejected because operator_token is not configured")
         raise DashboardAuthError()
 
     auth = request.headers.get("Authorization", "")
@@ -250,7 +250,7 @@ def require_operator_token(request: Request) -> None:
         presented = auth[len(_AUTH_HEADER_PREFIX) :]
         if _tokens_match(presented, expected):
             return
-        log.warning("nexus auth: invalid operator token presented")
+        log.warning("dashboard auth: invalid operator token presented")
 
     sessions = getattr(request.app.state, "sessions", None)
     if sessions is not None:
@@ -320,14 +320,14 @@ def build_auth_router(config: DashboardConfig) -> APIRouter:
         html = (
             "<!DOCTYPE html>"
             "<html>"
-            "<head><title>Nexus Login</title></head>"
+            "<head><title>Dashboard Login</title></head>"
             "<body>"
-            f'<form id="nexus-login-form" method="post" action="/auth/login">'
-            "<p>Enter the operator token from KAINE_NEXUS_TOKEN or config/secrets.toml.</p>"
-            f'<input id="nexus-login-token" type="password" name="token" autocomplete="current-password" />'
+            f'<form id="dashboard-login-form" method="post" action="/auth/login">'
+            "<p>Enter the operator token from KAINE_DASHBOARD_TOKEN or config/secrets.toml.</p>"
+            f'<input id="dashboard-login-token" type="password" name="token" autocomplete="current-password" />'
             '<button type="submit">Log in</button>'
             "</form>"
-            f'<p id="nexus-login-error">{message}</p>'
+            f'<p id="dashboard-login-error">{message}</p>'
             '<script src="/static/dashboard_auth.js"></script>'
             "</body>"
             "</html>"

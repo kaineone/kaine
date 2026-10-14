@@ -164,14 +164,14 @@ def _classify(rows: list[dict[str, Any]], config: SelfModelConfig) -> Verdict:
     outcome = Outcome.WIN if win else Outcome.NULL
     if win:
         detail = (
-            "Eidolon scorer's fixed-threshold heuristic behaves as specified: it "
+            "Self-model scorer's fixed-threshold heuristic behaves as specified: it "
             "reproduced every expected score on the planted-signal/claim battery "
             "(validates scorer arithmetic against FIXED thresholds, NOT calibration "
             "and NOT predicted-vs-actual self-knowledge)"
         )
     else:
         detail = (
-            f"Eidolon scorer mismatched on {n - correct}/{n} cases — it did not "
+            f"Self-model scorer mismatched on {n - correct}/{n} cases — it did not "
             "reproduce the expected score from the planted signals"
         )
     return Verdict(

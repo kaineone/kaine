@@ -182,7 +182,7 @@ class DINOv2Encoder:
             out = self._model(**dummy)
         self._latent_dim = int(out.last_hidden_state.shape[-1])
         log.info(
-            "Topos encoder %s loaded on %s; latent dim %d",
+            "Vision encoder %s loaded on %s; latent dim %d",
             self._model_id,
             self._device,
             self._latent_dim,
@@ -405,7 +405,7 @@ class InternVideoNextEncoder:
         )
         self._latent_dim = len(probe)
         log.info(
-            "Topos encoder %s loaded on %s; clip_len %d, pooling %s, latent dim %d "
+            "Vision encoder %s loaded on %s; clip_len %d, pooling %s, latent dim %d "
             "(trust_remote_code=False)",
             self._model_id,
             self._device,

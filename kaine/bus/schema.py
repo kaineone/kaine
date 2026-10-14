@@ -93,5 +93,5 @@ def entry_id_sort_key(entry_id: str) -> tuple[int, int, int, str]:
 def ensure_writable(stream: str, source: str) -> None:
     if stream == WORKSPACE_STREAM and source != WORKSPACE_SOURCE:
         raise ReservedStreamError(
-            f"only the syneidesis module may publish to {WORKSPACE_STREAM}"
+            f"only the workspace module may publish to {WORKSPACE_STREAM}"
         )

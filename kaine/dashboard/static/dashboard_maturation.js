@@ -17,7 +17,7 @@
   var ACK_CONFIRM_ID = "dev-ack-confirm";
   var ACK_CANCEL_ID = "dev-ack-cancel";
   var ACK_MSG_ID = "dev-ack-msg";
-  var STATUS_URL = "/diagnostics/birth.json";
+  var STATUS_URL = "/diagnostics/maturation.json";
   var ACK_URL = "/diagnostics/birth/ack";
   var POLL_MS = 5000;
 
@@ -199,10 +199,10 @@
 
   function scheduleRefresh() {
     if (
-      window.NexusVisibility &&
-      typeof window.NexusVisibility.pausable === "function"
+      window.DashboardVisibility &&
+      typeof window.DashboardVisibility.pausable === "function"
     ) {
-      window.NexusVisibility.pausable(refresh, POLL_MS);
+      window.DashboardVisibility.pausable(refresh, POLL_MS);
     } else {
       setInterval(refresh, POLL_MS);
     }
@@ -220,7 +220,7 @@
     init();
   }
 
-  window.NexusBirth = {
+  window.DashboardMaturation = {
     refresh: refresh,
     attachAck: attachAck,
     render: render,

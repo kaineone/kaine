@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, "..", "..");
 const SOURCE_PATH = path.join(ROOT, "kaine", "dashboard", "static", "dashboard_auth.js");
 const source = fs.readFileSync(SOURCE_PATH, "utf8");
 
-const STORAGE_KEY = "kaine.nexus.sessionKey";
+const STORAGE_KEY = "kaine.dashboard.sessionKey";
 
 function makeElement(id, extras) {
   extras = extras || {};
@@ -307,7 +307,7 @@ var scenarios = [
       }
       if (headers.get("x-nexus-session-key") !== "K1") {
         throw new Error(
-          "missing X-Nexus-Session-Key, got " +
+          "missing X-Dashboard-Session-Key, got " +
             headers.get("x-nexus-session-key")
         );
       }

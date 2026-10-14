@@ -89,7 +89,7 @@ async def _drain_peer_poll(episodic_memory: EpisodicMemory, bus: AsyncBus) -> No
                 # An id that does not parse yet means the poll has not caught up; keep waiting.
                 pass
         await asyncio.sleep(0.02)
-    pytest.fail("mnemos peer poll did not catch up")
+    pytest.fail("episodic memory peer poll did not catch up")
 
 
 @pytest.mark.asyncio

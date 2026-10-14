@@ -215,7 +215,7 @@ class Effectors(BaseModule):
         try:
             await self.act(effector_name, request)
         except Exception:
-            log.exception("praxis failed to realize act intent for %s", effector_name)
+            log.exception("effectors failed to realize act intent for %s", effector_name)
 
     def _verify_provenance(self, event: Event) -> Optional[str]:
         """Return a rejection reason for an act intent, or ``None`` to accept.
@@ -291,7 +291,7 @@ class Effectors(BaseModule):
                 provenance_rejected=True,
             )
         except Exception:
-            log.exception("praxis audit log append failed")
+            log.exception("effectors audit log append failed")
         await self.publish(
             "effectors.action",
             {
@@ -357,7 +357,7 @@ class Effectors(BaseModule):
                 blocked=blocked,
             )
         except Exception:
-            log.exception("praxis audit log append failed")
+            log.exception("effectors audit log append failed")
         salience = self._baseline_salience if result.success else self._alert_salience
         await self.publish(
             "effectors.action",

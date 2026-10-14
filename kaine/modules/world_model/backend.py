@@ -355,7 +355,7 @@ class DreamerV3WorldModel:
             from external.dreamerv3 import rssm as _rssm
         except ImportError as exc:  # pragma: no cover - covered by missing-extra path
             raise ImportError(
-                "Phantasia backend 'dreamerv3' engine='jax' requires the [worldmodel] extra "
+                "World model backend 'dreamerv3' engine='jax' requires the [worldmodel] extra "
                 "(jax). Install it with: pip install '.[worldmodel]' — or set "
                 '[world_model].backend = "fake" / engine = "numpy".'
             ) from exc
@@ -589,7 +589,7 @@ def load_world_model(
         if engine == "numpy":
             return NumpyDreamerV3WorldModel(obs_dim, **sub)
         raise ValueError(
-            f"unknown phantasia engine {engine!r} (expected 'jax' or 'numpy')"
+            f"unknown world model engine {engine!r} (expected 'jax' or 'numpy')"
         )
 
-    raise ValueError(f"unknown phantasia backend {backend!r}")
+    raise ValueError(f"unknown world model backend {backend!r}")

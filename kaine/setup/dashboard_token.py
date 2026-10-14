@@ -40,27 +40,27 @@ def ensure_dashboard_token(
     """Ensure a dashboard operator sign-in token exists.
 
     Without a token, the dashboard rejects every sign-in with 503. The environment
-    variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
+    variable ``KAINE_DASHBOARD_TOKEN`` takes precedence; otherwise the token is read
     from or written to ``[dashboard] operator_token`` in the secrets file.
     """
     env = os.environ if env is None else env
     out("\n")
 
     try:
-        env_token = (legacy_aliases.getenv("KAINE_NEXUS_TOKEN", "", environ=env) or "").strip()
+        env_token = (legacy_aliases.getenv("KAINE_DASHBOARD_TOKEN", "", environ=env) or "").strip()
     except legacy_aliases.LegacyNameConflict as exc:
         out(f"Dashboard sign-in token: {exc}. Nothing written.\n")
         return "conflict"
     if env_token:
         if len(env_token) < _MIN_DASHBOARD_TOKEN_LEN:
             out(
-                "Dashboard sign-in token: KAINE_NEXUS_TOKEN is shorter than "
+                "Dashboard sign-in token: KAINE_DASHBOARD_TOKEN is shorter than "
                 f"{_MIN_DASHBOARD_TOKEN_LEN} characters, so the dashboard will refuse it. "
                 "Unset it or replace it with a longer one.\n"
             )
             return "too_short"
         out(
-            "Dashboard sign-in token: provided by KAINE_NEXUS_TOKEN; nothing written.\n"
+            "Dashboard sign-in token: provided by KAINE_DASHBOARD_TOKEN; nothing written.\n"
         )
         return "env"
 

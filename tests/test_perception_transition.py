@@ -580,8 +580,8 @@ def test_fade_continues_across_blocks_to_full_gain():
         ("disabled", logging.INFO, "transition_seconds is 0"),
         ("no_stage", logging.INFO, "no developmental stage"),
         ("developing", logging.INFO, "not born yet"),
-        ("never_born", logging.INFO, "never born from the womb"),
-        ("missing_record", logging.WARNING, "no womb birth record"),
+        ("never_born", logging.INFO, "never born from the stimulus source"),
+        ("missing_record", logging.WARNING, "no stimulus source maturation record"),
         ("digest_mismatch", logging.WARNING, "digest mismatch"),
     ],
 )
@@ -607,7 +607,7 @@ def test_no_transition_logs_why(case, level, fragment, caplog):
     transition, pclock = _build(feed, stage, clock, timers)
     assert transition is None
     assert not pclock.paused and timers.timers == []
-    records = [r for r in caplog.records if "no womb-to-world transition" in r.getMessage()]
+    records = [r for r in caplog.records if "no stimulus-source-to-world transition" in r.getMessage()]
     assert len(records) == 1
     assert records[0].levelno == level
     assert fragment in records[0].getMessage()

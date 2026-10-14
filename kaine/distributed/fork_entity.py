@@ -61,9 +61,9 @@ def build_forked_entity_job(
     not silently stored (mirroring the per-fork dilation contract).
     """
     if not fork_snapshot_id:
-        raise ValueError("fork_snapshot_id is required for a forked-being job")
+        raise ValueError("fork_snapshot_id is required for a forked-entity job")
     if not directive or not directive.strip():
-        raise ValueError("a forked-being job requires a directive")
+        raise ValueError("a forked-entity job requires a directive")
     # Validate + normalize the timing profile (raises on time_scale <= 0).
     timing_meta = build_timing_metadata(time_scale=time_scale)
     inputs = {

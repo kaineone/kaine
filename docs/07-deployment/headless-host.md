@@ -15,7 +15,7 @@ Verify remote SSH access in step 2 before you switch to a headless boot target i
 | `--all` | Phase 1, then phase 2, with the same phase-2 check. |
 | `--dry-run` | Prints every action without performing any. |
 | `--swap-size SZ` | Size of `/swapfile` (default `16G`). |
-| `--serve-nexus` | With `--phase2` or `--all`, runs `tailscale serve --bg 8088` when Tailscale is installed and up. |
+| `--serve-dashboard` | With `--phase2` or `--all`, runs `tailscale serve --bg 8088` when Tailscale is installed and up. |
 
 The script does not create the Redis and Qdrant credentials or install the quadlet units. Do those by hand as described in step 5.
 
@@ -269,7 +269,7 @@ Then render the units into `~/.config/containers/systemd/` and start the service
 ```bash
 bash scripts/install-quadlet.sh
 systemctl --user daemon-reload
-systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
 ```
 
 The script writes the checkout's absolute path into the units and refuses a path with spaces or other characters that would break a unit line. It checks the rendered units with Podman's quadlet generator before installing them (`--dry-run` renders and checks without writing; `--root` and `--dest` choose another checkout or destination). It never enables or starts a unit, and it never installs `kaine-cycle-unattended.container`. Run it again after moving the checkout.
@@ -350,7 +350,7 @@ Do not widen the bind to `0.0.0.0`, which would expose the port on every interfa
 
 The reference host runs Tailscale, so `tailscale serve` puts a tailnet HTTPS address in front of the loopback port, and Tailscale provisions the certificate for the node's MagicDNS name.
 
-The dashboard refuses a request whose `Host` header is not in `[dashboard].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_NEXUS_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
+The dashboard refuses a request whose `Host` header is not in `[dashboard].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_DASHBOARD_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
 
 In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` and keep the loopback names:
 
@@ -359,10 +359,10 @@ In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` an
 host_allowlist = ["127.0.0.1", "localhost", "::1", "myhost.tail1234.ts.net"]
 ```
 
-In `quadlet/kaine-dashboard.container`, add the HTTPS origin to `KAINE_NEXUS_ALLOWED_ORIGINS`:
+In `quadlet/kaine-dashboard.container`, add the HTTPS origin to `KAINE_DASHBOARD_ALLOWED_ORIGINS`:
 
 ```ini
-Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088,https://myhost.tail1234.ts.net
+Environment=KAINE_DASHBOARD_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088,https://myhost.tail1234.ts.net
 ```
 
 Render the units again and restart the dashboard:
@@ -370,7 +370,7 @@ Render the units again and restart the dashboard:
 ```bash
 bash scripts/install-quadlet.sh
 systemctl --user daemon-reload
-systemctl --user restart kaine-nexus
+systemctl --user restart kaine-dashboard
 ```
 
 If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[dashboard].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[dashboard]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart the dashboard afterwards.

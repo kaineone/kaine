@@ -986,7 +986,7 @@ def test_new_panel_partials_render_with_representative_data():
 def test_evaluation_html_contains_planning_policy_panel():
     base = Path(__file__).parent.parent / "kaine" / "dashboard" / "templates"
     evald = (base / "_evaluation_sections.html").read_text()
-    assert "Nous policy" in evald
+    assert "Planning policy" in evald
     assert "nous_policy" in evald
 
 
@@ -1112,14 +1112,14 @@ def test_preservation_partial_renders():
 # Section 8 — Live cycle-vitals data contract (JOB 1 regression)
 #
 # The console cycle/run-identity/pacing/module panels are server-rendered once
-# and then live-refreshed in place by the NexusVitals poller (static/dashboard.js)
+# and then live-refreshed in place by the DashboardVitals poller (static/dashboard.js)
 # from /diagnostics/metrics.json + /diagnostics/health.json. If the backend
 # shape and the field paths the frontend reads ever drift apart, those panels
 # silently go dead again (the exact bug this section guards). These tests pin
 # the contract on BOTH sides so a rename on either side fails loudly.
 # ---------------------------------------------------------------------------
 
-# Field paths NexusVitals.renderRunIdentity / renderBanner read out of
+# Field paths DashboardVitals.renderRunIdentity / renderBanner read out of
 # /diagnostics/metrics.json (make_metrics_snapshot).
 _VITALS_METRICS_FIELDS = (
     "cycle_status",
@@ -1133,7 +1133,7 @@ _VITALS_METRICS_FIELDS = (
     "experiential_rate_hz",
 )
 
-# Field paths NexusVitals.renderPacing reads out of health.cycle_pacing.
+# Field paths DashboardVitals.renderPacing reads out of health.cycle_pacing.
 _VITALS_PACING_FIELDS = (
     "state",
     "time_scale",
@@ -1147,7 +1147,7 @@ _VITALS_PACING_FIELDS = (
     "window_ticks",
 )
 
-# Field paths NexusVitals.renderRunIdentity reads out of health.admissibility.
+# Field paths DashboardVitals.renderRunIdentity reads out of health.admissibility.
 _VITALS_ADMISSIBILITY_FIELDS = ("state", "run_id", "manifest_present", "tick_index")
 
 
@@ -1181,7 +1181,7 @@ def _running_runtime_payload() -> dict[str, Any]:
 
 
 def test_vitals_metrics_contract_running(tmp_path):
-    """metrics.json (make_metrics_snapshot) surfaces every field NexusVitals
+    """metrics.json (make_metrics_snapshot) surfaces every field DashboardVitals
     reads when a cycle is running."""
     from kaine.dashboard.__main__ import make_metrics_snapshot
 
@@ -1196,7 +1196,7 @@ def test_vitals_metrics_contract_running(tmp_path):
 
 def test_vitals_metrics_contract_not_running(tmp_path):
     """With no runtime.json the snapshot reports 'not running' — the exact value
-    NexusVitals.renderBanner compares against to show the banner."""
+    DashboardVitals.renderBanner compares against to show the banner."""
     from kaine.dashboard.__main__ import make_metrics_snapshot
 
     snap = make_metrics_snapshot(runtime_path=tmp_path / "absent.json")()
@@ -1266,7 +1266,7 @@ def test_status_chip_priority_logic_in_js():
 @pytest.mark.asyncio
 async def test_vitals_health_contract(tmp_path):
     """health.json exposes cycle_pacing / admissibility / modules with every
-    field the NexusVitals renderers read."""
+    field the DashboardVitals renderers read."""
     from kaine.dashboard.health import DependencySpec, HealthProber
 
     runtime = tmp_path / "runtime.json"
@@ -1309,16 +1309,16 @@ def _dashboard_js() -> str:
 
 
 def test_vitals_frontend_reads_declared_endpoints_and_fields():
-    """Static guard tying the frontend to the backend contract: the NexusVitals
+    """Static guard tying the frontend to the backend contract: the DashboardVitals
     block must fetch the two live endpoints and read the exact field names the
     backend provides. A rename on either side breaks this test."""
     js = _dashboard_js()
-    assert "window.NexusVitals" in js
+    assert "window.DashboardVitals" in js
     assert "/diagnostics/metrics.json" in js
     assert "/diagnostics/health.json" in js
     # Every backend field the renderers depend on appears verbatim in the JS.
     for field in _VITALS_METRICS_FIELDS + _VITALS_PACING_FIELDS:
-        assert field in js, f"dashboard.js NexusVitals never reads {field!r}"
+        assert field in js, f"dashboard.js DashboardVitals never reads {field!r}"
     # health blocks read by path.
     assert "health.cycle_pacing" in js
     assert "health.admissibility" in js
@@ -1326,7 +1326,7 @@ def test_vitals_frontend_reads_declared_endpoints_and_fields():
 
 
 def test_vitals_template_hooks_present():
-    """The live-refresh hook ids NexusVitals targets must exist in the templates,
+    """The live-refresh hook ids DashboardVitals targets must exist in the templates,
     and the not-running banner must be rendered-but-hidden while running (so the
     poller can show/hide it in place rather than the old reload-only behaviour)."""
     tpl = Path(__file__).resolve().parents[1] / "kaine" / "dashboard" / "templates"
@@ -1342,7 +1342,7 @@ def test_vitals_template_hooks_present():
     # Banner is always emitted (no longer gated behind a not-running-only {% if %}),
     # hidden when the cycle is running.
     assert 'hidden' in diag_sections
-    assert 'NexusVitals.init' in (tpl / "console.html").read_text()
+    assert 'DashboardVitals.init' in (tpl / "console.html").read_text()
 
 
 def _dashboard_console_js() -> str:
@@ -1357,7 +1357,7 @@ def test_single_multiplexed_eventsource_across_the_bundle():
     diagnostics bundle constructs exactly ONE ``EventSource``. Every feature
     (charts, fatigue, supervisor, preservation, vitals, reveal, presence, and the
     counter-only metrics stream) receives events by subscribing to the shared
-    NexusStream dispatcher rather than opening its own connection — this is what
+    DashboardStream dispatcher rather than opening its own connection — this is what
     keeps the console under the browser's ~6-connection-per-host cap so streams
     do not stall behind each other. A regression that reintroduces a per-feature
     ``new EventSource`` fails here."""
@@ -1368,14 +1368,14 @@ def test_single_multiplexed_eventsource_across_the_bundle():
         f"expected exactly one EventSource in the diagnostics bundle, "
         f"found {total_sources} — a feature reopened its own stream"
     )
-    # The single construction lives in the NexusStream dispatcher, and features
+    # The single construction lives in the DashboardStream dispatcher, and features
     # fan out through its subscribe() API.
     assert "new EventSource" in js
-    assert "window.NexusStream" in js
+    assert "window.DashboardStream" in js
     assert "subscribe:" in js or "subscribe(" in js
     # The formerly-independent counter-only metrics stream now delegates to the
     # shared dispatcher instead of opening a second EventSource.
-    assert "NexusSSE" in js and "subscribeMetrics" in js
+    assert "DashboardSSE" in js and "subscribeMetrics" in js
 
 
 def test_welfare_block_lists_blind_sensors_until_cleared(tmp_path):

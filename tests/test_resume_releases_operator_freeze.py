@@ -201,4 +201,4 @@ def test_override_refused_in_read_only_mode():
         headers={"Origin": "http://127.0.0.1:8088"},
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "Nexus is in read-only mode: controls are off"
+    assert r.json()["detail"] == "Dashboard is in read-only mode: controls are off"

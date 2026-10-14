@@ -58,9 +58,9 @@ Both wizards ask the same questions, in this order (the terminal wizard runs eve
 
 In the browser, steps 1 to 10 are the wizard pages and the review page. The browser wizard does not write the container settings (step 11); run the terminal wizard for those. After you save, the browser wizard offers the remaining setup work (optional extras, the organ download, shared services and the dashboard) as consented jobs, and its finish page takes the place of the summary.
 
-Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_NEXUS_TOKEN` environment variable is unset. The token is only needed when `[dashboard].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_DASHBOARD_TOKEN` environment variable is unset. The token is only needed when `[dashboard].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
 
-The finish page shows a service status light for each known local service and for the dashboard, a **Start Dashboard** button when the dashboard is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
+The finish page shows a service status light for each known local service and for the dashboard, a **Start Dashboard** button when the dashboard is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_DASHBOARD_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 
 ## Spawning the entity from the browser
 
@@ -244,7 +244,7 @@ NVIDIA CUDA is the primary tested configuration, and CPU-only always works. No R
 
 See [Accelerators and PyTorch wheels](../03-hardware/accelerators.md) for detailed wheel selection.
 
-The dashboard ships with `[dashboard].access = "open"` by default: viewing and control are open with no token or sign-in. Set it to `"token"` or export `KAINE_NEXUS_ACCESS=token` to require the operator token and session sign-in. `KAINE_NEXUS_READ_ONLY=1` refuses every request except GET/HEAD/OPTIONS with 403. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet hostnames. Host and Origin checks always apply.
+The dashboard ships with `[dashboard].access = "open"` by default: viewing and control are open with no token or sign-in. Set it to `"token"` or export `KAINE_DASHBOARD_ACCESS=token` to require the operator token and session sign-in. `KAINE_DASHBOARD_READ_ONLY=1` refuses every request except GET/HEAD/OPTIONS with 403. `KAINE_DASHBOARD_EXTRA_HOSTS` adds tailnet hostnames. Host and Origin checks always apply.
 
 For container hosts, see [Containers](../07-deployment/containers.md).
 

@@ -6,7 +6,7 @@
  * On localhost the browser shares cookies across ports on the same host, so the
  * HttpOnly session cookie by itself would authenticate any origin on the same
  * host. The session key is therefore kept only in origin-scoped localStorage
- * and sent explicitly via the X-Nexus-Session-Key header for state-changing
+ * and sent explicitly via the X-Dashboard-Session-Key header for state-changing
  * requests. The cookie is still required, but it alone must not authorize
  * mutations.
  */
@@ -20,7 +20,7 @@
   }
   window.__nexusAuthInstalled = true;
 
-  var STORAGE_KEY = "kaine.nexus.sessionKey";
+  var STORAGE_KEY = "kaine.dashboard.sessionKey";
 
   // Clock hook for tests; defaults to the real clock.
   if (typeof window.__nexusAuthNow !== "function") {
@@ -143,7 +143,7 @@
       return;
     }
     btn.addEventListener("click", function () {
-      window.NexusAuth.logout();
+      window.DashboardAuth.logout();
     });
   }
 
@@ -244,7 +244,7 @@
       method !== "OPTIONS"
     ) {
       var headers = buildHeaders(input, init);
-      headers.set("X-Nexus-Session-Key", key);
+      headers.set("X-Dashboard-Session-Key", key);
       nextInit = cloneInitWithHeaders(init, headers);
     }
 
@@ -266,7 +266,7 @@
   // Public API
   // ---------------------------------------------------------------------------
 
-  window.NexusAuth = {
+  window.DashboardAuth = {
     logout: function () {
       fetch("/auth/logout", { method: "POST" })
         .then(function () {

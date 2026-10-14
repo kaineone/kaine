@@ -388,7 +388,7 @@ class RemoteBridge:
         )
         log.info(
             "remote bridge listening on %s://%s:%d (token %s; origins=%s; "
-            "video->%s audio->%s vox-tap=%s)",
+            "video->%s audio->%s vocal-tap=%s)",
             "wss" if ssl_context is not None else "ws",
             self._cfg.host,
             self._cfg.port,
@@ -490,7 +490,7 @@ class RemoteBridge:
 
     async def _serve_video(self, connection: Any) -> None:
         if self._vision is None:
-            await connection.close(code=4503, reason="topos not enabled")
+            await connection.close(code=4503, reason="vision not enabled")
             return
         self._claims.acquire("video")
         log.info("remote video producer connected")

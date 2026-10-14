@@ -339,7 +339,7 @@ def test_redact_heard_speech_external_types_and_nesting():
     assert sentinel not in line
     assert HEARD_SPEECH_PLACEHOLDER in line
 
-    plain = _event("me", "me.utterance", {"text": "I am the being"})
+    plain = _event("me", "me.utterance", {"text": "I am the entity"})
     assert redact_heard_speech(plain) is None
 
     original = {"message": sentinel, "sender": "Avatar Two"}

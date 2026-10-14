@@ -15,7 +15,7 @@ With no profile selected, the configuration loader applies the base-thesis `thes
 | `kaine-model-server` | OpenAI-compatible language organ (llama.cpp `llama-server`) | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 (`KAINE_ORGAN_GPU`) |
 | `kaine-speaches` | speech-to-text (faster-distil-Whisper) | `127.0.0.1:8000` (`KAINE_SPEACHES_HOST_PORT`) | none, CPU only |
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` (`KAINE_CHATTERBOX_HOST_PORT`) | card 1 (`KAINE_VISION_GPU`) |
-| `kaine-dashboard` | dashboard (`python -m kaine.dashboard`, served by uvicorn) | `127.0.0.1:8088` (`KAINE_NEXUS_HOST_PORT`) | none |
+| `kaine-dashboard` | dashboard (`python -m kaine.dashboard`, served by uvicorn) | `127.0.0.1:8088` (`KAINE_DASHBOARD_HOST_PORT`) | none |
 | `kaine-cycle` | the cognitive cycle, which is the entity (`--profile cycle`) | none | card 1 |
 | `kaine-study` | runner of the module-addition study, called the ignition study in code (`--profile study`) | none | card 1 |
 | `kaine-trainer` | voice-alignment trainer service (`--profile training`) | none | `KAINE_TRAINER_GPU`, defaulting to the organ's card |
@@ -29,9 +29,9 @@ Every published port is bound to `127.0.0.1`. Inside the Compose network, servic
 
 ## Opening Dashboard
 
-Open `http://127.0.0.1:8088/diagnostics/` on the host. The shipped `[dashboard].access` is `"open"`, so no token or sign-in is needed. Compose passes these dashboard variables from `compose/.env`: `KAINE_NEXUS_ACCESS` (`open` or `token`), `KAINE_NEXUS_TOKEN`, `KAINE_NEXUS_EXTRA_HOSTS` (tailnet names to add to the allowed hosts and origins) and `KAINE_NEXUS_HOST_PORT`, which also sets `KAINE_NEXUS_PUBLISHED_PORT` and the allowed origins. `compose/.env.example` lists only `KAINE_NEXUS_HOST_PORT`.
+Open `http://127.0.0.1:8088/diagnostics/` on the host. The shipped `[dashboard].access` is `"open"`, so no token or sign-in is needed. Compose passes these dashboard variables from `compose/.env`: `KAINE_DASHBOARD_ACCESS` (`open` or `token`), `KAINE_DASHBOARD_TOKEN`, `KAINE_DASHBOARD_EXTRA_HOSTS` (tailnet names to add to the allowed hosts and origins) and `KAINE_DASHBOARD_HOST_PORT`, which also sets `KAINE_DASHBOARD_PUBLISHED_PORT` and the allowed origins. `compose/.env.example` lists only `KAINE_DASHBOARD_HOST_PORT`.
 
-The service sets `KAINE_NEXUS_HOST=0.0.0.0` (the bind inside the container, so the published loopback port can reach it), `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1` and `KAINE_NEXUS_ALLOWED_ORIGINS` to the loopback origins. The dashboard also reads `KAINE_NEXUS_PORT`, `KAINE_NEXUS_CONVERSATION_ENABLED` and `KAINE_NEXUS_READ_ONLY`, but Compose does not pass them, so setting them in `.env` has no effect. To make the dashboard read-only, set `[dashboard].read_only = true` in `config/kaine.operator.toml`, which is mounted into the container, or pass the variable through a local overlay (`compose/*.local.yml` files are ignored by git). Host and Origin checks always apply, and `/` redirects to `/diagnostics/` when conversation is off. See [the dashboard](../05-dashboard.md).
+The service sets `KAINE_DASHBOARD_HOST=0.0.0.0` (the bind inside the container, so the published loopback port can reach it), `KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED=1` and `KAINE_DASHBOARD_ALLOWED_ORIGINS` to the loopback origins. The dashboard also reads `KAINE_DASHBOARD_PORT`, `KAINE_DASHBOARD_CONVERSATION_ENABLED` and `KAINE_DASHBOARD_READ_ONLY`, but Compose does not pass them, so setting them in `.env` has no effect. To make the dashboard read-only, set `[dashboard].read_only = true` in `config/kaine.operator.toml`, which is mounted into the container, or pass the variable through a local overlay (`compose/*.local.yml` files are ignored by git). Host and Origin checks always apply, and `/` redirects to `/diagnostics/` when conversation is off. See [the dashboard](../05-dashboard.md).
 
 ## The images
 

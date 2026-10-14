@@ -143,7 +143,7 @@ class SelfModel(BaseModule):
                 save_atomic(self._persistence_path, self._model)
             except Exception:
                 log.warning("failed to persist launch name", exc_info=True)
-            log.info("eidolon assigned launch name: %s", self._model.name)
+            log.info("self-model assigned launch name: %s", self._model.name)
 
         # Apply operator seed (first boot only) before any observation.
         if self._inference.enabled:
@@ -179,21 +179,21 @@ class SelfModel(BaseModule):
         try:
             await self._publish_self_model()
         except Exception:
-            log.debug("eidolon initial self-model publish failed", exc_info=True)
+            log.debug("self-model initial self-model publish failed", exc_info=True)
         if self._inference.enabled:
             self._tasks.append(
                 asyncio.create_task(
-                    self._affect_consumer_loop(), name=f"{self.name}-thymos-consumer"
+                    self._affect_consumer_loop(), name=f"{self.name}-affect-consumer"
                 )
             )
             self._tasks.append(
                 asyncio.create_task(
-                    self._planning_consumer_loop(), name=f"{self.name}-nous-consumer"
+                    self._planning_consumer_loop(), name=f"{self.name}-planning-consumer"
                 )
             )
             self._tasks.append(
                 asyncio.create_task(
-                    self._sleep_consumer_loop(), name=f"{self.name}-hypnos-consumer"
+                    self._sleep_consumer_loop(), name=f"{self.name}-sleep-consumer"
                 )
             )
 
@@ -215,7 +215,7 @@ class SelfModel(BaseModule):
         try:
             await self._save_to_disk()
         except Exception:
-            log.warning("eidolon final save failed", exc_info=True)
+            log.warning("self-model final save failed", exc_info=True)
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         sources = [ev.source for _, ev in snapshot.selected_events]
@@ -530,7 +530,7 @@ class SelfModel(BaseModule):
                 try:
                     await self._save_to_disk()
                 except Exception:
-                    log.warning("eidolon periodic save failed", exc_info=True)
+                    log.warning("self-model periodic save failed", exc_info=True)
         except asyncio.CancelledError:
             raise
 

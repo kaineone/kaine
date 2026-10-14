@@ -282,7 +282,7 @@ async def test_coalition_oscillator_never_receives_external_drive(bus, base_metr
     # The coalition oscillator's step(drive) takes no external drive at all (a
     # keyword would raise TypeError), it was stepped only by the interoception module's publishes
     # with their saliences, and the self-rhythm never reached it.
-    assert coalition.steps, "Soma published nothing"
+    assert coalition.steps, "Interoception published nothing"
     assert all(0.0 <= d <= 1.0 for d in coalition.steps)
     assert 0.7 not in coalition.steps
     assert interoception.phase() == coalition.phase()

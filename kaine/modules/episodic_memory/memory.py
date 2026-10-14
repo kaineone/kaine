@@ -56,7 +56,7 @@ def _write_health_file(path: Path, data: dict[str, Any]) -> None:
             os.fsync(fh.fileno())
         os.replace(tmp, path)
     except OSError:
-        log.warning("mnemos: failed to write health file %s", path, exc_info=True)
+        log.warning("episodic memory: failed to write health file %s", path, exc_info=True)
 
 
 # The episodic memory module owns these payload keys (paper A.10); a caller's payload cannot set them.
@@ -91,7 +91,7 @@ def _strength(log_base: float, log_gain: float) -> float:
     """h = exp(log_base + L), clamped to at most 1; a non-finite value is a corrupt store."""
     x = log_base + log_gain
     if not math.isfinite(x):
-        raise StorageError(f"mnemos: non-finite trace strength (log_base {log_base!r}, log gain {log_gain!r})")
+        raise StorageError(f"episodic memory: non-finite trace strength (log_base {log_base!r}, log gain {log_gain!r})")
     return math.exp(min(0.0, x))
 
 
@@ -252,7 +252,7 @@ class EpisodicMemoryCore:
         await self._init_strength()
         if self._import_pending:
             log.error(
-                "mnemos: a preservation import was interrupted; "
+                "episodic memory: a preservation import was interrupted; "
                 "re-run the revive from its bundle before the next sleep"
             )
         await self._resume_entity_time()
@@ -282,13 +282,13 @@ class EpisodicMemoryCore:
             if total == 0:
                 await self._storage.write_stamp(self.stamp_key, space)
                 log.warning(
-                    "mnemos: memory store is empty; its stale embedding-space stamp %s is replaced with %s",
+                    "episodic memory: memory store is empty; its stale embedding-space stamp %s is replaced with %s",
                     stamp,
                     space,
                 )
                 return
             raise StorageError(
-                f"mnemos: the memory store is stamped with embedding space {stamp} "
+                f"episodic memory: the memory store is stamped with embedding space {stamp} "
                 f"but the embedder is {space}; its memories must be re-embedded "
                 f"before this embedder can use them"
             )
@@ -310,7 +310,7 @@ class EpisodicMemoryCore:
             dim = await self._storage.vector_dim(name)
             if dim != LEGACY_EMBEDDING_SPACE["dim"]:
                 raise StorageError(
-                    f"mnemos: memory store collection {name!r} has vector "
+                    f"episodic memory: memory store collection {name!r} has vector "
                     f"dimension {dim} but the legacy KAINE space requires "
                     f"{LEGACY_EMBEDDING_SPACE['dim']}; its memories must be "
                     f"re-embedded before this embedder can use them"
@@ -319,12 +319,12 @@ class EpisodicMemoryCore:
         if same_space(space, LEGACY_EMBEDDING_SPACE):
             await self._storage.write_stamp(self.stamp_key, LEGACY_EMBEDDING_SPACE)
             log.warning(
-                "mnemos: memory store predates embedding-space stamps; stamped as %s",
+                "episodic memory: memory store predates embedding-space stamps; stamped as %s",
                 LEGACY_EMBEDDING_SPACE,
             )
         else:
             raise StorageError(
-                f"mnemos: the memory store is stamped with embedding space {LEGACY_EMBEDDING_SPACE} "
+                f"episodic memory: the memory store is stamped with embedding space {LEGACY_EMBEDDING_SPACE} "
                 f"but the embedder is {space}; its memories must be re-embedded "
                 f"before this embedder can use them"
             )
@@ -340,7 +340,7 @@ class EpisodicMemoryCore:
                 carried += await self._storage.count_filtered(name, has_log_base=True)
             if carried > 0:
                 raise StorageError(
-                    f"mnemos: the memory store has no trace-strength record but {carried} "
+                    f"episodic memory: the memory store has no trace-strength record but {carried} "
                     "traces carry log_base; their strengths cannot be recovered"
                 )
             total = 0
@@ -366,7 +366,7 @@ class EpisodicMemoryCore:
             await self._storage.write_meta(self.strength_key, self._strength_meta())
         if changed:
             log.info(
-                "mnemos: gave %d traces from before trace strengths a strength of 1",
+                "episodic memory: gave %d traces from before trace strengths a strength of 1",
                 changed,
             )
 
@@ -450,7 +450,7 @@ class EpisodicMemoryCore:
                 await self._storage.write_meta(self.strength_key, self._strength_meta())
                 self._write_health()
                 log.error(
-                    "mnemos: a preservation import was interrupted; "
+                    "episodic memory: a preservation import was interrupted; "
                     "re-run the revive from its bundle before the next sleep "
                     "(blocked sleeps: %d)",
                     self._blocked_sleeps,
@@ -531,7 +531,7 @@ class EpisodicMemoryCore:
                         continue
                     if key in deleted:
                         raise StorageError(
-                            f"mnemos: pruning found point {p['id']!r} of {p['collection']!r} again after deleting it"
+                            f"episodic memory: pruning found point {p['id']!r} of {p['collection']!r} again after deleting it"
                         )
                     if p["log_base"] < thr:
                         reason = "floor"
@@ -566,7 +566,7 @@ class EpisodicMemoryCore:
             self._write_health()
 
         log.info(
-            "mnemos: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
+            "episodic memory: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
             pruned_floor,
             pruned_budget,
             self._bytes,
@@ -638,7 +638,7 @@ class EpisodicMemoryCore:
                 await self._storage.write_meta(self.strength_key, self._strength_meta())
                 self._write_health()
                 log.error(
-                    "mnemos: refused to store a trace: an interrupted import has blocked sleep for %d sleeps and the store is %d bytes, over twice its budget of %d; run python -m kaine.lifecycle.episodic_memory_recover or re-run the revive",
+                    "episodic memory: refused to store a trace: an interrupted import has blocked sleep for %d sleeps and the store is %d bytes, over twice its budget of %d; run python -m kaine.lifecycle.episodic_memory_recover or re-run the revive",
                     self._blocked_sleeps,
                     self.store_bytes,
                     self._budget_bytes,
@@ -714,7 +714,7 @@ class EpisodicMemoryCore:
                 if not exhausted and m >= _RECALL_SEARCH_CAP:
                     # The cap binds: log once for this recall and keep the ranking so far.
                     log.info(
-                        "mnemos: recall ranked the %d nearest of %d traces; beyond that the order is approximate",
+                        "episodic memory: recall ranked the %d nearest of %d traces; beyond that the order is approximate",
                         m,
                         n_all,
                     )
@@ -786,7 +786,7 @@ class EpisodicMemoryCore:
     def _rebuild_embeddings_if_desynced(self) -> None:
         if len(self._short_term_embeddings) != len(self._short_term):
             log.warning(
-                "mnemos: short_term_embeddings length (%d) differs from short_term length (%d); resetting embeddings cache",
+                "episodic memory: short_term_embeddings length (%d) differs from short_term length (%d); resetting embeddings cache",
                 len(self._short_term_embeddings),
                 len(self._short_term),
             )
@@ -873,7 +873,7 @@ class EpisodicMemoryCore:
             bundle_space = state.get("embedding_space") or LEGACY_EMBEDDING_SPACE
             if not same_space(bundle_space, self._embedder.space):
                 raise StorageError(
-                    f"mnemos: bundle embedding space {bundle_space} does not match "
+                    f"episodic memory: bundle embedding space {bundle_space} does not match "
                     f"running embedder space {self._embedder.space}; cannot revive"
                 )
 
@@ -895,7 +895,7 @@ class EpisodicMemoryCore:
                     for p in persisted.get(src_name, []):
                         if _log_base(p.get("payload") or {}) is not None:
                             raise StorageError(
-                                "mnemos: bundle carries trace strengths (log_base) "
+                                "episodic memory: bundle carries trace strengths (log_base) "
                                 "but no strength record; refusing to revive with meaningless strengths"
                             )
 
@@ -942,7 +942,7 @@ class EpisodicMemoryCore:
             except Exception:
                 if replaced_kinds:
                     log.error(
-                        "mnemos: replace_collection failed after replacing kinds: %s",
+                        "episodic memory: replace_collection failed after replacing kinds: %s",
                         replaced_kinds,
                     )
                 raise
@@ -972,7 +972,7 @@ class EpisodicMemoryCore:
                     )
                 if changed:
                     log.info(
-                        "mnemos: gave %d traces from before trace strengths a strength of 1",
+                        "episodic memory: gave %d traces from before trace strengths a strength of 1",
                         changed,
                     )
                 self._blocked_sleeps = 0
@@ -1002,7 +1002,7 @@ class EpisodicMemoryCore:
             for name, points in persisted.items():
                 if name not in mapping:
                     log.info(
-                        "mnemos: revive skips collection %s (%d points): not this bundle's own memory",
+                        "episodic memory: revive skips collection %s (%d points): not this bundle's own memory",
                         name,
                         len(points),
                     )
@@ -1078,36 +1078,36 @@ def _entity_time(payload: Any) -> float:
 def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalize the trace-strength meta record."""
     if not isinstance(meta, dict):
-        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
 
     def _num(key: str) -> float:
         value = meta.get(key)
         if isinstance(value, bool):
-            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+            raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
         if not isinstance(value, (int, float)) or not math.isfinite(value):
-            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+            raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
         return float(value)
 
     def _nonneg_int(key: str) -> int:
         value = meta.get(key, 0)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+            raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
         return value
 
     sleeps = meta.get("sleeps")
     if isinstance(sleeps, bool) or not isinstance(sleeps, int) or sleeps < 0:
-        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
     log_gain = _num("log_gain")
     total = _num("total")
     entity_time = _num("entity_time")
     bytes_value = meta.get("bytes")
     if isinstance(bytes_value, bool) or not isinstance(bytes_value, int) or bytes_value < 0:
-        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
     if total < 0:
-        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
     import_pending = meta.get("import_pending", False)
     if not isinstance(import_pending, bool):
-        raise StorageError(f"mnemos: trace-strength record is malformed: {meta!r}")
+        raise StorageError(f"episodic memory: trace-strength record is malformed: {meta!r}")
     blocked_sleeps = _nonneg_int("blocked_sleeps")
     persist_refusals = _nonneg_int("persist_refusals")
     return {
@@ -1173,7 +1173,7 @@ async def recover_interrupted_import(
         )
 
     log.warning(
-        "mnemos: operator cleared an interrupted import; the store is kept as it stands. "
+        "episodic memory: operator cleared an interrupted import; the store is kept as it stands. "
         "Imported traces' strengths are relative to the pre-import log gain."
     )
     return {"cleared": True, "store_bytes": scan["bytes"], "total": total}

@@ -3,14 +3,14 @@
    "/diagnostics/stream" — up to 8 concurrent connections from a single
    console tab. Browsers cap ~6 concurrent HTTP/1.1 connections per host, so
    8 SSE plus the polling fetches saturated the pool: streams stalled and
-   polls queued behind them. NexusStream opens exactly ONE connection and
+   polls queued behind them. DashboardStream opens exactly ONE connection and
    fans each parsed message out to every subscriber — this is what collapses
    the console back under the connection cap and is the single biggest
    smoothness win.
 
    It also owns the tab-visibility lifecycle (pause while `document.hidden`,
    a backgrounded phone tab must not stream forever) and exposes a connection
-   state ("connecting"|"live"|"reconnecting"|"paused") other UI (NexusConn) can
+   state ("connecting"|"live"|"reconnecting"|"paused") other UI (DashboardConn) can
    render so a dropped Tailscale link is visible rather than silently freezing
    the dashboard on stale numbers. --------------------------------------- */
 (function () {
@@ -26,7 +26,7 @@
     if (state === next) return;
     state = next;
     statusSubscribers.forEach(function (fn) {
-      try { fn(state); } catch (e) { if (window.console) console.error("NexusStream status subscriber", e); }
+      try { fn(state); } catch (e) { if (window.console) console.error("DashboardStream status subscriber", e); }
     });
   }
 
@@ -40,7 +40,7 @@
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (!msg) return;
       subscribers.forEach(function (fn) {
-        try { fn(msg); } catch (e) { if (window.console) console.error("NexusStream subscriber", e); }
+        try { fn(msg); } catch (e) { if (window.console) console.error("DashboardStream subscriber", e); }
       });
     };
     // The browser auto-retries a dropped SSE connection on its own; reflect
@@ -87,7 +87,7 @@
     });
   }
 
-  window.NexusStream = {
+  window.DashboardStream = {
     init: init,
     subscribe: subscribe,
     onStatus: onStatus,
@@ -116,7 +116,7 @@
     return { start: start, stop: stop };
   }
 
-  window.NexusVisibility = { pausable: pausable };
+  window.DashboardVisibility = { pausable: pausable };
 })();
 
 /* ---- Connection-status indicator ------------------------------------------
@@ -133,22 +133,22 @@
 
   function attach() {
     var el = document.getElementById("nexus-conn");
-    if (!el || !window.NexusStream) return;
+    if (!el || !window.DashboardStream) return;
     el.removeAttribute("hidden");
     var label = el.querySelector(".conn-status__label");
-    NexusStream.onStatus(function (state) {
+    DashboardStream.onStatus(function (state) {
       el.dataset.state = state;
       if (label) label.textContent = LABELS[state] || state;
     });
   }
 
-  window.NexusConn = { attach: attach };
+  window.DashboardConn = { attach: attach };
 })();
 
 (function () {
   function subscribeMetrics() {
-    if (!window.NexusStream) return;
-    NexusStream.subscribe(function () {
+    if (!window.DashboardStream) return;
+    DashboardStream.subscribe(function () {
       var el = document.getElementById("live-event-count");
       if (el) {
         var n = parseInt(el.dataset.count || "0") + 1;
@@ -158,27 +158,27 @@
     });
   }
 
-  window.NexusSSE = { subscribeMetrics: subscribeMetrics };
+  window.DashboardSSE = { subscribeMetrics: subscribeMetrics };
 })();
 
 /* ---- Global RED-ALERT frame --------------------------------------------- */
 /* The whole console goes red when a freeze is initiated or a serious problem
    appears. A single set of flags is the source of truth; updateRedAlert()
    re-evaluates and toggles `.red-alert` on `.shell`. Other modules (freeze,
-   spot, preservation, health) set their flag via NexusRedAlert.set(...) wherever
+   supervisor, preservation, health) set their flag via DashboardRedAlert.set(...) wherever
    their state changes, then this drives the frame. */
 (function () {
-  var flags = { frozen: false, spot: false, preservation: false, health: false };
+  var flags = { frozen: false, supervisor: false, preservation: false, health: false };
 
   function updateRedAlert() {
-    var on = flags.frozen || flags.spot || flags.preservation || flags.health;
+    var on = flags.frozen || flags.supervisor || flags.preservation || flags.health;
     var shell = document.querySelector(".shell");
     if (shell) shell.classList.toggle("red-alert", on);
   }
 
   // Derive the "serious problem" health flag from a /diagnostics/health.json
   // snapshot: a down service, or the cycle honestly overrunning its target rate.
-  // (Spot critical escalation is wired separately via applySpotState.)
+  // (Supervisor critical escalation is wired separately via applySupervisorState.)
   function evaluateHealth(data) {
     if (!data) return;
     var problem = false;
@@ -191,7 +191,7 @@
     updateRedAlert();
   }
 
-  window.NexusRedAlert = {
+  window.DashboardRedAlert = {
     set: function (key, value) {
       if (Object.prototype.hasOwnProperty.call(flags, key)) {
         flags[key] = !!value;
@@ -339,7 +339,7 @@
 
   const _origAttach = attach;
   attach = function () { _origAttach(); attachLocus(); };
-  window.NexusPerception = { attach: attach };
+  window.DashboardPerceptualLocus = { attach: attach };
 })();
 
 /* ---- Live charts (uPlot) ------------------------------------------------- */
@@ -486,8 +486,8 @@
     return out;
   }
 
-  window.NexusChartRouting = { chartSamples: chartSamples };
-  window.NexusLiveSeries = LiveSeries;
+  window.DashboardChartRouting = { chartSamples: chartSamples };
+  window.DashboardLiveSeries = LiveSeries;
 
   // Diagnostics: live cycle-rate, affect (VAD), salience, coherence from the SSE stream.
   function attachDiagnostics() {
@@ -519,9 +519,9 @@
       console.warn("uPlot unavailable; charts disabled");
       return;
     }
-    if (!window.NexusStream) return;
+    if (!window.DashboardStream) return;
 
-    NexusStream.subscribe(function (msg) {
+    DashboardStream.subscribe(function (msg) {
       const t = nowSeconds();
       const samples = chartSamples(msg);
 
@@ -541,21 +541,21 @@
   }
 
   // Fatigue trend chart — separate subscriber so it can be attached independently.
-  // Reads soma.report fatigue_value; draws a reference line for the threshold.
+  // Reads interoception.report fatigue_value; draws a reference line for the threshold.
   function attachFatigueChart() {
     const fatigueEl = document.getElementById("chart-fatigue");
     if (!fatigueEl || !hasUPlot()) { showEmpty(fatigueEl); return; }
     showEmpty(fatigueEl);
-    if (!window.NexusStream) return;
+    if (!window.DashboardStream) return;
 
     const fatigue = new LiveSeries(fatigueEl, [
       { label: "fatigue", stroke: "#E0913A" },
       { label: "threshold", stroke: "#f3603f" },
     ]);
 
-    NexusStream.subscribe(function (msg) {
+    DashboardStream.subscribe(function (msg) {
       const p = msg.payload || {};
-      // soma.report carries fatigue_value and fatigue_threshold.
+      // interoception.report carries fatigue_value and fatigue_threshold.
       if (msg.source === "interoception" && msg.type === "interoception.report" &&
           ("fatigue_value" in p || "fatigue_threshold" in p)) {
         fatigue.push(Date.now() / 1000, [num(p.fatigue_value), num(p.fatigue_threshold)]);
@@ -595,7 +595,7 @@
         { key: "after", label: "after", stroke: "#E0913A" },
       ]);
       // Eidolon accuracy.
-      seriesChart("chart-eidolon", data.eidolon_accuracy || [], [
+      seriesChart("chart-eidolon", data.self_model_accuracy || [], [
         { key: "aggregate", label: "accuracy", stroke: "#9EA5BA" },
       ]);
     }
@@ -639,7 +639,7 @@
     });
   }
 
-  window.NexusCharts = {
+  window.DashboardCharts = {
     attachDiagnostics: attachDiagnostics,
     attachFatigueChart: attachFatigueChart,
     attachEvaluation: attachEvaluation,
@@ -789,72 +789,72 @@
     }
   }
 
-  window.NexusControls = { attach: attach };
+  window.DashboardControls = { attach: attach };
 })();
 
-/* ---- Spot supervisor alert (border + banner + console) ------------------- */
+/* ---- Supervisor supervisor alert (border + banner + console) ------------------- */
 (function () {
   var MAX_LOG_LINES = 200;
 
-  function applySpotState(state, module, message) {
-    // A Spot CRITICAL escalation is a serious problem — light the global frame.
-    if (window.NexusRedAlert) NexusRedAlert.set("spot", state === "critical");
+  function applySupervisorState(state, module, message) {
+    // A Supervisor CRITICAL escalation is a serious problem — light the global frame.
+    if (window.DashboardRedAlert) DashboardRedAlert.set("supervisor", state === "critical");
     // Update the full-window alert overlay.
-    var overlay = document.getElementById("spot-alert");
+    var overlay = document.getElementById("supervisor-alert");
     if (overlay) {
       overlay.dataset.state = state || "ok";
     }
 
     // Update the banner visibility and content.
-    var banner = document.getElementById("spot-banner");
+    var banner = document.getElementById("supervisor-banner");
     if (banner) {
       banner.dataset.state = state || "ok";
       // Re-apply class to pick up the right colour.
-      banner.className = "spot-banner spot-banner--" + (state || "ok");
+      banner.className = "supervisor-banner supervisor-banner--" + (state || "ok");
       if (state === "recovery" || state === "critical") {
         banner.removeAttribute("hidden");
       } else {
         banner.setAttribute("hidden", "");
       }
       // Populate label text.
-      var label = banner.querySelector(".spot-banner__label");
+      var label = banner.querySelector(".supervisor-banner__label");
       if (label) {
         label.textContent =
-          state === "critical" ? "SPOT CRITICAL" :
-          state === "recovery" ? "SPOT RECOVERY" :
-          "SPOT";
+          state === "critical" ? "SUPERVISOR CRITICAL" :
+          state === "recovery" ? "SUPERVISOR RECOVERY" :
+          "SUPERVISOR";
       }
-      var msgEl = document.getElementById("spot-banner-msg");
+      var msgEl = document.getElementById("supervisor-banner-msg");
       if (msgEl) { msgEl.textContent = message || ""; }
-      var detailEl = document.getElementById("spot-banner-detail");
+      var detailEl = document.getElementById("supervisor-banner-detail");
       if (detailEl) { detailEl.textContent = module ? "module: " + module : ""; }
     }
   }
 
-  function ensureSpotPlaceholder() {
-    var log = document.getElementById("spot-console-log");
+  function ensureSupervisorPlaceholder() {
+    var log = document.getElementById("supervisor-console-log");
     if (!log) return;
-    if (log.querySelector(".spot-log-line")) return; // real lines present
-    if (log.querySelector(".spot-log-placeholder")) return; // already there
+    if (log.querySelector(".supervisor-log-line")) return; // real lines present
+    if (log.querySelector(".supervisor-log-placeholder")) return; // already there
     var ph = document.createElement("span");
-    ph.className = "spot-log-line spot-log-placeholder log-info";
+    ph.className = "supervisor-log-line supervisor-log-placeholder log-info";
     ph.textContent = "no incident events";
     log.appendChild(ph);
   }
 
   function appendLogLine(text, level) {
-    var log = document.getElementById("spot-console-log");
+    var log = document.getElementById("supervisor-console-log");
     if (!log) return;
     // Drop the placeholder once a real line arrives.
-    var ph = log.querySelector(".spot-log-placeholder");
+    var ph = log.querySelector(".supervisor-log-placeholder");
     if (ph) ph.remove();
     var line = document.createElement("span");
     var lvl = (level || "info").toLowerCase();
-    line.className = "spot-log-line log-" + lvl;
+    line.className = "supervisor-log-line log-" + lvl;
     line.textContent = text;
     log.appendChild(line);
     // Cap retained lines.
-    var lines = log.querySelectorAll(".spot-log-line");
+    var lines = log.querySelectorAll(".supervisor-log-line");
     if (lines.length > MAX_LOG_LINES) {
       for (var i = 0; i < lines.length - MAX_LOG_LINES; i++) {
         lines[i].remove();
@@ -871,38 +871,38 @@
         if (!data) return;
         // Re-evaluate the global red-alert from the full health snapshot (down
         // service / overrunning cycle) on every (re)load of this fetch.
-        if (window.NexusRedAlert) NexusRedAlert.evaluateHealth(data);
-        if (!data.spot) return;
-        var s = data.spot;
-        applySpotState(s.state, s.module, s.message);
+        if (window.DashboardRedAlert) DashboardRedAlert.evaluateHealth(data);
+        if (!data.supervisor) return;
+        var s = data.supervisor;
+        applySupervisorState(s.state, s.module, s.message);
       })
       .catch(function (err) {
-        console.warn("spot: health.json fetch failed", err);
+        console.warn("supervisor: health.json fetch failed", err);
       });
   }
 
-  function attachSpotSSE() {
-    if (!window.NexusStream) return;
-    NexusStream.subscribe(function (msg) {
-      // nexus.snapshot (task 2.2's periodic server push) carries the full
-      // health snapshot, including the spot block — reconcile from it so a
-      // reconnect (or simply a missed spot.status) never leaves the border
+  function attachSupervisorSSE() {
+    if (!window.DashboardStream) return;
+    DashboardStream.subscribe(function (msg) {
+      // dashboard.snapshot (task 2.2's periodic server push) carries the full
+      // health snapshot, including the supervisor block — reconcile from it so a
+      // reconnect (or simply a missed supervisor.status) never leaves the border
       // stale. Bridge-forwarded bus events additionally arrive as
       // msg.source === "supervisor" for instant reaction to a state change.
       if (msg.source === "dashboard" && msg.type === "dashboard.snapshot") {
         var health = msg.payload && msg.payload.health;
         if (health) {
-          if (window.NexusRedAlert) NexusRedAlert.evaluateHealth(health);
-          if (health.spot) applySpotState(health.spot.state, health.spot.module, health.spot.message);
+          if (window.DashboardRedAlert) DashboardRedAlert.evaluateHealth(health);
+          if (health.supervisor) applySupervisorState(health.supervisor.state, health.supervisor.module, health.supervisor.message);
         }
         return;
       }
-      // Bridge emits {source, type, payload, ...} — spot publishes to spot.out
+      // Bridge emits {source, type, payload, ...} — supervisor publishes to supervisor.out
       // so msg.source === "supervisor".
       if (msg.source !== "supervisor") return;
       var p = msg.payload || {};
       if (msg.type === "supervisor.status") {
-        applySpotState(p.state, p.module, p.message);
+        applySupervisorState(p.state, p.module, p.message);
       } else if (msg.type === "supervisor.log") {
         var text = p.message || p.text || JSON.stringify(p);
         appendLogLine(text, p.level || "info");
@@ -910,11 +910,11 @@
     });
   }
 
-  window.NexusSpot = {
+  window.DashboardSupervisor = {
     init: function () {
-      ensureSpotPlaceholder();
+      ensureSupervisorPlaceholder();
       loadInitialState();
-      attachSpotSSE();
+      attachSupervisorSSE();
     },
   };
 })();
@@ -923,7 +923,7 @@
 (function () {
   function applyFrozen(frozen, reason) {
     // A frozen cycle is an attention state — drive the global red-alert frame.
-    if (window.NexusRedAlert) NexusRedAlert.set("frozen", frozen);
+    if (window.DashboardRedAlert) DashboardRedAlert.set("frozen", frozen);
     var btn = document.getElementById("freeze-toggle");
     var status = document.getElementById("freeze-status");
     var section = document.getElementById("freeze-control");
@@ -954,7 +954,7 @@
     var currentOverridable = [];
     if (!btn) return;
     // Seed the global frame from the server-rendered initial freeze state.
-    if (window.NexusRedAlert) NexusRedAlert.set("frozen", btn.dataset.frozen === "true");
+    if (window.DashboardRedAlert) DashboardRedAlert.set("frozen", btn.dataset.frozen === "true");
 
     function updateHolders(holders) {
       holders = holders || [];
@@ -1027,7 +1027,7 @@
       var reason = frozen ? null : ((reasonEl && reasonEl.value) || null);
       // Initiating a freeze (currently running): light the frame optimistically
       // so the operator gets instant feedback before the POST round-trips.
-      if (!frozen && window.NexusRedAlert) NexusRedAlert.set("frozen", true);
+      if (!frozen && window.DashboardRedAlert) DashboardRedAlert.set("frozen", true);
       btn.disabled = true; if (msg) msg.textContent = "…";
       try {
         var r = await fetch("/diagnostics/cycle/freeze", {
@@ -1044,11 +1044,11 @@
           if (msg) msg.textContent = nowFrozen ? "frozen" : "running";
         } else {
           // POST failed — revert the optimistic frame to the real prior state.
-          if (window.NexusRedAlert) NexusRedAlert.set("frozen", frozen);
+          if (window.DashboardRedAlert) DashboardRedAlert.set("frozen", frozen);
           if (msg) msg.textContent = "failed";
         }
       } catch (e) {
-        if (window.NexusRedAlert) NexusRedAlert.set("frozen", frozen);
+        if (window.DashboardRedAlert) DashboardRedAlert.set("frozen", frozen);
         if (msg) msg.textContent = "error";
       } finally {
         btn.disabled = false;
@@ -1056,13 +1056,13 @@
     });
   }
 
-  window.NexusFreeze = { attach: attach };
+  window.DashboardFreeze = { attach: attach };
 })();
 
 /* ---- Preservation / welfare-protective events panel ---------------------- */
 (function () {
   var MAX = 50;
-  var STORE_KEY = "nexus.preservation.events";
+  var STORE_KEY = "dashboard.preservation.events";
 
   // EXACT allowlist mirrored from HealthProber._PRESERVATION_ALLOWED_FIELDS.
   // Anything outside this set is never read or rendered — no content can leak.
@@ -1072,7 +1072,7 @@
     var failed = transition.indexOf("fail") !== -1;
     line.className = "preservation-line" + (failed ? " log-error" : "");
     // A failed preservation is a serious problem — latch the global red-alert.
-    if (failed && window.NexusRedAlert) NexusRedAlert.set("preservation", true);
+    if (failed && window.DashboardRedAlert) DashboardRedAlert.set("preservation", true);
     if (ev.incident_id) line.dataset.incident = ev.incident_id;
     var parts = [];
     parts.push(ev.monitor || "preservation");
@@ -1128,8 +1128,8 @@
     if (!logEl.dataset.backfill && events.length) {
       events.forEach(function (ev) { renderLine(logEl, ev); });
     }
-    if (!window.NexusStream) return;
-    NexusStream.subscribe(function (msg) {
+    if (!window.DashboardStream) return;
+    DashboardStream.subscribe(function (msg) {
       if (msg.source !== "preservation") return;
       var ev = fromPayload(msg);
       renderLine(logEl, ev);
@@ -1138,7 +1138,7 @@
     });
   }
 
-  window.NexusPreservation = { init: init };
+  window.DashboardPreservation = { init: init };
 })();
 
 /* ---- Metrics in-place refresh (B14) --------------------------------------
@@ -1162,8 +1162,8 @@
 
   function attach() {
     var kvEl = document.getElementById("metrics-kv");
-    if (!kvEl || !window.NexusStream) return;
-    NexusStream.subscribe(function (msg) {
+    if (!kvEl || !window.DashboardStream) return;
+    DashboardStream.subscribe(function (msg) {
       if (msg && msg.source === "dashboard" && msg.type === "dashboard.snapshot") {
         var p = msg.payload || {};
         if (p.metrics) render(kvEl, p.metrics);
@@ -1171,7 +1171,7 @@
     });
   }
 
-  window.NexusMetrics = { attach: attach };
+  window.DashboardMetrics = { attach: attach };
 })();
 
 /* ---- Relative "Xs ago" timestamps (B7) ----------------------------------- */
@@ -1196,7 +1196,7 @@
 
   function attach() {
     refresh();
-    if (window.NexusVisibility) NexusVisibility.pausable(refresh, 5000);
+    if (window.DashboardVisibility) DashboardVisibility.pausable(refresh, 5000);
     else setInterval(refresh, 5000);
   }
 
@@ -1206,7 +1206,7 @@
   } else {
     attach();
   }
-  window.NexusRelTime = { attach: attach };
+  window.DashboardRelTime = { attach: attach };
 })();
 
 /* ---- Live cycle vitals (run identity / pacing / modules / banner / awake) --
@@ -1221,7 +1221,7 @@
    All fields are non-content operational metadata.
 
    DATA CONTRACT (kept in sync with the backend + asserted in
-   tests/test_nexus_observability.py):
+   tests/test_dashboard_observability.py):
      metrics.json : cycle_status, run_id, seed, git_sha, kaine_version,
                     supervision_mode, gate_checks, processing_rate_hz,
                     experiential_rate_hz
@@ -1242,7 +1242,7 @@
   // state by priority OFFLINE > FROZEN > SLEEPING > AWAKE.
   //   running  — cycle_status === "running" (from the pushed metrics snapshot)
   //   frozen   — operator freeze / experiential-loop paused (metrics.frozen)
-  //   sleeping — Hypnos asleep (hypnos.sleep.started/completed events)
+  //   sleeping — Hypnos asleep (sleep.sleep.started/completed events)
   // All three are metadata-only; none carries cognitive content.
   var chip = { running: false, frozen: false, sleeping: false };
   var lastChipState = null;
@@ -1444,7 +1444,7 @@
   }
 
   // ---- shared diagnostics SSE: per-module activity + sleep lifecycle,
-  // plus the server-pushed nexus.snapshot (task 2.2) that replaces this
+  // plus the server-pushed dashboard.snapshot (task 2.2) that replaces this
   // panel's own metrics.json/health.json poll loop. ------------------------
   function renderSnapshot(metrics, health) {
     if (metrics) { renderBanner(metrics); renderRunIdentity(metrics, health); }
@@ -1452,8 +1452,8 @@
   }
 
   function attachStream() {
-    if (!window.NexusStream) return;
-    NexusStream.subscribe(function (msg) {
+    if (!window.DashboardStream) return;
+    DashboardStream.subscribe(function (msg) {
       if (!msg) return;
       if (msg.source) lastSeen[msg.source] = Date.now();
       if (msg.source === "sleep") {
@@ -1483,7 +1483,7 @@
     poll();
   }
 
-  window.NexusVitals = { init: init, _poll: poll };
+  window.DashboardVitals = { init: init, _poll: poll };
 })();
 
 /* ---- Perception PiP (entity view) + audio mute -----------------------------
@@ -1582,12 +1582,12 @@
     attachMute();
     await refreshState();
     pollVideo();
-    if (window.NexusVisibility) {
+    if (window.DashboardVisibility) {
       // These three intervals fetch a frame / JSON snapshot each tick — a
       // backgrounded tab must not keep polling them (task 1.4).
-      NexusVisibility.pausable(refreshState, 3000);
-      NexusVisibility.pausable(pollVideo, VIDEO_MS);
-      NexusVisibility.pausable(pollAudioMeter, AUDIO_MS);
+      DashboardVisibility.pausable(refreshState, 3000);
+      DashboardVisibility.pausable(pollVideo, VIDEO_MS);
+      DashboardVisibility.pausable(pollAudioMeter, AUDIO_MS);
     } else {
       setInterval(refreshState, 3000);
       setInterval(pollVideo, VIDEO_MS);
@@ -1595,5 +1595,5 @@
     }
   }
 
-  window.NexusPreview = { init: init };
+  window.DashboardPreview = { init: init };
 })();

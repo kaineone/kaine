@@ -1126,7 +1126,7 @@ def delete_entity_state(
 
                                 if collection_drop_failed:
                                     result.errors.append(
-                                        "mnemos strength meta kept because a collection drop failed"
+                                        "episodic memory strength meta kept because a collection drop failed"
                                     )
                                 for (
                                     stamp_key_str,

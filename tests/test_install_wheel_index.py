@@ -986,7 +986,7 @@ def _assert_no_torch_and_dashboard_editable(
             break
     else:
         pytest.fail(
-            "no recorded editable install contained '.[test,nexus]'"
+            "no recorded editable install contained '.[test,dashboard]'"
             + _context(proc, pip_log)
         )
 

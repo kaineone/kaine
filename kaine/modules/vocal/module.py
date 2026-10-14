@@ -185,9 +185,9 @@ class Vocal(BaseModule):
         was_dormant = self._dormant
         self._dormant = bool(dormant)
         if self._dormant and not was_dormant:
-            log.info("vox held dormant")
+            log.info("vocal held dormant")
         elif not self._dormant and was_dormant:
-            log.info("vox activated")
+            log.info("vocal activated")
 
     @property
     def dormant(self) -> bool:
@@ -237,7 +237,7 @@ class Vocal(BaseModule):
         if existing:
             total = sum(p.stat().st_size for p in existing if p.exists())
             log.info(
-                "vox sink holds %d pre-existing clip(s) (%.1f MB) at %s; "
+                "vocal sink holds %d pre-existing clip(s) (%.1f MB) at %s; "
                 "not auto-deleted",
                 len(existing),
                 total / 1_000_000.0,
@@ -317,7 +317,7 @@ class Vocal(BaseModule):
         try:
             await self._tts_client.aclose()
         except Exception:
-            log.warning("vox tts client close failed", exc_info=True)
+            log.warning("vocal tts client close failed", exc_info=True)
 
     async def synthesize_text(
         self,
@@ -328,7 +328,7 @@ class Vocal(BaseModule):
     ) -> SynthesisResult:
         """Direct synthesis API for tests and callers without a bus loop."""
         if self._dormant:
-            log.debug("vox dormant: suppressing utterance")
+            log.debug("vocal dormant: suppressing utterance")
             self._suppressed_while_dormant += 1
             return SynthesisResult(
                 audio=b"",
@@ -358,7 +358,7 @@ class Vocal(BaseModule):
                     salience=self._baseline_salience,
                     origin=origin,
                 )
-            log.debug("vox muted synthesis suppressed: %s", self._tts_unavailable)
+            log.debug("vocal muted synthesis suppressed: %s", self._tts_unavailable)
             return SynthesisResult(
                 audio=b"",
                 content_type="",
@@ -392,7 +392,7 @@ class Vocal(BaseModule):
             await self._player.play(result.audio, output_format=result.output_format)
         except Exception:
             # Playback must never break the synthesis/eventing path.
-            log.warning("vox playback raised", exc_info=True)
+            log.warning("vocal playback raised", exc_info=True)
 
     def _params_for(self, state: DimensionalState) -> ChatterboxParams:
         params = affect_to_chatterbox(
@@ -440,7 +440,7 @@ class Vocal(BaseModule):
         try:
             path.write_bytes(result.audio)
         except Exception:
-            log.exception("vox sink write failed for %s", path)
+            log.exception("vocal sink write failed for %s", path)
             return
         self._prune_sink()
 
@@ -462,7 +462,7 @@ class Vocal(BaseModule):
             try:
                 stale.unlink()
             except OSError:
-                log.debug("vox sink prune could not remove %s", stale)
+                log.debug("vocal sink prune could not remove %s", stale)
 
     async def _publish_event(
         self,
@@ -560,7 +560,7 @@ class Vocal(BaseModule):
             try:
                 await self.synthesize_text(text, origin=origin)
             except Exception as exc:
-                log.exception("vox synthesis failed")
+                log.exception("vocal synthesis failed")
                 await self._publish_event(
                     text,
                     self._params_for(self._current_state),

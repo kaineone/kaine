@@ -25,6 +25,6 @@
 <script src="{{ asset('/static/vendor/uPlot.iife.min.js') }}"></script>
 <script src="{{ asset('/static/dashboard.js') }}"></script>
 <script>
-  if (window.NexusCharts) { NexusCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
+  if (window.DashboardCharts) { DashboardCharts.attachEvaluation("/diagnostics/evaluation/summary.json"); }
 </script>
 {% endblock %}

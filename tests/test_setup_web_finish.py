@@ -159,7 +159,7 @@ def test_finish_start_dashboard_button(tmp_path, monkeypatch):
         )
         r = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r.status_code == 200
-        assert "Start Nexus" in r.text
+        assert "Start Dashboard" in r.text
 
         monkeypatch.setattr(
             "kaine.setup.web.app.port_listening",
@@ -167,11 +167,11 @@ def test_finish_start_dashboard_button(tmp_path, monkeypatch):
         )
         r2 = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r2.status_code == 200
-        assert "Start Nexus" not in r2.text
+        assert "Start Dashboard" not in r2.text
 
 
 def test_finish_token_reveal(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     token = "operator-token-value-with-enough-characters-1234"
     app = _mk_app(tmp_path)
     monkeypatch.setattr(
@@ -216,7 +216,7 @@ def test_finish_token_reveal(tmp_path, monkeypatch):
 
 
 def test_finish_token_missing(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     app = _mk_app(tmp_path)
     secrets_path = app.state.setup.secrets_path
     monkeypatch.setattr(
@@ -238,7 +238,7 @@ def test_finish_token_missing(tmp_path, monkeypatch):
 
 
 def test_save_creates_token_and_note_omits_it(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     app = _mk_app(
         tmp_path,
@@ -257,7 +257,7 @@ def test_save_creates_token_and_note_omits_it(tmp_path, monkeypatch):
         token_note = app.state.setup.store.sessions[sid].get("token_note", [])
         note_text = "".join(token_note)
         assert token not in note_text
-        assert str(secrets_path) in note_text or "Nexus sign-in token" in note_text
+        assert str(secrets_path) in note_text or "Dashboard sign-in token" in note_text
 
         r = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r.status_code == 200
@@ -408,7 +408,7 @@ def test_only_spawn_route_starts_cycle(tmp_path):
 def test_finish_token_reads_the_configured_secrets_file(tmp_path, monkeypatch):
     """The token shown is the one in the secrets file setup writes to, not
     whatever a default location holds."""
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "custom-secrets.toml"
     token = "t" * 40
     secrets_path.write_text(f'[dashboard]\noperator_token = "{token}"\n', encoding="utf-8")
@@ -428,7 +428,7 @@ def test_finish_token_reads_the_configured_secrets_file(tmp_path, monkeypatch):
 
 def test_finish_token_refuses_an_unsaved_session(tmp_path, monkeypatch):
     """POST /finish/token before /save is refused and never loads the token."""
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     token_value = "unsaved-token-value-with-enough-characters-12345"
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
@@ -471,11 +471,11 @@ def test_finish_routes_survive_an_unreadable_dashboard_config(tmp_path, monkeypa
         services_up_fn=lambda: {name: False for name in SERVICE_PORTS},
     )
     with _saved_client(app) as client:
-        monkeypatch.setenv("KAINE_NEXUS_PORT", "not-a-port")
+        monkeypatch.setenv("KAINE_DASHBOARD_PORT", "not-a-port")
 
         r = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r.status_code == 200
-        assert "Nexus config could not be read (ValueError)" in r.text
+        assert "Dashboard config could not be read (ValueError)" in r.text
 
         r2 = client.post(
             "/finish/token",
@@ -485,7 +485,7 @@ def test_finish_routes_survive_an_unreadable_dashboard_config(tmp_path, monkeypa
             },
         )
         assert r2.status_code == 200
-        assert "Nexus config could not be read (ValueError)" in r2.text
+        assert "Dashboard config could not be read (ValueError)" in r2.text
 
 
 def test_setup_css_uses_only_dashboard_tokens():
@@ -496,7 +496,7 @@ def test_setup_css_uses_only_dashboard_tokens():
         re.findall(r"--([\w-]+):", dashboard_css.read_text(encoding="utf-8"))
     )
     undefined = used - defined
-    assert not undefined, f"setup.css uses undefined Nexus tokens: {sorted(undefined)}"
+    assert not undefined, f"setup.css uses undefined Dashboard tokens: {sorted(undefined)}"
 
 
 def test_no_cache_and_referrer_policy_on_any_page(tmp_path):
@@ -564,5 +564,5 @@ def test_finish_routes_use_configured_config_paths(tmp_path, monkeypatch):
     with _saved_client(app) as client:
         r = client.get("/finish", headers={"Host": "127.0.0.1:8000"})
         assert r.status_code == 200
-        assert "Nexus on port 12345" in r.text
-        assert "Start Nexus" in r.text
+        assert "Dashboard on port 12345" in r.text
+        assert "Start Dashboard" in r.text

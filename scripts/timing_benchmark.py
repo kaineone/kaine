@@ -348,7 +348,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
 
     print("=== KAINE timing benchmark (biological-timing-and-dilation Phase 3) ===")
     print("Dry performance probe — NOT an entity boot. Organ/LLM disabled,")
-    print("Volition removed (no outward action). Measures plumbing + encode cost.\n")
+    print("Action selection removed (no outward action). Measures plumbing + encode cost.\n")
 
     cfg = _load_kaine_config()
 

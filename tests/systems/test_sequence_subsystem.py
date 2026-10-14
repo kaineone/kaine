@@ -27,7 +27,7 @@ async def test_sequence_publishes_on_workspace_broadcast():
                 }
             )
         events = await h.collect("sequence.out", count=1, timeout=2.0)
-        assert events, "Chronos should have published a context event"
+        assert events, "Sequence should have published a context event"
 
 
 @pytest.mark.asyncio

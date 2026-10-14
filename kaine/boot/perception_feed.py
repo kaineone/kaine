@@ -91,16 +91,16 @@ def _install_shared_stimulus_source_clock(
         if stage_state.is_embodied:
             clock.mark_born()
             log.warning(
-                "perception_feed mode is womb but the entity is already born; "
-                "the womb delivers nothing. Choose another perception mode."
+                "perception_feed mode is stimulus source but the entity is already born; "
+                "the stimulus source delivers nothing. Choose another perception mode."
             )
     else:
         file_stage_state = _lifecycle_stage.read_stage(stage_path)
         if file_stage_state is not None and file_stage_state.is_embodied:
             clock.mark_born()
             log.warning(
-                "perception_feed mode is womb but the entity is already born; "
-                "the womb delivers nothing. Choose another perception mode."
+                "perception_feed mode is stimulus source but the entity is already born; "
+                "the stimulus source delivers nothing. Choose another perception mode."
             )
 
     unawake: dict[str, Any] = {}
@@ -193,7 +193,7 @@ def _plan_stimulus_source_world_transition(
     if stage_state is None:
         return False, "no developmental stage is on record", logging.INFO
     if not stage_state.is_embodied:
-        return False, "the being is not born yet", logging.INFO
+        return False, "the entity is not born yet", logging.INFO
     missing = [
         name
         for name in ("womb_t_at_birth", "womb_seed", "womb_params_digest")
@@ -203,12 +203,12 @@ def _plan_stimulus_source_world_transition(
         if getattr(stage_state, "born_at", None) is None:
             return (
                 False,
-                "the being was never born from the womb (no birth on record)",
+                "the entity was never born from the stimulus source (no maturation on record)",
                 logging.INFO,
             )
         return (
             False,
-            "the being is born but its stage has no womb birth record "
+            "the entity is born but its stage has no stimulus source maturation record "
             f"(missing {', '.join(missing)})",
             logging.WARNING,
         )
@@ -217,18 +217,18 @@ def _plan_stimulus_source_world_transition(
     except Exception as exc:
         return (
             False,
-            f"the womb parameters could not be read to check the birth record: {exc}",
+            f"the stimulus source parameters could not be read to check the maturation record: {exc}",
             logging.WARNING,
         )
     if digest != stage_state.womb_params_digest:
         return (
             False,
-            "the configured womb parameters differ from those recorded at birth "
-            "(parameter digest mismatch), so the womb's last field cannot be "
+            "the configured stimulus source parameters differ from those recorded at maturation "
+            "(parameter digest mismatch), so the stimulus source's last field cannot be "
             "reproduced",
             logging.WARNING,
         )
-    return True, "the being was born from the womb and its birth state is recorded", logging.INFO
+    return True, "the entity was born from the stimulus source and its maturation state is recorded", logging.INFO
 
 
 def _build_stimulus_source_world_transition(
@@ -260,7 +260,7 @@ def _build_stimulus_source_world_transition(
 
     active, reason, level = _plan_stimulus_source_world_transition(feed, stage_state)
     if not active:
-        log.log(level, "no womb-to-world transition: %s", reason)
+        log.log(level, "no stimulus-source-to-world transition: %s", reason)
         return None
     seconds = _transition_setting(feed, "transition_seconds", _TRANSITION_DEFAULT_SECONDS)
     fade = _transition_setting(
@@ -277,7 +277,7 @@ def _build_stimulus_source_world_transition(
         )
     except Exception:
         log.warning(
-            "no womb-to-world transition: the womb's birth field could not be "
+            "no stimulus-source-to-world transition: the stimulus source's maturation field could not be "
             "rendered",
             exc_info=True,
         )
@@ -293,8 +293,8 @@ def _build_stimulus_source_world_transition(
         controller_kwargs["timer_factory"] = timer_factory
     controller = TransitionController(playlist_clock, seconds, **controller_kwargs)
     log.info(
-        "womb-to-world transition armed: %.1f s crossfade from the womb's field "
-        "at womb time %.3f s, then programme audio fades in over %.1f s",
+        "stimulus-source-to-world transition armed: %.1f s crossfade from the stimulus source's field "
+        "at stimulus source time %.3f s, then programme audio fades in over %.1f s",
         seconds,
         float(stage_state.womb_t_at_birth),
         fade,
@@ -634,7 +634,7 @@ def _build_perception_feed_audio_factory(
         if fpb < min_frames:
             raise ValueError(
                 f"[perception_feed.stimulus_source] requires frames_per_block >= {min_frames} "
-                f"(the womb low-pass filter needs 128 samples of history); got {fpb}"
+                f"(the stimulus source low-pass filter needs 128 samples of history); got {fpb}"
             )
         if params.lowpass_hz >= sr / 2.0:
             raise ValueError(

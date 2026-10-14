@@ -380,7 +380,7 @@ def language_model_step() -> Step:
         config.setdefault("language", {})["model_id"] = answers.get("model_id", "")
 
     return Step(
-        id="lingua-model",
+        id="language-model",
         title="Model / voice / STT",
         explanation=explanation,
         fields=fields,
@@ -404,7 +404,7 @@ def vocal_voice_step() -> Step:
     def explanation(ctx: StepContext) -> list[str]:
         if _vocal_backend(ctx) != "chatterbox":
             return [
-                "  Vox speaks through sherpa-onnx Kokoro (preset speaker "
+                "  Vocal speaks through sherpa-onnx Kokoro (preset speaker "
                 "[vocal].sherpa_speaker_id); no Chatterbox voice needed."
             ]
         voices = (ctx.extra.get("discovered") or {}).get("voices") or []
@@ -451,7 +451,7 @@ def vocal_voice_step() -> Step:
             _make_line(ctx)("    no voice id given; the vocal module picks a shipped voice at startup.")
 
     return Step(
-        id="vox-voice",
+        id="vocal-voice",
         title="Model / voice / STT",
         explanation=explanation,
         fields=fields,

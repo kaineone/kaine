@@ -174,5 +174,5 @@ async def test_live_camera_drives_vision_subsystem_end_to_end():
         events = await h.collect(
             "vision.out", count=1, timeout=3.0, filter_type="vision.report"
         )
-        assert events, "live camera → Topos → bus pipeline produced no event"
+        assert events, "live camera → Vision → bus pipeline produced no event"
         assert events[0].payload.get("encoder_model_id") == "fake/encoder"

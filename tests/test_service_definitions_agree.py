@@ -147,7 +147,7 @@ IMAGE_CASES = [
     ("kaine-chatterbox", "compose/kaine.yml", None),
 ]
 
-PORT_CASES = IMAGE_CASES + [("kaine-nexus", "compose/kaine.yml", None)]
+PORT_CASES = IMAGE_CASES + [("kaine-dashboard", "compose/kaine.yml", None)]
 
 
 @pytest.mark.parametrize("service, main_file, standalone_file", IMAGE_CASES)

@@ -227,8 +227,8 @@ def test_injections_for_returns_merged_values_and_logs(caplog):
         "good",
         {"sequence.network", "interoception.forward_model"},
         {
-            "sequence": {"network": "chronos-model"},
-            "interoception": {"forward_model": "soma-model"},
+            "sequence": {"network": "sequence-model"},
+            "interoception": {"forward_model": "interoception-model"},
         },
     )
     lp = load_plugins(
@@ -237,8 +237,8 @@ def test_injections_for_returns_merged_values_and_logs(caplog):
         entry_points=_eps(FakeEP("good", lambda: p)),
     )
     with caplog.at_level(logging.WARNING, logger="kaine.plugins"):
-        assert lp.injections_for("sequence") == {"network": "chronos-model"}
-        assert lp.injections_for("interoception") == {"forward_model": "soma-model"}
+        assert lp.injections_for("sequence") == {"network": "sequence-model"}
+        assert lp.injections_for("interoception") == {"forward_model": "interoception-model"}
     logs = [rec.message for rec in caplog.records]
     assert "plugin good fills sequence.network" in logs
     assert "plugin good fills interoception.forward_model" in logs

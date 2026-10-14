@@ -19,17 +19,17 @@
 <script>
   // ONE multiplexed diagnostics SSE connection for the whole page (task 1.1) —
   // every feature below subscribes through it instead of opening its own
-  // EventSource. NexusConn renders its live/reconnecting/paused state (1.4).
-  NexusStream.init("/diagnostics/stream");
-  if (window.NexusConn) { NexusConn.attach(); }
-  NexusSSE.subscribeMetrics();
-  if (window.NexusCharts) { NexusCharts.attachDiagnostics(); NexusCharts.attachFatigueChart(); }
-  if (window.NexusPerception) { NexusPerception.attach(); }
-  if (window.NexusControls) { NexusControls.attach(); }
-  if (window.NexusSpot) { NexusSpot.init(); }
-  if (window.NexusPreservation) { NexusPreservation.init(); }
-  if (window.NexusFreeze) { NexusFreeze.attach(); }
-  if (window.NexusMetrics) { NexusMetrics.attach(); }
-  if (window.NexusVitals) { NexusVitals.init(); }
+  // EventSource. DashboardConn renders its live/reconnecting/paused state (1.4).
+  DashboardStream.init("/diagnostics/stream");
+  if (window.DashboardConn) { DashboardConn.attach(); }
+  DashboardSSE.subscribeMetrics();
+  if (window.DashboardCharts) { DashboardCharts.attachDiagnostics(); DashboardCharts.attachFatigueChart(); }
+  if (window.DashboardPerceptualLocus) { DashboardPerceptualLocus.attach(); }
+  if (window.DashboardControls) { DashboardControls.attach(); }
+  if (window.DashboardSupervisor) { DashboardSupervisor.init(); }
+  if (window.DashboardPreservation) { DashboardPreservation.init(); }
+  if (window.DashboardFreeze) { DashboardFreeze.attach(); }
+  if (window.DashboardMetrics) { DashboardMetrics.attach(); }
+  if (window.DashboardVitals) { DashboardVitals.init(); }
 </script>
 {% endblock %}

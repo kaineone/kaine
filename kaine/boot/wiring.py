@@ -268,7 +268,7 @@ def _wire_language_self_model(registry: ModuleRegistry) -> None:
     """
     if "language" not in registry or "self_model" not in registry:
         return
-    log.info("lingua persona seeded from bus-mediated self_model.self_model snapshot")
+    log.info("language persona seeded from bus-mediated self_model.self_model snapshot")
 
 
 def _wire_language_organ_adapter(
@@ -320,7 +320,7 @@ def _wire_language_organ_adapter(
     )
     registry.get("language").set_lora_resolver(resolver)
     log.info(
-        "lingua applies its own voice-alignment adapter when the organ has it loaded"
+        "language applies its own voice-alignment adapter when the organ has it loaded"
     )
 
 
@@ -339,7 +339,7 @@ def _wire_self_model_capabilities(registry: ModuleRegistry) -> None:
         return
     effector_names = sorted(getattr(effectors, "enabled_effectors", ()) or ())
     engine.set_whitelist_commands(effector_names)
-    log.info("wired eidolon capability whitelist from praxis (%d effectors)", len(effector_names))
+    log.info("wired self-model capability whitelist from effectors (%d effectors)", len(effector_names))
 
 
 def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
@@ -352,7 +352,7 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
         return
     affect = registry.get("affect")
     affect.set_drive_relevance(drive_sources_for(registry), dominant_drive)
-    log.info("wired thymos goal significance to the drive-to-source table")
+    log.info("wired affect goal significance to the drive-to-source table")
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
@@ -386,4 +386,4 @@ def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
         vocal.set_speaking_gate(gate)
     if hasattr(audition, "set_speaking_gate"):
         audition.set_speaking_gate(gate)
-    log.info("wired self-hearing gate between vox and audition")
+    log.info("wired self-hearing gate between vocal and audition")

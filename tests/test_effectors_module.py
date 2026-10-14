@@ -22,7 +22,7 @@ from kaine.security.intent_signing import compute_intent_signature
 
 # The per-boot provenance secret the tests share between the signer (here) and
 # the effectors module (via _make_effectors). At a real boot this is generate_intent_secret().
-_TEST_SECRET = b"praxis-provenance-test-secret-32"
+_TEST_SECRET = b"effectors-provenance-test-secret-32"
 _TEST_RUN_ID = "test-run"
 
 

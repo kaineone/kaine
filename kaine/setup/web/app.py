@@ -474,7 +474,7 @@ def create_setup_app(
 
     static_dir = Path(__file__).resolve().parents[2] / "dashboard" / "static"
     if not static_dir.exists() or not static_dir.is_dir():
-        raise ValueError(f"Nexus static directory not found at {static_dir}")
+        raise ValueError(f"Dashboard static directory not found at {static_dir}")
 
     store = session.LaunchSessionStore(ttl_seconds=120.0, now=now or time.time)
 
@@ -964,18 +964,18 @@ def create_setup_app(
             dashboard_running = port_listening(dashboard_port)
             dashboard_available = True
         except Exception as exc:
-            dashboard_error = f"Nexus config could not be read ({type(exc).__name__})"
+            dashboard_error = f"Dashboard config could not be read ({type(exc).__name__})"
 
         return {
             "service_lights": service_lights,
-            "nexus_available": dashboard_available,
-            "nexus_port": dashboard_port,
-            "nexus_running": dashboard_running,
+            "dashboard_available": dashboard_available,
+            "dashboard_port": dashboard_port,
+            "dashboard_running": dashboard_running,
             "token_note": sess.get("token_note", []),
             "token": token,
             "show_missing": show_missing,
             "secrets_path": state.secrets_path,
-            "nexus_error": dashboard_error,
+            "dashboard_error": dashboard_error,
             "saved": sess.get("saved", False),
             "spawn_ack_text": spawn.SPAWN_ACK_TEXT,
             "spawn_ack_phrase": spawn.SPAWN_ACK_PHRASE,
@@ -1013,11 +1013,11 @@ def create_setup_app(
             dashboard_cfg = _dashboard_config_for(request)
             token = dashboard_cfg.operator_token or None
         except Exception as exc:
-            dashboard_error = f"Nexus config could not be read ({type(exc).__name__})"
+            dashboard_error = f"Dashboard config could not be read ({type(exc).__name__})"
 
         context = _finish_context(request, token=token, show_missing=token is None)
         if dashboard_error is not None:
-            context["nexus_error"] = dashboard_error
+            context["dashboard_error"] = dashboard_error
 
         response = templates.TemplateResponse(
             request,

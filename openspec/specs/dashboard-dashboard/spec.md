@@ -167,7 +167,7 @@ to start when neither console is enabled, since sign-in would lead nowhere.
 - **THEN** the dashboard exits 1 with a message saying that no console is enabled
 
 ### Requirement: Dashboard access mode
-The dashboard SHALL support `[dashboard].access` with values `"open"` and `"token"`, overridable by `KAINE_NEXUS_ACCESS`. The committed configuration SHALL ship `"open"`. An invalid value SHALL fail startup with an error naming the allowed values.
+The dashboard SHALL support `[dashboard].access` with values `"open"` and `"token"`, overridable by `KAINE_DASHBOARD_ACCESS`. The committed configuration SHALL ship `"open"`. An invalid value SHALL fail startup with an error naming the allowed values.
 
 **Open mode:**
 - Every surface, read and state-changing, SHALL work without a token or sign-in.
@@ -197,10 +197,10 @@ The dashboard SHALL support `[dashboard].access` with values `"open"` and `"toke
 - **THEN** privileged surfaces are refused exactly as before
 
 ### Requirement: Tailnet hosts can reach Dashboard
-`KAINE_NEXUS_EXTRA_HOSTS`, a comma-separated list of host names or addresses, SHALL be added to the Host allowlist. For each entry, its `http://` and `https://` origins, with and without the configured and published ports, SHALL be added to the allowed origins. Entries SHALL be validated as host names or IP literals; an invalid entry SHALL fail startup naming it.
+`KAINE_DASHBOARD_EXTRA_HOSTS`, a comma-separated list of host names or addresses, SHALL be added to the Host allowlist. For each entry, its `http://` and `https://` origins, with and without the configured and published ports, SHALL be added to the allowed origins. Entries SHALL be validated as host names or IP literals; an invalid entry SHALL fail startup naming it.
 
 #### Scenario: Served over the tailnet
-- **WHEN** `KAINE_NEXUS_EXTRA_HOSTS` names the machine's tailnet host and a tailnet browser opens `https://<that host>/diagnostics/` through `tailscale serve`
+- **WHEN** `KAINE_DASHBOARD_EXTRA_HOSTS` names the machine's tailnet host and a tailnet browser opens `https://<that host>/diagnostics/` through `tailscale serve`
 - **THEN** the Host and Origin checks accept it
 
 ### Requirement: The root address leads to a console
@@ -211,7 +211,7 @@ When the conversation console is not mounted, a request for `/` SHALL redirect t
 - **THEN** the response redirects to `/diagnostics/`
 
 ### Requirement: Read-only mode refuses every control
-The dashboard SHALL support `[dashboard].read_only` (default false), overridable by `KAINE_NEXUS_READ_ONLY`. When it is true, the dashboard SHALL refuse every request whose method is not GET, HEAD or OPTIONS with HTTP 403, before routing and in every access mode. Pages SHALL show a banner saying controls are off. A study viewer SHALL run the dashboard in read-only mode, because some controls (the cycle rate) reach a running entity through its bus.
+The dashboard SHALL support `[dashboard].read_only` (default false), overridable by `KAINE_DASHBOARD_READ_ONLY`. When it is true, the dashboard SHALL refuse every request whose method is not GET, HEAD or OPTIONS with HTTP 403, before routing and in every access mode. Pages SHALL show a banner saying controls are off. A study viewer SHALL run the dashboard in read-only mode, because some controls (the cycle rate) reach a running entity through its bus.
 
 #### Scenario: A rate change against a watched study is refused
 - **WHEN** `read_only` is true and a client POSTs to `/diagnostics/cycle/rates`

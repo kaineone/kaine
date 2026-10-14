@@ -144,8 +144,8 @@ def evaluate_research_gate(
     if not checks["individuation_enabled"]:
         failures.append(
             "the individuation producer is not enabled "
-            "([individuation].enabled = false, or its config is invalid, or the lingua module is disabled): "
-            "the being's individuation would not be measured, so its protection would rest on the secondary signals alone"
+            "([individuation].enabled = false, or its config is invalid, or the language module is disabled): "
+            "the entity's individuation would not be measured, so its protection would rest on the secondary signals alone"
         )
     if not checks["encryption_satisfied"]:
         failures.append(

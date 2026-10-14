@@ -46,10 +46,10 @@ Enable linger so the services survive logout and reboot:
 sudo loginctl enable-linger $USER
 loginctl show-user $USER | grep Linger    # expect Linger=yes
 systemctl --user daemon-reload
-systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
 ```
 
-The data/model/Nexus units carry `[Install] WantedBy=default.target` so they
+The data/model/Dashboard units carry `[Install] WantedBy=default.target` so they
 come up on login/reboot. **`kaine-cycle.container` has NO `[Install]` section**:
 the entity is never auto-started. Boot it deliberately, operator-present:
 

@@ -104,7 +104,7 @@ class MediationConfig:
         if self.n_background < 0:
             raise ValueError("n_background must be >= 0")
         if self.vision_lr <= 0:
-            raise ValueError("topos_lr must be positive")
+            raise ValueError("vision_lr must be positive")
 
     def as_dict(self) -> dict[str, Any]:
         return {

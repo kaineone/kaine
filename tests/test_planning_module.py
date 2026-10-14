@@ -6,7 +6,7 @@
 Module-level tests drive a :class:`FakeEngine` (no pymdp, no JAX), so the green
 build never requires the reasoning extra or a NAR binary. An opt-in
 integration test exercises the real pymdp engine when
-``KAINE_NOUS_RUN_REAL_PYMDP=1`` and the extra is installed.
+``KAINE_PLANNING_RUN_REAL_PYMDP=1`` and the extra is installed.
 """
 from __future__ import annotations
 
@@ -221,7 +221,7 @@ async def test_serialize_roundtrips_numeric_only(bus: AsyncBus):
 
 
 def _real_pymdp_enabled() -> bool:
-    if os.environ.get("KAINE_NOUS_RUN_REAL_PYMDP") != "1":
+    if os.environ.get("KAINE_PLANNING_RUN_REAL_PYMDP") != "1":
         return False
     try:
         import jax  # noqa: F401
@@ -235,7 +235,7 @@ def _real_pymdp_enabled() -> bool:
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not _real_pymdp_enabled(),
-    reason="set KAINE_NOUS_RUN_REAL_PYMDP=1 and install the reasoning extra",
+    reason="set KAINE_PLANNING_RUN_REAL_PYMDP=1 and install the reasoning extra",
 )
 async def test_real_pymdp_module_publishes_belief_and_policy(bus: AsyncBus):
     from kaine.modules.planning.engine import PymdpEngine

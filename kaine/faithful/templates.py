@@ -171,9 +171,9 @@ def _t_interoception_report(payload: dict[str, Any]) -> str:
     fatigue_value = payload.get("fatigue_value")
     parts = []
     if alerts:
-        parts.append(f"Soma reports wellness {_fmt(wellness)} with alerts on {_fmt(alerts)}")
+        parts.append(f"Interoception reports wellness {_fmt(wellness)} with alerts on {_fmt(alerts)}")
     else:
-        parts.append(f"Soma reports wellness {_fmt(wellness)}, no alerts")
+        parts.append(f"Interoception reports wellness {_fmt(wellness)}, no alerts")
     if prediction_error is not None:
         parts.append(f"prediction error {_fmt(prediction_error)}")
     if fatigue_value is not None:
@@ -188,7 +188,7 @@ def _t_sequence_report(payload: dict[str, Any]) -> str:
     tsli = payload.get("time_since_last_interaction_s")
     tpe = payload.get("temporal_prediction_error")
     parts = [
-        f"Chronos reports anomaly {_fmt(score)}",
+        f"Sequence reports anomaly {_fmt(score)}",
         f"habituation {_fmt(hab)}",
     ]
     if rumination:
@@ -205,7 +205,7 @@ def _t_vision_report(payload: dict[str, Any]) -> str:
     hab = payload.get("habituation_score")
     model = payload.get("encoder_model_id", "unknown encoder")
     return (
-        f"Topos via {model} reports change {_fmt(change)}, "
+        f"Vision via {model} reports change {_fmt(change)}, "
         f"habituation {_fmt(hab)}."
     )
 
@@ -216,7 +216,7 @@ def _t_planning_belief(payload: dict[str, Any]) -> str:
         conf = float(payload.get("confidence", 0.0))
     except (TypeError, ValueError):
         conf = 0.0
-    return f"[Nous] {statement} (certainty {conf:.0%})"
+    return f"[Planning] {statement} (certainty {conf:.0%})"
 
 
 def _t_planning_policy(payload: dict[str, Any]) -> str:
@@ -225,7 +225,7 @@ def _t_planning_policy(payload: dict[str, Any]) -> str:
         efe = float(payload.get("expected_free_energy", 0.0))
     except (TypeError, ValueError):
         efe = 0.0
-    return f"[Nous] policy={policy} EFE={efe:.3f}"
+    return f"[Planning] policy={policy} EFE={efe:.3f}"
 
 
 def _t_episodic_memory_recall(payload: dict[str, Any]) -> str:
@@ -233,7 +233,7 @@ def _t_episodic_memory_recall(payload: dict[str, Any]) -> str:
     collection = payload.get("collection", "unknown")
     affect = payload.get("max_affect_intensity")
     msg = (
-        f"Mnemos recall returned {_fmt(count)} entries from {_fmt(collection)}"
+        f"Episodic memory recall returned {_fmt(count)} entries from {_fmt(collection)}"
     )
     if affect:
         msg += f" with peak affect intensity {_fmt(affect)}"
@@ -242,13 +242,13 @@ def _t_episodic_memory_recall(payload: dict[str, Any]) -> str:
 
 def _t_affect_emotion(payload: dict[str, Any]) -> str:
     emotion = payload.get("emotion", "unknown")
-    return f"Thymos categorical emotion is {_fmt(emotion)}."
+    return f"Affect categorical emotion is {_fmt(emotion)}."
 
 
 def _t_affect_drive(payload: dict[str, Any]) -> str:
     drive = payload.get("drive", "unknown")
     value = payload.get("value")
-    return f"Thymos drive {_fmt(drive)} crossed threshold at {_fmt(value)}."
+    return f"Affect drive {_fmt(drive)} crossed threshold at {_fmt(value)}."
 
 
 def _t_affect_state(payload: dict[str, Any]) -> str:
@@ -258,7 +258,7 @@ def _t_affect_state(payload: dict[str, Any]) -> str:
     drives_str = ", ".join(f"{k} {_fmt(v)}" for k, v in sorted(drives.items()))
     emotion = payload.get("emotion", "unknown")
     return (
-        f"Thymos state: {state_str}. "
+        f"Affect state: {state_str}. "
         f"Drives: {drives_str}. Emotion: {emotion}."
     )
 
@@ -266,13 +266,13 @@ def _t_affect_state(payload: dict[str, Any]) -> str:
 def _t_affect_goal(payload: dict[str, Any]) -> str:
     action = payload.get("action", "updated")
     desc = payload.get("description", "<unnamed>")
-    return f"Thymos goal {desc} was {action}."
+    return f"Affect goal {desc} was {action}."
 
 
 def _t_self_model_drift(payload: dict[str, Any]) -> str:
     score = payload.get("score")
     sources = payload.get("top_drifted_sources") or []
-    msg = f"Eidolon drift score {_fmt(score)}"
+    msg = f"Self-model drift score {_fmt(score)}"
     if sources:
         msg += f" with top contributors {_fmt(sources)}"
     return msg + "."
@@ -306,17 +306,17 @@ def _t_interoception_fatigue(payload: dict[str, Any]) -> str:
     crossed = payload.get("crossed", False)
     if crossed:
         return (
-            f"Soma fatigue {_fmt(value)} crossed maintenance threshold {_fmt(threshold)};"
+            f"Interoception fatigue {_fmt(value)} crossed maintenance threshold {_fmt(threshold)};"
             " offline maintenance recommended."
         )
-    return f"Soma fatigue {_fmt(value)} (threshold {_fmt(threshold)})."
+    return f"Interoception fatigue {_fmt(value)} (threshold {_fmt(threshold)})."
 
 
 def _t_interoception_regulation(payload: dict[str, Any]) -> str:
     action = payload.get("action", "unknown")
     reason = payload.get("reason", "")
     severity = payload.get("severity")
-    msg = f"Soma homeostatic advisory: {_fmt(action)} (severity {_fmt(severity)})"
+    msg = f"Interoception homeostatic advisory: {_fmt(action)} (severity {_fmt(severity)})"
     if reason:
         msg += f" — {reason}"
     return msg + "."
@@ -325,7 +325,7 @@ def _t_interoception_regulation(payload: dict[str, Any]) -> str:
 def _t_social_cognition_agent_model(payload: dict[str, Any]) -> str:
     agent_label = payload.get("agent_label") or payload.get("agent_id", "unknown")
     familiarity = float(payload.get("familiarity", 0.0))
-    return f"[Empatheia] {agent_label} familiarity={familiarity:.0%}"
+    return f"[Social cognition] {agent_label} familiarity={familiarity:.0%}"
 
 
 def _t_social_cognition_social_error(payload: dict[str, Any]) -> str:
@@ -333,7 +333,7 @@ def _t_social_cognition_social_error(payload: dict[str, Any]) -> str:
     deviation_magnitude = float(payload.get("deviation_magnitude", 0.0))
     salience = float(payload.get("salience", 0.0))
     return (
-        f"[Empatheia] social surprise: {agent_label} "
+        f"[Social cognition] social surprise: {agent_label} "
         f"deviation={deviation_magnitude:.2f} (salience {salience:.2f})"
     )
 
@@ -348,7 +348,7 @@ def _t_world_model_world_error(payload: dict[str, Any]) -> str:
     except (TypeError, ValueError):
         salience = 0.0
     return (
-        f"[Phantasia] world-prediction error {error:.2f} (salience {salience:.2f})"
+        f"[World model] world-prediction error {error:.2f} (salience {salience:.2f})"
     )
 
 
@@ -357,7 +357,7 @@ def _t_world_model_scenario(payload: dict[str, Any]) -> str:
     drift = payload.get("trajectory_drift")
     seed = payload.get("seed_memory_id") or "unseeded"
     msg = (
-        f"[Phantasia] imagined scenario from {seed}: "
+        f"[World model] imagined scenario from {seed}: "
         f"{_fmt(horizon)}-step trajectory"
     )
     if drift is not None:
@@ -370,7 +370,7 @@ def _t_planning_timeout(payload: dict[str, Any]) -> str:
     num_factors = payload.get("num_factors")
     num_actions = payload.get("num_actions")
     return (
-        f"[Nous] inference timed out after {_fmt(elapsed)} ms "
+        f"[Planning] inference timed out after {_fmt(elapsed)} ms "
         f"({_fmt(num_factors)} factors, {_fmt(num_actions)} actions); "
         "last posterior reused."
     )
@@ -399,9 +399,9 @@ def _t_vocal_synthesized(payload: dict[str, Any]) -> str:
     exaggeration = payload.get("exaggeration")
     if not success:
         error = payload.get("error", "unknown error")
-        return f"Vox synthesis failed ({error}); voice {_fmt(voice)}."
+        return f"Vocal synthesis failed ({error}); voice {_fmt(voice)}."
     parts = [
-        f"Vox synthesized {_fmt(text_len)}-char utterance via {_fmt(voice)}"
+        f"Vocal synthesized {_fmt(text_len)}-char utterance via {_fmt(voice)}"
     ]
     if latency is not None:
         parts.append(f"latency {_fmt(latency)} ms")
@@ -415,7 +415,7 @@ def _t_episodic_memory_replay(payload: dict[str, Any]) -> str:
     memory_id = payload.get("memory_id", "<unknown>")
     affect_intensity = payload.get("affect_intensity")
     affect = payload.get("affect") or {}
-    parts = [f"Mnemos replaying memory {_fmt(memory_id)}"]
+    parts = [f"Episodic memory replaying memory {_fmt(memory_id)}"]
     if affect_intensity is not None:
         parts.append(f"affect intensity {_fmt(affect_intensity)}")
     if affect:
@@ -427,8 +427,8 @@ def _t_episodic_memory_replay(payload: dict[str, Any]) -> str:
 def _t_sleep_sleep_started(payload: dict[str, Any]) -> str:
     started_at = payload.get("started_at")
     if started_at is not None:
-        return f"Hypnos maintenance window started (wall time {_fmt(started_at)})."
-    return "Hypnos maintenance window started."
+        return f"Sleep maintenance window started (wall time {_fmt(started_at)})."
+    return "Sleep maintenance window started."
 
 
 def _t_sleep_sleep_completed(payload: dict[str, Any]) -> str:
@@ -437,7 +437,7 @@ def _t_sleep_sleep_completed(payload: dict[str, Any]) -> str:
     n_phases = len(phases)
     n_ok = sum(1 for p in phases if p.get("success"))
     fatigue_triggered = payload.get("fatigue_triggered", False)
-    parts = [f"Hypnos completed {n_ok}/{n_phases} phases"]
+    parts = [f"Sleep completed {n_ok}/{n_phases} phases"]
     if elapsed is not None:
         parts.append(f"in {_fmt(elapsed)} ms")
     if fatigue_triggered:
@@ -450,7 +450,7 @@ def _t_sleep_association(payload: dict[str, Any]) -> str:
     horizon = payload.get("horizon", 0)
     seed_id = payload.get("seed_memory_id") or "unseeded"
     drift = payload.get("trajectory_drift")
-    parts = [f"Hypnos associative scenario from {_fmt(seed_id)}: {_fmt(horizon)}-step"]
+    parts = [f"Sleep associative scenario from {_fmt(seed_id)}: {_fmt(horizon)}-step"]
     if drift is not None:
         parts.append(f"drift {_fmt(drift)}")
     return ", ".join(parts) + "."
@@ -459,8 +459,8 @@ def _t_sleep_association(payload: dict[str, Any]) -> str:
 def _t_planning_proposal(payload: dict[str, Any]) -> str:
     kind = payload.get("kind")
     if kind:
-        return f"Nous proposes to {kind}."
-    return "Nous proposes an action."
+        return f"Planning proposes to {kind}."
+    return "Planning proposes an action."
 
 
 def _t_sleep_rest_request(payload: dict[str, Any]) -> str:
@@ -483,7 +483,7 @@ def _t_self_model_self_model(payload: dict[str, Any]) -> str:
         f"{k} {_fmt(v)}" for k, v in sorted(personality.items())
     ) if personality else "none"
     return (
-        f"Eidolon self-model: {len(values)} values, {len(norms)} norms, "
+        f"Self-model self-model: {len(values)} values, {len(norms)} norms, "
         f"personality [{pers_str}], {n_caps} capabilities."
     )
 

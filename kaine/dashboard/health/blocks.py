@@ -444,7 +444,7 @@ async def model_server_block(
             "served_alias": alias,
             "port": port,
             "listed": None,
-            "detail": "module 'lingua' disabled",
+            "detail": "module 'language' disabled",
         }
 
     listed: bool | None = None
@@ -528,12 +528,12 @@ def episodic_memory_store_block(health_path: Path, episodic_memory_enabled: bool
     count, persist refusals, store size and budget.
     """
     if not episodic_memory_enabled:
-        return {"state": "disabled", "message": "Mnemos is not enabled"}
+        return {"state": "disabled", "message": "Episodic memory is not enabled"}
     try:
         with health_path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception:
-        log.debug("mnemos_store_block failed", exc_info=True)
+        log.debug("episodic_memory_store_block failed", exc_info=True)
         data = None
     if not isinstance(data, dict):
         return {"state": "unknown", "message": "no store health recorded"}
@@ -582,12 +582,12 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
     try:
         control = read_control(supervisor_control_path)
     except Exception:
-        log.debug("spot_block: read_control failed", exc_info=True)
+        log.debug("supervisor_block: read_control failed", exc_info=True)
         control = None
     try:
         escalation = read_escalation(supervisor_escalation_path)
     except Exception:
-        log.debug("spot_block: read_escalation failed", exc_info=True)
+        log.debug("supervisor_block: read_escalation failed", exc_info=True)
         escalation = None
 
     try:
@@ -611,12 +611,12 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
                 "module": None,
                 "attempts": 0,
                 "max_attempts": MAX_ATTEMPTS,
-                "message": control.reason or "Spot is attempting module recovery",
+                "message": control.reason or "Supervisor is attempting module recovery",
                 "snapshot_id": None,
                 "since": control.frozen_at,
             }
     except Exception:
-        log.debug("spot_block: state derivation failed", exc_info=True)
+        log.debug("supervisor_block: state derivation failed", exc_info=True)
 
     return {
         "state": "ok",

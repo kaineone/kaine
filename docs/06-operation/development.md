@@ -86,7 +86,7 @@ After each withdrawal the readout judges whether the developmental phase can sti
 
 The thresholds are the `viability_*` keys in `[perception_feed.stimulus_source.readout]`. In the offline validation a developmental phase that was learning showed pull rising from the first hours, even at 80 bpm, while one that could not learn stayed flat; no viable developmental phase was flagged, and every unviable one was flagged by 24 to 27 hours.
 
-The verdict is recorded once. It is published as `development.viability` on `development.out` and written to `state/lifecycle/development_viability.json`. It changes nothing in the entity. Under the module-addition study the runner reads that file, ends the developmental step and keeps its data (see [The module-addition study](../15-experiments/ignition-study.md)). Independently of the verdict, the study runner ends a developmental step whose wall-clock duration exceeds its budget, 96 hours by default (`--gestation-budget-seconds`). Set `viability_watch = false` to let a developmental-phase run to its full budget.
+The verdict is recorded once. It is published as `development.viability` on `development.out` and written to `state/lifecycle/development_viability.json`. It changes nothing in the entity. Under the module-addition study the runner reads that file, ends the developmental step and keeps its data (see [The module-addition study](../15-experiments/ignition-study.md)). Independently of the verdict, the study runner ends a developmental step whose wall-clock duration exceeds its budget, 96 hours by default (`--development-budget-seconds`). Set `viability_watch = false` to let a developmental-phase run to its full budget.
 
 ### Progress across restarts
 

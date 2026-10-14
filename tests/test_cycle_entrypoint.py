@@ -162,7 +162,7 @@ def test_unattended_gate_refuses_in_subprocess(tmp_path):
         f"expected exit {UNATTENDED_GATE_EXIT_CODE}, got {result.returncode}; "
         f"stderr={result.stderr!r}"
     )
-    assert "6: Spot armed and self-tested" in result.stderr
+    assert "6: Supervisor armed and self-tested" in result.stderr
     assert "7: caretaker told" in result.stderr
     assert "8: continuous input" in result.stderr
     assert "Traceback" not in result.stderr

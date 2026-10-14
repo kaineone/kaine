@@ -268,7 +268,7 @@ async def test_sequence_and_interoception_share_the_substrate(reference_culture)
 
 
 async def test_interoception_event_schema_matches_silicon(reference_culture):
-    pytest.importorskip("torch", reason="the silicon Soma forward model needs torch")
+    pytest.importorskip("torch", reason="the silicon Interoception forward model needs torch")
 
     async def run(backend):
         cfg = _interoception_config(interoception_backend=backend)

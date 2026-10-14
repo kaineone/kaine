@@ -52,7 +52,7 @@ class WetwarePolicyEngine:
         need = n * MIN_CHANNELS_PER_ACTION + FEEDBACK_CHANNELS
         if len(channels) < need:
             raise ValueError(
-                f"the nous territory has {len(channels)} channels but {n} actions need at "
+                f"the planning territory has {len(channels)} channels but {n} actions need at "
                 f"least {need} (two per action plus two feedback channels)"
             )
 
@@ -154,7 +154,7 @@ class WetwarePolicyEngine:
             if self._proposals % LOG_EVERY == 0:
                 pct = 100.0 * self._agreements / self._proposals
                 log.info(
-                    "CL1 Nous (%s mode): tissue agreed with the silicon policy on "
+                    "CL1 Planning (%s mode): tissue agreed with the silicon policy on "
                     "%d of %d proposals (%.0f%%)",
                     self._mode,
                     self._agreements,

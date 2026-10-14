@@ -494,7 +494,7 @@ def test_dependency_specs_unknown_audition_backend(_patch_speech_models):
 
 def test_dependency_specs_unknown_vocal_backend(_patch_speech_models):
     specs = _specs(vocal_cfg={"backend": "whisper"})
-    row = _spec_named(specs, "Vox backend 'whisper'")
+    row = _spec_named(specs, "Vocal backend 'whisper'")
     status, detail = asyncio.run(row.probe())
     assert status == probes_mod.DEGRADED
     assert "unknown [vocal].backend" in detail

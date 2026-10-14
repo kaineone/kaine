@@ -138,7 +138,7 @@ class SubstrateForwardModel:
             device = select_device("cpu")
             if device != "cpu":
                 log.warning(
-                    "Soma forward model requested cpu but select_device returned "
+                    "Interoception forward model requested cpu but select_device returned "
                     "%s; pinning to cpu regardless to keep the network small and "
                     "the cycle predictable",
                     device,

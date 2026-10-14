@@ -178,7 +178,7 @@ def test_dashboard_forks_json_reports_disabled_when_no_fork_manager():
     assert payload["available"] is False
     assert payload["reason"] == (
         "fork operations are disabled: the state-encryption posture could not be "
-        "installed (see the Nexus log)"
+        "installed (see the Dashboard log)"
     )
 
 

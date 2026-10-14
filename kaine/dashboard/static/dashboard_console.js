@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 //
 // Console-only behaviours layered on the server-rendered dashboard:
-//   NexusFlow   — newspaper column flow: when a section spills into the next
+//   DashboardFlow   — newspaper column flow: when a section spills into the next
 //                 column, inject a "▸ … (continued)" marker so the continuation
 //                 reads as part of the same section instead of a new one.
 // The console is a single, scroll-free screen; sections flow across columns
@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  var NexusFlow = {
+  var DashboardFlow = {
     _raf: 0,
 
     // Distinct left-x of every *visible* flowing card == the column starts.
@@ -99,15 +99,15 @@
     },
   };
 
-  window.NexusFlow = NexusFlow;
+  window.DashboardFlow = DashboardFlow;
 
-  // ---- NexusSections -----------------------------------------------------
+  // ---- DashboardSections -----------------------------------------------------
   // Closed sections leave the screen; their rail button summons them back. The
   // section slides IN FROM ITS BUTTON and expands into place (a FLIP transform:
   // it starts shrunk at the button's position and grows to its layout slot) —
   // a console-style entrance. Dismissing reverses it: the section shrinks back
   // toward the button and leaves. Motion-gated.
-  var NexusSections = {
+  var DashboardSections = {
     _btn: function (id) { return document.querySelector('.rail__seg[data-board="' + id + '"]'); },
     _reduced: function () {
       return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -128,7 +128,7 @@
         setTimeout(function () { board.classList.remove("board--enter"); }, 480);
       }
       this._sync(board);
-      if (window.NexusFlow) NexusFlow.schedule();
+      if (window.DashboardFlow) DashboardFlow.schedule();
     },
 
     // Dismiss a section. The HIDE is guaranteed by a timeout fallback even if the
@@ -140,7 +140,7 @@
         board.classList.remove("board--leave");
         board.classList.add("board--closed");         // hidden — guaranteed
         self._sync(board);
-        if (window.NexusFlow) NexusFlow.schedule();
+        if (window.DashboardFlow) DashboardFlow.schedule();
       };
       if (this._reduced()) { hide(); return; }
       board.classList.remove("board--enter");
@@ -172,15 +172,15 @@
       });
     },
   };
-  window.NexusSections = NexusSections;
+  window.DashboardSections = DashboardSections;
 
-  // ---- NexusReveal -------------------------------------------------------
+  // ---- DashboardReveal -------------------------------------------------------
   // Situational sections sit COLLAPSED until they matter. When a relevant event
   // arrives on the diagnostics stream, expand that section and briefly FLASH it
   // so the operator's eye is drawn to it — instead of hiding the information away
   // in a popup. With no entity running, no events arrive and everything stays
   // calmly collapsed (honest idle state).
-  var NexusReveal = {
+  var DashboardReveal = {
     // event signature -> board to surface. Welfare-protective + preservation
     // activity surfaces the welfare board; divergence surfaces the identity/
     // divergence board.
@@ -194,7 +194,7 @@
       var board = document.getElementById(id);
       if (!board) return;
       // Summon the section in from its button (or just ensure it is open).
-      if (window.NexusSections) window.NexusSections.summonById(id);
+      if (window.DashboardSections) window.DashboardSections.summonById(id);
       else if (board.tagName === "DETAILS" && !board.open) board.open = true;
       board.classList.remove("board--flash");
       void board.offsetWidth;                            // restart the flash animation
@@ -203,14 +203,14 @@
     },
 
     init: function () {
-      if (!window.NexusStream) return;
+      if (!window.DashboardStream) return;
       var self = this;
       // Ignore the backfill burst a stream replays on connect — only a NEW,
       // live event should expand+flash a section. Without this, any historical
       // welfare/preservation event would re-open the section on every load,
       // defeating the glanceable-collapse intent.
       var readyAt = Date.now() + 2500;
-      NexusStream.subscribe(function (msg) {
+      DashboardStream.subscribe(function (msg) {
         if (Date.now() < readyAt) return;
         if (!msg) return;
         for (var i = 0; i < self._rules.length; i++) {
@@ -219,7 +219,7 @@
       });
     },
   };
-  window.NexusReveal = NexusReveal;
+  window.DashboardReveal = DashboardReveal;
 
 
   // The console never scrolls vertically; when more sections are open than fit
@@ -253,11 +253,11 @@
 
   function boot() {
     // Each init is isolated so one failure can't strip the others' handlers
-    // (e.g. a NexusFlow error must never disable the section toggles).
+    // (e.g. a DashboardFlow error must never disable the section toggles).
     try { initWheelScroll(); } catch (e) { if (window.console) console.error("initWheelScroll", e); }
-    try { NexusSections.init(); } catch (e) { if (window.console) console.error("NexusSections.init", e); }
-    try { NexusFlow.init(); } catch (e) { if (window.console) console.error("NexusFlow.init", e); }
-    try { NexusReveal.init(); } catch (e) { if (window.console) console.error("NexusReveal.init", e); }
+    try { DashboardSections.init(); } catch (e) { if (window.console) console.error("DashboardSections.init", e); }
+    try { DashboardFlow.init(); } catch (e) { if (window.console) console.error("DashboardFlow.init", e); }
+    try { DashboardReveal.init(); } catch (e) { if (window.console) console.error("DashboardReveal.init", e); }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

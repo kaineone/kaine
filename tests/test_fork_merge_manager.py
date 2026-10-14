@@ -111,7 +111,7 @@ def test_fork_excludes_shed_modules(tmp_path):
             ]
         )
     )
-    child = mgr.fork(parent.id, label="no-topos", shed=["vision"])
+    child = mgr.fork(parent.id, label="no-vision", shed=["vision"])
     assert child.parent_id == parent.id
     assert set(child.modules) == {"interoception", "sequence"}
     assert child.metadata["shed"] == ["vision"]

@@ -182,7 +182,7 @@ def _run_step_capture(
     runner.popen = lambda *args, **kwargs: proc
 
     def fail_preserve(*args, **kwargs):
-        raise AssertionError("_request_preserve must not be called for unviable gestation")
+        raise AssertionError("_request_preserve must not be called for unviable development")
 
     monkeypatch.setattr(runner, "_request_preserve", fail_preserve)
 

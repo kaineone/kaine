@@ -106,13 +106,13 @@ class WetwareInteroceptiveModel:
         err = pred - target
         loss = float(np.mean(err * err))
         if not math.isfinite(loss):
-            log.warning("Soma readout loss is non-finite; skipping SGD step")
+            log.warning("Interoception readout loss is non-finite; skipping SGD step")
             return False
         fd = self.feature_dim
         grad_W = (2.0 / fd) * np.outer(err, hidden)
         grad_b = (2.0 / fd) * err
         if not np.isfinite(grad_W).all() or not np.isfinite(grad_b).all():
-            log.warning("Soma readout gradients are non-finite; skipping SGD step")
+            log.warning("Interoception readout gradients are non-finite; skipping SGD step")
             return False
         self._W -= self._lr * grad_W
         self._b -= self._lr * grad_b

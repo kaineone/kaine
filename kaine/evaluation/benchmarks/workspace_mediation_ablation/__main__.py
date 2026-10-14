@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m kaine.evaluation.benchmarks.workspace_mediation_ablation",
         description=(
             "Offline development harness for the workspace-mediation test. It runs "
-            "a reduced pair of real processors (Soma and Topos) with the workspace on "
+            "a reduced pair of real processors (Interoception and Vision) with the workspace on "
             "against a pooled arm, measuring cross-module broadcast information gain. "
             "It boots no entity and opens no network connection. It is development "
             "tooling and does not test the thesis."

@@ -9,7 +9,7 @@
 
     {% include "_run_identity.html" %}
 
-    {# Always present so the live vitals poller (NexusVitals) can show/hide it
+    {# Always present so the live vitals poller (DashboardVitals) can show/hide it
        in place when the cycle starts/stops — never a stale dead panel that only
        a full page reload could clear. Hidden while the cycle is running. #}
     <section id="cycle-not-running" class="panel"{% if metrics.cycle_status == "running" %} hidden{% endif %}>
@@ -79,7 +79,7 @@
     {% endif %}
 
     {# Always rendered (the chart containers must exist for the SSE attach), and
-       toggled by NexusVitals: hidden until the cycle is running. #}
+       toggled by DashboardVitals: hidden until the cycle is running. #}
     <section id="cycle-charts" class="panel card--wide"{% if metrics.cycle_status != "running" %} hidden{% endif %}>
       <h2>cycle rate (live)</h2>
       {% if metrics.deterministic %}
@@ -96,7 +96,7 @@
       <p class="muted" style="font-size:0.8rem">Requires oscillatory layer enabled. Flat when disabled.</p>
       <div id="chart-coherence" class="chart" data-empty="waiting for workspace broadcast…"></div>
       <h3>Soma fatigue accumulator (live)</h3>
-      <div id="chart-fatigue" class="chart" data-empty="waiting for soma.report…"></div>
+      <div id="chart-fatigue" class="chart" data-empty="waiting for interoception.report…"></div>
     </section>
 
     <section id="metrics" class="panel"{% if metrics.cycle_status != "running" %} hidden{% endif %}>
@@ -126,13 +126,13 @@
 
     {% include "_preservation_events.html" %}
 
-    <section id="spot-console" class="panel card--wide">
-      <h2>spot — module supervisor</h2>
+    <section id="supervisor-console" class="panel card--wide">
+      <h2>supervisor — module supervisor</h2>
       <p class="muted">
-        Live incident log from the Spot module supervisor.
+        Live incident log from the Supervisor module supervisor.
         Yellow border: recovery in progress. Red border: escalation — operator action required.
       </p>
-      <div class="spot-console-log" id="spot-console-log" aria-live="polite" aria-label="Spot incident log"></div>
+      <div class="supervisor-console-log" id="supervisor-console-log" aria-live="polite" aria-label="Supervisor incident log"></div>
     </section>
 
     <section id="forks" class="panel">
@@ -248,7 +248,7 @@
         </tbody>
       </table>
       </div>
-      <div class="perception-locus" style="margin-top:0.85rem">
+      <div class="perceptual-locus" style="margin-top:0.85rem">
         <strong>perceptual locus:</strong>
         <span class="muted" id="locus-current">{{ perception.locus }}{% if perception.locus_locked %} 🔒 locked{% endif %}</span>
         <span style="margin-left:0.5rem">

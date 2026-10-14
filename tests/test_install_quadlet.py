@@ -83,12 +83,12 @@ def test_install_renders_units_for_checkout(tmp_path: Path):
 
     installed = {p.name for p in dest.iterdir()}
     assert "kaine-cycle.container" in installed
-    assert "kaine-nexus.container" in installed
+    assert "kaine-dashboard.container" in installed
     assert "kaine-redis.container" in installed
     assert "kaine-qdrant.container" in installed
 
     cycle = (dest / "kaine-cycle.container").read_text()
-    dashboard = (dest / "kaine-nexus.container").read_text()
+    dashboard = (dest / "kaine-dashboard.container").read_text()
     assert f"Volume={checkout}/config/kaine.operator.toml" in cycle
     assert f"Volume={checkout}/config/kaine.operator.toml" in dashboard
     for p in dest.iterdir():
@@ -120,7 +120,7 @@ def test_secret_using_units_load_env_file(tmp_path: Path):
     for name in (
         "kaine-cycle.container",
         "kaine-model-server.container",
-        "kaine-nexus.container",
+        "kaine-dashboard.container",
         "kaine-redis.container",
         "kaine-qdrant.container",
     ):

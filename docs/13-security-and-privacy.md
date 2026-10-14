@@ -147,7 +147,7 @@ Several sensitive operations require two independent conditions before they fire
 | Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, supervisor, caretaker and perception configuration | None: replaced by conditions verified at every start |
 | First-boot script | any configuration | `KAINE_FIRST_BOOT_OPERATOR_PRESENT=1` |
 | Voice-alignment training | `[sleep.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
-| Embodiment | `[modules].embodiment = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
+| Embodiment | `[modules].embodiment = true` | `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` |
 
 ## Boot gate
 
@@ -254,11 +254,11 @@ The dashboard serves the operator web UI and diagnostics surface. By default it 
 `[dashboard].access` controls who can use the dashboard:
 
 - `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). The dashboard only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer and the operator's tailnet if they choose to serve it there.
-- `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
+- `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_DASHBOARD_ACCESS=token`.
 
 Host and Origin checks apply in both modes. Every request's `Host` must be in `[dashboard].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[dashboard].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.
 
-Set `[dashboard].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make the dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
+Set `[dashboard].read_only = true` (or `KAINE_DASHBOARD_READ_ONLY=1`) to make the dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
 
 In token mode, the operator token must be at least 32 characters. Generate one with:
 
@@ -266,15 +266,15 @@ In token mode, the operator token must be at least 32 characters. Generate one w
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Store it in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[dashboard].operator_token`. A token placed in `config/kaine.toml` or `config/kaine.operator.toml` is refused at startup, so committed configuration files cannot silently ship a credential. The token is never logged.
+Store it in `KAINE_DASHBOARD_TOKEN` or in `config/secrets.toml` under `[dashboard].operator_token`. A token placed in `config/kaine.toml` or `config/kaine.operator.toml` is refused at startup, so committed configuration files cannot silently ship a credential. The token is never logged.
 
 Browser sign-in: `GET /login` serves the form; its script (`/static/dashboard_auth.js`) POSTs the token to `POST /auth/login` with `Accept: application/json` and receives a session key plus a redirect once, plus an `HttpOnly` `SameSite=Strict` session cookie. The key is kept in `localStorage` (origin-scoped, so another `localhost` port cannot read it) and sent as `X-Dashboard-Session-Key` on every state-changing request. The session cookie alone authorizes only `GET/HEAD/OPTIONS` (page loads, reads, and the diagnostics stream); state-changing requests also require the session key or `Authorization: Bearer <token>`. Sessions expire after idle inactivity (`[dashboard].session_idle_minutes`, default 720) or absolute age (`[dashboard].session_max_hours`, default 24), and are cleared on restart. An operator logs out by posting to `POST /auth/logout`. A correct token always signs in. A wrong token returns 401; after `login_max_failures` failures within `login_failure_window_s`, further attempts from that client are serialized and each delayed by `login_block_delay_s` (default 2 s), and wrong ones return 429. A correct token submitted while the client is blocked still signs in after waiting its turn. The login limiter only slows an attacker; security rests primarily on the token's length.
 
-A non-loopback bind requires `non_loopback_allowed = true`. When `access = "token"`, a configured operator token is also required, and `python -m kaine.dashboard` exits before listening if no token is configured. In the shipped containers the dashboard binds `0.0.0.0` inside the container with `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1`, while the published port remains `127.0.0.1` only.
+A non-loopback bind requires `non_loopback_allowed = true`. When `access = "token"`, a configured operator token is also required, and `python -m kaine.dashboard` exits before listening if no token is configured. In the shipped containers the dashboard binds `0.0.0.0` inside the container with `KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED=1`, while the published port remains `127.0.0.1` only.
 
 In token mode, residual exposure remains: browsers share cookies across every origin under the same host, including different `localhost` ports. Another web service on the same host that the operator's browser visits can therefore obtain the dashboard session cookie. With that cookie alone it can read pages and the diagnostics stream (which include raw content only when `conversation_enabled` or `dev_content_override` is on) and issue `GET/HEAD/OPTIONS` requests, but it cannot change state. Do not browse untrusted local services while signed in when either of those content-bearing modes is on.
 
-To serve the dashboard over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_NEXUS_EXTRA_HOSTS` (in `compose/.env` for containers, or the environment for native launches) and restart the dashboard. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
+To serve the dashboard over your tailnet, run `tailscale serve --bg 8088` on the KAINE machine, then add the machine's tailnet name (e.g. `my-machine.tail1234.ts.net`) to `KAINE_DASHBOARD_EXTRA_HOSTS` (in `compose/.env` for containers, or the environment for native launches) and restart the dashboard. Open `https://<that name>/diagnostics/` from any tailnet device. Keep machine names and addresses out of the repository (they belong in `compose/.env`, which is never committed). Stop with `tailscale serve --bg --https=443 off` (or `tailscale serve reset`).
 
 Operator responsibilities:
 

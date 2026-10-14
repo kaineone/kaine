@@ -166,7 +166,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         self._efe_timeout_s = float(efe_timeout_ms) / 1000.0
         self._policy_len = int(policy_len)
         self._num_iter = int(num_iter)
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nous-efe")
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="planning-efe")
 
         # Fixed action-factor transition slices (factor 0). The engine restores
         # these after every learning update so the action latent can never be
@@ -406,7 +406,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
     def seed_posterior(self, posterior: list[list[float]]) -> bool:
         if len(posterior) != len(self._model.num_states):
             log.warning(
-                "nous: seeded posterior factor count mismatch: %d vs %d",
+                "planning: seeded posterior factor count mismatch: %d vs %d",
                 len(posterior),
                 len(self._model.num_states),
             )
@@ -414,7 +414,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         for i, (dist, size) in enumerate(zip(posterior, self._model.num_states)):
             if len(dist) != size:
                 log.warning(
-                    "nous: seeded posterior length mismatch at factor %d: %d vs %d",
+                    "planning: seeded posterior length mismatch at factor %d: %d vs %d",
                     i,
                     len(dist),
                     size,
@@ -425,7 +425,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 for x in dist
             ):
                 log.warning(
-                    "nous: seeded posterior has non-finite or negative value at factor %d",
+                    "planning: seeded posterior has non-finite or negative value at factor %d",
                     i,
                 )
                 return False
@@ -479,7 +479,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         if captured_generation != self._generation:
             log.debug(
-                "nous infer result is stale (generation changed from %d to %d); "
+                "planning infer result is stale (generation changed from %d to %d); "
                 "dropping without committing",
                 captured_generation,
                 self._generation,
@@ -556,7 +556,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         """
         self._generation += 1
         if self._model.pB is None:
-            log.warning("nous load_learned_state: this model does not learn its transitions")
+            log.warning("planning load_learned_state: this model does not learn its transitions")
             return False
 
         expected_shapes = [pb.shape for pb in self._model.pB]
@@ -565,7 +565,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
         last_action = state.get("last_action_index")
 
         if not isinstance(pB_raw, list) or len(pB_raw) != len(expected_shapes):
-            log.warning("nous load_learned_state: pB factor count mismatch")
+            log.warning("planning load_learned_state: pB factor count mismatch")
             return False
 
         new_pB: list[np.ndarray] = []
@@ -574,12 +574,12 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 pb = np.asarray(raw, dtype=np.float64)
             except Exception as exc:
                 log.warning(
-                    "nous load_learned_state: pB factor %d not array-like: %s", f, exc
+                    "planning load_learned_state: pB factor %d not array-like: %s", f, exc
                 )
                 return False
             if pb.shape != expected:
                 log.warning(
-                    "nous load_learned_state: pB factor %d shape %s != expected %s",
+                    "planning load_learned_state: pB factor %d shape %s != expected %s",
                     f,
                     pb.shape,
                     expected,
@@ -587,24 +587,24 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 return False
             if not np.all(np.isfinite(pb)):
                 log.warning(
-                    "nous load_learned_state: pB factor %d contains non-finite values", f
+                    "planning load_learned_state: pB factor %d contains non-finite values", f
                 )
                 return False
             if np.any(pb < 0):
                 log.warning(
-                    "nous load_learned_state: pB factor %d contains negative values", f
+                    "planning load_learned_state: pB factor %d contains negative values", f
                 )
                 return False
             if np.any(pb.sum(axis=0) <= 0.0):
                 log.warning(
-                    "nous load_learned_state: pB factor %d has a zero column", f
+                    "planning load_learned_state: pB factor %d has a zero column", f
                 )
                 return False
             new_pB.append(pb)
 
         prior_expected = [d.shape for d in self._model.D]
         if not isinstance(prior_raw, list) or len(prior_raw) != len(prior_expected):
-            log.warning("nous load_learned_state: carried_prior factor count mismatch")
+            log.warning("planning load_learned_state: carried_prior factor count mismatch")
             return False
 
         new_prior_lists: list[list[float]] = []
@@ -613,7 +613,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 p = np.asarray(raw, dtype=np.float64)
             except Exception as exc:
                 log.warning(
-                    "nous load_learned_state: carried_prior factor %d not array-like: %s",
+                    "planning load_learned_state: carried_prior factor %d not array-like: %s",
                     f,
                     exc,
                 )
@@ -624,7 +624,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 new_prior_lists.append(p[0].tolist())
             else:
                 log.warning(
-                    "nous load_learned_state: carried_prior factor %d shape %s "
+                    "planning load_learned_state: carried_prior factor %d shape %s "
                     "!= expected %s or %s",
                     f,
                     p.shape,
@@ -634,7 +634,7 @@ class _EngineBase(ABC, ActiveInferenceEngine):
                 return False
             if not np.all(np.isfinite(p)) or np.any(p < 0):
                 log.warning(
-                    "nous load_learned_state: carried_prior factor %d has invalid values", f
+                    "planning load_learned_state: carried_prior factor %d has invalid values", f
                 )
                 return False
 
@@ -959,12 +959,12 @@ class FakeEngine:
 
     def seed_posterior(self, posterior: list[list[float]]) -> bool:
         if len(posterior) != len(self._last_posterior):
-            log.warning("nous: fake engine seeded posterior factor count mismatch")
+            log.warning("planning: fake engine seeded posterior factor count mismatch")
             return False
         for i, (dist, expected) in enumerate(zip(posterior, self._last_posterior)):
             if len(dist) != len(expected):
                 log.warning(
-                    "nous: fake engine seeded posterior length mismatch at factor %d", i
+                    "planning: fake engine seeded posterior length mismatch at factor %d", i
                 )
                 return False
             if not all(
@@ -972,7 +972,7 @@ class FakeEngine:
                 for x in dist
             ):
                 log.warning(
-                    "nous: fake engine seeded posterior has non-finite or negative value at factor %d",
+                    "planning: fake engine seeded posterior has non-finite or negative value at factor %d",
                     i,
                 )
                 return False

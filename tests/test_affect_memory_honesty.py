@@ -123,7 +123,7 @@ async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
         ev = emotion_events[0]
         assert ev.payload.get("norm_compatibility_available") is False, (
             "affect.emotion must carry norm_compatibility_available=False "
-            "until Eidolon norm signals are wired"
+            "until Self-model norm signals are wired"
         )
     finally:
         await affect.shutdown()
@@ -343,7 +343,7 @@ async def test_social_cognition_skips_degraded_emotion_fold(bus: AsyncBus):
 
         model = await store.get(emp._speaker_label)
         assert model is None or model.interaction_count == 0, (
-            "Empatheia must not count a degraded emotion fold as an interaction"
+            "Social cognition must not count a degraded emotion fold as an interaction"
         )
     finally:
         await emp.shutdown()
@@ -361,7 +361,7 @@ async def test_social_cognition_folds_real_emotion_event(bus: AsyncBus):
 
         model = await store.get(emp._speaker_label)
         assert model is not None and model.interaction_count >= 1, (
-            "Empatheia must fold a real (non-degraded) emotion event"
+            "Social cognition must fold a real (non-degraded) emotion event"
         )
     finally:
         await emp.shutdown()

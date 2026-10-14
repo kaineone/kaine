@@ -1798,7 +1798,7 @@ OLD_TABLE = next(form for form in legacy_aliases.name_forms("dashboard") if form
 
 
 def test_web_save_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     token = "t" * 40
     secrets_path.write_text(f'[{OLD_TABLE}]\noperator_token = "{token}"\n')
@@ -1813,7 +1813,7 @@ def test_web_save_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
 
 
 def test_web_save_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
     secrets_path = tmp_path / "secrets.toml"
     app = _mk_app(tmp_path)
     _drive_web(app, {}, save=True)

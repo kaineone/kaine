@@ -140,7 +140,7 @@ def _make_audition(bus: AsyncBus, clock) -> Audition:
 
     return Audition(
         bus,
-        stt_client=FakeSTTClient(responses=["womb sound"]),
+        stt_client=FakeSTTClient(responses=["stimulus source sound"]),
         emotion_classifier=FakeEmotionClassifier(),
         stt_model="fake-stt",
         capture_enabled=True,
@@ -216,7 +216,7 @@ async def test_physical_locus_keeps_stimulus_source_feed_dark(bus, tmp_path, mon
     try:
         vision_events = await _wait_for_events(bus, "vision.out", timeout_s=1.5)
         assert not vision_events, (
-            "virtual womb feed published while locus=physical — XOR violated"
+            "virtual stimulus source feed published while locus=physical — XOR violated"
         )
     finally:
         await vision.shutdown()

@@ -242,12 +242,12 @@ services:
       start_period: 30s
 
   # ---- Nexus web UI: always-up, holds NO entity (design §2) --------------
-  kaine-nexus:
+  kaine-dashboard:
     <<: *kaine-image
-    container_name: kaine-nexus
-    command: ["python", "-m", "kaine.nexus"]
+    container_name: kaine-dashboard
+    command: ["python", "-m", "kaine.dashboard"]
     ports:
-      - "127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088}:8088"
+      - "127.0.0.1:${KAINE_DASHBOARD_HOST_PORT:-${KAINE_NEXUS_HOST_PORT:-8088}}:8088"
     environment:
       # Growing data stays under the working directory /app, where the
       # named volumes are mounted; a host [storage].data_root in the shared
@@ -266,20 +266,20 @@ services:
       # published 127.0.0.1:8088 mapping can reach it; the shipped [nexus].host is
       # 127.0.0.1, which binds the container's own loopback and is unreachable via
       # the port mapping. Publishing is still loopback-only (see ports:).
-      KAINE_NEXUS_HOST: 0.0.0.0
+      KAINE_DASHBOARD_HOST: 0.0.0.0
       # The bind is all-interfaces inside the container; publishing stays 127.0.0.1-only.
       # Nexus still refuses to start without a token.
-      KAINE_NEXUS_NON_LOOPBACK_ALLOWED: "1"
+      KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED: "1"
       # Open access (no sign-in) is the default: Nexus is published on 127.0.0.1 only.
       # For the tailnet, run `tailscale serve --bg 8088` and set the machine's ts.net
-      # name in KAINE_NEXUS_EXTRA_HOSTS in compose/.env (never committed).
-      KAINE_NEXUS_ACCESS: ${KAINE_NEXUS_ACCESS:-}
-      KAINE_NEXUS_EXTRA_HOSTS: ${KAINE_NEXUS_EXTRA_HOSTS:-}
-      KAINE_NEXUS_PUBLISHED_PORT: ${KAINE_NEXUS_HOST_PORT:-8088}
+      # name in KAINE_DASHBOARD_EXTRA_HOSTS in compose/.env (never committed).
+      KAINE_DASHBOARD_ACCESS: ${KAINE_DASHBOARD_ACCESS:-${KAINE_NEXUS_ACCESS:-}}
+      KAINE_DASHBOARD_EXTRA_HOSTS: ${KAINE_DASHBOARD_EXTRA_HOSTS:-${KAINE_NEXUS_EXTRA_HOSTS:-}}
+      KAINE_DASHBOARD_PUBLISHED_PORT: ${KAINE_DASHBOARD_HOST_PORT:-${KAINE_NEXUS_HOST_PORT:-8088}}
       # Token from env first; empty falls through to the read-only mounted config/secrets.toml.
-      KAINE_NEXUS_TOKEN: ${KAINE_NEXUS_TOKEN:-}
+      KAINE_DASHBOARD_TOKEN: ${KAINE_DASHBOARD_TOKEN:-${KAINE_NEXUS_TOKEN:-}}
       # Allowed Origins must reflect the host-published port, not the in-container 8088.
-      KAINE_NEXUS_ALLOWED_ORIGINS: http://127.0.0.1:${KAINE_NEXUS_HOST_PORT:-8088},http://localhost:${KAINE_NEXUS_HOST_PORT:-8088}
+      KAINE_DASHBOARD_ALLOWED_ORIGINS: http://127.0.0.1:${KAINE_DASHBOARD_HOST_PORT:-${KAINE_NEXUS_HOST_PORT:-8088}},http://localhost:${KAINE_DASHBOARD_HOST_PORT:-${KAINE_NEXUS_HOST_PORT:-8088}}
     volumes:
       # Operator overlay + secrets bind-mounted READ-ONLY, never COPYed (design §8).
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
@@ -371,7 +371,7 @@ services:
       - kaine-backups:/app/backups
       # Film-aligned ignition log records (durable, never raw sense data).
       - kaine-ignition:/app/data/ignition
-      # Nexus record (`[research_event_log.nexus_record]`): local-only, never
+      # Nexus record (`[research_event_log.dashboard_record]`): local-only, never
       # exported; what Nexus displays after its privacy filter. ~2 GB per
       # four-hour viewing.
       - kaine-nexus-record:/app/data/nexus_record
@@ -389,7 +389,7 @@ services:
       kaine-qdrant:
         condition: service_healthy
     # DELIBERATELY no restart policy on kaine-cycle: an entity process never
-    # auto-restarts. Spot handles module-level recovery in-process; a dead
+    # auto-restarts. Supervisor handles module-level recovery in-process; a dead
     # cycle is an operator decision, never a supervisor's.
     logging: *default-logging
 
@@ -454,10 +454,10 @@ services:
       # (organ_adapter mode) for the launcher to load. Read/write here.
       - kaine-organ-adapters:/organ-adapters
       # Job-queue backend for voice-alignment training. Study steps that enable
-      # voice alignment set [hypnos.voice_alignment].trainer_jobs_dir = "/trainer-jobs"
+      # voice alignment set [sleep.voice_alignment].trainer_jobs_dir = "/trainer-jobs"
       # (the overlay does this); kaine-trainer claims and runs jobs from here.
       - kaine-trainer-jobs:/trainer-jobs
-      # No kaine-state, perception tmpfs, kaine-eval-data or kaine-trajectory: every step runs inside /app/studies/<id>, so a study never touches a live being's volumes.
+      # No kaine-state, perception tmpfs, kaine-eval-data or kaine-trajectory: every step runs inside /app/studies/<id>, so a study never touches a live entity's volumes.
       # Durable study directories (study.json, steps.jsonl, line directories,
       # analysis). Survives down/up; the runner resumes from it.
       - kaine-studies:/app/studies

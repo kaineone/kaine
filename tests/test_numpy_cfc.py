@@ -231,7 +231,7 @@ def test_interoception_module_logs_new_reservoir_for_old_snapshot(caplog):
     with caplog.at_level(logging.WARNING, logger="kaine.modules.interoception.module"):
         s.deserialize(old_state)
 
-    assert "soma: snapshot has no reservoir seed; the reservoir is new" in caplog.text
+    assert "interoception: snapshot has no reservoir seed; the reservoir is new" in caplog.text
     # The new model keeps the fresh reservoir it was born with.
     assert s._forward_model.reservoir_seed == 20
 
@@ -287,7 +287,7 @@ def test_sequence_module_logs_new_reservoir_for_old_snapshot(caplog):
     with caplog.at_level(logging.WARNING, logger="kaine.modules.sequence.module"):
         c.deserialize(old_state)
 
-    assert "chronos: snapshot has no reservoir seed; the reservoir is new" in caplog.text
+    assert "sequence: snapshot has no reservoir seed; the reservoir is new" in caplog.text
 
 
 def test_sequence_module_restore_with_seed_rebuilds_same_reservoir():
@@ -582,5 +582,5 @@ def test_interoception_serialize_omits_none_seed_and_deserialize_none(caplog):
     with caplog.at_level(logging.WARNING, logger="kaine.modules.interoception.module"):
         s2.deserialize({"reservoir_seed": None})
 
-    assert "soma: snapshot has no reservoir seed; the reservoir is new" in caplog.text
+    assert "interoception: snapshot has no reservoir seed; the reservoir is new" in caplog.text
     s2._forward_model.step([0.1, 0.2, 0.3, 0.4])

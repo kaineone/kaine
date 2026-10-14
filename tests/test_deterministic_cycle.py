@@ -249,7 +249,7 @@ async def test_two_seeded_runs_produce_identical_trajectory():
     # produced at least one intent — otherwise "identical" would be vacuous.
     assert run_a["broadcasts"], "expected at least one experiential broadcast"
     assert any(b["selected"] for b in run_a["broadcasts"]), "expected selections"
-    assert run_a["intents"], "expected at least one volition intent"
+    assert run_a["intents"], "expected at least one action selection intent"
     # And no wall-clock latency field leaked into the compared trajectory.
     for b in run_a["broadcasts"]:
         assert "wall_duration_ms" not in b and "slip_ms" not in b

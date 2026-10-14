@@ -28,7 +28,7 @@
 # After install, reload systemd, start the data services, and start the entity
 # only deliberately with operator presence:
 #   systemctl --user daemon-reload
-#   systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+#   systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
 #   systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
 #   systemctl --user start kaine-cycle
 
@@ -183,7 +183,7 @@ cat <<'EOF'
 
 Next steps:
   systemctl --user daemon-reload
-  systemctl --user start kaine-redis kaine-qdrant kaine-nexus
+  systemctl --user start kaine-redis kaine-qdrant kaine-dashboard
   systemctl --user set-environment KAINE_CYCLE_OPERATOR_PRESENT=1
   systemctl --user start kaine-cycle
 

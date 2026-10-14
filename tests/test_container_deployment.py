@@ -172,7 +172,7 @@ def test_compose_parses():
         "kaine-model-server",
         "kaine-speaches",
         "kaine-chatterbox",
-        "kaine-nexus",
+        "kaine-dashboard",
         "kaine-cycle",
         "kaine-provision",
     }
@@ -183,7 +183,7 @@ def test_cycle_is_profile_gated_out_of_default_up():
     assert doc["services"]["kaine-cycle"].get("profiles") == ["cycle"]
     assert doc["services"]["kaine-provision"].get("profiles") == ["setup"]
     # The dashboard is NOT profile-gated — it is always-up and holds no entity.
-    assert "profiles" not in doc["services"]["kaine-nexus"]
+    assert "profiles" not in doc["services"]["kaine-dashboard"]
 
 
 def test_cycle_defaults_no_gate_var_permissive():
@@ -206,20 +206,20 @@ def test_all_published_ports_are_loopback_only():
 
 def test_compose_dashboard_has_privacy_hardening_environment():
     doc = _load_compose()
-    env = doc["services"]["kaine-nexus"]["environment"]
+    env = doc["services"]["kaine-dashboard"]["environment"]
     # Non-loopback binding is explicitly enabled inside the container (publishing
     # stays loopback-only).
-    assert env["KAINE_NEXUS_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
+    assert env["KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
     # The env token entry exists (empty falls through to the mounted secrets.toml).
-    assert "KAINE_NEXUS_TOKEN" in env
+    assert "KAINE_DASHBOARD_TOKEN" in env
     # Allowed Origins must reflect the host-published port, not the in-container 8088.
-    assert "KAINE_NEXUS_ALLOWED_ORIGINS" in env
-    assert "${KAINE_NEXUS_HOST_PORT:-8088}" in env["KAINE_NEXUS_ALLOWED_ORIGINS"]
+    assert "KAINE_DASHBOARD_ALLOWED_ORIGINS" in env
+    assert "${KAINE_DASHBOARD_HOST_PORT:-8088}" in env["KAINE_DASHBOARD_ALLOWED_ORIGINS"]
 
 
 def test_cycle_and_dashboard_depend_on_healthy_data_services():
     doc = _load_compose()
-    for svc_name in ("kaine-cycle", "kaine-nexus"):
+    for svc_name in ("kaine-cycle", "kaine-dashboard"):
         deps = doc["services"][svc_name]["depends_on"]
         for dep in ("kaine-redis", "kaine-qdrant"):
             assert deps[dep]["condition"] == "service_healthy", (svc_name, dep)
@@ -227,7 +227,7 @@ def test_cycle_and_dashboard_depend_on_healthy_data_services():
 
 def test_dashboard_and_cycle_share_image_different_command():
     doc = _load_compose()
-    dashboard = doc["services"]["kaine-nexus"]
+    dashboard = doc["services"]["kaine-dashboard"]
     cycle = doc["services"]["kaine-cycle"]
     # Both build from the same Dockerfile (via the shared x-kaine-image anchor).
     assert dashboard["build"]["dockerfile"] == "Dockerfile"
@@ -243,7 +243,7 @@ def test_state_is_named_volume_and_config_bind_mounts_are_readonly():
     doc = _load_compose()
     assert "kaine-state" in doc["volumes"]
     assert "kaine-models" in doc["volumes"]
-    for svc_name in ("kaine-cycle", "kaine-nexus"):
+    for svc_name in ("kaine-cycle", "kaine-dashboard"):
         vols = doc["services"][svc_name]["volumes"]
         # Entity state persists at /app/state — the app writes state CWD-relative
         # under WORKDIR /app, so a /state mount would capture nothing it writes.
@@ -354,17 +354,17 @@ def test_quadlet_cycle_has_no_install_section():
     )
     assert "Restart=no" in text
     # The data/dashboard units, by contrast, ARE enabled for reboot survival.
-    assert _has_section((_QUADLET / "kaine-nexus.container").read_text(), "[Install]")
+    assert _has_section((_QUADLET / "kaine-dashboard.container").read_text(), "[Install]")
     assert _has_section((_QUADLET / "kaine-redis.container").read_text(), "[Install]")
 
 
 def test_quadlet_dashboard_privacy_hardening_and_python_healthcheck():
-    text = (_QUADLET / "kaine-nexus.container").read_text()
+    text = (_QUADLET / "kaine-dashboard.container").read_text()
     # The dashboard binds all-interfaces inside the container; the published port is loopback-only.
-    assert "Environment=KAINE_NEXUS_HOST=0.0.0.0" in text
-    assert "Environment=KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1" in text
+    assert "Environment=KAINE_DASHBOARD_HOST=0.0.0.0" in text
+    assert "Environment=KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED=1" in text
     assert (
-        "Environment=KAINE_NEXUS_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088"
+        "Environment=KAINE_DASHBOARD_ALLOWED_ORIGINS=http://127.0.0.1:8088,http://localhost:8088"
         in text
     )
     assert "PublishPort=127.0.0.1:" in text
@@ -553,7 +553,7 @@ def test_quadlet_generator_renders_redis_wrapper(tmp_path: Path):
 def test_quadlet_cycle_and_dashboard_have_redis_url():
     url = "Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0"
     assert url in (_QUADLET / "kaine-cycle.container").read_text()
-    assert url in (_QUADLET / "kaine-nexus.container").read_text()
+    assert url in (_QUADLET / "kaine-dashboard.container").read_text()
 
 
 def _section(text: str, section: str) -> str:

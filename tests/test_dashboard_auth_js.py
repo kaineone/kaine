@@ -31,10 +31,10 @@ def test_base_template_loads_auth_script_first():
 
 def test_logout_button_in_base_template():
     html = BASE_TEMPLATE.read_text(encoding="utf-8")
-    assert 'id="nexus-logout"' in html, "rail logout button missing"
+    assert 'id="dashboard-logout"' in html, "rail logout button missing"
 
     match = re.search(
-        r'<button\b[^>]*\bid="nexus-logout"[^>]*>',
+        r'<button\b[^>]*\bid="dashboard-logout"[^>]*>',
         html,
         re.IGNORECASE | re.DOTALL,
     )
@@ -49,7 +49,7 @@ def test_logout_button_in_base_template():
 def test_dashboard_auth_js_required_content():
     text = AUTH_JS.read_text(encoding="utf-8")
 
-    for needle in ("X-Nexus-Session-Key", "kaine.nexus.sessionKey", "localStorage"):
+    for needle in ("X-Dashboard-Session-Key", "kaine.dashboard.sessionKey", "localStorage"):
         assert needle in text, f"{needle!r} missing from dashboard_auth.js"
 
     for forbidden in ("document.cookie", "eval("):

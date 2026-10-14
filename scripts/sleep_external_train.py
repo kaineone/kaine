@@ -108,17 +108,17 @@ def resolve_previous_adapter(
         p = job_dir / p
     if not p.exists():
         raise TrainerJobError(
-            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            f"the entity's previous adapter could not be loaded from {str(p)!r}: "
             "no such directory; a fresh adapter is never trained in its place"
         )
     if not p.is_dir():
         raise TrainerJobError(
-            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            f"the entity's previous adapter could not be loaded from {str(p)!r}: "
             "not a directory; a fresh adapter is never trained in its place"
         )
     if not (p / "adapter_config.json").exists():
         raise TrainerJobError(
-            f"the being's previous adapter could not be loaded from {str(p)!r}: "
+            f"the entity's previous adapter could not be loaded from {str(p)!r}: "
             "missing adapter_config.json; a fresh adapter is never trained in its place"
         )
     return p

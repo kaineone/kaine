@@ -209,7 +209,7 @@ async def check_services(
             results.append(
                 CheckResult(
                     GROUP_SERVICES,
-                    "Nexus (live)",
+                    "Dashboard (live)",
                     PASS,
                     f"listening on port {port}",
                 )
@@ -218,18 +218,18 @@ async def check_services(
             results.append(
                 CheckResult(
                     GROUP_SERVICES,
-                    "Nexus (live)",
+                    "Dashboard (live)",
                     FAIL,
-                    f"Nexus is not running on port {port}; start it (setup finish page \"Start Nexus\", or python -m kaine.dashboard) before spawning",
+                    f"Dashboard is not running on port {port}; start it (setup finish page \"Start Dashboard\", or python -m kaine.dashboard) before spawning",
                 )
             )
     except Exception as exc:
         results.append(
             CheckResult(
                 GROUP_SERVICES,
-                "Nexus (live)",
+                "Dashboard (live)",
                 FAIL,
-                f"Nexus configuration could not be read ({type(exc).__name__})",
+                f"Dashboard configuration could not be read ({type(exc).__name__})",
             )
         )
 

@@ -108,7 +108,7 @@ async def _wait_event(bus, stream: str, etype: str, timeout: float = 3.0):
 # ---- gating: config + operator approval -----------------------------------
 @pytest.mark.asyncio
 async def test_disabled_is_noop(bus, monkeypatch):
-    monkeypatch.delenv("KAINE_MUNDUS_OPERATOR_APPROVED", raising=False)
+    monkeypatch.delenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", raising=False)
     # config on but env approval missing → still gated off; adapter never opened.
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True)
@@ -122,7 +122,7 @@ async def test_disabled_is_noop(bus, monkeypatch):
 async def test_feed_maps_through_descriptor(bus, monkeypatch):
     """The core pumps the adapter's feed and maps kinds via the descriptor,
     generically (no body-specific knowledge)."""
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=False,
                locus_reader=lambda: "virtual")
@@ -138,7 +138,7 @@ async def test_feed_maps_through_descriptor(bus, monkeypatch):
 @pytest.mark.asyncio
 async def test_raw_buffer_stripped_before_bus(bus, monkeypatch):
     """Raw-sense buffers named by the descriptor never reach the bus/disk."""
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=False,
                locus_reader=lambda: "virtual")
@@ -158,7 +158,7 @@ async def test_raw_buffer_stripped_before_bus(bus, monkeypatch):
 @pytest.mark.asyncio
 async def test_salience_policy_bumps_notable_events(bus, monkeypatch):
     """Core-owned salience policy raises the baseline for notable feed content."""
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=False,
                locus_reader=lambda: "virtual")
@@ -178,7 +178,7 @@ async def test_salience_policy_bumps_notable_events(bus, monkeypatch):
 # ---- action: bus → body (gated by locus + exposure) ------------------------
 @pytest.mark.asyncio
 async def test_intent_and_speech_reach_the_body(bus, monkeypatch):
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=True,
                speech_stream="linguatest.out", locus_reader=lambda: "virtual")
@@ -208,7 +208,7 @@ async def test_intent_and_speech_reach_the_body(bus, monkeypatch):
 async def test_physical_locus_blocks_avatar_actions(bus, monkeypatch):
     """perception_locus: in `physical` the entity isn't embodied in the world, so
     no avatar action is forwarded even for an exposed family."""
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=False,
                locus_reader=lambda: "physical")
@@ -226,7 +226,7 @@ async def test_physical_locus_blocks_avatar_actions(bus, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unexposed_action_is_dropped(bus, monkeypatch):
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = FakeAdapter()  # teleport defaults NOT exposed
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=False,
                locus_reader=lambda: "virtual")

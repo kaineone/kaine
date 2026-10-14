@@ -47,7 +47,7 @@ async def test_numpy_backend_down_on_infer_error(monkeypatch):
     monkeypatch.setattr(NumpyActiveInferenceEngine, "infer", broken_infer)
     status, detail = await planning_health_probe(backend="numpy")
     assert status == DOWN
-    assert "nous numpy backend failed" in detail
+    assert "planning numpy backend failed" in detail
 
 
 @pytest.mark.asyncio

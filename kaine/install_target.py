@@ -270,27 +270,27 @@ def plan_for(target: Target) -> Plan:
     if target.name == "termux":
         extras = "memory-edge"
         runs = [
-            "mnemos (with sqlite_vec backend)",
+            "episodic memory (with sqlite_vec backend)",
             "memory",
             "edge",
             "affect",
             "language",
             "workspace",
-            "soma (NumPy CfC)",
-            "chronos (NumPy CfC)",
+            "interoception (NumPy CfC)",
+            "sequence (NumPy CfC)",
             'audition (with [audition].backend = "sherpa_onnx")',
-            'vox (with [vocal].backend = "sherpa_onnx")',
-            'nous (with [planning].backend = "numpy")',
-            'phantasia (with [world_model].engine = "numpy")',
+            'vocal (with [vocal].backend = "sherpa_onnx")',
+            'planning (with [planning].backend = "numpy")',
+            'world model (with [world_model].engine = "numpy")',
         ]
         will_not_run = [
             ("vision", "needs torch for its video encoder; no Termux build"),
-            ("mnemos with qdrant", "no Qdrant build for Android; use [episodic_memory].backend = \"sqlite_vec\""),
+            ("episodic memory with qdrant", "no Qdrant build for Android; use [episodic_memory].backend = \"sqlite_vec\""),
         ]
         system_packages = {"pkg": list(_SYSTEM_PACKAGES["pkg"])}
         notes = [
             "Termux installs the memory and edge extras only.",
-            'Nous needs [planning].backend = "numpy" and Phantasia needs [world_model].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Nous backend and lists Phantasia as unsupported).',
+            'Planning needs [planning].backend = "numpy" and World model needs [world_model].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Planning backend and lists World model as unsupported).',
             'Speech needs the speech-edge extra and its models: pkg install python-numpy, then pip install sherpa-onnx, then python -m kaine.setup.speech_models. The sherpa-onnx Termux wheels are new upstream and unproven on a device here.',
             'Audition on Termux: set [audition].vad_backend = "rms" (webrtcvad ships only in the audio extra, which pulls torch).',
         ]

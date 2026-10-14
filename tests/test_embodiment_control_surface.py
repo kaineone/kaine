@@ -305,7 +305,7 @@ async def test_producer_to_body_via_intent_bus(bus, monkeypatch):
     """The producer emits `intent.avatar.control`; the control plane drives the
     body's setpoint sink and mirrors the efference copy — the producer gap
     closed end-to-end, no entity booted."""
-    monkeypatch.setenv("KAINE_MUNDUS_OPERATOR_APPROVED", "1")
+    monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
     adapter = StubAdapter()
     surface = _active(ContinuousMotorSurface(
         policy=_FakePolicy(drive=0.7, yaw_rate=-0.2)))

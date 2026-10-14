@@ -329,7 +329,7 @@ async def test_roundtrip_language(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         chat_client=_FakeChatClient(),
         intent_log=IntentExpressionLog(log_path),
-        model_id="lingua-roundtrip",
+        model_id="language-roundtrip",
         temperature=0.9,
         max_tokens=128,
         think=True,
@@ -340,7 +340,7 @@ async def test_roundtrip_language(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         chat_client=_FakeChatClient(),
         intent_log=IntentExpressionLog(tmp_path / "lingua2" / "intent.jsonl"),
-        model_id="lingua-roundtrip",
+        model_id="language-roundtrip",
         temperature=0.9,
         max_tokens=128,
         think=True,
@@ -790,7 +790,7 @@ def _mutate_audition(m: Audition, i: int) -> None:
 
 
 def _mutate_language(m: Language, i: int) -> None:
-    m._model_id = f"lingua-{i}"
+    m._model_id = f"language-{i}"
     m._temperature = 0.5 + i * 0.05
     m._intent_cursor = f"{i}-0"
 

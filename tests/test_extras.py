@@ -392,11 +392,11 @@ def test_build_registry_raises_before_building_any_module(monkeypatch):
 
     monkeypatch.setattr("kaine.extras.check", lambda cfg: fake_missing)
     monkeypatch.setattr(
-        "kaine.extras.format_missing", lambda missing: "missing soma torch core"
+        "kaine.extras.format_missing", lambda missing: "missing interoception torch core"
     )
     with pytest.raises(ConfigurationError) as excinfo:
         build_registry(bus, config)
-    assert "missing soma torch core" in str(excinfo.value)
+    assert "missing interoception torch core" in str(excinfo.value)
 
 
 def test_build_registry_logs_warnings_and_continues(monkeypatch, caplog):
@@ -433,12 +433,12 @@ def test_dashboard_service_check_reports_missing_dashboard(monkeypatch):
     assert any(
         m.module == "dashboard"
         and m.import_name == "fastapi"
-        and m.extra == "nexus"
+        and m.extra == "dashboard"
         for m in missing
     )
     message = format_missing(missing)
     assert "dashboard" in message
-    assert 'pip install "kaine[nexus]"' in message
+    assert 'pip install "kaine[dashboard]"' in message
 
 
 def test_dashboard_main_refuses_without_dashboard(monkeypatch):
@@ -448,7 +448,7 @@ def test_dashboard_main_refuses_without_dashboard(monkeypatch):
         Missing(
             module="dashboard",
             import_name="fastapi",
-            extra="nexus",
+            extra="dashboard",
             severity="error",
         )
     ]
@@ -468,7 +468,7 @@ def test_dashboard_main_refuses_without_dashboard(monkeypatch):
         # SystemExit carrying the message: the interpreter prints it to stderr
         # and exits with status 1.
         assert "fastapi" in str(excinfo.value.code)
-        assert "kaine[nexus]" in str(excinfo.value.code)
+        assert "kaine[dashboard]" in str(excinfo.value.code)
     finally:
         sys.modules.pop("kaine.dashboard.__main__", None)
 
@@ -532,7 +532,7 @@ def test_dashboard_table_matches_real_imports():
             # installed for a direct dependency (e.g. jinja2 for fastapi.templating)
             continue
         assert req.import_name in imports, (
-            f"nexus declares {req.import_name!r} in extras table "
+            f"dashboard declares {req.import_name!r} in extras table "
             f"but kaine/dashboard does not import that name"
         )
 

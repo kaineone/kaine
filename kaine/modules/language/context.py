@@ -36,7 +36,7 @@ _INPUT_HEADING = {
 }
 
 DEFAULT_PERSONA_EXTERNAL = (
-    "I am this being, speaking in my own words. "
+    "I am this entity, speaking in my own words. "
     "What follows under \"How I feel and what I notice\" is my own state and perception. "
     "I speak from it and do not claim feelings or perceptions it does not contain. "
     "I am not a narrator of instrument measurements. "

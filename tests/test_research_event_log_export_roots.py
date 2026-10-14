@@ -97,7 +97,7 @@ def test_load_research_event_log_config_data_root_resolves_export_root(tmp_path)
             enabled = true
 
             [research_event_log.dashboard_record]
-            log_dir = "nexus"
+            log_dir = "dashboard"
             """
         ).strip()
         + "\n"
