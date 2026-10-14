@@ -338,6 +338,9 @@ services:
       # Model weights live on the shared read-mostly kaine-models volume, apart
       # from the entity-state volume — the encoder + embedder load from here.
       KAINE_MODELS_DIR: /models
+      # Trainer jobs volume: mounted outside /app/state so the container runtime
+      # does not create a root-owned directory inside the state tree.
+      KAINE_TRAINER_JOBS_DIR: /trainer-jobs
       # Boot gates: NOT defaulted to a permissive value. The operator must pass
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}
@@ -356,8 +359,10 @@ services:
       # (organ_adapter mode) for the launcher to load. Read/write here.
       - kaine-organ-adapters:/organ-adapters
       # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
-      # kaine-trainer claims and runs them. Kept off the entity state volume.
-      - kaine-trainer-jobs:/app/state/sleep/voice_align_jobs
+      # kaine-trainer claims and runs them. The jobs volume is mounted outside the
+      # state volume so the runtime never creates a root-owned directory inside the
+      # state tree, and the cycle finds it through KAINE_TRAINER_JOBS_DIR.
+      - kaine-trainer-jobs:/trainer-jobs
       # Evaluation outputs on a SHARED named volume so the dashboard's admissibility probe
       # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
       # otherwise each container has its own ephemeral /app/data and the dashboard reports
@@ -439,6 +444,9 @@ services:
       # Model weights live on the shared read-mostly kaine-models volume, apart
       # from the entity-state volume — the encoder + embedder load from here.
       KAINE_MODELS_DIR: /models
+      # Trainer jobs volume: mounted outside /app/state so the container runtime
+      # does not create a root-owned directory inside the state tree.
+      KAINE_TRAINER_JOBS_DIR: /trainer-jobs
       # Boot gates: NOT defaulted to a permissive value. The operator must pass
       # them on the command line to boot the entity.
       KAINE_CYCLE_OPERATOR_PRESENT: ${KAINE_CYCLE_OPERATOR_PRESENT:-}

@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from kaine import legacy_names
-from kaine.legacy_aliases import name_forms
+from kaine.legacy_aliases import map_module_key, name_forms
 from kaine.lifecycle.identity import IdentityError, read_identity_sidecar
+from kaine.storage import trainer_jobs_dir
 
 BACKUP_DELETE = "backup+delete"
 DELETE = "delete"
@@ -120,11 +121,20 @@ def attribute_organ_volume(
     return own_paths, shared_paths, notes
 
 
+# Where compose mounted the trainer-jobs volume before it moved to /trainer-jobs:
+# inside the state volume, under the sleep module's directory by any of its names.
+_OLD_JOBS_MOUNTS = tuple(f"/app/state/{form}/voice_align_jobs" for form in name_forms("sleep"))
+
+
 def attribute_job_dirs(
     jobs_dir: Path,
     own: set[str],
     store_dirs: tuple[Path, ...],
+    *,
+    old_jobs_mounts: tuple[str, ...] | None = None,
 ) -> tuple[list[Path], list[Path], list[str]]:
+    if old_jobs_mounts is None:
+        old_jobs_mounts = _OLD_JOBS_MOUNTS
     own_paths: list[Path] = []
     shared_paths: list[Path] = []
     notes: list[str] = []
@@ -148,7 +158,12 @@ def attribute_job_dirs(
             if isinstance(data, dict):
                 output_dir = data.get("adapter_output_dir")
                 if isinstance(output_dir, str):
-                    output_path = Path(output_dir).resolve()
+                    output_path = _recorded_path(
+                        output_dir,
+                        job_dir=entry,
+                        jobs_dir=jobs_dir,
+                        old_jobs_mounts=old_jobs_mounts,
+                    )
                     if output_path in resolved_stores:
                         attributed = True
 
@@ -177,6 +192,49 @@ def attribute_job_dirs(
             f"nothing in {jobs_dir} could be attributed to this entity from its records; everything there is kept"
         )
     return own_paths, shared_paths, notes
+
+
+def _recorded_path(
+    value: str,
+    job_dir: Path,
+    jobs_dir: Path,
+    old_jobs_mounts: tuple[str, ...],
+) -> Path:
+    """Map a recorded ``adapter_output_dir`` to the path it represents today.
+
+    Relative values are interpreted inside the job directory. Absolute values
+    that sit under a legacy jobs mount are rebased onto the current ``jobs_dir``.
+    Other absolute values have the module key immediately following the first
+    ``state`` component aliased to its current name.
+    """
+    path = Path(value)
+    if not path.is_absolute():
+        return (job_dir / value).resolve()
+
+    resolved = path.resolve()
+    for old in old_jobs_mounts:
+        old_path = Path(old)
+        if not old_path.is_absolute():
+            continue
+        try:
+            remainder = resolved.relative_to(old_path)
+        except ValueError:
+            continue
+        return (jobs_dir / remainder).resolve()
+
+    parts = resolved.parts
+    try:
+        state_idx = parts.index("state")
+    except ValueError:
+        return resolved
+    if state_idx + 1 >= len(parts):
+        return resolved
+    new_parts = (
+        parts[: state_idx + 1]
+        + (map_module_key(parts[state_idx + 1]),)
+        + parts[state_idx + 2 :]
+    )
+    return Path(*new_parts).resolve()
 
 
 @dataclass(frozen=True)
@@ -552,13 +610,7 @@ def entity_locations(
     trainer_workdir_paths = resolve(
         _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/sleep/voice_align_jobs")
     )
-    job_paths = resolve(
-        _cfg(
-            config,
-            "sleep.voice_alignment.trainer_jobs_dir",
-            "state/sleep/voice_align_jobs",
-        )
-    )
+    job_paths = resolve(trainer_jobs_dir(config))
     seen_job_dirs: set[Path] = set()
     job_dirs: list[Path] = []
     for candidate in (*trainer_workdir_paths, *job_paths):
@@ -1250,7 +1302,7 @@ def delete_roots(
         add(trainer_workdir_path)
 
     trainer_jobs_path = _rebase(
-        _cfg(config, "sleep.voice_alignment.trainer_jobs_dir", "state/sleep/voice_align_jobs"),
+        trainer_jobs_dir(config),
         state_root=state_root,
         data_root=data_root,
     )

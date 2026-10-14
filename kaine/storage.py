@@ -20,6 +20,9 @@ from kaine.defaults import DEFAULT_MIN_FREE_GB  # noqa: F401
 DATA_ROOT_ENV = "KAINE_DATA_ROOT"
 MODELS_DIR_ENV = "KAINE_MODELS_DIR"
 
+TRAINER_JOBS_DIR_ENV = "KAINE_TRAINER_JOBS_DIR"
+DEFAULT_TRAINER_JOBS_DIR = "state/sleep/voice_align_jobs"
+
 # Paths that are resolved under $KAINE_MODELS_DIR when they start with
 # ``state/models``, falling back to the data root.
 MODEL_PATH_KEYS: tuple[tuple[str, ...], ...] = (
@@ -99,6 +102,29 @@ def resolve_under(root: Path | None, value: str) -> str:
     if Path(value).expanduser().is_absolute():
         return value
     return str(root / value)
+
+
+def trainer_jobs_dir(
+    config: Mapping[str, Any] | None, env: Mapping[str, str] | None = None
+) -> str:
+    """One resolver for the sleep module, decommission and the pre-boot report (OpenSpec compose-state-mount-ownership)."""
+    if env is None:
+        env = os.environ
+
+    env_value = env.get(TRAINER_JOBS_DIR_ENV)
+    if env_value is not None and env_value.strip():
+        return env_value.strip()
+
+    if config is not None:
+        sleep = config.get("sleep")
+        if isinstance(sleep, Mapping):
+            voice_alignment = sleep.get("voice_alignment")
+            if isinstance(voice_alignment, Mapping):
+                value = voice_alignment.get("trainer_jobs_dir")
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+    return DEFAULT_TRAINER_JOBS_DIR
 
 
 def _models_dir_from_env(env: Mapping[str, str]) -> Path | None:

@@ -99,6 +99,49 @@ jobs:
           docker run --rm -w /tmp kaine:${{ matrix.flavor }} \
             python -c "import kaine.modules.sleep.trainer_service; print('trainer_service imports')"
 
+      - name: An old-layout state volume upgrades as the image's user
+        run: |
+          set -euo pipefail
+
+          OLD=$(docker run --rm kaine:${{ matrix.flavor }} python -c "from kaine import legacy_names as T; print(next(k for k, e in T.MODULES.items() if e['new_key'] == 'sleep'))")
+
+          trap 'docker volume rm -f kaine-smoke-state kaine-smoke-jobs || true' EXIT
+
+          docker volume create kaine-smoke-state
+          docker volume create kaine-smoke-jobs
+
+          docker run --rm --user 0 --entrypoint sh \
+            -v kaine-smoke-state:/s \
+            -e OLD="$OLD" \
+            kaine:${{ matrix.flavor }} \
+            -c 'mkdir -p /s/$OLD/adapters /s/$OLD/voice_align_jobs && echo window > /s/$OLD/organ_window.json && echo adapter > /s/$OLD/adapters/a.gguf && chown -R 10001:10001 /s'
+
+          docker run --rm \
+            -v kaine-smoke-state:/app/state \
+            -v kaine-smoke-jobs:/trainer-jobs \
+            --tmpfs /app/state/perceptual_locus:mode=01777 \
+            kaine:${{ matrix.flavor }} \
+            python -m kaine.lifecycle.rename_state /app/state --no-qdrant
+
+          docker run --rm \
+            -v kaine-smoke-state:/app/state \
+            -v kaine-smoke-jobs:/trainer-jobs \
+            --tmpfs /app/state/perceptual_locus:mode=01777 \
+            -e OLD="$OLD" \
+            kaine:${{ matrix.flavor }} \
+            sh -c 'test -s /app/state/sleep/organ_window.json && test -s /app/state/sleep/adapters/a.gguf && test ! -e /app/state/$OLD'
+
+          output=$(docker run --rm \
+            -v kaine-smoke-state:/app/state \
+            -v kaine-smoke-jobs:/trainer-jobs \
+            --tmpfs /app/state/perceptual_locus:mode=01777 \
+            kaine:${{ matrix.flavor }} \
+            python -m kaine.lifecycle.rename_state /app/state --no-qdrant --dry-run)
+
+          if grep -E '^(move|stage|sqlite|qdrant_alias|remove empty):' <<<"$output"; then
+            echo "unexpected dry-run steps:"; echo "$output"; exit 1
+          fi
+
       - name: No model weights baked into any layer
         run: |
           # Fail if any weight extension exists inside the image filesystem.

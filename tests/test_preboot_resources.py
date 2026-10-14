@@ -357,7 +357,7 @@ def test_disk_rows_split_by_filesystem(tmp_path):
     backup_row = next(r for r in rows if "out_root" in r.name)
     assert backup_row.status == preboot.FAIL
     assert str(backups) in backup_row.detail
-    assert by_name["Disk free ([preboot].state_root +11)"].status == preboot.PASS
+    assert by_name["Disk free ([preboot].state_root +12)"].status == preboot.PASS
 
 
 def test_disk_warn_below_warn_threshold(tmp_path):

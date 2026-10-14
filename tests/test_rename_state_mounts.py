@@ -609,3 +609,22 @@ def test_mount_message_takes_precedence_over_writable_check(tmp_path, monkeypatc
         _restore_dirs(root)
 
 
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_non_writable_source_directory(tmp_path):
+    # Moving a child out of the old directory needs write access to it as well.
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"data")
+    (root / "sleep").mkdir(parents=True)
+    (root / old_sleep).chmod(0o555)
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match=f"cannot write {old_sleep}"):
+            rename_state.migrate(root, no_qdrant=True)
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)
