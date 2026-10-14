@@ -369,3 +369,84 @@ def test_a_deeper_mount_holding_data_refuses_a_merge(tmp_path, monkeypatch):
     mounts.add((root / OLD["sleep"] / "voice_align_jobs" / "sub").resolve())
     (root / "sleep").mkdir(parents=True)
     _refuses_unchanged(root)
+
+
+def test_an_old_directory_holding_only_a_mounted_empty_mount_point_plans_no_step(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    old_sleep = OLD["sleep"]
+    (root / old_sleep / "voice_align_jobs").mkdir(parents=True)
+    mounts.add((root / old_sleep / "voice_align_jobs").resolve())
+    _write(root / "sleep" / "file.txt", b"ok")
+
+    steps = rename_state.plan(root, qdrant=None)
+    assert not any(
+        s["kind"] == "remove_vacant" and s["path"] == old_sleep for s in steps
+    )
+
+    result = rename_state.migrate(root, no_qdrant=True)
+    assert result.status == "noop"
+    result2 = rename_state.migrate(root, no_qdrant=True)
+    assert result2.status == "noop"
+
+    files, dirs = _snapshot(root)
+    assert files == {"sleep/file.txt": b"ok"}
+    assert old_sleep in dirs
+    assert f"{old_sleep}/voice_align_jobs" in dirs
+
+
+def test_a_leftover_subtree_of_empty_mount_points_at_any_depth_is_accepted(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    old_sleep = OLD["sleep"]
+    (root / old_sleep / "a" / "b").mkdir(parents=True)
+    mounts.add((root / old_sleep / "a" / "b").resolve())
+    (root / old_sleep / "c").mkdir(parents=True)
+    _write(root / "sleep" / "file.txt", b"ok")
+
+    result = rename_state.migrate(root, no_qdrant=True)
+    assert result.status == "migrated"
+
+    files, dirs = _snapshot(root)
+    assert files == {"sleep/file.txt": b"ok"}
+    assert f"{old_sleep}/c" not in dirs
+    assert f"{old_sleep}/a" in dirs
+    assert f"{old_sleep}/a/b" in dirs
+    assert old_sleep in dirs
+
+    result2 = rename_state.migrate(root, no_qdrant=True)
+    assert result2.status == "noop"
+    assert _snapshot(root) == (files, dirs)
+
+
+def test_merge_leaves_old_directory_holding_an_empty_mount_point_and_second_is_noop(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    mounts = _mount_checker(monkeypatch)
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"window")
+    _write(root / old_sleep / "adapters" / "a.gguf", b"adapter")
+    (root / old_sleep / "voice_align_jobs").mkdir(parents=True)
+    mounts.add((root / old_sleep / "voice_align_jobs").resolve())
+    (root / "sleep" / "voice_align_jobs").mkdir(parents=True)
+    mounts.add((root / "sleep" / "voice_align_jobs").resolve())
+    _write(root / "sleep" / "voice_align_jobs" / "jobs.json", b'{"jobs":1}')
+    (root / OLD["perceptual_locus"]).mkdir(parents=True)
+    (root / "perceptual_locus").mkdir(parents=True)
+
+    result = rename_state.migrate(root, no_qdrant=True)
+    assert result.status == "migrated"
+
+    files, dirs = _snapshot(root)
+    assert files["sleep/organ_window.json"] == b"window"
+    assert files["sleep/adapters/a.gguf"] == b"adapter"
+    assert files["sleep/voice_align_jobs/jobs.json"] == b'{"jobs":1}'
+    assert old_sleep in dirs
+    assert f"{old_sleep}/voice_align_jobs" in dirs
+    assert not any(
+        d.startswith(old_sleep + "/") and d != f"{old_sleep}/voice_align_jobs"
+        for d in dirs
+    )
+
+    result2 = rename_state.migrate(root, no_qdrant=True)
+    assert result2.status == "noop"
+    assert _snapshot(root) == (files, dirs)
