@@ -33,3 +33,4 @@
 - [x] 4.8 Deletion refuses paths outside the roots and the configured allow-list.
 - [x] 4.9 Licence sections cited as "CAL Article".
 - [x] 4.10 CI runs the Redis end-to-end and authentication tests against a real redis-server.
+- [x] 4.11 Tests the final review found missing: the exit-3 gate with an unattributable CLAIMED job that has no result.json, and the earlier-export notice on a re-run after an incomplete run that dropped collections; both mutation-checked.

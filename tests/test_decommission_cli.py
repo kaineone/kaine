@@ -1325,3 +1325,95 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
     assert "just before deletion" in out.getvalue()
     assert (tmp_path / "state" / "eidolon" / "self_model.json").read_bytes() == before
     assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+
+
+def test_unattributable_claimed_job_refuses_before_anything(tmp_path, monkeypatch):
+    """A claimed but unfinished job blocks decommission without changing state."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_state(tmp_path / "state")
+    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job.mkdir(parents=True)
+    (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
+    (job / "CLAIMED").write_text("")
+    (job / "pairs.jsonl").write_text("SECRET pairs\n")
+    before = {p: p.read_bytes() for p in (tmp_path / "state").rglob("*") if p.is_file()}
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out,
+        err=err,
+    )
+    after = {p: p.read_bytes() for p in (tmp_path / "state").rglob("*") if p.is_file()}
+    assert rc == 3
+    assert str(job) in err.getvalue()
+    assert "--keep-unattributed-jobs" in err.getvalue()
+    assert after == before
+    assert not (job / "CANCELLED").exists()
+    assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
+    backups = tmp_path / "backups"
+    assert not backups.exists() or not any(backups.rglob("*"))
+
+
+def test_rerun_names_the_earlier_qdrant_export(tmp_path, monkeypatch):
+    """An earlier incomplete run is named as the source Qdrant export backup."""
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    earlier_backup = "/backups/entity_Kaine_Nova_20261013T120000Z"
+
+    run1 = tmp_path / "run1"
+    _seed_state(run1 / "state")
+    audit1 = run1 / "state" / "audit"
+    audit1.mkdir(parents=True)
+    (audit1 / "decommission.jsonl").write_text(
+        json.dumps(
+            {
+                "outcome": "incomplete",
+                "dropped_collections": ["mnemos_episodic"],
+                "backup_path": earlier_backup,
+            }
+        )
+        + "\n"
+    )
+    out1 = io.StringIO()
+    err1 = io.StringIO()
+    rc1 = main(
+        _args(run1),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out1,
+        err=err1,
+    )
+    assert rc1 == 0, f"rc={rc1}\nout={out1.getvalue()}\nerr={err1.getvalue()}"
+    assert "An earlier run already dropped this entity's Qdrant collections" in out1.getvalue()
+    assert earlier_backup in out1.getvalue()
+    lines1 = (audit1 / "decommission.jsonl").read_text().strip().split("\n")
+    assert len(lines1) == 2
+    assert json.loads(lines1[1])["earlier_qdrant_export_backup"] == earlier_backup
+
+    run2 = tmp_path / "run2"
+    _seed_state(run2 / "state")
+    audit2 = run2 / "state" / "audit"
+    audit2.mkdir(parents=True)
+    (audit2 / "decommission.jsonl").write_text(
+        json.dumps(
+            {
+                "outcome": "deleted",
+                "dropped_collections": ["mnemos_episodic"],
+                "backup_path": earlier_backup,
+            }
+        )
+        + "\n"
+    )
+    out2 = io.StringIO()
+    err2 = io.StringIO()
+    rc2 = main(
+        _args(run2),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out2,
+        err=err2,
+    )
+    assert rc2 == 0, f"rc={rc2}\nout={out2.getvalue()}\nerr={err2.getvalue()}"
+    assert "An earlier run already dropped this entity's Qdrant collections" not in out2.getvalue()
+    lines2 = (audit2 / "decommission.jsonl").read_text().strip().split("\n")
+    assert len(lines2) == 2
+    assert json.loads(lines2[1])["earlier_qdrant_export_backup"] is None
