@@ -40,11 +40,11 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
     fork_root = state_root / "forks"
     out_root = tmp_path / "backups"
     for path in (
-        state_root / "hypnos" / "consolidation_divergence.json",
+        state_root / "sleep" / "consolidation_divergence.json",
         state_root / "lifecycle" / "stage.json",
-        state_root / "praxis" / "files" / "a.txt",
+        state_root / "effectors" / "files" / "a.txt",
         state_root / "research" / "raw_bus_archive" / "x.jsonl",
-        state_root / "vox" / "u.wav",
+        state_root / "vocal" / "u.wav",
         state_root / "cycle" / "incidents" / "i.jsonl",
         state_root / "cycle" / "control.json",
         data_root / "evaluation" / "welfare" / "w.jsonl",
@@ -67,10 +67,10 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
     assert result.ok
     bdir = result.backup_path
     assert (
-        bdir / "locations" / "sleep.consolidation_divergence" / "hypnos" / "consolidation_divergence.json"
+        bdir / "locations" / "sleep.consolidation_divergence" / "sleep" / "consolidation_divergence.json"
     ).is_file()
     assert (bdir / "locations" / "lifecycle.development" / "lifecycle" / "stage.json").is_file()
-    assert (bdir / "locations" / "effectors.files" / "praxis" / "files" / "a.txt").is_file()
+    assert (bdir / "locations" / "effectors.files" / "effectors" / "files" / "a.txt").is_file()
     assert (
         bdir / "locations" / "research.raw_bus_archive" / "research" / "raw_bus_archive" / "x.jsonl"
     ).is_file()
@@ -81,11 +81,11 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
         fork_root=fork_root,
         data_root=data_root,
     )
-    assert not (state_root / "hypnos" / "consolidation_divergence.json").exists()
+    assert not (state_root / "sleep" / "consolidation_divergence.json").exists()
     assert not (state_root / "lifecycle" / "stage.json").exists()
-    assert not (state_root / "praxis" / "files" / "a.txt").exists()
+    assert not (state_root / "effectors" / "files" / "a.txt").exists()
     assert not (state_root / "research" / "raw_bus_archive" / "x.jsonl").exists()
-    assert not (state_root / "vox" / "u.wav").exists()
+    assert not (state_root / "vocal" / "u.wav").exists()
     assert (state_root / "cycle" / "incidents" / "i.jsonl").exists()
     assert (state_root / "cycle" / "control.json").exists()
     assert (data_root / "evaluation" / "welfare" / "w.jsonl").exists()
@@ -95,9 +95,9 @@ def test_backup_copies_new_locations_and_delete_removes_them(tmp_path):
 def test_sqlite_store_is_checkpointed_and_backed_up(tmp_path):
     """SQLite WAL files are checkpointed into the backup and removed with the store."""
     state_root = tmp_path / "state"
-    db_dir = state_root / "mnemos"
+    db_dir = state_root / "episodic_memory"
     db_dir.mkdir(parents=True, exist_ok=True)
-    db_path = db_dir / "mnemos.db"
+    db_path = db_dir / "episodic_memory.db"
 
     conn1 = sqlite3.connect(str(db_path))
     conn1.execute("CREATE TABLE t (c TEXT)")
@@ -122,7 +122,7 @@ def test_sqlite_store_is_checkpointed_and_backed_up(tmp_path):
     )
     assert result.ok
     backup_db = (
-        result.backup_path / "locations" / "episodic_memory.sqlite" / "mnemos" / "mnemos.db"
+        result.backup_path / "locations" / "episodic_memory.sqlite" / "episodic_memory" / "episodic_memory.db"
     )
     assert backup_db.is_file()
     backed = sqlite3.connect(str(backup_db))
@@ -216,13 +216,19 @@ def test_qdrant_in_use_and_api_key_resolution(tmp_path):
 def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
     """A Qdrant export error makes the whole backup fail."""
     state_root = tmp_path / "state"
-    (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
-    (state_root / "eidolon" / "self_model.json").write_text("{}", encoding="utf-8")
+    (state_root / "self_model").mkdir(parents=True, exist_ok=True)
+    (state_root / "self_model" / "self_model.json").write_text("{}", encoding="utf-8")
 
     cfg = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "qdrant"}}
     collection = decommission._episodic_memory_collection_names(cfg)[0]
 
     class FakeClient:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Coll:
                 pass
@@ -259,7 +265,7 @@ def test_failed_qdrant_export_fails_the_backup(tmp_path, monkeypatch):
 def test_shared_organ_volume_keeps_other_entities_files(tmp_path):
     """A shared organ directory only deletes files attributable to this entity."""
     state_root = tmp_path / "state"
-    adapter_store = state_root / "hypnos" / "adapters" / "a1"
+    adapter_store = state_root / "sleep" / "adapters" / "a1"
     adapter_store.mkdir(parents=True, exist_ok=True)
     (adapter_store / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
     organ = tmp_path / "organ"

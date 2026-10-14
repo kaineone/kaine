@@ -239,7 +239,7 @@ When `[research_event_log.external_utterances].enabled` is true, the cycle SHALL
 - **THEN** its text and timestamps are written to the external-utterance log
 
 ### Requirement: What Dashboard displays is recorded for each run
-When `[research_event_log.dashboard_record].enabled` is true, the cycle SHALL record every event on the streams the dashboard displays, after the same privacy filter the dashboard applies, through the encrypted JSONL sink under `data/dashboard_record/`. The record SHALL contain nothing that the dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
+When `[research_event_log.dashboard_record].enabled` is true, the cycle SHALL record every event on the streams the dashboard displays, after the same privacy filter the dashboard applies, through the encrypted JSONL sink under `data/nexus_record/`. The record SHALL contain nothing that the dashboard's filtered feed does not contain. It SHALL NOT be export-eligible.
 
 #### Scenario: The record matches the display
 - **WHEN** an event on a displayed stream is published during a run with the record enabled

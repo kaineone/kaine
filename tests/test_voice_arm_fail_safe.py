@@ -10,7 +10,7 @@ from tests.test_divergence_voice_arm import _state, _write_intent, _write_measur
 
 def test_corpus_cannot_be_listed_counts_as_spoken(tmp_path, monkeypatch):
     root = _state(tmp_path)
-    corpus_dir = root / "lingua" / "intent_log"
+    corpus_dir = root / "language" / "intent_log"
     corpus_dir.mkdir(parents=True, exist_ok=True)
     real_scandir = os.scandir
 
@@ -32,7 +32,7 @@ def test_corpus_cannot_be_listed_counts_as_spoken(tmp_path, monkeypatch):
 def test_stat_denied_on_live_log_counts_as_spoken(tmp_path, monkeypatch):
     root = _state(tmp_path)
     _write_intent(root, "intent_expression.jsonl", "hello world")
-    live_log = root / "lingua" / "intent_expression.jsonl"
+    live_log = root / "language" / "intent_expression.jsonl"
     real_stat = os.stat
 
     def fake_stat(path, *args, **kwargs):
@@ -61,7 +61,7 @@ def test_missing_live_log_and_no_corpus_abstains(tmp_path):
 
 def test_live_log_path_is_directory_counts_as_spoken(tmp_path):
     root = _state(tmp_path)
-    live_log = root / "lingua" / "intent_expression.jsonl"
+    live_log = root / "language" / "intent_expression.jsonl"
     live_log.mkdir(parents=True, exist_ok=True)
     result = assess_divergence(state_root=root)
     assert result.diverged

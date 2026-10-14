@@ -54,3 +54,21 @@ The operator-facing names follow the module names. Each old name keeps working u
 - The dashboard accepts the old session-key header `X-Nexus-Session-Key` beside `X-Dashboard-Session-Key`, and the page moves what a browser stored under the old storage keys to the new ones on first load. Sessions live in memory, so the upgrade signs every browser out once.
 
 The dashboard container is now `kaine-dashboard`. With compose, run `docker compose -f compose/kaine.yml up -d --remove-orphans` so the old `kaine-nexus` container stops and frees port 8088. With quadlet, run `systemctl --user stop kaine-nexus` first; `bash scripts/install-quadlet.sh` refuses while that service runs, then removes the old unit file it installed. Then run `systemctl --user daemon-reload` and `systemctl --user start kaine-dashboard`. The record volume keeps its name, so the recorded data stays where it is.
+
+## Stored names
+
+Names stored on disk follow the module names too: the module directories under `state/` (`state/hypnos/` is now `state/sleep/`, and so on), the developmental files (`gestation_*` and `birth_*` are now `development_*` and `maturation_*`), the episodic memory database (`state/mnemos/mnemos.db` is now `state/episodic_memory/episodic_memory.db`) and its collections (`mnemos_*` is now `episodic_memory_*`), the social-cognition collection, the stage value and stage fields, and the stored tags in checkpoints, preservation requests and study records.
+
+The cycle moves an existing state tree to the new names when it starts, before it reads anything (`kaine.lifecycle.rename_state`). Each move is a rename in place, so nothing is copied and nothing is lost. The stage file is rewritten with its fields under the new names, the SQLite store's collection column is rewritten in one transaction, and Qdrant collections keep their old names and are reached through aliases named like the new ones. A manifest under `state/.rename_state/` records every step, so an interrupted move resumes on the next start, and a second start finds nothing to do. A directory a container runtime creates as a mount point (a volume or tmpfs target under `state/`) does not count as data: an old directory that holds only empty directories or a leftover mount point is removed or left alone, and the content of an old directory is merged into a new one that holds only mount points or empty directories. When an old and a new name for one item both hold data, the start stops with exit code `14` and changes nothing; move one of the two aside and start again. `python -m kaine.lifecycle.rename_state <state root> --revert` undoes a completed move.
+
+A real (not dry-run) decommission of a tree still under the old names performs the same move first, before its confirmations, so a decommission stopped at a confirmation leaves the tree moved; the `--revert` command above undoes it.
+
+Data that is never rewritten keeps its old names and is read under the new ones: preservation bundles, fork snapshots, world-model checkpoints, recorded datasets, the episodic memory module's trace-strength record and embedding-space stamp (each is copied under the new prefix the first time it is read), and studies started before the upgrade (their development line directory is renamed in place when the study runner opens it). The dashboard record keeps its data directory, `data/nexus_record`, because the record volume is mounted on it.
+
+Rolling back across this step is not supported: a release from before it does not read the new names. Before upgrading, take a backup you can restore. While the cycle still runs on the earlier release, preserve it and stop it in one step:
+
+```bash
+python -m kaine.cycle.control preserve --reason "before the module rename" --stop
+```
+
+Then, with nothing running, copy the data root (`state/`, `data/` and `backups/`, or the volumes that hold them). To go back, restore that copy and run the earlier release on it; the preservation bundle also revives on the earlier release.

@@ -114,7 +114,7 @@ async def test_vocal_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_p
         backend="sherpa_onnx",
         applied_prosody=("speed_factor",),
         voice_label="kokoro-en speaker 0",
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
     )
 
     await vocal.initialize()
@@ -160,7 +160,7 @@ async def test_dormant_muted_vocal_publishes_nothing(bus: AsyncBus, tmp_path: Pa
         player=FakePlayer(),
         backend="sherpa_onnx",
         applied_prosody=("speed_factor",),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
     )
     await vocal.initialize()
     assert vocal._tts_unavailable is not None
@@ -194,7 +194,7 @@ async def test_muted_vocal_publishes_baseline_failure_once_per_60s(bus: AsyncBus
         applied_prosody=("speed_factor",),
         baseline_salience=0.25,
         alert_salience=0.75,
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         entity_clock=clock,
     )
     await vocal.initialize()

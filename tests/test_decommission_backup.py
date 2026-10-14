@@ -23,16 +23,16 @@ _NO_QDRANT = {"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"
 
 
 def _seed_state(state_root: Path) -> None:
-    (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
-    (state_root / "eidolon" / "self_model.json").write_text(
+    (state_root / "self_model").mkdir(parents=True, exist_ok=True)
+    (state_root / "self_model" / "self_model.json").write_text(
         json.dumps({"name": "Kaine Nova", "drift_count": 1}), encoding="utf-8"
     )
-    (state_root / "lingua").mkdir(parents=True, exist_ok=True)
-    (state_root / "lingua" / "intent_expression.jsonl").write_text(
+    (state_root / "language").mkdir(parents=True, exist_ok=True)
+    (state_root / "language" / "intent_expression.jsonl").write_text(
         '{"intent": "x"}\n', encoding="utf-8"
     )
-    (state_root / "hypnos" / "adapters").mkdir(parents=True, exist_ok=True)
-    (state_root / "hypnos" / "adapters" / "voice.bin").write_bytes(b"w")
+    (state_root / "sleep" / "adapters").mkdir(parents=True, exist_ok=True)
+    (state_root / "sleep" / "adapters" / "voice.bin").write_bytes(b"w")
 
 
 def _seed_fork(fork_root: Path, entity_id: str | None = None) -> None:
@@ -78,7 +78,7 @@ def test_capture_backup_copies_artifacts_and_manifest(tmp_path):
     bdir = result.backup_path
     assert (bdir / "self_model.json").is_file()
     assert (bdir / "intent_expression.jsonl").is_file()
-    assert (bdir / "locations" / "sleep.adapters" / "hypnos" / "adapters" / "voice.bin").is_file()
+    assert (bdir / "locations" / "sleep.adapters" / "sleep" / "adapters" / "voice.bin").is_file()
     assert (bdir / "snapshot.json").is_file()
     assert not (bdir / "QDRANT_BACKUP_INSTRUCTIONS.txt").exists()
 
@@ -109,11 +109,11 @@ def test_backup_covers_every_file_of_renamed_and_sibling_dirs(tmp_path):
     fork_root = tmp_path / "forks"
     out_root = tmp_path / "backups"
     files = {
-        "eidolon/self_model.json": '{"self": true}',
-        "eidolon/extra.json": '{"extra": true}',
+        "self_model/self_model.json": '{"self": true}',
+        "self_model/extra.json": '{"extra": true}',
         "self_model/notes.json": '{"notes": true}',
-        "lingua/intent_expression.jsonl": '{"intent": "x"}\n',
-        "lingua/monologue.jsonl": '{"monologue": "y"}\n',
+        "language/intent_expression.jsonl": '{"intent": "x"}\n',
+        "language/monologue.jsonl": '{"monologue": "y"}\n',
         "world_model/w.ckpt": b"weights",
     }
     for rel, content in files.items():
@@ -135,11 +135,11 @@ def test_backup_covers_every_file_of_renamed_and_sibling_dirs(tmp_path):
     assert result.ok
     bdir = result.backup_path
     bundled = {
-        bdir / "locations" / "self_model" / "eidolon" / "self_model.json",
-        bdir / "locations" / "self_model" / "eidolon" / "extra.json",
+        bdir / "locations" / "self_model" / "self_model" / "self_model.json",
+        bdir / "locations" / "self_model" / "self_model" / "extra.json",
         bdir / "locations" / "self_model" / "self_model" / "notes.json",
-        bdir / "locations" / "language" / "lingua" / "intent_expression.jsonl",
-        bdir / "locations" / "language" / "lingua" / "monologue.jsonl",
+        bdir / "locations" / "language" / "language" / "intent_expression.jsonl",
+        bdir / "locations" / "language" / "language" / "monologue.jsonl",
         bdir / "locations" / "world_model" / "world_model" / "w.ckpt",
     }
     for path in bundled:

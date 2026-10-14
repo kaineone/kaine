@@ -33,7 +33,7 @@ from kaine.storage import resolve
 log = logging.getLogger(__name__)
 
 #: Where the bracket publishes the window phase; consumers read it.
-ORGAN_WINDOW_STATE = Path("state/hypnos/organ_window.json")
+ORGAN_WINDOW_STATE = Path("state/sleep/organ_window.json")
 
 #: Window phases (surfaced to consumers + the dashboard).
 PHASE_IDLE = "idle"  # no training window; organ serving normally

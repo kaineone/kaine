@@ -33,7 +33,7 @@ _PLANNING_STREAM = "planning.out"
 class PlanningPolicyObserver(StreamSubscriberObserver):
     """Records the planning module's policy events (EFE, horizon, action) to JSONL."""
 
-    name = "nous_policy"
+    name = "planning_policy"
     streams = (_PLANNING_STREAM,)
 
     def __init__(self, bus: BusReader, sink: AsyncJsonlSink) -> None:

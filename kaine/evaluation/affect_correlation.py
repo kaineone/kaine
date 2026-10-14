@@ -144,7 +144,7 @@ class AffectCorrelationRecorder(StreamSubscriberObserver):
             {
                 "entry_id": entry_id,
                 "ts": datetime.now(timezone.utc).isoformat(),
-                "thymos_state": affect_state,
+                "affect_state": affect_state,
                 "characteristics": chars,
             }
         )
@@ -167,7 +167,7 @@ def correlate_from_log(log_path: Path) -> dict[str, dict[str, float]]:
             if not isinstance(entry, dict):
                 continue
             entry = legacy_aliases.map_record(entry)
-            affect = entry.get("thymos_state") or {}
+            affect = entry.get("affect_state") or {}
             chars = entry.get("characteristics") or {}
             if not isinstance(affect, dict) or not chars:
                 continue

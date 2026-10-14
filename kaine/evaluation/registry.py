@@ -344,7 +344,7 @@ class SidecarRegistry:
                 )
             )
         if config.self_model_accuracy and self._cognitive_client:
-            sink = self._make_sink("eidolon_accuracy", "eidolon_accuracy")
+            sink = self._make_sink("self_model_accuracy", "self_model_accuracy")
             self._observers.append(
                 SelfModelAccuracyRunner(
                     sink,
@@ -393,7 +393,7 @@ class SidecarRegistry:
             self._observers.append(observer)
             self._welfare_observer = observer
         if obs_cfg.planning_policy:
-            sink = self._make_sink("nous_policy", "nous_policy")
+            sink = self._make_sink("planning_policy", "planning_policy")
             self._observers.append(PlanningPolicyObserver(self._bus, sink))
 
     async def start(self) -> None:

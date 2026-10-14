@@ -146,6 +146,12 @@ class FakeQdrant:
         self.fail_scroll = False
         self.closed = False
 
+    def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     def get_collections(self):
         """Return the list of in-memory collection names."""
         return SimpleNamespace(
@@ -219,7 +225,7 @@ def build_entity(tmp_path, port):
     def _write(rel, fate):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        if rel == "state/eidolon/self_model.json":
+        if rel == "state/self_model/self_model.json":
             # The CLI reads the entity's name from here for the confirmation token.
             content = json.dumps({"name": "Kaine Nova", "note": f"SECRET {rel}"}).encode()
         elif fate in ("backup", "delete"):
@@ -230,43 +236,43 @@ def build_entity(tmp_path, port):
         seeded[rel] = (fate, content)
 
     backup_paths = [
-        "state/eidolon/self_model.json",
-        "state/eidolon/extra_notes.json",
         "state/self_model/self_model.json",
-        "state/lingua/intent_expression.jsonl",
-        "state/lingua/monologue.jsonl",
+        "state/self_model/extra_notes.json",
+        "state/self_model/self_model.json",
         "state/language/intent_expression.jsonl",
-        "state/lingua/utterance_outcomes.jsonl",
+        "state/language/monologue.jsonl",
+        "state/language/intent_expression.jsonl",
+        "state/language/utterance_outcomes.jsonl",
         "state/language/voice_measures.jsonl",
-        "state/hypnos/adapters/a1/adapter.gguf",
+        "state/sleep/adapters/a1/adapter.gguf",
         "state/sleep/adapters/a2/adapter.gguf",
-        "state/hypnos/consolidation_divergence.json",
         "state/sleep/consolidation_divergence.json",
-        "state/phantasia/world_model.ckpt",
+        "state/sleep/consolidation_divergence.json",
+        "state/world_model/world_model.ckpt",
         "state/world_model/world_model.ckpt",
         "state/individuation/ledger_extra.json",
         "state/individuation/maturation_adapter.gguf",
         "state/lifecycle/stage.json",
-        "state/lifecycle/gestation_progress.json",
         "state/lifecycle/development_progress.json",
-        "state/lifecycle/birth_request.json",
+        "state/lifecycle/development_progress.json",
         "state/lifecycle/maturation_request.json",
-        "state/praxis/files/note.txt",
+        "state/lifecycle/maturation_request.json",
+        "state/effectors/files/note.txt",
         "state/effectors/files/note2.txt",
-        "state/praxis/notifications.log",
+        "state/effectors/notifications.log",
         "state/effectors/notifications.log",
         "state/research/raw_bus_archive/2026-10-13.jsonl",
         "state/research/external_utterances/2026-10-13.jsonl",
     ]
 
     delete_paths = [
-        "state/mnemos/store_health.json",
         "state/episodic_memory/store_health.json",
-        "state/hypnos/organ_window.json",
+        "state/episodic_memory/store_health.json",
         "state/sleep/organ_window.json",
-        "state/vox/utt1.wav",
+        "state/sleep/organ_window.json",
+        "state/vocal/utt1.wav",
         "state/vocal/utt2.wav",
-        "state/perception/desired.json",
+        "state/perceptual_locus/desired.json",
         "state/perceptual_locus/runtime.json",
         "state/cycle/escalation.json",
         "state/preservation/divergence_edge.json",
@@ -280,9 +286,9 @@ def build_entity(tmp_path, port):
         "state/cycle/override_audit.jsonl",
         "state/cycle/control.json",
         "state/lifecycle/spawn_acknowledgements.jsonl",
-        "state/praxis/audit.log",
         "state/effectors/audit.log",
-        "state/hypnos/voice_alignment_audit.jsonl",
+        "state/effectors/audit.log",
+        "state/sleep/voice_alignment_audit.jsonl",
         "state/sleep/voice_alignment_audit.jsonl",
         "data/evaluation/coherence/c.jsonl",
         "data/evaluation/welfare/w.jsonl",
@@ -298,7 +304,7 @@ def build_entity(tmp_path, port):
     for rel in keep_paths:
         _write(rel, "keep")
 
-    own_bytes = seeded["state/hypnos/adapters/a1/adapter.gguf"][1]
+    own_bytes = seeded["state/sleep/adapters/a1/adapter.gguf"][1]
     own_sha = hashlib.sha256(own_bytes).hexdigest()
 
     def _put(rel, data, fate):
@@ -322,21 +328,21 @@ def build_entity(tmp_path, port):
     _put("organ/generation", b"2", "keep")
 
     _put(
-        "state/hypnos/voice_align_jobs/job1/job.json",
+        "state/sleep/voice_align_jobs/job1/job.json",
         json.dumps(
-            {"adapter_output_dir": str((state_root / "hypnos" / "adapters").resolve())}
+            {"adapter_output_dir": str((state_root / "sleep" / "adapters").resolve())}
         ).encode(),
         "backup",
     )
-    _put("state/hypnos/voice_align_jobs/job1/pairs.jsonl", b"SECRET job1 pairs", "backup")
+    _put("state/sleep/voice_align_jobs/job1/pairs.jsonl", b"SECRET job1 pairs", "backup")
     _put("state/sleep/voice_align_jobs/job2/out/x/adapter.gguf", own_bytes, "backup")
     _put("state/sleep/voice_align_jobs/job2/pairs.jsonl", b"SECRET job2 pairs", "backup")
     _put(
-        "state/hypnos/voice_align_jobs/study1/job.json",
+        "state/sleep/voice_align_jobs/study1/job.json",
         json.dumps({"adapter_output_dir": "out"}).encode(),
         "keep",
     )
-    _put("state/hypnos/voice_align_jobs/study1/pairs.jsonl", b"KEEP study pairs", "keep")
+    _put("state/sleep/voice_align_jobs/study1/pairs.jsonl", b"KEEP study pairs", "keep")
 
     runtime_path = state_root / "cycle" / "runtime.json"
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +386,7 @@ def build_entity(tmp_path, port):
                 fate = "backup" if rel == "forks/own1" else "keep"
                 seeded[_rel(path)] = (fate, path.read_bytes())
 
-    old_name_db = state_root / "mnemos" / "mnemos.db"
+    old_name_db = state_root / "episodic_memory" / "episodic_memory.db"
     old_name_db.parent.mkdir(parents=True, exist_ok=True)
     store = SqliteVecStorage(latent_dim=4, db_path=str(old_name_db))
 
@@ -388,7 +394,7 @@ def build_entity(tmp_path, port):
         try:
             await store.initialize()
             await store.upsert(
-                "mnemos_episodic",
+                "episodic_memory_episodic",
                 vector=[0.1, 0.2, 0.3, 0.4],
                 text="SECRET-memory",
                 payload={"timestamp": 1.0},
@@ -500,7 +506,7 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
 
     for rel in (
         "organ",
-        "state/hypnos/voice_align_jobs",
+        "state/sleep/voice_align_jobs",
         "state/sleep/voice_align_jobs",
     ):
         directory = tmp_path / rel
@@ -512,19 +518,19 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
             extra = Path(str(db_path) + suffix)
             assert not extra.exists(), extra
 
-    old_name_backup = [p for p in backup_dir.rglob("mnemos.db") if p.is_file()]
+    old_name_backup = [p for p in backup_dir.rglob("episodic_memory.db") if p.is_file()]
     assert len(old_name_backup) == 1, old_name_backup
 
     async def _read_old_name_backup():
         bstore = SqliteVecStorage(latent_dim=4, db_path=str(old_name_backup[0]))
         try:
             await bstore.initialize()
-            return await bstore.export(["mnemos_episodic"])
+            return await bstore.export(["episodic_memory_episodic"])
         finally:
             await bstore.shutdown()
 
     export = asyncio.run(_read_old_name_backup())
-    points = export.get("mnemos_episodic", [])
+    points = export.get("episodic_memory_episodic", [])
     assert len(points) == 1
     assert points[0]["text"] == "SECRET-memory"
 
@@ -564,7 +570,7 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     assert "SECRET" not in audit_text
     assert "Kaine Nova" not in audit_text
 
-    assert "hypnos/voice_align_jobs/study1" in record["shared_volume_kept"]
+    assert "sleep/voice_align_jobs/study1" in record["shared_volume_kept"]
     assert any(e.endswith("organ/active-1.gguf") for e in record["shared_volume_kept"])
     assert record["shared_volume_reason"] == "kept: shared volume, not attributable to this entity"
 

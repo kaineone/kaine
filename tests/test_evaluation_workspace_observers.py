@@ -92,7 +92,7 @@ async def test_trajectory_rows_carry_no_affect_state():
         sink,
     )
     await _drain(rec, sink, n_expected=1)
-    assert "thymos_state" not in sink.rows[0]
+    assert "affect_state" not in sink.rows[0]
 
 
 # ---- attribution ------------------------------------------------------------

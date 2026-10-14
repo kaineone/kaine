@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from kaine import legacy_names
 from kaine.dashboard.auth import require_operator_token
 from kaine.lifecycle.maturation_ack import (
     MaturationAck,
@@ -36,6 +37,11 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
+# The routes' name before the rename, kept as hidden aliases for a page loaded
+# before the upgrade. Taken from the table, so a rename run cannot fold the alias
+# into the route it stands for.
+_OLD_ROUTE = next(entry["old"] for entry in legacy_names.STORED_TAGS if entry["new"] == "maturation")
+
 
 class AckBody(BaseModel):
     request_id: str = Field(pattern=r"^[0-9a-f]{32}$")
@@ -47,7 +53,7 @@ RUNTIME_PATH = Path("state/cycle/runtime.json")
 
 _DEVELOPMENT_KEYS = {
     "stage",
-    "gestation_started_at",
+    "development_started_at",
     "born_at",
     "lived_seconds",
     "sleep_count",
@@ -116,8 +122,8 @@ def build_maturation_router(
 
     @router.get("/maturation.json", include_in_schema=False)
     @router.get("/maturation")
-    @router.get("/birth.json", include_in_schema=False)
-    @router.get("/birth", include_in_schema=False)
+    @router.get(f"/{_OLD_ROUTE}.json", include_in_schema=False)
+    @router.get(f"/{_OLD_ROUTE}", include_in_schema=False)
     async def maturation_json():
         return JSONResponse(
             maturation_snapshot(
@@ -129,7 +135,9 @@ def build_maturation_router(
         )
 
     @router.post("/maturation/ack", dependencies=[Depends(require_operator_token)])
-    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False)
+    @router.post(
+        f"/{_OLD_ROUTE}/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False
+    )
     async def maturation_ack(body: AckBody):
         request = read_request(path=request_path)
         if request is None:

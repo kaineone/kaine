@@ -26,10 +26,10 @@ def test_desired_state_defaults_to_operator_attribution() -> None:
 
 def test_write_desired_locus_records_development_lock(tmp_path: Path) -> None:
     p = _d(tmp_path)
-    d = ps.write_desired_locus("virtual", locked=True, path=p, locked_by="gestation")
-    assert d.locus == "virtual" and d.locus_locked is True and d.locked_by == "gestation"
+    d = ps.write_desired_locus("virtual", locked=True, path=p, locked_by="development")
+    assert d.locus == "virtual" and d.locus_locked is True and d.locked_by == "development"
     # Persisted and re-read.
-    assert ps.read_desired(p).locked_by == "gestation"
+    assert ps.read_desired(p).locked_by == "development"
 
 
 def test_unknown_locked_by_coerces_to_operator(tmp_path: Path) -> None:
@@ -39,10 +39,10 @@ def test_unknown_locked_by_coerces_to_operator(tmp_path: Path) -> None:
 
 def test_write_desired_locus_preserves_attribution_when_omitted(tmp_path: Path) -> None:
     p = _d(tmp_path)
-    ps.write_desired_locus("virtual", locked=True, path=p, locked_by="gestation")
+    ps.write_desired_locus("virtual", locked=True, path=p, locked_by="development")
     # A later write that does not pass locked_by keeps the existing attribution.
     d = ps.write_desired_locus("virtual", path=p)
-    assert d.locked_by == "gestation"
+    assert d.locked_by == "development"
 
 
 # --- honest denial reason (W2.2, spec: self-switch refused during the developmental phase) --
@@ -62,7 +62,7 @@ def _switch(locked_by: str):
 
 
 def test_development_lock_denial_is_attributed_to_the_gate() -> None:
-    allowed, reason = _switch("gestation")
+    allowed, reason = _switch("development")
     assert allowed is False
     assert "development" in reason and "operator" not in reason
 
@@ -76,5 +76,5 @@ def test_operator_lock_denial_unchanged() -> None:
 def test_self_switch_refused_while_developing() -> None:
     # The load-bearing behaviour: while the stimulus source lock is held the entity cannot
     # leave the stimulus source, regardless of dwell/policy.
-    allowed, _ = _switch("gestation")
+    allowed, _ = _switch("development")
     assert allowed is False

@@ -36,6 +36,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from kaine import legacy_aliases
 from kaine.distributed.job import BatchJob
 from kaine.distributed.runner import (
     RunnerNotEnabled,
@@ -83,14 +84,19 @@ class OutputBoundaryViolation(RuntimeError):
 _FORBIDDEN_OUTPUT_FRAGMENTS: tuple[str, ...] = (
     "raw_sense",
     "sensory_raw",
-    "topos/frames",
     "audition/raw",
-    "perception/raw",
-    "hypnos/adapters",
     "voice_adapter",
     "kaine.toml",
     "operator_config",
     "secrets",
+)
+# State directories that hold raw senses or the private voice adapters, under every
+# name a release has written them (a tree from before the rename keeps its old
+# directory names until the boot migration runs).
+_FORBIDDEN_OUTPUT_FRAGMENTS += tuple(
+    f"{form}/{leaf}"
+    for module, leaf in (("vision", "frames"), ("perceptual_locus", "raw"), ("sleep", "adapters"))
+    for form in legacy_aliases.name_forms(module)
 )
 
 

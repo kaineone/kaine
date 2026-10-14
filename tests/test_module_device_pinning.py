@@ -65,8 +65,8 @@ async def test_audition_factory_forwards_emotion_device():
 
 def test_voice_alignment_config_carries_training_device():
     cfg = VoiceAlignmentConfig(
-        intent_log_path="state/lingua/x.jsonl",
-        adapter_output_dir="state/hypnos/adapters",
+        intent_log_path="state/language/x.jsonl",
+        adapter_output_dir="state/sleep/adapters",
         training_device="cuda:0",
     )
     assert cfg.training_device == "cuda:0"

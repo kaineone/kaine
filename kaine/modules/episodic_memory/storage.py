@@ -627,7 +627,7 @@ class SqliteVecStorage:
         self,
         latent_dim: int,
         *,
-        db_path: str = "state/mnemos/mnemos.db",
+        db_path: str = "state/episodic_memory/episodic_memory.db",
         distance: str = "cosine",
     ) -> None:
         if latent_dim <= 0:
@@ -1667,12 +1667,26 @@ class QdrantStorage:
                 log.warning("qdrant client close failed", exc_info=True)
             self._client = None
 
+    async def _collection_names(self) -> set[str]:
+        """Names that reach a collection: the collections and their aliases.
+
+        A store renamed by ``kaine.lifecycle.rename_state`` keeps its collections
+        under their old names and reaches them through aliases named like the new
+        ones, so an alias counts as an existing collection and is never created
+        again as a second, empty collection.
+        """
+        assert self._client is not None
+        existing = await self._client.get_collections()
+        names = {c.name for c in existing.collections}
+        aliases = await self._client.get_aliases()
+        names.update(a.alias_name for a in aliases.aliases)
+        return names
+
     async def ensure_collection(self, name: str) -> None:
         from qdrant_client import models  # type: ignore[import-untyped]
 
         assert self._client is not None
-        existing = await self._client.get_collections()
-        existing_names = {c.name for c in existing.collections}
+        existing_names = await self._collection_names()
         if name not in existing_names:
             await self._client.create_collection(
                 collection_name=name,
@@ -1793,8 +1807,7 @@ class QdrantStorage:
     async def vector_dim(self, collection: str) -> int | None:
         assert self._client is not None
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant vector_dim failed listing collections: {exc}"
@@ -1831,8 +1844,7 @@ class QdrantStorage:
         """
         assert self._client is not None
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant export failed: could not list collections ({exc})"
@@ -1879,8 +1891,7 @@ class QdrantStorage:
             return []
         assert self._client is not None
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant recent_points failed: could not list collections ({exc})"
@@ -1941,8 +1952,7 @@ class QdrantStorage:
                     f"point has dim {len(vec)} != {self._latent_dim} or non-finite vector"
                 )
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant replace_collection failed listing collections for {name!r}: {exc}"
@@ -1995,8 +2005,7 @@ class QdrantStorage:
         assert self._client is not None
         meta_name = EPISODIC_MEMORY_STAMP_COLLECTION
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant {label} failed listing collections: {exc}"
@@ -2014,8 +2023,7 @@ class QdrantStorage:
                 # Another initializer may have won the race; tolerate it if the
                 # collection now exists, otherwise fail closed.
                 try:
-                    existing = await self._client.get_collections()
-                    existing_names = {c.name for c in existing.collections}
+                    existing_names = await self._collection_names()
                 except Exception as list_exc:
                     raise StorageError(
                         f"qdrant {label} failed creating {meta_name!r}: {exc}; "
@@ -2078,8 +2086,7 @@ class QdrantStorage:
         meta_name = EPISODIC_MEMORY_STAMP_COLLECTION
         pid = stamp_point_id(key)
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant read_meta failed listing collections: {exc}"
@@ -2112,8 +2119,7 @@ class QdrantStorage:
         meta_name = EPISODIC_MEMORY_STAMP_COLLECTION
         pid = stamp_point_id(key)
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant read_stamp failed listing collections: {exc}"
@@ -2145,8 +2151,7 @@ class QdrantStorage:
         from qdrant_client import models  # type: ignore[import-untyped]
 
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant wake_points failed listing collections: {exc}"
@@ -2208,8 +2213,7 @@ class QdrantStorage:
         from qdrant_client import models  # type: ignore[import-untyped]
 
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant count_filtered failed listing collections: {exc}"
@@ -2286,8 +2290,7 @@ class QdrantStorage:
         from qdrant_client import models  # type: ignore[import-untyped]
 
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant backfill_strength failed listing collections: {exc}"
@@ -2366,8 +2369,7 @@ class QdrantStorage:
             raise StorageError("qdrant scan_store before initialize()")
         from qdrant_client import models
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant scan_store failed listing collections: {exc}"
@@ -2447,8 +2449,7 @@ class QdrantStorage:
                 return 0.0
 
         try:
-            existing = await self._client.get_collections()
-            existing_names = {c.name for c in existing.collections}
+            existing_names = await self._collection_names()
         except Exception as exc:
             raise StorageError(
                 f"qdrant weakest failed listing collections: {exc}"

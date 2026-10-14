@@ -57,7 +57,7 @@ class MaturationCaptureCore(FakeCore):
         self.clock.t += 4000
         write_reference(self.paths)
         save_ledger(self.paths, Ledger(reference_id="r"))
-        return (FakeDoc("birth"), None)
+        return (FakeDoc("maturation"), None)
 
 
 class ScoredThenErrorCore(FakeCore):
@@ -93,28 +93,28 @@ class ScoredThenErrorCore(FakeCore):
 async def test_capture_store_failure_backs_off_instead_of_clearing(tmp_path: Path):
     sched, core, _clock = make(tmp_path)
     core.raise_on_capture = LedgerUnreadable("x")
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
-    assert sched._capture_kind == "birth"
+    assert sched._capture_kind == "maturation"
     assert sched._capture_at == 5.0
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
 
 
 async def test_capture_retry_counts_from_attempt_end(tmp_path: Path):
     sched, _core, clock = make(tmp_path)
     core = AdvancingCaptureCore(clock, sched)
     sched.bind(core)
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
     assert sched._capture_at == clock.t + 5
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
 
 
 async def test_capture_time_is_not_lived_time(tmp_path: Path):
     sched, _core, clock = make(tmp_path)
     core = MaturationCaptureCore(clock, sched._paths, sched)
     sched.bind(core)
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
     clock.t += 50
     await sched.tick()
@@ -124,9 +124,9 @@ async def test_capture_time_is_not_lived_time(tmp_path: Path):
 
 async def test_capture_not_blocked_by_embedder(tmp_path: Path):
     sched, core, _clock = make(tmp_path, embedder_ready=lambda: False)
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
 
 
 async def test_scored_then_exception_is_not_inconclusive(tmp_path: Path):

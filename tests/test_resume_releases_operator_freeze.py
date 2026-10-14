@@ -81,8 +81,8 @@ def test_override_rejects_empty_sources(tmp_path):
 def test_override_rejects_inactive_source(tmp_path):
     p = tmp_path / "control.json"
     cs.freeze("welfare pause", path=p, source="welfare")
-    with pytest.raises(LookupError, match="gestation"):
-        cs.override(["gestation"], path=p)
+    with pytest.raises(LookupError, match="development"):
+        cs.override(["development"], path=p)
 
 
 # ---- Dashboard router -----------------------------------------------------------
@@ -168,11 +168,11 @@ def test_override_inactive_source_is_409(tmp_path):
     client = TestClient(app)
     r = client.post(
         "/diagnostics/cycle/override",
-        json={"sources": ["gestation"], "confirm": "gestation"},
+        json={"sources": ["development"], "confirm": "development"},
         headers={"Authorization": "Bearer test-token"},
     )
     assert r.status_code == 409
-    assert "gestation" in r.json()["detail"]
+    assert "development" in r.json()["detail"]
     assert cs.read_control(ctrl).frozen is True
 
 

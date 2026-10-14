@@ -177,7 +177,7 @@ async def test_serialize_yields_state(bus: AsyncBus):
         await episodic_memory.on_workspace(_snapshot([_event()]))
         state = episodic_memory.serialize()
         assert state["short_term_size"] == 1
-        assert state["collection_prefix"] == "mnemos_"
+        assert state["collection_prefix"] == "episodic_memory_"
     finally:
         await episodic_memory.shutdown()
 

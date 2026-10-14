@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import quote, urlsplit
 
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
 from kaine.cycle.preserve_watch import read_request, read_result
@@ -135,11 +136,42 @@ class StudyRunner:
         self.disk_usage = disk_usage or shutil.disk_usage
         self.cycle_alive = cycle_alive or _cycle_process_alive
         self._lock_fd: Any | None = None
+        self._move_old_line_dirs()
         self._load_state()
 
     # --------------------------------------------------------------------- #
     # State
     # --------------------------------------------------------------------- #
+
+    def _move_old_line_dirs(self) -> None:
+        for entry in legacy_aliases.active(legacy_names.STAGE_VALUES):
+            old = entry["old"]
+            new = entry["new"]
+            old_dir = self.study_dir / old
+            if not (old_dir.is_symlink() or old_dir.exists()):
+                continue
+            if old_dir.is_symlink():
+                raise StudyError(
+                    f"study {self.study_dir}: {old}/ is a symlink; move it aside and re-run"
+                )
+            new_dir = self.study_dir / new
+            if new_dir.exists():
+                raise StudyError(
+                    f"study {self.study_dir} holds both {old}/ and {new}/; move one aside and re-run"
+                )
+            os.rename(old_dir, new_dir)
+            log.info("Renamed study line directory %s -> %s", old_dir, new_dir)
+
+    def _map_bundle_path(self, path: str) -> str:
+        p = Path(path)
+        for entry in legacy_aliases.active(legacy_names.STAGE_VALUES):
+            old_dir = self.study_dir / entry["old"]
+            try:
+                rel = p.relative_to(old_dir)
+            except ValueError:
+                continue
+            return str(self.study_dir / entry["new"] / rel)
+        return path
 
     def _load_state(self) -> None:
         self.steps: list[dict[str, Any]] = []
@@ -149,9 +181,14 @@ class StudyRunner:
                 if not line:
                     continue
                 try:
-                    self.steps.append(json.loads(line))
+                    record = json.loads(line)
                 except json.JSONDecodeError:
                     log.warning("Ignoring malformed steps.jsonl line: %s", line)
+                    continue
+                record = legacy_aliases.map_study_step(record)
+                if isinstance(record.get("bundle"), str):
+                    record["bundle"] = self._map_bundle_path(record["bundle"])
+                self.steps.append(record)
 
         self.line_bundles: dict[tuple[str, int], str | None] = {}
         self.completed_steps: set[tuple[str, int]] = set()
@@ -177,7 +214,7 @@ class StudyRunner:
 
     def _step_sequence(self) -> list[tuple[str, int]]:
         k = len(self.plan["order"])
-        seq: list[tuple[str, int]] = [("gestation", 0), ("branch", 0), ("repeat", 0)]
+        seq: list[tuple[str, int]] = [("development", 0), ("branch", 0), ("repeat", 0)]
         for i in range(1, k + 1):
             seq.append(("branch", i))
             seq.append(("accumulate", i))
@@ -203,12 +240,12 @@ class StudyRunner:
         if self.last_failed:
             raise StudyHalted(self.last_failed)
 
-        seed = self.line_bundles.get(("gestation", 0))
+        seed = self.line_bundles.get(("development", 0))
         for line, k in sequence:
             if (line, k) in self.completed_steps:
                 continue
 
-            if line == "gestation":
+            if line == "development":
                 revived_from: str | None = None
             elif line in ("branch", "repeat"):
                 if seed is None:
@@ -297,7 +334,8 @@ class StudyRunner:
             return None
         if not isinstance(data, dict):
             return None
-        ends_at = data.get("birth_bloom_ends_at")
+        data = legacy_aliases.map_stage_record(data)
+        ends_at = data.get("maturation_bloom_ends_at")
         if not isinstance(ends_at, str):
             return None
         try:
@@ -408,7 +446,7 @@ class StudyRunner:
         if (
             req is None
             or res is None
-            or req.reason != "birth"
+            or req.reason != "maturation"
             or res.get("request_id") != req.request_id
             or not res.get("ok")
         ):
@@ -428,7 +466,7 @@ class StudyRunner:
         except OSError:
             overlay_hash = None
         return {
-            "line": "gestation",
+            "line": "development",
             "step": 0,
             "modules": sorted(modules_set),
             "world_model_captured": world_model_captured,
@@ -465,7 +503,7 @@ class StudyRunner:
         line = step["line"]
         k = step["k"]
         line_dir = self._ensure_step_dir(line, k)
-        step_kind = "gestation" if line == "gestation" else "viewing"
+        step_kind = "development" if line == "development" else "viewing"
         repo_root = Path(self.plan["repo_root"])
 
         # Nothing is flushed, adopted or started while a cycle the study
@@ -486,9 +524,9 @@ class StudyRunner:
         # but before recording it, left the seed on disk: adopt it rather than
         # gestate a second being.
         if (
-            step_kind == "gestation"
+            step_kind == "development"
             and not step.get("is_retry")
-            and not any(rec.get("line") == "gestation" for rec in self.steps)
+            and not any(rec.get("line") == "development" for rec in self.steps)
         ):
             adopted = self._adopt_maturation_preservation(line_dir, modules_set)
             if adopted is not None:
@@ -533,7 +571,7 @@ class StudyRunner:
 
         bloom_fallback = (
             self._maturation_bloom_fallback_seconds(line_dir, env)
-            if step_kind == "gestation"
+            if step_kind == "development"
             else 0.0
         )
 
@@ -610,8 +648,8 @@ class StudyRunner:
 
         start_clock = self.clock()
         budget = (
-            self.plan["gestation_budget_seconds"]
-            if step_kind == "gestation"
+            self.plan["development_budget_seconds"]
+            if step_kind == "development"
             else self.plan["viewing_budget_seconds"]
         )
         last_check = start_clock - self.poll_seconds
@@ -633,7 +671,7 @@ class StudyRunner:
                     run_id = runtime.get("run_id") or run_id
                     stage = (runtime.get("developmental_stage") or {}).get("stage")
                     if (
-                        step_kind == "gestation"
+                        step_kind == "development"
                         and stage == "embodied"
                         and not maturation_requested
                     ):
@@ -646,7 +684,7 @@ class StudyRunner:
                             maturation_requested = True
                             _, _, _, ok = self._request_preserve(
                                 line_dir,
-                                "birth",
+                                "maturation",
                                 stop=True,
                                 wait=self.preserve_wait_seconds,
                             )
@@ -747,8 +785,8 @@ class StudyRunner:
                             f"pid {child_pid} is still running"
                         )
 
-            if step_kind == "gestation" and unviable_verdict is None and not timeout_requested and not maturation_requested and not disk_low_requested:
-                viability_path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+            if step_kind == "development" and unviable_verdict is None and not timeout_requested and not maturation_requested and not disk_low_requested:
+                viability_path = line_dir / "state" / "lifecycle" / "development_viability.json"
                 try:
                     if viability_path.stat().st_mtime < step_started_wall - VIABILITY_MTIME_SLACK_S:
                         raise FileNotFoundError("verdict predates this step")
@@ -809,7 +847,7 @@ class StudyRunner:
         )
 
         if unviable_verdict is not None and not maturation_requested:
-            outcome = "failed:gestation_unviable"
+            outcome = "failed:development_unviable"
             extra_viability = unviable_verdict
             try:
                 _write_unviable_note(
@@ -997,8 +1035,8 @@ class StudyRunner:
         if not bundle or bundle == revived_from:
             return "failed:stale_bundle"
 
-        expected_reason = "birth" if step_kind == "gestation" else "programme end"
-        if request.reason != expected_reason:
+        expected_reason = "maturation" if step_kind == "development" else "programme end"
+        if legacy_aliases.map_stored_value(request.reason) != expected_reason:
             return f"failed:reason:{request.reason}"
 
         return "complete"

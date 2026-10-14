@@ -27,7 +27,7 @@ async def test_registry_boots_passive_observers(tmp_path):
                     "retention_days": 30,
                 },
                 "memory_probes": False,  # needs cognitive_client; skip
-                "eidolon_accuracy": False,
+                "self_model_accuracy": False,
             }
         )
         sidecar = SidecarRegistry(

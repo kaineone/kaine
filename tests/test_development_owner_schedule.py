@@ -164,7 +164,7 @@ def owner_factory(tmp_path: Path):
         beat_phase = beat_phase or (lambda: 0.0)
         is_paused = is_paused or (lambda: False)
         config = config or _config()
-        state_path = state_path or tmp_path / "gestation_readout.json"
+        state_path = state_path or tmp_path / "development_readout.json"
         return DevelopmentOwner(
             bus,
             interoception=interoception,

@@ -128,7 +128,7 @@ Decisions:
 | `data/evaluation/replay/` when `replay_redact_content = false` | verbatim memory text | kept | DELETE (content records only) | private content; the redacted default is metrics and stays |
 | `data/evaluation/welfare/` | gray-zone and welfare events | kept | RETAIN | CAL Article 4.7: Welfare Events are logged and reviewed |
 | `data/evaluation/research_events/`, `runs/<run_id>/manifest.json`, `positive_control/`, `benchmarks/`, `redteam/` | curated metrics and run metadata | kept | RETAIN | research record |
-| `data/dashboard_record/` | privacy-filtered dashboard record | kept | RETAIN when the privacy filter was on; DELETE records written with the development content override | the filtered record holds no content; an override record does |
+| `data/nexus_record/` | privacy-filtered dashboard record | kept | RETAIN when the privacy filter was on; DELETE records written with the development content override | the filtered record holds no content; an override record does |
 | `data/workspace_trajectory/` (opt-in) | filtered workspace snapshots | kept | RETAIN when filtered; DELETE when it holds content | same rule |
 | `data/ignition/` | broadcast metadata | kept | RETAIN | research log the operator deletes by hand (docs/15-experiments) |
 | `research_out/` | published metric bundles | kept | RETAIN | already published under the licence |

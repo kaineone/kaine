@@ -234,9 +234,9 @@ async def test_watcher_loss_after_continuous_not_live(watcher):
     assert any(entry.get("source") == DEVELOPMENT_FREEZE_SOURCE for entry in control.stack)
     assert len(recorder.publishes) == 1
     assert recorder.publishes[0][0] == STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST
-    assert recorder.publishes[0][1]["stage"] == "gestation"
+    assert recorder.publishes[0][1]["stage"] == "development"
     assert recorder.publishes[0][2] == 0.9
-    assert recorder.notifies == ["womb_lost"]
+    assert recorder.notifies == ["stimulus_source_lost"]
 
 
 @pytest.mark.asyncio
@@ -756,7 +756,7 @@ class FakeEntityClock:
 
 
 def build_runner(clock: FakeEntityClock, paused_seconds=None):
-    stage = lifecycle_stage.StageState(stage="gestation", lived_seconds=0.0)
+    stage = lifecycle_stage.StageState(stage="development", lived_seconds=0.0)
     return MaturationGateRunner(
         bus=None,
         config=MaturationConfig.from_dict({}),

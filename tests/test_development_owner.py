@@ -166,7 +166,7 @@ def owner_factory(tmp_path: Path):
         beat_phase = beat_phase or (lambda: 0.0)
         is_paused = is_paused or (lambda: False)
         config = config or _config()
-        state_path = state_path or tmp_path / "gestation_readout.json"
+        state_path = state_path or tmp_path / "development_readout.json"
         return DevelopmentOwner(
             bus,
             interoception=interoception,
@@ -532,7 +532,7 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
         sample_hz=10.0,
         hrv_window_seconds=5.0,
     )
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     owner = owner_factory(
         clock=clock,
         bus=bus,
@@ -565,8 +565,8 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
     readout_events = _events(bus, f"{SOURCE}.out", READINESS_TYPE)
     assert len(readout_events) >= 1
     readout = readout_events[0].payload["readout"]
-    assert "womb_prediction_error" in readout
-    assert readout["womb_prediction_error"] == pytest.approx(1.0)
+    assert "stimulus_source_prediction_error" in readout
+    assert readout["stimulus_source_prediction_error"] == pytest.approx(1.0)
 
     data = json.loads(state_path.read_text(encoding="utf-8"))
     assert data["prediction_error_baseline"] == pytest.approx(1.0)
@@ -592,14 +592,14 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
     readout_events = _events(bus, f"{SOURCE}.out", READINESS_TYPE)
     assert len(readout_events) >= 2
     readout2 = readout_events[1].payload["readout"]
-    assert readout2["womb_prediction_error"] == pytest.approx(0.5)
+    assert readout2["stimulus_source_prediction_error"] == pytest.approx(0.5)
 
 
 @pytest.mark.asyncio
 async def test_new_owner_restores_baseline(owner_factory, tmp_path: Path):
     clock = FakeClock()
     bus = FakeBus()
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
         json.dumps({"prediction_error_baseline": 2.0}), encoding="utf-8"
@@ -632,7 +632,7 @@ async def test_new_owner_restores_baseline(owner_factory, tmp_path: Path):
         await owner.step()
 
     readout = _events(bus, f"{SOURCE}.out", READINESS_TYPE)[0].payload["readout"]
-    assert readout["womb_prediction_error"] == pytest.approx(0.5)
+    assert readout["stimulus_source_prediction_error"] == pytest.approx(0.5)
 
 
 @pytest.mark.asyncio
@@ -751,7 +751,7 @@ async def test_evoked_response_without_frequency_pull_is_not_entrainment(owner_f
 
 
 def test_progress_persists_across_restart(owner_factory, tmp_path):
-    path = tmp_path / "gestation_readout.json"
+    path = tmp_path / "development_readout.json"
     first = owner_factory(state_path=path)
     first._active_lived_seconds = 7200.0
     first._entrainment_consecutive_passes = 2
@@ -767,7 +767,7 @@ def test_progress_persists_across_restart(owner_factory, tmp_path):
 
 def test_progress_of_another_entity_is_ignored(owner_factory, tmp_path):
 
-    path = tmp_path / "gestation_readout.json"
+    path = tmp_path / "development_readout.json"
     first = owner_factory(state_path=path)
     first._active_lived_seconds = 7200.0
     first._entrainment_consecutive_passes = 2
@@ -775,7 +775,7 @@ def test_progress_of_another_entity_is_ignored(owner_factory, tmp_path):
     first._ever_replicated = False
     first._persist_progress()
 
-    progress_path = tmp_path / "gestation_progress.json"
+    progress_path = tmp_path / "development_progress.json"
     data = json.loads(progress_path.read_text(encoding="utf-8"))
     data["key"] = "other:none"
     progress_path.write_text(json.dumps(data), encoding="utf-8")
@@ -786,18 +786,18 @@ def test_progress_of_another_entity_is_ignored(owner_factory, tmp_path):
 
 
 def test_restored_verdict_is_rewritten(owner_factory, tmp_path):
-    first = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    first = owner_factory(state_path=tmp_path / "development_readout.json")
     first._viability_verdict = {"verdict": "unviable", "rule": "R1"}
     first._persist_progress()
-    viability_path = tmp_path / "gestation_viability.json"
+    viability_path = tmp_path / "development_viability.json"
     if viability_path.exists():
         viability_path.unlink()
-    second = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    second = owner_factory(state_path=tmp_path / "development_readout.json")
     assert second._viability_verdict == {"verdict": "unviable", "rule": "R1"}
     assert json.loads(viability_path.read_text()) == {"verdict": "unviable", "rule": "R1"}
 
 
 def test_progress_saved_each_minute_of_awake_time(owner_factory, tmp_path):
-    owner = owner_factory(state_path=tmp_path / "gestation_readout.json")
+    owner = owner_factory(state_path=tmp_path / "development_readout.json")
     owner._advance_lived(owner._last_step_at + 61.0, False)
-    assert (tmp_path / "gestation_progress.json").exists()
+    assert (tmp_path / "development_progress.json").exists()

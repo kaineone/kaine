@@ -131,7 +131,7 @@ async def test_trajectory_writes_snapshot_entry(tmp_path):
     assert files
     line = json.loads(files[0].read_text().splitlines()[0])
     assert line["tick_index"] == 42
-    assert "thymos_state" not in line
+    assert "affect_state" not in line
 
 
 # ---------- AttributionRecorder ----------
@@ -323,7 +323,7 @@ async def test_affect_correlation_writes_pair(tmp_path):
         await sink.stop()
     files = list(tmp_path.glob("affect_correlation-*.jsonl"))
     line = json.loads(files[0].read_text().splitlines()[0])
-    assert line["thymos_state"]["valence"] == 0.4
+    assert line["affect_state"]["valence"] == 0.4
     assert line["characteristics"]["hedge_word_count"] >= 1
 
 
@@ -336,7 +336,7 @@ def test_correlate_from_log_returns_matrix(tmp_path):
     ]
     with log.open("w") as fh:
         for t, c in rows:
-            fh.write(json.dumps({"thymos_state": t, "characteristics": c}) + "\n")
+            fh.write(json.dumps({"affect_state": t, "characteristics": c}) + "\n")
     matrix = correlate_from_log(log)
     assert matrix["valence"]["length_tokens"] == pytest.approx(1.0)
     assert matrix["valence"]["hedge_word_count"] == pytest.approx(1.0)
@@ -812,7 +812,7 @@ def test_parse_claims_extracts_keywords():
 
 @pytest.mark.asyncio
 async def test_self_model_accuracy_runs_once_and_logs(tmp_path):
-    name = "eidolon_accuracy"
+    name = "self_model_accuracy"
     sink = AsyncJsonlSink(tmp_path, name=name, flush_interval_s=0.05)
     runner = SelfModelAccuracyRunner(
         sink,

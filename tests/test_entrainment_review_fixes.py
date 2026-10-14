@@ -72,7 +72,7 @@ def _owner(tmp_path: Path, seed: int = 0, identity: str | None = "id-a"):
             "surrogate_count": 19.0,
         }
     )
-    state_path = tmp_path / "gestation.json"
+    state_path = tmp_path / "development.json"
     owner = DevelopmentOwner(
         bus=MagicMock(),
         interoception=interoception,

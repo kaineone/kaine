@@ -20,7 +20,7 @@ EXPECTED_KEYS = {
     "record_id",
     "replied",
     "reply_latency_s",
-    "empatheia_deviation",
+    "social_cognition_deviation",
     "social_drive_delta",
     "preempted",
 }
@@ -252,7 +252,7 @@ async def test_social_cognition_and_social_drive(bus, tmp_path):
     rec = records[0]
     assert set(rec.keys()) == EXPECTED_KEYS
     assert rec["social_drive_delta"] == pytest.approx(0.3, abs=1e-9)
-    assert rec["empatheia_deviation"] == pytest.approx(0.7, abs=1e-9)
+    assert rec["social_cognition_deviation"] == pytest.approx(0.7, abs=1e-9)
 
 
 async def test_no_text_in_file(bus, tmp_path):

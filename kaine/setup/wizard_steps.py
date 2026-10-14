@@ -305,7 +305,7 @@ def custom_modules_step() -> Step:
 
     def explanation(_ctx: StepContext) -> list[str]:
         return [
-            "Enable each module? (defaults shown; perception/echo/mundus default off)"
+            "Enable each module? (defaults shown; perception/echo/embodiment default off)"
         ]
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:

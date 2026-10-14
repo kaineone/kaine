@@ -90,7 +90,7 @@ def test_supervisor_selftest_removes_scratch_directory(tmp_path, monkeypatch):
     # A private temp root: parallel workers run their own self-tests, and their
     # scratch directories in the shared /tmp would look like ours.
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
-    pattern = str(tmp_path / "kaine-spot-selftest-*")
+    pattern = str(tmp_path / "kaine-supervisor-selftest-*")
     before = set(glob.glob(pattern))
 
     result = asyncio.run(run_supervisor_selftest({"enabled": True}, timeout_s=2.0))

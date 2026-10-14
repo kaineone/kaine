@@ -35,7 +35,7 @@ def _good_readout() -> dict:
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
 
@@ -86,7 +86,7 @@ def test_c1_marker_below_threshold_fails() -> None:
 
 def test_c1_missing_marker_fails_closed() -> None:
     ro = _good_readout()
-    del ro["womb_prediction_error"]
+    del ro["stimulus_source_prediction_error"]
     r = mg._evaluate_c1(ro, _cfg().regulation_thresholds)
     assert r.met is False
 

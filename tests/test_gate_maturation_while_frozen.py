@@ -180,7 +180,7 @@ async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -235,7 +235,7 @@ async def test_maturation_deferred_when_is_paused_raises(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []

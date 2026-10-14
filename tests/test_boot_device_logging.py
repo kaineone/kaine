@@ -28,7 +28,7 @@ async def test_build_registry_logs_vision_device(caplog):
                     },
                     "episodic_memory": {
                         "backend": "inmemory",
-                        "collection_prefix": "mnemos_",
+                        "collection_prefix": "episodic_memory_",
                         "short_term_capacity": 8,
                         "recall_top_k": 3,
                     },

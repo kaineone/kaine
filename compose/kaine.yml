@@ -357,7 +357,7 @@ services:
       - kaine-organ-adapters:/organ-adapters
       # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
       # kaine-trainer claims and runs them. Kept off the entity state volume.
-      - kaine-trainer-jobs:/app/state/hypnos/voice_align_jobs
+      - kaine-trainer-jobs:/app/state/sleep/voice_align_jobs
       # Evaluation outputs on a SHARED named volume so the Nexus admissibility probe
       # (runs_manifest_root = data/evaluation/runs) sees what the cycle writes —
       # otherwise each container has its own ephemeral /app/data and Nexus reports
@@ -380,7 +380,7 @@ services:
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
       # root ownership and is otherwise unwritable by the non-root `kaine` user.
       - type: tmpfs
-        target: /app/state/perception
+        target: /app/state/perceptual_locus
         tmpfs:
           mode: 01777
     depends_on:

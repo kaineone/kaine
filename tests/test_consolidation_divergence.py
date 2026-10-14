@@ -342,7 +342,7 @@ async def test_sleep_writes_state_file(bus: AsyncBus, tmp_path: Path, monkeypatc
 
 
 def _plant_consolidation(state_root: Path, *, rate: float, magnitude):
-    d = state_root / "hypnos"
+    d = state_root / "sleep"
     d.mkdir(parents=True, exist_ok=True)
     metric = ConsolidationDivergence(
         records_scanned=100,
@@ -364,7 +364,7 @@ def test_assess_flips_on_rate_threshold(tmp_path: Path):
     assert a.diverged is True
     assert a.signals["consolidation_divergence_signal"] is True
     assert a.signals["consolidation_divergence_rate"] == pytest.approx(0.8)
-    assert a.signals["hypnos_adapters_present"] is False
+    assert a.signals["sleep_adapters_present"] is False
     assert a.signals["individuation_individuated"] is False
     assert "consolidation divergence" in a.summary.lower()
 
@@ -397,7 +397,7 @@ def test_assess_consolidation_independent_of_adapters_and_individuation(tmp_path
     a = assess_divergence(state_root=state_root)
     assert a.diverged is True
     assert a.signals["individuation_state"] == "no_reference"
-    assert a.signals["hypnos_adapters_present"] is False
+    assert a.signals["sleep_adapters_present"] is False
 
 
 def test_assess_respects_config_thresholds(tmp_path: Path):
@@ -432,7 +432,7 @@ def test_consolidation_thresholds_from_config():
 
 def test_assess_never_raises_on_garbage_state(tmp_path: Path):
     state_root = tmp_path / "state"
-    d = state_root / "hypnos"
+    d = state_root / "sleep"
     d.mkdir(parents=True, exist_ok=True)
     (d / "consolidation_divergence.json").write_text("{broken", encoding="utf-8")
     a = assess_divergence(state_root=state_root)

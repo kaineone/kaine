@@ -65,7 +65,7 @@ STAGE_MATURATION = "stage.maturation"
 ACTION_DEVELOPING = "developing"
 ACTION_HOLD_AWAITING_EMBODIMENT = "hold_awaiting_embodiment"
 ACTION_HOLD_AWAITING_ACK = "hold_awaiting_ack"
-ACTION_MATURATION = "birth"
+ACTION_MATURATION = "maturation"
 
 REASON_BORN_INTO_PERCEPTUAL_WORLD = "born_into_perceptual_world"
 
@@ -267,7 +267,7 @@ def _evaluate_c1(
             "C1_regulation_baseline", False, "HRV-analog below floor"
         )
 
-    pe = _num(readout.get("womb_prediction_error"))
+    pe = _num(readout.get("stimulus_source_prediction_error"))
     if pe is None or pe > t.stimulus_source_prediction_error_ceiling:
         return ConditionResult(
             "C1_regulation_baseline", False, "stimulus source prediction error above ceiling"
@@ -449,12 +449,12 @@ def decide_maturation(
 # Payloads carry only operational/observability fields — never sensory content.
 
 
-def development_started_payload(*, gestation_started_at: str | None) -> dict[str, Any]:
-    return {"stage": "gestation", "gestation_started_at": gestation_started_at}
+def development_started_payload(*, development_started_at: str | None) -> dict[str, Any]:
+    return {"stage": "development", "development_started_at": development_started_at}
 
 
 def development_no_stimulus_payload() -> dict[str, Any]:
-    return {"stage": "gestation", "reason": "no_womb_feed_configured"}
+    return {"stage": "development", "reason": "no_stimulus_source_feed_configured"}
 
 
 def maturation_ready_payload(decision: MaturationDecision) -> dict[str, Any]:

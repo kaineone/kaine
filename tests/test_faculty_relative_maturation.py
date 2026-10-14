@@ -206,7 +206,7 @@ def _make_ready() -> Readiness:
             "endogenous_self_sustain": True,
             "entrain_then_autonomy": True,
             "hrv_variability": 0.5,
-            "womb_prediction_error": 0.1,
+            "stimulus_source_prediction_error": 0.1,
             "return_to_baseline_seconds": 10.0,
         },
         sleep_count=5,
@@ -259,7 +259,7 @@ def test_c2_not_applicable_not_reported_as_passed() -> None:
             "endogenous_self_sustain": True,
             "entrain_then_autonomy": True,
             "hrv_variability": 0.5,
-            "womb_prediction_error": 0.1,
+            "stimulus_source_prediction_error": 0.1,
             "return_to_baseline_seconds": 10.0,
         },
         sleep_count=0,
@@ -388,7 +388,7 @@ async def test_base_thesis_maturations_into_perceptual_world(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -446,7 +446,7 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -490,7 +490,7 @@ async def test_status_reports_not_applicable_for_base_thesis(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []

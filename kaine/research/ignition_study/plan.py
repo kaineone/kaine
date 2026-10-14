@@ -19,7 +19,7 @@ PLAN_FILE = "study.json"
 STEPS_FILE = "steps.jsonl"
 LOCK_FILE = ".lock"
 
-LINES = ["gestation", "branch", "repeat", "accumulate"]
+LINES = ["development", "branch", "repeat", "accumulate"]
 
 DEFAULT_VIEWING_BUDGET_SECONDS = 6 * 60 * 60  # programme length + 2 h
 DEFAULT_DEVELOPMENT_BUDGET_SECONDS = 96 * 60 * 60  # 24 h minimum + 72 h headroom
@@ -112,8 +112,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         )
 
     plan.setdefault("viewing_budget_seconds", DEFAULT_VIEWING_BUDGET_SECONDS)
-    plan.setdefault("gestation_budget_seconds", DEFAULT_DEVELOPMENT_BUDGET_SECONDS)
-    for key in ("viewing_budget_seconds", "gestation_budget_seconds"):
+    plan.setdefault("development_budget_seconds", DEFAULT_DEVELOPMENT_BUDGET_SECONDS)
+    for key in ("viewing_budget_seconds", "development_budget_seconds"):
         if not isinstance(plan[key], (int, float)) or plan[key] <= 0:
             raise ValueError(f"{key} must be positive")
 
@@ -146,7 +146,7 @@ def _validate_voice_alignment_steps(steps: Any, order_len: int) -> None:
         k = entry["k"]
         if line not in LINES:
             raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")
-        if line == "gestation":
+        if line == "development":
             raise ValueError(f"development never trains the voice: {entry!r}")
         if isinstance(k, bool) or not isinstance(k, int):
             raise ValueError(f"Invalid voice_alignment_steps entry: {entry!r}")

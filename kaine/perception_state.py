@@ -25,13 +25,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kaine import legacy_aliases
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-RUNTIME_PATH = Path("state/perception/runtime.json")
-DESIRED_PATH = Path("state/perception/desired.json")
+RUNTIME_PATH = Path("state/perceptual_locus/runtime.json")
+DESIRED_PATH = Path("state/perceptual_locus/desired.json")
 
 
 def _now_iso() -> str:
@@ -52,7 +53,7 @@ LOCI = ("physical", "virtual", "off")
 # `locus_locked`, but a refused self-switch must be attributed HONESTLY — a
 # gestating entity is confined by the developmental gate, not by the operator.
 # Defaults to `operator` so an unmarked lock reads as before.
-LOCKED_BY = ("operator", "gestation")
+LOCKED_BY = ("operator", "development")
 
 
 def _coerce_locus(value: Any) -> str:
@@ -60,7 +61,8 @@ def _coerce_locus(value: Any) -> str:
 
 
 def _coerce_locked_by(value: Any) -> str:
-    return value if value in LOCKED_BY else "operator"
+    mapped = legacy_aliases.map_stored_value(value)
+    return mapped if mapped in LOCKED_BY else "operator"
 
 
 @dataclass(frozen=True)
@@ -177,7 +179,7 @@ def read_desired(path: Path | None = None) -> DesiredState:
         return DesiredState()
 
     parsed = DesiredState.from_dict(raw_data)
-    if parsed.locus_locked and parsed.locked_by == "gestation":
+    if parsed.locus_locked and parsed.locked_by == "development":
         raw_locus = raw_data.get("locus") if isinstance(raw_data, dict) else None
         if raw_locus not in LOCI:
             return replace(parsed, locus="virtual")
@@ -222,7 +224,7 @@ def write_desired_locus(
     (``locked_by="development"``) may set anything, including unlocking."""
     target = resolve(path or DESIRED_PATH)
     cur = read_desired(path)
-    if cur.locus_locked and cur.locked_by == "gestation" and locked_by != "gestation":
+    if cur.locus_locked and cur.locked_by == "development" and locked_by != "development":
         log.debug("locus held by development; ignoring non-development write")
         return cur
     updated = replace(
@@ -321,7 +323,7 @@ def evaluate_locus_switch(
     if requested == current:
         return False, "already in that locus"
     if locked:
-        if _coerce_locked_by(locked_by) == "gestation":
+        if _coerce_locked_by(locked_by) == "development":
             return False, "locus locked by development gate"
         return False, "locus locked by operator"
     if not allow_self_switch:

@@ -221,7 +221,7 @@ def _mock_dashboard(monkeypatch, port=12345):
 @pytest.fixture(autouse=True)
 def _no_cwd_dashboard_log():
     """The dashboard job spec must never place its log under the current cwd."""
-    log = Path.cwd() / "state" / "logs" / "nexus.log"
+    log = Path.cwd() / "state" / "logs" / "dashboard.log"
     existed_before = log.exists()
     stats_before = None
     if existed_before:
@@ -1181,7 +1181,7 @@ def test_dashboard_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
     )
     dashboard_specs = [s for s in specs if s.name == "dashboard"]
     assert len(dashboard_specs) == 1
-    assert dashboard_specs[0].log_path == state_dir / "logs" / "nexus.log"
+    assert dashboard_specs[0].log_path == state_dir / "logs" / "dashboard.log"
 
 
 def test_private_log_handler_has_its_own_level(tmp_path):

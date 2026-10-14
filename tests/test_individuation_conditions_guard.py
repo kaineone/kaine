@@ -51,7 +51,7 @@ class _RaisingSampler:
 async def test_identical_conditions_proceeds_past_guard(tmp_path):
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     outcome = await core.look(warmed_up=True, lived_seconds=1.0, lived_ticks=1)
 
@@ -61,7 +61,7 @@ async def test_identical_conditions_proceeds_past_guard(tmp_path):
 async def test_model_id_differs_is_conditions_changed(tmp_path):
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     changed = {**BASE_CONDITIONS, "model_id": "model-b"}
     core._conditions = lambda: changed
@@ -78,7 +78,7 @@ async def test_model_id_differs_is_conditions_changed(tmp_path):
 async def test_new_condition_key_differs(tmp_path):
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     changed = {**BASE_CONDITIONS, "persona_template_version": 2}
     core._conditions = lambda: changed
@@ -96,7 +96,7 @@ async def test_embedder_id_differs_only_is_not_conditions_changed(tmp_path):
         "embedder_id": "embed-a",
         "embedder_dimension": 8,
     }
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     changed = {
         **BASE_CONDITIONS,
@@ -127,7 +127,7 @@ async def test_embedder_id_differs_only_is_not_conditions_changed(tmp_path):
 async def test_conditions_callable_raises_is_conditions_unreadable(tmp_path):
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     def raising():
         raise RuntimeError("conditions unreadable")
@@ -144,7 +144,7 @@ async def test_conditions_changed_logs_keys_not_values(tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="kaine.cycle.individuation_producer")
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     changed = {**BASE_CONDITIONS, "model_id": "model-b"}
     core._conditions = lambda: changed
@@ -314,7 +314,7 @@ async def test_server_build_change_is_conditions_changed(tmp_path):
     )
     core._conditions = lambda: {**BASE_CONDITIONS, **organ.snapshot()}
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     _RaisingSampler._called = False
     core._sampler = _RaisingSampler()
@@ -345,7 +345,7 @@ async def test_organ_model_path_change_is_conditions_changed(tmp_path):
     )
     core._conditions = lambda: {**BASE_CONDITIONS, **organ.snapshot()}
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     _RaisingSampler._called = False
     core._sampler = _RaisingSampler()
@@ -376,7 +376,7 @@ async def test_organ_model_file_same_but_sha_differs_across_directories(tmp_path
     )
     core._conditions = lambda: {**BASE_CONDITIONS, **organ.snapshot()}
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     _RaisingSampler._called = False
     core._sampler = _RaisingSampler()
@@ -389,7 +389,7 @@ async def test_organ_model_file_same_but_sha_differs_across_directories(tmp_path
 
 async def test_refresh_raises_during_look_is_conditions_unreadable(tmp_path):
     core, _paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     async def bad_refresh():
         raise RuntimeError("refresh failed")
@@ -411,7 +411,7 @@ async def test_capture_refuses_when_organ_unreachable(tmp_path):
     core._refresh_conditions = bad_refresh
 
     with pytest.raises(RuntimeError, match="Failed to refresh probe conditions"):
-        await core.capture_reference("birth")
+        await core.capture_reference("maturation")
 
     assert load_reference(paths) is None
 
@@ -422,7 +422,7 @@ async def test_capture_refuses_when_organ_unreachable(tmp_path):
 async def test_stored_empty_conditions_is_conditions_changed(tmp_path):
     core, paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     ref = load_reference(paths)
     ref = dataclasses.replace(ref, conditions={})
@@ -442,7 +442,7 @@ async def test_stored_empty_conditions_refused_even_when_current_has_only_embedd
     # refusal an empty stored mapping would compare as "no change" here.
     core, paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: {"embedder_id": "embed-a"}
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     ref = load_reference(paths)
     ref = dataclasses.replace(ref, conditions={})
@@ -462,7 +462,7 @@ async def test_stored_non_mapping_conditions_is_refused(tmp_path):
     # loads the document, before the look's own non-mapping check is reached.
     core, paths = make_core(tmp_path, conditioning_inputs=FakeConditioning())
     core._conditions = lambda: BASE_CONDITIONS.copy()
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
 
     ref = load_reference(paths)
     ref = dataclasses.replace(ref, conditions=["bad"])

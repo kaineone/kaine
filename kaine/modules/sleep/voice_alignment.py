@@ -156,11 +156,11 @@ class VoiceAlignmentConfig:
     trainer_python: str = ""
     # Where the subprocess backend stages job specs + the unsloth compiled
     # cache. Operators may redirect to a roomier disk.
-    trainer_workdir: str = "state/hypnos/voice_align_jobs"
+    trainer_workdir: str = "state/sleep/voice_align_jobs"
     # Where the job-queue backend writes ready job directories for the
     # kaine-trainer service. The service and the cycle container share this
     # volume; each job is a private 0o700 directory.
-    trainer_jobs_dir: str = "state/hypnos/voice_align_jobs"
+    trainer_jobs_dir: str = "state/sleep/voice_align_jobs"
     # Wall-clock ceiling (seconds) the job-queue backend waits for the
     # kaine-trainer service to write result.json. Default 6 h.
     trainer_timeout_s: float = 21600.0
@@ -223,7 +223,7 @@ OPERATOR_APPROVED_ENV = "KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED"
 #: Where the sleep module persists the latest consolidation-divergence metric so the
 #: core lifecycle ``assess_divergence`` can read it WITHOUT importing the sleep module's
 #: bus or ``kaine.evaluation`` (the boundary-neutral seam: a written record).
-CONSOLIDATION_DIVERGENCE_STATE = Path("state/hypnos/consolidation_divergence.json")
+CONSOLIDATION_DIVERGENCE_STATE = Path("state/sleep/consolidation_divergence.json")
 
 
 def write_consolidation_divergence(

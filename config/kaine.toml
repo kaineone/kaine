@@ -600,7 +600,7 @@ device = "cpu"
 
 [episodic_memory]
 backend = "qdrant"            # or "inmemory" for tests / minimal deployments
-collection_prefix = "mnemos_"
+collection_prefix = "episodic_memory_"
 short_term_capacity = 128
 recall_top_k = 5
 baseline_salience = 0.15
@@ -643,7 +643,7 @@ traces_per_day = 288000
 prune_floor = 0.01
 
 [self_model]
-persistence_path = "state/eidolon/self_model.json"
+persistence_path = "state/self_model/self_model.json"
 drift_window = 100
 drift_threshold = 0.6
 save_interval_s = 30.0
@@ -755,10 +755,10 @@ threshold = 0.7
 relief_gain = 0.5
 
 [effectors]
-sandbox_path = "state/praxis/files"
-audit_log_path = "state/praxis/audit.log"
+sandbox_path = "state/effectors/files"
+audit_log_path = "state/effectors/audit.log"
 notification_command = "notify-send"
-notification_fallback_log = "state/praxis/notifications.log"
+notification_fallback_log = "state/effectors/notifications.log"
 max_file_bytes = 1048576
 baseline_salience = 0.3
 alert_salience = 0.7
@@ -814,7 +814,7 @@ model_server_sleep_idle_seconds = 600
 # OR (preferred) export KAINE_MODEL_SERVER_API_KEY=... so it never lands in a
 # file. The A/B-eval baseline derives the same key. Do NOT commit a real key.
 # api_key = ""
-intent_log_path = "state/lingua/intent_expression.jsonl"
+intent_log_path = "state/language/intent_expression.jsonl"
 baseline_salience = 0.4
 alert_salience = 0.7
 
@@ -1072,7 +1072,7 @@ voice_mode = "predefined"
 # applicable and the pick is made from all voices.
 # voice_gender = "any"
 output_format = "wav"
-sink_path = "state/vox"
+sink_path = "state/vocal"
 baseline_temperature = 0.7
 baseline_exaggeration = 0.5
 baseline_cfg_weight = 0.5
@@ -1130,8 +1130,8 @@ associative_replay = false
 # so a freshly-cloned KAINE never rewrites the language organ on its
 # own. See kaine/modules/sleep/VOICE_ALIGNMENT.md.
 enabled = false
-intent_log_path = "state/lingua/intent_expression.jsonl"
-adapter_output_dir = "state/hypnos/adapters"
+intent_log_path = "state/language/intent_expression.jsonl"
+adapter_output_dir = "state/sleep/adapters"
 # Path to LOCAL HuggingFace-format base model weights. Required when
 # enabled = true. NOT a model id, NOT a .gguf file — the trainer's
 # FastLanguageModel needs HF safetensors / config / tokenizer.
@@ -1218,11 +1218,11 @@ trainer_backend = "in_process"
 trainer_python = ""
 # Where the subprocess backend stages job specs (pairs.jsonl + job.json) and
 # unsloth's compiled cache. Operator may redirect to a roomier disk.
-trainer_workdir = "state/hypnos/voice_align_jobs"
+trainer_workdir = "state/sleep/voice_align_jobs"
 # Where the job-queue backend writes ready job directories for the
 # kaine-trainer service. The service and the cycle container share this
 # volume; each job is a private 0o700 directory.
-trainer_jobs_dir = "state/hypnos/voice_align_jobs"
+trainer_jobs_dir = "state/sleep/voice_align_jobs"
 # Wall-clock ceiling (seconds) the job-queue backend waits for the
 # kaine-trainer service to write result.json. Default 6 h.
 trainer_timeout_s = 21600.0
@@ -1251,7 +1251,7 @@ consolidation_divergence_magnitude_threshold = 0.25
 # Social-cognition / theory-of-mind module. Ships disabled.
 # Requires rename-audition-vox to be merged before enabling.
 backend = "qdrant"            # or "inmemory" for tests / minimal deployments
-collection = "empatheia_agents"
+collection = "social_cognition_agents"
 # Operator-set speaker label. Default "operator" for single-partner v1.
 # Speaker diarization (paper §10) will expand this to per-speaker labels.
 speaker_label = "operator"
@@ -1314,7 +1314,7 @@ trajectory_buffer_size = 512
 # [security.state_encryption] is enabled. An incompatible checkpoint fails
 # the boot closed (never silently discards learned weights).
 persist_weights = true
-checkpoint_path = "state/phantasia/world_model.ckpt"
+checkpoint_path = "state/world_model/world_model.ckpt"
 # Imagined-trajectory length for offline scenario generation.
 rollout_horizon = 8
 
@@ -1445,7 +1445,7 @@ affect_correlation = true
 memory_probes = true
 memory_probe_interval_minutes = 60
 proactive_audit = true
-eidolon_accuracy = true
+self_model_accuracy = true
 self_model_accuracy_interval_hours = 24
 sleep_snapshots = true
 # OpenAI-compatible model server for the A/B-divergence baseline. POSTs to
@@ -1481,7 +1481,7 @@ voice_alignment_divergence = true
 fatigue = true
 prediction_error = true
 welfare = true
-nous_policy = true
+planning_policy = true
 
 
 [individuation]

@@ -53,7 +53,7 @@ async def test_look_report_build_failure_keeps_ledger_unchanged(tmp_path):
     core, paths = make_core(
         tmp_path, entity_name="x" * 201, conditioning_inputs=changing()
     )
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     ledger_before = load_ledger(paths)
 
     with pytest.raises(ValueError):
@@ -66,7 +66,7 @@ async def test_look_report_build_failure_keeps_ledger_unchanged(tmp_path):
 
 async def test_look_conditioning_raise_is_conditioning_unreadable(tmp_path):
     core, paths = make_core(tmp_path, conditioning_inputs=FirstTwoConditioning())
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     ledger_before = load_ledger(paths)
 
     outcome = await core.look(warmed_up=True, lived_seconds=1.0, lived_ticks=1)
@@ -178,12 +178,12 @@ async def test_ledger_reference_mismatch_is_inconclusive(tmp_path):
 
 async def test_incomplete_capture_can_be_replaced(tmp_path):
     core, paths = make_core(tmp_path)
-    doc1, _ = await core.capture_reference("birth")
+    doc1, _ = await core.capture_reference("maturation")
     old_id = doc1.reference_id
 
     paths.ledger.unlink(missing_ok=True)
 
-    doc2, _ = await core.capture_reference("birth")
+    doc2, _ = await core.capture_reference("maturation")
     assert doc2.reference_id != old_id
     assert paths.reference.exists()
 
@@ -220,14 +220,14 @@ async def test_maturation_adapter_not_copied_if_save_reference_fails(
     )
 
     with pytest.raises(OSError):
-        await core.capture_reference("birth")
+        await core.capture_reference("maturation")
 
     assert not paths.maturation_adapter.exists()
 
 
 async def test_changed_battery_is_inconclusive(tmp_path):
     core, paths = make_core(tmp_path, conditioning_inputs=changing())
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     ledger_before = load_ledger(paths)
 
     core._battery = core._battery + ("A new prompt?",)

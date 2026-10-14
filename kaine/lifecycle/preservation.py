@@ -127,14 +127,14 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
 
 # Developmental-phase files that travel with the entity. The viability verdict is not one:
 # it already rides inside the progress file.
-BUNDLED_DEVELOPMENT_FILES = ("gestation_progress.json", "gestation_readout.json")
-DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("gestation_viability.json",)
+BUNDLED_DEVELOPMENT_FILES = ("development_progress.json", "development_readout.json")
+DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("development_viability.json",)
 
 # Bundle member directories. The writer and every reader pass them through
 # legacy_aliases.map_bundle_member, so a bundle written before the keys step and
 # one written after it compare equal on either side of it.
 WORLD_MODEL_MEMBER = "world_model"
-DEVELOPMENT_MEMBER = "gestation"
+DEVELOPMENT_MEMBER = "development"
 
 
 def _member_dir(name: str) -> str:
@@ -491,7 +491,7 @@ async def preserve_live(
                 "(snapshot.json — every module's full preservation state: "
                 "self-model, memories, affect/drive, adapter paths, "
                 "individuation/ maturation reference + ledger + reports — plus "
-                "phantasia/ world-model weights when captured) is tarred into "
+                "world_model/ world-model weights when captured) is tarred into "
                 "bundle.tar(.enc); when state encryption is enabled the tar is "
                 "StateEncryptor-encrypted (bundle.tar.enc). Revive via "
                 "ForkManager.revive(bundle_dir, registry)."
@@ -1063,11 +1063,17 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
         members["snapshot.json"] = encryptor.maybe_decrypt(
             snap_path.read_bytes()
         ).decode("utf-8")
-    world_model_dir = bundle / "phantasia"
-    if world_model_dir.is_dir():
+    # The loose layout predates the module rename, so its world-model directory
+    # carries the old module name. Look under every name form; a file under the
+    # new name wins over the same file under the old one.
+    for form in legacy_aliases.name_forms(WORLD_MODEL_MEMBER):
+        world_model_dir = bundle / form
+        if not world_model_dir.is_dir():
+            continue
         for p in sorted(world_model_dir.iterdir()):
             if p.is_file():
-                members[legacy_aliases.map_bundle_member(f"phantasia/{p.name}")] = p.read_bytes()
+                name = legacy_aliases.map_bundle_member(f"{form}/{p.name}")
+                members.setdefault(name, p.read_bytes())
     return members
 
 

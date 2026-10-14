@@ -45,7 +45,7 @@ def _empty_digest() -> str:
     return conditioning_digest(adapter_sha=None, values=[], norms=[])
 
 
-def _write_reference(state_root: Path, kind: str = "birth") -> ReferenceDoc:
+def _write_reference(state_root: Path, kind: str = "maturation") -> ReferenceDoc:
     paths = _paths(state_root)
     ref_id = uuid.uuid4().hex
     battery = ("p1", "p2")
@@ -103,7 +103,7 @@ def _write_self_model(
     drift_count: int = 0,
     identity_history: list[dict] | None = None,
 ) -> None:
-    path = state_root / "eidolon" / "self_model.json"
+    path = state_root / "self_model" / "self_model.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "name": "Kaine Nova",
@@ -305,7 +305,7 @@ def test_fresh_nonsignificant_does_not_suppress_self_model_drift(tmp_path):
     )
     a = assess_divergence(state_root=state_root, now=now)
     assert a.diverged is True
-    assert a.signals["eidolon_drift_signal"] is True
+    assert a.signals["self_model_drift_signal"] is True
     assert a.signals["individuation_state"] == "not_individuated"
 
 

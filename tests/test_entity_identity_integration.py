@@ -389,8 +389,8 @@ def test_resolve_boot_identity_refuses_conflicting_revive_and_leaves_file(tmp_pa
 
 def test_resolve_boot_identity_legacy_tree_then_snapshot_same_id(tmp_path):
     state_root = tmp_path / "state"
-    (state_root / "phantasia").mkdir(parents=True)
-    (state_root / "phantasia" / "world_model.ckpt").write_text("weights")
+    (state_root / "world_model").mkdir(parents=True)
+    (state_root / "world_model" / "world_model.ckpt").write_text("weights")
 
     identity = _resolve_boot_identity(state_root, revive=None)
     assert identity.entity_id.startswith("legacy-")

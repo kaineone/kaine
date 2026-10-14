@@ -187,7 +187,7 @@ class _FakeInteroception:
 async def test_owner_publishes_viability_r1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
@@ -226,7 +226,7 @@ async def test_owner_publishes_viability_r1(
 
     assert owner._viability_verdict is not None
     assert owner._viability_verdict["rule"] == "R1"
-    assert (tmp_path / "gestation_viability.json").exists()
+    assert (tmp_path / "development_viability.json").exists()
 
     viability_events = [e for e in bus.events if e.type == "development.viability"]
     assert len(viability_events) == 1
@@ -238,7 +238,7 @@ async def test_owner_publishes_viability_r1(
 async def test_owner_publishes_nothing_when_viability_watch_is_off(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
@@ -276,7 +276,7 @@ async def test_owner_publishes_nothing_when_viability_watch_is_off(
     await owner._compute_withdrawal_markers(0.0, 1.0)
 
     assert owner._viability_verdict is None
-    assert not (tmp_path / "gestation_viability.json").exists()
+    assert not (tmp_path / "development_viability.json").exists()
     assert not any(e.type == "development.viability" for e in bus.events)
 
 
@@ -284,7 +284,7 @@ async def test_owner_publishes_nothing_when_viability_watch_is_off(
 async def test_paused_time_is_not_lived_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()
@@ -320,7 +320,7 @@ async def test_paused_time_is_not_lived_time(
     await owner._compute_withdrawal_markers(0.0, 1.0)
 
     assert owner._viability_verdict is None
-    assert not (tmp_path / "gestation_viability.json").exists()
+    assert not (tmp_path / "development_viability.json").exists()
     assert owner._active_lived_seconds == pytest.approx(3600.0)
 
 
@@ -328,7 +328,7 @@ async def test_paused_time_is_not_lived_time(
 async def test_advance_lived_counts_only_unpaused_intervals(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    state_path = tmp_path / "gestation_readout.json"
+    state_path = tmp_path / "development_readout.json"
     clock = _FakeClock(0.0)
     bus = _RecordingBus()
     drive = _FakeDrive()

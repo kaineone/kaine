@@ -212,12 +212,12 @@ class MaturationGateRunner:
         Bus errors fail closed for this tick: they leave the stage unchanged.
         """
         stream = self._sleep_stream
-        cursor = self._stage.hypnos_cursor
+        cursor = self._stage.sleep_cursor
         try:
             if cursor is None:
                 latest = await self._bus.latest(stream)
                 new_cursor = latest[0] if latest is not None else "0-0"
-                self._stage = replace(self._stage, hypnos_cursor=new_cursor)
+                self._stage = replace(self._stage, sleep_cursor=new_cursor)
                 return
 
             total = self._stage.sleep_count
@@ -232,7 +232,7 @@ class MaturationGateRunner:
                     break
                 cursor = last_scanned
 
-            self._stage = replace(self._stage, sleep_count=total, hypnos_cursor=cursor)
+            self._stage = replace(self._stage, sleep_count=total, sleep_cursor=cursor)
         except Exception:
             log.warning("maturation gate: failed to count sleep sleeps", exc_info=True)
 
@@ -524,7 +524,7 @@ class MaturationGateRunner:
         elif decision.action == ACTION_HOLD_AWAITING_ACK:
             if self._maturation_request is None:
                 try:
-                    req = new_request(self._stage.gestation_started_at)
+                    req = new_request(self._stage.development_started_at)
                     write_request(req, self._maturation_request_path)
                     self._maturation_request = req
                     log.info("operator maturation acknowledgement requested: %s", req.request_id)
@@ -614,7 +614,7 @@ class MaturationGateRunner:
         # Unlock the developmental phase locus lock. The unlock is attributed to the developmental phase,
         # not the operator; the locus stays virtual while the handoff continues.
         try:
-            write_desired_locus("virtual", locked=False, locked_by="gestation")
+            write_desired_locus("virtual", locked=False, locked_by="development")
         except Exception:
             log.warning("could not unlock development locus after maturation", exc_info=True)
 

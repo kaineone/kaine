@@ -136,15 +136,15 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
             if state is None or not state.is_embodied:
                 return
             stimulus_source_t = clock.maturation_end_stimulus_source_seconds()
-            womb_seed = int(feed.get("seed", 0))
-            params_digest = lifecycle_stage.womb_params_digest(_stimulus_source_params(feed))
+            stimulus_source_seed = int(feed.get("seed", 0))
+            params_digest = lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
             bloom_ends_at = (now() + timedelta(seconds=maturation_seconds)).isoformat()
             lifecycle_stage.write_stage(
                 lifecycle_stage.record_maturation_stimulus_source(
                     state,
-                    womb_t_at_birth=stimulus_source_t,
-                    womb_seed=womb_seed,
-                    womb_params_digest=params_digest,
+                    stimulus_source_t_at_maturation=stimulus_source_t,
+                    stimulus_source_seed=stimulus_source_seed,
+                    stimulus_source_params_digest=params_digest,
                     bloom_ends_at=bloom_ends_at,
                 )
             )
@@ -178,6 +178,12 @@ PLANNED_TEST_REFUSED_EXIT = 12
 # Exit code when the stored developmental stage holds a value this code does not
 # recognize (fail closed: the stage file is left for an operator to inspect).
 STAGE_REFUSED_EXIT = 13
+
+
+# Exit code when the state tree cannot be renamed to the functional module names
+# (an old and a new name for one item, or a migration step that failed); nothing
+# was changed by a refusal.
+RENAME_REFUSED_EXIT = 14
 
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
@@ -269,7 +275,7 @@ def _build_individuation(*, cfg, kaine_config, registry, bus, cycle, gate_runner
     sleep = registry.get("sleep") if "sleep" in registry else None
 
     voice_cfg = (kaine_config.get("sleep") or {}).get("voice_alignment") or {}
-    adapter_output_dir = resolve(voice_cfg.get("adapter_output_dir", "state/hypnos/adapters"))
+    adapter_output_dir = resolve(voice_cfg.get("adapter_output_dir", "state/sleep/adapters"))
 
     per_request_adapter = (
         _effective_hot_swap_mode(voice_cfg.get("hot_swap_mode", "manual"), kaine_config)
@@ -877,7 +883,7 @@ async def _write_runtime_state(
         if stage_state is not None:
             payload["developmental_stage"].update({
                 "stage": stage_state.stage,
-                "gestation_started_at": stage_state.gestation_started_at,
+                "development_started_at": stage_state.development_started_at,
                 "born_at": stage_state.born_at,
             })
         if gate_status is not None:
@@ -929,7 +935,7 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     language_model_id = (config.get("language") or {}).get("model_id")
     _put("language", language_model_id)
     _put("evaluation_chat", eval_chat_model_id)
-    _put("topos_encoder", (config.get("vision") or {}).get("encoder_model_id"))
+    _put("vision_encoder", (config.get("vision") or {}).get("encoder_model_id"))
     from kaine.text_embedding import resolve_embedding_config
     cfg = resolve_embedding_config(config)
     _put("embedding_backend", cfg["backend"])
@@ -948,7 +954,7 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
 
         revisions = read_revision_state()
         if isinstance(language_model_id, str) and language_model_id in revisions:
-            _put("lingua_revision", revisions[language_model_id])
+            _put("language_revision", revisions[language_model_id])
     except Exception:
         log.debug("organ revision provenance unavailable", exc_info=True)
     return out
@@ -1697,7 +1703,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
                 _lifecycle_event(
                     STAGE_DEVELOPMENT_STARTED,
                     development_started_payload(
-                        gestation_started_at=ctx.stage_state.gestation_started_at
+                        development_started_at=ctx.stage_state.development_started_at
                     ),
                     salience=0.6,
                 )
@@ -1748,7 +1754,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
             return 0
         from kaine import perception_state as _ps
 
-        _ps.write_desired_locus("virtual", locked=True, locked_by="gestation")
+        _ps.write_desired_locus("virtual", locked=True, locked_by="development")
         _ps.write_desired_audio(True)
         _ps.write_desired_video(True)
         log.info("development: stimulus source ready; pinned locus to the virtual stimulus source (locked by development)")
@@ -2533,7 +2539,7 @@ async def _start_utterance_outcome(ctx: BootContext) -> None:
     if (ctx.kaine_config.get("modules") or {}).get("language"):
         ctx.utterance_outcome = await start_utterance_outcome_observer(
             ctx.bus,
-            path=resolve(Path("state/lingua/utterance_outcomes.jsonl")),
+            path=resolve(Path("state/language/utterance_outcomes.jsonl")),
             language_section=ctx.kaine_config.get("language"),
         )
 
@@ -2667,7 +2673,7 @@ async def _shutdown(ctx: BootContext) -> None:
 
                 rec = read_escalation()
                 await ctx.caretaker.send_event(
-                    "supervision_lost" if rec.module == "supervisor" else "spot_escalation"
+                    "supervision_lost" if rec.module == "supervisor" else "supervisor_escalation"
                 )
         except Exception:
             log.warning("caretaker escalation notice failed", exc_info=True)
@@ -3037,6 +3043,19 @@ def main(argv: list[str] | None = None) -> int:
     root = install_data_root(config)
     if root is not None:
         log.info("growing data under %s", root)
+
+    import sqlite3
+
+    from kaine.lifecycle import rename_state
+
+    try:
+        rename_state.migrate_at_boot(config, resolve(Path("state")))
+    except rename_state.RenameStateError as exc:
+        sys.stderr.write(f"kaine.cycle: state rename refused: {exc}\n")
+        return RENAME_REFUSED_EXIT
+    except (OSError, sqlite3.Error, ImportError) as exc:
+        sys.stderr.write(f"kaine.cycle: state rename failed: {type(exc).__name__}: {exc}\n")
+        return RENAME_REFUSED_EXIT
 
     # Fail closed on an unrecognized stored stage value before anything reads or
     # writes the stage file. An unreadable file keeps its fail-safe reading.

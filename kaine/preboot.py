@@ -325,7 +325,7 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
                 "Perception feed",
                 SKIP,
                 "mode = live (real camera/microphone) — not exercised by this "
-                "offline dry-run; bring Topos/Audition up to verify hardware "
+                "offline dry-run; bring Vision/Audition up to verify hardware "
                 "capture (operator-present demos only, not a research run)",
             )
         ]
@@ -917,13 +917,13 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
         ),
         (
             "[sleep.voice_alignment].adapter_output_dir",
-            resolve(_dir_of(voice.get("adapter_output_dir"), "state/hypnos/adapters")),
+            resolve(_dir_of(voice.get("adapter_output_dir"), "state/sleep/adapters")),
         ),
         (
             "[sleep.voice_alignment].trainer_workdir",
             resolve(_dir_of(
                 str(voice.get("trainer_workdir") or "").strip() or None,
-                "state/hypnos/voice_align_jobs",
+                "state/sleep/voice_align_jobs",
             )),
         ),
         ("[ignition_log].directory", resolve(Path(ignition.directory))),
@@ -931,7 +931,7 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
         (
             "[self_model].persistence_path",
             resolve(_dir_of(
-                self_model.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
+                self_model.get("persistence_path"), "state/self_model/self_model.json", is_file=True
             )),
         ),
     ]

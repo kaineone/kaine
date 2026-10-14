@@ -194,7 +194,7 @@ def test_audit_log_file_and_dir_are_owner_only_under_permissive_umask(tmp_path: 
     try:
         # A freshly-created parent directory must be hardened too (not just the
         # file), mirroring snapshot.py / effectors.py.
-        parent = tmp_path / "praxis"
+        parent = tmp_path / "effectors"
         p = parent / "audit.log"
         log = ActionAuditLog(p)
         _append(log)

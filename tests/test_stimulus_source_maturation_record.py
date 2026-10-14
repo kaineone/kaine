@@ -30,15 +30,15 @@ def test_maturation_end_stimulus_source_seconds_before_and_after():
 def test_stage_state_round_trips_new_fields():
     data = {
         "stage": "embodied",
-        "gestation_started_at": "2026-01-01T00:00:00+00:00",
+        "development_started_at": "2026-01-01T00:00:00+00:00",
         "born_at": "2026-01-02T00:00:00+00:00",
         "lived_seconds": 123.4,
         "sleep_count": 5,
-        "hypnos_cursor": "3-7",
-        "womb_t_at_birth": 987.5,
-        "womb_seed": 42,
-        "womb_params_digest": "a" * 64,
-        "birth_bloom_ends_at": "2026-01-02T00:00:05+00:00",
+        "sleep_cursor": "3-7",
+        "stimulus_source_t_at_maturation": 987.5,
+        "stimulus_source_seed": 42,
+        "stimulus_source_params_digest": "a" * 64,
+        "maturation_bloom_ends_at": "2026-01-02T00:00:05+00:00",
     }
     state = lifecycle_stage.StageState.from_dict(data)
     assert state.to_dict() == data
@@ -46,36 +46,36 @@ def test_stage_state_round_trips_new_fields():
 
 def test_stage_state_old_dict_loads_none():
     state = lifecycle_stage.StageState.from_dict(
-        {"stage": "embodied", "hypnos_cursor": "1-2"}
+        {"stage": "embodied", "sleep_cursor": "1-2"}
     )
-    assert state.womb_t_at_birth is None
-    assert state.womb_seed is None
-    assert state.womb_params_digest is None
-    assert state.birth_bloom_ends_at is None
+    assert state.stimulus_source_t_at_maturation is None
+    assert state.stimulus_source_seed is None
+    assert state.stimulus_source_params_digest is None
+    assert state.maturation_bloom_ends_at is None
 
 
 def test_stage_state_bad_stimulus_source_t_at_maturation_coerces_to_none():
     for bad in (True, "x", float("nan"), -1, None):
-        state = lifecycle_stage.StageState.from_dict({"womb_t_at_birth": bad})
-        assert state.womb_t_at_birth is None
+        state = lifecycle_stage.StageState.from_dict({"stimulus_source_t_at_maturation": bad})
+        assert state.stimulus_source_t_at_maturation is None
 
 
 def test_stage_state_bad_stimulus_source_seed_coerces_to_none():
     for bad in (True, "42", 42.0, None):
-        state = lifecycle_stage.StageState.from_dict({"womb_seed": bad})
-        assert state.womb_seed is None
+        state = lifecycle_stage.StageState.from_dict({"stimulus_source_seed": bad})
+        assert state.stimulus_source_seed is None
 
 
 def test_stage_state_bad_stimulus_source_params_digest_coerces_to_none():
     for bad in ("", "G" * 64, "A" * 64, 123, None):
-        state = lifecycle_stage.StageState.from_dict({"womb_params_digest": bad})
-        assert state.womb_params_digest is None
+        state = lifecycle_stage.StageState.from_dict({"stimulus_source_params_digest": bad})
+        assert state.stimulus_source_params_digest is None
 
 
 def test_stage_state_bad_maturation_bloom_ends_at_coerces_to_none():
     for bad in (123, None):
-        state = lifecycle_stage.StageState.from_dict({"birth_bloom_ends_at": bad})
-        assert state.birth_bloom_ends_at is None
+        state = lifecycle_stage.StageState.from_dict({"maturation_bloom_ends_at": bad})
+        assert state.maturation_bloom_ends_at is None
 
 
 def test_record_maturation_stimulus_source_refuses_developing_state():
@@ -83,9 +83,9 @@ def test_record_maturation_stimulus_source_refuses_developing_state():
     with pytest.raises(ValueError):
         lifecycle_stage.record_maturation_stimulus_source(
             developing,
-            womb_t_at_birth=1.0,
-            womb_seed=0,
-            womb_params_digest="a" * 64,
+            stimulus_source_t_at_maturation=1.0,
+            stimulus_source_seed=0,
+            stimulus_source_params_digest="a" * 64,
             bloom_ends_at="2026-01-01T00:00:00+00:00",
         )
 
@@ -95,9 +95,9 @@ def test_stimulus_source_params_digest_stable_and_sensitive():
     same = StimulusSourceParams(heartbeat_bpm=72.0)
     different = replace(base, heartbeat_bpm=80.0)
 
-    digest_base = lifecycle_stage.womb_params_digest(base)
-    assert lifecycle_stage.womb_params_digest(same) == digest_base
-    assert lifecycle_stage.womb_params_digest(different) != digest_base
+    digest_base = lifecycle_stage.stimulus_source_params_digest(base)
+    assert lifecycle_stage.stimulus_source_params_digest(same) == digest_base
+    assert lifecycle_stage.stimulus_source_params_digest(different) != digest_base
 
 
 def test_maturation_hook_records_stimulus_source_state(tmp_path, monkeypatch):
@@ -121,10 +121,10 @@ def test_maturation_hook_records_stimulus_source_state(tmp_path, monkeypatch):
 
     after = lifecycle_stage.read_stage(stage_file)
     assert after.is_embodied
-    assert after.womb_t_at_birth == 12.5
-    assert after.womb_seed == 7
-    assert after.womb_params_digest == lifecycle_stage.womb_params_digest(StimulusSourceParams())
-    assert after.birth_bloom_ends_at == (base_time + timedelta(seconds=2.5)).isoformat()
+    assert after.stimulus_source_t_at_maturation == 12.5
+    assert after.stimulus_source_seed == 7
+    assert after.stimulus_source_params_digest == lifecycle_stage.stimulus_source_params_digest(StimulusSourceParams())
+    assert after.maturation_bloom_ends_at == (base_time + timedelta(seconds=2.5)).isoformat()
 
 
 def test_maturation_hook_does_not_raise_when_stage_missing(tmp_path, monkeypatch):

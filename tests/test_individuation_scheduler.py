@@ -66,7 +66,7 @@ class FakeCore:
         self.captures: list[str] = []
         self.next_look = LookOutcome("scored", None, None)
         self.capture_result: tuple[FakeDoc | None, str | None] = (
-            FakeDoc("birth"),
+            FakeDoc("maturation"),
             None,
         )
         self.due = True
@@ -400,15 +400,15 @@ async def test_no_ledger_drops_pending_lived_time(tmp_path: Path):
 
 async def test_capture_request(tmp_path: Path):
     sched, core, clock = make(tmp_path)
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
     assert sched._capture_kind is None
 
 
 async def test_capture_blocked_retries(tmp_path: Path):
     sched, core, clock = make(tmp_path, paused=lambda: True)
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
     assert sched._capture_at == 20.0
     assert sched.state.last_reason == "paused"
@@ -418,13 +418,13 @@ async def test_capture_blocked_retries(tmp_path: Path):
     clock.t = 40
     sched._paused = lambda: False
     await sched.tick()
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
 
 
 async def test_capture_failure_backs_off(tmp_path: Path):
     sched, core, clock = make(tmp_path)
     core.capture_result = (None, "request_failed")
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
     # Retry delays are 5, 10, 20, then 20 (capped).
     assert sched._capture_at == 5.0
@@ -441,17 +441,17 @@ async def test_capture_failure_backs_off(tmp_path: Path):
     await sched.tick()
     assert sched._capture_at == 55.0
     assert sched._capture_backoff == 20.0
-    assert core.captures == ["birth", "birth", "birth", "birth"]
+    assert core.captures == ["maturation", "maturation", "maturation", "maturation"]
 
 
 async def test_capture_store_error_clears_request(tmp_path: Path):
     sched, core, clock = make(tmp_path)
     core.raise_on_capture = ReferenceExists("already exists")
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
     assert sched._capture_kind is None
     assert sched._capture_at is None
-    assert core.captures == ["birth"]
+    assert core.captures == ["maturation"]
 
 
 async def test_inconclusive_alert(tmp_path: Path):

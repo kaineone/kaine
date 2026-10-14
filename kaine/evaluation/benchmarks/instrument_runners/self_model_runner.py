@@ -119,7 +119,7 @@ def _plant_affect_correlation(
     ac_dir = logs_dir / "affect_correlation"
     ac_dir.mkdir(parents=True, exist_ok=True)
     record = {
-        "thymos_state": {"valence": valence, "arousal": arousal},
+        "affect_state": {"valence": valence, "arousal": arousal},
         "characteristics": {"hedge_word_count": hedge_word_count},
     }
     (ac_dir / "affect_correlation-controlled.jsonl").write_text(

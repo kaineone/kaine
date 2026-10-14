@@ -49,7 +49,7 @@ class JobKind(str, Enum):
     #: a directive + an optional per-fork ``time_scale``, run to completion
     #: off-host, returning its post-run snapshot. Reuses the fork/dilation/merge
     #: machinery — no new runtime (see :mod:`kaine.distributed.fork_entity`).
-    FORKED_ENTITY = "forked_being"
+    FORKED_ENTITY = "forked_entity"
 
 
 class ArtifactKind(str, Enum):

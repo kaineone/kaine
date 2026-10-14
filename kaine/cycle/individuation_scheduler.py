@@ -228,7 +228,7 @@ class IndividuationScheduler:
 
     def notify_sleep_completed(self) -> None:
         self._asleep = False
-        if self._capture_kind == "birth":
+        if self._capture_kind == "maturation":
             self._capture_kind = "capture"
             log.info(
                 "individuation maturation capture downgraded to capture after sleep"

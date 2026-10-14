@@ -62,7 +62,7 @@ from kaine.security.crypto import (
 )
 
 # The world-model member directory under the current names.
-_WM_PREFIX = legacy_aliases.map_bundle_member("phantasia/")
+_WM_PREFIX = legacy_aliases.map_bundle_member("world_model/")
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -165,7 +165,7 @@ async def _build_synthetic_entity(
     reg.register(episodic_memory)
 
     # The world model module — capability-bearing fake so weights can be captured w/o jax.
-    ckpt = tmp_path / "phantasia" / "wm.ckpt"
+    ckpt = tmp_path / "world_model" / "wm.ckpt"
     wm = _PersistableFake(obs_dim=observation_dim(), decay=0.42)
     world_model = WorldModel(
         bus,
@@ -232,6 +232,12 @@ class _FakeAsyncQdrant:
         def __init__(self, names):
             self.collections = [type("C", (), {"name": n}) for n in names]
 
+    async def get_aliases(self):
+        """No collection aliases (a store that was never renamed)."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(aliases=[])
+
     async def get_collections(self):
         return self._Colls(list(self.store))
 
@@ -272,24 +278,24 @@ async def test_qdrant_export_import_roundtrip_codec():
     src = QdrantStorage(latent_dim=4, api_key="k")
     src._client = _FakeAsyncQdrant()
     await src.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.1, 0.2, 0.3, 0.4],
         text="planted memory",
         payload={"timestamp": 1.0},
         affect={"intensity": 0.9},
         point_id="11111111-1111-1111-1111-111111111111",
     )
-    dump = await src.export(["mnemos_episodic"])
-    assert dump["mnemos_episodic"][0]["text"] == "planted memory"
-    assert dump["mnemos_episodic"][0]["affect"] == {"intensity": 0.9}
+    dump = await src.export(["episodic_memory_episodic"])
+    assert dump["episodic_memory_episodic"][0]["text"] == "planted memory"
+    assert dump["episodic_memory_episodic"][0]["affect"] == {"intensity": 0.9}
 
     dst = QdrantStorage(latent_dim=4, api_key="k")
     dst._client = _FakeAsyncQdrant()
-    n = await dst.replace_collection("mnemos_episodic", dump["mnemos_episodic"])
+    n = await dst.replace_collection("episodic_memory_episodic", dump["episodic_memory_episodic"])
     assert n == 1
-    redump = await dst.export(["mnemos_episodic"])
-    assert redump["mnemos_episodic"][0]["vector"] == [0.1, 0.2, 0.3, 0.4]
-    assert redump["mnemos_episodic"][0]["text"] == "planted memory"
+    redump = await dst.export(["episodic_memory_episodic"])
+    assert redump["episodic_memory_episodic"][0]["vector"] == [0.1, 0.2, 0.3, 0.4]
+    assert redump["episodic_memory_episodic"][0]["text"] == "planted memory"
 
 
 @pytest.mark.asyncio
@@ -297,6 +303,12 @@ async def test_qdrant_export_fails_loud_when_unreachable():
     pytest.importorskip("qdrant_client")
 
     class _Broken:
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         async def get_collections(self):
             raise ConnectionError("server unreachable")
 
@@ -334,14 +346,14 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
     assert (bundle / "manifest.json").is_file()
     assert (bundle / "bundle.tar").is_file()
     assert not (bundle / "snapshot.json").exists()
-    assert not (bundle / "phantasia").exists()
+    assert not (bundle / "world_model").exists()
     # World-model weights rode along inside the tar.
     import tarfile as _tarfile
 
     with _tarfile.open(bundle / "bundle.tar") as _tf:
         _names = _tf.getnames()
     assert "snapshot.json" in _names
-    assert legacy_aliases.map_bundle_member("phantasia/wm.ckpt") in _names
+    assert legacy_aliases.map_bundle_member("world_model/wm.ckpt") in _names
 
     # The live entity is untouched (read-only) and nothing was deleted.
     assert reg.get("self_model").model.name == "Aria"
@@ -362,7 +374,7 @@ async def test_preserve_live_then_revive_same_individual(bus: AsyncBus, tmp_path
         world_model=wm2,
         backend="dreamerv3",
         persist_weights=True,
-        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+        checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
     )
     await ph2.initialize()
     reg2.register(ph2)
@@ -441,7 +453,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_social_cogni
         world_model=wm2,
         backend="fake",
         persist_weights=False,
-        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+        checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
     )
     await ph2.initialize()
     reg2.register(ph2)
@@ -459,7 +471,7 @@ async def test_preserve_live_then_revive_scopes_memory_and_restores_social_cogni
     # The memory lives under the reviving entity's prefix, and nothing was
     # written under the preserved entity's original prefix.
     assert await storage2.count("other_episodic") == 1
-    assert await storage2.export(["mnemos_episodic", "mnemos_semantic"]) == {}
+    assert await storage2.export(["episodic_memory_episodic", "episodic_memory_semantic"]) == {}
 
     # The social cognition module's profile is restored.
     restored = await social_cognition2.store.get("operator")
@@ -537,7 +549,7 @@ async def test_revive_routes_async_importer_by_state_key_and_fallback_to_deseria
         world_model=wm2,
         backend="fake",
         persist_weights=False,
-        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+        checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
     )
     await ph2.initialize()
     reg2.register(ph2)
@@ -605,6 +617,12 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
 
         def __init__(self):
             self.store: dict[str, list[_FakeQdrantPoint]] = {}
+
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
 
         async def get_collections(self):
             return self._Colls(list(self.store))
@@ -699,7 +717,7 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
 
     src_store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
         embedder=embedder,
     )
@@ -750,14 +768,14 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
         world_model=wm2,
         backend="fake",
         persist_weights=False,
-        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+        checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
     )
     await ph2.initialize()
     reg2.register(ph2)
 
     dst_store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
         embedder=embedder,
     )
@@ -775,7 +793,7 @@ async def test_preserve_live_then_revive_social_cognition_qdrant_replaces_stale(
     assert profiles["operator"].label == "operator"
 
     pts, _ = await client.scroll(
-        collection_name="empatheia_agents",
+        collection_name="social_cognition_agents",
         limit=10,
         with_payload=True,
         with_vectors=True,
@@ -932,6 +950,12 @@ async def test_preserve_live_fails_loud_when_memory_uncapturable(
     qs = QdrantStorage(latent_dim=4, api_key="k")
 
     class _Broken:
+        async def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         async def get_collections(self):
             raise ConnectionError("unreachable")
 
@@ -1054,7 +1078,7 @@ async def test_revive_fails_loud_when_captured_weights_absent_from_bundle(
         wm2 = _PersistableFake(obs_dim=observation_dim(), decay=0.99)
         ph2 = WorldModel(
             bus, world_model=wm2, backend="dreamerv3", persist_weights=True,
-            checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+            checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
         )
         await ph2.initialize()
         reg2.register(ph2)
@@ -1164,7 +1188,7 @@ async def test_qdrant_import_fails_loud_on_upsert_error():
         }
     ]
     with pytest.raises(StorageError, match="upserting into"):
-        await dst.replace_collection("mnemos_episodic", points)
+        await dst.replace_collection("episodic_memory_episodic", points)
 
 
 @pytest.mark.asyncio
@@ -1211,7 +1235,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
     from kaine.modules.world_model.backend import DreamerV3WorldModel
 
     reg = ModuleRegistry()
-    ckpt = tmp_path / "phantasia" / "wm.ckpt"
+    ckpt = tmp_path / "world_model" / "wm.ckpt"
     wm = DreamerV3WorldModel(
         observation_dim(), deter_dim=8, stoch_dim=4, stoch_classes=3, hidden_dim=8
     )
@@ -1241,7 +1265,7 @@ async def test_real_dreamerv3_weight_capture_restore(bus: AsyncBus, tmp_path: Pa
     )
     ph2 = WorldModel(
         bus, world_model=wm2, backend="dreamerv3", persist_weights=True,
-        checkpoint_path=str(tmp_path / "phantasia2" / "wm.ckpt"),
+        checkpoint_path=str(tmp_path / "world_model2" / "wm.ckpt"),
     )
     await ph2.initialize()
     reg2.register(ph2)

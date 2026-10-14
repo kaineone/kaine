@@ -89,10 +89,10 @@ class StubAdapter:
 
     async def apply_action(self, family: str, params: dict[str, Any]) -> bool:
         self.actions.append((family, dict(params)))
-        log.debug("mundus/stub: recorded action %r %r", family, params)
+        log.debug("embodiment/stub: recorded action %r %r", family, params)
         return True
 
     async def apply_setpoints(self, channels: dict[str, float]) -> bool:
         self.setpoints.append(dict(channels))
-        log.debug("mundus/stub: recorded setpoints %r", channels)
+        log.debug("embodiment/stub: recorded setpoints %r", channels)
         return True

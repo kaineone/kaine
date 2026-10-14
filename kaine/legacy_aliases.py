@@ -269,6 +269,33 @@ def normalize_config_layer(layer: dict, source: str) -> dict:
                         label = f"[{path_text}].{key}" if path_text else f"[].{key}"
                         changes.append(f"{label} = \"{old}\" -> \"{new}\"")
 
+    # State directory path rewrites (old shipped config paths still point at data).
+    if scope_done("persisted"):
+        module_dir_map = {
+            old: info["new_key"]
+            for old, info in table.MODULES.items()
+            if info.get("new_key") != old
+        }
+
+        def _rewrite_state_path(value: str) -> tuple[str, bool]:
+            if not value.startswith("state/"):
+                return value, False
+            rest = value[len("state/") :]
+            for old, new in module_dir_map.items():
+                if rest == old or rest.startswith(f"{old}/"):
+                    return f"state/{new}{rest[len(old):]}", True
+            return value, False
+
+        for table_path, table_value in list(_walk_tables(result)):
+            for key, value in list(table_value.items()):
+                if isinstance(value, str):
+                    new_value, changed = _rewrite_state_path(value)
+                    if changed:
+                        table_value[key] = new_value
+                        path_text = _format_table_path(table_path)
+                        label = f"[{path_text}].{key}" if path_text else f"[].{key}"
+                        changes.append(f'{label} = "{value}" -> "{new_value}"')
+
     # Module lists.
     tier = result.get("tier")
     if isinstance(tier, dict):
@@ -589,6 +616,37 @@ def map_bundle_member(name: str) -> str:
     return name
 
 
+def map_collection_prefix(prefix: str) -> str:
+    """Map an old episodic-memory collection prefix to its new name.
+
+    Scope ``persisted``: a bundle written before the rename stores the old
+    collection prefix; on read it is mapped to the current prefix.
+    """
+    if not isinstance(prefix, str) or not scope_done("persisted"):
+        return prefix
+    for entry in active(_table().COLLECTIONS):
+        if prefix == entry["old"]:
+            return entry["new"]
+    return prefix
+
+
+def map_stored_value(value: Any) -> Any:
+    """Map a stored tag or stage value through active persisted aliases.
+
+    Used for enum-like strings stored in JSON state (freeze sources,
+    checkpoint headers, divergence arms, report kinds).
+    """
+    if not isinstance(value, str) or not scope_done("persisted"):
+        return value
+    for entry in active(_table().STAGE_VALUES):
+        if value == entry["old"]:
+            return entry["new"]
+    for entry in active(_table().STORED_TAGS):
+        if value == entry["old"]:
+            return entry["new"]
+    return value
+
+
 def map_stage_record(data: dict) -> dict:
     """
     Rename stage field names and stage values.
@@ -695,7 +753,7 @@ def name_forms(name: str) -> tuple[str, ...]:
 
 
 def map_study_plan(plan: dict) -> dict:
-    """Map module names inside a study plan when the keys scope is done.
+    """Map module and persisted names inside a study plan when their scopes are done.
 
     The stored study.json is never rewritten; this maps on read.
     """
@@ -706,18 +764,72 @@ def map_study_plan(plan: dict) -> dict:
         value = mapped.get(key)
         if isinstance(value, list):
             mapped[key] = map_module_list(value)
+
+    if scope_done("persisted"):
+        redis = mapped.get("redis")
+        if isinstance(redis, dict):
+            redis = dict(redis)
+            db = redis.get("db")
+            if isinstance(db, dict):
+                redis["db"] = {map_stored_value(k): v for k, v in db.items()}
+            mapped["redis"] = redis
+
+        collections = mapped.get("collections")
+        if isinstance(collections, dict):
+            mapped["collections"] = {map_stored_value(k): v for k, v in collections.items()}
+
+        voice_alignment_steps = mapped.get("voice_alignment_steps")
+        if isinstance(voice_alignment_steps, list):
+            mapped["voice_alignment_steps"] = [
+                {**step, "line": map_stored_value(step["line"])}
+                if isinstance(step, dict) and isinstance(step.get("line"), str)
+                else step
+                for step in voice_alignment_steps
+            ]
+
+        for entry in active(_table().STAGE_VALUES):
+            old_key = f"{entry['old']}_budget_seconds"
+            new_key = f"{entry['new']}_budget_seconds"
+            if old_key in mapped:
+                if new_key not in mapped:
+                    mapped[new_key] = mapped.pop(old_key)
+                else:
+                    mapped.pop(old_key)
+                    _warn_record_both(old_key, new_key)
+
     return mapped
 
 
+def map_study_step(record: dict) -> dict:
+    """Map persisted names inside a recorded study step.
+
+    ``steps.jsonl`` is append-only and never rewritten; this maps on read.
+    """
+    if not scope_done("persisted"):
+        return record
+    mapped = dict(record)
+    for key in ("line", "outcome"):
+        value = mapped.get(key)
+        if isinstance(value, str):
+            mapped[key] = map_stored_value(value)
+    return mapped
+
+
+
 def map_freeze_source(source):
-    """Return a freeze source under the new module name when keys are done.
+    """Return a freeze source under the new name when keys or persisted are done.
 
     A freeze source recorded in the control file by an older release (for
-    example the supervisor's old module key) reads under the new name.
+    example the supervisor's old module key, or an old developmental tag)
+    reads under the new name.
     """
-    if not isinstance(source, str) or not scope_done("keys"):
+    if not isinstance(source, str):
         return source
-    return map_module_key(source)
+    if scope_done("keys"):
+        source = map_module_key(source)
+    if scope_done("persisted"):
+        source = map_stored_value(source)
+    return source
 
 
 def map_stream_keys(mapping: dict) -> dict:

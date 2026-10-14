@@ -167,9 +167,9 @@ STANDIN_SCRIPT = textwrap.dedent(
             bloom = os.environ.get("IGNITION_STANDIN_BLOOM_SECONDS", "0")
             if bloom != "none":
                 ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
-                stage["birth_bloom_ends_at"] = ends.isoformat()
+                stage["maturation_bloom_ends_at"] = ends.isoformat()
             write_json(lifecycle_dir / "stage.json", stage)
-            wait_for_request(state_dir, "birth", True, bundle_dir)
+            wait_for_request(state_dir, "maturation", True, bundle_dir)
             return
 
         if active_scenario == "missing_preservation":
@@ -330,11 +330,11 @@ def _create_study(
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "r_g_", "branch": "r_b_", "repeat": "r_r_", "accumulate": "r_a_"},
+        "collections": {"development": "r_g_", "branch": "r_b_", "repeat": "r_r_", "accumulate": "r_a_"},
         "viewing_budget_seconds": viewing_budget_seconds,
-        "gestation_budget_seconds": development_budget_seconds,
+        "development_budget_seconds": development_budget_seconds,
     }
     study_dir = tmp_path / "study"
     init_study(study_dir, validate_plan(plan))
@@ -414,7 +414,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     assert result == "complete"
 
     expected_order = [
-        ("gestation", 0),
+        ("development", 0),
         ("branch", 0),
         ("repeat", 0),
         ("branch", 1),
@@ -454,7 +454,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     ]
     assert all(e["research_mode"] == "1" for e in env_logs)
     by_line = {e["line"]: e for e in env_logs}
-    assert by_line["gestation"]["redis_url"].endswith("/10")
+    assert by_line["development"]["redis_url"].endswith("/10")
     assert by_line["branch"]["redis_url"].endswith("/11")
     assert by_line["repeat"]["redis_url"].endswith("/12")
     assert by_line["accumulate"]["redis_url"].endswith("/13")
@@ -475,7 +475,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
         assert (expected_dir / "config" / "profiles").is_symlink()
     # Every child ran in its step's own working directory.
     assert [(e["line"], e["k"]) for e in env_logs] == [
-        ("gestation", None),
+        ("development", None),
         ("branch", 0),
         ("repeat", None),
         ("branch", 1),
@@ -485,7 +485,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
     ]
     # The seed is born automatically; the entity in the seed never waits on
     # an operator acknowledgement.
-    seed_overlay = _read_overlay(study_dir / "gestation")
+    seed_overlay = _read_overlay(study_dir / "development")
     assert seed_overlay["developmental_stage"]["require_operator_ack_for_maturation"] is False
     # The world model module is checked wherever it is enabled.
     for s in steps:
@@ -495,7 +495,7 @@ def test_dry_run_e2e(tmp_path: Path, known_modules):
             assert s["world_model_captured"] is None
 
     expected_prefixes = [
-        ("gestation", 0, "r_g_"),
+        ("development", 0, "r_g_"),
         ("branch", 0, "r_b_0_"),
         ("repeat", 0, "r_r_"),
         ("branch", 1, "r_b_1_"),
@@ -546,7 +546,7 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
 
     records = [
         {
-            "line": "gestation",
+            "line": "development",
             "step": 0,
             "modules": BASE_MODULES,
             "started_at": "t0",
@@ -556,7 +556,7 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
             "preservation_id": "p0",
             "bundle": p0_bundle,
             "run_id": "r0",
-            "ignition_log_dir": str(study_dir / "gestation"),
+            "ignition_log_dir": str(study_dir / "development"),
             "overlay_sha256": "x",
             "outcome": "complete",
         },
@@ -595,7 +595,7 @@ def test_resume_skips_completed_steps(tmp_path: Path, known_modules):
         ("accumulate", None),
     ]
     assert [urlsplit(url).path for url in flush_log] == ["/12", "/11", "/13", "/11", "/13"]
-    assert steps[0]["line"] == "gestation"
+    assert steps[0]["line"] == "development"
     assert steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[2]["line"] == "repeat" and steps[2]["revived_from"] == p0_bundle
     assert steps[3]["line"] == "branch" and steps[3]["step"] == 1 and steps[3]["revived_from"] == p0_bundle
@@ -720,7 +720,7 @@ def test_halt_missing_preservation(tmp_path: Path, known_modules, monkeypatch):
     steps = _load_steps(study_dir)
 
     assert len(steps) == 4
-    assert steps[0]["outcome"] == "complete" and steps[0]["line"] == "gestation"
+    assert steps[0]["outcome"] == "complete" and steps[0]["line"] == "development"
     assert steps[1]["outcome"] == "complete" and steps[1]["line"] == "branch" and steps[1]["step"] == 0
     assert steps[2]["outcome"] == "complete" and steps[2]["line"] == "repeat" and steps[2]["step"] == 0
     assert steps[3]["line"] == "branch" and steps[3]["step"] == 1
@@ -800,7 +800,7 @@ def test_outcome_requires_the_step_reason(tmp_path: Path, known_modules):
     )
     req, res = _outcome_pair("programme end", "/b/new")
     assert (
-        runner._determine_outcome("gestation", 0, req, res, False, revived_from=None)
+        runner._determine_outcome("development", 0, req, res, False, revived_from=None)
         == "failed:reason:programme end"
     )
 
@@ -926,9 +926,9 @@ def _maturation_request_time(study_dir: Path) -> float:
     from datetime import datetime
 
     req = json.loads(
-        (study_dir / "gestation" / "state" / "cycle" / "preserve_request.json").read_text()
+        (study_dir / "development" / "state" / "cycle" / "preserve_request.json").read_text()
     )
-    assert req["reason"] == "birth"
+    assert req["reason"] == "maturation"
     return datetime.fromisoformat(req["requested_at"]).timestamp()
 
 
@@ -943,9 +943,9 @@ def test_maturation_preservation_waits_for_the_bloom_end(tmp_path: Path, known_m
     assert _run(_runner(study_dir, script, maturation_bloom_margin_seconds=60.0)) == "complete"
 
     stage = json.loads(
-        (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
+        (study_dir / "development" / "state" / "lifecycle" / "stage.json").read_text()
     )
-    bloom_end = datetime.fromisoformat(stage["birth_bloom_ends_at"]).timestamp()
+    bloom_end = datetime.fromisoformat(stage["maturation_bloom_ends_at"]).timestamp()
     assert _maturation_request_time(study_dir) >= bloom_end
     assert _load_steps(study_dir)[0]["outcome"] == "complete"
 
@@ -963,9 +963,9 @@ def test_maturation_preservation_waits_the_fallback_without_a_bloom_end(
     assert _run(_runner(study_dir, script, maturation_bloom_margin_seconds=0.3)) == "complete"
 
     stage = json.loads(
-        (study_dir / "gestation" / "state" / "lifecycle" / "stage.json").read_text()
+        (study_dir / "development" / "state" / "lifecycle" / "stage.json").read_text()
     )
-    assert "birth_bloom_ends_at" not in stage
+    assert "maturation_bloom_ends_at" not in stage
     embodied_at = float((study_dir / "embodied_at.txt").read_text())
     assert _maturation_request_time(study_dir) - embodied_at >= 0.4 + 0.3
 
@@ -1096,10 +1096,10 @@ def test_operator_database_is_checked_again_before_every_flush(
     # The seed ran on database 10; branch 0 (database 11) never flushed or ran.
     assert [urlsplit(u).path for u in flush_log] == ["/10"]
     assert [(e["line"], e["k"]) for e in _load_jsonl(study_dir / "env_log.jsonl")] == [
-        ("gestation", None)
+        ("development", None)
     ]
     assert [(s["line"], s["outcome"]) for s in _load_steps(study_dir)] == [
-        ("gestation", "complete")
+        ("development", "complete")
     ]
 
 
@@ -1130,7 +1130,7 @@ def test_failed_timeout_preservation_records_a_critical_step(
     # up (its stage file is its last write before it waits for the maturation
     # request), then jumps past the budget: the timeout fires on a running
     # seed however long the child took to start.
-    stage_file = study_dir / "gestation" / "state" / "lifecycle" / "stage.json"
+    stage_file = study_dir / "development" / "state" / "lifecycle" / "stage.json"
     programme_time = [0.0]
 
     def first_run_sleep(_seconds: float) -> None:
@@ -1166,10 +1166,10 @@ def test_failed_timeout_preservation_records_a_critical_step(
         assert len(procs) == 1 and procs[0].poll() is None
         steps = _load_steps(study_dir)
         assert len(steps) == 1
-        assert steps[0]["line"] == "gestation" and steps[0]["step"] == 0
+        assert steps[0]["line"] == "development" and steps[0]["step"] == 0
         assert steps[0]["outcome"] == "failed:critical"
         assert steps[0]["pid"] == procs[0].pid
-        marker = json.loads((study_dir / "gestation" / CHILD_FILE).read_text())
+        marker = json.loads((study_dir / "development" / CHILD_FILE).read_text())
         assert marker["pid"] == procs[0].pid
 
         # The study halts on the critical step...
@@ -1235,14 +1235,14 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
         f"open({str(control_log)!r}, 'a').write('called\\n'); raise SystemExit(3)",
     ]
 
-    line_dir = study_dir / "gestation"
+    line_dir = study_dir / "development"
     runtime_path = line_dir / "state" / "cycle" / "runtime.json"
     runtime_path.parent.mkdir(parents=True)
     stage_path = line_dir / "state" / "lifecycle" / "stage.json"
     stage_path.parent.mkdir(parents=True)
     # The earlier child was born and its bloom is long over.
     stage_path.write_text(
-        json.dumps({"stage": "embodied", "birth_bloom_ends_at": "2000-01-01T00:00:00+00:00"})
+        json.dumps({"stage": "embodied", "maturation_bloom_ends_at": "2000-01-01T00:00:00+00:00"})
     )
     earlier_pid = 4_000_000
     earlier = {
@@ -1308,14 +1308,14 @@ def test_an_earlier_childs_runtime_never_triggers_the_maturation_preservation(
     assert polls[0] >= 5
     assert not control_log.exists(), "a maturation preservation was requested"
     record = exc_info.value.record
-    assert record["line"] == "gestation"
+    assert record["line"] == "development"
     assert record["outcome"] == "failed:missing_preservation"
     assert record["run_id"] is None
     # The earlier child's runtime metadata is left in place, never deleted.
     assert runtime_path.read_text() == earlier_text
 
 
-@pytest.mark.parametrize("where", ["gestation", "branch/0"])
+@pytest.mark.parametrize("where", ["development", "branch/0"])
 @pytest.mark.parametrize("record", ["child", "runtime"])
 def test_resume_refuses_while_a_started_cycle_is_alive(
     tmp_path: Path, known_modules, where: str, record: str
@@ -1398,7 +1398,7 @@ def test_maturation_bloom_fallback_follows_the_child_configuration(
         with open(tmp_path / "repo" / "config" / "kaine.toml", "a") as fh:
             fh.write("[perception_feed.stimulus_source]\n" + stimulus_source_toml)
     runner = _runner(study_dir, tmp_path / "unused.py", maturation_bloom_margin_seconds=1.5)
-    got = runner._maturation_bloom_fallback_seconds(study_dir / "gestation", dict(os.environ))
+    got = runner._maturation_bloom_fallback_seconds(study_dir / "development", dict(os.environ))
     if expected == "default":
         assert got == StimulusSourceParams().maturation_transition_seconds + 1.5
     elif expected == "max":
@@ -1570,12 +1570,12 @@ def test_resume_adopts_an_unrecorded_maturation_preservation(tmp_path: Path, kno
     script.write_text(STANDIN_SCRIPT)
     seed = study_dir / "backups" / "seed"
     seed.mkdir(parents=True)
-    _write_pair(study_dir / "gestation", "birth", seed)
+    _write_pair(study_dir / "development", "maturation", seed)
 
     flush_log: list[str] = []
     assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
     steps = _load_steps(study_dir)
-    assert steps[0]["line"] == "gestation" and steps[0]["outcome"] == "complete"
+    assert steps[0]["line"] == "development" and steps[0]["outcome"] == "complete"
     assert steps[0]["bundle"] == str(seed)
     assert steps[0]["preservation_id"] == "p-born"
     assert steps[0]["adopted"] is True
@@ -1592,10 +1592,10 @@ def test_resume_gestates_when_the_pair_is_not_a_maturation(tmp_path: Path, known
     script.write_text(STANDIN_SCRIPT)
     old = study_dir / "backups" / "old"
     old.mkdir(parents=True)
-    _write_pair(study_dir / "gestation", "timeout", old)
+    _write_pair(study_dir / "development", "timeout", old)
 
     assert _run(_runner(study_dir, script)) == "complete"
     steps = _load_steps(study_dir)
     assert "adopted" not in steps[0]
     assert steps[0]["bundle"] != str(old)
-    assert _load_jsonl(study_dir / "env_log.jsonl")[0]["line"] == "gestation"
+    assert _load_jsonl(study_dir / "env_log.jsonl")[0]["line"] == "development"

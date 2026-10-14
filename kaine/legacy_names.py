@@ -17,7 +17,7 @@ SCOPE_STATUS = {
     "identifiers": "done",
     "keys": "done",
     "operator": "done",
-    "persisted": "pending",
+    "persisted": "done",
 }
 
 # The last release that still reads old operator-facing names (config tables and
@@ -963,10 +963,10 @@ RESOLUTIONS = [
     },
     {
         "name": "spot",
-        "action": "keep",
+        "action": "rename",
         "files": ["openspec/specs/unattended-boot/spec.md"],
         "pattern": r"event kind \"spot escalation\"",
-        "why": "names the stored caretaker event kind, which moves with the persisted names",
+        "why": "names the stored caretaker event kind, renamed in the persisted step",
     },
     {
         "name": "spot",
@@ -1009,28 +1009,45 @@ RESOLUTIONS = [
     },
     {
         "name": "birth",
-        "action": "keep",
+        "action": "rename",
         "files": ["tests/test_ignition_study_runner.py"],
         "pattern": r"wait_for_request\(state_dir, \"birth\"",
-        "why": "the stored preservation reason the runner requests, which moves with the persisted names",
+        "why": "the stored preservation reason the runner requests, renamed in the persisted step",
     },
     {
         "name": "gestation",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"\"locked_by\": \"gestation\"",
-        "why": "the stored lock holder value, which moves with the persisted names",
+        "why": "the stored lock holder value, renamed in the persisted step",
     },
     {
         "name": "gestation",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"gestation_started_at",
-        "why": "stored request field, which moves with the persisted names",
+        "why": "stored request field, renamed in the persisted step",
     },
     {
         "name": "birth",
-        "action": "keep",
+        "action": "rename",
         "pattern": r"birth_bloom_ends_at",
-        "why": "stored stage field, which moves with the persisted names",
+        "why": "stored stage field, renamed in the persisted step",
+    },
+    # Persisted step (PR 8): the dashboard record's data directory keeps its name,
+    # like the volume mounted on it, so recorded data is never split in two.
+    {
+        "name": "nexus",
+        "action": "keep",
+        "pattern": r"data/(?:evaluation/)?nexus_record",
+        "why": "the dashboard record's data directory, mounted from the kaine-nexus-record volume",
+    },
+    # Persisted step (PR 8): the perception scratch directory moves with the
+    # perceptual locus module's state directory.
+    {
+        "name": "perception",
+        "action": "rename",
+        "files": ["compose/*", "quadlet/*"],
+        "pattern": r"/app/state/perception\b",
+        "why": "the locus module's state directory, renamed in the persisted step",
     },
     {
         "name": "echo",
@@ -1432,6 +1449,10 @@ CONFIG_KEYS = (
     {"old": "nous_step_burst", "new": "planning_step_burst", "scope": "keys"},
     {"old": "nexus_url", "new": "dashboard_url", "scope": "keys"},
     {"old": "eidolon_accuracy_interval_hours", "new": "self_model_accuracy_interval_hours", "scope": "keys"},
+    # [evaluation] switches named like their sidecar directories; they move with
+    # the persisted step.
+    {"old": "eidolon_accuracy", "new": "self_model_accuracy", "scope": "persisted"},
+    {"old": "nous_policy", "new": "planning_policy", "scope": "persisted"},
 )
 
 # Module keys used as keys inside other tables (for example [evaluation.observers] or a plugin's backend table).
@@ -1520,6 +1541,22 @@ CONFIG_KEYS = CONFIG_KEYS + tuple(
 
 RECORD_FIELDS = (
     {"old": "thymos_state", "new": "affect_state", "scope": "persisted"},
+    {"old": "gestation_started_at", "new": "development_started_at", "scope": "persisted"},
+    {"old": "hypnos_payload", "new": "sleep_payload", "scope": "persisted"},
+    {"old": "empatheia_deviation", "new": "social_cognition_deviation", "scope": "persisted"},
+    {"old": "nous_initiated", "new": "planning_initiated", "scope": "persisted"},
+    {"old": "nous_initiated_entry_ids", "new": "planning_initiated_entry_ids", "scope": "persisted"},
+    {"old": "nous_proposals_realized", "new": "planning_proposals_realized", "scope": "persisted"},
+    {"old": "nous_proposals_declined", "new": "planning_proposals_declined", "scope": "persisted"},
+    {"old": "nous_proposals_forwarded", "new": "planning_proposals_forwarded", "scope": "persisted"},
+    {"old": "unrealizable_nous_intents", "new": "unrealizable_planning_intents", "scope": "persisted"},
+    {"old": "eidolon_drift_count", "new": "self_model_drift_count", "scope": "persisted"},
+    {"old": "eidolon_drift_signal", "new": "self_model_drift_signal", "scope": "persisted"},
+    {"old": "eidolon_identity_history_len", "new": "self_model_identity_history_len", "scope": "persisted"},
+    {"old": "eidolon_self_model_found", "new": "self_model_found", "scope": "persisted"},
+    {"old": "hypnos_adapters_present", "new": "sleep_adapters_present", "scope": "persisted"},
+    {"old": "phantasia_cue", "new": "world_model_cue", "scope": "persisted"},
+    {"old": "womb_prediction_error", "new": "stimulus_source_prediction_error", "scope": "persisted"},
 ) + tuple(
     {"old": k, "new": e["new_key"], "scope": "keys"} for k, e in MODULES.items()
 )
@@ -1561,6 +1598,8 @@ STORED_TAGS = (
     {"old": "phantasia-encoder-v1", "new": "world-model-encoder-v1", "scope": "persisted"},
     {"old": "birth", "new": "maturation", "scope": "persisted"},
     {"old": "failed:gestation_unviable", "new": "failed:development_unviable", "scope": "persisted"},
+    # divergence arm name stored in state/preservation/divergence_edge.json
+    {"old": "eidolon_drift", "new": "self_model_drift", "scope": "persisted"},
 )
 
 STAGE_VALUES = (

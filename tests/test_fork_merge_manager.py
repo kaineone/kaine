@@ -134,7 +134,7 @@ def test_merge_invokes_per_module_strategies(tmp_path):
                     "episodic_memory",
                     {
                         "short_term_size": 5,
-                        "collection_prefix": "mnemos_",
+                        "collection_prefix": "episodic_memory_",
                     },
                 ),
                 # High-certainty (low-entropy) posterior.
@@ -149,7 +149,7 @@ def test_merge_invokes_per_module_strategies(tmp_path):
                     "episodic_memory",
                     {
                         "short_term_size": 7,
-                        "collection_prefix": "mnemos_",
+                        "collection_prefix": "episodic_memory_",
                     },
                 ),
                 # Low-certainty (high-entropy) posterior — discarded on merge.
@@ -187,11 +187,11 @@ def test_merge_combines_adapters_via_fake_merger(tmp_path):
     mgr = ForkManager(tmp_path)
     a = mgr.snapshot(
         FakeRegistry([FakeModule("interoception", {"v": 1})]),
-        adapters=["/state/hypnos/adapters/a"],
+        adapters=["/state/sleep/adapters/a"],
     )
     b = mgr.snapshot(
         FakeRegistry([FakeModule("interoception", {"v": 2})]),
-        adapters=["/state/hypnos/adapters/b"],
+        adapters=["/state/sleep/adapters/b"],
     )
     # Both parents have adapters + FakeAdapterMerger → must refuse by default.
     from kaine.lifecycle.manager import UnmergedAdaptersError
@@ -201,8 +201,8 @@ def test_merge_combines_adapters_via_fake_merger(tmp_path):
     # With explicit allow_unmerged_adapters=True the merge proceeds and records
     # the skip in metadata so the operator-visible record is preserved.
     merged = mgr.merge(a.id, b.id, allow_unmerged_adapters=True)
-    assert "/state/hypnos/adapters/a" in merged.adapters
-    assert "/state/hypnos/adapters/b" in merged.adapters
+    assert "/state/sleep/adapters/a" in merged.adapters
+    assert "/state/sleep/adapters/b" in merged.adapters
     assert merged.metadata["adapter_merge_skipped"] == "no merger configured"
 
 

@@ -212,7 +212,7 @@ async def test_trajectory_member_is_graph_only_no_payload():
     rec = TrajectoryRecorder(FakeWorkspaceBus([("1-0", snapshot)]), sink)
     await _drain(rec, sink, n_expected=1)
     row = sink.rows[0]
-    assert "thymos_state" not in row
+    assert "affect_state" not in row
     assert "payload" not in row
     selected = row["selected"]
     assert len(selected) == 1

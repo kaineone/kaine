@@ -123,7 +123,9 @@ def test_study_plan_read_old_keys_without_rewrite(tmp_path, monkeypatch):
     plan = load_plan(tmp_path)
     assert plan["base_modules"] == ["interoception", "audition"]
     assert plan["order"] == ["episodic_memory", "world_model"]
-    assert plan["gestation_budget_seconds"] == 60
+    # The persisted step maps the budget key named after the development line.
+    assert plan["development_budget_seconds"] == 60
+    assert "gestation_budget_seconds" not in plan
     assert path.read_bytes() == before_bytes
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before_hash
 

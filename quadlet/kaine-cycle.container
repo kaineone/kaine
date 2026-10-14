@@ -50,7 +50,7 @@ Volume=kaine-ignition.volume:/app/data/ignition
 Volume=kaine-nexus-record.volume:/app/data/nexus_record
 # Perception scratch is RAM-backed and ephemeral — zero raw-sense-data
 # persistence (design §7).
-Tmpfs=/app/state/perception
+Tmpfs=/app/state/perceptual_locus
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
 Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}

@@ -58,7 +58,7 @@ def test_default_export_root_uses_cwd(monkeypatch, tmp_path):
 def test_load_research_event_log_config_eval_logs_absolute(tmp_path):
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()
-    bad_dashboard = eval_dir / "nexus"
+    bad_dashboard = eval_dir / "dashboard"
     shipped = tmp_path / "kaine.toml"
     shipped.write_text(
         textwrap.dedent(

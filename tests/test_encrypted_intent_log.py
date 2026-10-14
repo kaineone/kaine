@@ -290,7 +290,7 @@ def test_language_migrates_once(monkeypatch, tmp_path):
 def test_welfare_case(monkeypatch, tmp_path):
     _enable(monkeypatch)
     root = tmp_path / "state"
-    language = root / "lingua"
+    language = root / "language"
     language.mkdir(parents=True, exist_ok=True)
     record = {"generated_text": "hello world"}
     envelope = encode_record(record)

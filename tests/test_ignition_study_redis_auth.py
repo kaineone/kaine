@@ -80,10 +80,10 @@ def _make_plan(tmp_path: Path, base_url: str = "redis://127.0.0.1:6479") -> dict
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": base_url,
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "r_g_",
+            "development": "r_g_",
             "branch": "r_b_",
             "repeat": "r_r_",
             "accumulate": "r_a_",
@@ -91,7 +91,7 @@ def _make_plan(tmp_path: Path, base_url: str = "redis://127.0.0.1:6479") -> dict
         # A legacy field from the two-line protocol: ignored, never an error.
         "viewings_per_line": 2,
         "viewing_budget_seconds": 5.0,
-        "gestation_budget_seconds": 5.0,
+        "development_budget_seconds": 5.0,
     }
 
 
@@ -165,8 +165,8 @@ def test_runner_embeds_escaped_password(tmp_path: Path, known_modules, monkeypat
         for line in (study_dir / "env_log.jsonl").read_text().splitlines()
         if line.strip()
     ]
-    assert {e["line"] for e in env_logs} == {"gestation", "branch", "repeat", "accumulate"}
-    dbs = {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13}
+    assert {e["line"] for e in env_logs} == {"development", "branch", "repeat", "accumulate"}
+    dbs = {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13}
     for entry in env_logs:
         db = dbs[entry["line"]]
         url = entry["redis_url"]

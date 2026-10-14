@@ -291,7 +291,7 @@ async def test_cross_period_on_sqlite_vec(tmp_path: Path, bus):
     pytest.importorskip("sqlite_vec")
     from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
-    storage = SqliteVecStorage(latent_dim=8, db_path=str(tmp_path / "mnemos.db"))
+    storage = SqliteVecStorage(latent_dim=8, db_path=str(tmp_path / "episodic_memory.db"))
     try:
         episodic_memory, _ = await _seeded(bus, storage)
 

@@ -95,7 +95,7 @@ class Vocal(BaseModule):
         voice_mode: str = "predefined",
         predefined_voice_id: Optional[str] = None,
         output_format: str = "wav",
-        sink_path: Path | str = "state/vox",
+        sink_path: Path | str = "state/vocal",
         playback_enabled: bool = True,
         output_device: str = "",
         sink_enabled: bool = False,

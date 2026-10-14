@@ -66,7 +66,7 @@ def reset_encryptor():
 
 
 class FakeSampler:
-    def __init__(self, variant: str = "birth", failure_call: int | None = None):
+    def __init__(self, variant: str = "maturation", failure_call: int | None = None):
         self.variant = variant
         self.failure_call = failure_call
         self.calls = 0
@@ -207,16 +207,16 @@ def make_core(tmp_path: Path, **kwargs: object) -> tuple[IndividuationCore, Indi
 
 
 async def test_capture_reference(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     conditioning = FakeConditioning(
         sha="sha-a", values=["v1", "v2"], norms=["n1"]
     )
     core, paths = make_core(tmp_path, sampler=sampler, conditioning_inputs=conditioning)
 
-    doc, reason = await core.capture_reference("birth")
+    doc, reason = await core.capture_reference("maturation")
     assert reason is None
     assert doc is not None
-    assert doc.reference_kind == "birth"
+    assert doc.reference_kind == "maturation"
     assert len(doc.battery) == 3
     assert len(doc.samples) == 3
     assert all(len(prompt) == 6 for prompt in doc.samples)
@@ -239,10 +239,10 @@ async def test_capture_reference(tmp_path: Path) -> None:
 
 
 async def test_capture_failure(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth", failure_call=5)
+    sampler = FakeSampler(variant="maturation", failure_call=5)
     core, paths = make_core(tmp_path, sampler=sampler)
 
-    doc, reason = await core.capture_reference("birth")
+    doc, reason = await core.capture_reference("maturation")
     assert doc is None
     assert reason == "request_failed"
     assert not paths.reference.exists()
@@ -250,23 +250,23 @@ async def test_capture_failure(tmp_path: Path) -> None:
 
 
 async def test_capture_abort(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     core, paths = make_core(
         tmp_path, sampler=sampler, abort_reason=FakeAbort("asleep")
     )
 
-    doc, reason = await core.capture_reference("birth")
+    doc, reason = await core.capture_reference("maturation")
     assert doc is None
     assert reason == "asleep"
     assert sampler.calls == 0
 
 
 async def test_unchanged_entity(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     core, paths = make_core(tmp_path, sampler=sampler, report_sink=sink)
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     outcome = await core.look(
         warmed_up=True, lived_seconds=100.0, lived_ticks=50
     )
@@ -278,7 +278,7 @@ async def test_unchanged_entity(tmp_path: Path) -> None:
 
 
 async def test_scored_no_drift(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     pub = FakePublish()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -290,7 +290,7 @@ async def test_scored_no_drift(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     outcome = await core.look(
         warmed_up=True, lived_seconds=200.0, lived_ticks=100
     )
@@ -315,7 +315,7 @@ async def test_scored_no_drift(tmp_path: Path) -> None:
 
 
 async def test_scored_strong_drift(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     pub = FakePublish()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -327,7 +327,7 @@ async def test_scored_strong_drift(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     sampler.variant = "drifted"
     outcome = await core.look(
         warmed_up=True, lived_seconds=200.0, lived_ticks=100
@@ -363,7 +363,7 @@ async def test_not_warmed_up(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     outcome = await core.look(
         warmed_up=False, lived_seconds=200.0, lived_ticks=100
     )
@@ -380,7 +380,7 @@ async def test_not_warmed_up(tmp_path: Path) -> None:
 
 
 async def test_failure_mid_run(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     pub = FakePublish()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -392,7 +392,7 @@ async def test_failure_mid_run(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     await core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=100)
     pre_ledger = load_ledger(paths)
 
@@ -419,7 +419,7 @@ async def test_failure_mid_run(tmp_path: Path) -> None:
 
 
 async def test_digest_change_mid_run(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     conditioning = FakeConditioning()
     # Capture reads a twice, the look reads b before and c after sampling.
@@ -428,7 +428,7 @@ async def test_digest_change_mid_run(tmp_path: Path) -> None:
         tmp_path, sampler=sampler, report_sink=sink, conditioning_inputs=conditioning
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     pre_ledger = load_ledger(paths)
 
     outcome = await core.look(
@@ -444,7 +444,7 @@ async def test_digest_change_mid_run(tmp_path: Path) -> None:
 
 
 async def test_embedding_failure(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     embed = FakeEmbed(raise_on_call=1)
     sink = FakeSink()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -456,7 +456,7 @@ async def test_embedding_failure(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     pre_ledger = load_ledger(paths)
 
     outcome = await core.look(
@@ -471,14 +471,14 @@ async def test_embedding_failure(tmp_path: Path) -> None:
 
 
 async def test_alpha_unresolvable(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
     core, paths = make_core(
         tmp_path, sampler=sampler, report_sink=sink, conditioning_inputs=conditioning
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     ledger = load_ledger(paths)
     ledger = dataclasses.replace(ledger, looks_completed=500)
     save_ledger(paths, ledger)
@@ -500,7 +500,7 @@ async def test_alpha_unresolvable(tmp_path: Path) -> None:
 
 async def test_ledger_order(tmp_path: Path) -> None:
     sink = FakeSink(raise_on="scored")
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
     core, paths = make_core(
         tmp_path,
@@ -509,7 +509,7 @@ async def test_ledger_order(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     with pytest.raises(RuntimeError):
         await core.look(
             warmed_up=True, lived_seconds=200.0, lived_ticks=100
@@ -521,7 +521,7 @@ async def test_ledger_order(tmp_path: Path) -> None:
 
 
 async def test_latched_stays_latched(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     pub = FakePublish()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -533,12 +533,12 @@ async def test_latched_stays_latched(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     sampler.variant = "drifted"
     await core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=100)
     assert load_ledger(paths).individuated is True
 
-    sampler.variant = "birth"
+    sampler.variant = "maturation"
     conditioning2 = FakeConditioning(sha="sha-c", second_sha="sha-c")
     core2, _ = make_core(
         tmp_path,
@@ -561,7 +561,7 @@ async def test_latched_stays_latched(tmp_path: Path) -> None:
 
 
 async def test_regeneration_keeps_ledger(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     pub = FakePublish()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
@@ -573,7 +573,7 @@ async def test_regeneration_keeps_ledger(tmp_path: Path) -> None:
         conditioning_inputs=conditioning,
     )
 
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     sampler.variant = "drifted"
     await core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=100)
 
@@ -581,7 +581,7 @@ async def test_regeneration_keeps_ledger(tmp_path: Path) -> None:
     assert pre_ledger.individuated is True
     old_ref_id = pre_ledger.reference_id
 
-    sampler.variant = "birth"
+    sampler.variant = "maturation"
     conditioning2 = FakeConditioning(sha="sha-c")
     core2, _ = make_core(
         tmp_path,
@@ -607,7 +607,7 @@ async def test_regeneration_keeps_ledger(tmp_path: Path) -> None:
 
 
 async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     conditioning = FakeConditioning()
     conditioning.sequence = ["sha-a", "sha-b"]
     adapter = tmp_path / "adapter.gguf"
@@ -619,7 +619,7 @@ async def test_capture_conditioning_change_writes_nothing(tmp_path: Path) -> Non
         maturation_adapter_file=lambda: adapter,
     )
 
-    doc, reason = await core.capture_reference("birth")
+    doc, reason = await core.capture_reference("maturation")
     assert doc is None
     assert reason == "conditioning_changed_mid_run"
     assert not paths.reference.exists()
@@ -631,7 +631,7 @@ async def test_capture_copies_maturation_adapter_only_for_maturation(tmp_path: P
     adapter = tmp_path / "adapter.gguf"
     adapter.write_bytes(b"maturation adapter")
     core, paths = make_core(tmp_path, maturation_adapter_file=lambda: adapter)
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     assert paths.maturation_adapter.read_bytes() == b"maturation adapter"
 
     adapter.write_bytes(b"later adapter")
@@ -644,9 +644,9 @@ async def test_capture_copies_maturation_adapter_only_for_maturation(tmp_path: P
 async def test_capture_refuses_existing_reference_before_sampling(
     tmp_path: Path,
 ) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     core, paths = make_core(tmp_path, sampler=sampler)
-    first, _ = await core.capture_reference("birth")
+    first, _ = await core.capture_reference("maturation")
     calls = sampler.calls
 
     with pytest.raises(IndividuationStoreError):
@@ -656,21 +656,21 @@ async def test_capture_refuses_existing_reference_before_sampling(
 
 
 async def test_maturation_regeneration_is_refused(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     core, paths = make_core(tmp_path, sampler=sampler)
     with pytest.raises(ValueError):
-        await core.capture_reference("birth", regenerate=True)
+        await core.capture_reference("maturation", regenerate=True)
     assert sampler.calls == 0
 
 
 async def test_second_significant_look_keeps_the_first_latch(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
     core, paths = make_core(
         tmp_path, sampler=sampler, report_sink=sink, conditioning_inputs=conditioning
     )
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     sampler.variant = "drifted"
     await core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=100)
     first = load_ledger(paths)
@@ -690,13 +690,13 @@ async def test_second_significant_look_keeps_the_first_latch(tmp_path: Path) -> 
 
 
 async def test_scored_look_advances_the_digest(tmp_path: Path) -> None:
-    sampler = FakeSampler(variant="birth")
+    sampler = FakeSampler(variant="maturation")
     sink = FakeSink()
     conditioning = FakeConditioning(sha="sha-a", second_sha="sha-b")
     core, paths = make_core(
         tmp_path, sampler=sampler, report_sink=sink, conditioning_inputs=conditioning
     )
-    await core.capture_reference("birth")
+    await core.capture_reference("maturation")
     first = await core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=100)
     assert first.outcome == "scored"
     calls = sampler.calls

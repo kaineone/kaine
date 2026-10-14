@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Pins for names that must stay byte-identical until the persisted rename step."""
+"""Pins for stored names: each matches the rename table, under the old name until the
+persisted step and under the new name after it. The helpers accept either spelling,
+because a codemod run rewrites the names the tests pass them."""
 
 import dataclasses
 import inspect
@@ -34,7 +36,7 @@ PERSISTED_DONE = legacy_names.SCOPE_STATUS.get("persisted") == "done"
 def _state_path(old_rel: str) -> str:
     """Return 'state/' plus the table entry for *old_rel*, using the old or new name."""
     for entry in legacy_names.STATE_PATHS + legacy_names.LIVED_ARTIFACTS:
-        if entry["old"] == old_rel:
+        if old_rel in (entry["old"], entry["new"]):
             return "state/" + (entry["new"] if PERSISTED_DONE else entry["old"])
     raise AssertionError(f"no table entry for {old_rel}")
 
@@ -42,7 +44,7 @@ def _state_path(old_rel: str) -> str:
 def _collection(old: str) -> str:
     """Return the collection name for *old*, using the old or new name."""
     for entry in legacy_names.COLLECTIONS:
-        if entry["old"] == old:
+        if old in (entry["old"], entry["new"]):
             return entry["new"] if PERSISTED_DONE else entry["old"]
     raise AssertionError(old)
 
@@ -150,7 +152,7 @@ def test_language_intent_log_path_pinned():
     """The Language intent log path default must follow the legacy table."""
     assert (
         inspect.signature(Language.__init__).parameters["intent_log_path"].default
-        == _state_path("lingua/intent_expression.jsonl")
+        == _state_path("language/intent_expression.jsonl")
     )
 
 
@@ -158,7 +160,7 @@ def test_effectors_audit_log_path_pinned():
     """The Effectors audit log path default must follow the legacy table."""
     assert (
         inspect.signature(Effectors.__init__).parameters["audit_log_path"].default
-        == _state_path("praxis/audit.log")
+        == _state_path("effectors/audit.log")
     )
 
 
@@ -166,14 +168,14 @@ def test_effectors_notification_log_path_pinned():
     """The Effectors notification fallback log path default must follow the legacy table."""
     assert (
         inspect.signature(Effectors.__init__).parameters["notification_fallback_log"].default
-        == _state_path("praxis/notifications.log")
+        == _state_path("effectors/notifications.log")
     )
 
 
 def test_self_model_persistence_path_pinned():
     """The self-model default persistence path must follow the legacy table."""
     assert _self_model_module.DEFAULT_PERSISTENCE_PATH == Path(
-        _state_path("eidolon/self_model.json")
+        _state_path("self_model/self_model.json")
     )
 
 
@@ -188,8 +190,8 @@ def test_perception_state_paths_pinned():
 def test_maturation_request_and_ack_paths_pinned():
     """The maturation request/ack paths must follow the legacy table."""
     assert (
-        _maturation_ack.MATURATION_REQUEST_PATH == Path(_state_path("lifecycle/birth_request.json"))
-        and _maturation_ack.MATURATION_ACK_PATH == Path(_state_path("lifecycle/birth_ack.json"))
+        _maturation_ack.MATURATION_REQUEST_PATH == Path(_state_path("lifecycle/maturation_request.json"))
+        and _maturation_ack.MATURATION_ACK_PATH == Path(_state_path("lifecycle/maturation_ack.json"))
     )
 
 
@@ -197,9 +199,9 @@ def test_development_state_files_pinned():
     """The bundled/development state file names must follow the legacy table."""
     assert (
         _preservation.BUNDLED_DEVELOPMENT_FILES
-        == tuple(Path(_state_path(rel)).name for rel in ("lifecycle/gestation_progress.json", "lifecycle/gestation_readout.json"))
+        == tuple(Path(_state_path(rel)).name for rel in ("lifecycle/development_progress.json", "lifecycle/development_readout.json"))
         and _preservation.DEVELOPMENT_STATE_FILES
-        == _preservation.BUNDLED_DEVELOPMENT_FILES + (Path(_state_path("lifecycle/gestation_viability.json")).name,)
+        == _preservation.BUNDLED_DEVELOPMENT_FILES + (Path(_state_path("lifecycle/development_viability.json")).name,)
     )
 
 
@@ -207,7 +209,7 @@ def test_maturation_adapter_file_name_pinned(tmp_path):
     """The maturation adapter file name must follow the legacy table."""
     assert (
         IndividuationPaths(root=tmp_path).maturation_adapter.name
-        == Path(_state_path("individuation/birth_adapter.gguf")).name
+        == Path(_state_path("individuation/maturation_adapter.gguf")).name
     )
 
 
@@ -217,51 +219,51 @@ def test_stage_fields_and_value_pinned():
         expected = entry["new"] if PERSISTED_DONE else entry["old"]
         assert expected in {f.name for f in dataclasses.fields(_stage.StageState)}
     for entry in legacy_names.STAGE_VALUES:
-        if entry["old"] == "gestation":
+        if entry["old"] == "development":
             assert _stage.DEVELOPMENT == (entry["new"] if PERSISTED_DONE else entry["old"])
 
 
 def test_maturation_pending_sentinel_pinned(tmp_path):
     """The maturation pending sentinel keeps its filename across renames."""
     assert IndividuationPaths(root=tmp_path).maturation_pending.name == Path(
-        _state_path("individuation/birth_pending")
+        _state_path("individuation/maturation_pending")
     ).name
 
 
 def test_gate_action_values_pinned():
     """Maturation gate action values keep their old text in this step."""
     assert _maturation_gate.ACTION_DEVELOPING == "developing"
-    assert _maturation_gate.ACTION_MATURATION == "birth"
+    assert _maturation_gate.ACTION_MATURATION == "maturation"
 
 
 def _stored_tag(old: str) -> str:
     """Return the stored tag for *old*, using the old or new spelling."""
     for entry in legacy_names.STORED_TAGS:
-        if entry["old"] == old:
+        if old in (entry["old"], entry["new"]):
             return entry["new"] if PERSISTED_DONE else entry["old"]
     raise AssertionError(f"no STORED_TAGS entry for {old}")
 
 
 def test_world_model_checkpoint_format_pinned():
     """A world-model checkpoint saved before the rename must still load: its header keeps its stored text."""
-    assert _wm_backend._CHECKPOINT_FORMAT == _stored_tag("kaine-phantasia-rssm-npz-v1")
+    assert _wm_backend._CHECKPOINT_FORMAT == _stored_tag("kaine-world-model-rssm-npz-v1")
 
 
 def test_world_model_encoder_version_pinned():
     """The encoder version tag keeps its stored spelling until the persisted step."""
-    assert _wm_encoder.VERSION == _stored_tag("phantasia-encoder-v1")
+    assert _wm_encoder.VERSION == _stored_tag("world-model-encoder-v1")
 
 
 def test_maturation_reference_kind_pinned():
     """The maturation reference kind stays in stored form until persisted."""
-    assert _stored_tag("birth") in REFERENCE_KINDS
+    assert _stored_tag("maturation") in REFERENCE_KINDS
 
 
 def test_study_stored_strings_pinned():
     """The study runner's preservation reason and unviable outcome are written to disk and keep their stored text."""
     src = inspect.getsource(_study_runner)
-    assert f'req.reason != "{_stored_tag("birth")}"' in src
-    assert f'outcome = "{_stored_tag("failed:gestation_unviable")}"' in src
+    assert f'req.reason != "{_stored_tag("maturation")}"' in src
+    assert f'outcome = "{_stored_tag("failed:development_unviable")}"' in src
 
 
 def test_every_stored_tag_is_persisted_exact():

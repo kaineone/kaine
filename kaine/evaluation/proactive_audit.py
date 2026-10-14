@@ -71,6 +71,6 @@ class ProactiveAuditObserver(StreamSubscriberObserver):
                 "trigger_salience": payload.get("trigger_salience"),
                 "tick_index": payload.get("tick_index"),
                 "seconds_since_user_input": seconds_since_input,
-                "thymos_state": affect_state,
+                "affect_state": affect_state,
             }
         )

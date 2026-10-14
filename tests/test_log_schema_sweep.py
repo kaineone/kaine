@@ -42,17 +42,17 @@ def _write_jsonl(path: Path, records: list[dict]) -> None:
 
 def test_in_range_records_have_no_violations(tmp_path):
     _write_jsonl(
-        tmp_path / "soma.report-2026-06-14.jsonl",
+        tmp_path / "interoception.report-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": 0.0, "wellness": 0.9}],
     )
     _write_jsonl(
-        tmp_path / "thymos.state-2026-06-14.jsonl",
+        tmp_path / "affect.state-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": -0.5, "arousal": 0.3, "dominance": 0.1}],
     )
     _write_jsonl(
-        tmp_path / "nous.policy-2026-06-14.jsonl",
+        tmp_path / "planning.policy-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "planning.policy", "confidence": 0.7}],
     )
     assert sweep_run(RUN, root=tmp_path) == []
@@ -60,7 +60,7 @@ def test_in_range_records_have_no_violations(tmp_path):
 
 def test_negative_prediction_error_is_violation(tmp_path):
     _write_jsonl(
-        tmp_path / "soma.report-2026-06-14.jsonl",
+        tmp_path / "interoception.report-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": -0.3}],
     )
@@ -75,7 +75,7 @@ def test_negative_prediction_error_is_violation(tmp_path):
 
 def test_out_of_bounds_affect_is_violation(tmp_path):
     _write_jsonl(
-        tmp_path / "thymos.state-2026-06-14.jsonl",
+        tmp_path / "affect.state-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": 2.0, "arousal": 0.3, "dominance": 0.0}],
     )
@@ -86,7 +86,7 @@ def test_out_of_bounds_affect_is_violation(tmp_path):
 
 def test_out_of_bounds_confidence_is_violation(tmp_path):
     _write_jsonl(
-        tmp_path / "nous.policy-2026-06-14.jsonl",
+        tmp_path / "planning.policy-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "planning.policy", "confidence": 1.5}],
     )
     violations = sweep_run(RUN, root=tmp_path)
@@ -98,7 +98,7 @@ def test_out_of_bounds_confidence_is_violation(tmp_path):
 
 def test_multiple_violations_in_one_record(tmp_path):
     _write_jsonl(
-        tmp_path / "thymos.state-2026-06-14.jsonl",
+        tmp_path / "affect.state-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": 2.0, "arousal": 5.0, "dominance": -3.0}],
     )
@@ -140,7 +140,7 @@ def test_nan_numeric_field_is_not_flagged(tmp_path):
     Python json dump of float('nan') does — the bare token NaN — which json.loads
     accepts back as a float NaN.)"""
     # prediction_error: NaN — written as the bare JSON token Python's json emits.
-    path = tmp_path / "soma.report-2026-06-14.jsonl"
+    path = tmp_path / "interoception.report-2026-06-14.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         '{"run_id": "%s", "seq": 0, "event_type": "interoception.report", '
@@ -193,7 +193,7 @@ async def test_decrypt_path_round_trip(tmp_path):
 
 def test_cli_exits_nonzero_when_violations(tmp_path):
     _write_jsonl(
-        tmp_path / "soma.report-2026-06-14.jsonl",
+        tmp_path / "interoception.report-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": -1.0}],
     )
@@ -208,7 +208,7 @@ def test_cli_exits_nonzero_when_violations(tmp_path):
 
 def test_cli_exits_zero_when_clean(tmp_path):
     _write_jsonl(
-        tmp_path / "soma.report-2026-06-14.jsonl",
+        tmp_path / "interoception.report-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": 0.2}],
     )

@@ -130,7 +130,7 @@ def make_audition(
     mode = str(feed_section.get("mode", "off")).lower()
     if mode not in ("off", "seeded", "playlist", "stimulus_source", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/stimulus_source/live/screen, got {mode!r}"
         )
     # 'screen' hears the desktop audio monitor (what is playing on screen), so it
     # takes a stream_factory like seeded/playlist; the deterministic feeds and the

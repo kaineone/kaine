@@ -133,7 +133,7 @@ def test_vocal_mirroring_decay_follows_entity_clock(scale, expected_elapsed, tmp
             bus,
             tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
             player=FakePlayer(),
-            sink_path=tmp_path / "vox",
+            sink_path=tmp_path / "vocal",
             predefined_voice_id="default_sample.wav",
             entity_clock=clock,
             mirroring_enabled=True,

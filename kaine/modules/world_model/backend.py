@@ -115,7 +115,7 @@ def _coerce_np_float32(params: dict[str, dict[str, Any]]) -> dict[str, dict[str,
 # ---------------------------------------------------------------------------
 
 
-_CHECKPOINT_FORMAT = "kaine-phantasia-rssm-npz-v1"
+_CHECKPOINT_FORMAT = "kaine-world-model-rssm-npz-v1"
 
 
 def _rssm_config_header(cfg: Any, extra: dict[str, Any] | None) -> dict[str, Any]:
@@ -164,6 +164,18 @@ def _decode_checkpoint(
     try:
         data = np.load(io.BytesIO(blob), allow_pickle=False)
         header = json.loads(str(data["__header__"][()]))
+        from kaine import legacy_aliases
+        header = dict(header)
+        if "format" in header:
+            header["format"] = legacy_aliases.map_stored_value(header["format"])
+        extra = header.get("extra")
+        if isinstance(extra, dict):
+            extra = dict(extra)
+            if "encoder_version" in extra:
+                extra["encoder_version"] = legacy_aliases.map_stored_value(
+                    extra["encoder_version"]
+                )
+            header["extra"] = extra
     except Exception as exc:
         raise CheckpointMismatchError(
             f"checkpoint is not a readable {_CHECKPOINT_FORMAT} blob: "

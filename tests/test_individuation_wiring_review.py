@@ -79,14 +79,14 @@ async def test_maturation_marker_survives_restart(tmp_path: Path):
 
     runtime2 = build(tmp_path, is_developing=lambda: False)
     await runtime2.start()
-    assert runtime2.scheduler._capture_kind == "birth"
+    assert runtime2.scheduler._capture_kind == "maturation"
 
 
 def test_sleep_clears_maturation_marker(tmp_path: Path):
     runtime = build(tmp_path, is_developing=lambda: False)
     runtime.on_maturation()
     assert runtime.paths.maturation_pending.exists()
-    assert runtime.scheduler._capture_kind == "birth"
+    assert runtime.scheduler._capture_kind == "maturation"
 
     runtime.scheduler.notify_sleep_completed()
     assert runtime.scheduler._capture_kind == "capture"
@@ -112,14 +112,14 @@ async def test_start_does_not_override_pending_maturation(tmp_path: Path):
     runtime = build(tmp_path, is_developing=lambda: False)
     runtime.on_maturation()
     await runtime.start()
-    assert runtime.scheduler._capture_kind == "birth"
+    assert runtime.scheduler._capture_kind == "maturation"
     assert runtime.paths.maturation_pending.exists()
 
 
 async def test_start_keeps_a_pending_maturation_request_without_a_marker(tmp_path: Path):
     # As when writing the marker failed: the in-memory request still wins.
     runtime = build(tmp_path, is_developing=lambda: False)
-    runtime.scheduler.request_capture("birth")
+    runtime.scheduler.request_capture("maturation")
     assert not runtime.paths.maturation_pending.exists()
     await runtime.start()
-    assert runtime.scheduler._capture_kind == "birth"
+    assert runtime.scheduler._capture_kind == "maturation"

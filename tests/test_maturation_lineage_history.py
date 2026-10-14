@@ -104,7 +104,7 @@ def test_lived_before_true_for_unknown_identity(tmp_path: Path) -> None:
 
 
 def test_lived_before_true_for_legacy_tree_without_sidecars(tmp_path: Path) -> None:
-    world_model = tmp_path / "phantasia"
+    world_model = tmp_path / "world_model"
     world_model.mkdir(parents=True)
     (world_model / "world_model.ckpt").write_text("weights")
 
@@ -173,7 +173,7 @@ def test_resolve_boot_stage_embodied_for_legacy_tree(
 
     monkeypatch.setattr(st, "STAGE_PATH", state_root / "lifecycle" / "stage.json")
 
-    world_model = state_root / "phantasia"
+    world_model = state_root / "world_model"
     world_model.mkdir(parents=True)
     (world_model / "world_model.ckpt").write_text("weights")
 

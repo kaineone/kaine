@@ -467,7 +467,7 @@ def test_shipped_config_persists_and_trains_world_model():
     cfg = tomllib.loads((PROJECT_ROOT / "config" / "kaine.toml").read_text())
     assert cfg["world_model"]["persist_weights"] is True
     assert cfg["world_model"]["training_enabled"] is True
-    assert cfg["world_model"]["checkpoint_path"] == "state/phantasia/world_model.ckpt"
+    assert cfg["world_model"]["checkpoint_path"] == "state/world_model/world_model.ckpt"
     assert cfg["modules"]["world_model"] is False
 
 
@@ -477,8 +477,8 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
 
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
     state_root = tmp_path / "state"
-    (state_root / "phantasia").mkdir(parents=True)
-    (state_root / "phantasia" / "world_model.ckpt").write_bytes(b"weights")
+    (state_root / "world_model").mkdir(parents=True)
+    (state_root / "world_model" / "world_model.ckpt").write_bytes(b"weights")
 
     result = capture_backup(
         state_root=state_root,
@@ -490,17 +490,17 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
     )
     assert result.ok
     assert "locations/world_model/ (world_model)" in result.inventory
-    copied = result.backup_path / "locations" / "world_model" / "phantasia" / "world_model.ckpt"
+    copied = result.backup_path / "locations" / "world_model" / "world_model" / "world_model.ckpt"
     assert copied.read_bytes() == b"weights"
     manifest = json.loads((result.backup_path / "manifest.json").read_text())
-    assert "state/phantasia/" in manifest["restore_notes"]
+    assert "state/world_model/" in manifest["restore_notes"]
 
     # Deletion removes the world model subtree (after backup).
     deletion = delete_entity_state(
         state_root=state_root, qdrant_cfg=None, dry_run=False
     )
-    assert str(state_root / "phantasia") in deletion.removed_paths
-    assert not (state_root / "phantasia").exists()
+    assert str(state_root / "world_model") in deletion.removed_paths
+    assert not (state_root / "world_model").exists()
 
 
 @pytest.mark.asyncio

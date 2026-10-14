@@ -55,8 +55,8 @@ def test_h6_merge_refuses_when_both_parents_have_adapters(tmp_path):
 
     mgr = ForkManager(tmp_path)
     reg = _FakeRegistry([_FakeModule("interoception")])
-    a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
-    b = mgr.snapshot(reg, adapters=["state/hypnos/adapters/b"])
+    a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
+    b = mgr.snapshot(reg, adapters=["state/sleep/adapters/b"])
 
     with pytest.raises(UnmergedAdaptersError) as exc_info:
         mgr.merge(a.id, b.id)
@@ -74,12 +74,12 @@ def test_h6_merge_proceeds_with_allow_flag(tmp_path):
 
     mgr = ForkManager(tmp_path)
     reg = _FakeRegistry([_FakeModule("interoception")])
-    a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
-    b = mgr.snapshot(reg, adapters=["state/hypnos/adapters/b"])
+    a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
+    b = mgr.snapshot(reg, adapters=["state/sleep/adapters/b"])
 
     merged = mgr.merge(a.id, b.id, allow_unmerged_adapters=True)
-    assert "state/hypnos/adapters/a" in merged.adapters
-    assert "state/hypnos/adapters/b" in merged.adapters
+    assert "state/sleep/adapters/a" in merged.adapters
+    assert "state/sleep/adapters/b" in merged.adapters
     # Metadata records the skip so the operator-visible record is preserved.
     assert merged.metadata.get("adapter_merge_skipped") == "no merger configured"
 
@@ -90,11 +90,11 @@ def test_h6_merge_no_refusal_when_only_one_parent_has_adapters(tmp_path):
 
     mgr = ForkManager(tmp_path)
     reg = _FakeRegistry([_FakeModule("interoception")])
-    a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
+    a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
     b = mgr.snapshot(reg, adapters=[])
 
     merged = mgr.merge(a.id, b.id)
-    assert "state/hypnos/adapters/a" in merged.adapters
+    assert "state/sleep/adapters/a" in merged.adapters
 
 
 def test_h6_merge_no_refusal_when_neither_parent_has_adapters(tmp_path):
@@ -191,8 +191,8 @@ def test_h8_returns_none_when_voice_config_is_none():
 
 
 def _seed_backup_state(state_root: Path) -> None:
-    (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
-    (state_root / "eidolon" / "self_model.json").write_text(
+    (state_root / "self_model").mkdir(parents=True, exist_ok=True)
+    (state_root / "self_model" / "self_model.json").write_text(
         json.dumps({"name": "Test"}), encoding="utf-8"
     )
 
@@ -416,6 +416,12 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
     from kaine.lifecycle.decommission import delete_entity_state
 
     class FailingQdrantClient:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             raise ConnectionError("qdrant unavailable")
 
@@ -469,6 +475,12 @@ def test_l4_get_collections_success_deletes_normally(tmp_path):
                 self.collections = [
                     SuccessQdrantClient._Coll(n) for n in names
                 ]
+
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
 
         def get_collections(self):
             return self._Resp(expected_collections)

@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 import stat
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -23,6 +24,48 @@ from kaine import legacy_names
 from kaine.state_io import write_json_atomic
 
 log = logging.getLogger(__name__)
+
+def _mountinfo_points() -> set[str]:
+    """Mount points of this process's mount namespace, from /proc/self/mountinfo.
+
+    Field 5 of each line is the mount point, with spaces, tabs, newlines and
+    backslashes written as octal escapes.
+    """
+    points: set[str] = set()
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8", errors="surrogateescape") as fh:
+            for line in fh:
+                fields = line.split(" ")
+                if len(fields) > 4:
+                    raw = fields[4]
+                    for code, char in (("\\040", " "), ("\\011", "\t"), ("\\012", "\n"), ("\\134", "\\")):
+                        raw = raw.replace(code, char)
+                    points.add(raw)
+    except OSError:
+        # No mount table (not Linux, or /proc unavailable): os.path.ismount alone
+        # decides, which is the caller's other check.
+        log.debug("rename_state: /proc/self/mountinfo unreadable", exc_info=True)
+    return points
+
+
+def _detect_mount(path) -> bool:
+    """Whether ``path`` is a mount point.
+
+    ``os.path.ismount`` misses a bind mount from the same filesystem, which is
+    how container runtimes mount named volumes, so the mount table is read too.
+    """
+    path = Path(path)
+    try:
+        if os.path.ismount(path):
+            return True
+        resolved = str(path.resolve(strict=True))
+    except (OSError, ValueError):
+        return False
+    return resolved in _mountinfo_points()
+
+
+# The mount check every rule calls; tests monkeypatch it to simulate mount points.
+_is_mount = _detect_mount
 
 MANIFEST_DIR = ".rename_state"
 MANIFEST_NAME = "manifest.json"
@@ -159,6 +202,101 @@ def _refuse_symlink(path: Path, *, what: str) -> None:
         )
 
 
+def _empty_dir(path: Path) -> bool:
+    """Whether ``path`` is a real directory with no entries at all."""
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISDIR(st.st_mode):
+            return False
+        with os.scandir(path) as it:
+            return next(it, None) is None
+    except (OSError, ValueError):
+        return False
+
+
+def _vacant_tree(path: Path, *, mount_with_data_ok: bool) -> bool:
+    """Whether ``path`` holds no data of the state tree.
+
+    A real directory is vacant when every entry is itself vacant; a file, a
+    symlink or any other entry is data. A mount point is never descended into:
+    on the new side (``mount_with_data_ok``) the runtime's mount counts as vacant
+    whatever it holds, because its content belongs to its volume (the compose
+    trainer-jobs volume); on the old side a mount is vacant only when it is
+    empty, so a mount holding data is never mistaken for an empty leftover.
+    """
+    path = Path(path)
+    if _is_mount(path):
+        return True if mount_with_data_ok else _empty_dir(path)
+    try:
+        st = os.lstat(path)
+    except (OSError, ValueError):
+        return False
+    if not stat.S_ISDIR(st.st_mode):
+        return False
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                if not _vacant_tree(Path(entry.path), mount_with_data_ok=mount_with_data_ok):
+                    return False
+    except OSError:
+        return False
+    return True
+
+
+def _vacant_old(path: Path) -> bool:
+    """Old side: only empty directories and empty mount points."""
+    return _vacant_tree(path, mount_with_data_ok=False)
+
+
+def _vacant_new(path: Path) -> bool:
+    """New side: empty directories and the runtime's mount points."""
+    return _vacant_tree(path, mount_with_data_ok=True)
+
+
+def _nested_mount_with_data(path: Path) -> Path | None:
+    """The first mount point below ``path`` that holds data, or None.
+
+    Mount points are not descended into, and symlinks are not followed.
+    """
+    try:
+        with os.scandir(path) as it:
+            entries = [Path(e.path) for e in it]
+    except OSError:
+        return None
+    for child in sorted(entries):
+        if _is_mount(child):
+            if not _empty_dir(child):
+                return child
+            continue
+        try:
+            st = os.lstat(child)
+        except OSError:
+            continue
+        if stat.S_ISDIR(st.st_mode):
+            found = _nested_mount_with_data(child)
+            if found is not None:
+                return found
+    return None
+
+
+def _refuse_mount_with_data(root: Path, old_rel: str, new_rel: str) -> None:
+    raise RenameStateError(
+        f"rename_state: {old_rel} under {root} is a mount holding data; mount it at "
+        f"{new_rel} instead and re-run"
+    )
+
+
+def _removable(path: Path) -> bool:
+    """Return True when ``path`` is not a mount point and its parent is writable."""
+    path = Path(path)
+    return not _is_mount(path) and os.access(path.parent, os.W_OK)
+
+
+def _remove_vacant_step(rel: str) -> dict:
+    """Build a pending remove_vacant step dict."""
+    return {"kind": "remove_vacant", "path": rel, "status": "pending"}
+
+
 def _validate_steps(root: Path, steps: object) -> None:
     """Validate the whole step list before anything is touched on disk."""
     if not isinstance(steps, list):
@@ -260,6 +398,29 @@ def _validate_steps(root: Path, steps: object) -> None:
                     f"rename_state: qdrant_alias step {index} has an invalid field type"
                 )
 
+        elif kind == "remove_vacant":
+            _check_keys(step, index, "remove_vacant", ("path", "status"))
+            path = step["path"]
+            status = step["status"]
+            if not isinstance(path, str) or not isinstance(status, str):
+                raise RenameStateError(
+                    f"rename_state: remove_vacant step {index} has an invalid field type"
+                )
+            _refuse_symlink(
+                _safe_path(root, path, what="remove_vacant"), what="remove_vacant"
+            )
+            removed = step.get("removed", [])
+            if not isinstance(removed, list) or not all(isinstance(r, str) for r in removed):
+                raise RenameStateError(
+                    f"rename_state: remove_vacant step {index} has an invalid field type"
+                )
+            for rel in removed:
+                if rel != path and not rel.startswith(path + "/"):
+                    raise RenameStateError(
+                        f"rename_state: remove_vacant step {index} removed {rel!r} outside {path!r}"
+                    )
+                _safe_path(root, rel, what="remove_vacant")
+
         else:
             raise RenameStateError(f"rename_state: unknown step kind {kind!r} at step {index}")
 
@@ -360,6 +521,62 @@ def _created_dirs_for_dst(root: Path, dst: str, planned: set[str]) -> list[str]:
     return created
 
 
+def _plan_merge(
+    root: Path, old_rel: str, new_rel: str, planned: set[str], steps: list[dict]
+) -> None:
+    """Plan moving the contents of ``old_rel`` into the vacant ``new_rel``.
+
+    ``new_rel`` must already exist and be a vacant real directory.  Symlinks,
+    files, or non-vacant directories on either side raise RenameStateError.
+    Mount points are never descended into or moved over.
+    """
+    old_dir = root / old_rel
+    new_dir = root / new_rel
+    for entry in sorted(os.scandir(old_dir), key=lambda e: e.name):
+        child_rel = f"{old_rel}/{entry.name}"
+        target_path = new_dir / entry.name
+        target_rel = f"{new_rel}/{entry.name}"
+        _refuse_symlink(Path(entry.path), what=f"merge source {child_rel}")
+        _refuse_symlink(target_path, what=f"merge target {target_rel}")
+
+        if _is_mount(Path(entry.path)):
+            # A mount point cannot be renamed and its content is not the tree's to
+            # move. Mounted at the new path as well, it is the runtime's and is left
+            # alone when it is empty; a mount holding data is the operator's to
+            # mount at the new path.
+            if _empty_dir(Path(entry.path)):
+                # An empty mount point holds nothing to move; it is left where it is.
+                continue
+            _refuse_mount_with_data(root, child_rel, target_rel)
+        if not target_path.exists():
+            created = _created_dirs_for_dst(root, target_rel, planned)
+            steps.append(_move_step(child_rel, target_rel, created))
+        elif _is_mount(target_path):
+            if (
+                _vacant_old(Path(entry.path))
+                and entry.is_dir(follow_symlinks=False)
+                and not _is_mount(Path(entry.path))
+            ):
+                # Old empty mount-point directory can be left behind.
+                continue
+            raise RenameStateError(
+                f"rename_state: both {child_rel} and {target_rel} exist under {root} "
+                "and hold data; move one aside and re-run"
+            )
+        elif (
+            _vacant_new(target_path)
+            and not _is_mount(target_path)
+            and entry.is_dir(follow_symlinks=False)
+            and not _is_mount(Path(entry.path))
+        ):
+            _plan_merge(root, child_rel, target_rel, planned, steps)
+        else:
+            raise RenameStateError(
+                f"rename_state: both {child_rel} and {target_rel} exist under {root} "
+                "and hold data; move one aside and re-run"
+            )
+
+
 def _has_vec_table(db_path: Path) -> bool:
     """Return whether ``db_path`` contains a vec_memories table."""
     con: sqlite3.Connection | None = None
@@ -395,14 +612,49 @@ def plan(root: Path, *, qdrant: QdrantAliases | None = None) -> list[dict]:
     for old_key, new_key in module_moves:
         old_dir = root / old_key
         new_dir = root / new_key
-        if old_dir.is_dir():
-            if new_dir.exists():
-                raise RenameStateError(
-                    f"rename_state: both {old_key} and {new_key} exist under {root}; "
-                    "move one aside and re-run"
-                )
+        _refuse_symlink(old_dir, what=f"module directory {old_key}")
+        _refuse_symlink(new_dir, what=f"module directory {new_key}")
+        try:
+            old_st = os.lstat(old_dir)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise RenameStateError(
+                f"rename_state: cannot inspect {old_key} under {root} ({exc}); re-run"
+            ) from exc
+        if not stat.S_ISDIR(old_st.st_mode):
+            continue
+        if _is_mount(old_dir) and not _empty_dir(old_dir):
+            _refuse_mount_with_data(root, old_key, new_key)
+        if _is_mount(old_dir) and not new_dir.exists():
+            # A mount point cannot be renamed; the operator mounts the volume at
+            # the new path instead.
+            raise RenameStateError(
+                f"rename_state: {old_key} under {root} is a mount point; mount it at "
+                f"{new_key} instead and re-run"
+            )
+        # Moving the directory, or a child of it in a merge, would carry a mount
+        # below it to the new path for this boot only; a mount holding data is
+        # mounted at its new path by the operator instead.
+        nested = _nested_mount_with_data(old_dir)
+        if nested is not None:
+            rel = nested.relative_to(root).as_posix()
+            _refuse_mount_with_data(root, rel, new_key + rel[len(old_key):])
+        if not new_dir.exists():
             created = _created_dirs_for_dst(root, new_key, planned)
             steps.append(_move_step(old_key, new_key, created))
+        elif _vacant_old(old_dir):
+            if _removable(old_dir):
+                steps.append(_remove_vacant_step(old_key))
+        elif _vacant_new(new_dir) and not _is_mount(new_dir):
+            _plan_merge(root, old_key, new_key, planned, steps)
+            if _removable(old_dir):
+                steps.append(_remove_vacant_step(old_key))
+        else:
+            raise RenameStateError(
+                f"rename_state: both {old_key} and {new_key} exist under {root}; "
+                "move one aside and re-run"
+            )
 
     # Step 2: state file moves.
     active_state_paths = _active(_table().STATE_PATHS)
@@ -627,6 +879,8 @@ def _run_step(root: Path, step: dict, qdrant: QdrantAliases | None) -> None:
         _run_sqlite(root, step)
     elif kind == "qdrant_alias":
         _run_qdrant_alias(root, step, qdrant)
+    elif kind == "remove_vacant":
+        _run_remove_vacant(root, step)
     else:
         raise RenameStateError(f"rename_state: unknown step kind {kind!r}")
 
@@ -668,6 +922,87 @@ def _run_move(root: Path, step: dict) -> None:
             f"rename_state: both {step['src']} and {step['dst']} exist under {root}; "
             "move one aside and re-run"
         )
+
+
+def _run_remove_vacant(root: Path, step: dict) -> None:
+    """Remove a vacant directory tree bottom-up, leaving mount points alone."""
+    rel = step["path"]
+    path = _safe_path(root, rel, what="remove_vacant")
+    _refuse_symlink(path, what="remove_vacant")
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise RenameStateError(
+            f"rename_state: cannot remove empty directory {rel} ({exc})"
+        ) from exc
+    if not stat.S_ISDIR(st.st_mode):
+        return
+    if _is_mount(path):
+        log.info("remove_vacant: %s is a mount point; leaving it", rel)
+        return
+
+    to_remove: list[Path] = []
+
+    def _refuse(what: Path, why: str) -> None:
+        # Raised from the step, so the manifest stays in progress and the start
+        # stops with the refusal; nothing but empty directories was removed.
+        raise RenameStateError(
+            f"rename_state: cannot remove {what.relative_to(Path(root).resolve())} ({why}); "
+            "move its content aside and re-run"
+        )
+
+    def _collect(dir_path: Path) -> None:
+        try:
+            with os.scandir(dir_path) as it:
+                entries = [Path(e.path) for e in it]
+        except OSError as exc:
+            _refuse(dir_path, exc.strerror or type(exc).__name__)
+        for child in entries:
+            if _is_mount(child):
+                if not _empty_dir(child):
+                    _refuse(child, "a mount holding data")
+                continue
+            try:
+                cst = os.lstat(child)
+            except OSError as exc:
+                _refuse(child, exc.strerror or type(exc).__name__)
+            if stat.S_ISLNK(cst.st_mode) or not stat.S_ISDIR(cst.st_mode):
+                _refuse(child, "it holds data")
+            _collect(child)
+        to_remove.append(dir_path)
+
+    _collect(path)
+
+    to_remove.sort(key=lambda p: len(p.parts), reverse=True)
+    removed: list[str] = list(step.get("removed") or [])
+    for dir_path in to_remove:
+        try:
+            os.rmdir(dir_path)
+            rel_removed = dir_path.relative_to(Path(root).resolve()).as_posix()
+            if rel_removed not in removed:
+                removed.append(rel_removed)
+            # Recorded in the manifest with the step, so a revert recreates every
+            # directory this step removed, not only the top one.
+            step["removed"] = removed
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            # Only a directory still holding an empty mount point (which is never
+            # removed) may stay; anything else stops the run.
+            try:
+                with os.scandir(dir_path) as it:
+                    left = [Path(e.path) for e in it]
+            except OSError:
+                left = []
+            if left and all(_is_mount(c) and _empty_dir(c) for c in left):
+                log.info(
+                    "remove_vacant: leaving %s, which holds an empty mount point",
+                    dir_path.relative_to(Path(root).resolve()),
+                )
+                continue
+            _refuse(dir_path, exc.strerror or type(exc).__name__)
 
 
 def _run_stage(root: Path, step: dict) -> None:
@@ -899,6 +1234,8 @@ def _revert_step(root: Path, step: dict, qdrant: QdrantAliases | None) -> None:
         _revert_sqlite(root, step)
     elif kind == "qdrant_alias":
         _revert_qdrant_alias(root, step, qdrant)
+    elif kind == "remove_vacant":
+        _revert_remove_vacant(root, step)
     else:
         raise RenameStateError(f"rename_state: unknown step kind {kind!r}")
 
@@ -932,6 +1269,16 @@ def _revert_move(root: Path, step: dict) -> None:
             f"rename_state: both {step['src']} and {step['dst']} exist under {root}; "
             "move one aside and re-run"
         )
+
+
+def _revert_remove_vacant(root: Path, step: dict) -> None:
+    """Recreate an empty directory that was removed by a remove_vacant step."""
+    rel = step["path"]
+    path = _safe_path(root, rel, what="remove_vacant")
+    path.mkdir(parents=True, exist_ok=True)
+    for removed in sorted(step.get("removed") or [], key=lambda r: len(r.split("/"))):
+        _safe_path(root, removed, what="remove_vacant").mkdir(parents=True, exist_ok=True)
+    log.info("revert remove_vacant: %s", rel)
 
 
 def _revert_stage(root: Path, step: dict) -> None:
@@ -1082,7 +1429,60 @@ def _format_step(step: dict) -> str:
         return f"sqlite: {step['path']}"
     if kind == "qdrant_alias":
         return f"qdrant_alias: {step['alias']} -> {step['collection']}"
+    if kind == "remove_vacant":
+        return f"remove empty: {step['path']}"
     return f"{kind}: {step}"
+
+
+def migrate_at_boot(config: Mapping[str, Any], state_root: Path) -> RenameResult:
+    """Migrate the live state tree before the cycle reads it.
+
+    Safe to call on every boot: a tree that is already migrated returns a
+    ``noop`` result without writing anything. When Qdrant is configured, this
+    function builds a client, performs the migration with alias updates, and
+    closes the client afterwards.
+    """
+    state_root = Path(state_root)
+    if not state_root.exists():
+        return RenameResult("noop", ())
+
+    from kaine.lifecycle import decommission
+
+    qdrant_in_use = decommission.qdrant_in_use(config)
+    if qdrant_in_use:
+        client = decommission._qdrant_client(config)
+        if client is None:
+            raise RenameStateError(
+                "rename_state: Qdrant is in use but no client could be built; "
+                "check [episodic_memory.qdrant] and re-run"
+            )
+        adapter = QdrantClientAliases(client)
+        try:
+            result = migrate(state_root, qdrant=adapter)
+        except (RenameStateError, OSError, sqlite3.Error):
+            raise
+        except Exception as exc:
+            # A Qdrant client raises its own error types (an unreachable server, a
+            # refused key). Report them as a refusal, not a traceback; a run
+            # interrupted after its manifest resumes on the next start.
+            raise RenameStateError(
+                f"rename_state: Qdrant could not be used ({type(exc).__name__}: {exc}); "
+                "check that Qdrant is running and re-run"
+            ) from exc
+        finally:
+            try:
+                client.close()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("rename_state: ignoring Qdrant client close error: %s", exc)
+    else:
+        result = migrate(state_root, no_qdrant=True)
+
+    if result.status != "noop":
+        log.info("rename_state: %s; %d steps", result.status, len(result.steps))
+        for step in result.steps:
+            log.info("rename_state: %s", _format_step(step))
+
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

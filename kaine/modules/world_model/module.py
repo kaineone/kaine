@@ -104,7 +104,7 @@ class WorldModel(BaseModule):
         alert_salience: float = 0.7,
         # Opt-in learned-weight persistence (requires a real backend).
         persist_weights: bool = False,
-        checkpoint_path: str = "state/phantasia/world_model.ckpt",
+        checkpoint_path: str = "state/world_model/world_model.ckpt",
         # Peer streams: episodic_memory.replay cues + the sleep module's window tracking.
         episodic_memory_stream: str = "episodic_memory.out",
         sleep_stream: str = "sleep.out",

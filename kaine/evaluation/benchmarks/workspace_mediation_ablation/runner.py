@@ -115,9 +115,9 @@ class MediationConfig:
             "access_threshold": self.access_threshold,
             "min_effect": self.min_effect,
             "n_background": self.n_background,
-            "soma_units": self.interoception_units,
-            "topos_units": self.vision_units,
-            "topos_lr": self.vision_lr,
+            "interoception_units": self.interoception_units,
+            "vision_units": self.vision_units,
+            "vision_lr": self.vision_lr,
         }
 
 
@@ -288,10 +288,10 @@ async def _run_arm(
     ig = headline_gain(ig_by_processor)
 
     return {
-        "soma_gain": interoception_gains,
-        "topos_gain": vision_gains,
-        "soma_error": interoception_errors,
-        "topos_error": vision_errors,
+        "interoception_gain": interoception_gains,
+        "vision_gain": vision_gains,
+        "interoception_error": interoception_errors,
+        "vision_error": vision_errors,
         "competing_ticks": competing_ticks,
         "accessed_broadcasts": accessed_broadcasts,
         "coalition_sizes": coalition_sizes,

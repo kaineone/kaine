@@ -44,7 +44,7 @@ def _sample(text: str, seed: int) -> ProbeSample:
     return ProbeSample(text=text, seed=seed, finish_reason="stop", completion_tokens=1)
 
 
-def _write_reference(state_root: Path, kind: str = "birth") -> ReferenceDoc:
+def _write_reference(state_root: Path, kind: str = "maturation") -> ReferenceDoc:
     paths = _paths(state_root)
     ref_id = uuid.uuid4().hex
     battery = ("p1", "p2")

@@ -83,16 +83,16 @@ def _create_study(
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "r_g_",
+            "development": "r_g_",
             "branch": "r_b_",
             "repeat": "r_r_",
             "accumulate": "r_a_",
         },
         "viewing_budget_seconds": viewing_budget_seconds,
-        "gestation_budget_seconds": development_budget_seconds,
+        "development_budget_seconds": development_budget_seconds,
     }
     study_dir = tmp_path / "study"
     init_study(study_dir, validate_plan(plan))
@@ -172,7 +172,7 @@ def _run_step_capture(
         nonlocal calls
         calls += 1
         if write_viability_after_calls is not None and calls == write_viability_after_calls:
-            path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+            path = line_dir / "state" / "lifecycle" / "development_viability.json"
             if viability_payload is not None:
                 path.write_text(json.dumps(viability_payload))
             else:
@@ -215,8 +215,8 @@ def test_development_unviable_stops_gracefully(tmp_path: Path, known_modules, mo
     record, proc, line_dir = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
-        line="gestation",
+        step={"kind": "development", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -227,7 +227,7 @@ def test_development_unviable_stops_gracefully(tmp_path: Path, known_modules, mo
     )
 
     assert proc.terminate_calls == 1
-    assert record["outcome"] == "failed:gestation_unviable"
+    assert record["outcome"] == "failed:development_unviable"
     assert record["viability"]["rule"] == "R1"
 
     note = line_dir / "ENDED-NOTE.md"
@@ -248,8 +248,8 @@ def test_malformed_viability_file_is_ignored(tmp_path: Path, known_modules, monk
     record, proc, line_dir = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
-        line="gestation",
+        step={"kind": "development", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -261,7 +261,7 @@ def test_malformed_viability_file_is_ignored(tmp_path: Path, known_modules, monk
     )
 
     assert proc.terminate_calls == 0
-    assert record["outcome"] != "failed:gestation_unviable"
+    assert record["outcome"] != "failed:development_unviable"
     assert not (line_dir / "ENDED-NOTE.md").exists()
     assert (line_dir / "marker.txt").exists()
 
@@ -301,7 +301,7 @@ def test_viability_file_during_viewing_is_ignored(tmp_path: Path, known_modules,
     )
 
     assert proc.terminate_calls == 0
-    assert record["outcome"] != "failed:gestation_unviable"
+    assert record["outcome"] != "failed:development_unviable"
     assert not (line_dir / "ENDED-NOTE.md").exists()
     assert (line_dir / "marker.txt").exists()
 
@@ -315,8 +315,8 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
     script = tmp_path / "dummy.py"
     script.write_text("")
     runner = _runner(study_dir, script)
-    line_dir = study_dir / "gestation"
-    stale = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+    line_dir = study_dir / "development"
+    stale = line_dir / "state" / "lifecycle" / "development_viability.json"
     stale.parent.mkdir(parents=True, exist_ok=True)
     stale.write_text(json.dumps({"verdict": "unviable", "rule": "R3", "reason": "old", "lived_hours": 60.0, "evidence": {}}))
     past = time.time() - 3600
@@ -325,8 +325,8 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
     record, proc, _ = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation"},
-        line="gestation",
+        step={"kind": "development"},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -336,7 +336,7 @@ def test_verdict_from_an_earlier_attempt_is_ignored(tmp_path: Path, known_module
     )
 
     assert proc.terminate_calls == 0
-    assert record["outcome"] != "failed:gestation_unviable"
+    assert record["outcome"] != "failed:development_unviable"
 
 
 def test_verdict_after_maturation_is_ignored(
@@ -366,7 +366,7 @@ def test_verdict_after_maturation_is_ignored(
 
     monkeypatch.setattr(runner, "_request_preserve", fake_preserve)
 
-    line_dir = study_dir / "gestation"
+    line_dir = study_dir / "development"
     (line_dir / "state" / "lifecycle").mkdir(parents=True, exist_ok=True)
 
     calls = 0
@@ -375,7 +375,7 @@ def test_verdict_after_maturation_is_ignored(
         nonlocal calls
         calls += 1
         if calls == 3:
-            path = line_dir / "state" / "lifecycle" / "gestation_viability.json"
+            path = line_dir / "state" / "lifecycle" / "development_viability.json"
             path.write_text(
                 json.dumps({"verdict": "unviable", "rule": "R3", "reason": "test"})
             )
@@ -384,14 +384,14 @@ def test_verdict_after_maturation_is_ignored(
 
     try:
         record = runner._run_step(
-            {"line": "gestation", "k": 0, "revived_from": None, "is_retry": False}
+            {"line": "development", "k": 0, "revived_from": None, "is_retry": False}
         )
     except StudyHalted as exc:
         record = exc.record
 
     assert proc.terminate_calls == 0
-    assert "birth" in reasons
-    assert record["outcome"] != "failed:gestation_unviable"
+    assert "maturation" in reasons
+    assert record["outcome"] != "failed:development_unviable"
 
 
 def test_failed_terminate_is_retried(
@@ -422,8 +422,8 @@ def test_failed_terminate_is_retried(
     record, proc, line_dir = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
-        line="gestation",
+        step={"kind": "development", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -435,7 +435,7 @@ def test_failed_terminate_is_retried(
     )
 
     assert proc.terminate_calls == 2
-    assert record["outcome"] == "failed:gestation_unviable"
+    assert record["outcome"] == "failed:development_unviable"
 
 
 def test_coarse_mtime_accepted_with_slack(
@@ -473,8 +473,8 @@ def test_coarse_mtime_accepted_with_slack(
     record, proc, line_dir = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
-        line="gestation",
+        step={"kind": "development", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -486,7 +486,7 @@ def test_coarse_mtime_accepted_with_slack(
     )
 
     assert proc.terminate_calls == 2
-    assert record["outcome"] == "failed:gestation_unviable"
+    assert record["outcome"] == "failed:development_unviable"
 
 
 def test_stale_verdict_rejected(
@@ -511,8 +511,8 @@ def test_stale_verdict_rejected(
     record, proc, line_dir = _run_step_capture(
         study_dir,
         runner,
-        step={"kind": "gestation", "modules": BASE_MODULES, "budget_seconds": 1000.0},
-        line="gestation",
+        step={"kind": "development", "modules": BASE_MODULES, "budget_seconds": 1000.0},
+        line="development",
         k=0,
         modules=BASE_MODULES,
         overlay_hash=hashlib.sha256(b"overlay").hexdigest(),
@@ -524,4 +524,4 @@ def test_stale_verdict_rejected(
     )
 
     assert proc.terminate_calls == 0
-    assert record["outcome"] != "failed:gestation_unviable"
+    assert record["outcome"] != "failed:development_unviable"

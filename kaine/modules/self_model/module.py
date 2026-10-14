@@ -30,7 +30,7 @@ from kaine.storage import resolve
 log = logging.getLogger(__name__)
 
 
-DEFAULT_PERSISTENCE_PATH = Path("state/eidolon/self_model.json")
+DEFAULT_PERSISTENCE_PATH = Path("state/self_model/self_model.json")
 
 
 #: How many sources an episode reports in ``top_sources``.

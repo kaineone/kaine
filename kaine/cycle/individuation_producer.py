@@ -175,7 +175,7 @@ class IndividuationCore:
         if kind not in REFERENCE_KINDS:
             raise ValueError(f"Invalid reference kind {kind!r}")
 
-        if regenerate and kind == "birth":
+        if regenerate and kind == "maturation":
             raise ValueError(
                 "regenerating a maturation reference needs the stored maturation configuration, "
                 "which is not supported yet"
@@ -250,7 +250,7 @@ class IndividuationCore:
         )
         save_reference(self._paths, doc, overwrite=regenerate or replace_incomplete)
 
-        if kind == "birth":
+        if kind == "maturation":
             copy_maturation_adapter(self._paths, self._maturation_adapter_file())
 
         existing = load_ledger(self._paths)

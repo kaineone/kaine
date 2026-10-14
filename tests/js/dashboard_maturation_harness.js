@@ -184,7 +184,7 @@ var scenarios = [
             request_id: null,
             development: {
               stage: "gestation",
-              gestation_started_at: "2026-01-01T00:00:00+00:00",
+              development_started_at: "2026-01-01T00:00:00+00:00",
               born_at: null,
               lived_seconds: 7200,
               sleep_count: 3,

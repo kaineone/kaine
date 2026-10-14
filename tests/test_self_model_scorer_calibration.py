@@ -60,7 +60,7 @@ def _plant_affect_correlation(
     ac_dir = logs_dir / "affect_correlation"
     ac_dir.mkdir(parents=True, exist_ok=True)
     record = {
-        "thymos_state": {"valence": valence, "arousal": arousal},
+        "affect_state": {"valence": valence, "arousal": arousal},
         "characteristics": {"hedge_word_count": hedge_word_count},
     }
     (ac_dir / "affect_correlation-2026-06-14.jsonl").write_text(
@@ -208,5 +208,5 @@ def test_calibration_uses_real_async_sink(tmp_path):
     # Sanity: the real AsyncJsonlSink is importable and constructs (the runner
     # is also exercised with the production sink elsewhere); this keeps the
     # calibration honest about the seam it tests.
-    sink = AsyncJsonlSink(tmp_path, name="eidolon_accuracy")
+    sink = AsyncJsonlSink(tmp_path, name="self_model_accuracy")
     assert sink is not None

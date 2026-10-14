@@ -6,7 +6,7 @@
 NEVER EXPORT-ELIGIBLE
 ---------------------
 This recorder subscribes to the same diagnostics streams as the dashboard bridge
-and writes one record per event to ``data/dashboard_record/``.
+and writes one record per event to ``data/nexus_record/``.
 
 - The dashboard record NEVER leaves the host.
 - The dashboard record is NEVER export-eligible: it writes outside

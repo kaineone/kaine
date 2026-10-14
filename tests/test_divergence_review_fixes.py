@@ -53,13 +53,13 @@ def _run_context():
 def test_adapter_dir_for_defaults_and_custom():
     root = Path("/tmp/test-state-root")
 
-    assert adapter_dir_for(None, root) == root / "hypnos" / "adapters"
+    assert adapter_dir_for(None, root) == root / "sleep" / "adapters"
     assert (
         adapter_dir_for(
-            {"sleep": {"voice_alignment": {"adapter_output_dir": "state/hypnos/adapters"}}},
+            {"sleep": {"voice_alignment": {"adapter_output_dir": "state/sleep/adapters"}}},
             root,
         )
-        == root / "hypnos" / "adapters"
+        == root / "sleep" / "adapters"
     )
 
     custom = adapter_dir_for(
@@ -106,14 +106,14 @@ def test_custom_adapter_dir_makes_measurement_stale(tmp_path):
 
     a = assess_divergence(state_root=state_root, adapter_output_dir=custom)
     assert a.signals["individuation_state"] == "stale"
-    assert a.signals["hypnos_adapters_present"] is True
+    assert a.signals["sleep_adapters_present"] is True
     assert a.diverged is True
 
     # Hazard documentation: without the custom dir, the old path reads the
     # measurement as current because it scans the wrong adapter directory.
     a_default = assess_divergence(state_root=state_root)
     assert a_default.signals["individuation_state"] == "not_individuated"
-    assert a_default.signals["hypnos_adapters_present"] is False
+    assert a_default.signals["sleep_adapters_present"] is False
 
 
 def test_corrupt_report_line_counts_as_unreadable(tmp_path):

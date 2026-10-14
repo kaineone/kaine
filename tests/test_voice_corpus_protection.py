@@ -135,15 +135,15 @@ def _enable(monkeypatch):
 
 
 def _seed_backup_state(state_root: Path) -> None:
-    (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
-    (state_root / "eidolon" / "self_model.json").write_text(
+    (state_root / "self_model").mkdir(parents=True, exist_ok=True)
+    (state_root / "self_model" / "self_model.json").write_text(
         json.dumps({"name": "Kaine Nova"}), encoding="utf-8"
     )
-    (state_root / "lingua").mkdir(parents=True, exist_ok=True)
-    (state_root / "lingua" / "intent_expression.jsonl").write_text(
+    (state_root / "language").mkdir(parents=True, exist_ok=True)
+    (state_root / "language" / "intent_expression.jsonl").write_text(
         '{"live": true}\n', encoding="utf-8"
     )
-    corpus = state_root / "lingua" / "intent_log"
+    corpus = state_root / "language" / "intent_log"
     corpus.mkdir(parents=True, exist_ok=True)
     (corpus / "sleep-a.jsonl").write_text('{"a": 1}\n', encoding="utf-8")
     (corpus / "sleep-b.jsonl").write_text('{"b": 1}\n', encoding="utf-8")

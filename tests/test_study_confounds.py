@@ -111,7 +111,7 @@ def _vocal_and_player(bus: AsyncBus, tmp_path: Path, **overrides) -> tuple[Vocal
         bus,
         tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
         player=player,
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         predefined_voice_id="default_sample.wav",
         **overrides,
     )
@@ -316,7 +316,7 @@ async def test_vocal_dormant_suppresses_output_and_resumes(bus, tmp_path):
         assert result.bytes_produced == 0
         assert vocal._suppressed_while_dormant == 1
         assert player.played == []
-        assert not list((tmp_path / "vox").glob("*.wav"))
+        assert not list((tmp_path / "vocal").glob("*.wav"))
 
         vocal.set_dormant(False)
         assert not vocal.dormant

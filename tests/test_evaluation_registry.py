@@ -69,7 +69,7 @@ async def test_registry_builds_passive_observers(tmp_path):
     assert "affect_correlation" in names
     assert "ab_divergence" in names
     assert "memory_probes" not in names
-    assert "eidolon_accuracy" not in names
+    assert "self_model_accuracy" not in names
 
 
 @pytest.mark.asyncio
@@ -171,4 +171,4 @@ async def test_registry_builds_memory_and_self_model_with_providers(tmp_path):
     sidecar.build()
     names = [o.name for o in sidecar.observers]
     assert "memory_probes" in names
-    assert "eidolon_accuracy" in names
+    assert "self_model_accuracy" in names

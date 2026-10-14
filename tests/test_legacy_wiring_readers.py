@@ -109,7 +109,7 @@ def test_extract_bundle_development_maps_state_path(monkeypatch, tmp_path):
     monkeypatch.setattr(
         legacy_names,
         "BUNDLE_MEMBERS",
-        ({"old": "oldgest/", "new": "gestation/", "scope": "keys"},),
+        ({"old": "oldgest/", "new": "development/", "scope": "keys"},),
     )
     monkeypatch.setattr(
         legacy_names,
@@ -117,7 +117,7 @@ def test_extract_bundle_development_maps_state_path(monkeypatch, tmp_path):
         (
             {
                 "old": "lifecycle/old_progress.json",
-                "new": "lifecycle/gestation_progress.json",
+                "new": "lifecycle/development_progress.json",
                 "scope": "persisted",
             },
         ),
@@ -126,14 +126,14 @@ def test_extract_bundle_development_maps_state_path(monkeypatch, tmp_path):
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(
         "kaine.lifecycle.preservation.BUNDLED_DEVELOPMENT_FILES",
-        {"gestation_progress.json"},
+        {"development_progress.json"},
     )
     bundle = tmp_path / "b" / "bundle.tar"
     _plain_bundle(bundle, {"oldgest/old_progress.json": b"{}"})
     dest = tmp_path / "dest"
     written = extract_bundle_development(bundle.parent, dest)
-    assert written == ["gestation_progress.json"]
-    assert (dest / "gestation_progress.json").read_bytes() == b"{}"
+    assert written == ["development_progress.json"]
+    assert (dest / "development_progress.json").read_bytes() == b"{}"
 
 
 @pytest.mark.parametrize("first, second", [("old", "new"), ("new", "old")])
@@ -146,7 +146,7 @@ def test_extract_bundle_development_new_file_name_beats_old(monkeypatch, tmp_pat
         (
             {
                 "old": "lifecycle/old_progress.json",
-                "new": "lifecycle/gestation_progress.json",
+                "new": "lifecycle/development_progress.json",
                 "scope": "persisted",
             },
         ),
@@ -155,21 +155,21 @@ def test_extract_bundle_development_new_file_name_beats_old(monkeypatch, tmp_pat
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(
         "kaine.lifecycle.preservation.BUNDLED_DEVELOPMENT_FILES",
-        {"gestation_progress.json"},
+        {"development_progress.json"},
     )
     bundle = tmp_path / "b" / "bundle.tar"
     ordered: dict[str, bytes] = {}
     if first == "old":
-        ordered["gestation/old_progress.json"] = b"old"
-        ordered["gestation/gestation_progress.json"] = b"new"
+        ordered["development/old_progress.json"] = b"old"
+        ordered["development/development_progress.json"] = b"new"
     else:
-        ordered["gestation/gestation_progress.json"] = b"new"
-        ordered["gestation/old_progress.json"] = b"old"
+        ordered["development/development_progress.json"] = b"new"
+        ordered["development/old_progress.json"] = b"old"
     _plain_bundle(bundle, ordered)
     dest = tmp_path / "dest"
     written = extract_bundle_development(bundle.parent, dest)
-    assert written == ["gestation_progress.json"]
-    assert (dest / "gestation_progress.json").read_bytes() == b"new"
+    assert written == ["development_progress.json"]
+    assert (dest / "development_progress.json").read_bytes() == b"new"
 
 
 def test_load_run_records_maps_stream_and_fields(monkeypatch, tmp_path):
@@ -177,10 +177,10 @@ def test_load_run_records_maps_stream_and_fields(monkeypatch, tmp_path):
     monkeypatch.setattr(
         legacy_names,
         "RECORD_FIELDS",
-        ({"old": "oldaffect_state", "new": "thymos_state", "scope": "keys"},),
+        ({"old": "oldaffect_state", "new": "affect_state", "scope": "keys"},),
     )
     monkeypatch.setattr(legacy_names, "STREAM_NAMES", ())
-    monkeypatch.setattr(legacy_names, "MODULES", {"oldaffect": {"new_key": "thymos"}})
+    monkeypatch.setattr(legacy_names, "MODULES", {"oldaffect": {"new_key": "affect"}})
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     root = tmp_path / "records"
     root.mkdir()
@@ -189,7 +189,7 @@ def test_load_run_records_maps_stream_and_fields(monkeypatch, tmp_path):
     )
     records = load_run_records("r", root=root)
     assert records.by_stream == {
-        "thymos": [{"run_id": "r", "thymos_state": {"v": 1}, "source": "thymos"}]
+        "affect": [{"run_id": "r", "affect_state": {"v": 1}, "source": "affect"}]
     }
 
 
@@ -197,7 +197,7 @@ def test_correlate_from_log_maps_record_fields(monkeypatch, tmp_path):
     monkeypatch.setattr(
         legacy_names,
         "RECORD_FIELDS",
-        ({"old": "oldaffect_state", "new": "thymos_state", "scope": "keys"},),
+        ({"old": "oldaffect_state", "new": "affect_state", "scope": "keys"},),
     )
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     path = tmp_path / "affect.jsonl"
@@ -216,7 +216,7 @@ def test_latest_lines_reads_old_sidecar_directory(monkeypatch, tmp_path):
     monkeypatch.setattr(
         legacy_names,
         "SIDECAR_DIRS",
-        ({"old": "oldpolicy", "new": "nous_policy", "scope": "keys"},),
+        ({"old": "oldpolicy", "new": "planning_policy", "scope": "keys"},),
     )
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "keys", "done")
     logs = tmp_path / "logs"
@@ -224,11 +224,13 @@ def test_latest_lines_reads_old_sidecar_directory(monkeypatch, tmp_path):
     (logs / "oldpolicy" / "oldpolicy-2026-01-01.jsonl").write_text(
         json.dumps({"ts": "t", "policy": "p"}) + "\n"
     )
-    lines = _latest_lines(logs / "nous_policy", name="nous_policy")
+    lines = _latest_lines(logs / "planning_policy", name="planning_policy")
     assert lines == [{"ts": "t", "policy": "p"}]
 
 
-def test_read_maps_inert_while_pending():
+def test_read_maps_inert_while_pending(monkeypatch):
+    for scope in ("keys", "persisted"):
+        monkeypatch.setitem(legacy_names.SCOPE_STATUS, scope, "pending")
     assert (
         legacy_aliases.map_state_path("lifecycle/gestation_progress.json")
         == "lifecycle/gestation_progress.json"

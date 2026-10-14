@@ -122,8 +122,8 @@ def test_assess_fork_reads_consolidation_divergence(tmp_path):
     # A fork whose organ-level consolidation divergence crossed threshold reads
     # as individuated via the SAME divergence gate used by decommission.
     state_root = tmp_path / "fork_state"
-    (state_root / "hypnos").mkdir(parents=True)
-    (state_root / "hypnos" / "consolidation_divergence.json").write_text(
+    (state_root / "sleep").mkdir(parents=True)
+    (state_root / "sleep" / "consolidation_divergence.json").write_text(
         json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.6})
     )
     assessment = assess_fork(fork_state_root=state_root)

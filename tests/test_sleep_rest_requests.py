@@ -242,7 +242,7 @@ async def test_audit_window_counts_events_before_requested_sleep(sleep):
     assert completed
     audit = completed[0].payload["ignition_audit"]
     assert audit["realized_total"] == 1
-    assert audit["nous_initiated"] == 1
+    assert audit["planning_initiated"] == 1
     assert audit["self_initiated"] == 0
 
 

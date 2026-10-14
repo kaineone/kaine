@@ -36,7 +36,7 @@ from kaine.lifecycle.stimulus_source_liveness import (
 
 log = logging.getLogger(__name__)
 
-DEVELOPMENT_FREEZE_SOURCE = "gestation"
+DEVELOPMENT_FREEZE_SOURCE = "development"
 STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST = "stage.development.stimulus_source_lost"
 STAGE_DEVELOPMENT_STIMULUS_SOURCE_RETURNED = "stage.development.stimulus_source_returned"
 
@@ -82,8 +82,8 @@ async def hold_until_stimulus_source_ready(
             await publish(
                 "stage.development.no_stimulus",
                 {
-                    "stage": "gestation",
-                    "reason": "womb_not_ready",
+                    "stage": "development",
+                    "reason": "stimulus_source_not_ready",
                     "detail": result.reason,
                     "provider": result.provider,
                 },
@@ -174,7 +174,7 @@ class StimulusSourceLossWatcher:
             await self._publish(
                 STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST,
                 {
-                    "stage": "gestation",
+                    "stage": "development",
                     "reason": result.reason,
                     "provider": result.provider,
                 },
@@ -184,7 +184,7 @@ class StimulusSourceLossWatcher:
             log.warning("publish stage.development.stimulus_source_lost failed", exc_info=True)
         if self._notify is not None:
             try:
-                await self._notify("womb_lost")
+                await self._notify("stimulus_source_lost")
             except Exception:
                 log.warning("notify stimulus_source_lost failed", exc_info=True)
 
@@ -292,7 +292,7 @@ class StimulusSourceLossWatcher:
                         await self._publish(
                             STAGE_DEVELOPMENT_STIMULUS_SOURCE_RETURNED,
                             {
-                                "stage": "gestation",
+                                "stage": "development",
                                 "provider": result.provider,
                             },
                             0.6,

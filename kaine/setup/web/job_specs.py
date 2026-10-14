@@ -121,7 +121,7 @@ def build_job_specs(
         # The dashboard configuration is unsafe/invalid/malformed; do not offer the start job.
         return specs
 
-    dashboard_log = state_dir / "logs" / "nexus.log"
+    dashboard_log = state_dir / "logs" / "dashboard.log"
     specs.append(
         JobSpec(
             name="dashboard",

@@ -39,7 +39,7 @@ async def test_scheduler_adapter_unverifiable_blocks_look_and_capture(
     assert sched.state.last_reason == "adapter_unverifiable"
     assert core.looks == []
 
-    sched.request_capture("birth")
+    sched.request_capture("maturation")
     await sched.tick()
 
     assert core.captures == []

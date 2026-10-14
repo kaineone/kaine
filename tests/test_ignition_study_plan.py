@@ -60,9 +60,9 @@ def base_plan(tmp_path, known_modules):
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "t_g_", "branch": "t_b_", "repeat": "t_r_", "accumulate": "t_a_"},
+        "collections": {"development": "t_g_", "branch": "t_b_", "repeat": "t_r_", "accumulate": "t_a_"},
     }
 
 
@@ -84,11 +84,11 @@ def test_init_creates_layout_and_symlinks(base_plan, tmp_path):
     loaded = load_plan(study_dir)
     assert loaded["study_id"] == "ignite-test"
     assert loaded["viewing_budget_seconds"] == DEFAULT_VIEWING_BUDGET_SECONDS
-    assert loaded["gestation_budget_seconds"] == DEFAULT_DEVELOPMENT_BUDGET_SECONDS
+    assert loaded["development_budget_seconds"] == DEFAULT_DEVELOPMENT_BUDGET_SECONDS
 
-    step_dirs = [study_dir / "gestation", study_dir / "repeat", study_dir / "accumulate"]
+    step_dirs = [study_dir / "development", study_dir / "repeat", study_dir / "accumulate"]
     step_dirs += [study_dir / "branch" / str(k) for k in range(len(plan["order"]) + 1)]
-    assert set(LINES) == {"gestation", "branch", "repeat", "accumulate"}
+    assert set(LINES) == {"development", "branch", "repeat", "accumulate"}
     assert not (study_dir / "branch" / "config").exists()
     for ld in step_dirs:
         assert ld.is_dir()
@@ -138,13 +138,13 @@ def test_validate_duplicate_db(base_plan):
 
 
 def test_validate_db_zero_refused(base_plan):
-    base_plan["redis"]["db"]["gestation"] = 0
+    base_plan["redis"]["db"]["development"] = 0
     with pytest.raises(ValueError, match="1..15"):
         validate_plan(base_plan)
 
 
 def test_validate_db_out_of_range_refused(base_plan):
-    base_plan["redis"]["db"]["gestation"] = 16
+    base_plan["redis"]["db"]["development"] = 16
     with pytest.raises(ValueError, match="1..15"):
         validate_plan(base_plan)
 
@@ -162,7 +162,7 @@ def test_validate_ignores_legacy_viewings_per_line(base_plan):
 
 
 def test_validate_db_bool_refused(base_plan):
-    base_plan["redis"]["db"]["gestation"] = True
+    base_plan["redis"]["db"]["development"] = True
     with pytest.raises(ValueError, match="1..15"):
         validate_plan(base_plan)
 
@@ -170,7 +170,7 @@ def test_validate_db_bool_refused(base_plan):
 def test_validate_db_operator_refused():
     from kaine.research.ignition_study.plan import validate_redis_dbs
 
-    dbs = {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13}
+    dbs = {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13}
     validate_redis_dbs(dbs, {0, 3})
     with pytest.raises(ValueError, match="operator"):
         validate_redis_dbs(dbs, {0, 12})
@@ -233,7 +233,7 @@ def test_voice_alignment_explicit_list_kept(nine_module_plan):
 
 
 def test_voice_alignment_development_refused(nine_module_plan):
-    entry = {"line": "gestation", "k": 0}
+    entry = {"line": "development", "k": 0}
     nine_module_plan["voice_alignment_steps"] = [entry]
     with pytest.raises(ValueError) as exc_info:
         validate_plan(nine_module_plan)
@@ -297,7 +297,7 @@ def _nine_module_argv(nine_module_plan, study_dir):
         "--redis-base-url",
         nine_module_plan["redis"]["base_url"],
         "--db-development",
-        str(nine_module_plan["redis"]["db"]["gestation"]),
+        str(nine_module_plan["redis"]["db"]["development"]),
         "--db-branch",
         str(nine_module_plan["redis"]["db"]["branch"]),
         "--db-repeat",

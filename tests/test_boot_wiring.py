@@ -304,7 +304,7 @@ def test_make_episodic_memory_from_config_does_not_connect_qdrant():
         bus,
         {
             "backend": "inmemory",  # avoid Qdrant connect at construction
-            "collection_prefix": "mnemos_",
+            "collection_prefix": "episodic_memory_",
             "short_term_capacity": 128,
             "recall_top_k": 5,
             "qdrant": {"host": "127.0.0.1", "port": 6533},
@@ -322,7 +322,7 @@ def test_make_episodic_memory_rejects_embedder_model_id():
             bus,
             {
                 "backend": "inmemory",
-                "collection_prefix": "mnemos_",
+                "collection_prefix": "episodic_memory_",
                 "short_term_capacity": 128,
                 "recall_top_k": 5,
                 "embedder_model_id": "sentence-transformers/all-mpnet-base-v2",
@@ -338,7 +338,7 @@ def test_make_episodic_memory_rejects_device():
             bus,
             {
                 "backend": "inmemory",
-                "collection_prefix": "mnemos_",
+                "collection_prefix": "episodic_memory_",
                 "short_term_capacity": 128,
                 "recall_top_k": 5,
                 "device": "cpu",
@@ -435,7 +435,7 @@ def test_make_effectors_with_empty_whitelist(tmp_path):
     effectors = make_effectors(
         bus,
         {
-            "sandbox_path": str(tmp_path / "praxis"),
+            "sandbox_path": str(tmp_path / "effectors"),
             "audit_log_path": str(tmp_path / "audit.log"),
             "shell_whitelist": {},
             "baseline_salience": 0.3,
@@ -450,7 +450,7 @@ def test_make_effectors_translates_shell_whitelist_entries(tmp_path):
     effectors = make_effectors(
         bus,
         {
-            "sandbox_path": str(tmp_path / "praxis"),
+            "sandbox_path": str(tmp_path / "effectors"),
             "audit_log_path": str(tmp_path / "audit.log"),
             "shell_whitelist": {
                 "echo": {
@@ -595,7 +595,7 @@ def test_make_vocal_from_config(tmp_path):
             "chatterbox_url": "http://127.0.0.1:8883",
             "voice_mode": "predefined",
             "output_format": "wav",
-            "sink_path": str(tmp_path / "vox"),
+            "sink_path": str(tmp_path / "vocal"),
             "baseline_temperature": 0.7,
             "baseline_exaggeration": 0.5,
             "baseline_cfg_weight": 0.5,
@@ -611,7 +611,7 @@ def test_make_social_cognition_from_config():
         bus,
         {
             "backend": "inmemory",
-            "collection": "empatheia_agents",
+            "collection": "social_cognition_agents",
             "speaker_label": "operator",
             "deviation_threshold": 0.5,
             "baseline_salience": 0.15,
@@ -727,7 +727,7 @@ def test_build_registry_constructs_sleep_last():
             },
             "episodic_memory": {
                 "backend": "inmemory",
-                "collection_prefix": "mnemos_",
+                "collection_prefix": "episodic_memory_",
                 "short_term_capacity": 128,
                 "recall_top_k": 5,
                 "qdrant": {"host": "127.0.0.1", "port": 6533},
@@ -913,7 +913,7 @@ def test_wire_self_model_capabilities_injects_effectors_whitelist(tmp_path):
     effectors = make_effectors(
         bus,
         {
-            "sandbox_path": str(tmp_path / "praxis"),
+            "sandbox_path": str(tmp_path / "effectors"),
             "audit_log_path": str(tmp_path / "audit.log"),
             "enabled_effectors": ["file_write", "notify"],
             "shell_whitelist": {},
@@ -956,7 +956,7 @@ def test_rewire_module_restores_self_hearing_gate():
             "chatterbox_url": "http://127.0.0.1:8883",
             "voice_mode": "predefined",
             "output_format": "wav",
-            "sink_path": "/tmp/vox",
+            "sink_path": "/tmp/vocal",
         },
     )
     audition = make_audition(bus, {"speaches_url": "http://127.0.0.1:8000"})
@@ -988,7 +988,7 @@ def test_rewire_module_reseeds_self_model_whitelist(tmp_path):
     effectors = make_effectors(
         bus,
         {
-            "sandbox_path": str(tmp_path / "praxis"),
+            "sandbox_path": str(tmp_path / "effectors"),
             "audit_log_path": str(tmp_path / "audit.log"),
             "enabled_effectors": ["file_write", "notify"],
             "shell_whitelist": {},

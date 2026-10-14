@@ -72,7 +72,7 @@ METRICS_ONLY_DIRS: tuple[str, ...] = (
     "welfare",
     "fatigue",
     "prediction_error",
-    "nous_policy",
+    "planning_policy",
     "voice_alignment_divergence",
     # Curated, privacy-filtered research event log (research-event-log change).
     # Numeric/categorical records only; all CONTENT_FIELDS stripped at write
@@ -724,10 +724,10 @@ def preview(bundle: Bundle) -> str:
         "",
         "-" * 70,
         "EXCLUDED by default (never in a metrics bundle):",
-        "  - intent log (state/lingua/intent_expression.jsonl)",
+        "  - intent log (state/language/intent_expression.jsonl)",
         "    REASON: embeds user/bystander utterances and entity internal monologue.",
-        "  - Mnemos/Qdrant memories (verbatim transcripts and episodic records).",
-        "  - Self-model self-model (state/eidolon/self_model.json).",
+        "  - EpisodicMemory/Qdrant memories (verbatim transcripts and episodic records).",
+        "  - Self-model self-model (state/self_model/self_model.json).",
         "  - Conversation content (any turn text).",
         "  - Replay logs (may contain verbatim memory text when replay_redact_content=false).",
         "  - Local-only raw bus archive (state/research/raw_bus_archive/): verbatim",

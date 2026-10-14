@@ -108,10 +108,10 @@ def voice_alignment_config_from_section(
             )
         voice_config = VoiceAlignmentConfig(
             intent_log_path=resolve(
-                voice_cfg_section.get("intent_log_path", "state/lingua/intent_expression.jsonl")
+                voice_cfg_section.get("intent_log_path", "state/language/intent_expression.jsonl")
             ),
             adapter_output_dir=resolve(
-                voice_cfg_section.get("adapter_output_dir", "state/hypnos/adapters")
+                voice_cfg_section.get("adapter_output_dir", "state/sleep/adapters")
             ),
             enabled=bool(voice_cfg_section.get("enabled", False)),
             base_model_path=base_model_path,
@@ -140,17 +140,17 @@ def voice_alignment_config_from_section(
             trainer_workdir=str(
                 resolve(
                     str(
-                        voice_cfg_section.get("trainer_workdir", "state/hypnos/voice_align_jobs")
+                        voice_cfg_section.get("trainer_workdir", "state/sleep/voice_align_jobs")
                     ).strip()
-                    or "state/hypnos/voice_align_jobs"
+                    or "state/sleep/voice_align_jobs"
                 )
             ),
             trainer_jobs_dir=str(
                 resolve(
                     str(
-                        voice_cfg_section.get("trainer_jobs_dir", "state/hypnos/voice_align_jobs")
+                        voice_cfg_section.get("trainer_jobs_dir", "state/sleep/voice_align_jobs")
                     ).strip()
-                    or "state/hypnos/voice_align_jobs"
+                    or "state/sleep/voice_align_jobs"
                 )
             ),
             trainer_timeout_s=float(voice_cfg_section.get("trainer_timeout_s", 21600.0)),

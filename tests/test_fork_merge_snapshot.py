@@ -28,7 +28,7 @@ def test_snapshot_roundtrip(tmp_path):
         parent_id=None,
         label="root",
         modules={"interoception": {"wellness": 0.9}, "sequence": {"steps": 12}},
-        adapters=["state/hypnos/adapters/a"],
+        adapters=["state/sleep/adapters/a"],
         metadata={"note": "test"},
     )
     save_snapshot(tmp_path, snap)

@@ -50,7 +50,7 @@ def _make_vocal(bus: AsyncBus, tmp_path: Path, **overrides) -> Vocal:
     return Vocal(
         bus,
         tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         predefined_voice_id="default_sample.wav",
         **overrides,
     )
@@ -104,7 +104,7 @@ async def test_synthesize_text_writes_audio_to_sink_when_enabled(
     try:
         result = await vocal.synthesize_text("hello world")
         assert result.bytes_produced == len(b"WAV-FAKE-DATA-1234")
-        files = list((tmp_path / "vox").glob("*.wav"))
+        files = list((tmp_path / "vocal").glob("*.wav"))
         assert len(files) == 1
         assert files[0].read_bytes() == b"WAV-FAKE-DATA-1234"
     finally:
@@ -123,7 +123,7 @@ async def test_synthesize_plays_and_does_not_persist_by_default(
         # Played once...
         assert player.played == [b"WAV-FAKE-DATA-1234"]
         # ...and nothing written to disk (sink disabled by default).
-        assert not list((tmp_path / "vox").glob("*.wav"))
+        assert not list((tmp_path / "vocal").glob("*.wav"))
     finally:
         await vocal.shutdown()
 
@@ -135,7 +135,7 @@ async def test_sink_retention_prunes_to_retain_count(bus: AsyncBus, tmp_path: Pa
     try:
         for i in range(4):
             await vocal.synthesize_text(f"utterance {i}")
-        files = list((tmp_path / "vox").glob("*.wav"))
+        files = list((tmp_path / "vocal").glob("*.wav"))
         assert len(files) == 2
     finally:
         await vocal.shutdown()
@@ -238,7 +238,7 @@ async def test_shutdown_closes_client(bus: AsyncBus, tmp_path: Path):
     vocal = Vocal(
         bus,
         tts_client=client,
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         predefined_voice_id="default_sample.wav",
     )
     await vocal.initialize()
@@ -315,7 +315,7 @@ def _make_vocal_with_mirroring(bus: AsyncBus, tmp_path: Path, **overrides) -> Vo
     return Vocal(
         bus,
         tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE-DATA-1234"),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         predefined_voice_id="default_sample.wav",
         mirroring_enabled=True,
         mirror_strength=0.5,

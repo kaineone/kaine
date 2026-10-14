@@ -275,7 +275,7 @@ class MotorCurriculum:
         # before the *next* DOF can be freed — competence is per-stage.
         self._errors.clear()
         log.info(
-            "mundus/control: motor curriculum advanced to stage %d (free=%s)",
+            "embodiment/control: motor curriculum advanced to stage %d (free=%s)",
             self._stage_index,
             sorted(self.free_channels()),
         )
@@ -365,7 +365,7 @@ class ContinuousMotorSurface:
         active. Idempotent.
         """
         if not self._active:
-            log.info("mundus/control: maturation handoff — embodiment surface active")
+            log.info("embodiment/control: maturation handoff — embodiment surface active")
         self._active = True
 
     def deactivate(self) -> None:

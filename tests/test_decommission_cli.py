@@ -68,13 +68,13 @@ class _FakeClient:
 
 
 def _seed_state(state_root: Path, *, name: str = "Kaine Nova") -> None:
-    (state_root / "eidolon").mkdir(parents=True, exist_ok=True)
-    (state_root / "eidolon" / "self_model.json").write_text(
+    (state_root / "self_model").mkdir(parents=True, exist_ok=True)
+    (state_root / "self_model" / "self_model.json").write_text(
         json.dumps({"name": name, "drift_count": 0, "identity_history": []}),
         encoding="utf-8",
     )
-    (state_root / "lingua").mkdir(parents=True, exist_ok=True)
-    (state_root / "lingua" / "intent_expression.jsonl").write_text(
+    (state_root / "language").mkdir(parents=True, exist_ok=True)
+    (state_root / "language" / "intent_expression.jsonl").write_text(
         '{"x":1}\n', encoding="utf-8"
     )
 
@@ -203,7 +203,7 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
         err=io.StringIO(),
     )
     assert rc == 0, out.getvalue()
-    assert not (tmp_path / "state" / "eidolon").exists()
+    assert not (tmp_path / "state" / "self_model").exists()
     assert "Entity state deleted" in out.getvalue()
     # Backup was written.
     assert list((tmp_path / "backups").glob("entity_*"))
@@ -276,7 +276,7 @@ def test_running_voice_alignment_job_refuses(tmp_path, monkeypatch):
     jobs_dir = tmp_path / "jobs"
     jobs_dir.mkdir()
 
-    adapter_store = tmp_path / "state" / "hypnos" / "adapters"
+    adapter_store = tmp_path / "state" / "sleep" / "adapters"
     adapter_store.mkdir(parents=True)
     own_job = jobs_dir / "j1"
     own_job.mkdir(parents=True)
@@ -310,7 +310,7 @@ def test_running_voice_alignment_job_refuses(tmp_path, monkeypatch):
         err=err,
     )
     assert rc == 3, out.getvalue() + err.getvalue()
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
     assert "voice-alignment job is still training" in err.getvalue()
 
 
@@ -320,6 +320,12 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
     _seed_state(tmp_path / "state")
 
     class FailingQdrant:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             raise RuntimeError("connection refused")
 
@@ -327,6 +333,12 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
             pass
 
     class WorkingQdrant:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             return SimpleNamespace(collections=[])
 
@@ -365,7 +377,7 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
     )
     assert rc == 8, out.getvalue() + err.getvalue()
     assert "Qdrant" in out.getvalue()
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
 
 
 def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
@@ -406,7 +418,7 @@ def test_bus_auth_failure_deletes_nothing(tmp_path, monkeypatch):
     output = out.getvalue() + err.getvalue()
     assert rc == 8, output
     assert "FAILED" in output
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
 
 
 def test_missing_bus_config_is_a_configuration_error(tmp_path, monkeypatch):
@@ -435,7 +447,7 @@ def test_missing_bus_config_is_a_configuration_error(tmp_path, monkeypatch):
         err=err,
     )
     assert rc == 6, out.getvalue() + err.getvalue()
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
 
 
 def test_non_diverged_wrong_ack_aborts(tmp_path, monkeypatch):
@@ -449,7 +461,7 @@ def test_non_diverged_wrong_ack_aborts(tmp_path, monkeypatch):
         err=io.StringIO(),
     )
     assert rc == 5
-    assert (tmp_path / "state" / "eidolon").exists()  # nothing deleted
+    assert (tmp_path / "state" / "self_model").exists()  # nothing deleted
 
 
 def _make_diverged(tmp_path):
@@ -478,7 +490,7 @@ def test_diverged_declines_continuity_exit_5(tmp_path, monkeypatch):
         err=io.StringIO(),
     )
     assert rc == 5
-    assert (tmp_path / "state" / "eidolon").exists()  # nothing deleted
+    assert (tmp_path / "state" / "self_model").exists()  # nothing deleted
 
 
 def test_diverged_full_path_deletes(tmp_path, monkeypatch):
@@ -499,7 +511,7 @@ def test_diverged_full_path_deletes(tmp_path, monkeypatch):
         err=io.StringIO(),
     )
     assert rc == 0, out.getvalue()
-    assert not (tmp_path / "state" / "eidolon").exists()
+    assert not (tmp_path / "state" / "self_model").exists()
     # S3: the continuity note is recorded in a SEPARATE sidecar, never the
     # plaintext manifest (encryption is disabled here so it is honest plaintext).
     manifest = next((tmp_path / "backups").glob("entity_*/manifest.json"))
@@ -524,7 +536,7 @@ def test_dry_run_deletes_nothing(tmp_path, monkeypatch):
         err=io.StringIO(),
     )
     assert rc == 0, out.getvalue()
-    assert (tmp_path / "state" / "eidolon").exists()  # nothing deleted
+    assert (tmp_path / "state" / "self_model").exists()  # nothing deleted
     assert "dry-run" in out.getvalue().lower()
     assert "redis stream: affect.out" in out.getvalue()
 
@@ -878,7 +890,7 @@ def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
     )
     assert rc == 8, out.getvalue()
     assert "INCOMPLETE" in out.getvalue()
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
     audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
     assert audit_path.exists()
     lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
@@ -953,7 +965,7 @@ def test_qdrant_absent_flag_skips_qdrant_and_deletes(tmp_path, monkeypatch):
     assert rc == 0, out.getvalue() + err.getvalue()
     assert len(calls_cli) == 1
     assert calls_lib == []
-    assert not (tmp_path / "state" / "eidolon").exists()
+    assert not (tmp_path / "state" / "self_model").exists()
     audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
     assert audit_path.exists()
     lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
@@ -1005,7 +1017,7 @@ def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkey
     (job / "CLAIMED").write_text("")
     (job / "pairs.jsonl").write_text("SECRET pairs\n")
 
-    adapter_store = tmp_path / "state" / "hypnos" / "adapters"
+    adapter_store = tmp_path / "state" / "sleep" / "adapters"
     adapter_store.mkdir(parents=True)
     (job / "job.json").write_text(
         json.dumps(
@@ -1043,7 +1055,7 @@ def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkey
     err_text = err.getvalue()
     assert str(job) in err_text
     assert "--trainer-stopped" in err_text
-    assert (tmp_path / "state" / "eidolon").exists()
+    assert (tmp_path / "state" / "self_model").exists()
 
     out2 = io.StringIO()
     err2 = io.StringIO()
@@ -1092,7 +1104,7 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
 
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
-    model_path = tmp_path / "state" / "eidolon" / "self_model.json"
+    model_path = tmp_path / "state" / "self_model" / "self_model.json"
     original_bytes = model_path.read_bytes()
 
     config_path = tmp_path / "config" / "kaine.operator.toml"
@@ -1100,6 +1112,12 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
     config_path.write_text("[modules]\nmnemos = true\n", encoding="utf-8")
 
     class Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Collections:
                 collections = []
@@ -1163,6 +1181,12 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
     before = snapshot_files(tmp_path / "state")
 
     class Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             class Collections:
                 collections = []
@@ -1203,7 +1227,7 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
 def test_unattributable_pending_job_refuses_before_anything(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
-    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job = tmp_path / "state" / "sleep" / "voice_align_jobs" / "q1"
     job.mkdir(parents=True)
     (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
     (job / "READY").write_text("")
@@ -1231,7 +1255,7 @@ def test_unattributable_pending_job_refuses_before_anything(tmp_path, monkeypatc
 def test_keep_unattributed_jobs_flag_proceeds_and_records(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
-    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job = tmp_path / "state" / "sleep" / "voice_align_jobs" / "q1"
     job.mkdir(parents=True)
     (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
     (job / "READY").write_text("")
@@ -1252,15 +1276,15 @@ def test_keep_unattributed_jobs_flag_proceeds_and_records(tmp_path, monkeypatch)
     lines = audit_path.read_text().strip().splitlines()
     record = json.loads(lines[-1])
     assert record["keep_unattributed_jobs_asserted"] is True
-    assert "hypnos/voice_align_jobs/q1" in record["unattributed_jobs_kept"]
+    assert "sleep/voice_align_jobs/q1" in record["unattributed_jobs_kept"]
 
 
 def test_attributable_pending_job_is_still_cancelled(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
-    adapters = tmp_path / "state" / "hypnos" / "adapters"
+    adapters = tmp_path / "state" / "sleep" / "adapters"
     adapters.mkdir(parents=True)
-    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job = tmp_path / "state" / "sleep" / "voice_align_jobs" / "q1"
     job.mkdir(parents=True)
     (job / "job.json").write_text(
         json.dumps({"adapter_output_dir": str(adapters.resolve())})
@@ -1291,6 +1315,12 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
 
     class _Reachable:
+        def get_aliases(self):
+            """No collection aliases (a store that was never renamed)."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(aliases=[])
+
         def get_collections(self):
             return SimpleNamespace(collections=[])
 
@@ -1302,7 +1332,7 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
     monkeypatch.setattr("kaine.lifecycle.__main__._qdrant_client", lambda cfg: _Reachable())
     monkeypatch.setattr("kaine.lifecycle.decommission._qdrant_client", lambda cfg: _Reachable())
     _seed_state(tmp_path / "state")
-    before = (tmp_path / "state" / "eidolon" / "self_model.json").read_bytes()
+    before = (tmp_path / "state" / "self_model" / "self_model.json").read_bytes()
     out = io.StringIO()
     err = io.StringIO()
     answers = iter(["I acknowledge the CAL welfare terms", "Kaine Nova"])
@@ -1324,7 +1354,7 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
     )
     assert rc == 8, out.getvalue() + err.getvalue()
     assert "just before deletion" in out.getvalue()
-    assert (tmp_path / "state" / "eidolon" / "self_model.json").read_bytes() == before
+    assert (tmp_path / "state" / "self_model" / "self_model.json").read_bytes() == before
     assert not (tmp_path / "state" / "audit" / "decommission.jsonl").exists()
 
 
@@ -1332,7 +1362,7 @@ def test_unattributable_claimed_job_refuses_before_anything(tmp_path, monkeypatc
     """A claimed but unfinished job blocks decommission without changing state."""
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     _seed_state(tmp_path / "state")
-    job = tmp_path / "state" / "hypnos" / "voice_align_jobs" / "q1"
+    job = tmp_path / "state" / "sleep" / "voice_align_jobs" / "q1"
     job.mkdir(parents=True)
     (job / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
     (job / "CLAIMED").write_text("")
@@ -1370,7 +1400,7 @@ def test_rerun_names_the_earlier_qdrant_export(tmp_path, monkeypatch):
         json.dumps(
             {
                 "outcome": "incomplete",
-                "dropped_collections": ["mnemos_episodic"],
+                "dropped_collections": ["episodic_memory_episodic"],
                 "backup_path": earlier_backup,
             }
         )
@@ -1399,7 +1429,7 @@ def test_rerun_names_the_earlier_qdrant_export(tmp_path, monkeypatch):
         json.dumps(
             {
                 "outcome": "deleted",
-                "dropped_collections": ["mnemos_episodic"],
+                "dropped_collections": ["episodic_memory_episodic"],
                 "backup_path": earlier_backup,
             }
         )
@@ -1418,3 +1448,56 @@ def test_rerun_names_the_earlier_qdrant_export(tmp_path, monkeypatch):
     lines2 = (audit2 / "decommission.jsonl").read_text().strip().split("\n")
     assert len(lines2) == 2
     assert json.loads(lines2[1])["earlier_qdrant_export_backup"] is None
+
+
+def _old_key(new_key: str) -> str:
+    """The module's directory name before the rename, from the table."""
+    from kaine import legacy_names
+
+    return next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == new_key)
+
+
+def _seed_old_state(state_root: Path) -> None:
+    """A state tree last written before the stored-name rename."""
+    old_self_model = state_root / _old_key("self_model")
+    old_self_model.mkdir(parents=True, exist_ok=True)
+    (old_self_model / "self_model.json").write_text(
+        json.dumps({"name": "Kaine Nova", "drift_count": 0, "identity_history": []}),
+        encoding="utf-8",
+    )
+    old_language = state_root / _old_key("language")
+    old_language.mkdir(parents=True, exist_ok=True)
+    (old_language / "intent_expression.jsonl").write_text('{"x":1}\n', encoding="utf-8")
+
+
+def test_an_old_tree_is_moved_before_decommission_reads_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_old_state(tmp_path / "state")
+    eval_root = _make_diverged(tmp_path)
+    out = io.StringIO()
+    rc = main(
+        _args(tmp_path, eval_root=eval_root),
+        input_fn=_scripted_input(["decline"]),
+        out=out,
+        err=io.StringIO(),
+    )
+    assert rc == 5
+    assert "state tree moved to the current names" in out.getvalue()
+    assert (tmp_path / "state" / "self_model" / "self_model.json").is_file()
+    assert not (tmp_path / "state" / _old_key("self_model")).exists()
+
+
+def test_a_dry_run_refuses_an_old_tree_and_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    _seed_old_state(tmp_path / "state")
+    before = _snapshot_tree(tmp_path / "state")
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path, dry_run=True),
+        input_fn=_scripted_input([]),
+        out=io.StringIO(),
+        err=err,
+    )
+    assert rc == 6
+    assert "before the module rename" in err.getvalue()
+    assert _snapshot_tree(tmp_path / "state") == before

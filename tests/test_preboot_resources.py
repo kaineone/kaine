@@ -266,13 +266,13 @@ def _disk_config(tmp_path: Path, **extra: Any) -> dict[str, Any]:
         },
         "sleep": {
             "voice_alignment": {
-                "adapter_output_dir": str(state / "hypnos" / "adapters"),
-                "trainer_workdir": str(state / "hypnos" / "jobs"),
+                "adapter_output_dir": str(state / "sleep" / "adapters"),
+                "trainer_workdir": str(state / "sleep" / "jobs"),
             }
         },
         "ignition_log": {"directory": str(data / "ignition")},
         "supervisor": {"incident_log": {"path": str(state / "cycle" / "incidents")}},
-        "self_model": {"persistence_path": str(state / "eidolon" / "self_model.json")},
+        "self_model": {"persistence_path": str(state / "self_model" / "self_model.json")},
     }
 
 
@@ -318,7 +318,7 @@ def test_durable_paths_cover_every_configured_store(tmp_path):
     ):
         assert key in labels
     paths = dict(preboot.durable_paths(cfg))
-    assert paths["[self_model].persistence_path"] == tmp_path / "state" / "eidolon"
+    assert paths["[self_model].persistence_path"] == tmp_path / "state" / "self_model"
     assert paths["[preservation.welfare_response].out_root"] == tmp_path / "backups"
 
 
@@ -326,7 +326,7 @@ def test_durable_paths_cover_every_configured_store(tmp_path):
 def test_durable_paths_use_module_defaults():
     paths = dict(preboot.durable_paths({}))
     assert paths["[lifecycle].snapshots_path"] == Path("state/forks")
-    assert paths["[sleep.voice_alignment].adapter_output_dir"] == Path("state/hypnos/adapters")
+    assert paths["[sleep.voice_alignment].adapter_output_dir"] == Path("state/sleep/adapters")
     assert paths["[ignition_log].directory"] == Path("data/ignition")
     assert paths["[preservation.divergence_monitor].out_root"] == Path("backups")
 

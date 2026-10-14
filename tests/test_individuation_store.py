@@ -73,7 +73,7 @@ def _make_reference(text: str = "reference sample") -> ReferenceDoc:
     )
     return ReferenceDoc(
         reference_id="ref-000",
-        reference_kind="birth",
+        reference_kind="maturation",
         captured_at="2025-01-01T00:00:00+00:00",
         born_at="2025-01-01T00:00:00+00:00",
         battery=battery,
@@ -134,7 +134,7 @@ def test_reference_bad_battery_digest(tmp_path):
     paths = IndividuationPaths(tmp_path / "individuation")
     doc = ReferenceDoc(
         reference_id="ref-bad",
-        reference_kind="birth",
+        reference_kind="maturation",
         captured_at="2025-01-01T00:00:00+00:00",
         born_at=None,
         battery=("one",),
@@ -314,7 +314,7 @@ def test_sink_and_reader(tmp_path, monkeypatch):
             outcome="scored",
             entity_name="ent",
             reference_id="ref-a",
-            reference_kind="birth",
+            reference_kind="maturation",
             p_value=0.02,
             effect_size_h=0.5,
             alpha_k=0.05,
@@ -325,7 +325,7 @@ def test_sink_and_reader(tmp_path, monkeypatch):
             outcome="scored",
             entity_name="ent",
             reference_id="ref-a",
-            reference_kind="birth",
+            reference_kind="maturation",
             p_value=0.03,
             effect_size_h=0.4,
             alpha_k=0.05,
@@ -336,7 +336,7 @@ def test_sink_and_reader(tmp_path, monkeypatch):
             outcome="inconclusive",
             entity_name="ent",
             reference_id="ref-b",
-            reference_kind="birth",
+            reference_kind="maturation",
             inconclusive_reason="organ_resting",
             ts="2025-01-01T00:00:00+00:00",
         )

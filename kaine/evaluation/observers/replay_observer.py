@@ -95,7 +95,7 @@ class ReplayObserver:
             source_stream=_EPISODIC_MEMORY_STREAM,
             accepted_types=frozenset({"episodic_memory.replay"}),
             redact_content=redact_content,
-            name="replay_mnemos",
+            name="replay_episodic_memory",
         )
         self._world_model = _SingleStreamReplayObserver(
             bus,
@@ -103,7 +103,7 @@ class ReplayObserver:
             source_stream=_WORLD_MODEL_STREAM,
             accepted_types=frozenset({"world_model.scenario"}),
             redact_content=redact_content,
-            name="replay_phantasia",
+            name="replay_world_model",
         )
 
     async def start(self) -> None:

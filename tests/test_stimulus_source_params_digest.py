@@ -9,7 +9,7 @@ from dataclasses import fields
 import kaine.legacy_names as legacy_names
 from kaine import legacy_aliases
 from kaine.boot.perception_feed import gather_perception_feed_descriptor
-from kaine.lifecycle.stage import womb_params_digest
+from kaine.lifecycle.stage import stimulus_source_params_digest as womb_params_digest
 from kaine.lifecycle.stored_field_names import (
     STIMULUS_SOURCE_PARAMS,
     stimulus_source_params_record,

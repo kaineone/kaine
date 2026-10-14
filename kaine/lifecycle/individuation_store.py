@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from kaine import legacy_aliases
 from kaine.security.crypto import get_state_encryptor
 
 if TYPE_CHECKING:
@@ -94,11 +95,11 @@ class IndividuationPaths:
 
     @property
     def maturation_adapter(self) -> Path:
-        return self.root / "birth_adapter.gguf"
+        return self.root / "maturation_adapter.gguf"
 
     @property
     def maturation_pending(self) -> Path:
-        return self.root / "birth_pending"
+        return self.root / "maturation_pending"
 
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
@@ -154,7 +155,7 @@ def _read_encrypted_json(
     return obj
 
 
-REFERENCE_KINDS = ("birth", "capture", "reconstructed")
+REFERENCE_KINDS = ("maturation", "capture", "reconstructed")
 
 
 @dataclass(frozen=True)
@@ -217,7 +218,7 @@ class ReferenceDoc:
     @classmethod
     def from_dict(cls, d: dict) -> "ReferenceDoc":
         try:
-            reference_kind = d["reference_kind"]
+            reference_kind = legacy_aliases.map_stored_value(d["reference_kind"])
             if reference_kind not in REFERENCE_KINDS:
                 raise ReferenceUnreadable(
                     f"Invalid reference_kind {reference_kind!r}"
@@ -635,6 +636,13 @@ def read_reports(
                 if not isinstance(obj.get("ts"), str):
                     continue
 
+                if isinstance(obj.get("reference_kind"), str):
+                    obj = {
+                        **obj,
+                        "reference_kind": legacy_aliases.map_stored_value(
+                            obj["reference_kind"]
+                        ),
+                    }
                 matched.append(obj)
 
     if skipped > 0:

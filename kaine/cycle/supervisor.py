@@ -590,12 +590,12 @@ class Supervisor:
         development_only = (
             control.frozen
             and bool(control.stack)
-            and all(entry.get("source") == "gestation" for entry in control.stack)
+            and all(entry.get("source") == "development" for entry in control.stack)
         )
         # Any developmental phase entry means the cycle is paused for a lost stimulus source, so
         # heartbeats stay stale even while the supervisor's own entry sits on top of it.
         under_development = control.frozen and any(
-            entry.get("source") == "gestation" for entry in control.stack
+            entry.get("source") == "development" for entry in control.stack
         )
         if control.frozen and control.source != "supervisor" and not development_only:
             # A frozen cycle's modules are silent by design, so heartbeat

@@ -88,8 +88,8 @@ async def test_read_bundle_stage_returns_stage(tmp_path, self_model):
     stage_path.write_text(
         json.dumps(
             {
-                "stage": "gestation",
-                "gestation_started_at": "2026-01-01T00:00:00+00:00",
+                "stage": "development",
+                "development_started_at": "2026-01-01T00:00:00+00:00",
                 "lived_seconds": 12.5,
                 "sleep_count": 3,
             }
@@ -98,8 +98,8 @@ async def test_read_bundle_stage_returns_stage(tmp_path, self_model):
     bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
     stage_dict = read_bundle_stage(bundle)
     assert stage_dict is not None
-    assert stage_dict["stage"] == "gestation"
-    assert stage_dict["gestation_started_at"] == "2026-01-01T00:00:00+00:00"
+    assert stage_dict["stage"] == "development"
+    assert stage_dict["development_started_at"] == "2026-01-01T00:00:00+00:00"
     assert stage_dict["lived_seconds"] == 12.5
     assert stage_dict["sleep_count"] == 3
 
@@ -145,26 +145,26 @@ async def test_bundle_carries_development_progress_not_verdict(tmp_path, self_mo
     readout = {"baselines": 1}
     viability = {"verdict": "unviable"}
 
-    (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "gestation"}))
-    (lifecycle_dir / "gestation_progress.json").write_text(json.dumps(progress))
-    (lifecycle_dir / "gestation_readout.json").write_text(json.dumps(readout))
-    (lifecycle_dir / "gestation_viability.json").write_text(json.dumps(viability))
+    (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "development"}))
+    (lifecycle_dir / "development_progress.json").write_text(json.dumps(progress))
+    (lifecycle_dir / "development_readout.json").write_text(json.dumps(readout))
+    (lifecycle_dir / "development_viability.json").write_text(json.dumps(viability))
 
     stage_path = lifecycle_dir / "stage.json"
     bundle, _ = await _preserve_bundle(tmp_path, self_model, monkeypatch_stage=stage_path)
 
     restored = extract_bundle_development(bundle, tmp_path / "revived")
-    assert restored == ["gestation_progress.json", "gestation_readout.json"]
+    assert restored == ["development_progress.json", "development_readout.json"]
     assert (
-        json.loads((tmp_path / "revived" / "gestation_progress.json").read_text())
+        json.loads((tmp_path / "revived" / "development_progress.json").read_text())
         == progress
     )
     assert (
-        json.loads((tmp_path / "revived" / "gestation_readout.json").read_text())
+        json.loads((tmp_path / "revived" / "development_readout.json").read_text())
         == readout
     )
-    assert not (tmp_path / "revived" / "gestation_viability.json").exists()
-    assert not (bundle / "gestation").exists()
+    assert not (tmp_path / "revived" / "development_viability.json").exists()
+    assert not (bundle / "development").exists()
 
 
 @pytest.mark.asyncio
@@ -191,8 +191,8 @@ async def test_development_files_travel_encrypted(tmp_path, self_model, monkeypa
     lifecycle_dir = tmp_path / "lifecycle"
     lifecycle_dir.mkdir()
     progress = {"k": {"awake_seconds": 120.0}}
-    (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "gestation"}))
-    (lifecycle_dir / "gestation_progress.json").write_text(json.dumps(progress))
+    (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "development"}))
+    (lifecycle_dir / "development_progress.json").write_text(json.dumps(progress))
 
     try:
         bundle, _ = await _preserve_bundle(
@@ -203,20 +203,20 @@ async def test_development_files_travel_encrypted(tmp_path, self_model, monkeypa
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
 
     assert (bundle / "bundle.tar.enc").is_file()
-    assert restored == ["gestation_progress.json"]
+    assert restored == ["development_progress.json"]
     assert (
-        json.loads((tmp_path / "revived" / "gestation_progress.json").read_text())
+        json.loads((tmp_path / "revived" / "development_progress.json").read_text())
         == progress
     )
-    assert not (bundle / "gestation").exists()
+    assert not (bundle / "development").exists()
 
 def test_set_aside_development_files_keeps_them(tmp_path):
     dest = tmp_path / "lifecycle"
     dest.mkdir()
-    (dest / "gestation_progress.json").write_text("{}")
-    (dest / "gestation_viability.json").write_text("{}")
+    (dest / "development_progress.json").write_text("{}")
+    (dest / "development_viability.json").write_text("{}")
 
-    originals = {"gestation_progress.json", "gestation_viability.json"}
+    originals = {"development_progress.json", "development_viability.json"}
     moved = set_aside_development_files(dest)
     assert len(moved) == 2
     for original in originals:
