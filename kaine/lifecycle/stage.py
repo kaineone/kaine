@@ -52,7 +52,7 @@ from kaine.storage import resolve
 DEFAULT_STAGE_PATH = Path("state/lifecycle/stage.json")
 STAGE_PATH = DEFAULT_STAGE_PATH
 
-DEVELOPMENT = "gestation"
+DEVELOPMENT = "development"
 EMBODIED = "embodied"
 STAGES = (DEVELOPMENT, EMBODIED)
 
@@ -236,15 +236,15 @@ class StageState:
     """
 
     stage: str = DEVELOPMENT
-    gestation_started_at: str | None = None
+    development_started_at: str | None = None
     born_at: str | None = None
     lived_seconds: float = 0.0
     sleep_count: int = 0
-    hypnos_cursor: str | None = None
-    womb_t_at_birth: float | None = None
-    womb_seed: int | None = None
-    womb_params_digest: str | None = None
-    birth_bloom_ends_at: str | None = None
+    sleep_cursor: str | None = None
+    stimulus_source_t_at_maturation: float | None = None
+    stimulus_source_seed: int | None = None
+    stimulus_source_params_digest: str | None = None
+    maturation_bloom_ends_at: str | None = None
 
     @property
     def is_developing(self) -> bool:
@@ -268,15 +268,15 @@ class StageState:
             stage = DEVELOPMENT
         return cls(
             stage=stage,
-            gestation_started_at=data.get("gestation_started_at"),
+            development_started_at=data.get("development_started_at"),
             born_at=data.get("born_at"),
             lived_seconds=_coerce_lived_seconds(data.get("lived_seconds", 0.0)),
             sleep_count=_coerce_sleep_count(data.get("sleep_count", 0)),
-            hypnos_cursor=_coerce_sleep_cursor(data.get("hypnos_cursor")),
-            womb_t_at_birth=_coerce_stimulus_source_t_at_maturation(data.get("womb_t_at_birth")),
-            womb_seed=_coerce_stimulus_source_seed(data.get("womb_seed")),
-            womb_params_digest=_coerce_stimulus_source_params_digest(data.get("womb_params_digest")),
-            birth_bloom_ends_at=_coerce_maturation_bloom_ends_at(data.get("birth_bloom_ends_at")),
+            sleep_cursor=_coerce_sleep_cursor(data.get("sleep_cursor")),
+            stimulus_source_t_at_maturation=_coerce_stimulus_source_t_at_maturation(data.get("stimulus_source_t_at_maturation")),
+            stimulus_source_seed=_coerce_stimulus_source_seed(data.get("stimulus_source_seed")),
+            stimulus_source_params_digest=_coerce_stimulus_source_params_digest(data.get("stimulus_source_params_digest")),
+            maturation_bloom_ends_at=_coerce_maturation_bloom_ends_at(data.get("maturation_bloom_ends_at")),
         )
 
 
@@ -344,7 +344,7 @@ def resolve_boot_stage(
     if has_prior_lived_history:
         # Preserved-entity invariant (NORMATIVE): never regress a lived mind.
         return StageState(stage=EMBODIED)
-    return StageState(stage=DEVELOPMENT, gestation_started_at=now_iso or _now_iso())
+    return StageState(stage=DEVELOPMENT, development_started_at=now_iso or _now_iso())
 
 
 def advance_to_embodied(state: StageState, *, now_iso: str | None = None) -> StageState:
@@ -368,9 +368,9 @@ def maturation_is_new(before: StageState, after: StageState) -> bool:
 def record_maturation_stimulus_source(
     state: StageState,
     *,
-    womb_t_at_birth: float | None,
-    womb_seed: int | None,
-    womb_params_digest: str | None,
+    stimulus_source_t_at_maturation: float | None,
+    stimulus_source_seed: int | None,
+    stimulus_source_params_digest: str | None,
     bloom_ends_at: str | None,
 ) -> StageState:
     """Record the stimulus-source-state snapshot taken at maturation.
@@ -382,14 +382,14 @@ def record_maturation_stimulus_source(
         raise ValueError("record_maturation_stimulus_source: state must be embodied")
     return replace(
         state,
-        womb_t_at_birth=womb_t_at_birth,
-        womb_seed=womb_seed,
-        womb_params_digest=womb_params_digest,
-        birth_bloom_ends_at=bloom_ends_at,
+        stimulus_source_t_at_maturation=stimulus_source_t_at_maturation,
+        stimulus_source_seed=stimulus_source_seed,
+        stimulus_source_params_digest=stimulus_source_params_digest,
+        maturation_bloom_ends_at=bloom_ends_at,
     )
 
 
-def womb_params_digest(params: object) -> str:
+def stimulus_source_params_digest(params: object) -> str:
     """Return a stable sha256 hex digest of a stimulus source parameters object.
 
     ``params`` must be a dataclass instance (e.g. ``StimulusSourceParams``); its fields are

@@ -53,7 +53,7 @@ async def test_same_seed_reproduces_effect_and_verdict():
 
     arms1 = [rec for rec in r1["records"] if rec["kind"] == "arm"]
     arms2 = [rec for rec in r2["records"] if rec["kind"] == "arm"]
-    for field in ("soma_gain", "topos_gain", "soma_error", "topos_error"):
+    for field in ("interoception_gain", "vision_gain", "interoception_error", "vision_error"):
         assert arms1[0][field] == arms2[0][field]
         assert arms1[1][field] == arms2[1][field]
 
@@ -67,10 +67,10 @@ async def test_records_have_expected_shape():
     assert records[0]["arm"] == "workspace_on"
     assert records[1]["arm"] == "pooled"
     for record in records[:2]:
-        assert len(record["soma_gain"]) == cfg.ticks
-        assert len(record["topos_gain"]) == cfg.ticks
-        assert len(record["soma_error"]) == cfg.ticks
-        assert len(record["topos_error"]) == cfg.ticks
+        assert len(record["interoception_gain"]) == cfg.ticks
+        assert len(record["vision_gain"]) == cfg.ticks
+        assert len(record["interoception_error"]) == cfg.ticks
+        assert len(record["vision_error"]) == cfg.ticks
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,7 @@ async def test_workspace_on_and_pooled_interoception_gain_series_differ():
     result = await run_ablation(cfg)
     on = result["records"][0]
     pooled = result["records"][1]
-    assert on["soma_gain"] != pooled["soma_gain"]
+    assert on["interoception_gain"] != pooled["interoception_gain"]
 
 
 @pytest.mark.asyncio

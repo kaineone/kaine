@@ -318,7 +318,7 @@ async def test_gate_runner_calls_maturation_hook_once_after_embodied(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Any] = []
@@ -370,7 +370,7 @@ async def test_gate_runner_raising_maturation_hook_does_not_stop_maturation(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Any] = []
@@ -428,7 +428,7 @@ def test_boot_clock_not_born_when_stage_developing(
     path = tmp_path / "stage.json"
     monkeypatch.setattr("kaine.lifecycle.stage.STAGE_PATH", path)
     lifecycle_stage.write_stage(
-        lifecycle_stage.StageState(stage="gestation"), path
+        lifecycle_stage.StageState(stage="development"), path
     )
     feed: dict[str, Any] = {}
     _install_shared_stimulus_source_clock(feed, None, None, stage_path=path)

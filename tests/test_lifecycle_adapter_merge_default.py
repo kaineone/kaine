@@ -207,8 +207,8 @@ def test_real_merge_runs_via_forkmanager_when_peft_present(_fake_peft_present, t
 def test_fail_loud_when_peft_absent_and_both_parents_trained(_peft_absent, tmp_path):
     mgr = ForkManager(tmp_path)  # resolves to "auto" -> Fake (peft absent)
     reg = _FakeRegistry([_FakeModule("interoception")])
-    a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
-    b = mgr.snapshot(reg, adapters=["state/hypnos/adapters/b"])
+    a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
+    b = mgr.snapshot(reg, adapters=["state/sleep/adapters/b"])
 
     with pytest.raises(UnmergedAdaptersError) as exc_info:
         mgr.merge(a.id, b.id)
@@ -231,8 +231,8 @@ def test_explicit_fake_selection_unions_without_raising_when_untrained(tmp_path)
     without raising, regardless of whether PEFT happens to be installed."""
     mgr = ForkManager(tmp_path, adapter_merger=merger_from_name("fake"))
     reg = _FakeRegistry([_FakeModule("interoception")])
-    a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
+    a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
     b = mgr.snapshot(reg, adapters=[])
 
     merged = mgr.merge(a.id, b.id)
-    assert "state/hypnos/adapters/a" in merged.adapters
+    assert "state/sleep/adapters/a" in merged.adapters

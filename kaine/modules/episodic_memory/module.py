@@ -57,7 +57,7 @@ class EpisodicMemory(BaseModule):
         qdrant_host: str = "127.0.0.1",
         qdrant_port: int = 6533,
         qdrant_api_key: Optional[str] = None,
-        collection_prefix: str = "mnemos_",
+        collection_prefix: str = "episodic_memory_",
         short_term_capacity: int = 128,
         recall_top_k: int = 5,
         baseline_salience: float = 0.15,

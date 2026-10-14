@@ -60,7 +60,7 @@ def _small_wm(seed: int) -> NumpyDreamerV3WorldModel:
 def _make_world_model(
     bus: AsyncBus, tmp_path: Path, seed: int, persist: bool = True
 ) -> tuple[WorldModel, NumpyDreamerV3WorldModel, Path]:
-    ckpt = tmp_path / f"phantasia_{seed}" / "wm.ckpt"
+    ckpt = tmp_path / f"world_model_{seed}" / "wm.ckpt"
     wm = _small_wm(seed)
     ph = WorldModel(
         bus,
@@ -188,7 +188,7 @@ async def test_shed_drops_world_model_artifacts(bus, tmp_path):
     parent_snap = fm.snapshot(reg)
     child = fm.fork(parent_snap.id, shed=["world_model"])
 
-    assert not (snapshot_dir(fm.root, child.id) / "artifacts" / "phantasia").exists()
+    assert not (snapshot_dir(fm.root, child.id) / "artifacts" / "world_model").exists()
     assert "world_model" not in child.modules
     assert child.metadata["shed"] == ["world_model"]
 
@@ -261,7 +261,7 @@ async def test_mismatched_artifact_fails_closed(bus, tmp_path):
     snap = fm.snapshot(reg)
 
     reg2 = ModuleRegistry()
-    ckpt_b = tmp_path / "phantasia_mismatch" / "wm.ckpt"
+    ckpt_b = tmp_path / "world_model_mismatch" / "wm.ckpt"
     wm2 = NumpyDreamerV3WorldModel(
         observation_dim(),
         deter_dim=16,

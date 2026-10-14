@@ -242,7 +242,7 @@ def _purge_plaintext_bundle(bundle_dir: Path, *, error: str, reason: str = "encr
 
 def _episodic_memory_prefix(qdrant_cfg: dict[str, Any] | None) -> str:
     cfg = qdrant_cfg or {}
-    return str((cfg.get("episodic_memory") or {}).get("collection_prefix", "mnemos_"))
+    return str((cfg.get("episodic_memory") or {}).get("collection_prefix", "episodic_memory_"))
 
 
 def _episodic_memory_prefix_forms(qdrant_cfg: dict[str, Any] | None) -> list[str]:
@@ -269,7 +269,7 @@ def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list
             if coll not in seen:
                 seen.add(coll)
                 names.append(coll)
-    social_cognition = str((cfg.get("social_cognition") or {}).get("collection", "empatheia_agents"))
+    social_cognition = str((cfg.get("social_cognition") or {}).get("collection", "social_cognition_agents"))
     if social_cognition and social_cognition not in seen:
         seen.add(social_cognition)
         names.append(social_cognition)
@@ -645,7 +645,7 @@ def capture_backup(
                     log.debug("capture_backup: qdrant probe client close failed", exc_info=True)
 
     # --- 1. Self-model ------------------------------------------
-    self_model_src = state_root / "eidolon" / "self_model.json"
+    self_model_src = state_root / "self_model" / "self_model.json"
     if self_model_src.is_file():
         try:
             shutil.copy2(self_model_src, bundle_dir / "self_model.json")
@@ -654,7 +654,7 @@ def capture_backup(
             return _fail([f"copy self_model.json: {exc}"])
 
     # --- 2. Language intent expression log --------------------------------
-    intent_src = state_root / "lingua" / "intent_expression.jsonl"
+    intent_src = state_root / "language" / "intent_expression.jsonl"
     if intent_src.is_file():
         try:
             shutil.copy2(intent_src, bundle_dir / "intent_expression.jsonl")
@@ -663,7 +663,7 @@ def capture_backup(
             return _fail([f"copy intent_expression.jsonl: {exc}"])
 
     # --- 2b. Rotated intent log corpus ----------------------------------
-    intent_corpus_src = state_root / "lingua" / "intent_log"
+    intent_corpus_src = state_root / "language" / "intent_log"
     if intent_corpus_src.is_dir():
         try:
             shutil.copytree(
@@ -840,8 +840,8 @@ def capture_backup(
             "CAL Article 4.2(b). The complete state is under locations/<key>/, with paths "
             "relative to the state root, the data root (data/) or the fork root (forks/): "
             "to restore on another host, copy each back to the same place (for example "
-            "locations/world_model/phantasia/ to state/phantasia/ and "
-            "locations/sleep.adapters/hypnos/adapters/ to state/hypnos/adapters/), "
+            "locations/world_model/world_model/ to state/world_model/ and "
+            "locations/sleep.adapters/sleep/adapters/ to state/sleep/adapters/), "
             "restore individuation/ to state/individuation/, and re-import the "
             "qdrant/*.jsonl exports before booting. self_model.json, intent_expression.jsonl "
             "and snapshot.json at the top level are convenience copies of the same state. "

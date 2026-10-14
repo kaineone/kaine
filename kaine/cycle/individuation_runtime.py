@@ -293,7 +293,7 @@ class IndividuationRuntime:
             self.paths.maturation_pending.write_text("1", encoding="utf-8")
         except OSError as exc:
             log.warning("individuation failed to write maturation marker: %s", exc)
-        self.scheduler.request_capture("birth")
+        self.scheduler.request_capture("maturation")
 
     async def start(self) -> None:
         await self.ensure_fact(self.config.disclosure)
@@ -324,7 +324,7 @@ class IndividuationRuntime:
                     log.warning("individuation failed to remove stale maturation marker: %s", exc)
             elif self.paths.maturation_pending.exists():
                 log.info("individuation resuming pending maturation capture")
-                self.scheduler.request_capture("birth")
+                self.scheduler.request_capture("maturation")
             elif not developing:
                 self.scheduler.request_capture("capture")
 
@@ -457,7 +457,7 @@ def build_runtime(
         adapter_verifiable = _no_adapter_file
 
     def _on_capture_kind_change(kind: str | None) -> None:
-        if kind != "birth":
+        if kind != "maturation":
             try:
                 paths.maturation_pending.unlink(missing_ok=True)
             except OSError as exc:

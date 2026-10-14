@@ -333,7 +333,7 @@ async def main_async(args: argparse.Namespace) -> int:
 
     battery = load_battery(ind.battery_path or None)
 
-    intent_path = resolve("state/lingua/intent_expression.jsonl")
+    intent_path = resolve("state/language/intent_expression.jsonl")
     lines_before = _line_count(intent_path)
 
     sampler = build_probe_sampler(

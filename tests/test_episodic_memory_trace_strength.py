@@ -401,12 +401,12 @@ async def test_floor_prunes_weak_traces(storage):
 
 async def test_migration_backfills_once(storage):
     """Legacy points without log_base are backfilled and only once."""
-    await storage.ensure_collection("mnemos_episodic")
-    await storage.write_stamp("mnemos_embedding_space", _TableEmbedder().space)
+    await storage.ensure_collection("episodic_memory_episodic")
+    await storage.write_stamp("episodic_memory_embedding_space", _TableEmbedder().space)
     vec = _unit([1.0] * DIM)
     for i in range(3):
         await storage.upsert(
-            "mnemos_episodic",
+            "episodic_memory_episodic",
             vector=vec,
             text=f"legacy-{i}",
             payload={"timestamp": 1.0},
@@ -417,7 +417,7 @@ async def test_migration_backfills_once(storage):
     for p in points:
         assert p["payload"]["log_base"] == 0.0
         assert p["payload"]["born_sleep"] == -1
-    meta = await storage.read_meta("mnemos_strength")
+    meta = await storage.read_meta("episodic_memory_strength")
     assert meta == {
         "log_gain": 0.0,
         "sleeps": 0,
@@ -430,15 +430,15 @@ async def test_migration_backfills_once(storage):
     core2 = await _core(storage)
     changed = await storage.backfill_strength(core2.persisted_collection_names(), log_base=0.0)
     assert changed == 0
-    assert await storage.read_meta("mnemos_strength") == meta
+    assert await storage.read_meta("episodic_memory_strength") == meta
 
 
 async def test_store_without_meta_but_with_log_base_is_refused(storage):
     """A point with log_base but no strength record is rejected."""
-    await storage.ensure_collection("mnemos_episodic")
-    await storage.write_stamp("mnemos_embedding_space", _TableEmbedder().space)
+    await storage.ensure_collection("episodic_memory_episodic")
+    await storage.write_stamp("episodic_memory_embedding_space", _TableEmbedder().space)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=_unit([1.0] * DIM),
         text="orphan",
         payload={"timestamp": 1.0, "log_base": -3.0},
@@ -561,10 +561,10 @@ async def test_numerics_far_from_zero_log_gain(storage, request):
     """Strength arithmetic remains exact when log_gain is far from zero."""
     if request.node.callspec.params["storage"] == "qdrant":
         pytest.skip("in-memory and sqlite-vec only")
-    await storage.ensure_collection("mnemos_episodic")
-    await storage.write_stamp("mnemos_embedding_space", _TableEmbedder().space)
+    await storage.ensure_collection("episodic_memory_episodic")
+    await storage.write_stamp("episodic_memory_embedding_space", _TableEmbedder().space)
     await storage.write_meta(
-        "mnemos_strength",
+        "episodic_memory_strength",
         {"log_gain": -5000.0, "sleeps": 7, "total": 0.0, "entity_time": 0.0, "bytes": 0},
     )
     e0 = [1.0] + [0.0] * (DIM - 1)
@@ -876,9 +876,9 @@ async def test_summary_and_health_surface_a_blocked_sleep(bus, tmp_path):
     await storage.initialize()
     try:
         embedder = FakeEmbedder(latent_dim=DIM)
-        await storage.write_stamp("mnemos_embedding_space", embedder.space)
+        await storage.write_stamp("episodic_memory_embedding_space", embedder.space)
         await storage.write_meta(
-            "mnemos_strength",
+            "episodic_memory_strength",
             {
                 "log_gain": 0.0,
                 "sleeps": 0,
@@ -933,10 +933,10 @@ async def test_summary_and_health_surface_a_blocked_sleep(bus, tmp_path):
 async def test_persist_refused_when_pending_and_over_twice_budget(storage, caplog, tmp_path):
     """Persist is refused while import is pending and the store is over twice its budget."""
     await storage.write_stamp(
-        "mnemos_embedding_space", FakeEmbedder(latent_dim=DIM).space
+        "episodic_memory_embedding_space", FakeEmbedder(latent_dim=DIM).space
     )
     await storage.write_meta(
-        "mnemos_strength",
+        "episodic_memory_strength",
         {
             "log_gain": 0.0,
             "sleeps": 0,
@@ -1104,7 +1104,7 @@ async def test_sqlite_old_vector_table_is_rebuilt(tmp_path):
 
     import sqlite_vec
 
-    path = tmp_path / "old_mnemos.db"
+    path = tmp_path / "old_episodic_memory.db"
     try:
         db = sqlite3.connect(str(path))
         db.enable_load_extension(True)
@@ -1206,7 +1206,7 @@ async def test_replay_pool_is_the_whole_wake(bus):
     assert _key(events[0].point_id) == target_id
     assert target_id not in {_key(t[0]) for t in m.core.last_consolidated}
     for ev in events:
-        assert ev.collection == "mnemos_episodic"
+        assert ev.collection == "episodic_memory_episodic"
         assert isinstance(ev.log_base, float)
         assert _key(ev.point_id) not in prev_ids
 
@@ -1259,8 +1259,8 @@ async def test_cross_period_selection_sees_no_pruned_trace(bus):
 
 async def test_deep_consolidation_protects_replayed_traces():
     """deep_consolidation passes replay events to downscale as protected traces."""
-    sentinel_a = ReplayEvent(point_id="a", loop_payload={}, observer_payload={}, collection="mnemos_episodic", log_base=-0.1)
-    sentinel_b = ReplayEvent(point_id="b", loop_payload={}, observer_payload={}, collection="mnemos_episodic", log_base=-0.2)
+    sentinel_a = ReplayEvent(point_id="a", loop_payload={}, observer_payload={}, collection="episodic_memory_episodic", log_base=-0.1)
+    sentinel_b = ReplayEvent(point_id="b", loop_payload={}, observer_payload={}, collection="episodic_memory_episodic", log_base=-0.2)
 
     class FakeOk:
         opened = False
@@ -1323,11 +1323,11 @@ async def test_episodic_memory_downscale_maps_events_to_protect(bus, monkeypatch
     monkeypatch.setattr(m.core, "downscale", recorder)
     await m.downscale(
         protect=[
-            ReplayEvent(point_id="p", loop_payload={}, observer_payload={}, collection="mnemos_episodic", log_base=-0.5),
+            ReplayEvent(point_id="p", loop_payload={}, observer_payload={}, collection="episodic_memory_episodic", log_base=-0.5),
             ReplayEvent(point_id="short_term:0", loop_payload={}, observer_payload={}),
         ]
     )
-    assert recorded == [[("mnemos_episodic", "p", -0.5)]]
+    assert recorded == [[("episodic_memory_episodic", "p", -0.5)]]
 
 
 async def test_config(bus):

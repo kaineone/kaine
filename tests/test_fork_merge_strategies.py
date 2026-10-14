@@ -49,13 +49,13 @@ def test_episodic_memory_sums_short_term_and_preserves_matching_prefix():
     s = EpisodicMemoryMergeStrategy()
     space = {"model_id": "minilm", "dim": 384, "pooling": "mean", "normalized": True}
     out = s.merge(
-        {"short_term_size": 4, "collection_prefix": "mnemos_",
+        {"short_term_size": 4, "collection_prefix": "episodic_memory_",
          "embedding_space": space},
-        {"short_term_size": 7, "collection_prefix": "mnemos_",
+        {"short_term_size": 7, "collection_prefix": "episodic_memory_",
          "embedding_space": space},
     )
     assert out["short_term_size"] == 11
-    assert out["collection_prefix"] == "mnemos_"
+    assert out["collection_prefix"] == "episodic_memory_"
     assert "metadata" not in out
     assert out["embedding_space"] == space
     assert out["pending_source_tag"] == ["fork-a", "fork-b"]
@@ -74,9 +74,9 @@ def test_episodic_memory_flags_prefix_mismatch():
 def test_episodic_memory_flags_embedding_space_mismatch():
     s = EpisodicMemoryMergeStrategy()
     out = s.merge(
-        {"short_term_size": 1, "collection_prefix": "mnemos_",
+        {"short_term_size": 1, "collection_prefix": "episodic_memory_",
          "embedding_space": {"model_id": "a", "dim": 384, "pooling": "mean", "normalized": True}},
-        {"short_term_size": 2, "collection_prefix": "mnemos_",
+        {"short_term_size": 2, "collection_prefix": "episodic_memory_",
          "embedding_space": {"model_id": "b", "dim": 384, "pooling": "mean", "normalized": True}},
     )
     assert out["metadata"]["embedding_space_mismatch"] is True
@@ -85,8 +85,8 @@ def test_episodic_memory_flags_embedding_space_mismatch():
 
 def test_episodic_memory_one_parent_missing():
     s = EpisodicMemoryMergeStrategy()
-    out = s.merge({"short_term_size": 3, "collection_prefix": "mnemos_"}, None)
-    assert out == {"short_term_size": 3, "collection_prefix": "mnemos_"}
+    out = s.merge({"short_term_size": 3, "collection_prefix": "episodic_memory_"}, None)
+    assert out == {"short_term_size": 3, "collection_prefix": "episodic_memory_"}
 
 
 # ---- Planning ----

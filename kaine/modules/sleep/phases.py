@@ -408,7 +408,7 @@ async def associative_replay(
     scenarios_consumed = 0
     reinjected = 0
     if world_model is None:
-        metadata["phantasia_cue"] = "no-op (World model disabled/absent)"
+        metadata["world_model_cue"] = "no-op (World model disabled/absent)"
     else:
         # Cue once per cross-period seed; if no seeds were selected, still
         # issue a single unseeded cue so an enabled world model module can extend the
@@ -433,7 +433,7 @@ async def associative_replay(
                 except Exception as exc:
                     log.exception("associative_replay: re-injection failed")
                     errors.append(f"reinject: {type(exc).__name__}: {exc}")
-        metadata["phantasia_cue"] = "cued"
+        metadata["world_model_cue"] = "cued"
 
     metadata["scenarios_consumed"] = scenarios_consumed
     metadata["associations_reinjected"] = reinjected

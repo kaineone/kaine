@@ -53,7 +53,7 @@ async def test_seeded_utterance_never_reaches_state_logs(bus, tmp_path):
     state_root = tmp_path / "state"
     log_path = state_root / "logs" / "cycle-test.log"
     (state_root / "logs").mkdir(parents=True, exist_ok=True)
-    (state_root / "lingua").mkdir(parents=True, exist_ok=True)
+    (state_root / "language").mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger()
     saved_level = root.level
@@ -73,14 +73,14 @@ async def test_seeded_utterance_never_reaches_state_logs(bus, tmp_path):
             bus,
             chat_client=FakeChatClient(responses=[REPLY]),
             intent_log=IntentExpressionLog(
-                state_root / "lingua" / "intent_expression.jsonl"
+                state_root / "language" / "intent_expression.jsonl"
             ),
             model_id="fake-model",
         )
         vocal = Vocal(
             bus,
             tts_client=FakeTTSClient(canned_audio=b"WAV-FAKE"),
-            sink_path=state_root / "vox",
+            sink_path=state_root / "vocal",
             predefined_voice_id="default_sample.wav",
             player=FakePlayer(),
         )

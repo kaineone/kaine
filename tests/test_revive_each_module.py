@@ -323,7 +323,7 @@ async def test_roundtrip_audition(bus: AsyncBus, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_roundtrip_language(bus: AsyncBus, tmp_path: Path) -> None:
-    log_path = tmp_path / "lingua" / "intent.jsonl"
+    log_path = tmp_path / "language" / "intent.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     m1 = Language(
         bus,
@@ -339,7 +339,7 @@ async def test_roundtrip_language(bus: AsyncBus, tmp_path: Path) -> None:
     m2 = Language(
         bus,
         chat_client=_FakeChatClient(),
-        intent_log=IntentExpressionLog(tmp_path / "lingua2" / "intent.jsonl"),
+        intent_log=IntentExpressionLog(tmp_path / "language2" / "intent.jsonl"),
         model_id="language-roundtrip",
         temperature=0.9,
         max_tokens=128,
@@ -389,8 +389,8 @@ async def test_roundtrip_episodic_memory(bus: AsyncBus, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_roundtrip_sleep(bus: AsyncBus, tmp_path: Path) -> None:
-    intent_log = tmp_path / "hypnos" / "intent.jsonl"
-    adapter_dir = tmp_path / "hypnos" / "adapters"
+    intent_log = tmp_path / "sleep" / "intent.jsonl"
+    adapter_dir = tmp_path / "sleep" / "adapters"
     intent_log.parent.mkdir(parents=True, exist_ok=True)
     adapter_dir.mkdir(parents=True, exist_ok=True)
     m1 = Sleep(
@@ -410,8 +410,8 @@ async def test_roundtrip_sleep(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         trainer=_FakeTrainer(),
         voice_alignment_config=VoiceAlignmentConfig(
-            intent_log_path=tmp_path / "hypnos2" / "intent.jsonl",
-            adapter_output_dir=tmp_path / "hypnos2" / "adapters",
+            intent_log_path=tmp_path / "sleep2" / "intent.jsonl",
+            adapter_output_dir=tmp_path / "sleep2" / "adapters",
             enabled=False,
         ),
         interval_seconds=60.0,
@@ -465,14 +465,14 @@ async def test_roundtrip_planning(bus: AsyncBus, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_roundtrip_self_model(bus: AsyncBus, tmp_path: Path) -> None:
-    p = tmp_path / "eidolon.json"
+    p = tmp_path / "self_model.json"
     m1 = SelfModel(bus, persistence_path=p, save_interval_s=60)
     m1._model = SelfModelDocument(name="Aria", values=["honesty", "curiosity"])
     m1._drift_count = 7
     m1._internal_cursor = "5-0"
     m1._external_cursor = "9-0"
     state = _json_roundtrip(m1.serialize())
-    m2 = SelfModel(bus, persistence_path=tmp_path / "eidolon2.json", save_interval_s=60)
+    m2 = SelfModel(bus, persistence_path=tmp_path / "self_model2.json", save_interval_s=60)
     m2.deserialize(state)
     assert _json_roundtrip(m2.serialize()) == state
 
@@ -496,7 +496,7 @@ async def test_roundtrip_vocal(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
     )
     m1._current_state = DimensionalState(valence=0.5, arousal=0.7, dominance=-0.2)
     m1._voice_mode = "cloned"
@@ -505,7 +505,7 @@ async def test_roundtrip_vocal(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
-        sink_path=tmp_path / "vox2",
+        sink_path=tmp_path / "vocal2",
     )
     m2.deserialize(state)
     got = _json_roundtrip(m2.serialize())
@@ -514,7 +514,7 @@ async def test_roundtrip_vocal(bus: AsyncBus, tmp_path: Path) -> None:
         bus,
         tts_client=_FakeTTSClient(),
         player=_FakePlayer(),
-        sink_path=tmp_path / "vox3",
+        sink_path=tmp_path / "vocal3",
     )
     assert got["voice_mode"] == fresh._voice_mode
     state.pop("voice_mode", None)

@@ -69,7 +69,7 @@ def test_read_stage_int_list_value_is_refused(tmp_path):
 
 def test_read_stage_exists_permission_error_returns_embodied(tmp_path, monkeypatch):
     stage_file = tmp_path / "stage.json"
-    stage_file.write_text(json.dumps({"stage": "gestation"}))
+    stage_file.write_text(json.dumps({"stage": "development"}))
     original_exists = pathlib.Path.exists
 
     def deny(self: Path) -> bool:

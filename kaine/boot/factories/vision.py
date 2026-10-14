@@ -191,7 +191,7 @@ def make_vision(
     mode = str(feed_section.get("mode", "off")).lower()
     if mode not in ("off", "seeded", "playlist", "stimulus_source", "live", "screen"):
         raise ValueError(
-            f"[perception_feed].mode must be off/seeded/playlist/womb/live/screen, got {mode!r}"
+            f"[perception_feed].mode must be off/seeded/playlist/stimulus_source/live/screen, got {mode!r}"
         )
     width = int(section.get("capture_width", 640))
     height = int(section.get("capture_height", 480))

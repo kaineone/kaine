@@ -68,7 +68,7 @@ def parse_claims(self_description: str) -> list[str]:
 
 
 class SelfModelAccuracyRunner(BaseObserver):
-    name = "eidolon_accuracy"
+    name = "self_model_accuracy"
 
     def __init__(
         self,
@@ -147,7 +147,7 @@ class SelfModelAccuracyRunner(BaseObserver):
                         if not isinstance(entry, dict):
                             continue
                         entry = legacy_aliases.map_record(entry)
-                        th = entry.get("thymos_state") or {}
+                        th = entry.get("affect_state") or {}
                         if isinstance(th, dict):
                             if "valence" in th:
                                 valences.append(float(th["valence"]))

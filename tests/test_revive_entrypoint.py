@@ -128,7 +128,7 @@ def test_main_revive_stage_untouched_on_boot_failure(tmp_path, self_model, monke
         _make_bundle(
             tmp_path,
             self_model,
-            stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+            stage_state=stage.StageState(stage="development", lived_seconds=0.0),
         )
     )
 
@@ -152,7 +152,7 @@ def test_main_revive_stage_untouched_on_boot_failure(tmp_path, self_model, monke
 
     session = captured["kwargs"].get("revive")
     assert isinstance(session, ReviveSession)
-    assert session.stage_state == stage.StageState(stage="gestation", lived_seconds=0.0)
+    assert session.stage_state == stage.StageState(stage="development", lived_seconds=0.0)
     assert captured["stage_bytes"] == prior_bytes
     assert stage_path.read_bytes() == prior_bytes
 
@@ -171,7 +171,7 @@ def test_main_revive_stage_untouched_when_boot_returns_zero(
         _make_bundle(
             tmp_path,
             self_model,
-            stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+            stage_state=stage.StageState(stage="development", lived_seconds=0.0),
         )
     )
 
@@ -206,7 +206,7 @@ def test_main_revive_invalid_stage_returns_seven_and_leaves_stage(
         _make_bundle(
             tmp_path,
             self_model,
-            stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+            stage_state=stage.StageState(stage="development", lived_seconds=0.0),
         )
     )
 
@@ -245,7 +245,7 @@ async def test_revive_session_revive_writes_stage_and_lands(
     bundle = await _make_bundle(
         tmp_path,
         self_model,
-        stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+        stage_state=stage.StageState(stage="development", lived_seconds=0.0),
     )
     plan = prepare_revive(bundle)
 
@@ -262,7 +262,7 @@ async def test_revive_session_revive_writes_stage_and_lands(
 
     written = stage.read_stage(stage_path)
     assert written is not None
-    assert written.stage == "gestation"
+    assert written.stage == "development"
     assert written.lived_seconds == 0.0
 
     await eid2.shutdown()
@@ -321,7 +321,7 @@ async def test_revive_session_revive_refuses_when_stage_write_fails(
     bundle = await _make_bundle(
         tmp_path,
         self_model,
-        stage_state=stage.StageState(stage="gestation", lived_seconds=0.0),
+        stage_state=stage.StageState(stage="development", lived_seconds=0.0),
     )
     plan = prepare_revive(bundle)
 
@@ -361,7 +361,7 @@ def test_resolve_boot_stage_override_uses_stage_and_skips_file(
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
     stage.write_stage(stage.StageState(stage="embodied", lived_seconds=999.0), stage_path)
 
-    override = stage.StageState(stage="gestation", lived_seconds=0.0)
+    override = stage.StageState(stage="development", lived_seconds=0.0)
 
     def fail_read(_path=None):
         raise AssertionError("stage file should not be read when override is given")
@@ -380,7 +380,7 @@ def test_install_shared_stimulus_source_clock_uses_stage_state_and_ignores_file(
     monkeypatch.chdir(tmp_path)
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
-    stage.write_stage(stage.StageState(stage="gestation", lived_seconds=1.0), stage_path)
+    stage.write_stage(stage.StageState(stage="development", lived_seconds=1.0), stage_path)
 
     override = stage.StageState(stage="embodied", lived_seconds=123.0)
 
@@ -594,7 +594,7 @@ def test_start_stage_uses_the_revive_session_stage(tmp_path, monkeypatch):
     stage_path = tmp_path / "stage.json"
     monkeypatch.setattr(stage, "STAGE_PATH", stage_path)
     stage.write_stage(stage.StageState(stage="embodied", lived_seconds=9.0), stage_path)
-    preserved = stage.StageState(stage="gestation", lived_seconds=3.0)
+    preserved = stage.StageState(stage="development", lived_seconds=3.0)
     config = {"developmental_stage": {"enabled": True}}
 
     resolved, enabled, fresh = _resolve_start_stage(

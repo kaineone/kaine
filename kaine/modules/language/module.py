@@ -106,7 +106,7 @@ class Language(BaseModule):
         think: Optional[bool] = False,
         request_timeout_s: float = 60.0,
         api_key: Optional[str] = None,
-        intent_log_path: Path | str = "state/lingua/intent_expression.jsonl",
+        intent_log_path: Path | str = "state/language/intent_expression.jsonl",
         assembler: Optional[ContextAssembler] = None,
         self_model_provider: Optional[Callable[[], dict[str, Any]]] = None,
         context_max_events: int = 8,

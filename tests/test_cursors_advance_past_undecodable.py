@@ -137,7 +137,7 @@ async def test_development_interoception_reader_advances_past_undecodable_batch(
         is_paused=lambda: False,
         config=config,
         clock=lambda: 0.0,
-        state_path=tmp_path / "gestation_readout.json",
+        state_path=tmp_path / "development_readout.json",
     )
     owner._interoception_cursor = "0-0"
 

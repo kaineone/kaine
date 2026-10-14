@@ -114,7 +114,7 @@ async def test_world_model_absent_is_noop_cue():
     episodic_memory = FakeEpisodicMemory({"short_term": [_Trace("st:0", "a")], "episodic": [_Trace("ep:0", "b")]})
     result = await associative_replay(enabled=True, episodic_memory=episodic_memory, world_model=None)
     assert result.success is True
-    assert "no-op" in result.metadata["phantasia_cue"]
+    assert "no-op" in result.metadata["world_model_cue"]
     assert result.metadata["scenarios_consumed"] == 0
     # Cross-period selection still happened even with the world model module absent.
     assert result.metadata["distinct_periods"] >= 2

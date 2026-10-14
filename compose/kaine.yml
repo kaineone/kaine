@@ -380,7 +380,7 @@ services:
       # tmpfs nested under the /app/state volume inherits that mountpoint's 0755
       # root ownership and is otherwise unwritable by the non-root `kaine` user.
       - type: tmpfs
-        target: /app/state/perception
+        target: /app/state/perceptual_locus
         tmpfs:
           mode: 01777
     depends_on:

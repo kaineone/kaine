@@ -94,10 +94,10 @@ def plan(repo):
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "g_",
+            "development": "g_",
             "branch": "b_",
             "repeat": "r_",
             "accumulate": "a_",
@@ -108,8 +108,8 @@ def plan(repo):
 def test_overlay_forces_child_data_root_to_line_directory(repo, plan):
     overlay, _, _ = build_overlay(
         plan,
-        "gestation",
-        "gestation",
+        "development",
+        "development",
         0,
         repo,
         repo / "config" / "kaine.toml",

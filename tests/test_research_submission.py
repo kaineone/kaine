@@ -53,11 +53,11 @@ def _make_eval_root(tmp_path: Path) -> Path:
     )
 
     # 2. An episodic memory file
-    decoy_episodic_memory = eval_root / "mnemos_short_term.jsonl"
+    decoy_episodic_memory = eval_root / "episodic_memory_short_term.jsonl"
     decoy_episodic_memory.write_text('{"id": "mem1", "text": "private memory"}\n', encoding="utf-8")
 
     # 3. A self-model file
-    decoy_self_model = eval_root / "eidolon_self_model.json"
+    decoy_self_model = eval_root / "self_model_self_model.json"
     decoy_self_model.write_text('{"name": "entity identity", "values": []}', encoding="utf-8")
 
     # 4. A conversation file
@@ -116,8 +116,8 @@ def test_decoy_files_are_excluded(tmp_path: Path):
     included_paths = {bf.rel_path for bf in bundle.files}
     for forbidden in (
         "intent_expression.jsonl",
-        "mnemos_short_term.jsonl",
-        "eidolon_self_model.json",
+        "episodic_memory_short_term.jsonl",
+        "self_model_self_model.json",
         "conversation_2026-06-07.jsonl",
         "replay_2026-06-07.jsonl",
     ):
@@ -457,7 +457,7 @@ def _plant_run(eval_root: Path, run_id: str, *, complete: bool) -> None:
 def _plant_out_of_range_run(eval_root: Path, run_id: str) -> None:
     """A completeness-clean run that carries one out-of-range logged value."""
     _plant_run(eval_root, run_id, complete=True)
-    (eval_root / "soma.report-2026-06-14.jsonl").write_text(
+    (eval_root / "interoception.report-2026-06-14.jsonl").write_text(
         json.dumps({
             "run_id": run_id, "seq": 0, "event_type": "interoception.report",
             "prediction_error": -1.0,  # NONNEG range: must be >= 0.0
@@ -870,7 +870,7 @@ def test_cli_preview_blocks_on_inadmissible_eval_root(tmp_path: Path, monkeypatc
 def _plant_interoception_out_of_range(eval_root: Path, run_id: str) -> None:
     """Append one out-of-range interoception.report record for run_id (its own file)."""
     eval_root.mkdir(parents=True, exist_ok=True)
-    with (eval_root / f"soma.report-{run_id}.jsonl").open("a", encoding="utf-8") as fh:
+    with (eval_root / f"interoception.report-{run_id}.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "run_id": run_id, "seq": 0, "event_type": "interoception.report",
             "prediction_error": -99.0,
@@ -1026,7 +1026,7 @@ def test_cli_installs_encryptor_before_scan(tmp_path: Path, monkeypatch):
     enc = StateEncryptor(CryptoConfig(enabled=True))
     eval_root = tmp_path / "evaluation"
     eval_root.mkdir(parents=True)
-    with (eval_root / "soma.report-2026-06-14.jsonl").open("a", encoding="utf-8") as fh:
+    with (eval_root / "interoception.report-2026-06-14.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(enc.encrypt_text(json.dumps({
             "run_id": "run-enc-bad", "seq": 0, "event_type": "interoception.report",
             "prediction_error": -5.0,

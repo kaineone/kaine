@@ -50,7 +50,7 @@ def test_scenario_renders_via_named_template():
         "horizon": 8,
         "step_magnitudes": [0.1, 0.2],
         "trajectory_drift": 0.05,
-        "encoder_version": "phantasia-encoder-v1",
+        "encoder_version": "world-model-encoder-v1",
     }
     ev = _event("world_model.scenario", payload)
     out = renderer.render_event(ev)

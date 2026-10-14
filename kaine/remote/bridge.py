@@ -844,6 +844,6 @@ def build_remote_bridge(
     audition = _get("audition")
     vocal = _get("vocal")
     if vision is None and audition is None and vocal is None:
-        log.warning("remote bridge enabled but none of topos/audition/vox are — not starting")
+        log.warning("remote bridge enabled but none of vision/audition/vocal are — not starting")
         return None
     return RemoteBridge(cfg, bus=bus, vision=vision, audition=audition, vocal=vocal)

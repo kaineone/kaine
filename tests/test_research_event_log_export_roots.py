@@ -27,7 +27,7 @@ def _drop_env_root(monkeypatch):
     [
         (RawArchiveConfig, "archive_dir", "state/research/raw_bus_archive"),
         (ExternalUtterancesConfig, "log_dir", "state/research/external_utterances"),
-        (DashboardRecordConfig, "log_dir", "data/nexus_record"),
+        (DashboardRecordConfig, "log_dir", "data/dashboard_record"),
     ],
 )
 def test_recorder_config_rejects_export_tree(cls, key, default, tmp_path):
@@ -58,7 +58,7 @@ def test_default_export_root_uses_cwd(monkeypatch, tmp_path):
 def test_load_research_event_log_config_eval_logs_absolute(tmp_path):
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()
-    bad_dashboard = eval_dir / "nexus"
+    bad_dashboard = eval_dir / "dashboard"
     shipped = tmp_path / "kaine.toml"
     shipped.write_text(
         textwrap.dedent(

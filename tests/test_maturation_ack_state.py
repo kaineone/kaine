@@ -21,14 +21,14 @@ from kaine.lifecycle.maturation_ack import (
 
 
 def test_round_trip_and_acknowledgement(tmp_path):
-    request_path = tmp_path / "birth_request.json"
-    ack_path = tmp_path / "birth_ack.json"
+    request_path = tmp_path / "maturation_request.json"
+    ack_path = tmp_path / "maturation_ack.json"
 
     development_started = datetime.now(timezone.utc).isoformat()
     req = new_request(development_started)
     assert len(req.request_id) == 32
     assert req.requested_at is not None
-    assert req.gestation_started_at == development_started
+    assert req.development_started_at == development_started
 
     write_request(req, path=request_path)
     read = read_request(request_path)
@@ -49,8 +49,8 @@ def test_round_trip_and_acknowledgement(tmp_path):
 
 
 def test_absent_and_malformed_read_as_none(tmp_path):
-    request_path = tmp_path / "birth_request.json"
-    ack_path = tmp_path / "birth_ack.json"
+    request_path = tmp_path / "maturation_request.json"
+    ack_path = tmp_path / "maturation_ack.json"
 
     assert read_request(request_path) is None
     assert read_ack(ack_path) is None
@@ -70,7 +70,7 @@ def test_absent_and_malformed_read_as_none(tmp_path):
 
 
 def test_non_hex_id_reads_as_none(tmp_path):
-    request_path = tmp_path / "birth_request.json"
+    request_path = tmp_path / "maturation_request.json"
     bad_id = "A" * 32  # uppercase hex is invalid
     request_path.write_text(
         '{"request_id": "%s", "requested_at": "2024-01-01T00:00:00+00:00"}' % bad_id,
@@ -80,8 +80,8 @@ def test_non_hex_id_reads_as_none(tmp_path):
 
 
 def test_clear_missing_is_fine(tmp_path):
-    request_path = tmp_path / "birth_request.json"
-    ack_path = tmp_path / "birth_ack.json"
+    request_path = tmp_path / "maturation_request.json"
+    ack_path = tmp_path / "maturation_ack.json"
     clear_request(request_path)
     clear_ack(ack_path)
     assert not request_path.exists()
@@ -89,10 +89,10 @@ def test_clear_missing_is_fine(tmp_path):
 
 
 def test_invalid_development_started_at_type_reads_as_none(tmp_path):
-    request_path = tmp_path / "birth_request.json"
+    request_path = tmp_path / "maturation_request.json"
     request_path.write_text(
         '{"request_id": "a" * 32, "requested_at": "2024-01-01T00:00:00+00:00", '
-        '"gestation_started_at": 123}',
+        '"development_started_at": 123}',
         encoding="utf-8",
     )
     assert read_request(request_path) is None

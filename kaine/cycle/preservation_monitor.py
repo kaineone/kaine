@@ -408,9 +408,9 @@ def _active_arms(assessment) -> frozenset[str]:
         arms.add("individuation")
     if signals.get("consolidation_divergence_signal"):
         arms.add("consolidation")
-    if signals.get("eidolon_drift_signal"):
-        arms.add("eidolon_drift")
-    if signals.get("hypnos_adapters_present"):
+    if signals.get("self_model_drift_signal"):
+        arms.add("self_model_drift")
+    if signals.get("sleep_adapters_present"):
         arms.add("adapters")
     if signals.get("voice_vote") == "diverged":
         arms.add("voice")

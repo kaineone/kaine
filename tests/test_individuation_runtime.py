@@ -208,7 +208,7 @@ async def test_start_developing_on_maturation(tmp_path: Path):
     await runtime.start()
     assert runtime.scheduler._capture_kind is None
     runtime.on_maturation()
-    assert runtime.scheduler._capture_kind == "birth"
+    assert runtime.scheduler._capture_kind == "maturation"
     runtime.scheduler.notify_sleep_completed()
     assert runtime.scheduler._capture_kind == "capture"
 

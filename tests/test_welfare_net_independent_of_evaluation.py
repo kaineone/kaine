@@ -157,7 +157,7 @@ async def test_registry_does_not_build_a_second_welfare_observer(bus, tmp_path):
                 "voice_alignment_divergence": False,
                 "fatigue": False,
                 "prediction_error": False,
-                "nous_policy": False,
+                "planning_policy": False,
             },
         },
         language_model_id=None,

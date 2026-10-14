@@ -18,40 +18,40 @@ def desired_path(tmp_path: Path) -> Path:
 
 
 def test_development_lock_holds_stimulus_source_against_other_writers(desired_path: Path) -> None:
-    write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
     # A non-developmental-phase write (no locked_by) cannot move the locus.
     write_desired_locus("physical", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "virtual"
     assert state.locus_locked is True
-    assert state.locked_by == "gestation"
+    assert state.locked_by == "development"
 
     # Another non-developmental-phase write still cannot move it.
     write_desired_locus("off", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "virtual"
     assert state.locus_locked is True
-    assert state.locked_by == "gestation"
+    assert state.locked_by == "development"
 
     # An operator-attributed write also cannot move it.
     write_desired_locus("physical", locked=False, locked_by="operator", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "virtual"
     assert state.locus_locked is True
-    assert state.locked_by == "gestation"
+    assert state.locked_by == "development"
 
 
 def test_development_holder_can_unlock_and_then_normal_writes_work(desired_path: Path) -> None:
-    write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
-    write_desired_locus("physical", locked=False, locked_by="gestation", path=desired_path)
+    write_desired_locus("physical", locked=False, locked_by="development", path=desired_path)
     state = read_desired(desired_path)
     assert state.locus == "physical"
     assert state.locus_locked is False
     # The unlock is recorded as the developmental-phase holder's action (spec: the unlock
     # is attributed to the developmental phase, not the operator).
-    assert state.locked_by == "gestation"
+    assert state.locked_by == "development"
 
     # After the developmental-phase holder unlocks, normal writes apply.
     write_desired_locus("off", path=desired_path)
@@ -70,7 +70,7 @@ def test_operator_lock_behavior_unchanged(desired_path: Path) -> None:
 
 def test_unknown_locus_in_development_lock_resolves_to_virtual(desired_path: Path) -> None:
     desired_path.write_text(
-        '{"locus": "unknown_place", "locus_locked": true, "locked_by": "gestation"}'
+        '{"locus": "unknown_place", "locus_locked": true, "locked_by": "development"}'
     )
     state = read_desired(desired_path)
     assert state.locus == "virtual"
@@ -85,7 +85,7 @@ def test_unknown_locus_when_unlocked_resolves_to_physical(desired_path: Path) ->
 
 
 def test_sleep_restore_path_does_not_move_development_lock(desired_path: Path) -> None:
-    write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
     # The sleep module records the pre-sleep locus as raw string (physical, virtual, off)
     # and restores with exactly this call shape:
@@ -95,4 +95,4 @@ def test_sleep_restore_path_does_not_move_development_lock(desired_path: Path) -
     state = read_desired(desired_path)
     assert state.locus == "virtual"
     assert state.locus_locked is True
-    assert state.locked_by == "gestation"
+    assert state.locked_by == "development"

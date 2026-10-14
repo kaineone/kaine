@@ -84,10 +84,10 @@ def _make_study_dir(tmp_path: Path, order: list[str] | None = None) -> Path:
         },
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "s_g_",
+            "development": "s_g_",
             "branch": "s_b_",
             "repeat": "s_r_",
             "accumulate": "s_a_",
@@ -403,8 +403,8 @@ def _study_with_k2(tmp_path: Path):
         ("accumulate", 1): [0.0, 50.0],
         ("accumulate", 2): [0.0, 25.0, 50.0],
     }
-    steps = [{"line": "gestation", "step": 0, "outcome": "complete", "run_id": "g0",
-              "ignition_log_dir": str(_viewing(study_dir, "gestation", "g0", [0.0, 5.0])),
+    steps = [{"line": "development", "step": 0, "outcome": "complete", "run_id": "g0",
+              "ignition_log_dir": str(_viewing(study_dir, "development", "g0", [0.0, 5.0])),
               "modules": ["interoception"]}]
     for (line, k), offs in spec.items():
         rid = f"{line}{k}"
@@ -424,7 +424,7 @@ def test_three_comparison_families_and_k_from_order(tmp_path: Path):
 
     # The developmental phase is not a viewing.
     lines = [(v["line"], v["step"]) for v in report["per_viewing"]]
-    assert ("gestation", 0) not in lines
+    assert ("development", 0) not in lines
     assert sorted(lines) == sorted(spec)
 
     comps = report["comparisons"]

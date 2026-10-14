@@ -118,7 +118,7 @@ def _make_vocal(bus, tmp_path, **overrides):
     return Vocal(
         bus,
         tts_client=FakeTTSClient(canned_audio=_wav_bytes(0.5)),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         predefined_voice_id="v.wav",
         **overrides,
     )

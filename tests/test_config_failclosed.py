@@ -334,8 +334,8 @@ def test_decommission_main_encrypted_self_model_disabled_encryption(tmp_path, mo
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
 
     state_root = tmp_path / "state"
-    (state_root / "eidolon").mkdir(parents=True)
-    self_model = state_root / "eidolon" / "self_model.json"
+    (state_root / "self_model").mkdir(parents=True)
+    self_model = state_root / "self_model" / "self_model.json"
     self_model.write_bytes(b"KAINEgcm1:" + b"0" * 32)
 
     backup_root = tmp_path / "backups"

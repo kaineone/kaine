@@ -215,7 +215,7 @@ class DashboardRecordConfig:
     """
 
     enabled: bool = False
-    log_dir: str = "data/nexus_record"
+    log_dir: str = "data/dashboard_record"
     retention_days: int = 0
     export_roots: tuple[str, ...] = ()
 
@@ -359,7 +359,7 @@ class ObserversConfig:
             fatigue=bool(data.get("fatigue", cls.fatigue)),
             prediction_error=bool(data.get("prediction_error", cls.prediction_error)),
             welfare=bool(data.get("welfare", cls.welfare)),
-            planning_policy=bool(data.get("nous_policy", cls.planning_policy)),
+            planning_policy=bool(data.get("planning_policy", cls.planning_policy)),
         )
 
 
@@ -527,7 +527,7 @@ class EvaluationConfig:
                 data.get("memory_probe_interval_minutes", cls.memory_probe_interval_minutes)
             ),
             proactive_audit=bool(data.get("proactive_audit", cls.proactive_audit)),
-            self_model_accuracy=bool(data.get("eidolon_accuracy", cls.self_model_accuracy)),
+            self_model_accuracy=bool(data.get("self_model_accuracy", cls.self_model_accuracy)),
             self_model_accuracy_interval_hours=int(
                 data.get(
                     "self_model_accuracy_interval_hours",

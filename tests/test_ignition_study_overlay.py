@@ -63,15 +63,15 @@ def plan(repo):
         "programme": {"manifest": str(repo / "programme.toml"), "sha256": "a" * 64},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
-        "collections": {"gestation": "g_", "branch": "b_", "repeat": "r_", "accumulate": "a_"},
+        "collections": {"development": "g_", "branch": "b_", "repeat": "r_", "accumulate": "a_"},
     }
 
 
 def test_overlay_development_modules(repo, plan):
     overlay, enabled, _ = build_overlay(
-        plan, "gestation", "gestation", 0, repo, repo / "config" / "kaine.toml",
+        plan, "development", "development", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert enabled == {"interoception", "sequence", "vision"}
@@ -118,9 +118,9 @@ def test_overlay_repeat_only_base(repo, plan):
 
 
 def test_overlay_isolation_keys(repo, plan):
-    for line in ["gestation", "branch", "repeat", "accumulate"]:
+    for line in ["development", "branch", "repeat", "accumulate"]:
         overlay, _, _ = build_overlay(
-            plan, line, "gestation" if line == "gestation" else "viewing",
+            plan, line, "development" if line == "development" else "viewing",
             0, repo, repo / "config" / "kaine.toml",
             repo / "config" / "kaine.operator.toml",
         )
@@ -206,7 +206,7 @@ def test_operator_encoder_dir_wins_and_is_made_absolute(tmp_path):
 
 def test_overlay_self_rhythm_enabled_development(repo, plan):
     overlay, _, _ = build_overlay(
-        plan, "gestation", "gestation", 0, repo, repo / "config" / "kaine.toml",
+        plan, "development", "development", 0, repo, repo / "config" / "kaine.toml",
         repo / "config" / "kaine.operator.toml",
     )
     assert overlay["interoception"]["self_rhythm_enabled"] is True
@@ -245,7 +245,7 @@ def test_overlay_self_rhythm_overrides_operator_false(repo, plan):
         "require_operator_ack_for_maturation = true\n"
     )
     for line, kind, k in [
-        ("gestation", "gestation", 0),
+        ("development", "development", 0),
         ("branch", "viewing", 0),
         ("branch", "viewing", 2),
         ("repeat", "viewing", 0),
@@ -269,7 +269,7 @@ def test_overlay_pins_greedy_decoding_and_competitive_arm(repo, plan):
         'arm = "pooled"\n'
     )
     for line, kind, k in [
-        ("gestation", "gestation", 0),
+        ("development", "development", 0),
         ("branch", "viewing", 1),
         ("repeat", "viewing", 0),
         ("accumulate", "viewing", 2),
@@ -284,7 +284,7 @@ def test_overlay_pins_greedy_decoding_and_competitive_arm(repo, plan):
 
 
 _RECORDING_STEPS = [
-    ("gestation", "gestation", 0),
+    ("development", "development", 0),
     ("branch", "viewing", 1),
     ("accumulate", "viewing", 2),
 ]
@@ -363,10 +363,10 @@ def nine_plan(repo):
         "programme": {"manifest": str(repo / "programme.toml"), "sha256": "a" * 64},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "g_",
+            "development": "g_",
             "branch": "b_",
             "repeat": "r_",
             "accumulate": "a_",
@@ -383,7 +383,7 @@ def test_overlay_voice_alignment_only_registered_step(nine_plan, repo):
     )
     k_max = len(nine_plan["order"])
     sequence = [
-        ("gestation", "gestation", 0),
+        ("development", "development", 0),
         ("branch", "viewing", 0),
         ("repeat", "viewing", 0),
     ]

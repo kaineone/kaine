@@ -26,16 +26,16 @@ PAYLOAD_ALLOWLIST = frozenset(
         "input_triggered",
         "drive_triggered",
         "self_initiated",
-        "nous_initiated",
-        "unrealizable_nous_intents",
+        "planning_initiated",
+        "unrealizable_planning_intents",
         "realization_failed_count",
-        "nous_proposals_realized",
-        "nous_proposals_declined",
-        "nous_proposals_forwarded",
+        "planning_proposals_realized",
+        "planning_proposals_declined",
+        "planning_proposals_forwarded",
         "input_triggered_entry_ids",
         "drive_triggered_entry_ids",
         "self_initiated_entry_ids",
-        "nous_initiated_entry_ids",
+        "planning_initiated_entry_ids",
         "event_types",
         "saliences",
     }
@@ -455,7 +455,7 @@ def test_research_event_taxonomy_registered():
     assert "transcript" not in allowed
     assert "latent" not in allowed
     assert "sleep_index" in allowed
-    assert "unrealizable_nous_intents" in allowed
+    assert "unrealizable_planning_intents" in allowed
     # Every numeric count the audit publishes reaches the research log; only
     # the entry_id lists, event types and saliences stay in the sleep snapshot.
     counts = {

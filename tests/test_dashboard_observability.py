@@ -987,7 +987,7 @@ def test_evaluation_html_contains_planning_policy_panel():
     base = Path(__file__).parent.parent / "kaine" / "dashboard" / "templates"
     evald = (base / "_evaluation_sections.html").read_text()
     assert "Planning policy" in evald
-    assert "nous_policy" in evald
+    assert "planning_policy" in evald
 
 
 def test_planning_policy_aggregate_no_data_and_from_jsonl(tmp_path):
@@ -995,9 +995,9 @@ def test_planning_policy_aggregate_no_data_and_from_jsonl(tmp_path):
 
     assert _aggregate_planning_policy(Path(tmp_path / "nope"))["source"] == "none"
 
-    pol_dir = tmp_path / "nous_policy"
+    pol_dir = tmp_path / "planning_policy"
     pol_dir.mkdir()
-    (pol_dir / "nous_policy-2026-06-01.jsonl").write_text(
+    (pol_dir / "planning_policy-2026-06-01.jsonl").write_text(
         json.dumps({"ts": "2026-06-01T00:00:00Z", "expected_free_energy": 1.5, "horizon": 1, "policy": "act-3"})
         + "\n"
     )

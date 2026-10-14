@@ -435,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=20261005)
     parser.add_argument(
         "--adapter-output-dir",
-        default="state/hypnos/test_lora_adapters",
+        default="state/sleep/test_lora_adapters",
     )
     args = parser.parse_args(argv)
     return asyncio.run(_main_async(args))

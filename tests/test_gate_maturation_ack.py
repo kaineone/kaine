@@ -178,7 +178,7 @@ def _fresh_development_state(tmp_path: Path) -> lifecycle_stage.StageState:
     # on the first evaluation (otherwise the first tick only anchors the cursor).
     from dataclasses import replace
 
-    return replace(state, sleep_count=1, hypnos_cursor="1-0")
+    return replace(state, sleep_count=1, sleep_cursor="1-0")
 
 
 def _ready_readout() -> dict[str, Any]:
@@ -186,7 +186,7 @@ def _ready_readout() -> dict[str, Any]:
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
 
@@ -218,8 +218,8 @@ def _build_runner(
         stage_state=state,
         staging_enabled=True,
         stimulus_source_feed_configured=True,
-        maturation_request_path=tmp_path / "birth_request.json",
-        maturation_ack_path=tmp_path / "birth_ack.json",
+        maturation_request_path=tmp_path / "maturation_request.json",
+        maturation_ack_path=tmp_path / "maturation_ack.json",
     )
 
 
@@ -237,7 +237,7 @@ async def test_first_evaluation_holds_writes_request(
 
     assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
-    request_path = tmp_path / "birth_request.json"
+    request_path = tmp_path / "maturation_request.json"
     assert request_path.exists()
     req = read_request(request_path)
     assert req is not None
@@ -263,14 +263,14 @@ async def test_wrong_ack_does_not_maturation(
             request_id="b" * 32,
             acknowledged_at=datetime.now(timezone.utc).isoformat(),
         ),
-        path=tmp_path / "birth_ack.json",
+        path=tmp_path / "maturation_ack.json",
     )
 
     await runner._evaluate_once()
 
     assert runner.stage.is_developing
     assert not any(e.type == STAGE_MATURATION for e in published)
-    assert read_request(tmp_path / "birth_request.json").request_id == request_id
+    assert read_request(tmp_path / "maturation_request.json").request_id == request_id
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_matching_ack_maturations_and_clears_files(
             request_id=request_id,
             acknowledged_at=datetime.now(timezone.utc).isoformat(),
         ),
-        path=tmp_path / "birth_ack.json",
+        path=tmp_path / "maturation_ack.json",
     )
 
     await runner._evaluate_once()
@@ -301,8 +301,8 @@ async def test_matching_ack_maturations_and_clears_files(
     assert [e.type for e in published].count(STAGE_MATURATION) == 1
     assert published[-1].type == STAGE_MATURATION
     assert runner.stage.is_embodied
-    assert not (tmp_path / "birth_request.json").exists()
-    assert not (tmp_path / "birth_ack.json").exists()
+    assert not (tmp_path / "maturation_request.json").exists()
+    assert not (tmp_path / "maturation_ack.json").exists()
     assert runner.status["request_id"] is None
     assert runner.status["awaiting_ack"] is False
 
@@ -312,14 +312,14 @@ async def test_old_request_ack_pair_does_not_maturation(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv("KAINE_EMBODIMENT_OPERATOR_APPROVED", "1")
-    request_path = tmp_path / "birth_request.json"
-    ack_path = tmp_path / "birth_ack.json"
+    request_path = tmp_path / "maturation_request.json"
+    ack_path = tmp_path / "maturation_ack.json"
     old_id = "c" * 32
     write_request(
         MaturationRequest(
             request_id=old_id,
             requested_at=datetime.now(timezone.utc).isoformat(),
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -362,7 +362,7 @@ async def test_readiness_lost_clears_request(
 
     await runner._evaluate_once()
     assert runner.status["awaiting_ack"] is True
-    request_path = tmp_path / "birth_request.json"
+    request_path = tmp_path / "maturation_request.json"
     assert request_path.exists()
 
     # Simulate loss of the stimulus source readout.

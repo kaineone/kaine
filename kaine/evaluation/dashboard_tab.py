@@ -262,8 +262,8 @@ def _aggregate_planning_policy(logs_root: Path) -> dict[str, Any]:
     divergence metric here (fork/posterior divergence lives in the
     individuation and entity-care surfaces).
     """
-    pol_dir = logs_root / "nous_policy"
-    entries = _latest_lines(pol_dir, name="nous_policy", limit=200)
+    pol_dir = logs_root / "planning_policy"
+    entries = _latest_lines(pol_dir, name="planning_policy", limit=200)
     if not entries:
         return {"source": "none", "series": [], "latest_policy": None, "n": 0}
     series = [
@@ -367,7 +367,7 @@ def empty_evaluation_metrics() -> dict[str, Any]:
         "welfare": {"source": "none"},
         "prediction_error": {"source": "none"},
         "coherence": {"latest": None, "mean_per_pair": {}, "n": 0, "source": "none"},
-        "nous_policy": {"source": "none", "series": [], "latest_policy": None, "n": 0},
+        "planning_policy": {"source": "none", "series": [], "latest_policy": None, "n": 0},
         "individuation": None,
     }
 
@@ -433,8 +433,8 @@ def _aggregate(
     sleep_dir = logs_root / "sleep_snapshots"
     sleep_entries = _latest_lines(sleep_dir, name="sleep_snapshots", limit=20)
 
-    self_model_dir = logs_root / "eidolon_accuracy"
-    self_model_entries = _latest_lines(self_model_dir, name="eidolon_accuracy", limit=60)
+    self_model_dir = logs_root / "self_model_accuracy"
+    self_model_entries = _latest_lines(self_model_dir, name="self_model_accuracy", limit=60)
     self_model_series = [
         {"ts": e.get("ts"), "aggregate": e.get("aggregate_accuracy")}
         for e in self_model_entries
@@ -495,6 +495,6 @@ def _aggregate(
         "welfare": welfare,
         "prediction_error": prediction_error,
         "coherence": coherence,
-        "nous_policy": planning_policy,
+        "planning_policy": planning_policy,
         "individuation": individuation,
     }

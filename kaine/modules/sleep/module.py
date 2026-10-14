@@ -148,8 +148,8 @@ class Sleep(BaseModule):
         self._trainer: Trainer = trainer or FakeTrainer()
         self._organ_window_runner = organ_window_runner
         self._voice_config: VoiceAlignmentConfig = voice_alignment_config or VoiceAlignmentConfig(
-            intent_log_path=resolve("state/lingua/intent_expression.jsonl"),
-            adapter_output_dir=resolve("state/hypnos/adapters"),
+            intent_log_path=resolve("state/language/intent_expression.jsonl"),
+            adapter_output_dir=resolve("state/sleep/adapters"),
         )
         self._clock = entity_clock or EntityClock()
         self._scheduler = scheduler or RestScheduler(
@@ -1116,15 +1116,15 @@ class Sleep(BaseModule):
             payload = {
                 "sleep_index": self._sleep_count,
                 "realized_total": 0,
-                "unrealizable_nous_intents": 0,
+                "unrealizable_planning_intents": 0,
                 "synthesized_realizations": 0,
                 "input": 0,
                 "drive": 0,
                 "self": 0,
-                "nous_initiated": 0,
-                "nous_proposals_realized": 0,
-                "nous_proposals_declined": 0,
-                "nous_proposals_forwarded": 0,
+                "planning_initiated": 0,
+                "planning_proposals_realized": 0,
+                "planning_proposals_declined": 0,
+                "planning_proposals_forwarded": 0,
                 "audit_error": type(exc).__name__,
             }
         # Content-free bus event on sleep.out. An intermediate publish must

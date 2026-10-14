@@ -47,7 +47,7 @@ class SocialCognition(BaseModule):
         store: Optional[AgentStore] = None,
         embedder: Optional[Embedder] = None,
         backend: str = "inmemory",
-        collection: str = "empatheia_agents",
+        collection: str = "social_cognition_agents",
         speaker_label: str = "operator",
         operator_sources: Sequence[str] = OPERATOR_SOURCES,
         deviation_threshold: float = 0.5,

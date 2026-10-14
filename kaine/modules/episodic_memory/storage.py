@@ -627,7 +627,7 @@ class SqliteVecStorage:
         self,
         latent_dim: int,
         *,
-        db_path: str = "state/mnemos/mnemos.db",
+        db_path: str = "state/episodic_memory/episodic_memory.db",
         distance: str = "cosine",
     ) -> None:
         if latent_dim <= 0:

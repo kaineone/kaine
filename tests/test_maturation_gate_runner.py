@@ -248,14 +248,14 @@ async def test_final_sleep_count_catches_sleeps_after_the_last_tick(tmp_path: Pa
         stimulus_source_feed_configured=True,
     )
     runner._stage = dataclasses.replace(
-        runner._stage, hypnos_cursor="2-0", sleep_count=0
+        runner._stage, sleep_cursor="2-0", sleep_count=0
     )
 
     await runner._begin_boot()
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 2
-    assert runner._stage.hypnos_cursor == "4-0"
+    assert runner._stage.sleep_cursor == "4-0"
     stage_file = lifecycle_stage.STAGE_PATH
     assert json.loads(stage_file.read_text())["sleep_count"] == 2
 
@@ -275,14 +275,14 @@ async def test_final_sleep_count_skips_without_stimulus_feed(tmp_path: Path) -> 
         stimulus_source_feed_configured=False,
     )
     runner._stage = dataclasses.replace(
-        runner._stage, hypnos_cursor="2-0", sleep_count=0
+        runner._stage, sleep_cursor="2-0", sleep_count=0
     )
     await runner._begin_boot()
 
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 0
-    assert runner._stage.hypnos_cursor == "2-0"
+    assert runner._stage.sleep_cursor == "2-0"
 
 
 @pytest.mark.asyncio
@@ -300,13 +300,13 @@ async def test_final_sleep_count_skips_before_boot_is_anchored(tmp_path: Path) -
         stimulus_source_feed_configured=True,
     )
     runner._stage = dataclasses.replace(
-        runner._stage, hypnos_cursor="2-0", sleep_count=0
+        runner._stage, sleep_cursor="2-0", sleep_count=0
     )
 
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 0
-    assert runner._stage.hypnos_cursor == "2-0"
+    assert runner._stage.sleep_cursor == "2-0"
 
 
 @pytest.mark.asyncio
@@ -326,7 +326,7 @@ async def test_final_sleep_count_skips_when_not_developing(tmp_path: Path) -> No
     runner._stage = dataclasses.replace(
         runner._stage,
         stage=lifecycle_stage.EMBODIED,
-        hypnos_cursor="2-0",
+        sleep_cursor="2-0",
         sleep_count=0,
     )
     await runner._begin_boot()
@@ -334,7 +334,7 @@ async def test_final_sleep_count_skips_when_not_developing(tmp_path: Path) -> No
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 0
-    assert runner._stage.hypnos_cursor == "2-0"
+    assert runner._stage.sleep_cursor == "2-0"
 
 
 @pytest.mark.asyncio
@@ -369,7 +369,7 @@ async def test_final_count_never_counts_what_a_tick_skipped(
     runner._stage = dataclasses.replace(
         runner._stage,
         stage=stage,
-        hypnos_cursor="2-0",
+        sleep_cursor="2-0",
         sleep_count=0,
     )
 
@@ -377,7 +377,7 @@ async def test_final_count_never_counts_what_a_tick_skipped(
     await runner._final_sleep_count()
 
     assert runner._stage.sleep_count == 0
-    assert runner._stage.hypnos_cursor == "2-0"
+    assert runner._stage.sleep_cursor == "2-0"
 
 
 @pytest.mark.asyncio
@@ -396,14 +396,14 @@ async def test_shutdown_cancel_path_runs_the_final_count(tmp_path: Path) -> None
     )
     await runner._begin_boot()
     runner._stage = dataclasses.replace(
-        runner._stage, hypnos_cursor="2-0", sleep_count=0
+        runner._stage, sleep_cursor="2-0", sleep_count=0
     )
 
     runner._task = asyncio.create_task(runner.run(asyncio.Event()))
     await asyncio.sleep(0)
     await asyncio.sleep(0)
     runner._stage = dataclasses.replace(
-        runner._stage, hypnos_cursor="2-0", sleep_count=0
+        runner._stage, sleep_cursor="2-0", sleep_count=0
     )
     await runner.shutdown()
 
@@ -443,7 +443,7 @@ async def test_old_stream_cursor_counts_only_sleeps_on_the_new_stream(tmp_path: 
     bus.read_entries = AsyncMock(side_effect=_read_entries)
 
     state = _fresh_development_state(tmp_path)
-    state = dataclasses.replace(state, hypnos_cursor="1000-2")
+    state = dataclasses.replace(state, sleep_cursor="1000-2")
     runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(enabled=True, gate_cadence_seconds=0.01),
@@ -458,7 +458,7 @@ async def test_old_stream_cursor_counts_only_sleeps_on_the_new_stream(tmp_path: 
     await runner._count_new_sleeps()
 
     assert runner._stage.sleep_count == 3
-    assert runner._stage.hypnos_cursor == "2000-2"
+    assert runner._stage.sleep_cursor == "2000-2"
 
 
 @pytest.mark.asyncio
@@ -469,7 +469,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavaila
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -507,7 +507,7 @@ async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Pa
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -555,7 +555,7 @@ async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch)
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -566,7 +566,7 @@ async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch)
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
     from kaine import perception_state as _ps
 
-    _ps.write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    _ps.write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
     runner = MaturationGateRunner(
         bus=bus,
@@ -649,7 +649,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -660,7 +660,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
     from kaine import perception_state as _ps
 
-    _ps.write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    _ps.write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
     embodiment = _RecordingEmbodiment(probe_result=True, activate_result=True)
     runner = MaturationGateRunner(
@@ -696,7 +696,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
     desired = read_desired(desired_path)
     assert desired.locus == "virtual"
     assert desired.locus_locked is False
-    assert desired.locked_by == "gestation"
+    assert desired.locked_by == "development"
 
 
 @pytest.mark.asyncio
@@ -708,7 +708,7 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
         "endogenous_self_sustain": True,
         "entrain_then_autonomy": True,
         "hrv_variability": 0.5,
-        "womb_prediction_error": 0.1,
+        "stimulus_source_prediction_error": 0.1,
         "return_to_baseline_seconds": 10.0,
     }
     published: list[Event] = []
@@ -719,7 +719,7 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
     monkeypatch.setattr("kaine.perception_state.DESIRED_PATH", desired_path)
     from kaine import perception_state as _ps
 
-    _ps.write_desired_locus("virtual", locked=True, locked_by="gestation", path=desired_path)
+    _ps.write_desired_locus("virtual", locked=True, locked_by="development", path=desired_path)
 
     embodiment = _RecordingEmbodiment(probe_result=True, activate_result=False)
     runner = MaturationGateRunner(
@@ -755,4 +755,4 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
     desired = read_desired(desired_path)
     assert desired.locus == "virtual"
     assert desired.locus_locked is True
-    assert desired.locked_by == "gestation"
+    assert desired.locked_by == "development"

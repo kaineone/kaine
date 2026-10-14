@@ -20,8 +20,8 @@ from uuid import uuid4
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
-MATURATION_REQUEST_PATH = Path("state/lifecycle/birth_request.json")
-MATURATION_ACK_PATH = Path("state/lifecycle/birth_ack.json")
+MATURATION_REQUEST_PATH = Path("state/lifecycle/maturation_request.json")
+MATURATION_ACK_PATH = Path("state/lifecycle/maturation_ack.json")
 
 _REQUEST_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -30,7 +30,7 @@ _REQUEST_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 class MaturationRequest:
     request_id: str          # 32 lowercase hex (uuid4().hex)
     requested_at: str        # ISO-8601 UTC
-    gestation_started_at: str | None
+    development_started_at: str | None
 
 
 @dataclass(frozen=True)
@@ -53,12 +53,12 @@ def _read_json_object(path: Path) -> dict | None:
     return data
 
 
-def new_request(gestation_started_at: str | None) -> MaturationRequest:
+def new_request(development_started_at: str | None) -> MaturationRequest:
     """Mint a new maturation request record."""
     return MaturationRequest(
         request_id=uuid4().hex,
         requested_at=datetime.now(timezone.utc).isoformat(),
-        gestation_started_at=gestation_started_at,
+        development_started_at=development_started_at,
     )
 
 
@@ -68,7 +68,7 @@ def write_request(req: MaturationRequest, path: Path | None = None) -> None:
     payload = {
         "request_id": req.request_id,
         "requested_at": req.requested_at,
-        "gestation_started_at": req.gestation_started_at,
+        "development_started_at": req.development_started_at,
     }
     write_json_atomic(target, payload)
 
@@ -81,15 +81,15 @@ def read_request(path: Path | None = None) -> MaturationRequest | None:
         return None
     request_id = data.get("request_id")
     requested_at = data.get("requested_at")
-    gestation_started_at = data.get("gestation_started_at")
+    development_started_at = data.get("development_started_at")
     if not _is_valid_request_id(request_id) or not isinstance(requested_at, str):
         return None
-    if gestation_started_at is not None and not isinstance(gestation_started_at, str):
+    if development_started_at is not None and not isinstance(development_started_at, str):
         return None
     return MaturationRequest(
         request_id=request_id,
         requested_at=requested_at,
-        gestation_started_at=gestation_started_at,
+        development_started_at=development_started_at,
     )
 
 

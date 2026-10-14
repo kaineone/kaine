@@ -50,7 +50,7 @@ def build_overlay(
     modules = {name: (name in enabled) for name in all_modules}
 
     perception: dict[str, Any] = {
-        "mode": "stimulus_source" if step_kind == "gestation" else "playlist",
+        "mode": "stimulus_source" if step_kind == "development" else "playlist",
     }
     if step_kind == "viewing":
         perception["playlist_manifest"] = plan["programme"]["manifest"]

@@ -121,4 +121,4 @@ def test_self_model_default_persistence_path_under_data_root(tmp_path):
     root = tmp_path / "root"
     set_data_root(root)
     self_model = SelfModel(_FakeBus())
-    assert self_model._persistence_path == root / "state" / "eidolon" / "self_model.json"
+    assert self_model._persistence_path == root / "state" / "self_model" / "self_model.json"

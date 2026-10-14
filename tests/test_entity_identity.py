@@ -50,9 +50,9 @@ def test_identity_path_is_relative():
 def test_own_lived_artifacts_listing(tmp_path):
     assert OWN_LIVED_ARTIFACTS == (
         Path("lifecycle/stage.json"),
-        Path("phantasia/world_model.ckpt"),
         Path("world_model/world_model.ckpt"),
-        Path("hypnos/consolidation_divergence.json"),
+        Path("world_model/world_model.ckpt"),
+        Path("sleep/consolidation_divergence.json"),
         Path("sleep/consolidation_divergence.json"),
         Path("perception/desired.json"),
         Path("perceptual_locus/desired.json"),
@@ -296,7 +296,7 @@ def test_check_sidecar_agrees():
 
 
 def test_tree_digest_changes_with_bytes(tmp_path):
-    ckpt = tmp_path / "phantasia" / "world_model.ckpt"
+    ckpt = tmp_path / "world_model" / "world_model.ckpt"
     ckpt.mkdir(parents=True)
     f = ckpt / "w.bin"
     f.write_bytes(b"1")
@@ -309,7 +309,7 @@ def test_tree_digest_changes_with_bytes(tmp_path):
 
 
 def test_tree_digest_independent_of_walk_order(tmp_path):
-    ckpt = tmp_path / "phantasia" / "world_model.ckpt"
+    ckpt = tmp_path / "world_model" / "world_model.ckpt"
     ckpt.mkdir(parents=True)
     (ckpt / "a.bin").write_bytes(b"x")
     (ckpt / "b.bin").write_bytes(b"y")
@@ -357,7 +357,7 @@ def test_resolve_spawn_identity_foreign_records_only(tmp_path):
 
 
 def test_resolve_spawn_identity_legacy_from_directory_artifact(tmp_path):
-    ckpt = tmp_path / "phantasia" / "world_model.ckpt"
+    ckpt = tmp_path / "world_model" / "world_model.ckpt"
     ckpt.mkdir(parents=True)
     (ckpt / "a.bin").write_bytes(b"alpha")
     (ckpt / "b.bin").write_bytes(b"beta")
@@ -371,7 +371,7 @@ def test_resolve_spawn_identity_legacy_from_directory_artifact(tmp_path):
     assert second == identity
 
     # Add a new own artifact after the identity was persisted.
-    sleep = tmp_path / "hypnos" / "consolidation_divergence.json"
+    sleep = tmp_path / "sleep" / "consolidation_divergence.json"
     sleep.parent.mkdir(parents=True)
     sleep.write_text("{}")
     third = resolve_spawn_identity(tmp_path, now=lambda: 3.0)

@@ -64,7 +64,7 @@ class SleepSnapshotRecorder(StreamSubscriberObserver):
                     "ended_ts": datetime.now(timezone.utc).isoformat(),
                     "before": self._pending_before,
                     "after": self._capture_state(),
-                    "hypnos_payload": event.payload or {},
+                    "sleep_payload": event.payload or {},
                 }
             )
             self._pending_before = None

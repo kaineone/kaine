@@ -136,7 +136,7 @@ async def test_sleeps_before_first_tick_are_ignored(
     runner = _runner(fake_async_bus, _make_clock([0.0]), StageState(stage=DEVELOPMENT), stage_path)
     await runner._evaluate_once()
     assert runner._stage.sleep_count == 0
-    assert runner._stage.hypnos_cursor is not None
+    assert runner._stage.sleep_cursor is not None
 
     for _ in range(2):
         await fake_async_bus.publish(

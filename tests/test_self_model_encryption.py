@@ -52,7 +52,7 @@ def _model() -> SelfModelDocument:
 
 
 def test_self_model_encrypted_on_disk_and_roundtrips(enabled_global, tmp_path):
-    path = tmp_path / "eidolon" / "self_model.json"
+    path = tmp_path / "self_model" / "self_model.json"
     model = _model()
     save_atomic(path, model)
 

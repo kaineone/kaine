@@ -19,8 +19,8 @@ from kaine.lifecycle.maturation_ack import MaturationRequest, read_ack, write_re
 
 
 def _isolated_router(tmp_path):
-    request_path = tmp_path / "birth_request.json"
-    ack_path = tmp_path / "birth_ack.json"
+    request_path = tmp_path / "maturation_request.json"
+    ack_path = tmp_path / "maturation_ack.json"
     stage_path = tmp_path / "stage.json"
     app = FastAPI()
     app.state.config = DashboardConfig(
@@ -44,7 +44,7 @@ async def test_get_unauthorized(tmp_path):
     stage_path.write_bytes(b"stage")
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        r = await c.get("/diagnostics/birth.json")
+        r = await c.get("/diagnostics/maturation.json")
     assert r.status_code != 200
     assert stage_path.read_bytes() == b"stage"
 
@@ -56,7 +56,7 @@ async def test_get_no_request_returns_pending_false(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get(
-            "/diagnostics/birth.json",
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
@@ -82,7 +82,7 @@ async def test_get_with_request_returns_pending_true(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=requested_at,
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -91,7 +91,7 @@ async def test_get_with_request_returns_pending_true(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get(
-            "/diagnostics/birth.json",
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
@@ -115,7 +115,7 @@ async def test_post_ack_writes_ack_and_preserves_request(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=requested_at,
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -124,7 +124,7 @@ async def test_post_ack_writes_ack_and_preserves_request(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": request_id},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -155,7 +155,7 @@ async def test_post_ack_wrong_id_rejected(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=datetime.now(timezone.utc).isoformat(),
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -163,7 +163,7 @@ async def test_post_ack_wrong_id_rejected(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": "b" * 32},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -182,7 +182,7 @@ async def test_post_ack_malformed_id_rejected(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": "x"},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -198,7 +198,7 @@ async def test_post_ack_no_request_rejected(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": "a" * 32},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -218,7 +218,7 @@ async def test_post_ack_unauthorized(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=datetime.now(timezone.utc).isoformat(),
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -226,7 +226,7 @@ async def test_post_ack_unauthorized(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": request_id},
         )
     assert r.status_code != 200
@@ -242,7 +242,7 @@ async def test_post_ack_idempotent(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=datetime.now(timezone.utc).isoformat(),
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -250,12 +250,12 @@ async def test_post_ack_idempotent(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r1 = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": request_id},
             headers={"Authorization": "Bearer test-token"},
         )
         r2 = await c.post(
-            "/diagnostics/birth/ack",
+            "/diagnostics/maturation/ack",
             json={"request_id": request_id},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -273,8 +273,8 @@ async def test_get_includes_development_from_runtime(tmp_path):
     app, _, _, runtime_path = _isolated_router(tmp_path)
     runtime_data = {
         "developmental_stage": {
-            "stage": "gestation",
-            "gestation_started_at": "2026-01-01T00:00:00+00:00",
+            "stage": "development",
+            "development_started_at": "2026-01-01T00:00:00+00:00",
             "born_at": None,
             "lived_seconds": 7200,
             "sleep_count": 3,
@@ -290,14 +290,14 @@ async def test_get_includes_development_from_runtime(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get(
-            "/diagnostics/birth.json",
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
     dev = r.json()["development"]
     assert dev is not None
-    assert dev["stage"] == "gestation"
-    assert dev["gestation_started_at"] == "2026-01-01T00:00:00+00:00"
+    assert dev["stage"] == "development"
+    assert dev["development_started_at"] == "2026-01-01T00:00:00+00:00"
     assert dev["born_at"] is None
     assert dev["lived_seconds"] == 7200
     assert dev["sleep_count"] == 3
@@ -316,7 +316,7 @@ async def test_get_development_whitelist_ignores_extra_keys(tmp_path):
         json.dumps(
             {
                 "developmental_stage": {
-                    "stage": "gestation",
+                    "stage": "development",
                     "secret": "x",
                     "internal": {"value": 1},
                 }
@@ -328,11 +328,11 @@ async def test_get_development_whitelist_ignores_extra_keys(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get(
-            "/diagnostics/birth.json",
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
-    assert r.json()["development"] == {"stage": "gestation"}
+    assert r.json()["development"] == {"stage": "development"}
 
 
 @pytest.mark.asyncio
@@ -343,7 +343,7 @@ async def test_get_development_null_when_runtime_missing(tmp_path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get(
-            "/diagnostics/birth.json",
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
     assert r.status_code == 200
@@ -360,15 +360,15 @@ async def test_get_maturation_json_matches_the_old_route(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=requested_at,
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        birth = await c.get(
-            "/diagnostics/birth.json",
+        maturation = await c.get(
+            "/diagnostics/maturation.json",
             headers={"Authorization": "Bearer test-token"},
         )
         maturation = await c.get(
@@ -376,9 +376,9 @@ async def test_get_maturation_json_matches_the_old_route(tmp_path):
             headers={"Authorization": "Bearer test-token"},
         )
 
-    assert birth.status_code == 200
     assert maturation.status_code == 200
-    assert maturation.json() == birth.json()
+    assert maturation.status_code == 200
+    assert maturation.json() == maturation.json()
 
 
 @pytest.mark.asyncio
@@ -391,7 +391,7 @@ async def test_post_maturation_ack_records_ack(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=requested_at,
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
@@ -430,15 +430,15 @@ async def test_old_status_route_without_suffix_still_serves(tmp_path):
         MaturationRequest(
             request_id=request_id,
             requested_at=requested_at,
-            gestation_started_at=None,
+            development_started_at=None,
         ),
         path=request_path,
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        birth = await c.get(
-            "/diagnostics/birth",
+        maturation = await c.get(
+            "/diagnostics/maturation",
             headers={"Authorization": "Bearer test-token"},
         )
         maturation = await c.get(
@@ -446,6 +446,6 @@ async def test_old_status_route_without_suffix_still_serves(tmp_path):
             headers={"Authorization": "Bearer test-token"},
         )
 
-    assert birth.status_code == 200
     assert maturation.status_code == 200
-    assert birth.json() == maturation.json()
+    assert maturation.status_code == 200
+    assert maturation.json() == maturation.json()

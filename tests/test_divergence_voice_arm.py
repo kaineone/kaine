@@ -21,7 +21,7 @@ def _state(tmp_path):
 
 
 def _write_intent(root, filename, text):
-    language = root / "lingua"
+    language = root / "language"
     language.mkdir(parents=True, exist_ok=True)
     (language / filename).write_text(
         json.dumps({"generated_text": text}) + "\n", encoding="utf-8"
@@ -29,7 +29,7 @@ def _write_intent(root, filename, text):
 
 
 def _write_measures(root, measures):
-    language = root / "lingua"
+    language = root / "language"
     language.mkdir(parents=True, exist_ok=True)
     (language / "voice_measures_latest.json").write_text(
         json.dumps(measures), encoding="utf-8"
@@ -46,7 +46,7 @@ def test_silent_entity_not_diverged_abstains(tmp_path):
 
 def test_silent_entity_with_consolidation_over_threshold_is_diverged(tmp_path):
     root = _state(tmp_path)
-    sleep = root / "hypnos"
+    sleep = root / "sleep"
     sleep.mkdir(parents=True, exist_ok=True)
     (sleep / "consolidation_divergence.json").write_text(
         json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.0}),
@@ -104,7 +104,7 @@ def test_spoken_low_distinctiveness_at_high_threshold_not_diverged(tmp_path):
 
 def test_unreadable_intent_log_counts_as_spoken(tmp_path):
     root = _state(tmp_path)
-    log_dir = root / "lingua" / "intent_log"
+    log_dir = root / "language" / "intent_log"
     log_dir.mkdir(parents=True, exist_ok=True)
     p = log_dir / "sleep-1.jsonl"
     p.write_text(json.dumps({"generated_text": "hello world"}) + "\n")
@@ -147,7 +147,7 @@ def test_spoken_non_finite_distinctiveness_is_diverged(tmp_path):
     root = _state(tmp_path)
     _write_intent(root, "intent_expression.jsonl", "hello")
     for bad in ("NaN", "Infinity"):
-        (root / "lingua" / "voice_measures_latest.json").write_text(
+        (root / "language" / "voice_measures_latest.json").write_text(
             '{"distinctiveness": ' + bad + "}", encoding="utf-8"
         )
         result = assess_divergence(state_root=root, distinctiveness_threshold=0.5)
@@ -254,7 +254,7 @@ def test_configured_voice_paths_find_speech_outside_default(tmp_path):
 
 def test_unparseable_intent_line_counts_as_spoken(tmp_path):
     root = _state(tmp_path)
-    language = root / "lingua"
+    language = root / "language"
     language.mkdir(parents=True, exist_ok=True)
     (language / "intent_expression.jsonl").write_text(
         "not json at all\n", encoding="utf-8"
@@ -270,7 +270,7 @@ def test_live_log_read_before_corpus_rotation(tmp_path, monkeypatch):
     sit only in the corpus, so a corpus listed before the read would miss
     them and the entity would read as silent."""
     root = _state(tmp_path)
-    live = root / "lingua" / "intent_expression.jsonl"
+    live = root / "language" / "intent_expression.jsonl"
     live.parent.mkdir(parents=True, exist_ok=True)
     live.write_text(json.dumps({"generated_text": "hello"}) + "\n", encoding="utf-8")
     corpus = live.parent / "intent_log"

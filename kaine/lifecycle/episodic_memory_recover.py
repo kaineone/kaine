@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
 
     from kaine.modules.episodic_memory.memory import recover_interrupted_import
 
-    collection_prefix = episodic_memory.get("collection_prefix", "mnemos_")
+    collection_prefix = episodic_memory.get("collection_prefix", "episodic_memory_")
     budget_bytes = episodic_memory.get("storage_budget_bytes") or None
     health_path = resolve(EPISODIC_MEMORY_STORE_HEALTH_PATH)
 

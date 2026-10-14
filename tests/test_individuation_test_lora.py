@@ -107,7 +107,7 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     }
     pairs = mod.build_pairs(4)
 
-    out_dir = "state/hypnos/test_lora_adapters"
+    out_dir = "state/sleep/test_lora_adapters"
     result = asyncio.run(
         mod.train_test_lora(
             kaine_config,
@@ -154,7 +154,7 @@ def test_resolve_lora_field_uses_production_resolver(monkeypatch):
         "hot_swap_mode": "organ_adapter",
         "trainer_backend": "job_queue",
         "trainer_jobs_dir": "/trainer-jobs",
-        "adapter_output_dir": "state/hypnos/test_lora_adapters",
+        "adapter_output_dir": "state/sleep/test_lora_adapters",
     }
     kaine_config = {
         "language": {
@@ -184,7 +184,7 @@ def test_voice_alignment_config_parser():
         "hot_swap_mode": "organ_adapter",
         "trainer_backend": "job_queue",
         "trainer_jobs_dir": "/trainer-jobs",
-        "adapter_output_dir": "state/hypnos/test_lora_adapters",
+        "adapter_output_dir": "state/sleep/test_lora_adapters",
     }
     kaine_config = {"language": {"chat_url": "http://kaine-model-server:8080"}}
     cfg = voice_alignment_config_from_section(section, kaine_config)
@@ -196,7 +196,7 @@ def test_voice_alignment_config_parser():
     assert cfg.trainer_backend == "job_queue"
     assert cfg.trainer_jobs_dir == "/trainer-jobs"
     assert cfg.organ_url == "http://kaine-model-server:8080"
-    assert str(cfg.adapter_output_dir).endswith("state/hypnos/test_lora_adapters")
+    assert str(cfg.adapter_output_dir).endswith("state/sleep/test_lora_adapters")
 
 
 def _kaine_config_for_main() -> dict[str, Any]:

@@ -183,12 +183,12 @@ def _feed(manifest: Path | None = None, **overrides) -> dict:  # noqa: ANN003
 def _born_stage(feed: dict, **overrides) -> lifecycle_stage.StageState:  # noqa: ANN003
     fields = {
         "stage": lifecycle_stage.EMBODIED,
-        "gestation_started_at": "2026-09-01T00:00:00+00:00",
+        "development_started_at": "2026-09-01T00:00:00+00:00",
         "born_at": "2026-09-02T00:00:00+00:00",
         "lived_seconds": 5000.0,
-        "womb_t_at_birth": 5003.2,
-        "womb_seed": 7,
-        "womb_params_digest": lifecycle_stage.womb_params_digest(_stimulus_source_params(feed)),
+        "stimulus_source_t_at_maturation": 5003.2,
+        "stimulus_source_seed": 7,
+        "stimulus_source_params_digest": lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed)),
     }
     fields.update(overrides)
     return lifecycle_stage.StageState(**fields)
@@ -303,7 +303,7 @@ def test_maturation_field_is_the_stimulus_source_bloom_peak_at_the_recorded_time
     feed = _feed()
     params = _stimulus_source_params(feed)
     field = render_maturation_field(
-        seed=7, womb_t_at_birth=5003.2, lived_seconds=5000.0, params=params,
+        seed=7, stimulus_source_t_at_maturation=5003.2, lived_seconds=5000.0, params=params,
         width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H,
     )
     schedule = StimulusSourceSchedule(seed=7, width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H)
@@ -599,7 +599,7 @@ def test_no_transition_logs_why(case, level, fragment, caplog):
     elif case == "never_born":
         stage = lifecycle_stage.StageState(stage=lifecycle_stage.EMBODIED)
     elif case == "missing_record":
-        stage = _born_stage(feed, womb_t_at_birth=None)
+        stage = _born_stage(feed, stimulus_source_t_at_maturation=None)
     elif case == "digest_mismatch":
         feed["stimulus_source"] = {"heartbeat_bpm": 90}
     clock, timers = _FakeClock(), _TimerFactory()

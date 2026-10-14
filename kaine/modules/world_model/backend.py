@@ -115,7 +115,7 @@ def _coerce_np_float32(params: dict[str, dict[str, Any]]) -> dict[str, dict[str,
 # ---------------------------------------------------------------------------
 
 
-_CHECKPOINT_FORMAT = "kaine-phantasia-rssm-npz-v1"
+_CHECKPOINT_FORMAT = "kaine-world-model-rssm-npz-v1"
 
 
 def _rssm_config_header(cfg: Any, extra: dict[str, Any] | None) -> dict[str, Any]:

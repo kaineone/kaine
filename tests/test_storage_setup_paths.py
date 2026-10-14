@@ -57,7 +57,7 @@ def test_revision_state_round_trip_under_data_root(tmp_path):
 def test_sqlite_vec_storage_db_path_under_data_root(tmp_path):
     set_data_root(tmp_path / "root")
     storage = SqliteVecStorage(latent_dim=4)
-    assert storage._db_path == str(tmp_path / "root" / "state" / "mnemos" / "mnemos.db")
+    assert storage._db_path == str(tmp_path / "root" / "state" / "episodic_memory" / "episodic_memory.db")
 
 
 def test_write_manifest_under_data_root(tmp_path):

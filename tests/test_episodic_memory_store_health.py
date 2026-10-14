@@ -198,7 +198,7 @@ def test_recover_cli_clears_pending_and_is_idempotent(monkeypatch, tmp_path):
         config_mod,
         "load_runtime_config",
         lambda path, op_path: {
-            "episodic_memory": {"backend": "sqlite_vec", "collection_prefix": "mnemos_"}
+            "episodic_memory": {"backend": "sqlite_vec", "collection_prefix": "episodic_memory_"}
         },
     )
     monkeypatch.setattr(storage_util, "install_data_root", lambda cfg: None)
@@ -214,10 +214,10 @@ def test_recover_cli_clears_pending_and_is_idempotent(monkeypatch, tmp_path):
             await super().initialize()
             if not getattr(self, "_pending_seeded", False):
                 await self.write_stamp(
-                    "mnemos_embedding_space", FakeEmbedder(latent_dim=8).space
+                    "episodic_memory_embedding_space", FakeEmbedder(latent_dim=8).space
                 )
                 await self.write_meta(
-                    "mnemos_strength",
+                    "episodic_memory_strength",
                     {
                         "log_gain": 0.0,
                         "sleeps": 0,
@@ -245,7 +245,7 @@ def test_recover_cli_clears_pending_and_is_idempotent(monkeypatch, tmp_path):
     assert code1 == 0
     assert "recovered store" in out1.getvalue()
 
-    meta = asyncio.run(shared.read_meta("mnemos_strength"))
+    meta = asyncio.run(shared.read_meta("episodic_memory_strength"))
     assert meta.get("import_pending") in (None, False)
 
     out2 = io.StringIO()

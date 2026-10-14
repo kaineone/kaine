@@ -72,10 +72,10 @@ def test_study_overlay_passes_the_workspace_key_guard(monkeypatch, tmp_path):
         },
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "g_",
+            "development": "g_",
             "branch": "b_",
             "repeat": "r_",
             "accumulate": "a_",

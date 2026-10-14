@@ -266,7 +266,7 @@ def _resolve_entity_name(state_root: Path, config: dict[str, Any]) -> str:
     try:
         from kaine.modules.self_model.document import load as load_self_model
 
-        sm_path = state_root / "eidolon" / "self_model.json"
+        sm_path = state_root / "self_model" / "self_model.json"
         if sm_path.is_file():
             name = load_self_model(sm_path).name
             if name:

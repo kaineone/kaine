@@ -31,7 +31,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 
 log = logging.getLogger(__name__)
 
-VERSION: str = "phantasia-encoder-v1"
+VERSION: str = "world-model-encoder-v1"
 
 # Stable, ordered list of module sources that may appear in the coalition.
 # Order is LOAD-BEARING: it fixes the observation-vector layout for VERSION.

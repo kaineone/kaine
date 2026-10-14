@@ -38,7 +38,7 @@ from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
 
 CONTROL_PATH = Path("state/cycle/control.json")
-OVERRIDABLE_SOURCES = ("welfare", "gestation", "programme_end")
+OVERRIDABLE_SOURCES = ("welfare", "development", "programme_end")
 SELF_RELEASING_SOURCES = ("supervisor", "preserve")
 OVERRIDE_AUDIT_PATH = Path("state/cycle/override_audit.jsonl")
 

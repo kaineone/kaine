@@ -43,8 +43,8 @@ DECOY_FILES = {
     "intent_expression.jsonl": (
         '{"intent": "user said something private", "expression": "entity replied"}\n'
     ),
-    "mnemos_short_term.jsonl": '{"id": "mem1", "text": "private memory"}\n',
-    "eidolon_self_model.json": '{"name": "entity identity", "values": []}',
+    "episodic_memory_short_term.jsonl": '{"id": "mem1", "text": "private memory"}\n',
+    "self_model_self_model.json": '{"name": "entity identity", "values": []}',
     "conversation_2026-06-07.jsonl": '{"turn": "user: hello", "response": "hi"}\n',
     "replay_2026-06-07.jsonl": '{"memory_text": "verbatim episodic content"}\n',
 }

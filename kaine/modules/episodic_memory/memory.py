@@ -101,7 +101,7 @@ class EpisodicMemoryCore:
         embedder: Embedder,
         storage: MemoryStorage,
         *,
-        collection_prefix: str = "mnemos_",
+        collection_prefix: str = "episodic_memory_",
         short_term_capacity: int = 128,
         retrigger_hook: EmotionalRetriggerHook | None = None,
         clock: Callable[[], float] = time.time,
@@ -878,7 +878,7 @@ class EpisodicMemoryCore:
                 )
 
             src_prefix = (
-                state["collection_prefix"] if "collection_prefix" in state else "mnemos_"
+                state["collection_prefix"] if "collection_prefix" in state else "episodic_memory_"
             )
             persisted = state.get("persisted") or {}
             persisted_kinds = [k for k in DEFAULT_COLLECTIONS if k != "short_term"]
@@ -1125,7 +1125,7 @@ def _validate_strength(meta: dict[str, Any]) -> dict[str, Any]:
 async def recover_interrupted_import(
     storage: MemoryStorage,
     *,
-    collection_prefix: str = "mnemos_",
+    collection_prefix: str = "episodic_memory_",
     budget_bytes: int | None = None,
     health_path: Path | None = None,
 ) -> dict[str, Any]:

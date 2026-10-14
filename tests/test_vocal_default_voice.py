@@ -72,7 +72,7 @@ async def _open_vocal(bus, client, tmp_path, **kw):
         bus,
         tts_client=client,
         player=FakePlayer(),
-        sink_path=tmp_path / "vox",
+        sink_path=tmp_path / "vocal",
         **kw,
     )
     await vocal.initialize()

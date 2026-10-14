@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DEFAULT_CHECKPOINT_DIR = Path("state/phantasia")
+DEFAULT_CHECKPOINT_DIR = Path("state/world_model")
 
 
 def save_checkpoint(path: Path | str, blob: bytes) -> Path:

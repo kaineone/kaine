@@ -86,7 +86,7 @@ def _valid_reference(reference_id: str = "r1") -> ReferenceDoc:
     sample = ProbeSample(text="s", seed=1, finish_reason="stop", completion_tokens=1)
     return ReferenceDoc(
         reference_id=reference_id,
-        reference_kind="birth",
+        reference_kind="maturation",
         captured_at="2024-01-01T00:00:00+00:00",
         born_at=None,
         battery=battery,

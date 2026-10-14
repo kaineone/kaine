@@ -253,7 +253,7 @@ def test_gather_model_ids_pins_organ_revision(tmp_path, monkeypatch):
         {"language": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=ORGAN_GGUF_REPO
     )
     assert ids["language"] == ORGAN_GGUF_REPO
-    assert ids["lingua_revision"] == sha
+    assert ids["language_revision"] == sha
 
 
 def test_gather_model_ids_no_revision_when_absent(tmp_path, monkeypatch):
@@ -265,4 +265,4 @@ def test_gather_model_ids_no_revision_when_absent(tmp_path, monkeypatch):
     ids = _gather_model_ids(
         {"language": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=None
     )
-    assert "lingua_revision" not in ids
+    assert "language_revision" not in ids

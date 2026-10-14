@@ -324,7 +324,7 @@ def entity_locations(
             "self_model",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "self_model.persistence_path", "state/eidolon/self_model.json"),
+                _cfg(config, "self_model.persistence_path", "state/self_model/self_model.json"),
                 directory=True,
             ),
             "self-understanding and identity history (cognitive state)",
@@ -338,7 +338,7 @@ def entity_locations(
             "language",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "language.intent_log_path", "state/lingua/intent_expression.jsonl"),
+                _cfg(config, "language.intent_log_path", "state/language/intent_expression.jsonl"),
                 directory=True,
             ),
             "the language module's intent log and monologue (cognitive state)",
@@ -348,7 +348,7 @@ def entity_locations(
 
     # 3. language outcomes
     language_dir = resolve(
-        _cfg(config, "language.intent_log_path", "state/lingua/intent_expression.jsonl"),
+        _cfg(config, "language.intent_log_path", "state/language/intent_expression.jsonl"),
         directory=True,
     )
     locations.append(
@@ -377,7 +377,7 @@ def entity_locations(
                 _cfg(
                     config,
                     "sleep.voice_alignment.adapter_output_dir",
-                    "state/hypnos/adapters",
+                    "state/sleep/adapters",
                 )
             ),
             "learned voice adapters",
@@ -393,7 +393,7 @@ def entity_locations(
         Location(
             "sleep.consolidation_divergence",
             BACKUP_DELETE,
-            resolve("state/hypnos/consolidation_divergence.json"),
+            resolve("state/sleep/consolidation_divergence.json"),
             "a consolidation record (cognitive state)",
             bundle_dir="locations/sleep.consolidation_divergence",
         )
@@ -404,7 +404,7 @@ def entity_locations(
         Location(
             "sleep.organ_window",
             DELETE,
-            resolve("state/hypnos/organ_window.json"),
+            resolve("state/sleep/organ_window.json"),
             "host residency schedule a later entity would inherit",
         )
     )
@@ -415,7 +415,7 @@ def entity_locations(
             "world_model",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "world_model.checkpoint_path", "state/phantasia/world_model.ckpt"),
+                _cfg(config, "world_model.checkpoint_path", "state/world_model/world_model.ckpt"),
                 directory=True,
             ),
             "learned world-model weights",
@@ -425,7 +425,7 @@ def entity_locations(
 
     # 8. episodic memory sqlite
     db_bases = resolve(
-        _cfg(config, "episodic_memory.db_path", "state/mnemos/mnemos.db")
+        _cfg(config, "episodic_memory.db_path", "state/episodic_memory/episodic_memory.db")
     )
     sqlite_paths: list[Path] = []
     for db_path in db_bases:
@@ -448,7 +448,7 @@ def entity_locations(
         Location(
             "episodic_memory.store_health",
             DELETE,
-            resolve("state/mnemos/store_health.json"),
+            resolve("state/episodic_memory/store_health.json"),
             "a store marker the next store would act on",
         )
     )
@@ -473,12 +473,12 @@ def entity_locations(
                 resolve("state/lifecycle"),
                 (
                     "stage.json",
-                    "birth_request.json",
-                    "birth_ack.json",
+                    "maturation_request.json",
+                    "maturation_ack.json",
                     "maturation_pending",
-                    "gestation_readout.json",
-                    "gestation_progress.json",
-                    "gestation_viability.json",
+                    "development_readout.json",
+                    "development_progress.json",
+                    "development_viability.json",
                 ),
             ),
             "developmental stage and progress a later entity would inherit",
@@ -503,7 +503,7 @@ def entity_locations(
             "effectors.files",
             BACKUP_DELETE,
             resolve(
-                _cfg(config, "effectors.sandbox_path", "state/praxis/files")
+                _cfg(config, "effectors.sandbox_path", "state/effectors/files")
             ),
             "files the entity wrote",
             bundle_dir="locations/effectors.files",
@@ -519,7 +519,7 @@ def entity_locations(
                 _cfg(
                     config,
                     "effectors.notification_fallback_log",
-                    "state/praxis/notifications.log",
+                    "state/effectors/notifications.log",
                 )
             ),
             "notifications the entity sent",
@@ -532,20 +532,20 @@ def entity_locations(
         Location(
             "vocal.audio",
             DELETE,
-            resolve(_cfg(config, "vocal.sink_path", "state/vox")),
+            resolve(_cfg(config, "vocal.sink_path", "state/vocal")),
             "rendered speech audio (output, not state)",
         )
     )
 
     # 16-17. sleep voice alignment jobs
     trainer_workdir_paths = resolve(
-        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs")
+        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/sleep/voice_align_jobs")
     )
     job_paths = resolve(
         _cfg(
             config,
             "sleep.voice_alignment.trainer_jobs_dir",
-            "state/hypnos/voice_align_jobs",
+            "state/sleep/voice_align_jobs",
         )
     )
     seen_job_dirs: set[Path] = set()
@@ -714,7 +714,7 @@ def entity_locations(
         _cfg(
             config,
             "research_event_log.dashboard_record.log_dir",
-            "data/nexus_record",
+            "data/dashboard_record",
         ),
         state_root=state_root,
         data_root=data_root,
@@ -892,7 +892,7 @@ def entity_locations(
             "effectors.audit",
             RETAIN,
             resolve(
-                _cfg(config, "effectors.audit_log_path", "state/praxis/audit.log")
+                _cfg(config, "effectors.audit_log_path", "state/effectors/audit.log")
             ),
             "record of the entity's actions, no content",
         )
@@ -901,7 +901,7 @@ def entity_locations(
         Location(
             "sleep.voice_alignment_audit",
             RETAIN,
-            resolve("state/hypnos/voice_alignment_audit.jsonl"),
+            resolve("state/sleep/voice_alignment_audit.jsonl"),
             "audit of voice changes",
         )
     )
@@ -1228,7 +1228,7 @@ def delete_roots(
         add(organ_path)
 
     trainer_workdir_path = _rebase(
-        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/hypnos/voice_align_jobs"),
+        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/sleep/voice_align_jobs"),
         state_root=state_root,
         data_root=data_root,
     )
@@ -1239,7 +1239,7 @@ def delete_roots(
         add(trainer_workdir_path)
 
     trainer_jobs_path = _rebase(
-        _cfg(config, "sleep.voice_alignment.trainer_jobs_dir", "state/hypnos/voice_align_jobs"),
+        _cfg(config, "sleep.voice_alignment.trainer_jobs_dir", "state/sleep/voice_align_jobs"),
         state_root=state_root,
         data_root=data_root,
     )

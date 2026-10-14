@@ -36,7 +36,7 @@ EPISODIC_MEMORY_COLLECTION_KINDS: tuple[str, str, str, str] = (
 EPISODIC_MEMORY_STAMP_COLLECTION: str = "kaine_meta"
 
 #: Shared path to the episodic memory module's store health state file written by the episodic memory module and read by the dashboard.
-EPISODIC_MEMORY_STORE_HEALTH_PATH: str = "state/mnemos/store_health.json"
+EPISODIC_MEMORY_STORE_HEALTH_PATH: str = "state/episodic_memory/store_health.json"
 
 #: Fixed namespace for deriving deterministic Qdrant point ids for
 #: ``kaine_meta`` embedding-space stamps.

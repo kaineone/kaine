@@ -543,7 +543,7 @@ class DevelopmentOwner:
         self._clock = clock
         self._seed = int(seed)
         self._state_path = resolve(
-            state_path if state_path is not None else Path("state/lifecycle/gestation_readout.json")
+            state_path if state_path is not None else Path("state/lifecycle/development_readout.json")
         )
 
         self._jitter_counter_withdrawal: int = 0
@@ -631,8 +631,8 @@ class DevelopmentOwner:
         self._viability_history: list[dict] = []
         self._ever_replicated: bool = False
         self._viability_verdict: dict | None = None
-        self._viability_path: Path = self._state_path.parent / "gestation_viability.json"
-        self._progress_path: Path = self._state_path.parent / "gestation_progress.json"
+        self._viability_path: Path = self._state_path.parent / "development_viability.json"
+        self._progress_path: Path = self._state_path.parent / "development_progress.json"
         self._last_progress_save_awake: float = 0.0
         self._load_progress()
 
@@ -680,7 +680,7 @@ class DevelopmentOwner:
             elif self_baseline is not None or stored_key is not None:
                 log.info(
                     "development: ignoring self-rhythm baseline from "
-                    "mismatched being/run (stored_key=%s, current_key=%s)",
+                    "mismatched entity/run (stored_key=%s, current_key=%s)",
                     stored_key,
                     self._baseline_key,
                 )
@@ -1379,7 +1379,7 @@ class DevelopmentOwner:
         if self._hrv_variability is not None:
             result["hrv_variability"] = self._hrv_variability
         if self._stimulus_source_prediction_error is not None:
-            result["womb_prediction_error"] = self._stimulus_source_prediction_error
+            result["stimulus_source_prediction_error"] = self._stimulus_source_prediction_error
         if self._return_to_baseline_seconds is not None:
             result["return_to_baseline_seconds"] = self._return_to_baseline_seconds
         if self._entrainment_plv is not None:

@@ -47,7 +47,7 @@ Volume=kaine-ignition.volume:/app/data/ignition
 # Local-only Nexus record (privacy-filtered display stream); never exported.
 # About 2 GB per four-hour viewing.
 Volume=kaine-nexus-record.volume:/app/data/nexus_record
-Tmpfs=/app/state/perception
+Tmpfs=/app/state/perceptual_locus
 # Share the user's D-Bus session bus so a desktop caretaker channel can send
 # notifications. The image must contain `gdbus`. This channel does NOT work
 # after a power loss because no desktop session exists at boot.

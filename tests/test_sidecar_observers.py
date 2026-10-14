@@ -1038,7 +1038,7 @@ async def test_welfare_observer_interoceptive_defaults_preserve_abc():
 async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
     """task 5.1 — planning.policy event → JSONL with EFE, horizon, policy."""
     bus = FakeBus()
-    name = "nous_policy"
+    name = "planning_policy"
     sink = AsyncJsonlSink(tmp_path, name=name, flush_interval_s=0.05)
     obs = PlanningPolicyObserver(bus, sink)
     bus.push(
@@ -1065,7 +1065,7 @@ async def test_planning_policy_observer_logs_efe_and_action(tmp_path):
 async def test_planning_policy_observer_noop_when_stream_absent(tmp_path):
     """task 5.2 — no planning module events → silent no-op."""
     bus = FakeBus()
-    sink = AsyncJsonlSink(tmp_path, name="nous_policy", flush_interval_s=0.05)
+    sink = AsyncJsonlSink(tmp_path, name="planning_policy", flush_interval_s=0.05)
     obs = PlanningPolicyObserver(bus, sink)
     await sink.start()
     await _run_observer(obs, bus, delay=0.1)
@@ -1116,7 +1116,7 @@ def test_evaluation_config_includes_observers_section():
     from kaine.evaluation.config import EvaluationConfig
 
     cfg = EvaluationConfig.from_mapping(
-        {"observers": {"coherence": False, "nous_policy": False}}
+        {"observers": {"coherence": False, "planning_policy": False}}
     )
     assert cfg.observers.coherence is False
     assert cfg.observers.planning_policy is False

@@ -64,7 +64,7 @@ def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
 
     monkeypatch.setattr(decommission, "_qdrant_client", _no_qdrant)
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -104,46 +104,46 @@ def test_old_and_new_named_trees_are_backed_up_then_deleted(tmp_path, monkeypatc
     """Old and new component names are both backed up then removed while audit logs are retained."""
     state_root = tmp_path / "state"
     backed_up_then_deleted = [
-        "mnemos/mnemos.db",
+        "episodic_memory/episodic_memory.db",
         "episodic_memory/episodic_memory.db",
         "episodic_memory/episodic_memory.db-wal",
         "episodic_memory/episodic_memory.db-shm",
         "episodic_memory/episodic_memory.db-journal",
-        "lingua/intent_expression.jsonl",
         "language/intent_expression.jsonl",
-        "lingua/utterance_outcomes.jsonl",
+        "language/intent_expression.jsonl",
         "language/utterance_outcomes.jsonl",
-        "eidolon/self_model.json",
+        "language/utterance_outcomes.jsonl",
         "self_model/self_model.json",
-        "hypnos/consolidation_divergence.json",
+        "self_model/self_model.json",
         "sleep/consolidation_divergence.json",
-        "praxis/notifications.log",
+        "sleep/consolidation_divergence.json",
         "effectors/notifications.log",
-        "lifecycle/gestation_readout.json",
+        "effectors/notifications.log",
         "lifecycle/development_readout.json",
-        "lifecycle/birth_request.json",
+        "lifecycle/development_readout.json",
         "lifecycle/maturation_request.json",
-        "lifecycle/birth_ack.json",
+        "lifecycle/maturation_request.json",
         "lifecycle/maturation_ack.json",
-        "lifecycle/gestation_progress.json",
+        "lifecycle/maturation_ack.json",
         "lifecycle/development_progress.json",
-        "lifecycle/gestation_viability.json",
+        "lifecycle/development_progress.json",
         "lifecycle/development_viability.json",
-        "individuation/birth_adapter.gguf",
+        "lifecycle/development_viability.json",
         "individuation/maturation_adapter.gguf",
-        "phantasia/world_model.ckpt",
+        "individuation/maturation_adapter.gguf",
+        "world_model/world_model.ckpt",
         "world_model/world_model.ckpt",
     ]
     deleted_without_backup = [
-        "mnemos/store_health.json",
         "episodic_memory/store_health.json",
-        "hypnos/organ_window.json",
+        "episodic_memory/store_health.json",
+        "sleep/organ_window.json",
         "sleep/organ_window.json",
         "perception/desired.json",
         "perceptual_locus/desired.json",
     ]
     kept = [
-        "praxis/audit.log",
+        "effectors/audit.log",
         "effectors/audit.log",
     ]
     for rel in backed_up_then_deleted + deleted_without_backup + kept:
@@ -187,9 +187,9 @@ def test_old_and_new_named_trees_are_backed_up_then_deleted(tmp_path, monkeypatc
 def test_collection_names_cover_old_and_new_prefixes():
     """Episodic memory collection names include both legacy and current component names."""
     names = decommission._episodic_memory_collection_names({})
-    assert "mnemos_episodic" in names
     assert "episodic_memory_episodic" in names
-    assert "empatheia_agents" in names
+    assert "episodic_memory_episodic" in names
+    assert "social_cognition_agents" in names
     assert "social_cognition_agents" in names
     assert len(names) == len(set(names))
 
@@ -236,8 +236,8 @@ def test_claimed_job_blocks_on_every_run(tmp_path):
 def test_permission_error_makes_deletion_incomplete(tmp_path, monkeypatch):
     """A permission error while removing a state directory marks deletion as incomplete."""
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
-    _seed(state_root, "lingua/intent_expression.jsonl")
+    _seed(state_root, "self_model/self_model.json")
+    _seed(state_root, "language/intent_expression.jsonl")
     real_rmtree = shutil.rmtree
 
     def guarded_rmtree(path, *args, **kwargs):
@@ -255,8 +255,8 @@ def test_permission_error_makes_deletion_incomplete(tmp_path, monkeypatch):
     )
     assert result.incomplete
     assert any(form in str(e) for form in legacy_aliases.name_forms("self_model") for e in result.errors)
-    assert (state_root / "eidolon").exists()
-    assert not (state_root / "lingua").exists()
+    assert (state_root / "self_model").exists()
+    assert not (state_root / "language").exists()
 
 
 def test_failed_backup_purges_plaintext_when_encrypted(tmp_path, monkeypatch):
@@ -266,7 +266,7 @@ def test_failed_backup_purges_plaintext_when_encrypted(tmp_path, monkeypatch):
     set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
 
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json", "SECRET self")
+    _seed(state_root, "self_model/self_model.json", "SECRET self")
     _seed(state_root, "research/raw_bus_archive/a.jsonl", "SECRET bus")
     real_copytree = shutil.copytree
 
@@ -297,7 +297,7 @@ def test_failed_backup_purges_plaintext_when_encrypted(tmp_path, monkeypatch):
 def test_failed_backup_hardens_permissions_when_unencrypted(tmp_path, monkeypatch):
     """A failed backup with encryption off restricts permissions on the bundle directory."""
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json", "SECRET self")
+    _seed(state_root, "self_model/self_model.json", "SECRET self")
     _seed(state_root, "research/raw_bus_archive/a.jsonl", "SECRET bus")
     real_copytree = shutil.copytree
 
@@ -340,7 +340,7 @@ def test_qdrant_probed_before_any_copy(tmp_path, monkeypatch):
 
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: BadQdrant())
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     result = decommission.capture_backup(
         state_root=state_root,
@@ -368,12 +368,12 @@ def test_trainer_workdir_is_backed_up_then_deleted(tmp_path):
         },
     }
     state_root = tmp_path / "state"
-    adapter_store = state_root / "hypnos" / "adapters"
+    adapter_store = state_root / "sleep" / "adapters"
     adapter_store.mkdir(parents=True)
     _seed(state_root, "train_work/job1/pairs.jsonl", "SECRET pairs")
     _seed(state_root, "train_work/job1/job.json", json.dumps({"adapter_output_dir": str(adapter_store.resolve())}))
     _seed(state_root, "train_jobs/job2/spec.json", "{}")
-    _seed(state_root, "train_jobs/job2/job.json", json.dumps({"adapter_output_dir": "/app/studies/s1/state/hypnos/adapters"}))
+    _seed(state_root, "train_jobs/job2/job.json", json.dumps({"adapter_output_dir": "/app/studies/s1/state/sleep/adapters"}))
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -434,7 +434,7 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     (outside / "sandboxed.bin").write_text("x", encoding="utf-8")
     config = {**_NO_QDRANT, "effectors": {"sandbox_path": str(outside)}}
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     result = decommission.delete_entity_state(
         state_root=state_root,
         qdrant_cfg=config,
@@ -451,7 +451,7 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     organ = tmp_path / "organ"
     organ.mkdir(parents=True)
     state_root2 = tmp_path / "state2"
-    adapter_store2 = state_root2 / "hypnos" / "adapters" / "a1"
+    adapter_store2 = state_root2 / "sleep" / "adapters" / "a1"
     adapter_store2.mkdir(parents=True)
     (adapter_store2 / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
     (organ / "active-1.gguf").write_bytes(b"OWN-ADAPTER")
@@ -460,7 +460,7 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
         **_NO_QDRANT,
         "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
-    _seed(state_root2, "eidolon/self_model.json")
+    _seed(state_root2, "self_model/self_model.json")
     result2 = decommission.delete_entity_state(
         state_root=state_root2,
         qdrant_cfg=config2,
@@ -479,7 +479,7 @@ def test_symlink_in_shared_jobs_dir_is_kept_and_not_followed(tmp_path):
     outside = tmp_path / "shared" / "docs"
     outside.mkdir(parents=True)
     (outside / "keep.txt").write_text("KEEP", encoding="utf-8")
-    jobs = tmp_path / "state" / "hypnos" / "voice_align_jobs"
+    jobs = tmp_path / "state" / "sleep" / "voice_align_jobs"
     jobs.mkdir(parents=True)
     (jobs / "escape").symlink_to(outside, target_is_directory=True)
     result = decommission.delete_entity_state(
@@ -561,7 +561,7 @@ def test_tier0_with_shipped_endpoint_and_reachable_qdrant_is_clean(tmp_path, mon
     fake = _FakeQdrant([])
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -595,7 +595,7 @@ def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch
     fake = _FakeQdrant(names[:2])
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -631,7 +631,7 @@ def test_module_off_unreachable_qdrant_fails_backup_and_absent_skips(tmp_path, m
 
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json")
+    _seed(state_root, "self_model/self_model.json")
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     backup = decommission.capture_backup(
         state_root=state_root,
@@ -796,7 +796,7 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
 
     state_root = tmp_path / "state"
-    _seed(state_root, "eidolon/self_model.json", content="{}")
+    _seed(state_root, "self_model/self_model.json", content="{}")
 
     backup = decommission.capture_backup(
         qdrant_cfg=config,
@@ -858,7 +858,7 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
 def _store_adapter(state_root, name, data):
     """Write an adapter.gguf into this entity's adapter store and return its SHA-256."""
     import hashlib
-    path = state_root / "hypnos" / "adapters" / name / "adapter.gguf"
+    path = state_root / "sleep" / "adapters" / name / "adapter.gguf"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return hashlib.sha256(data).hexdigest()
@@ -878,11 +878,11 @@ def test_shared_volumes_scoped_by_ownership(tmp_path):
     (organ / "active-1.gguf").write_bytes(b"STUDY-ADAPTER")
     (organ / "generation").write_text("2", encoding="utf-8")
 
-    jobs = state_root / "hypnos" / "voice_align_jobs"
+    jobs = state_root / "sleep" / "voice_align_jobs"
     own_job = jobs / "own_job"
     own_job.mkdir(parents=True)
     (own_job / "job.json").write_text(
-        json.dumps({"adapter_output_dir": str((state_root / "hypnos" / "adapters").resolve())}),
+        json.dumps({"adapter_output_dir": str((state_root / "sleep" / "adapters").resolve())}),
         encoding="utf-8",
     )
     (own_job / "pairs.jsonl").write_text("SECRET own pairs", encoding="utf-8")
@@ -952,7 +952,7 @@ def test_no_records_keeps_shared_volumes_whole(tmp_path):
     (organ / "active-1.gguf").write_bytes(b"STUDY-ADAPTER")
     (organ / "active.json").write_text(json.dumps({"sha256": "abc"}), encoding="utf-8")
 
-    jobs = state_root / "hypnos" / "voice_align_jobs"
+    jobs = state_root / "sleep" / "voice_align_jobs"
     job_a = jobs / "job_a"
     job_a.mkdir(parents=True)
     (job_a / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}), encoding="utf-8")
@@ -997,8 +997,8 @@ def test_module_on_with_absent_flag_still_exports_and_drops(tmp_path, monkeypatc
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: fake)
 
     state_root = tmp_path / "state"
-    (state_root / "eidolon").mkdir(parents=True)
-    (state_root / "eidolon" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
+    (state_root / "self_model").mkdir(parents=True)
+    (state_root / "self_model" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
 
     result = decommission.capture_backup(
         state_root=state_root,
@@ -1037,8 +1037,8 @@ def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
 
     state_root = tmp_path / "state"
-    (state_root / "eidolon").mkdir(parents=True)
-    (state_root / "eidolon" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
+    (state_root / "self_model").mkdir(parents=True)
+    (state_root / "self_model" / "self_model.json").write_text(json.dumps({}), encoding="utf-8")
 
     result = decommission.delete_entity_state(
         state_root=state_root,
@@ -1047,7 +1047,7 @@ def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):
         data_root=tmp_path / "data",
         dry_run=False,
     )
-    assert (state_root / "eidolon" / "self_model.json").exists()
+    assert (state_root / "self_model" / "self_model.json").exists()
     assert result.incomplete
     assert any("local state kept because a remote store" in err for err in result.errors)
 
@@ -1068,7 +1068,7 @@ def test_job_started_from_this_entitys_adapter_is_not_claimed(tmp_path):
     (ran_here / "out" / "x" / "adapter.gguf").write_bytes(b"OWN-ADAPTER")
 
     own, shared, _notes = attribute_job_dirs(
-        jobs, {sha}, (state_root / "hypnos" / "adapters",)
+        jobs, {sha}, (state_root / "sleep" / "adapters",)
     )
     assert own == [ran_here]
     assert shared == [forked]

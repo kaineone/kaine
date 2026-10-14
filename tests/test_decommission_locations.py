@@ -64,7 +64,7 @@ def test_config_paths_are_rebased(tmp_path):
     fork_root = tmp_path / "forks"
     config = {
         "episodic_memory": {"db_path": "state/mem/m.db"},
-        "vocal": {"sink_path": "/abs/vox"},
+        "vocal": {"sink_path": "/abs/vocal"},
     }
     locs = {
         loc.key: loc
@@ -80,7 +80,7 @@ def test_config_paths_are_rebased(tmp_path):
     assert db in locs["episodic_memory.sqlite"].paths
     assert db.parent / "m.db-wal" in locs["episodic_memory.sqlite"].paths
     assert db.parent / "m.db-shm" in locs["episodic_memory.sqlite"].paths
-    assert locs["vocal.audio"].paths == (Path("/abs/vox"),)
+    assert locs["vocal.audio"].paths == (Path("/abs/vocal"),)
 
 
 def test_module_forms_cover_renamed_directories(tmp_path):
@@ -98,7 +98,7 @@ def test_module_forms_cover_renamed_directories(tmp_path):
             entity_id=None,
         )
     }
-    assert state_root / "episodic_memory" / "mnemos.db" in locs["episodic_memory.sqlite"].paths
+    assert state_root / "episodic_memory" / "episodic_memory.db" in locs["episodic_memory.sqlite"].paths
 
 
 def test_replay_and_dashboard_record_follow_their_flags(tmp_path):

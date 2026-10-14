@@ -24,7 +24,7 @@ HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 def _seed(state_root: Path) -> None:
-    for path in ("eidolon/f.json", "lingua/f.json", "perception/f.json"):
+    for path in ("self_model/f.json", "language/f.json", "perception/f.json"):
         p = state_root / path
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("{}", encoding="utf-8")
@@ -33,8 +33,8 @@ def _seed(state_root: Path) -> None:
     (fork_snap / "snapshot.json").write_text(
         json.dumps({"id": "s1", "metadata": {}}), encoding="utf-8"
     )
-    (state_root / "hypnos" / "adapters").mkdir(parents=True, exist_ok=True)
-    (state_root / "hypnos" / "adapters" / "a.bin").write_bytes(b"w")
+    (state_root / "sleep" / "adapters").mkdir(parents=True, exist_ok=True)
+    (state_root / "sleep" / "adapters" / "a.bin").write_bytes(b"w")
     (state_root / "cycle").mkdir(parents=True, exist_ok=True)
     (state_root / "cycle" / "runtime.json").write_text("{}", encoding="utf-8")
     # An operator file we must NOT touch.
@@ -54,14 +54,14 @@ def test_dry_run_removes_nothing(tmp_path):
     assert result.dry_run is True
     assert result.removed_paths == []
     # Everything still on disk.
-    assert (state_root / "eidolon" / "f.json").exists()
-    assert (state_root / "hypnos" / "adapters" / "a.bin").exists()
+    assert (state_root / "self_model" / "f.json").exists()
+    assert (state_root / "sleep" / "adapters" / "a.bin").exists()
     assert (state_root / "forks" / "s1").exists()
     # The would-remove report lists the intended subtrees.
     joined = " ".join(result.would_remove_paths)
     # Without an identity no fork snapshot is attributed to this entity, so
     # forks/s1 is kept and does not appear here.
-    assert str(state_root / "eidolon") in joined and "adapters" in joined
+    assert str(state_root / "self_model") in joined and "adapters" in joined
     assert "forks" not in joined
 
 
@@ -74,12 +74,12 @@ def test_delete_removes_only_intended_paths(tmp_path):
         dry_run=False,
     )
     # Intended subtrees gone.
-    assert not (state_root / "eidolon").exists()
-    assert not (state_root / "lingua").exists()
+    assert not (state_root / "self_model").exists()
+    assert not (state_root / "language").exists()
     assert not (state_root / "perception").exists()
     assert (state_root / "forks" / "s1").exists()  # no identity -> cannot attribute
     assert (state_root / "forks").is_dir()
-    assert not (state_root / "hypnos" / "adapters").exists()
+    assert not (state_root / "sleep" / "adapters").exists()
     assert not (state_root / "cycle" / "runtime.json").exists()
     # Operator file preserved.
     assert (state_root / "cycle" / "control.json").exists()
@@ -100,11 +100,11 @@ def test_delete_handles_missing_state(tmp_path):
 class _DecommissionFakeQdrantClient:
     def __init__(self):
         self.collections = {
-            "mnemos_episodic": None,
-            "mnemos_semantic": None,
-            "mnemos_short_term": None,
-            "mnemos_procedural": None,
-            "empatheia_agents": None,
+            "episodic_memory_episodic": None,
+            "episodic_memory_semantic": None,
+            "episodic_memory_short_term": None,
+            "episodic_memory_procedural": None,
+            "social_cognition_agents": None,
             EPISODIC_MEMORY_STAMP_COLLECTION: None,
         }
         self.deleted_collections: list[str] = []
@@ -153,16 +153,16 @@ def test_decommission_deletes_stamp_point(tmp_path, monkeypatch):
         },
         dry_run=False,
     )
-    expected_key = stamp_key("mnemos_")
+    expected_key = stamp_key("episodic_memory_")
     expected_pid = stamp_point_id(expected_key)
     assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{expected_key}" in result.dropped_collections
     assert any(
         coll == EPISODIC_MEMORY_STAMP_COLLECTION and expected_pid in pids
         for coll, pids in fake.deleted_points
     )
-    assert "mnemos_episodic" in fake.deleted_collections
+    assert "episodic_memory_episodic" in fake.deleted_collections
 
-    strength_key_str = strength_key("mnemos_")
+    strength_key_str = strength_key("episodic_memory_")
     strength_pid = stamp_point_id(strength_key_str)
     assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{strength_key_str}" in result.dropped_collections
     assert any(
@@ -179,7 +179,7 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
 
     class FragileQdrant(_DecommissionFakeQdrantClient):
         def delete_collection(self, collection_name: str) -> None:
-            if collection_name == "mnemos_semantic":
+            if collection_name == "episodic_memory_semantic":
                 raise RuntimeError("semantic drop failed")
             super().delete_collection(collection_name)
 
@@ -202,9 +202,9 @@ def test_decommission_keeps_strength_meta_when_a_drop_fails(tmp_path, monkeypatc
         },
         dry_run=False,
     )
-    stamp = stamp_key("mnemos_")
+    stamp = stamp_key("episodic_memory_")
     stamp_pid = stamp_point_id(stamp)
-    strength = strength_key("mnemos_")
+    strength = strength_key("episodic_memory_")
     strength_pid = stamp_point_id(strength)
 
     assert f"{EPISODIC_MEMORY_STAMP_COLLECTION}:{stamp}" in result.dropped_collections

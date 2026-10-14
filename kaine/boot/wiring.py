@@ -303,7 +303,7 @@ def _wire_language_organ_adapter(
         return
 
     adapter_output_dir = resolve(
-        voice_cfg.get("adapter_output_dir", "state/hypnos/adapters")
+        voice_cfg.get("adapter_output_dir", "state/sleep/adapters")
     )
     organ_adapters_dir = Path(
         voice_cfg.get("organ_adapters_dir", "/organ-adapters")

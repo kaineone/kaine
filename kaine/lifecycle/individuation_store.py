@@ -94,11 +94,11 @@ class IndividuationPaths:
 
     @property
     def maturation_adapter(self) -> Path:
-        return self.root / "birth_adapter.gguf"
+        return self.root / "maturation_adapter.gguf"
 
     @property
     def maturation_pending(self) -> Path:
-        return self.root / "birth_pending"
+        return self.root / "maturation_pending"
 
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
@@ -154,7 +154,7 @@ def _read_encrypted_json(
     return obj
 
 
-REFERENCE_KINDS = ("birth", "capture", "reconstructed")
+REFERENCE_KINDS = ("maturation", "capture", "reconstructed")
 
 
 @dataclass(frozen=True)

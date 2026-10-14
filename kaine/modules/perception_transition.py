@@ -196,7 +196,7 @@ def apply_audio_fade(
 def render_maturation_field(
     *,
     seed: int,
-    womb_t_at_birth: float,
+    stimulus_source_t_at_maturation: float,
     lived_seconds: float,
     params: StimulusSourceParams,
     width: int,
@@ -225,7 +225,7 @@ def render_maturation_field(
         clock=StimulusSourceClock(lived_offset_seconds=lived),
         lived_seconds=lambda: lived,
     )
-    index = int(math.floor(float(womb_t_at_birth) * float(schedule.frame_rate_hz)))
+    index = int(math.floor(float(stimulus_source_t_at_maturation) * float(schedule.frame_rate_hz)))
     return source.frame_at(index, maturation_progress=1.0)
 
 

@@ -141,14 +141,14 @@ def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
     the default under ``state_root`` is returned. A custom value is resolved to
     an absolute path. Pure and fail-closed: any error returns the default.
     """
-    default = state_root / "hypnos" / "adapters"
+    default = state_root / "sleep" / "adapters"
     try:
         value = (
             ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
         ).get("adapter_output_dir")
         if not value:
             return default
-        if str(value).strip() == "state/hypnos/adapters":
+        if str(value).strip() == "state/sleep/adapters":
             return default
         return resolve(Path(value))
     except Exception:
@@ -164,8 +164,8 @@ class VoicePaths:
 
 def default_voice_paths(state_root: Path) -> VoicePaths:
     return VoicePaths(
-        intent_logs=(state_root / "lingua" / "intent_expression.jsonl",),
-        measures_latest=state_root / "lingua" / "voice_measures_latest.json",
+        intent_logs=(state_root / "language" / "intent_expression.jsonl",),
+        measures_latest=state_root / "language" / "voice_measures_latest.json",
     )
 
 
@@ -194,7 +194,7 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
             if not value:
                 return default.intent_logs[0]
             stripped = str(value).strip()
-            if stripped == "state/lingua/intent_expression.jsonl":
+            if stripped == "state/language/intent_expression.jsonl":
                 return default.intent_logs[0]
             return resolve(Path(value))
 
@@ -384,10 +384,10 @@ def read_individuation(
         log.debug("read_individuation: reading reports failed", exc_info=True)
         return unreadable
 
-    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
+    adapters_dir = adapter_output_dir or state_root / "sleep" / "adapters"
     try:
         adapter_sha, values, norms = read_conditioning_inputs(
-            self_model_path=state_root / "eidolon" / "self_model.json",
+            self_model_path=state_root / "self_model" / "self_model.json",
             adapter_output_dir=adapters_dir,
         )
         current_digest = conditioning_digest(
@@ -557,7 +557,7 @@ def assess_divergence(
         # protective 0.0 keeps the arm voting for every entity that has spoken.
         distinctiveness_threshold = 0.0
 
-    adapters_dir = adapter_output_dir or state_root / "hypnos" / "adapters"
+    adapters_dir = adapter_output_dir or state_root / "sleep" / "adapters"
 
     # --- Primary: individuation permutation test --------------------------
     ind = read_individuation(
@@ -574,7 +574,7 @@ def assess_divergence(
     # the breadth (rate) and depth (magnitude) of how the entity's conditioned
     # output diverges from its bare language organ, every sleep.
     consolidation = _read_consolidation_divergence(
-        state_root / "hypnos" / "consolidation_divergence.json"
+        state_root / "sleep" / "consolidation_divergence.json"
     )
     cons_rate = None
     cons_magnitude = None
@@ -640,7 +640,7 @@ def assess_divergence(
                 voice_reason = "measurement_missing"
 
     # --- Secondary: Self-model identity drift --------------------------------
-    self_model = _read_self_model(state_root / "eidolon" / "self_model.json")
+    self_model = _read_self_model(state_root / "self_model" / "self_model.json")
     drift_count = (self_model or {}).get("drift_count", 0)
     identity_history_len = (self_model or {}).get("identity_history_len", 0)
     self_model_drift = bool(drift_count > 0 and identity_history_len > 0)
@@ -690,11 +690,11 @@ def assess_divergence(
         "voice_measures_found": voice_measures_found,
         "voice_self_consistency": voice_self_consistency,
         "voice_grounding": voice_grounding,
-        "eidolon_self_model_found": self_model is not None,
-        "eidolon_drift_count": int(drift_count or 0),
-        "eidolon_identity_history_len": int(identity_history_len or 0),
-        "eidolon_drift_signal": self_model_drift,
-        "hypnos_adapters_present": adapters_present,
+        "self_model_found": self_model is not None,
+        "self_model_drift_count": int(drift_count or 0),
+        "self_model_identity_history_len": int(identity_history_len or 0),
+        "self_model_drift_signal": self_model_drift,
+        "sleep_adapters_present": adapters_present,
     }
 
     if diverged:

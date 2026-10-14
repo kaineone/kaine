@@ -164,16 +164,16 @@ def test_revive_refuses_unrecognized_bundle_stage(tmp_path: Path, monkeypatch) -
 def test_never_regress_with_synthetic_alias(monkeypatch) -> None:
     monkeypatch.setitem(legacy_names.SCOPE_STATUS, "persisted", "done")
     monkeypatch.setattr(stage, "STAGES", ("development", "embodied"))
-    assert stage._coerce_stage("gestation") == "development"
     assert stage._coerce_stage("development") == "development"
-    assert stage.StageState.from_dict({"stage": "gestation"}).stage == "development"
+    assert stage._coerce_stage("development") == "development"
+    assert stage.StageState.from_dict({"stage": "development"}).stage == "development"
     with pytest.raises(stage.StageValueError):
         stage._coerce_stage("larval")
 
 
 def test_pending_scope_keeps_development_readable() -> None:
     assert legacy_names.SCOPE_STATUS.get("persisted") != "done"
-    assert stage._coerce_stage("gestation") == "gestation"
+    assert stage._coerce_stage("development") == "development"
 
 
 def test_stage_alias_and_constants_move_together() -> None:

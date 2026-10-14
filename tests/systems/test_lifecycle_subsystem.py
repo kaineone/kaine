@@ -60,10 +60,10 @@ def test_merge_applies_default_strategy(tmp_path):
 def test_merge_invokes_specialized_strategies(tmp_path):
     fm = ForkManager(tmp_path)
     a = fm.snapshot(
-        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 3, "collection_prefix": "mnemos_"})])
+        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 3, "collection_prefix": "episodic_memory_"})])
     )
     b = fm.snapshot(
-        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 5, "collection_prefix": "mnemos_"})])
+        FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 5, "collection_prefix": "episodic_memory_"})])
     )
     merged = fm.merge(a.id, b.id)
     assert merged.modules["episodic_memory"]["short_term_size"] == 8

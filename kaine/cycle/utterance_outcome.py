@@ -324,7 +324,7 @@ class UtteranceOutcomeObserver:
             "record_id": rec.record_id,
             "replied": replied,
             "reply_latency_s": reply_latency_s,
-            "empatheia_deviation": rec.max_social_cognition_deviation,
+            "social_cognition_deviation": rec.max_social_cognition_deviation,
             "social_drive_delta": delta,
             "preempted": preempted,
         }

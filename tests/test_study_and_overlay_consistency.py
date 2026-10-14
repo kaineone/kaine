@@ -58,10 +58,10 @@ def base_plan(tmp_path, known_modules):
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
-            "db": {"gestation": 10, "branch": 11, "repeat": 12, "accumulate": 13},
+            "db": {"development": 10, "branch": 11, "repeat": 12, "accumulate": 13},
         },
         "collections": {
-            "gestation": "t_g_",
+            "development": "t_g_",
             "branch": "t_b_",
             "repeat": "t_r_",
             "accumulate": "t_a_",
@@ -100,7 +100,7 @@ def _init_args(plan: dict) -> list[str]:
         "--redis-base-url",
         plan["redis"]["base_url"],
         "--db-development",
-        str(plan["redis"]["db"]["gestation"]),
+        str(plan["redis"]["db"]["development"]),
         "--db-branch",
         str(plan["redis"]["db"]["branch"]),
         "--db-repeat",

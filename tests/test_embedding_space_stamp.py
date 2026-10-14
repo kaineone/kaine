@@ -174,7 +174,7 @@ class _WrongDimFakeQdrant(_StampFakeQdrant):
         self._default_dim = 768
 
     async def count(self, collection_name, **kwargs):
-        if collection_name.startswith("mnemos_"):
+        if collection_name.startswith("episodic_memory_"):
             return types.SimpleNamespace(count=1)
         return await super().count(collection_name, **kwargs)
 
@@ -209,7 +209,7 @@ async def test_empty_store_initializes_stamp():
 async def test_matching_stamp_allows_initialize():
     embedder = FakeEmbedder(latent_dim=32)
     storage = InMemoryStorage(latent_dim=32)
-    await storage.write_stamp("mnemos_embedding_space", embedder.space)
+    await storage.write_stamp("episodic_memory_embedding_space", embedder.space)
     core = EpisodicMemoryCore(embedder, storage)
     await core.initialize()
     await storage.upsert(
@@ -233,9 +233,9 @@ async def test_mismatched_stamp_refuses_initialize():
         "pooling": "mean",
         "normalized": True,
     }
-    await storage.write_stamp("mnemos_embedding_space", bad_stamp)
+    await storage.write_stamp("episodic_memory_embedding_space", bad_stamp)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.0] * 32,
         text="x",
         payload={},
@@ -244,7 +244,7 @@ async def test_mismatched_stamp_refuses_initialize():
     core = EpisodicMemoryCore(embedder, storage)
     with pytest.raises(StorageError, match="re-embedded"):
         await core.initialize()
-    assert await storage.count("mnemos_episodic") == 1
+    assert await storage.count("episodic_memory_episodic") == 1
 
 
 @pytest.mark.asyncio
@@ -253,7 +253,7 @@ async def test_legacy_store_stamped_with_warning(caplog):
     embedder = _LegacySpaceEmbedder()
     storage = InMemoryStorage(latent_dim=DEFAULT_LATENT_DIM)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.0] * DEFAULT_LATENT_DIM,
         text="legacy",
         payload={},
@@ -274,7 +274,7 @@ async def test_legacy_store_refused_for_non_legacy_embedder():
     embedder = FakeEmbedder(latent_dim=32)
     storage = InMemoryStorage(latent_dim=32)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.0] * 32,
         text="legacy",
         payload={},
@@ -318,7 +318,7 @@ async def test_import_refuses_mismatched_bundle_space():
     core = EpisodicMemoryCore(embedder, storage)
     await core.initialize()
     bundle = {
-        "collection_prefix": "mnemos_",
+        "collection_prefix": "episodic_memory_",
         "embedding_space": {
             "model_id": "other",
             "dim": 32,
@@ -326,7 +326,7 @@ async def test_import_refuses_mismatched_bundle_space():
             "normalized": True,
         },
         "persisted": {
-            "mnemos_episodic": [
+            "episodic_memory_episodic": [
                 {"id": "1", "vector": [0.0] * 32, "text": "x", "payload": {}}
             ],
         },
@@ -344,9 +344,9 @@ async def test_import_legacy_bundle_without_space_stamps_running_space():
     core = EpisodicMemoryCore(embedder, storage)
     await core.initialize()
     bundle = {
-        "collection_prefix": "mnemos_",
+        "collection_prefix": "episodic_memory_",
         "persisted": {
-            "mnemos_episodic": [
+            "episodic_memory_episodic": [
                 {
                     "id": "1",
                     "vector": [0.0] * DEFAULT_LATENT_DIM,
@@ -434,7 +434,7 @@ def test_sentence_transformer_space_before_load():
 @pytest.mark.asyncio
 @pytest.mark.skipif(not HAS_SQLITE_VEC, reason="sqlite_vec not installed")
 async def test_sqlite_stamp_round_trip(tmp_path: Path):
-    db = tmp_path / "mnemos.db"
+    db = tmp_path / "episodic_memory.db"
     storage = SqliteVecStorage(latent_dim=32, db_path=str(db))
     await storage.initialize()
     stamp = {
@@ -443,12 +443,12 @@ async def test_sqlite_stamp_round_trip(tmp_path: Path):
         "pooling": "mean",
         "normalized": True,
     }
-    await storage.write_stamp("mnemos_embedding_space", stamp)
-    read = await storage.read_stamp("mnemos_embedding_space")
+    await storage.write_stamp("episodic_memory_embedding_space", stamp)
+    read = await storage.read_stamp("episodic_memory_embedding_space")
     assert same_space(read, stamp)
     updated = {**stamp, "model_id": "updated"}
-    await storage.write_stamp("mnemos_embedding_space", updated)
-    read = await storage.read_stamp("mnemos_embedding_space")
+    await storage.write_stamp("episodic_memory_embedding_space", updated)
+    read = await storage.read_stamp("episodic_memory_embedding_space")
     assert same_space(read, updated)
     assert await storage.read_stamp("missing_key") is None
 
@@ -458,7 +458,7 @@ async def test_malformed_stamp_fails_loudly():
     embedder = FakeEmbedder(latent_dim=32)
     storage = InMemoryStorage(latent_dim=32)
     await storage.write_stamp(
-        "mnemos_embedding_space",
+        "episodic_memory_embedding_space",
         {"model_id": "x", "dim": 32, "normalized": True},
     )
     core = EpisodicMemoryCore(embedder, storage)
@@ -476,7 +476,7 @@ async def test_qdrant_read_stamp_missing_meta_returns_none_without_retrieve():
     client = _NoRetrieveFake()
     storage = QdrantStorage(latent_dim=32, api_key="test")
     storage._client = client
-    assert await storage.read_stamp("mnemos_embedding_space") is None
+    assert await storage.read_stamp("episodic_memory_embedding_space") is None
 
 
 def test_space_uses_the_canonical_model_id(tmp_path: Path) -> None:
@@ -508,7 +508,7 @@ async def test_legacy_store_with_wrong_dimension_refuses_in_memory():
     embedder = _LegacySpaceEmbedder()
     storage = InMemoryStorage(latent_dim=768)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.0] * 768,
         text="legacy-wrong-dim",
         payload={},
@@ -544,7 +544,7 @@ async def test_stale_stamp_on_empty_store_is_replaced(caplog):
         "pooling": "mean",
         "normalized": True,
     }
-    await storage.write_stamp("mnemos_embedding_space", stale_stamp)
+    await storage.write_stamp("episodic_memory_embedding_space", stale_stamp)
     core = EpisodicMemoryCore(embedder, storage)
     await core.initialize()
     stamp = await storage.read_stamp(core.stamp_key)
@@ -565,9 +565,9 @@ async def test_stale_stamp_on_non_empty_store_refuses():
         "pooling": "mean",
         "normalized": True,
     }
-    await storage.write_stamp("mnemos_embedding_space", stale_stamp)
+    await storage.write_stamp("episodic_memory_embedding_space", stale_stamp)
     await storage.upsert(
-        "mnemos_episodic",
+        "episodic_memory_episodic",
         vector=[0.0] * 32,
         text="x",
         payload={},
@@ -582,10 +582,10 @@ def test_merge_defaults_missing_space_to_legacy():
     strategy = EpisodicMemoryMergeStrategy()
     a = {
         "short_term_size": 1,
-        "collection_prefix": "mnemos_",
+        "collection_prefix": "episodic_memory_",
         "embedding_space": LEGACY_EMBEDDING_SPACE,
     }
-    b = {"short_term_size": 2, "collection_prefix": "mnemos_"}
+    b = {"short_term_size": 2, "collection_prefix": "episodic_memory_"}
     out = strategy.merge(a, b)
     assert "embedding_space_mismatch" not in out.get("metadata", {})
     assert same_space(out["embedding_space"], LEGACY_EMBEDDING_SPACE)
@@ -593,10 +593,10 @@ def test_merge_defaults_missing_space_to_legacy():
 
 def test_merge_flags_different_space_when_one_missing():
     strategy = EpisodicMemoryMergeStrategy()
-    a = {"short_term_size": 1, "collection_prefix": "mnemos_"}
+    a = {"short_term_size": 1, "collection_prefix": "episodic_memory_"}
     b = {
         "short_term_size": 2,
-        "collection_prefix": "mnemos_",
+        "collection_prefix": "episodic_memory_",
         "embedding_space": {
             "model_id": "other-384",
             "dim": DEFAULT_LATENT_DIM,
@@ -619,8 +619,8 @@ async def test_stamp_tolerates_extra_keys_and_rejects_malformed():
         "normalized": True,
         "extra": 1,
     }
-    await storage.write_stamp("mnemos_embedding_space", extra)
-    read = await storage.read_stamp("mnemos_embedding_space")
+    await storage.write_stamp("episodic_memory_embedding_space", extra)
+    read = await storage.read_stamp("episodic_memory_embedding_space")
     assert read == extra
     assert "extra" in read
 
@@ -652,6 +652,6 @@ async def test_qdrant_write_stamp_race_creating_meta_collection():
         "pooling": "mean",
         "normalized": True,
     }
-    await storage.write_stamp("mnemos_embedding_space", stamp)
-    read = await storage.read_stamp("mnemos_embedding_space")
+    await storage.write_stamp("episodic_memory_embedding_space", stamp)
+    read = await storage.read_stamp("episodic_memory_embedding_space")
     assert same_space(read, stamp)

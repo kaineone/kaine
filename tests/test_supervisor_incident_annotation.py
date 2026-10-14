@@ -166,7 +166,7 @@ async def test_status_and_log_events_still_published(tmp_path):
     await _drive_one_incident(bus, tmp_path)
     # The existing ephemeral events must remain (not replaced).
     assert bus.of_type("supervisor.status"), "supervisor.status must still be published"
-    assert bus.of_type("supervisor.log"), "spot.log must still be published"
+    assert bus.of_type("supervisor.log"), "supervisor.log must still be published"
     assert bus.of_type("supervisor.incident"), "supervisor.incident must be added"
 
 

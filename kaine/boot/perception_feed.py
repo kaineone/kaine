@@ -196,7 +196,7 @@ def _plan_stimulus_source_world_transition(
         return False, "the entity is not born yet", logging.INFO
     missing = [
         name
-        for name in ("womb_t_at_birth", "womb_seed", "womb_params_digest")
+        for name in ("stimulus_source_t_at_maturation", "stimulus_source_seed", "stimulus_source_params_digest")
         if getattr(stage_state, name, None) is None
     ]
     if missing:
@@ -213,14 +213,14 @@ def _plan_stimulus_source_world_transition(
             logging.WARNING,
         )
     try:
-        digest = _lifecycle_stage.womb_params_digest(_stimulus_source_params(feed))
+        digest = _lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
     except Exception as exc:
         return (
             False,
             f"the stimulus source parameters could not be read to check the maturation record: {exc}",
             logging.WARNING,
         )
-    if digest != stage_state.womb_params_digest:
+    if digest != stage_state.stimulus_source_params_digest:
         return (
             False,
             "the configured stimulus source parameters differ from those recorded at maturation "
@@ -268,8 +268,8 @@ def _build_stimulus_source_world_transition(
     )
     try:
         stimulus_source_frame = render_maturation_field(
-            seed=int(stage_state.womb_seed),
-            womb_t_at_birth=float(stage_state.womb_t_at_birth),
+            seed=int(stage_state.stimulus_source_seed),
+            stimulus_source_t_at_maturation=float(stage_state.stimulus_source_t_at_maturation),
             lived_seconds=float(stage_state.lived_seconds),
             params=_stimulus_source_params(feed),
             width=int(width),
@@ -296,7 +296,7 @@ def _build_stimulus_source_world_transition(
         "stimulus-source-to-world transition armed: %.1f s crossfade from the stimulus source's field "
         "at stimulus source time %.3f s, then programme audio fades in over %.1f s",
         seconds,
-        float(stage_state.womb_t_at_birth),
+        float(stage_state.stimulus_source_t_at_maturation),
         fade,
     )
     return StimulusSourceWorldTransition(

@@ -27,7 +27,7 @@ def _p(tmp_path: Path) -> Path:
 def test_fresh_entity_begins_in_development(tmp_path: Path) -> None:
     resolved = st.resolve_boot_stage(has_prior_lived_history=False, path=_p(tmp_path))
     assert resolved.stage == st.DEVELOPMENT
-    assert resolved.gestation_started_at is not None
+    assert resolved.development_started_at is not None
 
 
 def test_preserved_entity_defaults_to_embodied_never_development(tmp_path: Path) -> None:
@@ -39,7 +39,7 @@ def test_preserved_entity_defaults_to_embodied_never_development(tmp_path: Path)
 
 def test_existing_stage_file_is_authoritative_fork_inherits(tmp_path: Path) -> None:
     p = _p(tmp_path)
-    st.write_stage(st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0"), p)
+    st.write_stage(st.StageState(stage=st.DEVELOPMENT, development_started_at="t0"), p)
     # A fork of a gestating entity gestates...
     inherited = st.resolve_boot_stage(has_prior_lived_history=True, path=p)
     assert inherited.stage == st.DEVELOPMENT
@@ -64,7 +64,7 @@ def test_unknown_stage_value_is_refused_not_read_as_a_stage(tmp_path: Path) -> N
 
 
 def test_advance_is_monotonic_and_one_shot() -> None:
-    g = st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0")
+    g = st.StageState(stage=st.DEVELOPMENT, development_started_at="t0")
     born = st.advance_to_embodied(g, now_iso="t1")
     assert born.stage == st.EMBODIED
     assert born.born_at == "t1"
@@ -84,7 +84,7 @@ def test_no_path_returns_embodied_to_development() -> None:
 
 
 def test_roundtrip_dict() -> None:
-    s = st.StageState(stage=st.DEVELOPMENT, gestation_started_at="t0", born_at=None)
+    s = st.StageState(stage=st.DEVELOPMENT, development_started_at="t0", born_at=None)
     assert st.StageState.from_dict(s.to_dict()) == s
 
 
@@ -116,8 +116,8 @@ def test_has_prior_lived_history_true_for_preservation_manifest(tmp_path: Path) 
 
 def test_has_prior_lived_history_true_for_world_model_checkpoint(tmp_path: Path) -> None:
     identity = mint_identity()
-    (tmp_path / "phantasia").mkdir(parents=True)
-    (tmp_path / "phantasia" / "world_model.ckpt").write_text("data")
+    (tmp_path / "world_model").mkdir(parents=True)
+    (tmp_path / "world_model" / "world_model.ckpt").write_text("data")
     assert st.has_prior_lived_history(identity, state_root=tmp_path) is True
 
 

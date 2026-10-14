@@ -47,7 +47,7 @@ RUNTIME_PATH = Path("state/cycle/runtime.json")
 
 _DEVELOPMENT_KEYS = {
     "stage",
-    "gestation_started_at",
+    "development_started_at",
     "born_at",
     "lived_seconds",
     "sleep_count",
@@ -116,8 +116,8 @@ def build_maturation_router(
 
     @router.get("/maturation.json", include_in_schema=False)
     @router.get("/maturation")
-    @router.get("/birth.json", include_in_schema=False)
-    @router.get("/birth", include_in_schema=False)
+    @router.get("/maturation.json", include_in_schema=False)
+    @router.get("/maturation", include_in_schema=False)
     async def maturation_json():
         return JSONResponse(
             maturation_snapshot(
@@ -129,7 +129,7 @@ def build_maturation_router(
         )
 
     @router.post("/maturation/ack", dependencies=[Depends(require_operator_token)])
-    @router.post("/birth/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False)
+    @router.post("/maturation/ack", dependencies=[Depends(require_operator_token)], include_in_schema=False)
     async def maturation_ack(body: AckBody):
         request = read_request(path=request_path)
         if request is None:

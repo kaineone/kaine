@@ -195,7 +195,7 @@ async def test_send_event_swallows_raising_notify_fn(tmp_path):
 
     notifier = _notifier(tmp_path, _valid_config(), raising_notify, clock)
     await notifier.start()
-    results = await notifier.send_event("spot_escalation")
+    results = await notifier.send_event("supervisor_escalation")
     assert results == []
     await notifier.stop()
 

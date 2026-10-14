@@ -158,7 +158,7 @@ class QdrantAgentStore:
         host: str = "127.0.0.1",
         port: int = 6533,
         api_key: str,
-        collection: str = "empatheia_agents",
+        collection: str = "social_cognition_agents",
         latent_dim: int = DEFAULT_LATENT_DIM,
         embedder: Any = None,
     ) -> None:

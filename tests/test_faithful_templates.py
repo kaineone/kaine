@@ -113,7 +113,7 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "horizon": 8,
         "step_magnitudes": [0.1, 0.2, 0.3],
         "trajectory_drift": 0.05,
-        "encoder_version": "phantasia-encoder-v1",
+        "encoder_version": "world-model-encoder-v1",
     },
     # --- v4 additions ---
     ("planning", "planning.timeout"): {

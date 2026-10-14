@@ -289,10 +289,10 @@ def test_boinc_never_selected_over_trusted():
 @pytest.mark.parametrize(
     "bad",
     [
-        "state/hypnos/adapters/voice.safetensors",
-        "topos/frames/frame_001.png",
+        "state/sleep/adapters/voice.safetensors",
+        "vision/frames/frame_001.png",
         "config/kaine.toml",
-        "state/perception/raw/audio.wav",
+        "state/perceptual_locus/raw/audio.wav",
         "secrets/redis.pass",
     ],
 )

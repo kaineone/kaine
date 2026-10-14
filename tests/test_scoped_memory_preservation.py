@@ -325,7 +325,7 @@ async def test_sqlite_vec_two_prefixes_scoped_export_import(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
     from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
-    db_path = tmp_path / "mnemos.db"
+    db_path = tmp_path / "episodic_memory.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
     await storage.initialize()
 
@@ -381,7 +381,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
             "a_semantic": [],
             "a_procedural": [],
             "b_episodic": [point],
-            "empatheia_agents": [
+            "social_cognition_agents": [
                 {"id": "22222222-2222-2222-2222-222222222222", "vector": good_vec, "text": "agent", "payload": {}, "affect": None}
             ],
         },
@@ -395,7 +395,7 @@ async def test_import_skips_foreign_collections_and_logs(caplog):
     assert any("alpha" in r.text for r in results)
 
     assert "b_episodic" in caplog.text
-    assert "empatheia_agents" in caplog.text
+    assert "social_cognition_agents" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -457,12 +457,12 @@ async def test_social_cognition_qdrant_all_profiles_includes_collection():
         vector=[0.1] * 4,
         payload={"agent_id": "remote", "profile_json": profile_json},
     )
-    client.store["empatheia_agents"] = [point]
+    client.store["social_cognition_agents"] = [point]
 
     embedder = FakeEmbedder(latent_dim=4)
     store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
         embedder=embedder,
     )
@@ -528,7 +528,7 @@ async def test_social_cognition_qdrant_all_profiles_fails_loud_on_scroll_error()
 
     store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
     )
     store._client = _Broken()
@@ -549,7 +549,7 @@ async def test_social_cognition_put_stores_profile_when_embedder_fails():
 
     store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
         embedder=_FailingEmbedder(latent_dim=4),
     )
@@ -560,7 +560,7 @@ async def test_social_cognition_put_stores_profile_when_embedder_fails():
     await store.put(model)
 
     pts, _ = await client.scroll(
-        collection_name="empatheia_agents",
+        collection_name="social_cognition_agents",
         limit=10,
         offset=None,
         with_payload=True,
@@ -580,7 +580,7 @@ async def test_social_cognition_all_profiles_raises_without_client():
     pytest.importorskip("qdrant_client")
     store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
     )
     with pytest.raises(RuntimeError, match="not initialized"):
@@ -797,7 +797,7 @@ async def test_sqlite_vec_import_absent_kind_empties_target(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
     from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
-    db_path = tmp_path / "mnemos.db"
+    db_path = tmp_path / "episodic_memory.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
     await storage.initialize()
 
@@ -821,7 +821,7 @@ async def test_sqlite_vec_replace_collection_only_named_rows(tmp_path: Path):
     pytest.importorskip("sqlite_vec")
     from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
-    db_path = tmp_path / "mnemos.db"
+    db_path = tmp_path / "episodic_memory.db"
     storage = SqliteVecStorage(latent_dim=4, db_path=str(db_path))
     await storage.initialize()
 
@@ -846,7 +846,7 @@ async def test_social_cognition_put_generates_stable_valid_point_id():
     client = _FakeAsyncQdrant()
     store = QdrantAgentStore(
         api_key="k",
-        collection="empatheia_agents",
+        collection="social_cognition_agents",
         latent_dim=4,
         embedder=FakeEmbedder(latent_dim=4),
     )
@@ -860,7 +860,7 @@ async def test_social_cognition_put_generates_stable_valid_point_id():
 
     await store.put(model)
     pts, _ = await client.scroll(
-        collection_name="empatheia_agents",
+        collection_name="social_cognition_agents",
         limit=10,
         offset=None,
         with_payload=True,
@@ -874,7 +874,7 @@ async def test_social_cognition_put_generates_stable_valid_point_id():
     )
     await store.put(model2)
     pts2, _ = await client.scroll(
-        collection_name="empatheia_agents",
+        collection_name="social_cognition_agents",
         limit=10,
         offset=None,
         with_payload=True,

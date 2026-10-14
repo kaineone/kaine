@@ -83,10 +83,10 @@ class OutputBoundaryViolation(RuntimeError):
 _FORBIDDEN_OUTPUT_FRAGMENTS: tuple[str, ...] = (
     "raw_sense",
     "sensory_raw",
-    "topos/frames",
+    "vision/frames",
     "audition/raw",
     "perception/raw",
-    "hypnos/adapters",
+    "sleep/adapters",
     "voice_adapter",
     "kaine.toml",
     "operator_config",

@@ -123,7 +123,7 @@ async def test_live_arms_then_continuous_not_live_declares_loss(env):
     lost = [p for p in recorder.publishes if p[0] == STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST]
     assert len(lost) == 1
     assert lost[0][1]["reason"] == "quiet"
-    assert recorder.notifies == ["womb_lost"]
+    assert recorder.notifies == ["stimulus_source_lost"]
 
 
 @pytest.mark.asyncio
@@ -149,7 +149,7 @@ async def test_never_live_declares_loss_at_arm_timeout(env):
     lost = [p for p in recorder.publishes if p[0] == STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST]
     assert len(lost) == 1
     assert lost[0][1]["reason"] == "timeout reason"
-    assert recorder.notifies == ["womb_lost"]
+    assert recorder.notifies == ["stimulus_source_lost"]
 
 
 def test_arm_timeout_zero_raises(tmp_path):
