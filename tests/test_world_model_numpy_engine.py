@@ -57,7 +57,7 @@ def _snapshot(events, *, inhibited: bool = False, tick: int = 1) -> WorkspaceSna
     )
 
 
-async def _drain(bus: AsyncBus, stream: str = "phantasia.out") -> list[Event]:
+async def _drain(bus: AsyncBus, stream: str = "world_model.out") -> list[Event]:
     entries = await bus.read(stream, last_id="0")
     return [e for _, e in entries]
 
@@ -298,7 +298,7 @@ def test_load_world_model_selects_numpy_and_rejects_bogus_engine():
 
 
 # ---------------------------------------------------------------------------
-# 6. make_phantasia engine validation
+# 6. make_world_model engine validation
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +316,7 @@ async def test_make_world_model_builds_numpy_engine_and_rejects_invalid(bus: Asy
 
     with pytest.raises(
         ConfigurationError,
-        match=r'\[phantasia\].engine must be "jax" or "numpy", got \'cuda\'',
+        match=r'\[world_model\].engine must be "jax" or "numpy", got \'cuda\'',
     ):
         make_world_model(bus, {**section, "engine": "cuda"})
 
@@ -331,9 +331,9 @@ async def test_disclosure_publishes_backend_and_engine(bus: AsyncBus):
     ph = WorldModel(bus, backend="dreamerv3", engine="numpy")
     await ph.initialize()
     try:
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
         events = await _drain(bus)
-        we = [e for e in events if e.type == "phantasia.world_error"]
+        we = [e for e in events if e.type == "world_model.world_error"]
         assert we
         assert we[-1].payload["backend"] == "dreamerv3"
         assert we[-1].payload["engine"] == "numpy"
@@ -343,9 +343,9 @@ async def test_disclosure_publishes_backend_and_engine(bus: AsyncBus):
     ph2 = WorldModel(bus, backend="fake")
     await ph2.initialize()
     try:
-        await ph2.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        await ph2.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
         events = await _drain(bus)
-        we = [e for e in events if e.type == "phantasia.world_error"]
+        we = [e for e in events if e.type == "world_model.world_error"]
         assert we
         assert we[-1].payload["backend"] == "fake"
         assert we[-1].payload["engine"] is None

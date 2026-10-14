@@ -31,9 +31,9 @@ def test_check_reports_missing_core_for_enabled_interoception_sequence(monkeypat
     )
     # The torch CfC backend needs core; the default numpy backend does not.
     config = {
-        "modules": {"soma": True, "chronos": True},
-        "soma": {"cfc_backend": "torch"},
-        "chronos": {"cfc_backend": "torch"},
+        "modules": {"interoception": True, "sequence": True},
+        "interoception": {"cfc_backend": "torch"},
+        "sequence": {"cfc_backend": "torch"},
     }
     missing = check(config)
 
@@ -53,11 +53,11 @@ def test_check_respects_module_toggles(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec({"torch", "ncps"})
     )
-    config = {"modules": {"soma": True, "chronos": False}}
+    config = {"modules": {"interoception": True, "sequence": False}}
     missing = check(config)
     assert missing == [
         Missing(
-            module="soma",
+            module="interoception",
             import_name="pynvml",
             extra="nvidia",
             severity="warning",
@@ -69,10 +69,10 @@ def test_episodic_memory_qdrant_backend_needs_memory(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
-    config = {"modules": {"mnemos": True}, "mnemos": {"backend": "qdrant"}}
+    config = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "qdrant"}}
     missing = check(config)
     assert any(
-        m.module == "mnemos"
+        m.module == "episodic_memory"
         and m.import_name == "qdrant_client"
         and m.extra == "memory"
         for m in missing
@@ -85,10 +85,10 @@ def test_episodic_memory_sqlite_vec_backend_needs_memory_edge(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
-    config = {"modules": {"mnemos": True}, "mnemos": {"backend": "sqlite_vec"}}
+    config = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "sqlite_vec"}}
     missing = check(config)
     assert any(
-        m.module == "mnemos"
+        m.module == "episodic_memory"
         and m.import_name == "sqlite_vec"
         and m.extra == "memory-edge"
         for m in missing
@@ -101,7 +101,7 @@ def test_episodic_memory_inmemory_backend_needs_nothing_by_default(monkeypatch):
     monkeypatch.setattr(
         importlib.util, "find_spec", _make_find_spec(set())
     )
-    config = {"modules": {"mnemos": True}, "mnemos": {"backend": "inmemory"}}
+    config = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "inmemory"}}
     missing = check(config)
     assert not missing
 
@@ -111,13 +111,13 @@ def test_episodic_memory_sentence_transformers_backend_needs_memory(monkeypatch)
         importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {
-        "modules": {"mnemos": True},
-        "mnemos": {"backend": "qdrant"},
+        "modules": {"episodic_memory": True},
+        "episodic_memory": {"backend": "qdrant"},
         "embedding": {"backend": "sentence_transformers"},
     }
     missing = check(config)
     assert any(
-        m.module == "mnemos"
+        m.module == "episodic_memory"
         and m.import_name == "sentence_transformers"
         and m.extra == "memory"
         for m in missing
@@ -129,13 +129,13 @@ def test_social_cognition_qdrant_sentence_transformers_backend_needs_memory(monk
         importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {
-        "modules": {"empatheia": True},
-        "empatheia": {"backend": "qdrant"},
+        "modules": {"social_cognition": True},
+        "social_cognition": {"backend": "qdrant"},
         "embedding": {"backend": "sentence_transformers"},
     }
     missing = check(config)
     assert any(
-        m.module == "empatheia"
+        m.module == "social_cognition"
         and m.import_name == "sentence_transformers"
         and m.extra == "memory"
         for m in missing
@@ -147,12 +147,12 @@ def test_sleep_warns_sentence_transformers_when_embedding_backend_torch(monkeypa
         importlib.util, "find_spec", _make_find_spec(set())
     )
     config = {
-        "modules": {"hypnos": True},
+        "modules": {"sleep": True},
         "embedding": {"backend": "sentence_transformers"},
     }
     missing = check(config)
     assert any(
-        m.module == "hypnos"
+        m.module == "sleep"
         and m.import_name == "sentence_transformers"
         and m.extra == "memory"
         and m.severity == "warning"
@@ -166,7 +166,7 @@ def test_vision_cv2_needed_when_capture_enabled(monkeypatch):
         "find_spec",
         _make_find_spec({"torch", "transformers", "PIL"}),
     )
-    config = {"modules": {"topos": True}, "topos": {"capture_enabled": True}}
+    config = {"modules": {"vision": True}, "vision": {"capture_enabled": True}}
     missing = check(config)
     assert any(m.import_name == "cv2" and m.extra == "vision" for m in missing)
 
@@ -178,8 +178,8 @@ def test_vision_cv2_needed_in_playlist_mode(monkeypatch):
         _make_find_spec({"torch", "transformers", "PIL"}),
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {"capture_enabled": False},
+        "modules": {"vision": True},
+        "vision": {"capture_enabled": False},
         "perception_feed": {"mode": "playlist"},
     }
     missing = check(config)
@@ -193,8 +193,8 @@ def test_vision_cv2_not_needed_without_capture_or_playlist(monkeypatch):
         _make_find_spec({"torch", "transformers", "PIL", "cv2"}),
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {"capture_enabled": False},
+        "modules": {"vision": True},
+        "vision": {"capture_enabled": False},
         "perception_feed": {"mode": "live"},
     }
     missing = check(config)
@@ -249,8 +249,8 @@ def test_audition_default_requires_no_sherpa_onnx(monkeypatch):
 def test_vocal_sherpa_onnx_requires_speech_edge(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
-        "modules": {"vox": True},
-        "vox": {"backend": "sherpa_onnx"},
+        "modules": {"vocal": True},
+        "vocal": {"backend": "sherpa_onnx"},
     }
     missing = check(config)
     assert any(
@@ -261,8 +261,8 @@ def test_vocal_sherpa_onnx_requires_speech_edge(monkeypatch):
 def test_vocal_default_requires_no_sherpa_onnx(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
-        "modules": {"vox": True},
-        "vox": {},
+        "modules": {"vocal": True},
+        "vocal": {},
     }
     missing = check(config)
     assert not missing
@@ -283,7 +283,7 @@ def test_audition_playlist_requires_av_and_webrtcvad_not_sounddevice(monkeypatch
 
 def test_audition_webrtcvad_needed_in_seeded_stimulus_source_or_screen_not_sounddevice(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
-    for mode in ("seeded", "womb", "screen"):
+    for mode in ("seeded", "stimulus_source", "screen"):
         config = {
             "modules": {"audition": True},
             "audition": {"capture_enabled": False},
@@ -323,7 +323,7 @@ def test_audition_live_capture_requires_sounddevice_and_webrtcvad(monkeypatch):
 
 def test_planning_needs_reasoning(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
-    config = {"modules": {"nous": True}}
+    config = {"modules": {"planning": True}}
     missing = check(config)
     assert any(m.import_name == "pymdp" and m.extra == "reasoning" for m in missing)
     assert any(m.import_name == "jax" and m.extra == "reasoning" for m in missing)
@@ -331,7 +331,7 @@ def test_planning_needs_reasoning(monkeypatch):
 
 def test_world_model_dreamerv3_needs_worldmodel(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
-    config = {"modules": {"phantasia": True}, "phantasia": {"backend": "dreamerv3"}}
+    config = {"modules": {"world_model": True}, "world_model": {"backend": "dreamerv3"}}
     missing = check(config)
     assert any(m.import_name == "jax" and m.extra == "worldmodel" for m in missing)
 
@@ -339,8 +339,8 @@ def test_world_model_dreamerv3_needs_worldmodel(monkeypatch):
 def test_world_model_numpy_engine_needs_nothing(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
     config = {
-        "modules": {"phantasia": True},
-        "phantasia": {"backend": "dreamerv3", "engine": "numpy"},
+        "modules": {"world_model": True},
+        "world_model": {"backend": "dreamerv3", "engine": "numpy"},
     }
     missing = check(config)
     assert not missing
@@ -348,7 +348,7 @@ def test_world_model_numpy_engine_needs_nothing(monkeypatch):
 
 def test_world_model_fake_backend_needs_nothing(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", _make_find_spec(set()))
-    config = {"modules": {"phantasia": True}, "phantasia": {"backend": "fake"}}
+    config = {"modules": {"world_model": True}, "world_model": {"backend": "fake"}}
     missing = check(config)
     assert not missing
 
@@ -359,7 +359,7 @@ def test_interoception_missing_pynvml_is_warning(monkeypatch):
         "find_spec",
         _make_find_spec({"torch", "ncps"}),
     )
-    config = {"modules": {"soma": True}}
+    config = {"modules": {"interoception": True}}
     missing = check(config)
     pynvml_missing = [m for m in missing if m.import_name == "pynvml"]
     assert len(pynvml_missing) == 1
@@ -374,7 +374,7 @@ def test_format_missing_omits_warnings_and_groups_extras(monkeypatch):
         "find_spec",
         _make_find_spec({"torch"}),
     )
-    config = {"modules": {"soma": True, "nous": True}, "soma": {"cfc_backend": "torch"}}
+    config = {"modules": {"interoception": True, "planning": True}, "interoception": {"cfc_backend": "torch"}}
     missing = check(config)
     message = format_missing(missing)
     assert "core" in message
@@ -385,9 +385,9 @@ def test_format_missing_omits_warnings_and_groups_extras(monkeypatch):
 
 def test_build_registry_raises_before_building_any_module(monkeypatch):
     bus = MagicMock()
-    config = {"modules": {"soma": True}}
+    config = {"modules": {"interoception": True}}
     fake_missing = [
-        Missing(module="soma", import_name="torch", extra="core", severity="error")
+        Missing(module="interoception", import_name="torch", extra="core", severity="error")
     ]
 
     monkeypatch.setattr("kaine.extras.check", lambda cfg: fake_missing)
@@ -401,10 +401,10 @@ def test_build_registry_raises_before_building_any_module(monkeypatch):
 
 def test_build_registry_logs_warnings_and_continues(monkeypatch, caplog):
     bus = MagicMock()
-    config = {"modules": {"soma": True}}
+    config = {"modules": {"interoception": True}}
     fake_missing = [
         Missing(
-            module="soma",
+            module="interoception",
             import_name="pynvml",
             extra="nvidia",
             severity="warning",
@@ -429,15 +429,15 @@ def test_dashboard_service_check_reports_missing_dashboard(monkeypatch):
         "find_spec",
         _make_find_spec({"uvicorn", "jinja2"}),
     )
-    missing = check({}, services={"nexus"})
+    missing = check({}, services={"dashboard"})
     assert any(
-        m.module == "nexus"
+        m.module == "dashboard"
         and m.import_name == "fastapi"
         and m.extra == "nexus"
         for m in missing
     )
     message = format_missing(missing)
-    assert "nexus" in message
+    assert "dashboard" in message
     assert 'pip install "kaine[nexus]"' in message
 
 
@@ -446,7 +446,7 @@ def test_dashboard_main_refuses_without_dashboard(monkeypatch):
 
     fake_missing = [
         Missing(
-            module="nexus",
+            module="dashboard",
             import_name="fastapi",
             extra="nexus",
             severity="error",
@@ -510,7 +510,7 @@ def test_table_matches_real_module_imports():
         "pynvml": [repo / "kaine" / "modules" / "interoception" / "reader.py"],
     }
     for name, reqs in extras_module.REQUIREMENTS.items():
-        if name == "nexus":
+        if name == "dashboard":
             continue
         paths = [_module_dir(name)]
         for req in reqs:
@@ -527,7 +527,7 @@ def test_table_matches_real_module_imports():
 def test_dashboard_table_matches_real_imports():
     dashboard_dir = _repo_root() / "kaine" / "dashboard"
     imports = _collect_top_level_imports(dashboard_dir)
-    for req in extras_module.REQUIREMENTS["nexus"]:
+    for req in extras_module.REQUIREMENTS["dashboard"]:
         if req.transitive_for:
             # installed for a direct dependency (e.g. jinja2 for fastapi.templating)
             continue

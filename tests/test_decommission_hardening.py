@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from kaine import legacy_aliases
 from kaine.config import load_runtime_config
 from kaine.lifecycle import decommission
 from kaine.lifecycle.decommission_locations import (
@@ -24,7 +25,7 @@ from kaine.security.crypto import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+_NO_QDRANT = {"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}}
 
 
 @pytest.fixture(autouse=True)
@@ -52,8 +53,8 @@ def test_tier0_profile_uses_no_qdrant(tmp_path, monkeypatch):
         op,
         env={"KAINE_TIER": "tier0"},
     )
-    config["mnemos"].pop("qdrant", None)
-    config["empatheia"].pop("qdrant", None)
+    config["episodic_memory"].pop("qdrant", None)
+    config["social_cognition"].pop("qdrant", None)
     assert config["tier"]["name"] == "tier0"
     assert decommission.qdrant_in_use(config) is False
     assert decommission.qdrant_endpoint_configured(config) is False
@@ -240,7 +241,7 @@ def test_permission_error_makes_deletion_incomplete(tmp_path, monkeypatch):
     real_rmtree = shutil.rmtree
 
     def guarded_rmtree(path, *args, **kwargs):
-        if Path(path).name == "eidolon":
+        if Path(path).name in legacy_aliases.name_forms("self_model"):
             raise PermissionError(path)
         return real_rmtree(path, *args, **kwargs)
 
@@ -253,7 +254,7 @@ def test_permission_error_makes_deletion_incomplete(tmp_path, monkeypatch):
         dry_run=False,
     )
     assert result.incomplete
-    assert any("eidolon" in str(e) for e in result.errors)
+    assert any(form in str(e) for form in legacy_aliases.name_forms("self_model") for e in result.errors)
     assert (state_root / "eidolon").exists()
     assert not (state_root / "lingua").exists()
 
@@ -328,7 +329,7 @@ def test_failed_backup_hardens_permissions_when_unencrypted(tmp_path, monkeypatc
 
 def test_qdrant_probed_before_any_copy(tmp_path, monkeypatch):
     """Backup fails before copying state if Qdrant cannot be reached."""
-    config = {"modules": {"mnemos": True}, "mnemos": {"backend": "qdrant"}}
+    config = {"modules": {"episodic_memory": True}, "episodic_memory": {"backend": "qdrant"}}
 
     class BadQdrant:
         def get_collections(self):
@@ -359,7 +360,7 @@ def test_trainer_workdir_is_backed_up_then_deleted(tmp_path):
     """Own voice alignment jobs are backed up and deleted; shared jobs are kept."""
     config = {
         **_NO_QDRANT,
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "trainer_workdir": "state/train_work",
                 "trainer_jobs_dir": "state/train_jobs",
@@ -431,7 +432,7 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     outside = tmp_path / "elsewhere" / "files"
     outside.mkdir(parents=True)
     (outside / "sandboxed.bin").write_text("x", encoding="utf-8")
-    config = {**_NO_QDRANT, "praxis": {"sandbox_path": str(outside)}}
+    config = {**_NO_QDRANT, "effectors": {"sandbox_path": str(outside)}}
     state_root = tmp_path / "state"
     _seed(state_root, "eidolon/self_model.json")
     result = decommission.delete_entity_state(
@@ -457,7 +458,7 @@ def test_delete_refuses_paths_outside_the_roots(tmp_path):
     (organ / "organ.bin").write_text("y", encoding="utf-8")
     config2 = {
         **_NO_QDRANT,
-        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
     _seed(state_root2, "eidolon/self_model.json")
     result2 = decommission.delete_entity_state(
@@ -586,7 +587,7 @@ def test_tier0_with_shipped_endpoint_and_reachable_qdrant_is_clean(tmp_path, mon
 
 def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch):
     """Disabled module exports reachable Qdrant collections then drops them."""
-    config = {"mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
+    config = {"episodic_memory": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
     assert decommission.qdrant_in_use(config) is False
     assert decommission.qdrant_endpoint_configured(config) is True
 
@@ -624,7 +625,7 @@ def test_module_off_collections_are_backed_up_then_dropped(tmp_path, monkeypatch
 
 def test_module_off_unreachable_qdrant_fails_backup_and_absent_skips(tmp_path, monkeypatch):
     """Unreachable Qdrant fails the backup; qdrant_absent skips it entirely."""
-    config = {"mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
+    config = {"episodic_memory": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}}}
     assert decommission.qdrant_in_use(config) is False
     assert decommission.qdrant_endpoint_configured(config) is True
 
@@ -695,7 +696,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
     ]
 
     for path, expected_reason in cases:
-        config = {"hypnos": {"voice_alignment": {"trainer_workdir": path}}}
+        config = {"sleep": {"voice_alignment": {"trainer_workdir": path}}}
         roots, refused = delete_roots(
             config,
             state_root=state_root,
@@ -716,7 +717,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
     assert refused == ()
 
     config = {
-        "hypnos": {"voice_alignment": {"organ_adapters_dir": "/organ-adapters"}}
+        "sleep": {"voice_alignment": {"organ_adapters_dir": "/organ-adapters"}}
     }
     roots, refused = delete_roots(
         config,
@@ -727,7 +728,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
     assert refused == ()
 
     config = {
-        "hypnos": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs"}}
+        "sleep": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs"}}
     }
     roots, refused = delete_roots(
         config,
@@ -738,7 +739,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
     assert refused == ()
 
     for path in ("/organ-adapters2", "/organ"):
-        config = {"hypnos": {"voice_alignment": {"organ_adapters_dir": path}}}
+        config = {"sleep": {"voice_alignment": {"organ_adapters_dir": path}}}
         roots, refused = delete_roots(
             config,
             state_root=state_root,
@@ -750,7 +751,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
         assert str(refused_path) == path
         assert reason == "a top-level directory"
 
-    config = {"hypnos": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs2"}}}
+    config = {"sleep": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs2"}}}
     roots, refused = delete_roots(
         config,
         state_root=state_root,
@@ -764,7 +765,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
 
     qdrant_cfg = {
         **_NO_QDRANT,
-        "hypnos": {"voice_alignment": {"trainer_workdir": str(tmp_path)}},
+        "sleep": {"voice_alignment": {"trainer_workdir": str(tmp_path)}},
     }
     result = delete_entity_state(
         state_root=state_root,
@@ -785,7 +786,7 @@ def test_backup_reports_probed_qdrant_collections(tmp_path, monkeypatch):
     from kaine.lifecycle.__main__ import _write_location_split
 
     config = {
-        "mnemos": {
+        "episodic_memory": {
             "backend": "qdrant",
             "qdrant": {"host": "127.0.0.1", "port": 1},
         }
@@ -898,7 +899,7 @@ def test_shared_volumes_scoped_by_ownership(tmp_path):
 
     config = {
         **_NO_QDRANT,
-        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
     assessment = DivergenceAssessment(diverged=False, signals={}, summary="x")
     result = decommission.capture_backup(
@@ -959,7 +960,7 @@ def test_no_records_keeps_shared_volumes_whole(tmp_path):
 
     config = {
         **_NO_QDRANT,
-        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
     result = decommission.delete_entity_state(
         state_root=state_root,
@@ -988,8 +989,8 @@ def test_no_records_keeps_shared_volumes_whole(tmp_path):
 def test_module_on_with_absent_flag_still_exports_and_drops(tmp_path, monkeypatch):
     """--qdrant-absent still exports and drops Qdrant collections when the module is on."""
     config = {
-        "modules": {"mnemos": True},
-        "mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
+        "modules": {"episodic_memory": True},
+        "episodic_memory": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
     }
     names = decommission._episodic_memory_collection_names(config)
     fake = _FakeQdrant(names[:2])
@@ -1030,8 +1031,8 @@ def test_module_on_with_absent_flag_still_exports_and_drops(tmp_path, monkeypatc
 def test_remote_failure_keeps_local_state(tmp_path, monkeypatch):
     """A failing remote store keeps all local state."""
     config = {
-        "modules": {"mnemos": True},
-        "mnemos": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
+        "modules": {"episodic_memory": True},
+        "episodic_memory": {"backend": "qdrant", "qdrant": {"host": "127.0.0.1", "port": 1}},
     }
     monkeypatch.setattr(decommission, "_qdrant_client", lambda cfg: None)
 
@@ -1099,7 +1100,7 @@ def test_live_organ_adapter_is_backed_up_but_kept(tmp_path):
 
     config = {
         **_NO_QDRANT,
-        "hypnos": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
+        "sleep": {"voice_alignment": {"organ_adapters_dir": str(organ)}},
     }
 
     out_root = tmp_path / "backups"

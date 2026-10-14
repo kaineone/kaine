@@ -83,7 +83,7 @@ def test_normalize_storage_paths_resolves_relative_keys(tmp_path):
         "storage": {"data_root": str(root)},
         "evaluation": {"paths": {"trajectory_dir": "traj", "evaluation_logs": "/var/log"}},
         "preboot": {"extra_disk_paths": ["disk1", "/abs_disk"]},
-        "praxis": {"sandbox_path": 123},
+        "effectors": {"sandbox_path": 123},
     }
     original = config.copy()
     result = normalize_storage_paths(config)
@@ -94,8 +94,8 @@ def test_normalize_storage_paths_resolves_relative_keys(tmp_path):
     assert result["evaluation"]["paths"]["trajectory_dir"] == str(root / "traj")
     assert result["evaluation"]["paths"]["evaluation_logs"] == "/var/log"
     assert result["preboot"]["extra_disk_paths"] == [str(root / "disk1"), "/abs_disk"]
-    assert result["praxis"]["sandbox_path"] == 123
-    assert "vox" not in result
+    assert result["effectors"]["sandbox_path"] == 123
+    assert "vocal" not in result
 
 
 def test_normalize_storage_paths_creates_storage_for_env_root(tmp_path, monkeypatch):

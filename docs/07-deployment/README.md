@@ -6,7 +6,7 @@ Use this page to match a host to a KAINE tier and to decide how the processes ca
 
 KAINE is a cognitive architecture for synthetic minds, built from modules that can be replaced, and the same configuration of modules can run on hardware from a small single-board computer to a multi-GPU server by choosing lighter or heavier backends. The main portability cliff is the PyTorch, transformers and JAX runtime. KAINE's base dependencies are `redis`, `pydantic`, `psutil`, `numpy`, `httpx` and `cryptography`. `torch`, `transformers`, `ncps`, `qdrant-client`, `sentence-transformers` and `pynvml` live in optional extras that are imported only when a selected backend needs them.
 
-Several backends avoid PyTorch entirely. The interoception and sequence modules default to the NumPy CfC network (`cfc_backend = "numpy"` in `config/kaine.toml`), and the shared memory embedder defaults to NumPy MiniLM (`[embedding].backend = "numpy"`). The [planning module](../09-modules/planning.md) can use the NumPy active-inference backend (`[nous].backend = "numpy"`), and the [world model module](../09-modules/world-model.md) can use the NumPy engine (`[phantasia].engine = "numpy"`). Only the modules you enable pull their optional extras.
+Several backends avoid PyTorch entirely. The interoception and sequence modules default to the NumPy CfC network (`cfc_backend = "numpy"` in `config/kaine.toml`), and the shared memory embedder defaults to NumPy MiniLM (`[embedding].backend = "numpy"`). The [planning module](../09-modules/planning.md) can use the NumPy active-inference backend (`[planning].backend = "numpy"`), and the [world model module](../09-modules/world-model.md) can use the NumPy engine (`[world_model].engine = "numpy"`). Only the modules you enable pull their optional extras.
 
 Run `scripts/probe-host` for a recommendation. It computes a memory budget, which is system RAM on unified-memory hosts and the smaller of system RAM and total VRAM on discrete hosts (system RAM when the memory state is unknown). Each nominal threshold is scaled by 0.9 to allow for firmware and kernel reservations, so the nominal 16 GB threshold is a 14.4 GiB floor, 6 GB is 5.4 GiB and 4 GB is 3.6 GiB.
 
@@ -64,7 +64,7 @@ The pre-boot check (`python -m kaine.preboot`) prints a `Tier fit` row. It fails
 |---|---|---|---|---|
 | Host target | about 512 MB single-board computer or retired phone; the original Pi Zero (ARMv6) cannot install the stack | 4 to 8 GB single-board computer or 8 GB phone | workstation with one or two GPUs | multi-GPU server |
 | Language ([Language](../09-modules/language.md)) | `llama_cpp` backend, sub-1B GGUF, slow | `llama_cpp` backend, 1B to 2B GGUF | `openai` backend: an OpenAI-compatible HTTP server | `openai` backend, larger model and longer context |
-| Vision ([Vision](../09-modules/vision.md)) | unsupported | torch encoder on CPU (`[topos].device = "cpu"`) | InternVideo-Next (default) or DINOv2 through torch | as Tier 2 |
+| Vision ([Vision](../09-modules/vision.md)) | unsupported | torch encoder on CPU (`[vision].device = "cpu"`) | InternVideo-Next (default) or DINOv2 through torch | as Tier 2 |
 | Speech in ([Audition](../09-modules/audition.md)) | unsupported | Moonshine through sherpa-onnx | faster-distil-Whisper through Speaches | as Tier 2 |
 | Vocal emotion ([Audition](../09-modules/audition.md)) | unsupported | off (`[audition].emotion_model_id = ""`) | emotion2vec+ through torch | as Tier 2 |
 | Speech out ([Vocal](../09-modules/vocal.md)) | unsupported | Kokoro through sherpa-onnx | Chatterbox | Chatterbox |
@@ -147,11 +147,11 @@ The intended layout:
 - The single-host default is the case where the subset is every module.
 - Coordination between hosts goes through the bus or an explicitly typed contract, never an in-process Python object reference.
 
-The language module already reads the self-model module's self-model from the bus (`eidolon.self_model` on `eidolon.out`) instead of holding a live object, so the language module can run on a separate trusted GPU host. The sleep module still receives the episodic memory, planning and affect module instances at boot, so it must run in the same process as those modules.
+The language module already reads the self-model module's self-model from the bus (`self_model.document` on `self_model.out`) instead of holding a live object, so the language module can run on a separate trusted GPU host. The sleep module still receives the episodic memory, planning and affect module instances at boot, so it must run in the same process as those modules.
 
 ### Batch offload behind a verification gate
 
-A batch job is a self-contained descriptor in `kaine/distributed/job.py` with a kind (`voice_align`, `abliterate`, `consolidate`, `eval` or `forked_being`), its inputs and the artifact it is expected to return. The runner selector in `kaine/distributed/runner.py` tries runners in trusted-first order: an owned host, then a rented trusted GPU, then a volunteer.
+A batch job is a self-contained descriptor in `kaine/distributed/job.py` with a kind (`voice_align`, `abliterate`, `consolidate`, `eval` or `forked_entity`), its inputs and the artifact it is expected to return. The runner selector in `kaine/distributed/runner.py` tries runners in trusted-first order: an owned host, then a rented trusted GPU, then a volunteer.
 
 Every returned artifact passes the gate in `kaine/distributed/gate.py` on the trusted side before promotion. The gate re-runs the sleep module's capability-loss veto and an independent evaluation on trusted hardware. A failing artifact is never promoted, and the rejection is logged and shown on the operator health surface. Volunteer redundancy or quorum does not replace this gate for work that is not deterministic.
 
@@ -195,10 +195,10 @@ These defaults shape the deployment choice:
 ## Durable output and unattended-run defaults
 
 - Profiles ship in the image. The `Dockerfile` copies `config/profiles`, so `KAINE_PROFILE` and the automatic `thesis_test` selection resolve without a bind mount.
-- Research output is durable. In Compose, the `kaine-eval-data` volume is mounted at `/app/data/evaluation` on `kaine-nexus` and `kaine-cycle`, and `kaine-trajectory` at `/app/data/workspace_trajectory` on `kaine-cycle`. `kaine-study` mounts neither and keeps every step under `/app/studies`. `KAINE_DATA_ROOT=/app` is set on the dashboard, cycle and study containers.
-- Quadlet mounts differ. The quadlet `kaine-nexus` unit mounts only `kaine-state` and has no `kaine-eval-data` mount. Compose mounts are described in [Containers](./containers.md).
+- Research output is durable. In Compose, the `kaine-eval-data` volume is mounted at `/app/data/evaluation` on `kaine-dashboard` and `kaine-cycle`, and `kaine-trajectory` at `/app/data/workspace_trajectory` on `kaine-cycle`. `kaine-study` mounts neither and keeps every step under `/app/studies`. `KAINE_DATA_ROOT=/app` is set on the dashboard, cycle and study containers.
+- Quadlet mounts differ. The quadlet `kaine-dashboard` unit mounts only `kaine-state` and has no `kaine-eval-data` mount. Compose mounts are described in [Containers](./containers.md).
 - Redis is capped and strict. `KAINE_REDIS_MAXMEMORY` defaults to `4gb` through the `${KAINE_REDIS_MAXMEMORY:-4gb}` fallback in the Compose file and the equivalent fallback in the quadlet unit; `compose/.env.example` only shows it commented out. Redis runs with `--maxmemory-policy noeviction`, so a full bus fails loudly instead of silently dropping events. A full study needs `12gb` or more on hosts with the RAM.
-- Logs rotate. The `x-logging` anchor in `compose/kaine.yml` uses `json-file` with `max-size: "50m"` and `max-file: "3"`. It is applied to `kaine-redis`, `kaine-qdrant`, `kaine-cycle`, `kaine-study`, `kaine-trainer` and `kaine-provision`; `kaine-model-server`, `kaine-speaches`, `kaine-chatterbox` and `kaine-nexus` use the engine's default logging.
+- Logs rotate. The `x-logging` anchor in `compose/kaine.yml` uses `json-file` with `max-size: "50m"` and `max-file: "3"`. It is applied to `kaine-redis`, `kaine-qdrant`, `kaine-cycle`, `kaine-study`, `kaine-trainer` and `kaine-provision`; `kaine-model-server`, `kaine-speaches`, `kaine-chatterbox` and `kaine-dashboard` use the engine's default logging.
 - Manifests record their source revision. Compose passes `GIT_SHA` (from `KAINE_GIT_SHA`) as a build argument, the Dockerfile sets it as `ENV KAINE_GIT_SHA`, and the run manifest's `git_sha` falls back to it when the git lookup fails.
 - The Qdrant healthcheck is `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'`, because `qdrant/qdrant:v1.19.1` ships neither wget nor curl and a successful TCP connect shows the server is serving.
 

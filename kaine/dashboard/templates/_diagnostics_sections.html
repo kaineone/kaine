@@ -148,7 +148,7 @@
               <td>{{ fork.label }}</td>
               <td>{{ fork.timestamp }}</td>
               <td>
-                {% if fork.metadata is defined and fork.metadata is mapping and fork.metadata["nous.merge_warning"] is defined and fork.metadata["nous.merge_warning"] %}
+                {% if fork.metadata is defined and fork.metadata is mapping and fork.metadata["planning.merge_warning"] is defined and fork.metadata["planning.merge_warning"] %}
                   <span title="Nous policy divergence detected on merge — posterior beliefs clashed across branches">&#9888; merge-warning</span>
                 {% endif %}
               </td>

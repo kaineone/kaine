@@ -4,7 +4,7 @@
 """Agent profile persistence for the social cognition module.
 
 `AgentStore` is the protocol. `QdrantAgentStore` is the production
-backend (collection ``empatheia_agents``, all-MiniLM-L6-v2 embeddings
+backend (collection ``social_cognition_agents``, all-MiniLM-L6-v2 embeddings
 from the single boundary-neutral :mod:`kaine.text_embedding` wrapper —
 the same embedder and cosine scale the episodic memory module and the evaluation sidecar use).
 `InMemoryAgentStore` is the deterministic test backend (no external

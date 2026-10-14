@@ -11,7 +11,7 @@ The system SHALL provide an explicitly-labeled, opt-in experiment configuration 
 activates only the modules the ablation needs — the interoception, sequence and language modules — while
 leaving the always-on workspace and the action selection module's action layer active. All other
 built modules SHALL remain constructed-but-disabled; the configuration SHALL NOT remove
-or delete any module. The configuration SHALL set `volition.drive_initiative = false`
+or delete any module. The configuration SHALL set `action_selection.drive_initiative = false`
 so the action selection module matches the paper's described default action policy, and SHALL pin the language module
 to greedy decoding.
 
@@ -31,7 +31,7 @@ to greedy decoding.
 #### Scenario: Action selection matches the paper's default policy
 
 - **WHEN** the minimal configuration is active
-- **THEN** `volition.drive_initiative` is false, so no drive-initiated intents are
+- **THEN** `action_selection.drive_initiative` is false, so no drive-initiated intents are
   emitted and the action selection module forms a speak intent only from a user utterance
 
 ### Requirement: Workspace capacity forces competition in the minimal set
@@ -70,14 +70,14 @@ The system SHALL provide a headless path to inject a single seeded user utteranc
 a minimal (Audition-absent) build and to capture the entity's resulting external
 speech. The injected stimulus SHALL reach the cycle on a stream the cycle actually
 reads, carry the source/type of a user utterance so the action selection module forms a speak intent, and
-the resulting output SHALL be observable on `lingua.external`.
+the resulting output SHALL be observable on `language.external`.
 
 #### Scenario: Single stimulus produces capturable output
 
 - **WHEN** the operator injects one seeded user-utterance stimulus into a running
   minimal build
 - **THEN** the action selection module forms a speak intent, the language module generates a response, and the response
-  is readable from `lingua.external`
+  is readable from `language.external`
 
 #### Scenario: Injection works without the Audition module
 

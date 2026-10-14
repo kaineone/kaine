@@ -552,13 +552,13 @@ async def test_no_report_until_ring_buffer_fills(bus):
     for _ in range(15):  # clip_len - 1
         rid = await vision.process_frame(_frame())
         assert rid == ""  # warmup: nothing published
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     assert entries == []
     assert enc.clip_calls == 0
     # The 16th frame fills the buffer → first report.
     rid = await vision.process_frame(_frame())
     assert rid
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     assert len(entries) == 1
     _, ev = entries[0]
     assert len(ev.payload["latent"]) == 768
@@ -614,7 +614,7 @@ async def test_foveation_composes_with_clip_encoder(bus):
 
     for i in range(17):  # fill the clip_len ring buffer, then emit foveated reports
         await vision.process_frame(_np_frame(i * 9))
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     assert entries, "foveation with a clip encoder emitted no report"
     _, ev = entries[-1]
     # Peripheral + foveal were both encoded through the clip seam (encode_clip) —

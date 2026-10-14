@@ -9,7 +9,7 @@ phase SHALL log the message and continue the rest of the sleep
 cycle.
 
 #### Scenario: Missing extras don't crash sleep
-- **WHEN** `[hypnos.voice_alignment].enabled = true` and the env
+- **WHEN** `[sleep.voice_alignment].enabled = true` and the env
   var is set but `unsloth` is not installed
 - **THEN** `train()` returns a TrainingResult with `accepted=False`
   and `reason` naming the `training` extras group, and the sleep

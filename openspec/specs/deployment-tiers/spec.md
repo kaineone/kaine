@@ -115,7 +115,7 @@ malformed `[tier]` table or malformed `[oscillator]` shape, naming the problem.
   bound backends and devices and must not toggle modules
 
 #### Scenario: Tier fit fails when tier0 is recorded with vision enabled
-- **WHEN** the recorded tier is tier0 and the operator config has `[modules] topos = true`
+- **WHEN** the recorded tier is tier0 and the operator config has `[modules] vision = true`
 - **THEN** the pre-boot Tier-fit row FAILS, naming the vision module as unsupported at tier0
   and advising the operator to disable it or record a larger tier
 

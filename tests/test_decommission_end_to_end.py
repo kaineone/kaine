@@ -185,10 +185,10 @@ def build_entity(tmp_path, port):
 
     config_text = (
         "[research_submission]\nenabled = false\n"
-        "[mnemos]\nbackend = \"qdrant\"\n"
-        "[mnemos.qdrant]\nhost = \"127.0.0.1\"\nport = 1\n"
+        "[episodic_memory]\nbackend = \"qdrant\"\n"
+        "[episodic_memory.qdrant]\nhost = \"127.0.0.1\"\nport = 1\n"
         "[evaluation.observers]\nreplay_redact_content = false\n"
-        "[hypnos.voice_alignment]\norgan_adapters_dir = \"<organ>\"\n"
+        "[sleep.voice_alignment]\norgan_adapters_dir = \"<organ>\"\n"
     ).replace("<organ>", organ.as_posix())
     config_path.write_text(config_text, encoding="utf-8")
 
@@ -403,7 +403,7 @@ def build_entity(tmp_path, port):
 
     bus = redis.Redis(port=port, password="s3cret")
     bus.flushall()
-    for stream in ("thymos.out", "affect.out", "lingua.external"):
+    for stream in ("affect.out", "affect.out", "language.external"):
         bus.xadd(stream, {"text": "SECRET-bus"})
     bus.xadd("workspace.broadcast", {"ping": "old"}, id="1000-0")
     bus.set("operator:note", "keep")
@@ -531,7 +531,7 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
         assert (backup_dir / "qdrant" / f"{name}.jsonl").is_file()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
-    for stream in ("thymos.out", "affect.out", "lingua.external"):
+    for stream in ("affect.out", "affect.out", "language.external"):
         assert not bus.exists(stream)
     assert bus.get("operator:note") == b"keep"
 
@@ -543,7 +543,7 @@ def test_full_decommission_covers_every_location(requirepass_redis, tmp_path, mo
     assert record["outcome"] == "deleted"
     assert record["entity_id"] == roots.this_id.entity_id
     assert record["guardian_notice_reminder"] == "shown"
-    assert "thymos.out" in record["cleared_streams"]
+    assert "affect.out" in record["cleared_streams"]
     assert record["aof_rewrite"] in ("started", "already in progress")
     assert record["rdb_snapshot"] in ("started", "already in progress")
     assert isinstance(record["deleted_locations"], list)
@@ -601,7 +601,7 @@ def test_failed_qdrant_export_aborts_before_anything_is_deleted(
         assert (tmp_path / db_rel).exists()
 
     bus = redis.Redis(port=requirepass_redis, password="s3cret")
-    assert bus.exists("thymos.out")
+    assert bus.exists("affect.out")
 
     audit_path = roots.state_root / "audit" / "decommission.jsonl"
     assert not audit_path.exists()

@@ -202,7 +202,7 @@ def test_incomplete_record_fails_and_names_blocked_key(tmp_path: Path) -> None:
 def test_changed_principal_component_file_fails(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
     write_settings_record(record, path)
-    pc_path = Path(record["values"]["principal_components"]["topos"]["path"])
+    pc_path = Path(record["values"]["principal_components"]["vision"]["path"])
     pc_path.write_text(pc_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
     with pytest.raises(PlannedTestSettingsError, match="sha256"):
         load_settings_record(path)
@@ -218,7 +218,7 @@ def test_min_reports_zero_fails(tmp_path: Path) -> None:
 
 def test_missing_processor_in_snr_fails(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
-    record["values"]["snr"] = {"topos": 4.0, "audition": 4.0}
+    record["values"]["snr"] = {"vision": 4.0, "audition": 4.0}
     write_settings_record(record, path)
     with pytest.raises(PlannedTestSettingsError, match="snr"):
         load_settings_record(path)
@@ -226,7 +226,7 @@ def test_missing_processor_in_snr_fails(tmp_path: Path) -> None:
 
 def test_missing_principal_component_file_fails(tmp_path: Path) -> None:
     record, path = _build_record(tmp_path)
-    record["values"]["principal_components"]["topos"]["path"] = str(tmp_path / "missing.json")
+    record["values"]["principal_components"]["vision"]["path"] = str(tmp_path / "missing.json")
     write_settings_record(record, path)
     with pytest.raises(PlannedTestSettingsError, match="missing"):
         load_settings_record(path)

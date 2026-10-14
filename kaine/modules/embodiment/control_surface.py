@@ -157,7 +157,7 @@ class MotorFeedback:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "MotorFeedback":
-        """Build feedback from a ``mundus.proprio`` bus payload (best-effort)."""
+        """Build feedback from a ``embodiment.proprio`` bus payload (best-effort)."""
         return cls(
             forward_velocity=float(payload.get("forward_velocity", 0.0) or 0.0),
             heading=float(payload.get("heading", 0.0) or 0.0),
@@ -390,7 +390,7 @@ class ContinuousMotorSurface:
         A workspace inhibition zeroes the action (returns the null command), so
         nothing is forwarded while the entity is inhibited — the reciprocal of
         the action selection module returning no intents. The surface is likewise inert (null
-        command) before the maturation handoff (:meth:`on_birth`). Channels frozen by
+        command) before the maturation handoff (:meth:`on_maturation`). Channels frozen by
         the curriculum are forced to zero; freed channels are clamped to range at
         the boundary (the policy is never trusted).
         """

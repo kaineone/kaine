@@ -96,14 +96,14 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     )
 
     kaine_config = {
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "base_model_path": "/models/base.gguf",
                 "capability_probe_path": "/probes/capability.json",
                 "abliteration_probe_path": "/probes/abliteration.json",
             }
         },
-        "lingua": {"chat_url": "http://kaine-model-server:8080"},
+        "language": {"chat_url": "http://kaine-model-server:8080"},
     }
     pairs = mod.build_pairs(4)
 
@@ -157,7 +157,7 @@ def test_resolve_lora_field_uses_production_resolver(monkeypatch):
         "adapter_output_dir": "state/hypnos/test_lora_adapters",
     }
     kaine_config = {
-        "lingua": {
+        "language": {
             "chat_url": "http://kaine-model-server:8080/v1"
         }
     }
@@ -186,7 +186,7 @@ def test_voice_alignment_config_parser():
         "trainer_jobs_dir": "/trainer-jobs",
         "adapter_output_dir": "state/hypnos/test_lora_adapters",
     }
-    kaine_config = {"lingua": {"chat_url": "http://kaine-model-server:8080"}}
+    kaine_config = {"language": {"chat_url": "http://kaine-model-server:8080"}}
     cfg = voice_alignment_config_from_section(section, kaine_config)
 
     assert cfg is not None
@@ -201,14 +201,14 @@ def test_voice_alignment_config_parser():
 
 def _kaine_config_for_main() -> dict[str, Any]:
     return {
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "base_model_path": "/models/base.gguf",
                 "capability_probe_path": "/probes/capability.json",
                 "abliteration_probe_path": "/probes/abliteration.json",
             }
         },
-        "lingua": {"chat_url": "http://kaine-model-server:8080"},
+        "language": {"chat_url": "http://kaine-model-server:8080"},
     }
 
 

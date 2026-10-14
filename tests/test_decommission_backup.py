@@ -19,7 +19,7 @@ from kaine.security.crypto import (
 )
 
 # This deployment keeps no memory in Qdrant (the runtime default is Qdrant).
-_NO_QDRANT = {"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}}
+_NO_QDRANT = {"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}}
 
 
 def _seed_state(state_root: Path) -> None:
@@ -39,7 +39,7 @@ def _seed_fork(fork_root: Path, entity_id: str | None = None) -> None:
     from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 
     metadata = {"identity": {"entity_id": entity_id}} if entity_id else {}
-    snap = ForkSnapshot(label="root", modules={"soma": {"wellness": 0.9}}, metadata=metadata)
+    snap = ForkSnapshot(label="root", modules={"interoception": {"wellness": 0.9}}, metadata=metadata)
     save_snapshot(fork_root, snap)
 
 
@@ -161,7 +161,7 @@ def test_capture_backup_fails_when_qdrant_unreachable(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"modules": {"mnemos": True}, "mnemos": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
+        qdrant_cfg={"modules": {"episodic_memory": True}, "episodic_memory": {"qdrant": {"host": "127.0.0.1", "port": 59999}}},
         out_root=tmp_path / "backups",
         entity_name="Kaine Nova",
         assessment=_assessment(),

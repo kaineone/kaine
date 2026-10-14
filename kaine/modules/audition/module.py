@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
-    _SLEEP_STREAM: ClassVar[str] = "hypnos.out"
+    _SLEEP_STREAM: ClassVar[str] = "sleep.out"
 
     def holds_external_resources(self) -> bool:
         return True
@@ -89,7 +89,7 @@ class Audition(BaseModule):
         live_mic_config: Optional[LiveMicConfig] = None,
         # Deterministic audio feed seam (unified-perception-feed). When boot
         # selects a seeded/playlist mode it injects an _AudioStream factory here,
-        # the precise mirror of Topos.source_factory; None = the real mic.
+        # the precise mirror of Vision.source_factory; None = the real mic.
         stream_factory: Optional[Callable[..., Any]] = None,
         # Self-hearing suppression. Shared gate injected in build_registry; while
         # the vocal module is playing the entity's own voice, captured utterances are
@@ -434,7 +434,7 @@ class Audition(BaseModule):
         }
         # Playlist provenance (playlist-realtime-av-sync): stamp the CONTENT-FREE
         # identity of the item being heard (basename + manifest order) — the same
-        # keys the vision module stamps on topos.report — so picture and sound are legibly on
+        # keys the vision module stamps on vision.report — so picture and sound are legibly on
         # the same item off the bus. Absent for the real mic and seeded feed.
         if item is not None:
             payload["item"] = item.title
@@ -462,7 +462,7 @@ class Audition(BaseModule):
         return getattr(stream, "delivered_position", None)
 
     async def _sleep_loop(self) -> None:
-        """Subscribe to hypnos.out to gate adaptation during sleep."""
+        """Subscribe to sleep.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
@@ -475,14 +475,14 @@ class Audition(BaseModule):
                     if last_scanned is not None:
                         self._sleep_cursor = last_scanned
                         for _, event in entries:
-                            if event.type == "hypnos.sleep.started":
+                            if event.type == "sleep.sleep.started":
                                 self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
                                 if self._acoustic_forward_model is not None:
                                     self._acoustic_forward_model.suspended = True
                                 log.debug("audition: adaptation suspended (hypnos sleep started)")
-                            elif event.type == "hypnos.sleep.completed":
+                            elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False

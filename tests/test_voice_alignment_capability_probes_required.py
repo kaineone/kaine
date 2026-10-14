@@ -29,7 +29,7 @@ _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "sleep_external
 
 def _load_script_module():
     spec = importlib.util.spec_from_file_location(
-        "hypnos_external_train_under_test", _SCRIPT_PATH
+        "sleep_external_train_under_test", _SCRIPT_PATH
     )
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

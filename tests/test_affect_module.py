@@ -26,7 +26,7 @@ async def bus():
     await bus.close()
 
 
-def _event(source="soma", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
+def _event(source="interoception", type_="t", salience=0.5, eid="e0", **payload) -> tuple:
     return eid, Event(
         source=source,
         type=type_,
@@ -73,9 +73,9 @@ async def test_workspace_publishes_affect_state_after_interval(bus: AsyncBus):
         await affect.on_workspace(_snapshot([_event(salience=0.4)]))
         fake_now[0] = 1.0
         await affect.on_workspace(_snapshot([_event(salience=0.5)]))
-        entries = await bus.read("thymos.out", last_id="0", count=20)
+        entries = await bus.read("affect.out", last_id="0", count=20)
         types = [e.type for _, e in entries]
-        assert "thymos.state" in types
+        assert "affect.state" in types
     finally:
         await affect.shutdown()
 
@@ -90,10 +90,10 @@ async def test_workspace_publishes_emotion_when_changes(bus: AsyncBus):
     try:
         fake_now[0] = 1.0
         await affect.on_workspace(
-            _snapshot([_event(salience=0.5, type_="topos.report", normalised_error=3.0)])
+            _snapshot([_event(salience=0.5, type_="vision.report", normalised_error=3.0)])
         )
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        emotion_events = [e for _, e in entries if e.type == "affect.emotion"]
         assert len(emotion_events) >= 1
         assert any(
             e.payload.get("emotion") == CategoricalEmotion.SURPRISE.value
@@ -130,8 +130,8 @@ async def test_add_goal_publishes_event(bus: AsyncBus):
     await affect.initialize()
     try:
         gid = await affect.add_goal("explore", priority=0.6)
-        entries = await bus.read("thymos.out", last_id="0", count=10)
-        goal_events = [e for _, e in entries if e.type == "thymos.goal"]
+        entries = await bus.read("affect.out", last_id="0", count=10)
+        goal_events = [e for _, e in entries if e.type == "affect.goal"]
         assert len(goal_events) == 1
         assert goal_events[0].payload["action"] == "added"
         assert goal_events[0].payload["id"] == gid
@@ -148,8 +148,8 @@ async def test_complete_and_abandon_goal_publish_events(bus: AsyncBus):
         await affect.complete_goal(gid)
         gid2 = await affect.add_goal("alt")
         await affect.abandon_goal(gid2)
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        actions = [e.payload.get("action") for _, e in entries if e.type == "thymos.goal"]
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        actions = [e.payload.get("action") for _, e in entries if e.type == "affect.goal"]
         assert "added" in actions
         assert "completed" in actions
         assert "abandoned" in actions
@@ -168,8 +168,8 @@ async def test_interoception_report_nudges_state(bus: AsyncBus):
         prior_valence = affect.state.valence
         await bus.publish(
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"wellness": 0.1, "alerts": ["cpu_percent"]},
                 salience=0.7,
                 timestamp=datetime.now(timezone.utc),
@@ -190,7 +190,7 @@ async def test_interoception_report_nudges_state(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_sequence_report_arms_social_drive(bus: AsyncBus):
-    # Rewritten for research affect: the first chronos.report arms the social
+    # Rewritten for research affect: the first sequence.report arms the social
     # drive; subsequent ticks build it with u=1, and a newly-reset TSLI relieves it.
     fake_now = [0.0]
     affect = Affect(bus, clock=lambda: fake_now[0], publish_interval_s=999.0)
@@ -198,8 +198,8 @@ async def test_sequence_report_arms_social_drive(bus: AsyncBus):
     try:
         await bus.publish(
             Event(
-                source="chronos",
-                type="chronos.report",
+                source="sequence",
+                type="sequence.report",
                 payload={"time_since_last_interaction_s": 8.0},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -352,7 +352,7 @@ async def test_appraisal_path_unchanged_by_coupling(bus: AsyncBus):
 async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
     """When emotion coupling is disabled the social cognition stream is not subscribed.
 
-    (Perception→arousal reads topos.out / audition.out unconditionally — arousal
+    (Perception→arousal reads vision.out / audition.out unconditionally — arousal
     is pre-attentive — so those ARE subscribed; the emotion and social cognition module coupling
     stays gated by CouplingConfig.enabled.)
     """
@@ -360,9 +360,9 @@ async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
     affect = Affect(bus, coupling=cfg, publish_interval_s=999.0)
     await affect.initialize()
     try:
-        assert "empatheia.out" not in affect._cursors  # emotion coupling stays gated
+        assert "social_cognition.out" not in affect._cursors  # emotion coupling stays gated
         # perception→arousal streams are always read
-        assert "topos.out" in affect._cursors
+        assert "vision.out" in affect._cursors
         assert "audition.out" in affect._cursors
     finally:
         await affect.shutdown()
@@ -374,7 +374,7 @@ async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: Async
     normalised prediction error (surprise above the expected level); a well-predicted
     event does not arouse. Mirrors the interoception module's alert→arousal path."""
     affect = Affect(bus, publish_interval_s=999.0)
-    for stream, typ in (("topos.out", "topos.report"),
+    for stream, typ in (("vision.out", "vision.report"),
                         ("audition.out", "audition.perception")):
         base = affect._state.arousal
         # A strong surprise (normalised error 5 → surprise 4, capped) arouses.
@@ -399,15 +399,15 @@ async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: Async
 
 @pytest.mark.asyncio
 async def test_social_cognition_agent_model_updates_familiarity_cache(bus: AsyncBus):
-    """empatheia.agent_model events update the per-agent familiarity cache."""
+    """social_cognition.agent_model events update the per-agent familiarity cache."""
     cfg = CouplingConfig(enabled=True)
     affect = Affect(bus, coupling=cfg, publish_interval_s=999.0)
     await affect.initialize()
     try:
         await bus.publish(
             Event(
-                source="empatheia",
-                type="empatheia.agent_model",
+                source="social_cognition",
+                type="social_cognition.agent_model",
                 payload={"agent_id": "alice", "familiarity": 0.65},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -425,15 +425,15 @@ async def test_social_cognition_agent_model_updates_familiarity_cache(bus: Async
 
 @pytest.mark.asyncio
 async def test_familiarity_cached_under_source_label(bus: AsyncBus):
-    """empatheia.agent_model events cache familiarity under source_label too."""
+    """social_cognition.agent_model events cache familiarity under source_label too."""
     cfg = CouplingConfig(enabled=True)
     affect = Affect(bus, coupling=cfg, publish_interval_s=999.0)
     await affect.initialize()
     try:
         await bus.publish(
             Event(
-                source="empatheia",
-                type="empatheia.agent_model",
+                source="social_cognition",
+                type="social_cognition.agent_model",
                 payload={
                     "agent_id": "media:live_mic",
                     "source_label": "live_mic",
@@ -465,8 +465,8 @@ async def test_drive_crossing_is_a_categorical_alert(bus):
         affect._drives.tick = lambda dt, **kwargs: [DriveCrossing(name="boredom", value=0.9)]
         fake_now[0] = 1.0
         await affect._tick()
-        entries = await bus.read("thymos.out", last_id="0", count=50)
-        drive_events = [entry for entry in entries if entry[1].type == "thymos.drive"]
+        entries = await bus.read("affect.out", last_id="0", count=50)
+        drive_events = [entry for entry in entries if entry[1].type == "affect.drive"]
         assert len(drive_events) == 1
         payload = drive_events[0][1].payload
         assert payload["alert"] is True

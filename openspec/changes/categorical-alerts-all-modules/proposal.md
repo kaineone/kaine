@@ -13,11 +13,11 @@ never raise the access rate.
 - Every event a module publishes at its alert level carries `"alert": True` in
   its payload, and every event whose intensity is chosen between the baseline
   and the alert level carries `"alert"` set to whether the alert level was
-  chosen. Sites: the interoception module (`soma.fatigue`, `soma.regulation`), the affect module
-  (`thymos.drive`, `thymos.emotion`, the sleep-reset `thymos.state`), the sleep module
-  (`hypnos.sleep.completed`), Audition (`audition.transcription` and
-  `audition.emotion` error events), the self-model module (`eidolon.drift`) and the effectors module
-  (`praxis.action`).
+  chosen. Sites: the interoception module (`interoception.fatigue`, `interoception.regulation`), the affect module
+  (`affect.drive`, `affect.emotion`, the sleep-reset `affect.state`), the sleep module
+  (`sleep.sleep.completed`), Audition (`audition.transcription` and
+  `audition.emotion` error events), the self-model module (`self_model.drift`) and the effectors module
+  (`effectors.action`).
 - The access-rate reader is unchanged: it already counts payloads with `alert`
   true.
 
@@ -29,5 +29,5 @@ never raise the access rate.
 
 ## Impact
 
-- `kaine/modules/{soma,thymos,hypnos,audition,eidolon,praxis}/module.py`, tests.
+- `kaine/modules/{interoception,affect,sleep,audition,self_model,effectors}/module.py`, tests.
 - Behaviour: the access rate now rises on these events as the paper specifies.

@@ -43,17 +43,17 @@ def _write_jsonl(path: Path, records: list[dict]) -> None:
 def test_in_range_records_have_no_violations(tmp_path):
     _write_jsonl(
         tmp_path / "soma.report-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "soma.report",
+        [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": 0.0, "wellness": 0.9}],
     )
     _write_jsonl(
         tmp_path / "thymos.state-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "thymos.state",
+        [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": -0.5, "arousal": 0.3, "dominance": 0.1}],
     )
     _write_jsonl(
         tmp_path / "nous.policy-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "nous.policy", "confidence": 0.7}],
+        [{"run_id": RUN, "seq": 0, "event_type": "planning.policy", "confidence": 0.7}],
     )
     assert sweep_run(RUN, root=tmp_path) == []
 
@@ -61,7 +61,7 @@ def test_in_range_records_have_no_violations(tmp_path):
 def test_negative_prediction_error_is_violation(tmp_path):
     _write_jsonl(
         tmp_path / "soma.report-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "soma.report",
+        [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": -0.3}],
     )
     violations = sweep_run(RUN, root=tmp_path)
@@ -76,7 +76,7 @@ def test_negative_prediction_error_is_violation(tmp_path):
 def test_out_of_bounds_affect_is_violation(tmp_path):
     _write_jsonl(
         tmp_path / "thymos.state-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "thymos.state",
+        [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": 2.0, "arousal": 0.3, "dominance": 0.0}],
     )
     violations = sweep_run(RUN, root=tmp_path)
@@ -87,7 +87,7 @@ def test_out_of_bounds_affect_is_violation(tmp_path):
 def test_out_of_bounds_confidence_is_violation(tmp_path):
     _write_jsonl(
         tmp_path / "nous.policy-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "nous.policy", "confidence": 1.5}],
+        [{"run_id": RUN, "seq": 0, "event_type": "planning.policy", "confidence": 1.5}],
     )
     violations = sweep_run(RUN, root=tmp_path)
     assert len(violations) == 1
@@ -99,7 +99,7 @@ def test_out_of_bounds_confidence_is_violation(tmp_path):
 def test_multiple_violations_in_one_record(tmp_path):
     _write_jsonl(
         tmp_path / "thymos.state-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "thymos.state",
+        [{"run_id": RUN, "seq": 0, "event_type": "affect.state",
           "valence": 2.0, "arousal": 5.0, "dominance": -3.0}],
     )
     violations = sweep_run(RUN, root=tmp_path)
@@ -111,11 +111,11 @@ def test_coherence_plv_out_of_range_is_violation(tmp_path):
     _write_jsonl(
         tmp_path / "coherence-2026-06-14.jsonl",
         [{"run_id": RUN, "seq": 0, "event_type": "coherence",
-          "coherence": {"soma|thymos": 0.5, "topos|nous": 1.4}}],
+          "coherence": {"interoception|affect": 0.5, "vision|planning": 1.4}}],
     )
     violations = sweep_run(RUN, root=tmp_path)
     assert len(violations) == 1
-    assert violations[0].field == "coherence[topos|nous]"
+    assert violations[0].field == "coherence[vision|planning]"
     assert violations[0].value == 1.4
     assert violations[0].bound == (0.0, 1.0)
 
@@ -143,7 +143,7 @@ def test_nan_numeric_field_is_not_flagged(tmp_path):
     path = tmp_path / "soma.report-2026-06-14.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        '{"run_id": "%s", "seq": 0, "event_type": "soma.report", '
+        '{"run_id": "%s", "seq": 0, "event_type": "interoception.report", '
         '"prediction_error": NaN}\n' % RUN,
         encoding="utf-8",
     )
@@ -168,11 +168,11 @@ async def test_decrypt_path_round_trip(tmp_path):
         ctx = RunContext(run_id=RUN, seed=1, started_at="t", git_sha=None)
         set_run_context(ctx)
         try:
-            sink = AsyncJsonlSink(tmp_path, name="thymos.state", flush_interval_s=0.05)
+            sink = AsyncJsonlSink(tmp_path, name="affect.state", flush_interval_s=0.05)
             await sink.start()
             try:
                 await sink.write(
-                    {"event_type": "thymos.state", "valence": 2.0,
+                    {"event_type": "affect.state", "valence": 2.0,
                      "arousal": 0.3, "dominance": 0.0}
                 )
                 await asyncio.sleep(0.2)
@@ -181,7 +181,7 @@ async def test_decrypt_path_round_trip(tmp_path):
         finally:
             set_run_context(None)
 
-        path = list(tmp_path.glob("thymos.state-*.jsonl"))[0]
+        path = list(tmp_path.glob("affect.state-*.jsonl"))[0]
         first = path.read_text(encoding="utf-8").splitlines()[0]
         assert not first.startswith("{")  # encrypted on disk
 
@@ -194,7 +194,7 @@ async def test_decrypt_path_round_trip(tmp_path):
 def test_cli_exits_nonzero_when_violations(tmp_path):
     _write_jsonl(
         tmp_path / "soma.report-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "soma.report",
+        [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": -1.0}],
     )
     proc = subprocess.run(
@@ -209,7 +209,7 @@ def test_cli_exits_nonzero_when_violations(tmp_path):
 def test_cli_exits_zero_when_clean(tmp_path):
     _write_jsonl(
         tmp_path / "soma.report-2026-06-14.jsonl",
-        [{"run_id": RUN, "seq": 0, "event_type": "soma.report",
+        [{"run_id": RUN, "seq": 0, "event_type": "interoception.report",
           "prediction_error": 0.2}],
     )
     proc = subprocess.run(

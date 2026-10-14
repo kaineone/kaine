@@ -126,7 +126,7 @@ def _vocal_and_player(bus: AsyncBus, tmp_path: Path, **overrides) -> tuple[Vocal
 def test_live_mic_source_label_helper():
     from kaine.boot import _live_mic_source_label
 
-    for feed in ("playlist", "seeded", "womb", "screen"):
+    for feed in ("playlist", "seeded", "stimulus_source", "screen"):
         assert _live_mic_source_label(feed) == feed
     for real in ("live", "off"):
         assert _live_mic_source_label(real) == "live_mic"
@@ -341,12 +341,12 @@ def test_development_holds_embodiment_and_vocal_dormant():
             self.dormant = dormant
 
     registry = ModuleRegistry()
-    vocal, embodiment, interoception = _Effector("vox"), _Effector("mundus"), _Effector("soma")
+    vocal, embodiment, interoception = _Effector("vocal"), _Effector("embodiment"), _Effector("interoception")
     for module in (vocal, embodiment, interoception):
         registry.register(module)
 
     held = _hold_effectors_for_development(registry)
 
-    assert sorted(held) == ["mundus", "vox"]
+    assert sorted(held) == ["embodiment", "vocal"]
     assert vocal.dormant is True and embodiment.dormant is True
     assert interoception.dormant is None

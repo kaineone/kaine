@@ -9,7 +9,7 @@ from kaine.bus.schema import Event
 from kaine.workspace.novelty import NoveltyTracker, fingerprint
 
 
-def _ev(payload=None, source="soma", etype="t") -> Event:
+def _ev(payload=None, source="interoception", etype="t") -> Event:
     return Event(
         source=source,
         type=etype,
@@ -60,14 +60,14 @@ def test_fingerprint_distinct_for_distinct_events():
 
 def test_fingerprint_stable_under_dict_ordering():
     a = Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload={"a": 1, "b": 2},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     b = Event(
-        source="soma",
+        source="interoception",
         type="t",
         payload={"b": 2, "a": 1},
         salience=0.5,

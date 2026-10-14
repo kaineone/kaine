@@ -18,18 +18,18 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 
 CANONICAL_MODULE_NAMES = (
-    "soma",
-    "chronos",
-    "topos",
-    "nous",
-    "mnemos",
-    "eidolon",
-    "thymos",
-    "praxis",
-    "lingua",
-    "vox",
+    "interoception",
+    "sequence",
+    "vision",
+    "planning",
+    "episodic_memory",
+    "self_model",
+    "affect",
+    "effectors",
+    "language",
+    "vocal",
     "audition",
-    "hypnos",
+    "sleep",
 )
 
 

@@ -72,10 +72,10 @@ async def test_tick_once_publishes_baseline_report(bus: AsyncBus):
     payload = await interoception.tick_once()
     assert payload["alerts"] == []
     assert payload["wellness"] == pytest.approx(0.85)
-    entries = await bus.read("soma.out", last_id="0")
-    # The developmental warm-up (enabled by default) emits a soma.warmup.started
+    entries = await bus.read("interoception.out", last_id="0")
+    # The developmental warm-up (enabled by default) emits a interoception.warmup.started
     # marker before the first report; select the report by type.
-    reports = [ev for _, ev in entries if ev.type == "soma.report"]
+    reports = [ev for _, ev in entries if ev.type == "interoception.report"]
     assert len(reports) == 1
     event = reports[0]
     assert event.salience == pytest.approx(interoception._baseline_salience)
@@ -89,9 +89,9 @@ async def test_alert_raises_salience(bus: AsyncBus):
     interoception = Interoception(bus, reader=reader, detector=detector)
     payload = await interoception.tick_once()
     assert payload["alerts"] == ["cpu_percent"]
-    entries = await bus.read("soma.out", last_id="0")
+    entries = await bus.read("interoception.out", last_id="0")
     # Select the report past the warm-up marker (enabled by default).
-    event = next(ev for _, ev in entries if ev.type == "soma.report")
+    event = next(ev for _, ev in entries if ev.type == "interoception.report")
     assert event.salience == pytest.approx(interoception._alert_salience)
     assert event.payload["alerts"] == ["cpu_percent"]
 
@@ -157,7 +157,7 @@ async def test_produce_loop_emits_multiple_reports(bus: AsyncBus):
         await asyncio.sleep(0.1)
     finally:
         await interoception.shutdown()
-    entries = await bus.read("soma.out", last_id="0", count=100)
+    entries = await bus.read("interoception.out", last_id="0", count=100)
     assert len(entries) >= 2
 
 
@@ -232,7 +232,7 @@ async def test_serialize_roundtrip_includes_forward_model_and_fatigue(bus: Async
     # Forward model readout weights should match after restore. The CfC
     # reservoir itself is a frozen, independently-seeded random projection
     # that is intentionally never serialised (mirroring the sequence module's
-    # CfCNetwork) — `soma` and `fresh` have DIFFERENT reservoirs, so only
+    # CfCNetwork) — `interoception` and `fresh` have DIFFERENT reservoirs, so only
     # the persisted readout weights (the learned, adapting part) are
     # expected to round-trip exactly.
     orig_sd = interoception._forward_model.state_dict()

@@ -17,23 +17,23 @@ from kaine.storage import set_data_root
 @pytest.fixture
 def known_modules(monkeypatch):
     names = [
-        "echo",
-        "soma",
-        "chronos",
-        "topos",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
-        "vox",
+        "recorder",
+        "interoception",
+        "sequence",
+        "vision",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
+        "vocal",
         "audition",
-        "hypnos",
-        "empatheia",
-        "phantasia",
-        "perception",
-        "mundus",
+        "sleep",
+        "social_cognition",
+        "world_model",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     return names
@@ -53,8 +53,8 @@ def base_plan(tmp_path, known_modules):
     return {
         "study_id": "ignite-test",
         "repo_root": str(repo_root),
-        "base_modules": ["soma", "chronos", "topos", "audition", "lingua"],
-        "order": ["thymos", "mnemos"],
+        "base_modules": ["interoception", "sequence", "vision", "audition", "language"],
+        "order": ["affect", "episodic_memory"],
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",

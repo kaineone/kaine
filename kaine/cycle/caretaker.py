@@ -53,7 +53,7 @@ _EVENT_TITLE = {
 }
 
 EVENT_KINDS = tuple(_EVENT_TITLE)
-NOTICE_FIELDS = ("install_label", "time", "event", "conditions", "nexus_url")
+NOTICE_FIELDS = ("install_label", "time", "event", "conditions", "dashboard_url")
 
 _ALLOWED_IPV4 = (
     ipaddress.IPv4Network("127.0.0.0/8"),
@@ -95,7 +95,7 @@ class CaretakerConfig:
             "channels",
             "reminder_interval_s",
             "input_loss_after_s",
-            "nexus_url",
+            "dashboard_url",
         }
         try:
             require_known_keys(section, allowed, "[caretaker]")
@@ -132,10 +132,10 @@ class CaretakerConfig:
                 "invalid [caretaker].input_loss_after_s: must be a number > 0"
             )
 
-        dashboard_url = section.get("nexus_url", cls.dashboard_url)
+        dashboard_url = section.get("dashboard_url", cls.dashboard_url)
         if not isinstance(dashboard_url, str) or not _DASHBOARD_URL_RE.fullmatch(dashboard_url):
             raise CaretakerConfigError(
-                "invalid [caretaker].nexus_url: must match ^https?://[A-Za-z0-9.\\-:\\[\\]/_]+$"
+                "invalid [caretaker].dashboard_url: must match ^https?://[A-Za-z0-9.\\-:\\[\\]/_]+$"
             )
 
         raw_channels = section.get("channels", [])
@@ -259,7 +259,7 @@ def build_notice(
         "time": now.isoformat(),
         "event": event,
         "conditions": dict(conditions) if conditions is not None else None,
-        "nexus_url": config.dashboard_url,
+        "dashboard_url": config.dashboard_url,
     }
 
 
@@ -275,7 +275,7 @@ def render_text(notice: dict) -> tuple[str, str]:
         failed = [name for name, ok in conditions.items() if not ok]
         if failed:
             parts.append("Failed gate conditions: " + ", ".join(failed))
-    parts.append(f"Nexus: {notice['nexus_url']}")
+    parts.append(f"Nexus: {notice['dashboard_url']}")
     return title, "\n".join(parts)
 
 

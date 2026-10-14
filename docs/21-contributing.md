@@ -75,7 +75,7 @@ The import-boundary check runs in seconds and enforces the package contracts des
 
 ### Continuous integration
 
-CI runs the test job on Python 3.11 and 3.12, plus a `torch-min` leg on Python 3.12. The install line is `.[test,browser-test,core,memory,memory-edge,nexus,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]`, plus `librosa`, `av`, `webrtcvad` and `soundfile` directly, so `audio`, `speech-edge`, `training`, and `internvideo-flash` are not installed in the test job.
+CI runs the test job on Python 3.11 and 3.12, plus a `torch-min` leg on Python 3.12. The install line is `.[test,browser-test,core,memory,memory-edge,dashboard,nvidia,vision,reasoning,worldmodel,oscillator,internvideo]`, plus `librosa`, `av`, `webrtcvad` and `soundfile` directly, so `audio`, `speech-edge`, `training`, and `internvideo-flash` are not installed in the test job.
 
 Other workflows run `ruff check kaine tests plugins`, the red-team suite, CodeQL analysis, the import-boundary check, and a container-image smoke test. All of them except the container-image smoke test also run on `merge_group` batches; the smoke test runs only when the Dockerfile, `docker/`, `compose/` or its own workflow changes.
 
@@ -248,7 +248,7 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 | `oscillator` | `snntorch`, `scipy` |
 | `test` | `pytest`, `pytest-asyncio`, `pytest-xdist`, `fakeredis`, `import-linter` |
 | `browser-test` | `playwright`, for the real-browser dashboard layout tests in `tests/test_dashboard_detail_layout.py`. They drive the system Google Chrome and skip when no browser is available. Kept out of `test` because the runtime images install that extra. |
-| `core`, `memory`, `memory-edge`, `speech-edge`, `nexus`, `nvidia`, `internvideo`, `internvideo-flash`, `perception`, `full` | See `pyproject.toml` |
+| `core`, `memory`, `memory-edge`, `speech-edge`, `dashboard`, `nvidia`, `internvideo`, `internvideo-flash`, `perception`, `full` | See `pyproject.toml` |
 
 ## Local config rule
 

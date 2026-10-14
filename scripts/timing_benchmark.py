@@ -24,7 +24,7 @@ THIS IS NOT AN ENTITY BOOT. It is a dry performance probe. Explicitly:
     chat client is created. (The organ never participates in tick() anyway —
     it reacts to bus events in its own loop — but disabling it removes any
     chance of an outward utterance.)
-  * NO action selection module side-effects: the cycle is built with ``volition=None``, so the
+  * NO action selection module side-effects: the cycle is built with ``action_selection=None``, so the
     tick can never select or publish an effector intent. Nothing is spoken,
     nothing acts outward. We measure cognitive PLUMBING cost only.
   * The vision encode is timed directly on a seeded synthetic frame — never a
@@ -122,8 +122,8 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
     bench_cfg = {**cfg, "modules": dict(cfg.get("modules") or {})}
     for k in list(bench_cfg["modules"]):
         bench_cfg["modules"][k] = True
-    bench_cfg["modules"]["lingua"] = False
-    bench_cfg["modules"]["vox"] = False
+    bench_cfg["modules"]["language"] = False
+    bench_cfg["modules"]["vocal"] = False
     # Deterministic mode: logical clock, canonical ordering — the plumbing path
     # the research runs use, and reproducible.
     bench_cfg["experiment"] = {**(cfg.get("experiment") or {}), "deterministic": True}
@@ -151,7 +151,7 @@ async def _benchmark_tick(cfg: dict[str, Any], ticks: int) -> dict[str, Any]:
             for n, e in init_err:
                 print(f"    - {n}: {e}")
 
-        syn_cfg = bench_cfg.get("syneidesis") or {}
+        syn_cfg = bench_cfg.get("workspace") or {}
         coherence = make_coherence_scorer(bench_cfg)
         workspace = Workspace(
             strategy=RuleBasedSalience(
@@ -223,7 +223,7 @@ async def _benchmark_vision(cfg: dict[str, Any], encodes: int) -> dict[str, Any]
     """Time the vision module's DINOv2 encode of one seeded frame over `encodes` iters."""
     out: dict[str, Any] = {"ran": False, "reason": "", "samples_ms": []}
 
-    vision_cfg = cfg.get("topos") or {}
+    vision_cfg = cfg.get("vision") or {}
     width = int(vision_cfg.get("capture_width", 640))
     height = int(vision_cfg.get("capture_height", 480))
     model_id = vision_cfg.get("encoder_model_id")
@@ -410,7 +410,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
             f"(p95 x {SAFETY_HEADROOM} headroom)"
         )
         print(f"  RECOMMENDED                 : {rec['recommended_hz']:.3f} Hz")
-        cur_int = float((cfg.get("topos") or {}).get("capture_interval_s", 1.0))
+        cur_int = float((cfg.get("vision") or {}).get("capture_interval_s", 1.0))
         print(
             f"  shipped default (unchanged) : {1.0 / cur_int:.3f} Hz "
             f"(capture_interval_s = {cur_int:.3f})"

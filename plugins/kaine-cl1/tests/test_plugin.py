@@ -23,10 +23,10 @@ def _cfg(**substrate_overrides):
         "accelerated_time": True,
         "ticks_per_second": 100,
         "cognitive_rate": 3.333,
-        "territories": {"chronos": 8},
+        "territories": {"sequence": 8},
     }
     substrate.update(substrate_overrides)
-    return {"substrate": substrate, "backends": {"chronos": "cl1"}}
+    return {"substrate": substrate, "backends": {"sequence": "cl1"}}
 
 
 class _CountingFactory:
@@ -78,7 +78,7 @@ def test_entry_point_is_declared():
 
 
 def test_seams_for_sequence():
-    assert Cl1Plugin().seams(_cfg()) == frozenset({"chronos.network"})
+    assert Cl1Plugin().seams(_cfg()) == frozenset({"sequence.network"})
 
 
 def test_seams_empty_when_nothing_converted_opens_no_session():
@@ -86,8 +86,8 @@ def test_seams_empty_when_nothing_converted_opens_no_session():
     plugin = Cl1Plugin(session_factory=factory)
 
     assert plugin.seams({}) == frozenset()
-    assert plugin.seams({"backends": {"chronos": "silicon"}}) == frozenset()
-    assert plugin.injections("chronos", {}) == {}
+    assert plugin.seams({"backends": {"sequence": "silicon"}}) == frozenset()
+    assert plugin.injections("sequence", {}) == {}
     assert len(factory.sessions) == 0
 
     plugin.close()
@@ -100,14 +100,14 @@ def test_unimplemented_backend_rejected():
             "accelerated_time": True,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"volition": 8},
+            "territories": {"action_selection": 8},
         },
-        "backends": {"volition": "cl1"},
+        "backends": {"action_selection": "cl1"},
     }
     with pytest.raises(ValueError) as excinfo:
         Cl1Plugin().seams(config)
     msg = str(excinfo.value)
-    assert "volition" in msg
+    assert "action_selection" in msg
     assert "hybrid-wetware-conversions" in msg
 
 
@@ -115,14 +115,14 @@ def test_missing_territory_rejected():
     with pytest.raises(ValueError) as excinfo:
         Cl1Plugin().seams(_cfg(territories={}))
     msg = str(excinfo.value)
-    assert "chronos" in msg
+    assert "sequence" in msg
     assert not msg.startswith(('"', "'"))
 
 
 def test_real_time_substrate_warns(caplog):
     """Real time is supported through KAINE's cycle hook, so it warns instead of refusing."""
     with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
-        assert Cl1Plugin().seams(_cfg(accelerated_time=False)) == frozenset({"chronos.network"})
+        assert Cl1Plugin().seams(_cfg(accelerated_time=False)) == frozenset({"sequence.network"})
     assert any("cycle hook" in r.getMessage() for r in caplog.records)
 
 
@@ -139,9 +139,9 @@ def test_bad_backend_value_rejected():
             "accelerated_time": True,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"chronos": 8},
+            "territories": {"sequence": 8},
         },
-        "backends": {"chronos": "wetware"},
+        "backends": {"sequence": "wetware"},
     }
     with pytest.raises(ValueError):
         Cl1Plugin().seams(config)
@@ -154,7 +154,7 @@ def test_bad_cognitive_rate_rejected():
 
 
 def test_injections_for_unconverted_module_is_empty(plugin):
-    assert plugin.injections("lingua", _cfg()) == {}
+    assert plugin.injections("language", _cfg()) == {}
     assert plugin.territory_map() == {}
 
 
@@ -165,7 +165,7 @@ def test_repeated_injections_reuse_one_territory(reference_culture):
     try:
         networks = []
         for _ in range(3):
-            injections = plugin.injections("chronos", _cfg())
+            injections = plugin.injections("sequence", _cfg())
             assert set(injections) == {"network"}
             networks.append(injections["network"])
 
@@ -178,12 +178,12 @@ def test_repeated_injections_reuse_one_territory(reference_culture):
         assert networks[1] is not networks[2]
 
         territory = plugin.territory_map()
-        assert set(territory) == {"chronos"}
-        channels = territory["chronos"]
+        assert set(territory) == {"sequence"}
+        channels = territory["sequence"]
         assert len(channels) == 8
 
         for _ in range(3):
-            assert plugin.territory_map()["chronos"] == channels
+            assert plugin.territory_map()["sequence"] == channels
 
         assert len(factory.sessions) == 1
     finally:
@@ -193,7 +193,7 @@ def test_repeated_injections_reuse_one_territory(reference_culture):
 def test_close_is_idempotent(reference_culture):
     plugin = Cl1Plugin()
     try:
-        plugin.injections("chronos", _cfg())
+        plugin.injections("sequence", _cfg())
         plugin.close()
         plugin.close()
     finally:
@@ -228,7 +228,7 @@ async def test_plugin_network_drives_real_sequence(reference_culture):
             featurizer=SnapshotFeaturizer(clock=lambda: 0.0),
             anomaly=RollingZScoreAnomaly(window=4),
             rumination=RecurrenceRuminationDetector(window=4, threshold=4),
-            **plugin.injections("chronos", _cfg()),
+            **plugin.injections("sequence", _cfg()),
         )
 
         assert sequence.has_network is True
@@ -238,10 +238,10 @@ async def test_plugin_network_drives_real_sequence(reference_culture):
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         assert len(entries) == 3
         for _, event in entries:
-            assert event.type == "chronos.report"
+            assert event.type == "sequence.report"
 
         await bus.close()
     finally:

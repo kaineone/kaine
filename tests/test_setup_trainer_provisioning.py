@@ -314,7 +314,7 @@ def _base_answers(*, want_trainer: str) -> list[str]:
     """
     answers = [ACK_PHRASE, "", "", "y", "c"]  # ack, accept device assignments, custom preset
     for m in MODULE_ORDER:
-        answers.append("y" if m == "soma" else "n")
+        answers.append("y" if m == "interoception" else "n")
     answers.append(want_trainer)  # "set up trainer now?"
     return answers
 
@@ -339,7 +339,7 @@ def test_wizard_records_trainer_python_on_consent():
         probe_services=lambda: {},
         probe_trainer=_probe,
     )
-    va = result.config["hypnos"]["voice_alignment"]
+    va = result.config["sleep"]["voice_alignment"]
     assert va["trainer_python"] == "/home/op/.unsloth/studio/unsloth_studio/bin/python"
     assert va["trainer_backend"] == "subprocess"
     # round-trips through the operator-config emitter
@@ -367,7 +367,7 @@ def test_wizard_does_not_record_when_probe_not_found():
     )
     # No trainer_python recorded — never a path that would fail at first sleep.
     assert "trainer_python" not in (
-        (result.config.get("hypnos") or {}).get("voice_alignment") or {}
+        (result.config.get("sleep") or {}).get("voice_alignment") or {}
     )
     assert any("install per the steps" in line for line in out)
 
@@ -396,7 +396,7 @@ def test_wizard_unsupported_backend_reports_unavailable_no_error():
     )
     assert result.acknowledged is True
     assert "trainer_python" not in (
-        (result.config.get("hypnos") or {}).get("voice_alignment") or {}
+        (result.config.get("sleep") or {}).get("voice_alignment") or {}
     )
     assert any("unavailable" in line.lower() for line in out)
     # unavailable backend short-circuits before probing
@@ -424,7 +424,7 @@ def test_wizard_skipped_when_operator_declines():
     )
     # The device step still sets training_device, but no trainer_python is set.
     assert "trainer_python" not in (
-        (result.config.get("hypnos") or {}).get("voice_alignment") or {}
+        (result.config.get("sleep") or {}).get("voice_alignment") or {}
     )
     assert any("skipped" in line.lower() for line in out)
 
@@ -451,6 +451,6 @@ def test_wizard_never_crashes_on_probe_exception():
     )
     assert result.acknowledged is True
     assert "trainer_python" not in (
-        (result.config.get("hypnos") or {}).get("voice_alignment") or {}
+        (result.config.get("sleep") or {}).get("voice_alignment") or {}
     )
     assert any("error" in line.lower() for line in out)

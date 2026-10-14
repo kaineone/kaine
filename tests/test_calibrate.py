@@ -168,14 +168,14 @@ def _build_evaluation_tree(
                         "context_gain": float(gain),
                         "awake": True,
                     }
-                    if wrong_entity_time_run == run_id and k == 1 and processor == "topos":
+                    if wrong_entity_time_run == run_id and k == 1 and processor == "vision":
                         del record["entity_time_s"]
                     if with_threshold and arm == "competitive":
-                        if processor == "topos":
+                        if processor == "vision":
                             record["prediction_broadcast_tick"] = 1000 + k
                         elif processor == "audition":
                             record["prediction_broadcast_tick"] = 1200 + k
-                        elif processor == "soma":
+                        elif processor == "interoception":
                             record["prediction_broadcast_tick"] = 1400 + k
                         record["prediction_context_age_s"] = 0.5 + (k % 7) * 0.4
                     _append_record(path, record)
@@ -353,9 +353,9 @@ def _build_evaluation_tree(
 
 def _report_type(processor: str) -> str:
     return {
-        "topos": "topos.report",
+        "vision": "vision.report",
         "audition": "audition.perception",
-        "soma": "soma.report",
+        "interoception": "interoception.report",
     }[processor]
 
 
@@ -522,7 +522,7 @@ def test_wrong_manifest_study_raises(tmp_path: Path) -> None:
 
 def test_ladder_different_pc_sha256_blocks_snr(tmp_path: Path) -> None:
     plan, root = _build_evaluation_tree(
-        tmp_path, n_pilots=5, wrong_pc_sha_run_processor=("competitive_0", "topos")
+        tmp_path, n_pilots=5, wrong_pc_sha_run_processor=("competitive_0", "vision")
     )
     record = calibrate(plan, root=root, n_cal=4, mser_ignore_end=5)
 
@@ -579,7 +579,7 @@ def test_ladder_failed_true_blocks_snr(tmp_path: Path) -> None:
         {
             "run_id": "competitive_0",
             "event_type": "positive_control.result",
-            "processor": "topos",
+            "processor": "vision",
             "mode": "ladder",
             "final": True,
             "failed": True,
@@ -648,7 +648,7 @@ def test_not_exercised_reason_none() -> None:
 
 
 def test_headline_returns_none_when_processor_missing() -> None:
-    ig = {"topos": 1.0, "audition": None, "soma": 1.0}
+    ig = {"vision": 1.0, "audition": None, "interoception": 1.0}
     assert headline(ig) is None
 
 
@@ -801,8 +801,8 @@ def test_calibrate_survives_a_report_without_preceding_broadcast(tmp_path: Path)
         path,
         {
             "run_id": run_id,
-            "event_type": "topos.report",
-            "processor": "topos",
+            "event_type": "vision.report",
+            "processor": "vision",
             "awake": True,
             "context_gain": 0.1,
             "entity_time_s": 10000.0,

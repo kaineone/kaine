@@ -376,27 +376,27 @@ assert "ncps" not in sys.modules
 
 def test_extras_predicates_torch_only_when_backend_is_torch():
     interoception_torch = next(
-        r for r in REQUIREMENTS["soma"] if r.import_name == "torch"
+        r for r in REQUIREMENTS["interoception"] if r.import_name == "torch"
     )
     interoception_ncps = next(
-        r for r in REQUIREMENTS["soma"] if r.import_name == "ncps"
+        r for r in REQUIREMENTS["interoception"] if r.import_name == "ncps"
     )
     sequence_torch = next(
-        r for r in REQUIREMENTS["chronos"] if r.import_name == "torch"
+        r for r in REQUIREMENTS["sequence"] if r.import_name == "torch"
     )
     sequence_ncps = next(
-        r for r in REQUIREMENTS["chronos"] if r.import_name == "ncps"
+        r for r in REQUIREMENTS["sequence"] if r.import_name == "ncps"
     )
 
-    assert not interoception_torch.applies({"soma": {"cfc_backend": "numpy"}})
-    assert interoception_torch.applies({"soma": {"cfc_backend": "torch"}})
-    assert not interoception_ncps.applies({"soma": {"cfc_backend": "numpy"}})
-    assert interoception_ncps.applies({"soma": {"cfc_backend": "torch"}})
+    assert not interoception_torch.applies({"interoception": {"cfc_backend": "numpy"}})
+    assert interoception_torch.applies({"interoception": {"cfc_backend": "torch"}})
+    assert not interoception_ncps.applies({"interoception": {"cfc_backend": "numpy"}})
+    assert interoception_ncps.applies({"interoception": {"cfc_backend": "torch"}})
 
-    assert not sequence_torch.applies({"chronos": {"cfc_backend": "numpy"}})
-    assert sequence_torch.applies({"chronos": {"cfc_backend": "torch"}})
-    assert not sequence_ncps.applies({"chronos": {"cfc_backend": "numpy"}})
-    assert sequence_ncps.applies({"chronos": {"cfc_backend": "torch"}})
+    assert not sequence_torch.applies({"sequence": {"cfc_backend": "numpy"}})
+    assert sequence_torch.applies({"sequence": {"cfc_backend": "torch"}})
+    assert not sequence_ncps.applies({"sequence": {"cfc_backend": "numpy"}})
+    assert sequence_ncps.applies({"sequence": {"cfc_backend": "torch"}})
 
 
 async def test_sequence_keeps_the_preserved_seed_when_restored_before_initialize():

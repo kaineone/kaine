@@ -49,7 +49,7 @@ def _event(source: str, type_: str, salience: float = 0.5) -> Event:
 def _snapshot(tick: int) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         tick_index=tick,
-        selected_events=[("0-0", _event("soma", "soma.report", 0.5))],
+        selected_events=[("0-0", _event("interoception", "interoception.report", 0.5))],
     )
 
 
@@ -99,7 +99,7 @@ async def test_training_pass_writes_no_disk_artifacts(
 
             # Also run scenario generation (imagination rollout) for good measure.
             await ph._handle_peer_event(
-                "hypnos.out", _event("hypnos", "hypnos.sleep.started")
+                "sleep.out", _event("sleep", "sleep.sleep.started")
             )
             await ph.generate_scenario(seed_memory_id="m")
 

@@ -7,7 +7,7 @@ This capability lets the audition and vocal modules run on torch-free speech bac
 
 ### Requirement: Audition and Vocal select a torch-free speech backend
 
-The audition module SHALL select its speech recogniser with `[audition].backend` (`"speaches"`, the default, or `"sherpa_onnx"`), and the vocal module SHALL select its synthesiser with `[vox].backend` (`"chatterbox"`, the default, or `"sherpa_onnx"`). The `"sherpa_onnx"` backends SHALL run Moonshine and Kokoro through sherpa-onnx behind the modules' existing client interfaces, SHALL import no torch, and SHALL run inference off the event loop. An unknown backend SHALL be a configuration error.
+The audition module SHALL select its speech recogniser with `[audition].backend` (`"speaches"`, the default, or `"sherpa_onnx"`), and the vocal module SHALL select its synthesiser with `[vocal].backend` (`"chatterbox"`, the default, or `"sherpa_onnx"`). The `"sherpa_onnx"` backends SHALL run Moonshine and Kokoro through sherpa-onnx behind the modules' existing client interfaces, SHALL import no torch, and SHALL run inference off the event loop. An unknown backend SHALL be a configuration error.
 
 #### Scenario: Defaults are unchanged
 - **WHEN** neither key is set
@@ -35,15 +35,15 @@ The audition module SHALL select its speech recogniser with `[audition].backend`
 
 ### Requirement: Speech events disclose the backend and what reached the voice
 
-`audition.transcription` and `vox.synthesized` SHALL carry `"backend"` under every backend. `vox.synthesized` SHALL carry `"prosody_applied"`, the list of prosody parameters that reached the voice. The field set SHALL be the same under every backend.
+`audition.transcription` and `vocal.synthesized` SHALL carry `"backend"` under every backend. `vocal.synthesized` SHALL carry `"prosody_applied"`, the list of prosody parameters that reached the voice. The field set SHALL be the same under every backend.
 
 #### Scenario: Kokoro reports speed-only prosody
 - **WHEN** the vocal module synthesises with `backend = "sherpa_onnx"`
-- **THEN** `vox.synthesized` carries `"backend": "sherpa_onnx"` and `"prosody_applied": ["speed_factor"]`
+- **THEN** `vocal.synthesized` carries `"backend": "sherpa_onnx"` and `"prosody_applied": ["speed_factor"]`
 
 #### Scenario: Chatterbox reports the full parameter set
 - **WHEN** the vocal module synthesises with the default backend
-- **THEN** `vox.synthesized` carries `"backend": "chatterbox"` and all four prosody parameters in `"prosody_applied"`
+- **THEN** `vocal.synthesized` carries `"backend": "chatterbox"` and all four prosody parameters in `"prosody_applied"`
 
 ### Requirement: Speech models are fetched only with consent and verified
 

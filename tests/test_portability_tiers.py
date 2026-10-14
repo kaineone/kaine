@@ -74,7 +74,7 @@ def test_failed_backend_falls_back_and_records_reason():
     def _boom() -> str:
         raise ImportError("no llama_cpp wheel here")
 
-    reg: BackendRegistry[str] = BackendRegistry("lingua", default="ollama")
+    reg: BackendRegistry[str] = BackendRegistry("language", default="ollama")
     reg.register("ollama", lambda: "HTTP")
     reg.register("llama_cpp", _boom, fallback="ollama")
 
@@ -82,7 +82,7 @@ def test_failed_backend_falls_back_and_records_reason():
     assert result == "HTTP"  # degraded to the declared fallback, did not raise
     failures = backend_failures()
     assert len(failures) == 1
-    assert failures[0].module == "lingua"
+    assert failures[0].module == "language"
     assert failures[0].backend == "llama_cpp"
     assert failures[0].fallback == "ollama"
     assert "llama_cpp" in failures[0].reason
@@ -92,12 +92,12 @@ def test_failed_backend_without_fallback_disables_and_records():
     def _boom() -> str:
         raise RuntimeError("load failed")
 
-    reg: BackendRegistry[str] = BackendRegistry("topos", default="onnx")
+    reg: BackendRegistry[str] = BackendRegistry("vision", default="onnx")
     reg.register("onnx", _boom)  # no fallback declared
     assert reg.resolve("onnx") is None  # module disables itself, no raise
     failures = backend_failures()
     assert len(failures) == 1
-    assert failures[0].module == "topos"
+    assert failures[0].module == "vision"
     assert failures[0].fallback is None
 
 
@@ -568,77 +568,77 @@ def test_resolve_tier_name_rejects_profile_without_tier_table():
 
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\nmodel_id = "x"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "tier1.toml").write_text(
-        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "llama_cpp"\n'
     )
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
+    op.write_text('[language]\nmodel_id = "operator-choice"\n')
 
     cfg = load_kaine_config(
         shipped, op, profile="tier1", profiles_dir=profiles
     )
     # Profile overrides the shipped default...
-    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["language"]["backend"] == "llama_cpp"
     # ...but the operator's local value still wins, and shipped siblings survive.
-    assert cfg["lingua"]["model_id"] == "operator-choice"
+    assert cfg["language"]["model_id"] == "operator-choice"
 
 
 def test_tier_profile_layers_between_profile_and_operator(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\nmodel_id = "x"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "tier1.toml").write_text(
-        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\nmodel_id = "tier1-model"\n'
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "http"\nmodel_id = "tier1-model"\n'
     )
     (profiles / "tier2.toml").write_text(
-        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "llama_cpp"\n'
     )
     op = tmp_path / "kaine.operator.toml"
-    op.write_text('[lingua]\nmodel_id = "operator-choice"\n')
+    op.write_text('[language]\nmodel_id = "operator-choice"\n')
 
     cfg = load_kaine_config(
         shipped, op, profile="tier1", tier="tier2", profiles_dir=profiles
     )
     # Tier overlay overrides the module profile, but operator still wins.
-    assert cfg["lingua"]["backend"] == "llama_cpp"
-    assert cfg["lingua"]["model_id"] == "operator-choice"
+    assert cfg["language"]["backend"] == "llama_cpp"
+    assert cfg["language"]["model_id"] == "operator-choice"
 
 
 def test_load_kaine_config_equal_profile_and_tier_applied_once(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "tier1.toml").write_text(
-        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\n'
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "http"\n'
     )
     op = tmp_path / "kaine.operator.toml"  # absent
 
     cfg = load_kaine_config(shipped, op, profile="tier1", tier="tier1", profiles_dir=profiles)
-    assert cfg["lingua"]["backend"] == "http"
+    assert cfg["language"]["backend"] == "http"
 
 
 def test_load_kaine_config_tier_without_profile(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\n')
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "tier2.toml").write_text(
-        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "llama_cpp"\n'
     )
     op = tmp_path / "kaine.operator.toml"  # absent
 
     cfg = load_kaine_config(shipped, op, profile=None, tier="tier2", profiles_dir=profiles)
-    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["language"]["backend"] == "llama_cpp"
 
 
 def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\nmodel_id = "x"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\nmodel_id = "x"\n')
     op = tmp_path / "kaine.operator.toml"  # absent
     with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
         load_kaine_config(
@@ -649,10 +649,10 @@ def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
 @pytest.mark.no_data_root
 def test_no_profile_is_behaviour_identical(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
-    shipped.write_text('[lingua]\nbackend = "ollama"\n')
+    shipped.write_text('[language]\nbackend = "ollama"\n')
     op = tmp_path / "kaine.operator.toml"  # absent
     with_none = load_kaine_config(shipped, op, profile=None)
-    assert with_none == {"lingua": {"backend": "ollama"}}
+    assert with_none == {"language": {"backend": "ollama"}}
 
 
 def test_missing_selected_profile_raises_not_silent(tmp_path: Path):
@@ -684,7 +684,7 @@ def test_shipped_profiles_are_voice_free():
         raw = (REPO_ROOT / PROFILES_DIR / f"{name}.toml").read_text()
         assert "predefined_voice_id" not in raw, f"{name} embeds a voice id"
         parsed = tomllib.loads(raw)
-        vocal = parsed.get("vox", {})
+        vocal = parsed.get("vocal", {})
         assert "predefined_voice_id" not in vocal
 
 
@@ -769,7 +769,7 @@ def test_language_llama_cpp_backend_degrades_to_http_when_dep_absent():
     # The organ still exists and can speak over HTTP.
     assert language.chat_client is not None
     failures = backend_failures()
-    assert any(f.module == "lingua" and f.backend == "llama_cpp" for f in failures)
+    assert any(f.module == "language" and f.backend == "llama_cpp" for f in failures)
 
 
 # --------------------------------------------------------------------------
@@ -781,8 +781,8 @@ def test_backend_failures_surface_on_health_snapshot():
     from kaine.backend_state import record_backend_failure
     from kaine.dashboard.health.prober import HealthProber
 
-    record_backend_failure("lingua", "llama_cpp", "no wheel", fallback="ollama")
+    record_backend_failure("language", "llama_cpp", "no wheel", fallback="ollama")
     block = HealthProber._backends_block(object.__new__(HealthProber))
     assert block["ok"] is False
-    assert block["failures"][0]["module"] == "lingua"
+    assert block["failures"][0]["module"] == "language"
     assert block["failures"][0]["fallback"] == "ollama"

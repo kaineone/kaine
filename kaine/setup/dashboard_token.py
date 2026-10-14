@@ -28,7 +28,7 @@ def ensure_dashboard_token(
 
     Without a token, the dashboard rejects every sign-in with 503. The environment
     variable ``KAINE_NEXUS_TOKEN`` takes precedence; otherwise the token is read
-    from or written to ``[nexus] operator_token`` in the secrets file.
+    from or written to ``[dashboard] operator_token`` in the secrets file.
     """
     env = os.environ if env is None else env
     out("\n")
@@ -53,7 +53,7 @@ def ensure_dashboard_token(
 
     try:
         existing = secrets_file.read_toml_field(
-            secrets_path, "nexus", "operator_token"
+            secrets_path, "dashboard", "operator_token"
         )
     except tomllib.TOMLDecodeError:
         out(
@@ -73,14 +73,14 @@ def ensure_dashboard_token(
         # refuse it rather than reporting it as fine.
         if len(existing.strip()) < _MIN_DASHBOARD_TOKEN_LEN:
             out(
-                f"Nexus sign-in token in {secrets_path} [nexus] operator_token is "
+                f"Nexus sign-in token in {secrets_path} [dashboard] operator_token is "
                 f"shorter than {_MIN_DASHBOARD_TOKEN_LEN} characters, so Nexus will "
                 "refuse it. Replace it, or delete that line and re-run setup to "
                 "generate one.\n"
             )
             return "too_short"
         out(
-            f"Nexus sign-in token: already set in {secrets_path} [nexus] "
+            f"Nexus sign-in token: already set in {secrets_path} [dashboard] "
             "operator_token; kept.\n"
         )
         return "kept"
@@ -88,7 +88,7 @@ def ensure_dashboard_token(
     token = secrets.token_urlsafe(32)
     try:
         secrets_file.upsert_toml_field(
-            secrets_path, "nexus", "operator_token", token
+            secrets_path, "dashboard", "operator_token", token
         )
     except (OSError, ValueError) as exc:
         out(
@@ -98,7 +98,7 @@ def ensure_dashboard_token(
 
     out(
         f"Nexus sign-in token: generated and saved to {secrets_path} under "
-        "[nexus] operator_token (mode 600). It is not shown here; open that file "
+        "[dashboard] operator_token (mode 600). It is not shown here; open that file "
         "when Nexus asks for it.\n"
     )
     return "generated"

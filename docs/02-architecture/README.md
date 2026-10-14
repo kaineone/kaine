@@ -8,7 +8,7 @@ The default configuration is the **base-thesis form**, defined in `config/profil
 
 The profile activates seven modules: four predictive processors in distinct signal domains, the **interoception** module (interoception of the compute substrate), the **sequence** module (temporal prediction of the broadcast sequence), the **vision** module (foveated vision) and the **audition** module (raw hearing), plus the **affect** module (affect, whose arousal is the global gain on the competition), the **sleep** module (fatigue-triggered sleep) and the **language** module (the output-only language organ). The workspace and the action selection module always run.
 
-The base-thesis form observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[volition].policy = "self_initiated_report"`.
+The base-thesis form observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`.
 
 The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal, effectors, perceptual locus and embodiment modules) are built and tested in isolation and held off by configuration. The module-addition study (the `ignition_study` in the code) adds them one at a time to a preserved seed entity. Before that, a planned test asks whether competitive selection gives the processors a more useful prediction context than a score-blind coalition or a pool of every candidate; see [For researchers](../14-for-researchers.md#the-planned-test).
 
@@ -55,26 +55,26 @@ graph TD
     ActionSelection["ActionSelection\n(action selection)"]
     OscillatorLayer["Oscillatory layer\n(optional, off)"]
 
-    Interoception -->|"soma.out"| Bus
-    Sequence -->|"chronos.out"| Bus
-    Vision -->|"topos.out"| Bus
+    Interoception -->|"interoception.out"| Bus
+    Sequence -->|"sequence.out"| Bus
+    Vision -->|"vision.out"| Bus
     Audition -->|"audition.out"| Bus
-    Affect -->|"thymos.out"| Bus
-    Language -->|"lingua.out"| Bus
-    Sleep -->|"hypnos.out"| Bus
-    Planning -->|"nous.out"| Bus
-    EpisodicMemory -->|"mnemos.out"| Bus
-    SelfModel -->|"eidolon.out"| Bus
-    WorldModel -->|"phantasia.out"| Bus
-    SocialCognition -->|"empatheia.out"| Bus
-    Vocal -->|"vox.out"| Bus
-    Effectors -->|"praxis.out"| Bus
+    Affect -->|"affect.out"| Bus
+    Language -->|"language.out"| Bus
+    Sleep -->|"sleep.out"| Bus
+    Planning -->|"planning.out"| Bus
+    EpisodicMemory -->|"episodic_memory.out"| Bus
+    SelfModel -->|"self_model.out"| Bus
+    WorldModel -->|"world_model.out"| Bus
+    SocialCognition -->|"social_cognition.out"| Bus
+    Vocal -->|"vocal.out"| Bus
+    Effectors -->|"effectors.out"| Bus
 
     Bus --> Workspace
     OscillatorLayer -.->|"phase per module"| Workspace
     Workspace -->|"workspace.broadcast"| Bus
     Workspace --> ActionSelection
-    ActionSelection -->|"intent.speak / think / act / rest\nvia volition.out"| Bus
+    ActionSelection -->|"intent.speak / think / act / rest\nvia action_selection.out"| Bus
     Bus -->|"accessed content as context"| Vision
     Bus -->|"accessed content as context"| Audition
     Bus -->|"accessed content as context"| Interoception
@@ -85,7 +85,7 @@ graph TD
     Language -.->|"text to speak"| Vocal
     PerceptualLocus -.->|"physical XOR virtual gate"| Vision
     PerceptualLocus -.->|"physical XOR virtual gate"| Audition
-    Embodiment -.->|"mundus.*"| Bus
+    Embodiment -.->|"embodiment.*"| Bus
 
     classDef inactive stroke-dasharray: 5 5,opacity:0.6;
     class Planning,EpisodicMemory,SelfModel,WorldModel,SocialCognition,Vocal,Effectors,PerceptualLocus,Embodiment inactive;
@@ -97,17 +97,17 @@ graph TD
 
 | # | Name | Group | Base thesis | Code | Backing technology |
 |---|------|-------|-------------|------|--------------------|
-| 1 | **Interoception** | Prediction | Active | `kaine/modules/interoception/` | NumPy CfC reservoir with an online readout by default (`[soma].cfc_backend = "numpy"`); ncps/torch optional; pynvml and psutil; fatigue and regulation integrate only prediction error beyond the learned expected band |
+| 1 | **Interoception** | Prediction | Active | `kaine/modules/interoception/` | NumPy CfC reservoir with an online readout by default (`[interoception].cfc_backend = "numpy"`); ncps/torch optional; pynvml and psutil; fatigue and regulation integrate only prediction error beyond the learned expected band |
 | 2 | **Sequence** | Prediction | Active | `kaine/modules/sequence/` | NumPy CfC reservoir (32 units) by default; ncps/torch optional; predicts the next broadcast's features |
 | 3 | **Vision** | Prediction | Active | `kaine/modules/vision/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
 | 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the base thesis) |
-| 5 | **Planning** | Cognition | Held | `kaine/modules/planning/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/planning.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[nous].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
+| 5 | **Planning** | Cognition | Held | `kaine/modules/planning/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/planning.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[planning].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
 | 6 | **Episodic memory** | Cognition | Held | `kaine/modules/episodic_memory/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |
 | 7 | **Self-model** | Cognition | Held | `kaine/modules/self_model/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
-| 8 | **World model** | Cognition | Held | `kaine/modules/world_model/` | DreamerV3 RSSM (`[phantasia].backend = "dreamerv3"`, `engine = "jax"` by default, NumPy engine optional); `persist_weights = true` and `training_enabled = true` |
+| 8 | **World model** | Cognition | Held | `kaine/modules/world_model/` | DreamerV3 RSSM (`[world_model].backend = "dreamerv3"`, `engine = "jax"` by default, NumPy engine optional); `persist_weights = true` and `training_enabled = true` |
 | 9 | **Social cognition** | Cognition | Held | `kaine/modules/social_cognition/` | Qdrant-backed agent models; familiarity-driven affect coupling |
 | 10 | **Affect** | Motivation | Active | `kaine/modules/affect/` | Sequential appraisal; arousal as global gain; drive accumulators with hysteresis; affect coupling consumer |
-| 11 | **Language** | Expression | Active | `kaine/modules/language/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `lingua.internal` and `lingua.external` as well as `lingua.out` |
+| 11 | **Language** | Expression | Active | `kaine/modules/language/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `language.internal` and `language.external` as well as `language.out` |
 | 12 | **Vocal** | Expression | Held | `kaine/modules/vocal/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
 | 13 | **Effectors** | Expression | Held | `kaine/modules/effectors/` | File-write, notify and shell effectors (empty whitelist by default) |
 | 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
@@ -124,13 +124,13 @@ Per-module implementation, configuration and safety details are in [Chapter 9, T
 
 All inter-module communication flows through Redis Streams (`compose/redis.yml`), implemented in `kaine/bus/`. Every module sits behind this interface: it publishes typed events and declares which streams it reads, which is what lets a module be replaced without touching the others.
 
-**Stream naming.** Most modules publish to `<name>.out`. The language module also publishes `lingua.internal` and `lingua.external`. Only the workspace may write the reserved stream `workspace.broadcast`. The action selection module's intents go to `volition.out`. The cycle writes telemetry to `cycle.out` and reads rate-control commands from `cycle.control`.
+**Stream naming.** Most modules publish to `<name>.out`. The language module also publishes `language.internal` and `language.external`. Only the workspace may write the reserved stream `workspace.broadcast`. The action selection module's intents go to `action_selection.out`. The cycle writes telemetry to `cycle.out` and reads rate-control commands from `cycle.control`.
 
 **Event schema** (`kaine/bus/schema.py`):
 
 ```
 source        string      module name (no whitespace)
-type          string      dotted event type (e.g. soma.regulation)
+type          string      dotted event type (e.g. interoception.regulation)
 payload       object      JSON payload, module-defined
 salience      float       0.0 to 1.0, the event's intensity (validated at publish time)
 timestamp     datetime    timezone-aware UTC ISO-8601
@@ -139,7 +139,7 @@ causal_parent string|null entry ID of the event this is a response to
 
 Events that fail validation are rejected before any Redis write. `AsyncBus.audit()` enforces `requirepass` while `[bus].audit_required` is true (the default). When `[redis].host` is not a loopback address, the audit also refuses a Redis bound to all interfaces; with the shipped loopback host only the password is checked.
 
-**Retention.** Streams are trimmed by approximate `MAXLEN` on every publish. The default cap is 100,000 entries, including `workspace.broadcast`; `topos.out` and `audition.out` are capped at 12,000 entries (about 20 minutes at 10 Hz). `python -m kaine.preboot` checks the memory the caps imply against Redis `maxmemory`. Per-stream overrides go under `[bus.per_stream_maxlen]` in the [Core, cycle and host configuration](../appendix-a-configuration/core.md).
+**Retention.** Streams are trimmed by approximate `MAXLEN` on every publish. The default cap is 100,000 entries, including `workspace.broadcast`; `vision.out` and `audition.out` are capped at 12,000 entries (about 20 minutes at 10 Hz). `python -m kaine.preboot` checks the memory the caps imply against Redis `maxmemory`. Per-stream overrides go under `[bus.per_stream_maxlen]` in the [Core, cycle and host configuration](../appendix-a-configuration/core.md).
 
 **Reading with a cursor.** A consumer that keeps a stream cursor reads with `AsyncBus.read_entries`. It returns the decoded events plus the id of the last entry scanned, decoded or not, and the consumer advances its cursor to that id, so a batch made only of undecodable entries cannot stall the cursor. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()`. `AsyncBus.read` returns only the decoded events. `tests/test_cursors_advance_past_undecodable.py` fails if code outside the bus calls `bus.read(`, except for one one-shot reader in the dashboard entry point that keeps no cursor.
 
@@ -151,17 +151,17 @@ See [The cognitive cycle](../08-cognitive-cycle/README.md) for the per-tick read
 
 KAINE runs a continuous loop independent of any external input. Processing ticks occur at the **processing rate**, 10 Hz by default (100 ms per tick). Broadcasts fall on **broadcast ticks**, a subset of the processing ticks set by the **access rate**: it rests at `experiential_rate_hz = 3.333` (one broadcast every third tick) and, with `[cycle.access_rate].enabled = true`, rises toward the processing rate after categorical alerts and with arousal.
 
-The run loop first drains `cycle.control` for `cycle.set_rates` events and `soma.out` for `soma.regulation` advisories. Each tick then:
+The run loop first drains `cycle.control` for `cycle.set_rates` events and `interoception.out` for `interoception.regulation` advisories. Each tick then:
 
 1. Reads all active module streams.
 2. Sorts the events by `(source, type, entry_id)`.
 3. Refreshes the affect snapshot the scorer reads.
 4. Updates the access rate and decides whether this is a broadcast tick.
 5. Calls `Workspace.select()` to score the candidates and form the coalition.
-6. On a broadcast tick, publishes the snapshot to `workspace.broadcast`, then calls `ActionSelection.select()` and publishes its intents to `volition.out`.
+6. On a broadcast tick, publishes the snapshot to `workspace.broadcast`, then calls `ActionSelection.select()` and publishes its intents to `action_selection.out`.
 7. Publishes telemetry to `cycle.out`.
 
-The cycle can be **frozen** through `state/cycle/control.json`, a stack of per-source freeze entries (`operator`, `spot`, `welfare`, `gestation`, `programme_end`, `preserve`). Each recovery pops only its own entry, so a welfare pause survives a supervisor recovery, and the cycle resumes only when the stack is empty. A freeze stops the entity clock while operators repair infrastructure; it is not a shutdown.
+The cycle can be **frozen** through `state/cycle/control.json`, a stack of per-source freeze entries (`operator`, `supervisor`, `welfare`, `development`, `programme_end`, `preserve`). Each recovery pops only its own entry, so a welfare pause survives a supervisor recovery, and the cycle resumes only when the stack is empty. A freeze stops the entity clock while operators repair infrastructure; it is not a shutdown.
 
 See [The cognitive cycle](../08-cognitive-cycle/README.md) for the full tick sequence, rate control and the interoception module's regulation.
 
@@ -198,9 +198,9 @@ The action selection module is the only path from the workspace to an output. Af
 - `DefaultActionSelectionPolicy` answers an `audition.transcription` event with non-empty text. It never forms a speak intent about the entity's own external speech, and its one-in-flight guard clears when the entity's own `external_speech` appears in a later coalition or after 48 s of wall time without it.
 - `DriveBiasedActionSelectionPolicy` adds intents from drive crossings in the coalition.
 
-Every policy keeps the 48 s guard timeout, so a failed realization cannot mute the entity. Intents are published to `volition.out` as `intent.speak`, `intent.think`, `intent.act` or `intent.rest`. When the planning module is enabled, `PlanningProposalSource` wraps the chosen policy and may turn an accessed `nous.proposal` into an `intent.think`, `intent.speak` or `intent.rest`, subject to the same guards.
+Every policy keeps the 48 s guard timeout, so a failed realization cannot mute the entity. Intents are published to `action_selection.out` as `intent.speak`, `intent.think`, `intent.act` or `intent.rest`. When the planning module is enabled, `PlanningProposalSource` wraps the chosen policy and may turn an accessed `planning.proposal` into an `intent.think`, `intent.speak` or `intent.rest`, subject to the same guards.
 
-**Interruptible speech.** The language module runs each generation as a cancellable task. When `[volition].interrupt_threshold` is set above the speak bar, a coalition that crosses it with a different signature while a `speak` is in flight emits an interrupt-marked `speak` that cancels the generation in flight and redirects it. The unspoken remainder is dropped and only a content-free preemption note is kept. There is one language organ and one token stream, so the entity can change what it is saying mid-stream but cannot produce inner and outer speech at the same time.
+**Interruptible speech.** The language module runs each generation as a cancellable task. When `[action_selection].interrupt_threshold` is set above the speak bar, a coalition that crosses it with a different signature while a `speak` is in flight emits an interrupt-marked `speak` that cancels the generation in flight and redirects it. The unspoken remainder is dropped and only a content-free preemption note is kept. There is one language organ and one token stream, so the entity can change what it is saying mid-stream but cannot produce inner and outer speech at the same time.
 
 ## Predictive forward models
 
@@ -214,7 +214,7 @@ An accessed broadcast reaches an effector only through the action selection and 
 
 The effectors module, held in the base-thesis form, applies two checks before it runs an effector. First, the action selection module signs every `act` intent with a per-boot HMAC secret held only in the cycle process, and the effectors module verifies the signature over `canonical(kind, effector, params, run_id, seq)` before it reads any effector name, dropping forged, unsigned or replayed intents and logging them as `provenance_rejected`. Second, it applies the operator's effector-enablement whitelist, which is empty by default, and each effector enforces its own bounds (the shell `CommandWhitelist`, the file sandbox).
 
-Voice alignment, which would change the language organ's weights during sleep, needs a two-layer operator opt-in (`[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`). An abliteration-probe welfare veto rejects any adapter whose response to an adversarial prompt matches a deflection pattern, and a capability-loss veto rejects adapters that degrade general language competence beyond a configurable threshold.
+Voice alignment, which would change the language organ's weights during sleep, needs a two-layer operator opt-in (`[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`). An abliteration-probe welfare veto rejects any adapter whose response to an adversarial prompt matches a deflection pattern, and a capability-loss veto rejects adapters that degrade general language competence beyond a configurable threshold.
 
 See [the effectors module](../09-modules/effectors.md), [Security and privacy](../13-security-and-privacy.md) and [Voice alignment](../10-sleep/voice-alignment.md).
 
@@ -224,9 +224,9 @@ The privacy model rests on one invariant: no raw sensory data is written to disk
 
 - Live camera frames are processed by the vision module in memory and released.
 - Live microphone audio is processed by Audition in memory and released.
-- The perception state files (`state/perception/runtime.json`, `state/perception/desired.json`) hold only operational booleans, the locus and ISO timestamps.
+- The perception state files (`state/perceptual_locus/runtime.json`, `state/perceptual_locus/desired.json`) hold only operational booleans, the locus and ISO timestamps.
 - The freeze file (`state/cycle/control.json`) holds per-source records of `source`, `reason` and `frozen_at`.
-- The dashboard privacy boundary (`kaine/dashboard/privacy.py` re-exports `kaine/privacy_filter.py`) strips a hard-coded list of fifteen content-bearing fields from every diagnostics stream before messages reach clients: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`. Vector fields are always stripped. `[nexus].dev_content_override = true` disables the stripping for development only.
+- The dashboard privacy boundary (`kaine/dashboard/privacy.py` re-exports `kaine/privacy_filter.py`) strips a hard-coded list of fifteen content-bearing fields from every diagnostics stream before messages reach clients: `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`. Vector fields are always stripped. `[dashboard].dev_content_override = true` disables the stripping for development only.
 
 See [Where perception comes from](../08-cognitive-cycle/perceptual-locus.md) for the physical, virtual and off loci.
 
@@ -235,10 +235,10 @@ See [Where perception comes from](../08-cognitive-cycle/perceptual-locus.md) for
 KAINE has no runtime cloud dependencies. Model weights are downloaded at setup. At runtime:
 
 - The optional spiking oscillator layer runs on CPU (snnTorch).
-- The planning module defaults to the pymdp backend; the NumPy engine is selected by `tier0.toml` and `tier1.toml` or by `[nous].backend = "numpy"`.
+- The planning module defaults to the pymdp backend; the NumPy engine is selected by `tier0.toml` and `tier1.toml` or by `[planning].backend = "numpy"`.
 - The world model module defaults to the JAX engine (`engine = "jax"`); the NumPy engine uses no JAX.
 - The shared embedding model (all-MiniLM-L6-v2) runs on CPU by default.
-- Voice-alignment training uses `[hypnos.voice_alignment].training_device`, `cuda:0` by default. The setup wizard sets it per host, and `cpu` can be set explicitly; a run that does not fit fails closed.
+- Voice-alignment training uses `[sleep.voice_alignment].training_device`, `cuda:0` by default. The setup wizard sets it per host, and `cpu` can be set explicitly; a run that does not fit fails closed.
 - Torch wheels are selected per host at install time.
 
 ## Boot gate
@@ -248,7 +248,7 @@ Every module is disabled in the committed `config/kaine.toml` (`[modules]` secti
 A run is operator-supervised, research-safety-net-verified, or an opt-in unattended start:
 
 - **Operator-supervised.** The entrypoint requires `KAINE_CYCLE_OPERATOR_PRESENT=1` before starting the cycle.
-- **Research mode.** A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless six conditions hold: preservation enabled, the welfare-protective response wired, logging active, a passing preflight dry preserve-and-revive self-check, the individuation producer enabled (which needs the `lingua` module), and encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present.
+- **Research mode.** A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless six conditions hold: preservation enabled, the welfare-protective response wired, logging active, a passing preflight dry preserve-and-revive self-check, the individuation producer enabled (which needs the `language` module), and encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present.
 - **Unattended (opt-in).** `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` starts a full entity with nobody present. It must pass all six research-net conditions plus a supervisor self-test, a content-free caretaker notice accepted by a local channel, and a continuous-input probe (`kaine/cycle/unattended_gate.py`) at every start, with no override (exit code `6` otherwise). An opt-in quadlet unit can start it at boot.
 
 See [Day-to-day operation](../06-operation/README.md), [Preservation and the safety net](../11-preservation.md) and [For researchers](../14-for-researchers.md).
@@ -257,8 +257,8 @@ See [Day-to-day operation](../06-operation/README.md), [Preservation and the saf
 
 Two held modules can use JAX, and each has a NumPy engine for hosts without it:
 
-- **Planning** (`kaine/modules/planning/`): pymdp under `[nous].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
-- **World model** (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[phantasia].engine` selects `"jax"` or `"numpy"`.
+- **Planning** (`kaine/modules/planning/`): pymdp under `[planning].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
+- **World model** (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[world_model].engine` selects `"jax"` or `"numpy"`.
 
 Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configured.
 
@@ -271,17 +271,17 @@ Eight sidecar observers run as async tasks alongside the cycle:
 | Observer | Stream(s) | Output |
 |----------|-----------|--------|
 | `coherence_observer` | `workspace.broadcast` | PLV time series (daily JSONL) |
-| `replay_observer` | `mnemos.out`, `phantasia.out` | Memory IDs (content redacted by default) |
-| `empatheia_observer` | `empatheia.out`, `audition.out` | Agent-model accuracy |
-| `voice_alignment_divergence_observer` | `hypnos.out` | Per-sleep voice-alignment outcome and training metrics |
-| `fatigue_observer` | `soma.out` | Fatigue level history |
-| `prediction_error_observer` | `soma.out`, `chronos.out`, `topos.out`, `audition.out`, `phantasia.out` | Sliding-window mean, p95 and p99 |
-| `welfare_observer` | `soma.out`, `hypnos.out`, `thymos.out`, `mnemos.out`, `topos.out`, `audition.out` | Gray-zone event counts (also emits `welfare.gray_zone` on `welfare.out`) and the sensor advisories (`welfare.blind_sensor`, `welfare.sensor_silent` and their clears on `welfare.out`) |
-| `nous_policy_observer` | `nous.out` | EFE value, horizon, selected action |
+| `replay_observer` | `episodic_memory.out`, `world_model.out` | Memory IDs (content redacted by default) |
+| `social_cognition_observer` | `social_cognition.out`, `audition.out` | Agent-model accuracy |
+| `voice_alignment_divergence_observer` | `sleep.out` | Per-sleep voice-alignment outcome and training metrics |
+| `fatigue_observer` | `interoception.out` | Fatigue level history |
+| `prediction_error_observer` | `interoception.out`, `sequence.out`, `vision.out`, `audition.out`, `world_model.out` | Sliding-window mean, p95 and p99 |
+| `welfare_observer` | `interoception.out`, `sleep.out`, `affect.out`, `episodic_memory.out`, `vision.out`, `audition.out` | Gray-zone event counts (also emits `welfare.gray_zone` on `welfare.out`) and the sensor advisories (`welfare.blind_sensor`, `welfare.sensor_silent` and their clears on `welfare.out`) |
+| `planning_policy_observer` | `planning.out` | EFE value, horizon, selected action |
 
 The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each sampled language module external-speech event with a bare inference of the same model (no workspace context, no persona) and logs the cosine similarity and `divergence = 1 − cos`. It records how the workspace context changes the organ's text. It is not a measure of the thesis: the organ is a language model following a persona prompt, and the planned test measures the workspace through the processors' own predictions.
 
-The individuation producer (`kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, `individuation_runtime.py`) measures whether an entity has changed measurably since its maturation reference. It is enabled by `[individuation].enabled` and requires the `lingua` module. Its evidence is encrypted welfare evidence under `state/individuation/` and is kept apart from sidecar research data. The shared divergence verdict (`kaine/lifecycle/divergence.py`) is used by the decommission CLI, the dashboard entity-care panel, the fork merge gate and the live divergence monitor.
+The individuation producer (`kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, `individuation_runtime.py`) measures whether an entity has changed measurably since its maturation reference. It is enabled by `[individuation].enabled` and requires the `language` module. Its evidence is encrypted welfare evidence under `state/individuation/` and is kept apart from sidecar research data. The shared divergence verdict (`kaine/lifecycle/divergence.py`) is used by the decommission CLI, the dashboard entity-care panel, the fork merge gate and the live divergence monitor.
 
 Core runtime must run with the sidecar absent, so nothing under `kaine/` imports `kaine.evaluation` except the two composition-root entrypoints (`kaine/cycle/__main__.py`, `kaine/dashboard/__main__.py`). Import contracts enforce this and the broader package layering. See [Code boundaries](./boundaries.md) and [The evaluation sidecar](../17-research-data/README.md).
 
@@ -292,7 +292,7 @@ Core runtime must run with the sidecar absent, so nothing under `kaine/` imports
 | Module | Merge strategy |
 |--------|----------------|
 | Episodic memory | Sum `short_term_size`; tag retrieved memories; surface mismatches |
-| Planning | One-sided selection by posterior certainty (lower mean entropy wins); emits `nous.merge_warning` when the forks diverged significantly |
+| Planning | One-sided selection by posterior certainty (lower mean entropy wins); emits `planning.merge_warning` when the forks diverged significantly |
 | Self-model | Deduplicate values and norms; sum speech count; concatenate identity history; average personality baseline |
 | Affect | Average dimensional baseline; max drives; union goals; concatenate emotional history |
 | Social cognition | Sum interaction counts; average emotion histograms, behavioural summaries and reliability weighted by interaction count; earliest `first_seen`, latest `last_seen` |

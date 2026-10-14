@@ -1413,7 +1413,7 @@ def create_setup_app(
                     "error_summary": errors,
                     "log_path": log_path,
                     "stderr_path": stderr_path,
-                    "nexus_url": dashboard_url,
+                    "dashboard_url": dashboard_url,
                 },
             )
         finally:

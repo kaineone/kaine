@@ -200,7 +200,7 @@ def test_planning_scores_the_answer_against_the_encoded_choice():
             self._prev_tag = tag
             return obs
 
-    territory = types.SimpleNamespace(module="nous", channels=tuple(range(1, 11)))
+    territory = types.SimpleNamespace(module="planning", channels=tuple(range(1, 11)))
 
     shadow_policy = SiliconEngine(
         [

@@ -26,8 +26,8 @@ def make_world_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "rollout_horizon",
         "persist_weights",
         "checkpoint_path",
-        "mnemos_stream",
-        "hypnos_stream",
+        "episodic_memory_stream",
+        "sleep_stream",
         "salience",  # nested sub-table: baseline, alert
         "world_model",  # nested sub-table: real-backend hyperparams (extra-gated)
     }
@@ -45,8 +45,8 @@ def make_world_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
                 "rollout_horizon",
                 "persist_weights",
                 "checkpoint_path",
-                "mnemos_stream",
-                "hypnos_stream",
+                "episodic_memory_stream",
+                "sleep_stream",
             ),
             WorldModel,
         )
@@ -63,6 +63,6 @@ def make_world_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     engine = section.get("engine", "jax")
     if engine not in {"jax", "numpy"}:
         raise ConfigurationError(
-            f"[phantasia].engine must be \"jax\" or \"numpy\", got {engine!r}"
+            f"[world_model].engine must be \"jax\" or \"numpy\", got {engine!r}"
         )
     return WorldModel(bus, **kwargs)

@@ -35,8 +35,8 @@ def test_serialize_snapshot_strips_vision_vectors_and_omits_tick_and_entry_ids()
     event = (
         "entry-42",
         Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={
                 "latent": list(values),
                 "peripheral": list(values),
@@ -54,7 +54,7 @@ def test_serialize_snapshot_strips_vision_vectors_and_omits_tick_and_entry_ids()
     text = episodic_memory_module._serialize_snapshot(snapshot)
     assert "tick=" not in text
     assert "@" not in text
-    assert "topos:topos.report=" in text
+    assert "vision:vision.report=" in text
     for value in values:
         assert str(value) not in text
     assert "<raw-perceptual omitted>" not in text

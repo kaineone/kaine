@@ -121,7 +121,7 @@ class ScriptedBus:
         return f"{event.source}-pub"
 
     async def publish_workspace(
-        self, snapshot: dict[str, Any], source: str = "syneidesis"
+        self, snapshot: dict[str, Any], source: str = "workspace"
     ) -> str:
         self.workspace_broadcasts.append(snapshot)
         return "workspace-pub"
@@ -252,13 +252,13 @@ async def test_record_shape_has_exact_keys_and_no_payloads(tmp_path: Path) -> No
             },
             {
                 "entry_id": "e-2",
-                "source": "topos",
-                "type": "topos.scene",
+                "source": "vision",
+                "type": "vision.scene",
                 "salience": 0.55,
                 "timestamp": "2024-01-01T00:00:01+00:00",
             },
         ],
-        "salience_scores": {"audition": 0.62, "topos": 0.55},
+        "salience_scores": {"audition": 0.62, "vision": 0.55},
         "inhibited": False,
     }
 
@@ -540,7 +540,7 @@ async def test_engine_observer_not_called_when_publish_fails() -> None:
 
     class FailingBus(ScriptedBus):
         async def publish_workspace(
-            self, snapshot: dict[str, Any], source: str = "syneidesis"
+            self, snapshot: dict[str, Any], source: str = "workspace"
         ) -> str:
             attempts.append(snapshot)
             raise RuntimeError("broadcast refused")

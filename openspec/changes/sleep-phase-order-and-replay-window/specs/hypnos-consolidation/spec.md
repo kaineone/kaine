@@ -3,7 +3,7 @@
 ### Requirement: Phase-3 associative replay with World model scenarios
 The sleep module's phase 3 SHALL replay traces from different memory periods in novel
 combinations, cue the world model module for scenario extensions by publishing to
-`phantasia.scenario`, and re-inject the resulting associations into the workspace.
+`world_model.scenario`, and re-inject the resulting associations into the workspace.
 Before `phantasia-dreamerv3` is present, the world model module cue SHALL be a no-op stub.
 Cross-period selection SHALL draw on the short-term buffer, the traces phase 1
 of the same sleep consolidated, and the newest `cross_period_candidates`
@@ -13,7 +13,7 @@ once.
 
 #### Scenario: Associative phase cues World model
 - **WHEN** phase 3 runs with the world model module enabled
-- **THEN** the world model module is cued and `phantasia.scenario` events are consumed and
+- **THEN** the world model module is cued and `world_model.scenario` events are consumed and
   re-injected into the workspace
 
 #### Scenario: Cross-period traces are combined

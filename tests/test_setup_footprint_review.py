@@ -21,7 +21,7 @@ from kaine.setup.footprint import (
     main,
 )
 
-_LANGUAGE = "lingua"
+_LANGUAGE = "language"
 
 
 def _raise_file_not_found(*args: Any, **kwargs: Any) -> Path:
@@ -139,17 +139,17 @@ def test_uncalibrated_enabled_components_exit_three_and_named(
     """An enabled, planned component without a catalogue figure makes the fit partial."""
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"topos": True},
-        "topos": {"encoder_backend": "internvideo_next"},
+        "modules": {"vision": True},
+        "vision": {"encoder_backend": "internvideo_next"},
     }
 
     code, out, err, catalogue_path = _run(
-        ["--yes", "--only", "topos.encoder"], config, tmp_path, capsys
+        ["--yes", "--only", "vision.encoder"], config, tmp_path, capsys
     )
 
     assert code == 3
-    assert "Uncalibrated components: topos.encoder" in out
-    assert "result is partial; uncalibrated components: topos.encoder" in err
+    assert "Uncalibrated components: vision.encoder" in out
+    assert "result is partial; uncalibrated components: vision.encoder" in err
     # The weights are absent, so nothing was measured and no file is written.
     assert not catalogue_path.exists()
 
@@ -188,12 +188,12 @@ def test_remote_url_not_measured(capsys, tmp_path, monkeypatch):
     """A non-loopback endpoint is recorded as not_measured remote_endpoint."""
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"lingua": True},
-        "lingua": {"backend": "openai", "chat_url": "http://example.com:5000"},
+        "modules": {"language": True},
+        "language": {"backend": "openai", "chat_url": "http://example.com:5000"},
     }
 
     code, out, err, catalogue_path = _run(
-        ["--yes", "--only", "lingua"], config, tmp_path, capsys
+        ["--yes", "--only", "language"], config, tmp_path, capsys
     )
 
     assert "not measured: remote_endpoint" in out
@@ -329,7 +329,7 @@ def test_non_positive_timeout_rejected(capsys, tmp_path):
 def test_needs_for_uncalibrated_and_device_folding():
     """_needs_for emits uncalibrated Needs and folds device bytes on unified hosts."""
     base_entry = dict(
-        component="topos.encoder",
+        component="vision.encoder",
         backend="internvideo_next",
         model_id="internvideo_next",
         bytes=2 << 30,
@@ -342,7 +342,7 @@ def test_needs_for_uncalibrated_and_device_folding():
     unified_entries = [Entry(host_class="unified", **base_entry)]
 
     info = ComponentInfo(
-        name="topos.encoder",
+        name="vision.encoder",
         kind="in_process",
         backend="internvideo_next",
         model_id="internvideo_next",
@@ -390,7 +390,7 @@ def test_needs_for_uncalibrated_and_device_folding():
     needs = _needs_for([], [info], "discrete", discrete_budgets)
     assert len(needs) == 1
     assert needs[0].footprint_bytes is None
-    assert needs[0].component == "topos.encoder"
+    assert needs[0].component == "vision.encoder"
 
 
 def test_valid_existing_catalogue_not_moved(capsys, tmp_path, monkeypatch):
@@ -400,7 +400,7 @@ def test_valid_existing_catalogue_not_moved(capsys, tmp_path, monkeypatch):
     write_catalogue(
         [
             Entry(
-                component="topos.encoder",
+                component="vision.encoder",
                 backend="internvideo_next",
                 model_id="internvideo_next",
                 bytes=100 << 20,
@@ -411,11 +411,11 @@ def test_valid_existing_catalogue_not_moved(capsys, tmp_path, monkeypatch):
     )
 
     config = {
-        "modules": {"topos": True},
-        "topos": {"encoder_backend": "internvideo_next"},
+        "modules": {"vision": True},
+        "vision": {"encoder_backend": "internvideo_next"},
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -425,7 +425,7 @@ def test_valid_existing_catalogue_not_moved(capsys, tmp_path, monkeypatch):
     assert code == 0
     assert not list(tmp_path.glob("footprints.json.bak-*"))
     entries = load_catalogue(cat)
-    assert any(e.component == "topos.encoder" for e in entries)
+    assert any(e.component == "vision.encoder" for e in entries)
 
 
 def test_failed_backup_rename_returns_one_and_measures_nothing(
@@ -438,7 +438,7 @@ def test_failed_backup_rename_returns_one_and_measures_nothing(
     (tmp_path / "model.safetensors").write_text("x")
 
     measure, calls = _fake_measure(
-        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+        {"vision.encoder": (True, 100 << 20, None, None, False, "")}
     )
 
     def _broken_rename(self, target):
@@ -447,14 +447,14 @@ def test_failed_backup_rename_returns_one_and_measures_nothing(
     monkeypatch.setattr(Path, "rename", _broken_rename)
 
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -578,21 +578,21 @@ def test_child_wrapper_uses_smi_when_available(monkeypatch):
 def test_needs_for_not_measured_local_is_uncalibrated():
     """A not_measured local organ without a catalogue entry is uncalibrated."""
     info = ComponentInfo(
-        name="lingua",
+        name="language",
         kind="not_measured",
         backend="llama_cpp",
         model_id="qwen2.5-3b",
     )
     needs = _needs_for([], [info], "cpu", _fake_budgets())
     assert len(needs) == 1
-    assert needs[0].component == "lingua"
+    assert needs[0].component == "language"
     assert needs[0].footprint_bytes is None
 
 
 def test_needs_for_remote_endpoint_skipped():
     """A remote_endpoint component is skipped and produces no Need."""
     info = ComponentInfo(
-        name="lingua",
+        name="language",
         kind="not_measured",
         backend="openai",
         model_id="gpt-4o-mini",
@@ -605,7 +605,7 @@ def test_needs_for_remote_endpoint_skipped():
 def test_needs_for_external_without_entry_is_uncalibrated():
     """A local external service that was not measured is uncalibrated."""
     info = ComponentInfo(
-        name="lingua",
+        name="language",
         kind="external",
         backend="openai",
         model_id="gpt-4o-mini",
@@ -613,7 +613,7 @@ def test_needs_for_external_without_entry_is_uncalibrated():
     )
     needs = _needs_for([], [info], "cpu", _fake_budgets())
     assert len(needs) == 1
-    assert needs[0].component == "lingua"
+    assert needs[0].component == "language"
     assert needs[0].footprint_bytes is None
 
 
@@ -753,15 +753,15 @@ def test_local_service_gpu_unknown_not_recorded(capsys, tmp_path, monkeypatch):
     )
 
     config = {
-        "modules": {"lingua": True},
-        "lingua": {
+        "modules": {"language": True},
+        "language": {
             "backend": "openai",
             "model_id": "m",
             "chat_url": "http://localhost:1234",
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "lingua"],
+        ["--yes", "--only", "language"],
         config,
         tmp_path,
         capsys,

@@ -31,8 +31,8 @@ def _isolate_state_encryptor(monkeypatch):
 
 def _enabled_config(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "modules": {"lingua": True, "topos": True, "audition": True},
-        "lingua": {"chat_url": "http://127.0.0.1:11434/v1", "model_id": "organ"},
+        "modules": {"language": True, "vision": True, "audition": True},
+        "language": {"chat_url": "http://127.0.0.1:11434/v1", "model_id": "organ"},
         "perception_feed": {"mode": "off"},
         "preservation": {"require_encryption": False},
         "security": {"state_encryption": {"enabled": False}},
@@ -111,7 +111,7 @@ async def test_smoke_services_maps_up_not_configured_down_degraded(monkeypatch):
 
 
 async def test_smoke_organ_skipped_when_language_disabled():
-    config = _enabled_config(modules={"lingua": False})
+    config = _enabled_config(modules={"language": False})
     results = await preboot.check_organ(config)
     assert results[0].status == preboot.SKIP
 
@@ -376,8 +376,8 @@ def test_smoke_config_sanity_tier_fit_skips_when_no_tier():
 
 def test_smoke_config_sanity_tier_fit_passes_when_modules_fit():
     config = _enabled_config(
-        modules={"lingua": True, "soma": True},
-        tier={"name": "tier0", "unsupported_modules": ["topos", "audition"], "oscillator_supported": False},
+        modules={"language": True, "interoception": True},
+        tier={"name": "tier0", "unsupported_modules": ["vision", "audition"], "oscillator_supported": False},
     )
     results = preboot.check_config_sanity(config)
     tier_row = next(r for r in results if r.name == "Tier fit")
@@ -387,20 +387,20 @@ def test_smoke_config_sanity_tier_fit_passes_when_modules_fit():
 
 def test_smoke_config_sanity_tier_fit_fails_on_unsupported_modules():
     config = _enabled_config(
-        modules={"lingua": True, "topos": True, "audition": True},
-        tier={"name": "tier0", "unsupported_modules": ["topos", "audition", "vox"], "oscillator_supported": False},
+        modules={"language": True, "vision": True, "audition": True},
+        tier={"name": "tier0", "unsupported_modules": ["vision", "audition", "vocal"], "oscillator_supported": False},
     )
     results = preboot.check_config_sanity(config)
     tier_row = next(r for r in results if r.name == "Tier fit")
     assert tier_row.status == preboot.FAIL
-    assert "topos" in tier_row.detail
+    assert "vision" in tier_row.detail
     assert "audition" in tier_row.detail
     assert "disable them in the operator config or record a larger tier" in tier_row.detail
 
 
 def test_smoke_config_sanity_tier_fit_fails_on_unsupported_oscillator():
     config = _enabled_config(
-        modules={"lingua": True},
+        modules={"language": True},
         tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": False},
         oscillator={"enabled": True},
     )
@@ -448,7 +448,7 @@ def test_smoke_config_sanity_tier_string_value_fails():
 
 def test_smoke_config_sanity_tier_unsupported_modules_list_of_lists():
     config = _enabled_config(
-        modules={"lingua": True},
+        modules={"language": True},
         tier={"name": "tier0", "unsupported_modules": [["x"]]},
     )
     results = preboot.check_config_sanity(config)
@@ -469,7 +469,7 @@ def test_smoke_config_sanity_tier_oscillator_supported_non_bool():
 
 def test_smoke_config_sanity_oscillator_scalar_value():
     config = _enabled_config(
-        modules={"lingua": True},
+        modules={"language": True},
         tier={"name": "tier0", "unsupported_modules": [], "oscillator_supported": True},
         oscillator=True,
     )
@@ -480,7 +480,7 @@ def test_smoke_config_sanity_oscillator_scalar_value():
 
 
 def test_smoke_config_sanity_unsupported_modules_string_fails():
-    config = _enabled_config(tier={"name": "tier0", "unsupported_modules": "vox"})
+    config = _enabled_config(tier={"name": "tier0", "unsupported_modules": "vocal"})
     results = preboot.check_config_sanity(config)
     tier_row = next(r for r in results if r.name == "Tier fit")
     assert tier_row.status == preboot.FAIL
@@ -497,7 +497,7 @@ async def test_dry_run_run_async_checks_survives_a_crashing_check(monkeypatch):
         raise RuntimeError("simulated crash")
 
     monkeypatch.setattr(preboot, "check_services", _boom)
-    config = _enabled_config(perception_feed={"mode": "off"}, modules={"lingua": False})
+    config = _enabled_config(perception_feed={"mode": "off"}, modules={"language": False})
 
     async def _ok_welfare(_config):
         return [preboot.CheckResult(preboot.GROUP_WELFARE, "x", preboot.PASS)]
@@ -548,7 +548,7 @@ async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp
 
 
 def test_dry_run_main_exits_zero_when_everything_passes(monkeypatch, capsys):
-    config = _enabled_config(modules={"lingua": False, "soma": True}, perception_feed={"mode": "off"})
+    config = _enabled_config(modules={"language": False, "interoception": True}, perception_feed={"mode": "off"})
     monkeypatch.setattr(preboot, "load_runtime_config", lambda *a, **k: config)
     monkeypatch.setattr(preboot, "check_torch_stack", lambda: [])
     monkeypatch.setattr(preboot, "describe_torch_stack", lambda: "torch 2.14.0+cu130")
@@ -569,7 +569,7 @@ def test_dry_run_main_exits_zero_when_everything_passes(monkeypatch, capsys):
 
 
 def test_dry_run_main_exits_nonzero_when_any_check_fails(monkeypatch, capsys):
-    config = _enabled_config(modules={"lingua": False, "soma": True}, perception_feed={"mode": "off"})
+    config = _enabled_config(modules={"language": False, "interoception": True}, perception_feed={"mode": "off"})
     monkeypatch.setattr(preboot, "load_runtime_config", lambda *a, **k: config)
 
     async def _fake_run_async_checks(_config):
@@ -633,11 +633,11 @@ def test_dry_run_main_returns_2_on_config_shape_error(monkeypatch, capsys):
     from kaine.config import ConfigShapeError
 
     def _raise(*a, **k):
-        raise ConfigShapeError("modules.soma expected bool, got str")
+        raise ConfigShapeError("modules.interoception expected bool, got str")
 
     monkeypatch.setattr(preboot, "load_runtime_config", _raise)
     rc = preboot.main([])
     err = capsys.readouterr().err
     assert rc == 2
     assert "pre-boot: configuration error:" in err
-    assert "modules.soma expected bool, got str" in err
+    assert "modules.interoception expected bool, got str" in err

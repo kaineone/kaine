@@ -123,7 +123,7 @@ async def test_multiple_emotion_events_accumulate(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# empatheia.agent_model published with familiarity
+# social_cognition.agent_model published with familiarity
 # ---------------------------------------------------------------------------
 
 
@@ -133,8 +133,8 @@ async def test_emotion_event_publishes_agent_model(bus: AsyncBus):
     await emp.initialize()
     try:
         await emp._handle_audition_event(_emotion_event("happy", confidence=0.8))
-        events = await _drain_events(bus, "empatheia.out")
-        agent_model_events = [e for e in events if e.type == "empatheia.agent_model"]
+        events = await _drain_events(bus, "social_cognition.out")
+        agent_model_events = [e for e in events if e.type == "social_cognition.agent_model"]
         assert len(agent_model_events) >= 1
         payload = agent_model_events[-1].payload
         assert "familiarity" in payload
@@ -154,19 +154,19 @@ async def test_agent_model_familiarity_increases_with_observations(bus: AsyncBus
     await emp.initialize()
     try:
         await emp._handle_audition_event(_emotion_event("happy", confidence=0.8))
-        events_1 = await _drain_events(bus, "empatheia.out")
+        events_1 = await _drain_events(bus, "social_cognition.out")
         fam_1 = next(
             e.payload["familiarity"]
             for e in events_1
-            if e.type == "empatheia.agent_model"
+            if e.type == "social_cognition.agent_model"
         )
         for _ in range(50):
             await emp._handle_audition_event(_emotion_event("happy", confidence=0.8))
-        events_many = await _drain_events(bus, "empatheia.out")
+        events_many = await _drain_events(bus, "social_cognition.out")
         fam_many = max(
             e.payload["familiarity"]
             for e in events_many
-            if e.type == "empatheia.agent_model"
+            if e.type == "social_cognition.agent_model"
         )
         assert fam_many > fam_1
     finally:
@@ -192,13 +192,13 @@ async def test_transcription_event_updates_interaction_count(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# Deviation emits empatheia.social_error with ONLY id/salience/deviation
+# Deviation emits social_cognition.social_error with ONLY id/salience/deviation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_deviation_emits_social_error(bus: AsyncBus):
-    """An out-of-character emotion triggers empatheia.social_error."""
+    """An out-of-character emotion triggers social_cognition.social_error."""
     emp = await _new_social_cognition(bus, deviation_threshold=0.1)
     await emp.initialize()
     try:
@@ -209,15 +209,15 @@ async def test_deviation_emits_social_error(bus: AsyncBus):
         # Clear the stream so we can see only new events.
         # (fakeredis keeps all entries; we'll read after this point)
         # Record current position.
-        entries_before = await bus.read("empatheia.out", last_id="0")
+        entries_before = await bus.read("social_cognition.out", last_id="0")
         last_id = entries_before[-1][0] if entries_before else "0"
 
         # Trigger a sharp out-of-character event.
         await emp._handle_audition_event(_emotion_event("angry", confidence=1.0))
 
-        new_entries = await bus.read("empatheia.out", last_id=last_id)
+        new_entries = await bus.read("social_cognition.out", last_id=last_id)
         new_events = [e for _, e in new_entries]
-        social_errors = [e for e in new_events if e.type == "empatheia.social_error"]
+        social_errors = [e for e in new_events if e.type == "social_cognition.social_error"]
         assert len(social_errors) >= 1
     finally:
         await emp.shutdown()
@@ -225,7 +225,7 @@ async def test_deviation_emits_social_error(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_social_error_payload_contains_only_allowed_fields(bus: AsyncBus):
-    """empatheia.social_error payload must carry ONLY id/salience/deviation."""
+    """social_cognition.social_error payload must carry ONLY id/salience/deviation."""
     emp = await _new_social_cognition(bus, deviation_threshold=0.1)
     await emp.initialize()
     try:
@@ -234,8 +234,8 @@ async def test_social_error_payload_contains_only_allowed_fields(bus: AsyncBus):
             await emp._handle_audition_event(_emotion_event("neutral", confidence=1.0))
         await emp._handle_audition_event(_emotion_event("angry", confidence=1.0))
 
-        events = await _drain_events(bus, "empatheia.out")
-        social_errors = [e for e in events if e.type == "empatheia.social_error"]
+        events = await _drain_events(bus, "social_cognition.out")
+        social_errors = [e for e in events if e.type == "social_cognition.social_error"]
         assert len(social_errors) >= 1
 
         for se in social_errors:
@@ -264,7 +264,7 @@ async def test_social_error_payload_contains_only_allowed_fields(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_social_error_enters_workspace_with_declared_salience(bus: AsyncBus):
-    """empatheia.social_error must be published with a numeric salience."""
+    """social_cognition.social_error must be published with a numeric salience."""
     emp = await _new_social_cognition(bus, deviation_threshold=0.1)
     await emp.initialize()
     try:
@@ -272,8 +272,8 @@ async def test_social_error_enters_workspace_with_declared_salience(bus: AsyncBu
             await emp._handle_audition_event(_emotion_event("neutral", confidence=1.0))
         await emp._handle_audition_event(_emotion_event("angry", confidence=1.0))
 
-        events = await _drain_events(bus, "empatheia.out")
-        social_errors = [e for e in events if e.type == "empatheia.social_error"]
+        events = await _drain_events(bus, "social_cognition.out")
+        social_errors = [e for e in events if e.type == "social_cognition.social_error"]
         assert len(social_errors) >= 1
         for se in social_errors:
             assert isinstance(se.salience, float)
@@ -297,8 +297,8 @@ async def test_in_character_behavior_does_not_emit_social_error(bus: AsyncBus):
         for _ in range(20):
             await emp._handle_audition_event(_emotion_event("neutral", confidence=0.5))
 
-        events = await _drain_events(bus, "empatheia.out")
-        social_errors = [e for e in events if e.type == "empatheia.social_error"]
+        events = await _drain_events(bus, "social_cognition.out")
+        social_errors = [e for e in events if e.type == "social_cognition.social_error"]
         assert social_errors == []
     finally:
         await emp.shutdown()

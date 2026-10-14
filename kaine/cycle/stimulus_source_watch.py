@@ -4,9 +4,9 @@
 """Stimulus-source-loss watcher and pre-spawn hold for entities in their developmental phase.
 
 An entity in its developmental phase depends on a developmental stimulus.  Before spawn,
-:func:`hold_until_womb_ready` blocks module initialisation until the stimulus source
+:func:`hold_until_stimulus_source_ready` blocks module initialisation until the stimulus source
 is ready or shutdown is requested.  While running, :class:`StimulusSourceLossWatcher`
-monitors stimulus source liveness and freezes the cycle (under the ``gestation``
+monitors stimulus source liveness and freezes the cycle (under the ``development``
 freeze source) when the stimulus is lost for too long.  Because perception
 is left on during a developmental-phase-only freeze, a local stimulus source can prove its return
 through real sensory deliveries.
@@ -37,8 +37,8 @@ from kaine.lifecycle.stimulus_source_liveness import (
 log = logging.getLogger(__name__)
 
 DEVELOPMENT_FREEZE_SOURCE = "gestation"
-STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST = "stage.gestation.womb_lost"
-STAGE_DEVELOPMENT_STIMULUS_SOURCE_RETURNED = "stage.gestation.womb_returned"
+STAGE_DEVELOPMENT_STIMULUS_SOURCE_LOST = "stage.development.stimulus_source_lost"
+STAGE_DEVELOPMENT_STIMULUS_SOURCE_RETURNED = "stage.development.stimulus_source_returned"
 
 
 def _validate_positive(name: str, value: float) -> None:
@@ -61,7 +61,7 @@ async def hold_until_stimulus_source_ready(
 ) -> bool:
     """Block until the stimulus source is ready for spawn, or until shutdown is requested.
 
-    While held, publish ``stage.gestation.no_stimulus`` after each failed
+    While held, publish ``stage.development.no_stimulus`` after each failed
     check so the developmental state is visible on ``lifecycle.out``.
     """
     _validate_positive("retry_seconds", retry_seconds)
@@ -80,7 +80,7 @@ async def hold_until_stimulus_source_ready(
         log.warning("womb not ready: %s", result.reason)
         try:
             await publish(
-                "stage.gestation.no_stimulus",
+                "stage.development.no_stimulus",
                 {
                     "stage": "gestation",
                     "reason": "womb_not_ready",
@@ -90,7 +90,7 @@ async def hold_until_stimulus_source_ready(
                 0.7,
             )
         except Exception:
-            log.warning("publish stage.gestation.no_stimulus failed", exc_info=True)
+            log.warning("publish stage.development.no_stimulus failed", exc_info=True)
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=retry_seconds)
             return False
@@ -181,7 +181,7 @@ class StimulusSourceLossWatcher:
                 0.9,
             )
         except Exception:
-            log.warning("publish stage.gestation.womb_lost failed", exc_info=True)
+            log.warning("publish stage.development.stimulus_source_lost failed", exc_info=True)
         if self._notify is not None:
             try:
                 await self._notify("womb_lost")
@@ -299,7 +299,7 @@ class StimulusSourceLossWatcher:
                         )
                     except Exception:
                         log.warning(
-                            "publish stage.gestation.womb_returned failed",
+                            "publish stage.development.stimulus_source_returned failed",
                             exc_info=True,
                         )
             else:

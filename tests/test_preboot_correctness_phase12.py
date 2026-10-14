@@ -102,9 +102,9 @@ def _mark_realized(policy) -> None:
 
 SPEAK = getattr(vt, "SPEAK", "speak")
 THINK = getattr(vt, "THINK", "think")
-OWN_SRC = getattr(vt, "OWN_EXTERNAL_SPEECH_SOURCE", "lingua")
-OWN_EXT_TYPE = getattr(vt, "OWN_EXTERNAL_SPEECH_TYPE", "lingua.external")
-OWN_INT_TYPE = getattr(vt, "OWN_INTERNAL_SPEECH_TYPE", "lingua.internal")
+OWN_SRC = getattr(vt, "OWN_EXTERNAL_SPEECH_SOURCE", "language")
+OWN_EXT_TYPE = getattr(vt, "OWN_EXTERNAL_SPEECH_TYPE", "language.external")
+OWN_INT_TYPE = getattr(vt, "OWN_INTERNAL_SPEECH_TYPE", "language.internal")
 
 
 # --------------------------------------------------------------------------
@@ -206,22 +206,22 @@ def test_c2_welfare_pause_survives_supervisor_recovery(tmp_path: Path):
     path = tmp_path / "control.json"
     push_freeze(reason="operator repair", path=path, source="operator")
     push_freeze(reason="distress", path=path, source="welfare")
-    push_freeze(reason="module fault", path=path, source="spot")
+    push_freeze(reason="module fault", path=path, source="supervisor")
 
     state = read_control(path)
     assert state.frozen
     assert len(state.stack) == 3
-    assert state.source == "spot"  # top of the stack
+    assert state.source == "supervisor"  # top of the stack
 
     # The supervisor recovers: it pops only its own entry.
-    state = pop_freeze(path=path, source="spot")
+    state = pop_freeze(path=path, source="supervisor")
     assert state.frozen, "welfare freeze must survive a Spot recovery"
     assert [e["source"] for e in state.stack] == ["operator", " welfare".strip()]
     assert state.source == "welfare"
     assert state.reason == "distress"
 
     # A supervisor recovery repeated still never touches the welfare entry.
-    state = pop_freeze(path=path, source="spot")
+    state = pop_freeze(path=path, source="supervisor")
     assert state.frozen
     assert [e["source"] for e in state.stack] == ["operator", "welfare"]
 
@@ -238,10 +238,10 @@ def test_c2_supervisor_recovery_restores_pre_existing_stack(tmp_path: Path):
     before = [dict(e) for e in base.stack]
     assert len(before) == 1
 
-    push_freeze(reason="escalating", path=path, source="spot")
+    push_freeze(reason="escalating", path=path, source="supervisor")
     assert read_control(path).frozen
 
-    after = pop_freeze(path=path, source="spot")
+    after = pop_freeze(path=path, source="supervisor")
     assert after.stack == tuple(before)
     assert after.frozen and after.source == "operator"
     assert after.frozen_at == before[-1]["frozen_at"]
@@ -254,11 +254,11 @@ def test_c2_only_operator_or_welfare_stand_down_lifts_welfare(tmp_path: Path):
     push_freeze(reason="distress", path=path, source="welfare")
 
     # A supervisor recovery cannot lift it.
-    assert pop_freeze(path=path, source="spot").frozen
+    assert pop_freeze(path=path, source="supervisor").frozen
     # A plain pop of the top would lift it — but the API contract for welfare
     # entries is the stand-down paths; assert an unrelated source stand-down
     # (e.g. the supervisor) does not lift the welfare freeze either.
-    assert stand_down(path=path, source="spot").frozen
+    assert stand_down(path=path, source="supervisor").frozen
 
     # Operator stand-down lifts everything, including the welfare freeze.
     state = unfreeze(path=path)
@@ -448,7 +448,7 @@ def test_c3_realization_failed_event_is_content_free():
     secret = "SECRET-PROMPT-CONTENT never to be audited"
 
     mod = object.__new__(Language)  # bypass heavy __init__
-    mod.name = "lingua"
+    mod.name = "language"
     mod._gen_task = None  # no held generation on this bare instance
     published: list[tuple[str, str, dict]] = []
 
@@ -466,7 +466,7 @@ def test_c3_realization_failed_event_is_content_free():
 
     assert len(published) == 1
     stream, type_, payload = published[0]
-    assert stream == "lingua.internal"
+    assert stream == "language.internal"
     assert type_ == "realization_failed"
     assert payload == {"mode": vt.SPEAK, "reason_class": "RuntimeError"}
     # Schema is content-free: exactly these payload keys, nothing else.
@@ -541,7 +541,7 @@ def test_h4_no_sig_expiry_means_permanent_novelty_suppression():
 
 
 def test_h4_sig_expiry_is_wired_from_action_selection_config():
-    """cycle __main__ threads [volition].sig_expiry_s into the report policy
+    """cycle __main__ threads [action_selection].sig_expiry_s into the report policy
     (without it the expiry defaults to never and H4 is inert on a real boot)."""
     import kaine.cycle.__main__ as cycle_main
 
@@ -555,7 +555,7 @@ def test_thesis_test_profile_sets_sig_expiry():
 
     profile = Path(__file__).parent.parent / "config" / "profiles" / "thesis_test.toml"
     raw = tomllib.loads(profile.read_text())
-    assert float(raw["volition"]["sig_expiry_s"]) > 0
+    assert float(raw["action_selection"]["sig_expiry_s"]) > 0
 
 
 def test_m3_notify_rate_limit_is_enforced_in_respond():

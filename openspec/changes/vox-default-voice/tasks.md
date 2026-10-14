@@ -1,7 +1,7 @@
 ## 1. Design
 
 - [x] 1.1 Research what the Chatterbox TTS server and the pinned Kokoro model ship, how they list it, and whether gender is knowable; cite the sources in design.md
-- [x] 1.2 Proposal, design, tasks, delta spec on `vox`, and a roadmap row
+- [x] 1.2 Proposal, design, tasks, delta spec on `vocal`, and a roadmap row
 
 ## 2. Selection
 
@@ -23,8 +23,8 @@
 
 ## 4. Docs and config
 
-- [x] 4.1 `[vox]` comments in `config/kaine.toml` and the two keys
-- [x] 4.2 `docs/09-modules/vocal.md` and the `[vox]` table in `docs/appendix-a-configuration/modules.md`
+- [x] 4.1 `[vocal]` comments in `config/kaine.toml` and the two keys
+- [x] 4.2 `docs/09-modules/vocal.md` and the `[vocal]` table in `docs/appendix-a-configuration/modules.md`
 
 ## 5. Follow-up: the entity's own choice (separate change, not in this PR)
 

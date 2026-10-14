@@ -252,7 +252,7 @@ def required_speech_models(config: dict) -> list[str]:
 
     - STT when ``[audition].backend == "sherpa_onnx"`` and
       ``[audition].transcription_enabled`` is true.
-    - TTS when ``[vox].backend == "sherpa_onnx"``.
+    - TTS when ``[vocal].backend == "sherpa_onnx"``.
 
     Unknown ids are skipped with a warning.
     """
@@ -267,7 +267,7 @@ def required_speech_models(config: dict) -> list[str]:
             else:
                 warnings.warn(f"skipping unknown speech model id: {stt_id}")
 
-    vocal = config.get("vox") or {}
+    vocal = config.get("vocal") or {}
     if str(vocal.get("backend", "chatterbox")).strip().lower() == "sherpa_onnx":
         tts_id = str(vocal.get("sherpa_model_id", DEFAULT_TTS)).strip()
         if tts_id in MANIFEST:

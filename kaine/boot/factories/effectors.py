@@ -45,7 +45,7 @@ def make_effectors(
             )
         )
     # Effector-enablement whitelist: empty by default → no effector runs until the
-    # operator names it here. The gate is enforced in Praxis.act for every effector.
+    # operator names it here. The gate is enforced in Effectors.act for every effector.
     enabled_effectors = list(section.get("enabled_effectors", ()) or ())
     kwargs: dict[str, Any] = {
         "whitelist": CommandWhitelist(entries),

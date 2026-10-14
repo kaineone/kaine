@@ -91,11 +91,11 @@ def sleep(bus, monkeypatch):
 
 
 async def _read_rest_requests(bus: AsyncBus):
-    entries = await bus.read("hypnos.out", last_id="0")
-    return [(id_, e) for id_, e in entries if e.type == "hypnos.rest_request"]
+    entries = await bus.read("sleep.out", last_id="0")
+    return [(id_, e) for id_, e in entries if e.type == "sleep.rest_request"]
 
 
-async def _read_typed_entries(bus: AsyncBus, stream: str = "hypnos.out"):
+async def _read_typed_entries(bus: AsyncBus, stream: str = "sleep.out"):
     entries = await bus.read(stream, last_id="0")
     return [(i, e.type, e.payload) for i, (_, e) in enumerate(entries)]
 
@@ -104,7 +104,7 @@ async def _read_typed_entries(bus: AsyncBus, stream: str = "hypnos.out"):
 async def test_real_requested_sleep_starts_and_publishes_accepted_after(sleep):
     # The interval is measured from boot, so move past it first.
     sleep._entity_clock.advance(1800.0)
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "p1"})
     if getattr(sleep, "_sleep_task", None):
         await sleep._sleep_task
 
@@ -115,13 +115,13 @@ async def test_real_requested_sleep_starts_and_publishes_accepted_after(sleep):
     assert accepted[0][1].payload["proposal_id"] == "p1"
 
     entries = await _read_typed_entries(sleep._bus)
-    started_idx = next(i for i, t, _ in entries if t == "hypnos.sleep.started")
+    started_idx = next(i for i, t, _ in entries if t == "sleep.sleep.started")
     accepted_idx = next(
         i
         for i, t, p in entries
-        if t == "hypnos.rest_request" and p.get("accepted") is True
+        if t == "sleep.rest_request" and p.get("accepted") is True
     )
-    completed_idx = next(i for i, t, _ in entries if t == "hypnos.sleep.completed")
+    completed_idx = next(i for i, t, _ in entries if t == "sleep.sleep.completed")
     assert started_idx < accepted_idx < completed_idx
 
     assert sleep._last_sleep_ended_at is not None
@@ -135,7 +135,7 @@ async def test_requested_sleep_aborted_publishes_accepted_then_aborted(sleep, mo
     monkeypatch.setattr("kaine.modules.sleep.module.deep_consolidation", _raise)
 
     sleep._entity_clock.advance(1800.0)
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "abort-p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "abort-p1"})
     # The requested-sleep task reports the abort itself and does not raise.
     await sleep._sleep_task
 
@@ -150,7 +150,7 @@ async def test_requested_sleep_aborted_publishes_accepted_then_aborted(sleep, mo
 
     entries = await _read_typed_entries(sleep._bus)
     assert any(
-        t == "hypnos.sleep.completed" and p.get("aborted") is True
+        t == "sleep.sleep.completed" and p.get("aborted") is True
         for _, t, p in entries
     )
 
@@ -158,7 +158,7 @@ async def test_requested_sleep_aborted_publishes_accepted_then_aborted(sleep, mo
 @pytest.mark.asyncio
 async def test_rest_request_busy_at_start_time_rejected(sleep):
     sleep._sleep_pending = True
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "busy-p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "busy-p1"})
     assert getattr(sleep, "_sleep_task", None) is None
 
     requests = await _read_rest_requests(sleep._bus)
@@ -175,7 +175,7 @@ async def test_rest_request_busy_at_start_time_rejected(sleep):
 @pytest.mark.asyncio
 async def test_rest_request_boot_seeding_immediate_request_too_soon(sleep):
     # Clock is at 0; _last_sleep_ended_at was seeded at construction time.
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "soon-p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "soon-p1"})
     requests = await _read_rest_requests(sleep._bus)
     refusal = [(id_, r) for id_, r in requests if r.payload.get("accepted") is False][0]
     assert refusal[1].payload["reason"] == "too_soon"
@@ -204,7 +204,7 @@ async def test_rest_request_no_frozen_reason(sleep):
 async def test_rest_request_after_interval_accepted(sleep):
     sleep._last_sleep_ended_at = 0.0
     sleep._entity_clock.advance(1800.0)
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "ok-p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "ok-p1"})
     if getattr(sleep, "_sleep_task", None):
         await sleep._sleep_task
     requests = await _read_rest_requests(sleep._bus)
@@ -217,12 +217,12 @@ async def test_rest_request_after_interval_accepted(sleep):
 @pytest.mark.asyncio
 async def test_audit_window_counts_events_before_requested_sleep(sleep):
     intent = Event(
-        source="volition",
+        source="action_selection",
         type="intent.rest",
         payload={
             "kind": "rest",
             "entry_id": "rest-1",
-            "origin": "nous",
+            "origin": "planning",
             "proposal_id": "audit-p1",
             "salience": 0.5,
         },
@@ -233,12 +233,12 @@ async def test_audit_window_counts_events_before_requested_sleep(sleep):
 
     # The interval is measured from boot, so move past it first.
     sleep._entity_clock.advance(1800.0)
-    await sleep._handle_rest_request({"origin": "nous", "proposal_id": "audit-p1"})
+    await sleep._handle_rest_request({"origin": "planning", "proposal_id": "audit-p1"})
     if getattr(sleep, "_sleep_task", None):
         await sleep._sleep_task
 
-    entries = await sleep._bus.read("hypnos.out", last_id="0")
-    completed = [e for _, e in entries if e.type == "hypnos.sleep.completed"]
+    entries = await sleep._bus.read("sleep.out", last_id="0")
+    completed = [e for _, e in entries if e.type == "sleep.sleep.completed"]
     assert completed
     audit = completed[0].payload["ignition_audit"]
     assert audit["realized_total"] == 1
@@ -249,11 +249,11 @@ async def test_audit_window_counts_events_before_requested_sleep(sleep):
 @pytest.mark.asyncio
 async def test_action_selection_consumer_loop_publishes_rest_request(sleep):
     intent = Event(
-        source="volition",
+        source="action_selection",
         type="intent.rest",
         payload={
             "kind": "rest",
-            "origin": "nous",
+            "origin": "planning",
             "proposal_id": "loop-p1",
             "salience": 0.5,
         },

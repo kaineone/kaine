@@ -13,7 +13,7 @@ the security boundary; an optional shared-secret token adds cheap hardening.
 Channels (path-routed on one port):
 
   * ``/ingest/video``  — client→entity binary JPEG/PNG frames. Decoded to an
-    in-memory ``PIL.Image`` and handed to ``Topos.process_frame()``.
+    in-memory ``PIL.Image`` and handed to ``Vision.process_frame()``.
     Latest-wins: frames arriving faster than ``video_max_fps`` (or while a
     frame is still being encoded) are dropped, and drops are counted.
   * ``/ingest/audio``  — client→entity binary int16 mono PCM at
@@ -23,11 +23,11 @@ Channels (path-routed on one port):
     in-memory WAV utterances for ``Audition.process_audio(...,
     source_label="remote")``. No duplicated segmentation logic.
   * ``/speech``        — entity→client binary WAV clips, tapped from the vocal module via
-    ``Vox.add_playback_tap`` (local playback unaffected).
+    ``Vocal.add_playback_tap`` (local playback unaffected).
   * ``/transcript``    — entity→client JSON: entity utterances
-    (``lingua.external``) and heard transcriptions (``audition.out``).
+    (``language.external``) and heard transcriptions (``audition.out``).
   * ``/affect``        — entity→client JSON: the entity's dimensional affect
-    (``thymos.out``: ``thymos.state`` heartbeat + ``thymos.emotion`` changes),
+    (``affect.out``: ``affect.state`` heartbeat + ``affect.emotion`` changes),
     a read-only feed clients can drive a "mood ring" from. Compact lines of
     ``{"valence", "arousal", "ts"[, "label"]}``; coalesced to <=~10/s.
 
@@ -60,15 +60,15 @@ from kaine.bus.schema import Event
 
 log = logging.getLogger(__name__)
 
-LANGUAGE_EXTERNAL_STREAM = "lingua.external"
+LANGUAGE_EXTERNAL_STREAM = "language.external"
 AUDITION_STREAM = "audition.out"
-# The affect module publishes via BaseModule.publish (source="thymos"), so both the
-# `thymos.state` heartbeat and the `thymos.emotion` change events land on the
-# single `thymos.out` stream. Both carry dimensional affect nested under the
+# The affect module publishes via BaseModule.publish (source="affect"), so both the
+# `affect.state` heartbeat and the `affect.emotion` change events land on the
+# single `affect.out` stream. Both carry dimensional affect nested under the
 # payload `"state"` key ({valence, arousal, dominance}) and a discrete label
 # under `"emotion"`. The /affect channel tails this stream read-only.
-AFFECT_STREAM = "thymos.out"
-AFFECT_AFFECT_TYPES = ("thymos.state", "thymos.emotion")
+AFFECT_STREAM = "affect.out"
+AFFECT_AFFECT_TYPES = ("affect.state", "affect.emotion")
 # Coalesce affect forwarding to at most ~10/s (keep-latest) so a chatty affect module
 # can't flood mood-ring clients. Lines arriving sooner than this are dropped.
 AFFECT_MIN_INTERVAL_S = 0.1
@@ -209,7 +209,7 @@ class NetworkAudioStream:
 class SpeechTapPlayer:
     """The vocal module `Player` that broadcasts each synthesized clip to /speech clients.
 
-    Composed via ``Vox.add_playback_tap`` — the local player still runs.
+    Composed via ``Vocal.add_playback_tap`` — the local player still runs.
     Per-client bounded queues; when a slow client falls behind, the oldest
     clip is dropped (and counted) rather than blocking synthesis.
     """
@@ -394,7 +394,7 @@ class RemoteBridge:
             self._cfg.port,
             "set" if self._cfg.token else "NOT set — tailnet ACL is the only boundary",
             list(self._cfg.allowed_origins),
-            "topos" if self._vision is not None else "absent",
+            "vision" if self._vision is not None else "absent",
             "audition" if self._audition is not None else "absent",
             self._vocal is not None,
         )
@@ -734,8 +734,8 @@ class RemoteBridge:
     async def _affect_loop(self) -> None:
         """Forward the entity's dimensional affect to /affect clients.
 
-        Tails ``thymos.out`` (both the ``thymos.state`` heartbeat and the
-        ``thymos.emotion`` change events) and fans out compact JSON to mood-ring
+        Tails ``affect.out`` (both the ``affect.state`` heartbeat and the
+        ``affect.emotion`` change events) and fans out compact JSON to mood-ring
         subscribers. Read-only: this loop never writes to the bus or disk.
         Coalesced to <=~10/s so a chatty affect module can't flood clients."""
         try:
@@ -776,7 +776,7 @@ class RemoteBridge:
         if stream != AFFECT_STREAM or event.type not in AFFECT_AFFECT_TYPES:
             return None
         payload = event.payload or {}
-        # Both thymos.state and thymos.emotion nest the dimensional values under
+        # Both affect.state and affect.emotion nest the dimensional values under
         # "state"; never invent affect — bail if it's absent or malformed.
         dims = payload.get("state")
         if not isinstance(dims, dict):
@@ -840,9 +840,9 @@ def build_remote_bridge(
         except Exception:
             return None
 
-    vision = _get("topos")
+    vision = _get("vision")
     audition = _get("audition")
-    vocal = _get("vox")
+    vocal = _get("vocal")
     if vision is None and audition is None and vocal is None:
         log.warning("remote bridge enabled but none of topos/audition/vox are — not starting")
         return None

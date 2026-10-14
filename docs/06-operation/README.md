@@ -25,7 +25,7 @@ The launch above is the operator-supervised mode, in which a person watches the 
 
 The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A frozen state is not persisted across restarts; a fresh launch clears any stale freeze and the cycle starts running.
 
-Freeze requests can come from several holders, which stack: `operator`, `spot`, `welfare`, `preserve`, `gestation` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. The supervisor and preservation release their own entries. A `welfare`, `gestation` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
+Freeze requests can come from several holders, which stack: `operator`, `supervisor`, `welfare`, `preserve`, `development` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. The supervisor and preservation release their own entries. A `welfare`, `development` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
 
 ### Normal stop
 
@@ -35,7 +35,7 @@ Do not `kill -9` the cycle process during a sleep. Sleep is non-interruptible, a
 
 ### The organ sleeps when idle
 
-The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds in container and Quadlet deployments, or after `[lingua].model_server_sleep_idle_seconds` when KAINE launches the server natively. The default is 600, and `-1` keeps the model loaded. While it sleeps the server holds neither the model nor its KV cache, so once the cycle stops the organ unloads within that timeout with no operator action. The next inference request reloads it, which takes a few seconds. On the reference host, an asleep containerized organ holds about 210 MiB of VRAM (the CUDA context only) against several GB awake; check the release with `nvidia-smi`.
+The model server unloads the organ after `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` idle seconds in container and Quadlet deployments, or after `[language].model_server_sleep_idle_seconds` when KAINE launches the server natively. The default is 600, and `-1` keeps the model loaded. While it sleeps the server holds neither the model nor its KV cache, so once the cycle stops the organ unloads within that timeout with no operator action. The next inference request reloads it, which takes a few seconds. On the reference host, an asleep containerized organ holds about 210 MiB of VRAM (the CUDA context only) against several GB awake; check the release with `nvidia-smi`.
 
 Health polling against `/health`, `/v1/models` and `/props` does not wake the organ. The dashboard health board and the pre-boot Chat LLM row therefore report it as `up` and `asleep`. The pre-boot Organ content row sends a real completion, which wakes the server. If you override `KAINE_MODEL_SERVER_CMD`, pass `--sleep-idle-seconds` yourself.
 
@@ -87,32 +87,32 @@ Module-specific prerequisites:
 
 | Module | Prerequisites |
 |---|---|
-| `nous` | `[reasoning]` extra installed (`inferactively-pymdp`, `jax[cpu]`) |
-| `mnemos` | Qdrant container up; Qdrant API key in `config/secrets.toml` |
-| `lingua` | OpenAI-compatible model server serving `model_id` on `http://127.0.0.1:11434/v1`; `enable_thinking: false` honored via `chat_template_kwargs` |
+| `planning` | `[reasoning]` extra installed (`inferactively-pymdp`, `jax[cpu]`) |
+| `episodic_memory` | Qdrant container up; Qdrant API key in `config/secrets.toml` |
+| `language` | OpenAI-compatible model server serving `model_id` on `http://127.0.0.1:11434/v1`; `enable_thinking: false` honored via `chat_template_kwargs` |
 | `audition` | `[audio]` extra installed; Speaches up on CPU with `medium.en` |
-| `vox` | Chatterbox up and listing at least one voice, or `predefined_voice_id` set to a valid filename |
-| `topos` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
-| `hypnos` | None. Fatigue-triggered sleep runs in the base-thesis form without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
-| `empatheia` | Qdrant container up |
-| `phantasia` | `[worldmodel]` extra installed for the DreamerV3 backend; the shipped defaults are `backend = "dreamerv3"`, `engine = "jax"`, `training_enabled = true`, `persist_weights = true` |
-| `praxis` | Shell whitelist is empty by default; fill it deliberately before enabling |
+| `vocal` | Chatterbox up and listing at least one voice, or `predefined_voice_id` set to a valid filename |
+| `vision` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
+| `sleep` | None. Fatigue-triggered sleep runs in the base-thesis form without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
+| `social_cognition` | Qdrant container up |
+| `world_model` | `[worldmodel]` extra installed for the DreamerV3 backend; the shipped defaults are `backend = "dreamerv3"`, `engine = "jax"`, `training_enabled = true`, `persist_weights = true` |
+| `effectors` | Shell whitelist is empty by default; fill it deliberately before enabling |
 | `perception` | No extras. It arbitrates whether the senses come from the physical or the virtual locus, never both. The shipped `[modules]` block has `perception = false`, so set it to `true` in your overlay |
-| `mundus` | The shipped `config/kaine.toml` already has `[mundus].enabled = true`. To enable the module, set `[modules].mundus = true` and export `KAINE_MUNDUS_OPERATOR_APPROVED=1`. The only shipped adapter is the transport-free `stub`; a Paracosmic virtual-world adapter is planned |
+| `embodiment` | The shipped `config/kaine.toml` already has `[embodiment].enabled = true`. To enable the module, set `[modules].embodiment = true` and export `KAINE_MUNDUS_OPERATOR_APPROVED=1`. The only shipped adapter is the transport-free `stub`; a Paracosmic virtual-world adapter is planned |
 
 ## Monitoring
 
 ### Fatigue and sleep
 
-The sleep module is triggered by fatigue. The interoception module keeps a fatigue accumulator fed by unexpected substrate prediction error, the part of the error beyond a learned band, and the accumulator decays slowly (`[soma].fatigue_decay_per_s`, 0.01). The band follows the expected error over `expected_error_tau_s` (600 entity seconds) and admits `expected_error_band` (2.0) spreads above it. The interoception module still reports its raw `prediction_error`, and `soma.report` also carries `unexpected_error`. When the accumulator crosses `[soma].fatigue_maintenance_threshold` (100.0), a `soma.fatigue` event triggers the sleep module.
+The sleep module is triggered by fatigue. The interoception module keeps a fatigue accumulator fed by unexpected substrate prediction error, the part of the error beyond a learned band, and the accumulator decays slowly (`[interoception].fatigue_decay_per_s`, 0.01). The band follows the expected error over `expected_error_tau_s` (600 entity seconds) and admits `expected_error_band` (2.0) spreads above it. The interoception module still reports its raw `prediction_error`, and `interoception.report` also carries `unexpected_error`. When the accumulator crosses `[interoception].fatigue_maintenance_threshold` (100.0), a `interoception.fatigue` event triggers the sleep module.
 
 Watch the fatigue chart on the diagnostics page. If fatigue grows continuously and no sleep follows, check that:
 
 - The sleep module is enabled and initialized.
-- `[hypnos.consolidation].fatigue_triggered = true`.
-- The interoception module is publishing `soma.fatigue` events (visible in the health board).
+- `[sleep.consolidation].fatigue_triggered = true`.
+- The interoception module is publishing `interoception.fatigue` events (visible in the health board).
 
-`[hypnos].interval_seconds` (3600 by default) is a maximum interval: the sleep module also sleeps that often when fatigue never crosses the threshold.
+`[sleep].interval_seconds` (3600 by default) is a maximum interval: the sleep module also sleeps that often when fatigue never crosses the threshold.
 
 ### Oscillatory coherence
 
@@ -127,7 +127,7 @@ The A/B divergence observer pairs each external utterance of the language module
 A divergence near zero means the workspace is not conditioning the organ. If it drops unexpectedly:
 
 - Check that the cycle is ticking and modules are broadcasting workspace events.
-- Check that the language module's `ContextAssembler` is receiving the coalition from the workspace (look for `lingua.external` events on the diagnostics stream);
+- Check that the language module's `ContextAssembler` is receiving the coalition from the workspace (look for `language.external` events on the diagnostics stream);
 - Check the evaluation sidecar is running (`[evaluation].enabled = true`).
 
 ### Forks, merges and the sleep cycle

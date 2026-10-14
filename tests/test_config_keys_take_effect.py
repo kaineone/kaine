@@ -73,7 +73,7 @@ def test_resolve_job_queue_trainer_reads_language_api_key_from_config(
     cfg = _voice_cfg(tmp_path)
     trainer = _resolve_job_queue_trainer(
         cfg,
-        {"lingua": {"api_key": "cfg-key", "chat_url": "http://organ:8080/v1"}},
+        {"language": {"api_key": "cfg-key", "chat_url": "http://organ:8080/v1"}},
     )
     assert trainer._organ_api_key == "cfg-key"
 
@@ -85,7 +85,7 @@ def test_resolve_job_queue_trainer_falls_back_to_env_when_config_empty(
     cfg = _voice_cfg(tmp_path, organ_url="")
     trainer = _resolve_job_queue_trainer(
         cfg,
-        {"lingua": {"api_key": "", "chat_url": ""}},
+        {"language": {"api_key": "", "chat_url": ""}},
     )
     assert trainer._organ_api_key == "env-key"
 
@@ -107,7 +107,7 @@ def test_make_vision_rejects_non_pinned_encoder_revision(bus: AsyncBus) -> None:
 
 def test_make_vision_accepts_pinned_encoder_revision(bus: AsyncBus) -> None:
     vision = make_vision(bus, {"encoder_revision": PINNED_REVISION})
-    assert vision.name == "topos"
+    assert vision.name == "vision"
 
 
 def test_apply_log_level_sets_root_logger() -> None:

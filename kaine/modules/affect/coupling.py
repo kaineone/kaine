@@ -85,7 +85,7 @@ def compute_coupling(
 
 @dataclass(frozen=True)
 class CouplingConfig:
-    """All `[thymos.coupling]` knobs in one immutable bag.
+    """All `[affect.coupling]` knobs in one immutable bag.
 
     The knobs are appraisal-influence weights, not direct state-nudge rates:
 

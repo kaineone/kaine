@@ -39,9 +39,9 @@ async def test_ready_local_stimulus_source_live_when_probe_passes():
         ]
 
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
-        "perception_feed": {"mode": "womb"},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
+        "perception_feed": {"mode": "stimulus_source"},
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert result == StimulusSourceLiveness(True, "local", "")
@@ -56,9 +56,9 @@ async def test_ready_local_stimulus_source_not_live_when_audio_fails():
         ]
 
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
-        "perception_feed": {"mode": "womb"},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
+        "perception_feed": {"mode": "stimulus_source"},
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert not result.live
@@ -72,9 +72,9 @@ async def test_ready_local_stimulus_source_not_live_when_probe_raises():
         raise RuntimeError("synthesis failed")
 
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
-        "perception_feed": {"mode": "womb"},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
+        "perception_feed": {"mode": "stimulus_source"},
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert not result.live
@@ -87,8 +87,8 @@ async def test_ready_local_stimulus_source_not_live_when_audition_disabled():
         return [CheckResult("perception", "video probe", "PASS", "")]
 
     config = {
-        "modules": {"topos": True, "audition": False},
-        "perception_feed": {"mode": "womb"},
+        "modules": {"vision": True, "audition": False},
+        "perception_feed": {"mode": "stimulus_source"},
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert not result.live
@@ -101,9 +101,9 @@ async def test_ready_local_stimulus_source_not_live_when_probe_returns_no_rows()
         return []
 
     config = {
-        "modules": {"topos": True, "audition": True, "soma": True},
-        "soma": {"self_rhythm_enabled": True},
-        "perception_feed": {"mode": "womb"},
+        "modules": {"vision": True, "audition": True, "interoception": True},
+        "interoception": {"self_rhythm_enabled": True},
+        "perception_feed": {"mode": "stimulus_source"},
     }
     result = await check_stimulus_source_ready(config, None, perception_check=fake_check)
     assert not result.live
@@ -233,7 +233,7 @@ async def test_ready_external_live_despite_later_readiness_event(bus):
         Event(
             timestamp=datetime.now(timezone.utc),
             source=STIMULUS_SOURCE_SOURCE,
-            type="gestation.readiness",
+            type="development.readiness",
             payload={"ready": True},
             salience=0.1,
         )
@@ -296,7 +296,7 @@ async def test_live_local_live_with_two_advancing_events(bus):
     await bus.publish(_presence_event(1, provider="local"))
     await bus.publish(_presence_event(2, provider="local"))
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, bus
+        {"perception_feed": {"mode": "stimulus_source"}}, bus
     )
     assert result == StimulusSourceLiveness(True, "local", "")
 
@@ -305,7 +305,7 @@ async def test_live_local_live_with_two_advancing_events(bus):
 async def test_live_local_not_live_with_one_event(bus):
     await bus.publish(_presence_event(1, provider="local"))
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, bus
+        {"perception_feed": {"mode": "stimulus_source"}}, bus
     )
     assert not result.live
     assert "only one presence event" in result.reason
@@ -316,7 +316,7 @@ async def test_live_local_not_live_with_two_same_frame_events(bus):
     await bus.publish(_presence_event(7, provider="local"))
     await bus.publish(_presence_event(7, provider="local"))
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, bus
+        {"perception_feed": {"mode": "stimulus_source"}}, bus
     )
     assert not result.live
     assert "frame_index did not advance" in result.reason
@@ -327,7 +327,7 @@ async def test_live_local_not_live_with_wrong_provider(bus):
     await bus.publish(_presence_event(1, provider="external"))
     await bus.publish(_presence_event(2, provider="external"))
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, bus
+        {"perception_feed": {"mode": "stimulus_source"}}, bus
     )
     assert not result.live
     assert f"no {STIMULUS_SOURCE_PRESENCE_TYPE} presence event" in result.reason
@@ -357,7 +357,7 @@ async def test_live_external_not_live_with_wrong_provider(bus):
 @pytest.mark.asyncio
 async def test_live_local_not_live_without_bus():
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, None
+        {"perception_feed": {"mode": "stimulus_source"}}, None
     )
     assert not result.live
     assert "no bus" in result.reason
@@ -373,7 +373,7 @@ async def test_live_local_not_live_when_server_time_raises():
             return []
 
     result = await check_stimulus_source_live(
-        {"perception_feed": {"mode": "womb"}}, BadBus()
+        {"perception_feed": {"mode": "stimulus_source"}}, BadBus()
     )
     assert not result.live
     assert "RuntimeError: redis down" in result.reason
@@ -384,7 +384,7 @@ async def test_live_local_not_live_when_server_time_raises():
 async def test_check_stimulus_source_live_rejects_bad_window(window_s):
     with pytest.raises(ValueError):
         await check_stimulus_source_live(
-            {"perception_feed": {"mode": "womb"}}, None, window_s=window_s
+            {"perception_feed": {"mode": "stimulus_source"}}, None, window_s=window_s
         )
 
 

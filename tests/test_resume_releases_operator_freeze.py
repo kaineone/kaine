@@ -64,8 +64,8 @@ def test_override_lifts_welfare_and_audits(tmp_path):
 
 def test_override_rejects_self_releasing_and_unknown(tmp_path):
     p = tmp_path / "control.json"
-    with pytest.raises(ValueError, match="spot"):
-        cs.override(["spot"], path=p)
+    with pytest.raises(ValueError, match="supervisor"):
+        cs.override(["supervisor"], path=p)
     with pytest.raises(ValueError, match="preserve"):
         cs.override(["preserve"], path=p)
     with pytest.raises(ValueError, match="nonsense"):
@@ -144,11 +144,11 @@ def test_override_self_releasing_source_is_refused(tmp_path):
     client = TestClient(app)
     r = client.post(
         "/diagnostics/cycle/override",
-        json={"sources": ["spot"], "confirm": "spot"},
+        json={"sources": ["supervisor"], "confirm": "supervisor"},
         headers={"Authorization": "Bearer test-token"},
     )
     assert r.status_code == 422
-    assert "spot" in r.json()["detail"]
+    assert "supervisor" in r.json()["detail"]
 
 
 def test_override_unknown_source_is_refused(tmp_path):

@@ -130,7 +130,7 @@ def _consolidation_record(tmp_path):
 
 def test_consolidation_thresholds_from_config_wiring():
     assert consolidation_thresholds_from_config(
-        {"hypnos": {"voice_alignment": {"consolidation_divergence_rate_threshold": 0.2}}}
+        {"sleep": {"voice_alignment": {"consolidation_divergence_rate_threshold": 0.2}}}
     ) == (0.2, DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD)
 
 

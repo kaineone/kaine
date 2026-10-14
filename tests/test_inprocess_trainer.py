@@ -316,7 +316,7 @@ def _load_external_script():
     from kaine.modules.sleep.subprocess_trainer import EXTERNAL_ENTRY_SCRIPT
 
     spec = importlib.util.spec_from_file_location(
-        "hypnos_external_train_script", EXTERNAL_ENTRY_SCRIPT
+        "sleep_external_train_script", EXTERNAL_ENTRY_SCRIPT
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

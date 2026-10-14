@@ -22,7 +22,7 @@ from kaine.experiment.threshold_contrast import (
     threshold_verdict,
 )
 
-REPORT_TYPES = ("topos.report", "audition.perception", "soma.report")
+REPORT_TYPES = ("vision.report", "audition.perception", "interoception.report")
 T_LEARN_S = 50.0
 THETA_BAND = 0.25
 B_BAND = 0.3
@@ -102,7 +102,7 @@ def test_excluded_reports_do_not_change_contrast():
     for k in (1, 2, 3):
         records.append(
             {
-                "event_type": "topos.report",
+                "event_type": "vision.report",
                 "awake": False,
                 "context_gain": 1e9,
                 "entity_time_s": 100 + k,
@@ -122,7 +122,7 @@ def test_excluded_reports_do_not_change_contrast():
         )
         records.append(
             {
-                "event_type": "soma.report",
+                "event_type": "interoception.report",
                 "awake": True,
                 "context_gain": float("nan"),
                 "entity_time_s": 100 + k,
@@ -217,7 +217,7 @@ def test_malformed_non_finite_score():
 def test_malformed_missing_prediction_tick():
     records = make_run(n=5)
     for record in records:
-        if record.get("event_type") == "topos.report":
+        if record.get("event_type") == "vision.report":
             del record["prediction_broadcast_tick"]
             break
     with pytest.raises(ThresholdContrastError):
@@ -307,7 +307,7 @@ def test_report_with_non_finite_time_raises(bad_time):
     records = make_run(jump=0.2)
     records.append(
         {
-            "event_type": "topos.report",
+            "event_type": "vision.report",
             "awake": True,
             "context_gain": 0.1,
             "entity_time_s": bad_time,

@@ -3,8 +3,8 @@
 
 """Content-free utterance-outcome observer for voice alignment research.
 
-Watches ``lingua.external`` (external utterances), ``audition.out`` (operator
-replies), ``empatheia.out`` (social deviation) and ``thymos.out`` (social
+Watches ``language.external`` (external utterances), ``audition.out`` (operator
+replies), ``social_cognition.out`` (social deviation) and ``affect.out`` (social
 drive). For every external utterance it writes one record containing only
 metrics, never transcript text.
 """
@@ -38,7 +38,7 @@ def _warn_outcome_reply_window(value: object) -> None:
 
 
 def reply_window_from_language(language_section: object) -> float:
-    """Return a safe reply-window from the ``lingua`` config table.
+    """Return a safe reply-window from the ``language`` config table.
 
     Falls back to :data:`DEFAULT_REPLY_WINDOW_S` and logs a single warning
     for any invalid value.  The observer is content-free and must never raise.
@@ -72,10 +72,10 @@ def reply_window_from_language(language_section: object) -> float:
 
 
 # Produced by the language module: each external_speech event opens one outcome record.
-LANGUAGE_EXTERNAL = "lingua.external"
+LANGUAGE_EXTERNAL = "language.external"
 AUDITION_OUT = module_stream("audition")
-SOCIAL_COGNITION_OUT = module_stream("empatheia")
-AFFECT_OUT = module_stream("thymos")
+SOCIAL_COGNITION_OUT = module_stream("social_cognition")
+AFFECT_OUT = module_stream("affect")
 
 STREAMS = (LANGUAGE_EXTERNAL, AUDITION_OUT, SOCIAL_COGNITION_OUT, AFFECT_OUT)
 
@@ -233,9 +233,9 @@ class UtteranceOutcomeObserver:
                 )
         elif stream == AUDITION_OUT and event.type == "audition.transcription":
             await self._maybe_reply(event, ts)
-        elif stream == SOCIAL_COGNITION_OUT and event.type == "empatheia.social_error":
+        elif stream == SOCIAL_COGNITION_OUT and event.type == "social_cognition.social_error":
             await self._maybe_social_cognition(event, ts)
-        elif stream == AFFECT_OUT and event.type == "thymos.state":
+        elif stream == AFFECT_OUT and event.type == "affect.state":
             await self._maybe_affect(event, ts)
 
     async def _open_record_if_new(self, record_id: str, ts: float) -> None:

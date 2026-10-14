@@ -22,7 +22,7 @@ EFE must not run unbounded inside the ~300 ms cognitive-cycle budget. The engine
 wraps the infer step in a :class:`~concurrent.futures.ThreadPoolExecutor` with
 an ``efe_timeout_ms`` deadline (default 250). On overrun it returns the **last
 computed posterior** and signals a timeout (via ``last_result.timed_out`` plus a
-``nous.timeout`` diagnostic published by the module) so the cycle is never
+``planning.timeout`` diagnostic published by the module) so the cycle is never
 blocked.
 """
 from __future__ import annotations
@@ -80,7 +80,7 @@ class EngineResult:
 
     def dominant_factor(self) -> tuple[int, int, float]:
         """Return (factor_idx, state_idx, expectation) of the most-confident
-        non-trivial perceptual factor — used to fill ``nous.belief``.
+        non-trivial perceptual factor — used to fill ``planning.belief``.
 
         "Most confident" = lowest normalised entropy among the perceptual
         factors (every factor except the action latent). Ties break toward the

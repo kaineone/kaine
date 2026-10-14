@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Host benchmark for attention-driven foveation (topos-foveation, task 1.7).
+"""Host benchmark for attention-driven foveation (vision-foveation, task 1.7).
 
 Foveation replaces one uniform whole-frame encode with a small amount of spatial
 bookkeeping plus TWO encodes (a downsampled peripheral gist + a native foveal
@@ -115,7 +115,7 @@ async def _run(cfg: dict[str, Any], iters: int, use_screen: bool) -> dict[str, A
         select_fovea,
     )
 
-    vision_cfg = cfg.get("topos") or {}
+    vision_cfg = cfg.get("vision") or {}
     knobs = _fovea_knobs(vision_cfg)
     out: dict[str, Any] = {"knobs": knobs, "grab": {}, "iters": iters}
 
@@ -257,7 +257,7 @@ async def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = _load_config(args.config)
-    vision_cfg = cfg.get("topos") or {}
+    vision_cfg = cfg.get("vision") or {}
     vision_hz = float(vision_cfg.get("vision_sample_hz", 10.0))
     budget_ms = 1000.0 / vision_hz if vision_hz > 0 else float("inf")
 

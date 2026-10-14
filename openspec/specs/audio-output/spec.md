@@ -48,47 +48,47 @@ larger `cfg_weight` (more committed delivery).
 - **THEN** the second result's `cfg_weight` is strictly greater than
   the first's
 
-### Requirement: Vocal subscribes to lingua.external
-The vocal module SHALL subscribe to the `lingua.external` stream and, for each
-`lingua.external` event observed while not in a muted or dormant state,
+### Requirement: Vocal subscribes to language.external
+The vocal module SHALL subscribe to the `language.external` stream and, for each
+`language.external` event observed while not in a muted or dormant state,
 SHALL invoke the TTS client to synthesize audio for the event's `text`
 field. The synthesis SHALL use parameters derived from the most-recent
-`thymos.state` observed on the `thymos.out` stream (or configured
-baseline if none seen yet). When `[vox.mirroring].enabled` is true,
+`affect.state` observed on the `affect.out` stream (or configured
+baseline if none seen yet). When `[vocal.mirroring].enabled` is true,
 The vocal module SHALL also subscribe to `audition.out` and use `audition.prosody`
 events for prosodic mirroring.
 
-#### Scenario: lingua.external event triggers one synthesis
-- **WHEN** the language module publishes one event on `lingua.external` while
+#### Scenario: language.external event triggers one synthesis
+- **WHEN** the language module publishes one event on `language.external` while
   the vocal module is running
 - **THEN** the TTS client receives exactly one `synthesize` call
   whose request `text` equals the event's `text`
 
-#### Scenario: Most-recent thymos.state used for parameters
-- **WHEN** two `thymos.state` events with different arousals are
-  observed (latest arousal=0.8) and then a `lingua.external` event
+#### Scenario: Most-recent affect.state used for parameters
+- **WHEN** two `affect.state` events with different arousals are
+  observed (latest arousal=0.8) and then a `language.external` event
   arrives
 - **THEN** the TTS request's `exaggeration` is the value
   `affect_to_chatterbox` produces for arousal=0.8
 
 #### Scenario: A dormant Vocal stays silent
 - **WHEN** the vocal module is dormant (the entity is in the stimulus source)
-- **AND** a `lingua.external` event arrives
+- **AND** a `language.external` event arrives
 - **THEN** no TTS request is made
-- **AND** no `vox.synthesized` event is published
+- **AND** no `vocal.synthesized` event is published
 
 #### Scenario: A muted Vocal reports that it cannot speak
 - **WHEN** the vocal module is muted because its text-to-speech backend is unavailable
-- **AND** `lingua.external` events arrive
+- **AND** `language.external` events arrive
 - **THEN** no TTS request is made
-- **AND** at most one `vox.synthesized` event per 60 seconds is published, with `success` false and an `error` naming the unavailable backend
+- **AND** at most one `vocal.synthesized` event per 60 seconds is published, with `success` false and an `error` naming the unavailable backend
 
 #### Scenario: Prosody mirroring is off by default
-- **WHEN** `[vox.mirroring].enabled` is false (shipped default)
+- **WHEN** `[vocal.mirroring].enabled` is false (shipped default)
 - **THEN** the vocal module does not subscribe to `audition.out` for prosody
 
 ### Requirement: Audio bytes never appear on the bus
-The published `vox.synthesized` event payload SHALL contain
+The published `vocal.synthesized` event payload SHALL contain
 `text_length`, `bytes_produced`, `output_format`, `voice`,
 `exaggeration`, `cfg_weight`, `temperature`, `latency_ms`,
 `speed_factor`, `success`, `backend`, `prosody_applied`, and may include
@@ -100,7 +100,7 @@ enabled. The audio is never placed on the bus.
 
 #### Scenario: Bus event excludes audio bytes
 - **WHEN** any synthesis succeeds
-- **THEN** the published `vox.synthesized` event has no field
+- **THEN** the published `vocal.synthesized` event has no field
   whose value is a `bytes` object
 
 #### Scenario: Audio is written to the sink only when the sink is enabled
@@ -115,22 +115,22 @@ enabled. The audio is never placed on the bus.
 - **THEN** no audio file is written to the sink directory
 
 ### Requirement: Default Vocal config and disabled-by-default
-The repository SHALL ship a `[vox]` block in
+The repository SHALL ship a `[vocal]` block in
 `config/kaine.toml` with default values for `chatterbox_url`,
 `voice_mode`, `output_format`, `sink_path`,
 `baseline_temperature`, `baseline_exaggeration`, `baseline_cfg_weight`,
-`request_timeout_s`, `baseline_salience`, `alert_salience`, `lingua_external_stream`,
-`thymos_state_stream`, `backend`, and `sherpa_*`. `predefined_voice_id`
+`request_timeout_s`, `baseline_salience`, `alert_salience`, `language_external_stream`,
+`affect_state_stream`, `backend`, and `sherpa_*`. `predefined_voice_id`
 is accepted at runtime but is not present in the shipped file.
-`[modules].vox = false` SHALL keep first boot from auto-registering
+`[modules].vocal = false` SHALL keep first boot from auto-registering
 The vocal module also accepts `playback_enabled` (default true),
 `sink_enabled` (default false), `retain_count` (default 0), and
 `suppress_self_hearing` (default true).
 
 #### Scenario: kaine.toml carries defaults
 - **WHEN** an operator inspects `config/kaine.toml`
-- **THEN** they find a `[vox]` section with the documented
-  keys and `[modules].vox == false`
+- **THEN** they find a `[vocal]` section with the documented
+  keys and `[modules].vocal == false`
 
 ### Requirement: Synthesized speech is played through an output device
 
@@ -142,20 +142,20 @@ SHALL run off the event loop without blocking the cognitive cycle.
 
 If no output device is available or the audio playback extra is not
 installed, the vocal module SHALL log a single warning and continue: synthesis and
-the `vox.synthesized` event SHALL still occur. Absence of playback
+the `vocal.synthesized` event SHALL still occur. Absence of playback
 SHALL NOT raise or stop the module.
 
 #### Scenario: A produced utterance is played
 
-- **WHEN** `lingua.external` emits text and the vocal module synthesizes it
+- **WHEN** `language.external` emits text and the vocal module synthesizes it
 - **THEN** the synthesized clip is played through the output device
-- **AND** the `vox.synthesized` event is still published
+- **AND** the `vocal.synthesized` event is still published
 
 #### Scenario: No device degrades gracefully
 
 - **WHEN** no output device / playback extra is available
 - **THEN** the vocal module logs one warning and continues
-- **AND** synthesis and the `vox.synthesized` event still happen
+- **AND** synthesis and the `vocal.synthesized` event still happen
 - **AND** no exception propagates
 
 ### Requirement: Rendered audio is not persisted without bound

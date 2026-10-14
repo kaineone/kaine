@@ -131,20 +131,20 @@ def test_mint_run_context_and_manifest_round_trip(tmp_path):
         seed=42,
         started_at="2026-06-14T00:00:00+00:00",
         config={"a": 1, "b": {"c": 2}},
-        model_ids={"lingua": "model:x"},
+        model_ids={"language": "model:x"},
         version="26.06.0a1",
     )
     assert isinstance(ctx, RunContext)
     assert ctx.seed == 42
     assert len(ctx.run_id) == 32  # uuid4 hex
-    assert ctx.model_ids == {"lingua": "model:x"}
+    assert ctx.model_ids == {"language": "model:x"}
 
     path = write_manifest(ctx, root=tmp_path)
     assert path == tmp_path / ctx.run_id / "manifest.json"
     loaded = json.loads(path.read_text())
     assert loaded["run_id"] == ctx.run_id
     assert loaded["seed"] == 42
-    assert loaded["model_ids"] == {"lingua": "model:x"}
+    assert loaded["model_ids"] == {"language": "model:x"}
     assert loaded["config_digest"] == ctx.config_digest
     assert loaded["kaine_version"] == "26.06.0a1"
 
@@ -154,7 +154,7 @@ def test_run_context_and_manifest_record_the_study(tmp_path):
         seed=42,
         started_at="2026-06-14T00:00:00+00:00",
         config={"a": 1, "b": {"c": 2}},
-        model_ids={"lingua": "model:x"},
+        model_ids={"language": "model:x"},
         version="26.06.0a1",
         study="workspace_mediation_matched",
     )
@@ -168,7 +168,7 @@ def test_run_context_and_manifest_record_the_study(tmp_path):
         seed=43,
         started_at="2026-06-14T00:00:00+00:00",
         config={"a": 1},
-        model_ids={"lingua": "model:x"},
+        model_ids={"language": "model:x"},
         version="26.06.0a1",
     )
     assert ctx_default.study is None
@@ -228,7 +228,7 @@ def test_seeded_perception_covariate_round_trips_to_regenerate(tmp_path):
     from kaine.modules.vision.feed import SeededProceduralSource, SeededSchedule
 
     config = {
-        "topos": {"capture_width": 48, "capture_height": 32},
+        "vision": {"capture_width": 48, "capture_height": 32},
         "audition": {"capture_sample_rate": 16000, "capture_channels": 1, "vad_frame_ms": 30},
         "perception_feed": {
             "mode": "seeded",
@@ -334,7 +334,7 @@ def test_manifest_is_content_free(tmp_path):
         seed=9,
         started_at="2026-06-14T00:00:00+00:00",
         config={"secret": "redact-me"},
-        model_ids={"lingua": "m"},
+        model_ids={"language": "m"},
         version="v",
     )
     loaded = json.loads(write_manifest(ctx, root=tmp_path).read_text())
@@ -345,6 +345,7 @@ def test_manifest_is_content_free(tmp_path):
         "git_sha",
         "model_ids",
         "config_digest",
+        "config_key_scheme",
         "kaine_version",
         # Reproducible perception-feed covariate (descriptor only — no frames,
         # no operator paths). Defaults to {"mode": "off"} when unconfigured.

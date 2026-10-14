@@ -587,7 +587,7 @@ def _is_code_reference(text: str, start: int, end: int, ctx: str | None) -> bool
                 return False
             return True
 
-    # d) dotted reference on the same line (e.g. mundus.<adapter> or mnemos.replay)
+    # d) dotted reference on the same line (e.g. embodiment.<adapter> or episodic_memory.replay)
     if end < line_end and text[end] == ".":
         if end + 1 < line_end and not text[end + 1].isspace():
             return True

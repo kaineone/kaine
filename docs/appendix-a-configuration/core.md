@@ -91,14 +91,14 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 ```toml
 [bus.per_stream_maxlen]
 "workspace.broadcast" = 100000
-"topos.out" = 12000
+"vision.out" = 12000
 "audition.out" = 12000
 ```
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
-| `"topos.out"` | integer | `12000` | About 20 minutes at ten entries per second. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
+| `"vision.out"` | integer | `12000` | About 20 minutes at ten entries per second. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
 | `"audition.out"` | integer | `12000` | About 20 minutes at ten entries per second. |
 
 The memory these caps imply must fit in Redis `maxmemory`, set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Containers](../07-deployment/containers.md)). The pre-boot `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, it multiplies the cap by a per-entry size, doubles the result for AOF-rewrite headroom, and compares it with `maxmemory`. The per-entry size is sampled from the running bus when possible, otherwise taken from the measured table in `kaine/bus/config.py`, otherwise estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
@@ -115,9 +115,9 @@ Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories, snaps
 - both `[preservation.*].out_root`
 - `[evaluation].paths`
 - `[research_event_log].log_dir` and its `raw_archive.archive_dir`
-- `[hypnos.voice_alignment].adapter_output_dir` and `trainer_workdir`
+- `[sleep.voice_alignment].adapter_output_dir` and `trainer_workdir`
 - `[ignition_log].directory`
-- `[spot.incident_log].path`
+- `[supervisor.incident_log].path`
 - the self-model directory
 - the native Redis data directory (`<state_root>/services/redis/data`, when it exists)
 
@@ -179,7 +179,7 @@ Cognitive cycle timing, read at startup. Rates and durations elsewhere in the co
 | `enabled` | bool | `true` | Adapt the access rate. `false` holds it at the resting rate. |
 | `salience_floor` | float | `0.5` | Only reports whose payload carries `alert = true` count toward the phasic input, and only by how far their intensity exceeds this floor. Graded reports without an alert never raise the rate, so with no alert it rests at about 3.3 Hz. |
 | `phasic_decay_s` | float | `1.0` | Entity seconds for an alert's effect to decay by 1/e. |
-| `baseline_arousal` | float | `[thymos].baseline_arousal` | Arousal at which the tonic drive is zero. Not in the shipped file; set it only to override the affect module's baseline. |
+| `baseline_arousal` | float | `[affect].baseline_arousal` | Arousal at which the tonic drive is zero. Not in the shipped file; set it only to override the affect module's baseline. |
 
 Each tick the controller computes `drive = max(tonic, phasic)`. `tonic` is the affect module's arousal above `baseline_arousal`, scaled to `[0, 1]`. `phasic` is the highest intensity among the tick's alert reports above `salience_floor`, scaled to `[0, 1]` and held as a peak that decays over `phasic_decay_s`. The access rate is `experiential_rate_hz + (processing_rate_hz - experiential_rate_hz) * drive`.
 
@@ -192,9 +192,9 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 | `top_k` | integer | `5` | Coalition size: on each broadcast tick the `top_k` highest-scoring candidates form the coalition. |
 | `publication_threshold` | float | `0.35` | Access threshold. A coalition member is accessed when its own score reaches it. A broadcast whose best score is below it is inhibited: it is still published, but it drives no report or action and leaves the processors' prediction context unchanged. |
 | `novelty_window` | integer | `32` | Number of recently scored candidates over which novelty discounts exact repeats (same source, type and payload). |
-| `salience_thymos_factor` | string | `"state_modulator"` | `"state_modulator"` applies the affect module's arousal as the level gain and contrast on the score. `"static"` holds the level at a constant with no contrast and logs a warning; it is a negative control. |
+| `salience_affect_factor` | string | `"state_modulator"` | `"state_modulator"` applies the affect module's arousal as the level gain and contrast on the score. `"static"` holds the level at a constant with no contrast and logs a warning; it is a negative control. |
 | `salience_goal_factor` | string | `"static"` | `"static"` holds the goal factor at one (the shipped value, logged at INFO). `"drive_relevance"` scores each candidate's relevance to the affect module's drives; it is built but off, because it changes what reaches access. |
-| `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_thymos_factor = "state_modulator"`. |
+| `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_affect_factor = "state_modulator"`. |
 | `arm` | string | `"competitive"` | Arm of the planned workspace-mediation test. `"competitive"` is selection and access as built. `"matched"` draws each broadcast's coalition of the competitive size without regard to score, seeded from the run seed, with access by the same threshold. `"pooled"` broadcasts every candidate with no scoring, selection or access gate. The two controls need `[oscillator].enabled = false`. |
 
 ### Action selection
@@ -205,7 +205,7 @@ Executive action selection (`kaine/workspace/action_selection.py`). When the sec
 |---|---|---|---|
 | `policy` | string | `""` (unset) | `"self_initiated_report"` selects `SelfInitiatedReportPolicy`: the entity speaks or thinks only when the top score of an accessed broadcast clears a report bar, and a user utterance never triggers it. Any other value, or none, uses the drive-biased or plain default policy. |
 | `drive_initiative` | boolean | `true` | Read when `policy` is not `"self_initiated_report"`. `true` turns drive threshold crossings into intents; `false` uses the plain default policy. |
-| `report_threshold` | float | `0.6` | Report bar for speech. When the top score among the broadcast's members (the entity's own speech excluded) reaches it, the action selection module forms an `intent.speak`. The code enforces `0 <= think_threshold <= report_threshold <= 1`; keeping the bars above `[syneidesis].publication_threshold` is a recommendation. |
+| `report_threshold` | float | `0.6` | Report bar for speech. When the top score among the broadcast's members (the entity's own speech excluded) reaches it, the action selection module forms an `intent.speak`. The code enforces `0 <= think_threshold <= report_threshold <= 1`; keeping the bars above `[workspace].publication_threshold` is a recommendation. |
 | `think_threshold` | float | `0.45` | Report bar for inner speech: a top score at or above it, but below `report_threshold`, forms an `intent.think`. |
 | `speak_refractory_s` | float | `8.0` | Minimum entity seconds between spoken reports under the self-initiated policy. `PlanningProposalSource` also reads it when the planning module is enabled. |
 | `think_refractory_s` | float | `3.0` | Minimum entity seconds between think intents under the self-initiated policy. `PlanningProposalSource` also reads it when the planning module is enabled. |
@@ -287,27 +287,27 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `echo` | boolean | `false` | Permanent test infrastructure. Never enable in production. |
-| `soma` | boolean | `false` | Predictive interoception. |
-| `chronos` | boolean | `false` | Temporal processor: predicts the broadcast sequence. |
-| `topos` | boolean | `false` | Vision. |
-| `nous` | boolean | `false` | Active inference engine. |
-| `mnemos` | boolean | `false` | Vector-store memory. |
-| `eidolon` | boolean | `false` | Self-model. |
-| `thymos` | boolean | `false` | Affect, drives, and affect coupling. |
-| `praxis` | boolean | `false` | Bounded effectors. |
-| `lingua` | boolean | `false` | Language organ. |
-| `vox` | boolean | `false` | Voice synthesis. |
+| `recorder` | boolean | `false` | Permanent test infrastructure. Never enable in production. |
+| `interoception` | boolean | `false` | Predictive interoception. |
+| `sequence` | boolean | `false` | Temporal processor: predicts the broadcast sequence. |
+| `vision` | boolean | `false` | Vision. |
+| `planning` | boolean | `false` | Active inference engine. |
+| `episodic_memory` | boolean | `false` | Vector-store memory. |
+| `self_model` | boolean | `false` | Self-model. |
+| `affect` | boolean | `false` | Affect, drives, and affect coupling. |
+| `effectors` | boolean | `false` | Bounded effectors. |
+| `language` | boolean | `false` | Language organ. |
+| `vocal` | boolean | `false` | Voice synthesis. |
 | `audition` | boolean | `false` | Hearing. |
-| `hypnos` | boolean | `false` | Sleep: fatigue-triggered offline periods and consolidation. |
-| `empatheia` | boolean | `false` | Social cognition. |
-| `phantasia` | boolean | `false` | World model. |
+| `sleep` | boolean | `false` | Sleep: fatigue-triggered offline periods and consolidation. |
+| `social_cognition` | boolean | `false` | Social cognition. |
+| `world_model` | boolean | `false` | World model. |
 | `perception` | boolean | `false` | Perceptual locus arbiter (physical-XOR-virtual sense gating). |
-| `mundus` | boolean | `false` | Embodiment control plane. The continuous control surface is built but inert at runtime; nothing drives its per-tick loop yet. Also requires `KAINE_MUNDUS_OPERATOR_APPROVED=1`. |
+| `embodiment` | boolean | `false` | Embodiment control plane. The continuous control surface is built but inert at runtime; nothing drives its per-tick loop yet. Also requires `KAINE_MUNDUS_OPERATOR_APPROVED=1`. |
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
 
-With no profile selected, the loader applies the base-thesis `thesis_test` profile, which turns `soma`, `chronos`, `topos`, `audition`, `lingua`, `thymos` and `hypnos` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
+With no profile selected, the loader applies the base-thesis `thesis_test` profile, which turns `interoception`, `sequence`, `vision`, `audition`, `language`, `affect` and `sleep` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
 
 ## Plugins
 
@@ -321,7 +321,7 @@ Per-plugin settings live under `[plugins.<name>]`. Their keys are plugin-specifi
 
 ## Supervisor
 
-`[spot]` configures the module supervisor (watchdog). The supervisor runs in the cycle process, polls every module for crash or hang, and on a fault freezes the cycle, snapshots last-good state, and restarts the faulted module. After `max_restart_attempts` consecutive failures it saves a final snapshot, shuts every module down, writes `state/cycle/escalation.json`, and exits non-zero. The supervisor never reboots the host.
+`[supervisor]` configures the module supervisor (watchdog). The supervisor runs in the cycle process, polls every module for crash or hang, and on a fault freezes the cycle, snapshots last-good state, and restarts the faulted module. After `max_restart_attempts` consecutive failures it saves a final snapshot, shuts every module down, writes `state/cycle/escalation.json`, and exits non-zero. The supervisor never reboots the host.
 
 It ships disabled, since first boot is operator-supervised. For remote operation guidance see [Remote operation and the supervisor](../06-operation/remote-and-supervisor.md).
 
@@ -334,20 +334,20 @@ It ships disabled, since first boot is operator-supervised. For remote operation
 | `restart_backoff_s` | float | `3.0` | Seconds between restart attempts. |
 | `selftest_timeout_s` | float | `10.0` | Bound on the supervisor's scratch freeze/restart self-test. |
 
-### `[spot.per_module_timeout_s]`
+### `[supervisor.per_module_timeout_s]`
 
 Optional per-module heartbeat timeout overrides. The key is the module name; the value overrides `heartbeat_timeout_s` for that module only.
 
 ```toml
-[spot.per_module_timeout_s]
-lingua = 120.0
+[supervisor.per_module_timeout_s]
+language = 120.0
 ```
 
-### `[spot.incident_log]`
+### `[supervisor.incident_log]`
 
 Durable, append-only record of the supervisor's fault-recovery lifecycle. The supervisor writes one encrypted JSONL line per transition under `path`, all sharing a generated `incident_id`. The log is never cleared at boot, so crash/recovery evidence accumulates across runs. It is encrypted at rest when state encryption is on, and filesystem paths are scrubbed from exception reprs before write. Retention auto-purge is unconditionally disabled.
 
-Ships `enabled = true`, but the block is dormant while `[spot].enabled = false`.
+Ships `enabled = true`, but the block is dormant while `[supervisor].enabled = false`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

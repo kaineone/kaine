@@ -3,7 +3,7 @@
 Decommission is meant to remove an entity's traffic from the event bus. It
 clears Redis keys matching `kaine:*`, but the bus streams are not prefixed:
 they are named `<module>.out`, `workspace.broadcast`, `cycle.control`,
-`lingua.external` and so on. So a decommission clears no stream, and the
+`language.external` and so on. So a decommission clears no stream, and the
 entity's recent content (utterances, percepts, workspace broadcasts) stays on
 the bus after the operator was told it was deleted.
 

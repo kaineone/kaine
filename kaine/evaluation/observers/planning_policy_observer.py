@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The planning module policy observer — logs nous.policy events to daily-rotated JSONL.
+"""The planning module policy observer — logs planning.policy events to daily-rotated JSONL.
 
-Subscribes to ``nous.out`` and records every ``nous.policy`` event:
+Subscribes to ``planning.out`` and records every ``planning.policy`` event:
 - ``expected_free_energy`` (EFE value)
 - ``horizon``              (planning horizon)
 - ``policy``               (selected action ID string)
@@ -27,7 +27,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_PLANNING_STREAM = "nous.out"
+_PLANNING_STREAM = "planning.out"
 
 
 class PlanningPolicyObserver(StreamSubscriberObserver):
@@ -41,7 +41,7 @@ class PlanningPolicyObserver(StreamSubscriberObserver):
         self._sink = sink
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        if event.type != "nous.policy":
+        if event.type != "planning.policy":
             return
         payload = event.payload or {}
         await self._sink.write(

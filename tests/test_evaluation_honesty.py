@@ -6,8 +6,8 @@
 Covers:
   H5 — embedder disclosure in A/B-divergence and memory-probe records,
        require_semantic_embedder fail-closed behaviour.
-  H4 — eidolon_accuracy no longer advertises honest/open claims.
-  M6 — curiosity is labelled a proxy in eidolon_accuracy output.
+  H4 — self_model_accuracy no longer advertises honest/open claims.
+  M6 — curiosity is labelled a proxy in self_model_accuracy output.
   L3 — the social cognition module's observer skips pairings with absent confidence.
   L5 — the planning module's health probe performs a generative-model build check.
 """
@@ -164,8 +164,8 @@ async def test_ab_divergence_record_carries_embedder_hash():
         last_user_input_provider=lambda: "hello",
     )
     bus.push(
-        "lingua.external",
-        _event("lingua", "external_speech", {"text": "real answer", "user_input": "hello"}),
+        "language.external",
+        _event("language", "external_speech", {"text": "real answer", "user_input": "hello"}),
     )
     await obs.start()
     await asyncio.sleep(0.1)
@@ -198,8 +198,8 @@ async def test_ab_divergence_record_embedder_field_uses_kind_attribute():
         last_user_input_provider=lambda: "hello",
     )
     bus.push(
-        "lingua.external",
-        _event("lingua", "external_speech", {"text": "real", "user_input": "hello"}),
+        "language.external",
+        _event("language", "external_speech", {"text": "real", "user_input": "hello"}),
     )
     await obs.start()
     await asyncio.sleep(0.1)
@@ -352,7 +352,7 @@ async def test_sidecar_resolve_embedder_fallback(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# H4 — eidolon_accuracy no longer advertises honest/open claims
+# H4 — self_model_accuracy no longer advertises honest/open claims
 # ---------------------------------------------------------------------------
 
 
@@ -448,8 +448,8 @@ async def test_social_cognition_observer_skips_missing_confidence(tmp_path):
 
     # Push a prediction.
     bus.push(
-        "empatheia.out",
-        _event("empatheia", "empatheia.agent_model", {
+        "social_cognition.out",
+        _event("social_cognition", "social_cognition.agent_model", {
             "agent_id": "agent1",
             "reliability": 0.8,
             "familiarity": 0.5,
@@ -480,8 +480,8 @@ async def test_social_cognition_observer_scores_present_confidence(tmp_path):
     obs = SocialCognitionObserver(bus, sink, poll_interval_s=0.05)
 
     bus.push(
-        "empatheia.out",
-        _event("empatheia", "empatheia.agent_model", {
+        "social_cognition.out",
+        _event("social_cognition", "social_cognition.agent_model", {
             "agent_id": "agent1",
             "reliability": 0.8,
             "familiarity": 0.5,

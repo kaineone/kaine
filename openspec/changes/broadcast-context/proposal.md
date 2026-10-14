@@ -14,7 +14,7 @@ This change lands in three pull requests.
 
 ### Modified Capabilities
 
-- `syneidesis`: broadcasts carry the access threshold; accessed members are those whose score reaches it.
+- `workspace`: broadcasts carry the access threshold; accessed members are those whose score reaches it.
 
 ## Impact
 

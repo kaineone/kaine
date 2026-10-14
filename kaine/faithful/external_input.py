@@ -14,7 +14,7 @@ from typing import Any, Iterator
 # Other-initiated workspace coalition member types.
 # These events carry heard input: every text value in their payload is speech
 # said to or near the entity.
-EXTERNAL_INPUT_TYPES = frozenset({"audition.transcription", "mundus.chat"})
+EXTERNAL_INPUT_TYPES = frozenset({"audition.transcription", "embodiment.chat"})
 
 
 def iter_text_leaves(value: Any) -> Iterator[str]:

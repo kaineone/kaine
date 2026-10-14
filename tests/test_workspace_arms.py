@@ -22,7 +22,7 @@ def _ev(
     intensity: float,
     eid: str,
     tick: int = 0,
-    source: str = "soma",
+    source: str = "interoception",
 ) -> tuple[str, Event]:
     return eid, Event(
         source=source,
@@ -264,10 +264,10 @@ def test_arm_validation():
 @pytest.mark.asyncio
 async def test_pooled_context_takes_every_member():
     events = [
-        _ev(0.1, "a", source="soma"),
-        _ev(0.2, "b", source="topos"),
-        _ev(0.5, "c", source="chronos"),
-        _ev(0.9, "d", source="thymos"),
+        _ev(0.1, "a", source="interoception"),
+        _ev(0.2, "b", source="vision"),
+        _ev(0.5, "c", source="sequence"),
+        _ev(0.9, "d", source="affect"),
     ]
     snapshot = await _syn(arm="pooled").select(events, {"tick_index": 1, "is_experiential": True})
     ctx = BroadcastContext(lambda: 10.0)

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
+from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
@@ -35,15 +36,15 @@ from kaine.workspace.action_selection import ACTION_SELECTION_STREAM, SPEAK, THI
 
 log = logging.getLogger(__name__)
 
-EXTERNAL_STREAM: str = "lingua.external"
-INTERNAL_STREAM: str = "lingua.internal"
+EXTERNAL_STREAM: str = "language.external"
+INTERNAL_STREAM: str = "language.internal"
 
 #: The bus stream + event type carrying the self-model module's snapshot. The language module
 #: consumes this over the bus to seed its persona, so the language organ can run
 #: in a separate process / on a separate trusted host from the self-model module instead of
 #: holding an in-process reference to it (``distributed-deployment``).
-SELF_MODEL_OUT_STREAM: str = "eidolon.out"
-SELF_MODEL_SELF_MODEL_TYPE: str = "eidolon.self_model"
+SELF_MODEL_OUT_STREAM: str = "self_model.out"
+SELF_MODEL_SELF_MODEL_TYPE: str = "self_model.document"
 
 
 class Language(BaseModule):
@@ -68,13 +69,13 @@ class Language(BaseModule):
     Chatterbox NEVER reads.
 
     `_produce()` writes to the mode-specific stream via the bus client,
-    then mirrors the same event to the canonical aggregate `lingua.out`
+    then mirrors the same event to the canonical aggregate `language.out`
     stream through `self.publish`. Consumers that need to distinguish
     external from internal speech subscribe to the split streams; generic
-    observers and the dashboard diagnostics tail can follow `lingua.out`.
+    observers and the dashboard diagnostics tail can follow `language.out`.
     """
 
-    name: ClassVar[str] = "lingua"
+    name: ClassVar[str] = "language"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom", "social_drive"})
 
     def holds_external_resources(self) -> bool:
@@ -137,7 +138,7 @@ class Language(BaseModule):
         # The workspace access conditions every generation. The language module caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
         # into the prompt at speak/think time - the rolling-latest pattern
-        # the vocal module uses for thymos.state. The assembler builds (system, prompt)
+        # the vocal module uses for affect.state. The assembler builds (system, prompt)
         # from the persona + that working memory + the triggering input.
         self._assembler = assembler or ContextAssembler(
             renderer,  # None → assembler builds its own renderer
@@ -151,7 +152,7 @@ class Language(BaseModule):
         self._persona_digest = hashlib.sha256(
             json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
         ).hexdigest()[:16]
-        # Latest self-model snapshot observed on eidolon.out (bus-mediated persona
+        # Latest self-model snapshot observed on self_model.out (bus-mediated persona
         # seed). Preferred over the in-process provider so the language module can run split
         # from the self-model module; None until the first snapshot arrives (fresh boot → the
         # minimal persona, exactly as an empty in-process model would give).
@@ -165,7 +166,7 @@ class Language(BaseModule):
         self._alert_salience = float(alert_salience)
         self._intent_stream = intent_stream
         self._intent_cursor = "0-0"
-        # Latest sleep index observed on hypnos.out (None until seen).
+        # Latest sleep index observed on sleep.out (None until seen).
         self._sleep_index: Optional[int] = None
         self._sleep_cursor = "0-0"
         # The single in-flight generation, held as a cancellable task so an
@@ -223,10 +224,10 @@ class Language(BaseModule):
             return self._with_own_facts({})
 
     async def _self_model_cache_loop(self) -> None:
-        """Cache the latest self-model snapshot published on eidolon.out.
+        """Cache the latest self-model snapshot published on self_model.out.
 
         This is the bus-mediated replacement for the former in-process
-        ``_wire_lingua_self_model`` accessor: The language module seeds its persona from the
+        ``_wire_language_self_model`` accessor: The language module seeds its persona from the
         self-model *snapshot* the self-model module publishes rather than reaching into the
         live self-model module object, so the two modules may run in different processes /
         on different trusted hosts sharing one authenticated bus. Only the
@@ -271,17 +272,17 @@ class Language(BaseModule):
                     pass
 
     async def _sleep_cache_loop(self) -> None:
-        """Cache the latest completed sleep index published on hypnos.out.
+        """Cache the latest completed sleep index published on sleep.out.
 
         The index is the number of sleeps the sleep module has completed since it
-        started, stamped on its hypnos.out events. The language module records the latest
+        started, stamped on its sleep.out events. The language module records the latest
         value it has seen, or None before any such event (unknown, never 0).
         """
         cursor = self._sleep_cursor
         while not self._stopped.is_set():
             try:
                 entries, last_scanned = await self._bus.read_entries(
-                    "hypnos.out", last_id=cursor, count=32, block_ms=0
+                    "sleep.out", last_id=cursor, count=32, block_ms=0
                 )
             except asyncio.CancelledError:
                 raise
@@ -368,7 +369,7 @@ class Language(BaseModule):
         # the most recent events to catch the latest sleep_index published
         # before boot. Never use "$": a non-blocking read from "$" never returns.
         try:
-            latest_sleep = await self._bus.client.xrevrange("hypnos.out", count=1)
+            latest_sleep = await self._bus.client.xrevrange("sleep.out", count=1)
         except Exception:
             latest_sleep = []
         if latest_sleep:
@@ -377,23 +378,42 @@ class Language(BaseModule):
                 entry_id = entry_id.decode()
             self._sleep_cursor = entry_id
         try:
-            recent_sleep = await self._bus.client.xrevrange("hypnos.out", count=200)
+            recent_sleep = await self._bus.client.xrevrange("sleep.out", count=200)
         except Exception as exc:
             log.debug("hypnos sleep_index backfill failed: %s", exc)
             recent_sleep = []
         # xrevrange is newest first: the first sleep_index found is the latest.
-        for _entry_id, fields in recent_sleep:
-            raw = fields.get("payload", fields.get(b"payload"))
-            if isinstance(raw, bytes):
-                raw = raw.decode("utf-8", errors="replace")
-            try:
-                sleep_payload = json.loads(raw) if raw else {}
-            except (TypeError, ValueError):
-                continue
-            idx = sleep_payload.get("sleep_index") if isinstance(sleep_payload, dict) else None
-            if isinstance(idx, int) and not isinstance(idx, bool):
-                self._sleep_index = idx
-                break
+
+        def _latest_sleep_index(entries):
+            for _entry_id, fields in entries:
+                raw = fields.get("payload", fields.get(b"payload"))
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8", errors="replace")
+                try:
+                    sleep_payload = json.loads(raw) if raw else {}
+                except (TypeError, ValueError):
+                    continue
+                idx = sleep_payload.get("sleep_index") if isinstance(sleep_payload, dict) else None
+                if isinstance(idx, int) and not isinstance(idx, bool):
+                    return idx
+            return None
+
+        self._sleep_index = _latest_sleep_index(recent_sleep)
+        if self._sleep_index is None:
+            old_sleep_stream = legacy_aliases.old_stream_name("sleep.out")
+            if old_sleep_stream:
+                try:
+                    old_recent_sleep = await self._bus.client.xrevrange(
+                        old_sleep_stream, count=200
+                    )
+                except Exception as exc:
+                    log.debug(
+                        "hypnos sleep_index backfill from old stream %s failed: %s",
+                        old_sleep_stream,
+                        exc,
+                    )
+                    old_recent_sleep = []
+                self._sleep_index = _latest_sleep_index(old_recent_sleep)
 
         await super().initialize()
         self._tasks.append(asyncio.create_task(self._intent_loop(), name=f"{self.name}-intent"))
@@ -515,7 +535,7 @@ class Language(BaseModule):
         )
 
     async def _intent_loop(self) -> None:
-        """Realize action intents off ``volition.out``.
+        """Realize action intents off ``action_selection.out``.
 
         The language module is intent-driven, NOT reflexive: it never decides on its own to
         respond to perceived input. The only trigger for external speech is a
@@ -757,7 +777,7 @@ class Language(BaseModule):
                     yield from _iter_field_values(item, fields)
 
         # Heard speech is anything that came from an external-input event in
-        # the coalition (audition.transcription, mundus.chat), plus any unmarked
+        # the coalition (audition.transcription, embodiment.chat), plus any unmarked
         # about (fail-closed: felt/event must be explicitly tagged). The
         # redaction set also holds the values of the heard-speech payload fields
         # at any depth on any coalition event.
@@ -775,7 +795,7 @@ class Language(BaseModule):
                     event.payload, HEARD_TEXT_FIELDS - {"text"}
                 ):
                     redact_texts.add(leaf)
-                    if event.source != "lingua":
+                    if event.source != "language":
                         foreign_field_texts.add(leaf)
         redact_texts |= heard_texts
 
@@ -880,7 +900,7 @@ class Language(BaseModule):
         # Publish directly to the mode-specific stream (bypassing the
         # default <module>.out routing) so subscribers can filter cleanly.
         await self._write_mode_record(stream, f"{mode}_speech", payload)
-        # Also publish to the aggregate lingua.out stream so consumers that
+        # Also publish to the aggregate language.out stream so consumers that
         # expect the canonical <module>.out routing (dashboard diagnostics, raw
         # archive, generic observers) see every utterance in one place.
         # Bypass `self.publish` to avoid driving the oscillator; The language module's

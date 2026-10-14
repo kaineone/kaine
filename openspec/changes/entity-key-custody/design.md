@@ -17,7 +17,7 @@ There are about 23 call sites. Most run inside the live cycle for its one entity
 - decommission;
 - research analysis over many study lines.
 
-Identity comes from the `entity-identity` change (Lead A), and custody consumes it. Every entity has an `entity_id` (`ent-` or `legacy-` plus 32 lowercase hex, a frozen format) and a `lineage`. Every encrypted container has a plaintext identity sidecar: `state/forks/<id>/identity.json`, the preservation and decommission `manifest.json`, and the `fork_being` job payload. Custody adds no field to `entity.json`.
+Identity comes from the `entity-identity` change (Lead A), and custody consumes it. Every entity has an `entity_id` (`ent-` or `legacy-` plus 32 lowercase hex, a frozen format) and a `lineage`. Every encrypted container has a plaintext identity sidecar: `state/forks/<id>/identity.json`, the preservation and decommission `manifest.json`, and the `fork_entity` job payload. Custody adds no field to `entity.json`.
 
 ## Goals and honest limits
 Custody protects an entity's persisted mind against:
@@ -38,7 +38,7 @@ TPM storage primary (owner hierarchy, created on demand, never persisted outside
 - **DEK.** One data key per entity, from `secrets.token_bytes(32)` at spawn and at every fork. A fork's DEK is fresh and independent of its parent's. CAL §4.6: a fork that individuates is a separate entity with its own mental privacy, which cannot be separated after the fact.
 - **Envelope v2.** `KAINEgcm2:` ‖ salt(16) ‖ nonce(12) ‖ ciphertext+tag.
   - The subkey for each envelope is HKDF-SHA256 over the DEK, with the envelope's random salt and `info = AAD`.
-  - The AAD is `b"kaine/v2|" + entity_id + b"|" + kind`, where `kind` names the container class (`snapshot`, `sidecar-jsonl`, `bundle`, `phantasia`, `eidolon`, `individuation`, `backup`, `research`).
+  - The AAD is `b"kaine/v2|" + entity_id + b"|" + kind`, where `kind` names the container class (`snapshot`, `sidecar-jsonl`, `bundle`, `world_model`, `self_model`, `individuation`, `backup`, `research`).
   - **Why per-envelope subkeys.** JSONL sinks encrypt every line, and a long-lived entity could approach the random-nonce limit of AES-GCM under one key (about 2^32 messages). A fresh subkey per envelope removes that limit.
   - **Why `entity_id` in the AAD.** A swapped sidecar, or a file copied between entities, fails authentication instead of decrypting under the wrong identity.
   - **Why `kind`.** A ciphertext cannot be replayed as a different kind of file within the same entity.

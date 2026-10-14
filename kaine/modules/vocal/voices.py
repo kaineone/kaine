@@ -4,8 +4,8 @@
 """Pure rules for picking a voice the speech engine ships when none is configured.
 
 This is the implementation of openspec vox-default-voice: an explicit
-``[vox].default_voice`` wins first, otherwise the first voice in sorted order is
-chosen, filtered by ``[vox].voice_gender`` only where the engine makes gender
+``[vocal].default_voice`` wins first, otherwise the first voice in sorted order is
+chosen, filtered by ``[vocal].voice_gender`` only where the engine makes gender
 knowable. Kokoro speaker names encode gender, but the Chatterbox server reports
 none, so gender filtering is only applied for Kokoro.
 """
@@ -58,7 +58,7 @@ def normalize_gender(value: object) -> str:
         return "any"
     if not isinstance(value, str):
         raise ValueError(
-            f"[vox].voice_gender must be one of 'any', 'female' or 'male'; got {value!r}"
+            f"[vocal].voice_gender must be one of 'any', 'female' or 'male'; got {value!r}"
         )
     cleaned = value.strip().casefold()
     if cleaned == "":
@@ -66,7 +66,7 @@ def normalize_gender(value: object) -> str:
     if cleaned in VOICE_GENDERS:
         return cleaned
     raise ValueError(
-        f"[vox].voice_gender must be one of 'any', 'female' or 'male'; got {value!r}"
+        f"[vocal].voice_gender must be one of 'any', 'female' or 'male'; got {value!r}"
     )
 
 
@@ -140,7 +140,7 @@ def select_chatterbox_voice(
     if len(voices) == 0:
         raise VoiceSelectionError(
             f"{server} lists no predefined voices; add one to its voices directory, "
-            "or set [vox].predefined_voice_id or [vox].default_voice"
+            "or set [vocal].predefined_voice_id or [vocal].default_voice"
         )
 
     dv = default_voice.strip() if isinstance(default_voice, str) else ""
@@ -152,7 +152,7 @@ def select_chatterbox_voice(
                     speaker_id=None,
                     source="default_voice",
                     gender_applied=False,
-                    note="named in [vox].default_voice",
+                    note="named in [vocal].default_voice",
                 )
 
         dv_folded = dv.casefold()
@@ -170,11 +170,11 @@ def select_chatterbox_voice(
                 speaker_id=None,
                 source="default_voice",
                 gender_applied=False,
-                note="named in [vox].default_voice",
+                note="named in [vocal].default_voice",
             )
 
         raise VoiceSelectionError(
-            f"[vox].default_voice {dv!r} is not among the {len(voices)} voices {server} ships"
+            f"[vocal].default_voice {dv!r} is not among the {len(voices)} voices {server} ships"
         )
 
     g = normalize_gender(gender)
@@ -184,7 +184,7 @@ def select_chatterbox_voice(
         note = f"first of {n} shipped voices in sorted order"
     else:
         note = (
-            f"first of {n} shipped voices in sorted order; [vox].voice_gender = {g!r} "
+            f"first of {n} shipped voices in sorted order; [vocal].voice_gender = {g!r} "
             "not applied because the Chatterbox server reports no gender"
         )
     return VoiceChoice(
@@ -208,8 +208,8 @@ def select_kokoro_speaker(
     if dv:
         if len(speakers) == 0:
             raise VoiceSelectionError(
-                f"[vox].default_voice {dv!r} cannot be checked: the speech manifest has no "
-                f"speaker table for {model_id}; set [vox].sherpa_speaker_id"
+                f"[vocal].default_voice {dv!r} cannot be checked: the speech manifest has no "
+                f"speaker table for {model_id}; set [vocal].sherpa_speaker_id"
             )
         for i, name in enumerate(speakers):
             if name.casefold() == dv.casefold():
@@ -218,10 +218,10 @@ def select_kokoro_speaker(
                     speaker_id=i,
                     source="default_voice",
                     gender_applied=False,
-                    note="named in [vox].default_voice",
+                    note="named in [vocal].default_voice",
                 )
         raise VoiceSelectionError(
-            f"[vox].default_voice {dv!r} is not a speaker of {model_id} "
+            f"[vocal].default_voice {dv!r} is not a speaker of {model_id} "
             f"(speakers: {', '.join(speakers)})"
         )
 
@@ -237,8 +237,8 @@ def select_kokoro_speaker(
                 note=f"{model_id} has no speaker table; using speaker 0",
             )
         raise VoiceSelectionError(
-            f"[vox].voice_gender = {g!r} cannot be applied: the speech manifest has no "
-            f"speaker table for {model_id}; set [vox].sherpa_speaker_id"
+            f"[vocal].voice_gender = {g!r} cannot be applied: the speech manifest has no "
+            f"speaker table for {model_id}; set [vocal].sherpa_speaker_id"
         )
 
     candidates = [
@@ -248,7 +248,7 @@ def select_kokoro_speaker(
     ]
     if not candidates:
         raise VoiceSelectionError(
-            f"no speaker of {model_id} matches [vox].voice_gender = {g!r}"
+            f"no speaker of {model_id} matches [vocal].voice_gender = {g!r}"
         )
 
     i, name = min(candidates, key=lambda c: (c[1].casefold(), c[1], c[0]))

@@ -55,15 +55,15 @@ class _Bus:
 
 
 def _feed(**extra) -> dict:
-    feed = {"mode": "womb", "seed": 1, "_shared_womb_clock": StimulusSourceClock(lived_offset_seconds=0.0)}
-    feed["_womb_lived_seconds"] = lambda: 0.0
+    feed = {"mode": "stimulus_source", "seed": 1, "_shared_stimulus_source_clock": StimulusSourceClock(lived_offset_seconds=0.0)}
+    feed["_stimulus_source_lived_seconds"] = lambda: 0.0
     feed.update(extra)
     return feed
 
 
 @pytest.mark.asyncio
 async def test_not_started_outside_stimulus_source_mode() -> None:
-    reg = _Registry({"soma": _Interoception()}, now=lambda: 0.0)
+    reg = _Registry({"interoception": _Interoception()}, now=lambda: 0.0)
     task = _start_development_owner(
         {"perception_feed": {"mode": "seeded"}}, _Bus(), reg, asyncio.Event(),
         is_paused=lambda: False,
@@ -87,10 +87,10 @@ async def test_not_started_without_a_self_rhythm_and_says_why(caplog) -> None:
 async def test_started_and_publishes_a_readiness_readout(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)  # the owner's default state path is relative
     clock = {"t": 0.0}
-    reg = _Registry({"soma": _Interoception()}, now=lambda: clock["t"])
+    reg = _Registry({"interoception": _Interoception()}, now=lambda: clock["t"])
     bus = _Bus()
     stop = asyncio.Event()
-    feed = _feed(**{"womb": {"readout": {"readout_period_seconds": 0.05, "sample_hz": 100.0}}})
+    feed = _feed(**{"stimulus_source": {"readout": {"readout_period_seconds": 0.05, "sample_hz": 100.0}}})
     task = _start_development_owner(
         {"perception_feed": feed}, bus, reg, stop, is_paused=lambda: False
     )
@@ -100,4 +100,4 @@ async def test_started_and_publishes_a_readiness_readout(tmp_path, monkeypatch) 
         await asyncio.sleep(0.01)
     stop.set()
     await asyncio.wait_for(task, timeout=2.0)
-    assert any(e.type == "gestation.readiness" and e.source == DEVELOPMENT_SOURCE for e in bus.events)
+    assert any(e.type == "development.readiness" and e.source == DEVELOPMENT_SOURCE for e in bus.events)

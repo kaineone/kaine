@@ -176,9 +176,9 @@ def test_boot_wires_same_shared_embedder_for_modules_and_supervisor_rebuild():
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
     config = {
-        "modules": {"mnemos": True, "empatheia": True},
-        "mnemos": {"backend": "inmemory"},
-        "empatheia": {"backend": "inmemory"},
+        "modules": {"episodic_memory": True, "social_cognition": True},
+        "episodic_memory": {"backend": "inmemory"},
+        "social_cognition": {"backend": "inmemory"},
     }
 
     registry = build_registry(bus, config)
@@ -186,11 +186,11 @@ def test_boot_wires_same_shared_embedder_for_modules_and_supervisor_rebuild():
     shared = registry.shared_embedder
     assert isinstance(shared, SharedEmbedder)
 
-    episodic_memory = registry.get("mnemos")
+    episodic_memory = registry.get("episodic_memory")
     assert episodic_memory._core._embedder is shared
 
     # The supervisor rebuild of the same module must receive the existing instance.
-    episodic_memory2 = construct_module("mnemos", bus, config, registry=registry)
+    episodic_memory2 = construct_module("episodic_memory", bus, config, registry=registry)
     assert episodic_memory2._core._embedder is shared
 
 

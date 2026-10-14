@@ -48,5 +48,5 @@ Every record is therefore incomplete today, and the boot check refuses live runs
 ## Impact
 
 - New: `kaine/experiment/{calibration_rules,principal_component,planned_test_settings,calibrate}.py`, five study files, tests.
-- Changed: `kaine/modules/positive_control.py`, `kaine/modules/{topos,audition,soma}/module.py`, `kaine/experiment/{positive_control,run_records,log_schema}.py`, `kaine/workspace/core.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/config.py`, `kaine/cycle/__main__.py`, `config/kaine.toml`, the three arm studies, docs.
+- Changed: `kaine/modules/positive_control.py`, `kaine/modules/{vision,audition,interoception}/module.py`, `kaine/experiment/{positive_control,run_records,log_schema}.py`, `kaine/workspace/core.py`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/config.py`, `kaine/cycle/__main__.py`, `config/kaine.toml`, the three arm studies, docs.
 - Ordinary boots: reports gain two fields and broadcasts one; nothing else changes.

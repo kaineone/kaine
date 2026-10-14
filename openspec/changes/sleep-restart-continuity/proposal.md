@@ -19,9 +19,9 @@ The pre-conference audit of 2026-10-10 found four defects in how the affect and 
 
 ### Modified Capabilities
 
-- `thymos`: the sleep reset clears the progress and rate trackers; a malformed peer event does not stop the consumer.
-- `chronos`: the time since the last interaction survives a restart as lived time.
-- `chronos-predictive`: a long pause does not distort later reservoir steps.
+- `affect`: the sleep reset clears the progress and rate trackers; a malformed peer event does not stop the consumer.
+- `sequence`: the time since the last interaction survives a restart as lived time.
+- `sequence-predictive`: a long pause does not distort later reservoir steps.
 
 ## Impact
 

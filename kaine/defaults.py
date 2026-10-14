@@ -16,22 +16,22 @@ DEFAULT_QDRANT_PORT = 6533  # the KAINE-owned Qdrant container's host port (comp
 
 
 def language_chat_url(config: Mapping[str, Any] | None) -> str:
-    """[lingua].chat_url, else DEFAULT_CHAT_URL."""
-    section = (config or {}).get("lingua") or {}
+    """[language].chat_url, else DEFAULT_CHAT_URL."""
+    section = (config or {}).get("language") or {}
     return language_section_chat_url(section)
 
 
 def language_section_chat_url(section: Mapping[str, Any] | None) -> str:
-    """[lingua] section chat_url, else DEFAULT_CHAT_URL."""
+    """[language] section chat_url, else DEFAULT_CHAT_URL."""
     chat_url = (section or {}).get("chat_url")
     return str(chat_url) if chat_url else DEFAULT_CHAT_URL
 
 
 def language_section_api_key(section: Mapping[str, Any] | None) -> str | None:
-    """[lingua].api_key when set and non-empty, else the environment variable, else None."""
+    """[language].api_key when set and non-empty, else the environment variable, else None."""
     return (section or {}).get("api_key") or os.environ.get(MODEL_SERVER_API_KEY_ENV) or None
 
 
 def model_server_api_key(config: Mapping[str, Any] | None) -> str | None:
-    """[lingua].api_key when set and non-empty, else the environment variable, else None."""
-    return language_section_api_key((config or {}).get("lingua") or {})
+    """[language].api_key when set and non-empty, else the environment variable, else None."""
+    return language_section_api_key((config or {}).get("language") or {})

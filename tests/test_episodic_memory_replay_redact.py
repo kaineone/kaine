@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for mnemos.replay redact_content option.
+"""Tests for episodic_memory.replay redact_content option.
 
 Scenarios verified:
 - redact_content=True  → observer_payload contains memory IDs and metadata but

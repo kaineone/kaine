@@ -215,11 +215,11 @@ async def _check_situation_fact(bus: AsyncBus) -> None:
 
     assert await self_model.ensure_situation_fact(fact) is True
 
-    stream = getattr(self_model, "out", "eidolon.out")
+    stream = getattr(self_model, "out", "self_model.out")
     records = await bus.client.xrevrange(stream, max="+", min="-", count=1)
     assert records
     _id, fields = records[0]
-    assert fields.get("type") == "eidolon.self_model"
+    assert fields.get("type") == "self_model.document"
     payload_raw = fields.get("payload", "{}")
     payload = (
         json.loads(payload_raw)

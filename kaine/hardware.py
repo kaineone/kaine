@@ -579,7 +579,7 @@ def device_consumers(timeout_s: float = 5.0) -> list[dict[str, Any]]:
 
 
 class HostSnapshot(TypedDict):
-    """Structured snapshot for diagnostics and `soma.report` payloads.
+    """Structured snapshot for diagnostics and `interoception.report` payloads.
 
     Guaranteed keys (spec contract — never removed):
         device, cuda_available, mps_available, gpu_count, gpu_names,
@@ -826,7 +826,7 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
             "symbolic reasoning + episodic memory + perception satellite; "
             "no torch runtime"
         ),
-        "present": ["soma", "chronos", "nous", "mnemos (sqlite-vec)", "eidolon", "thymos"],
+        "present": ["interoception", "sequence", "planning", "mnemos (sqlite-vec)", "self_model", "affect"],
         "degraded": ["lingua (sub-1B GGUF, slow)"],
         "absent": ["topos vision", "speech in/out", "vocal emotion", "expressive TTS", "≥2B LLM"],
     },

@@ -26,7 +26,7 @@ The thesis predicts a higher gain under competitive selection than under both co
 
 **Decision rule.** For each control, a one-sided exact sign test on the paired run-level contrasts, offset by a minimum effect set from pilot runs, gives WIN, NEGATIVE, NULL or NOT EXERCISED. The thesis requires a WIN against both controls. The minimum effect, the excluded learning period, the threshold band, the context-age bins, the positive control's settings and the number of runs follow from rules stated in advance, applied to a preliminary run and thirty pilot runs, and are recorded in the repository before any live run.
 
-**What is built.** The context and the per-report gain are built: the vision module, audition's acoustic path and the interoception module publish `context_gain` and `context_age_s` on every report (see [The global workspace](08-cognitive-cycle/global-workspace.md#the-broadcast-as-prediction-context)). The matched and pooled arms run in the live cycle, selected by `[syneidesis].arm` (see [The arms of the planned test](08-cognitive-cycle/global-workspace.md#the-arms-of-the-planned-test)). The positive control is built as a study-mode facility, `[positive_control]`, off by default (see [Research event streams](17-research-data/event-streams.md#positive-control-records)). The calibration tool `python -m kaine.experiment.calibrate` derives the test's settings from the pilot runs into one versioned record, and the live arm studies refuse to boot without a complete record (see [Settings of the planned test](15-experiments/README.md#settings-of-the-planned-test)). Every setting can now be derived from the pilot runs: the contrast at threshold uses a clean-room implementation of the method of Calonico, Cattaneo and Titiunik (2014) in `kaine/experiment/rd_robust.py`. The tone variant of the on arm (`workspace_mediation_pilot_tone`, `workspace_mediation_tone`), the tone analysis with both of its tests, and its settings are built. Not built yet: the calibration of the intensity levels, the access threshold and the report bars, which are provisional. The offline harness in `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling. It runs the real interoception and vision modules against a pooled arm and compares their information gain; it does not test the thesis. No live experiment has been run.
+**What is built.** The context and the per-report gain are built: the vision module, audition's acoustic path and the interoception module publish `context_gain` and `context_age_s` on every report (see [The global workspace](08-cognitive-cycle/global-workspace.md#the-broadcast-as-prediction-context)). The matched and pooled arms run in the live cycle, selected by `[workspace].arm` (see [The arms of the planned test](08-cognitive-cycle/global-workspace.md#the-arms-of-the-planned-test)). The positive control is built as a study-mode facility, `[positive_control]`, off by default (see [Research event streams](17-research-data/event-streams.md#positive-control-records)). The calibration tool `python -m kaine.experiment.calibrate` derives the test's settings from the pilot runs into one versioned record, and the live arm studies refuse to boot without a complete record (see [Settings of the planned test](15-experiments/README.md#settings-of-the-planned-test)). Every setting can now be derived from the pilot runs: the contrast at threshold uses a clean-room implementation of the method of Calonico, Cattaneo and Titiunik (2014) in `kaine/experiment/rd_robust.py`. The tone variant of the on arm (`workspace_mediation_pilot_tone`, `workspace_mediation_tone`), the tone analysis with both of its tests, and its settings are built. Not built yet: the calibration of the intensity levels, the access threshold and the report bars, which are provisional. The offline harness in `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling. It runs the real interoception and vision modules against a pooled arm and compares their information gain; it does not test the thesis. No live experiment has been run.
 
 A planned affect-gain ablation will run the system with arousal live against a condition that holds arousal at baseline, asking whether the global gain changes the access rate, the share of inhibited broadcasts and the information gain.
 
@@ -34,7 +34,7 @@ A planned affect-gain ablation will run the system with arousal live against a c
 
 The module-addition study grows the architecture one module at a time. In the code and CLI it is the ignition study (`kaine/research/ignition_study/`). A developmental phase produces a seed entity, preserved just after maturation. Branch 0 and a repeat start from that seed with the base-thesis modules, branch `k` starts from the seed with the first `k` held modules added, and an accumulate line carries one entity through every step. The default order adds six modules: the episodic memory, world model, planning, self-model, social cognition and vocal modules. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed, so they would be expected nulls on the reference host; `--order` adds them once one is attached. Every viewing plays the same film program, and the report is content-free (broadcast rate, coalition size, each module's share of broadcasts, member scores, share of inhibited broadcasts). The first study has one entity per condition, so its results are descriptive.
 
-Developmental progress (awake time, consecutive passing withdrawals, pull history, the replication flag and the viability verdict) persists with the entity in `gestation_progress.json`, so a restart neither resets nor repeats it.
+Developmental progress (awake time, consecutive passing withdrawals, pull history, the replication flag and the viability verdict) persists with the entity in `development_progress.json`, so a restart neither resets nor repeats it.
 
 ```bash
 python -m kaine.research.ignition_study init --study-id <study-id> --programme-manifest <manifest-path>
@@ -91,7 +91,7 @@ Besides the six research-safety-net conditions (unattended conditions 1 to 5 and
 
 6. **supervisor armed and self-tested**: [Supervisor](06-operation/remote-and-supervisor.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
 7. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
-8. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `womb` (`off` has no input and a playlist runs out), `topos` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
+8. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `stimulus_source` (`off` has no input and a playlist runs out), `vision` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
 
 The gate is implemented in `kaine/cycle/unattended_gate.py`.
 
@@ -129,7 +129,7 @@ An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research]
 2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`.
 3. **Logging active**: `[evaluation]` or `[research_event_log]` enabled.
 4. **Dry self-check passed**: a real preflight preserve-and-revive round trip succeeds on this install. The check builds a minimal synthetic individual in a throwaway temporary directory and leaves no persistent state.
-5. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `lingua` module is enabled.
+5. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled.
 6. **Encryption satisfied**: if `[preservation].require_encryption = true`, `[security.state_encryption]` must be enabled.
 
 The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints which one and refuses. There is no override that skips the net.
@@ -142,14 +142,14 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 |---|---|
 | `1` | Config or profile error, including conflicting supervision modes |
 | `2` | Operator-present gate: none of `KAINE_CYCLE_OPERATOR_PRESENT=1`, research mode or unattended mode |
-| `3` | Evaluation A/B baseline does not match the configured `[lingua].model_id` |
+| `3` | Evaluation A/B baseline does not match the configured `[language].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
 | `5` | Research safety net not live and verified (one or more of the six conditions failed) |
 | `6` | Unattended gate: one or more of its nine conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |
 | `9` | Organ content gate: the served language organ returned no content (unless `KAINE_ALLOW_MUTE_ORGAN=1`) |
-| `10` | Individuation: `[individuation]` is misconfigured, or is enabled without the `lingua` module |
+| `10` | Individuation: `[individuation]` is misconfigured, or is enabled without the `language` module |
 | `11` | Entity identity: the identity file is unreadable, or a revive targets a state tree that already holds a different entity |
 
 A running cycle can also halt with exit code `70` when the supervisor escalates.

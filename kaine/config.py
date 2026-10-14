@@ -12,7 +12,7 @@ that this loader deep-merges over the shipped file — operator values win.
 
 The cognitive cycle entrypoint and the dashboard route through
 :func:`load_kaine_config`, so an operator override applies wherever the
-configuration is consumed. The dashboard's own ``[nexus]`` section is the exception:
+configuration is consumed. The dashboard's own ``[dashboard]`` section is the exception:
 :mod:`kaine.dashboard.config` reads it from ``config/kaine.toml``,
 ``config/kaine.operator.toml`` and ``config/secrets.toml`` directly.
 
@@ -63,8 +63,8 @@ STUDY_ENV_VAR = "KAINE_STUDY"
 # preservation, the coherence layer) stays the operator's.
 STUDY_ALLOWED_TABLES: frozenset[str] = frozenset(
     {
-        "lingua",
-        "syneidesis",
+        "language",
+        "workspace",
         "experiment",
         "individuation",
         "planned_test",
@@ -321,18 +321,18 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                     f"modules.{key} expected bool, got {type(value).__name__}"
                 )
 
-    social_cognition = config.get("empatheia")
+    social_cognition = config.get("social_cognition")
     if isinstance(social_cognition, dict):
         operator_sources = social_cognition.get("operator_sources")
         if operator_sources is not None:
             if not isinstance(operator_sources, list):
                 raise ConfigShapeError(
-                    f"empatheia.operator_sources expected list of strings, got {type(operator_sources).__name__}"
+                    f"social_cognition.operator_sources expected list of strings, got {type(operator_sources).__name__}"
                 )
             for idx, item in enumerate(operator_sources):
                 if not isinstance(item, str):
                     raise ConfigShapeError(
-                        f"empatheia.operator_sources[{idx}] expected string, got {type(item).__name__}"
+                        f"social_cognition.operator_sources[{idx}] expected string, got {type(item).__name__}"
                     )
 
     tier = config.get("tier")
@@ -519,7 +519,7 @@ def require_known_keys(
     Shared unknown-config-key guard for every ``from_section``-style loader so
     a typo'd TOML key fails loudly and consistently instead of being silently
     swallowed. ``table_name`` is the TOML table name woven into the message
-    (e.g. ``"[spot]"`` or ``"[gpu_preflight]"``); pass ``""`` for an
+    (e.g. ``"[supervisor]"`` or ``"[gpu_preflight]"``); pass ``""`` for an
     un-named section, which yields the bare ``"unknown config keys: ..."``.
     """
     extra = set(section) - allowed
@@ -686,7 +686,7 @@ def load_kaine_config(
     not set module toggles; tiers only bound backends and devices"), because a
     deployment tier must never silently change the enabled module set.
 
-    A study file may set only the ``[lingua]``, ``[syneidesis]``,
+    A study file may set only the ``[language]``, ``[workspace]``,
     ``[experiment]``, ``[individuation]``, ``[planned_test]``,
     ``[positive_control]`` and ``[audition]`` tables; any other table,
     ``[modules]`` included, raises :class:`ProfileError`. A study may also set

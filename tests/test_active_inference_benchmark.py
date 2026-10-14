@@ -290,7 +290,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
     ``__init__`` transitively imports type/protocol modules — importing
     dataclasses/protocols is not "starting a cognitive cycle". The meaningful
     offline guarantee is that *the benchmark code itself* never connects a bus,
-    constructs a ``Nous`` module, or boots/starts a cycle or entity. This asserts
+    constructs a ``Planning`` module, or boots/starts a cycle or entity. This asserts
     that on every benchmark source file.
     """
     import inspect
@@ -316,7 +316,7 @@ def test_benchmark_source_does_not_reference_live_system_apis():
         "import kaine.entity",
         "from kaine.entity",
         # constructing the live planning *module* (the engine alone is allowed)
-        "Nous(",
+        "Planning(",
         "import Nous",
     )
     for mod in (envs, rl_baseline, metrics, aif_agent, runner, cli):

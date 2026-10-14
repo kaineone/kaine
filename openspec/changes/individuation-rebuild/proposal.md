@@ -43,7 +43,7 @@ Research impact: **safety (welfare net) and instrument**.
 - `entity-decommission`: the decommission verdict uses the latched or fresh significant result with STALE, INCONCLUSIVE and capture-kind summaries; the transfer backup includes `state/individuation/`.
 - `divergence-assessment`: one decision function for both consumers, and a decrypting report reader with kind, schema, reference and staleness filters.
 - `experiment-foundation`: warm-up counters come from the runtime producer and persist; the CLI becomes a simulation and validation harness.
-- `nexus-observability`: the individuation panel reads through the shared reader, shows only scalars, and carries the inconclusive alert.
+- `dashboard-observability`: the individuation panel reads through the shared reader, shows only scalars, and carries the inconclusive alert.
 
 ## Impact
 - **Code:** new `kaine/lifecycle/individuation_stats.py` and `kaine/lifecycle/individuation_store.py`, a lived-time helper factored out of `kaine/lifecycle/gate_runner.py`, new `kaine/cycle/individuation_producer.py`; changes to `kaine/lifecycle/divergence.py`, `kaine/cycle/preservation_monitor.py`, `kaine/cycle/__main__.py`, `kaine/modules/language/client.py`, `kaine/modules/language/module.py` (and its context assembler for the disclosure), `kaine/lifecycle/preservation.py`, revive, the decommission backup and research boot gate, and `kaine/evaluation/dashboard_tab.py`. `kaine/evaluation/individuation.py` is retired or reduced to a re-export; `individuation_runner.py` becomes the `simulate` harness.

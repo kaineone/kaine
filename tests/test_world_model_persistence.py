@@ -11,7 +11,7 @@ Covers the `phantasia-weight-persistence` change:
   persist), load-on-initialize, save-after-successful-train,
   no-save-after-aborted-train, save-on-shutdown.
 * Encryption at rest via the shared StateEncryptor.
-* Decommission backup includes state/phantasia/; deletion removes it.
+* Decommission backup includes state/world_model/; deletion removes it.
 * Shipped config keeps persist_weights = false.
 * The trajectory buffer never reaches a checkpoint or serialize().
 """
@@ -67,7 +67,7 @@ def _event(source: str, type_: str, salience: float = 0.5) -> Event:
 def _snapshot(tick: int) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         tick_index=tick,
-        selected_events=[("0-0", _event("soma", "soma.report", 0.5))],
+        selected_events=[("0-0", _event("interoception", "interoception.report", 0.5))],
     )
 
 
@@ -308,7 +308,7 @@ async def test_save_after_successful_training_pass(
             await ph.on_workspace(_snapshot(i))
         assert not ckpt.exists()
         await ph._handle_peer_event(
-            "hypnos.out", _event("hypnos", "hypnos.sleep.started")
+            "sleep.out", _event("sleep", "sleep.sleep.started")
         )
         assert ckpt.is_file()
     finally:
@@ -449,7 +449,7 @@ async def test_persistence_off_means_no_writes(bus: AsyncBus, tmp_path: Path):
         for i in range(5):
             await ph.on_workspace(_snapshot(i))
         await ph._handle_peer_event(
-            "hypnos.out", _event("hypnos", "hypnos.sleep.started")
+            "sleep.out", _event("sleep", "sleep.sleep.started")
         )
     finally:
         await ph.shutdown()
@@ -465,10 +465,10 @@ async def test_persistence_off_means_no_writes(bus: AsyncBus, tmp_path: Path):
 
 def test_shipped_config_persists_and_trains_world_model():
     cfg = tomllib.loads((PROJECT_ROOT / "config" / "kaine.toml").read_text())
-    assert cfg["phantasia"]["persist_weights"] is True
-    assert cfg["phantasia"]["training_enabled"] is True
-    assert cfg["phantasia"]["checkpoint_path"] == "state/phantasia/world_model.ckpt"
-    assert cfg["modules"]["phantasia"] is False
+    assert cfg["world_model"]["persist_weights"] is True
+    assert cfg["world_model"]["training_enabled"] is True
+    assert cfg["world_model"]["checkpoint_path"] == "state/phantasia/world_model.ckpt"
+    assert cfg["modules"]["world_model"] is False
 
 
 def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, monkeypatch):
@@ -483,7 +483,7 @@ def test_decommission_backup_includes_world_model_checkpoint(tmp_path: Path, mon
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=tmp_path / "backups",
         entity_name="testkaine",
         assessment=DivergenceAssessment(diverged=False, signals={}, summary="t"),

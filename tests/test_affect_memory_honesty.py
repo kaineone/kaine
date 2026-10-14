@@ -4,11 +4,11 @@
 """Tests for affect & memory honesty fixes (audit batch affect-memory-honesty).
 
 Covers findings:
-  H2 — thymos.emotion carries norm_compatibility_available=False
+  H2 — affect.emotion carries norm_compatibility_available=False
   H3 — audition.emotion carries degraded=True when model absent
   L2 — the social cognition module skips fold on degraded emotion events
   M3 — the affect module PassiveDecay no-op is visible (first-use debug log)
-  M4 — thymos.emotion carries goal_significance_method; no-goals guard
+  M4 — affect.emotion carries goal_significance_method; no-goals guard
   M7 — the episodic memory module recall surfaces StorageError instead of fake empty result
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     )
 
 
-def _ev(source="soma", type_="t", salience=0.5, eid="e0", **payload):
+def _ev(source="interoception", type_="t", salience=0.5, eid="e0", **payload):
     return eid, Event(
         source=source,
         type=type_,
@@ -76,13 +76,13 @@ def _ev(source="soma", type_="t", salience=0.5, eid="e0", **payload):
 
 
 # ---------------------------------------------------------------------------
-# H2 — thymos.emotion event carries norm_compatibility_available=False
+# H2 — affect.emotion event carries norm_compatibility_available=False
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
-    """thymos.emotion event must signal that norm_compatibility is not a real reading."""
+    """affect.emotion event must signal that norm_compatibility is not a real reading."""
     fake_now = [0.0]
     affect = Affect(
         bus,
@@ -101,10 +101,10 @@ async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
         ):
             fake_now[0] = idx * 0.1
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -117,12 +117,12 @@ async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
         await affect.on_workspace(
             _snapshot([_ev(salience=0.9, type_="explore_event", normalised_error=3.0)])
         )
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
-        assert emotion_events, "expected at least one thymos.emotion event"
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        emotion_events = [e for _, e in entries if e.type == "affect.emotion"]
+        assert emotion_events, "expected at least one affect.emotion event"
         ev = emotion_events[0]
         assert ev.payload.get("norm_compatibility_available") is False, (
-            "thymos.emotion must carry norm_compatibility_available=False "
+            "affect.emotion must carry norm_compatibility_available=False "
             "until Eidolon norm signals are wired"
         )
     finally:
@@ -130,13 +130,13 @@ async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# M4 — thymos.emotion event carries goal_significance_method tag
+# M4 — affect.emotion event carries goal_significance_method tag
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_affect_emotion_carries_goal_significance_method(bus: AsyncBus):
-    """thymos.emotion must carry goal_significance_method to disclose proxy."""
+    """affect.emotion must carry goal_significance_method to disclose proxy."""
     fake_now = [0.0]
     affect = Affect(
         bus,
@@ -154,10 +154,10 @@ async def test_affect_emotion_carries_goal_significance_method(bus: AsyncBus):
         ):
             fake_now[0] = idx * 0.1
             await affect._handle_peer_event(
-                "topos.out",
+                "vision.out",
                 Event(
-                    source="topos",
-                    type="topos.report",
+                    source="vision",
+                    type="vision.report",
                     payload={"prediction_error": r},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -170,12 +170,12 @@ async def test_affect_emotion_carries_goal_significance_method(bus: AsyncBus):
         await affect.on_workspace(
             _snapshot([_ev(salience=0.9, type_="navigate_event", normalised_error=3.0)])
         )
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
-        assert emotion_events, "expected at least one thymos.emotion event"
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        emotion_events = [e for _, e in entries if e.type == "affect.emotion"]
+        assert emotion_events, "expected at least one affect.emotion event"
         ev = emotion_events[0]
         assert ev.payload.get("goal_significance_method") == "token_overlap_v1", (
-            "thymos.emotion must disclose goal_significance is a token-overlap proxy"
+            "affect.emotion must disclose goal_significance is a token-overlap proxy"
         )
     finally:
         await affect.shutdown()
@@ -374,7 +374,7 @@ async def test_social_cognition_folds_real_emotion_event(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_episodic_memory_recall_publishes_error_on_storage_failure(bus: AsyncBus):
-    """mnemos.recall event must carry error=True on StorageError, not fake count=0."""
+    """episodic_memory.recall event must carry error=True on StorageError, not fake count=0."""
     class FailingStorage(InMemoryStorage):
         async def search(self, collection, *, query_vector, limit):
             raise StorageError("simulated qdrant failure")
@@ -389,12 +389,12 @@ async def test_episodic_memory_recall_publishes_error_on_storage_failure(bus: As
         results = await episodic_memory.recall("test query")
         # Should return [] (graceful return) but publish error=True
         assert results == []
-        entries = await bus.read("mnemos.out", last_id="0", count=10)
-        recall_events = [e for _, e in entries if e.type == "mnemos.recall"]
-        assert recall_events, "mnemos.recall event must still be published on error"
+        entries = await bus.read("episodic_memory.out", last_id="0", count=10)
+        recall_events = [e for _, e in entries if e.type == "episodic_memory.recall"]
+        assert recall_events, "episodic_memory.recall event must still be published on error"
         ev = recall_events[0]
         assert ev.payload.get("error") is True, (
-            "mnemos.recall must carry error=True when storage fails, "
+            "episodic_memory.recall must carry error=True when storage fails, "
             "not silently publish count=0 as if the search succeeded"
         )
     finally:
@@ -403,7 +403,7 @@ async def test_episodic_memory_recall_publishes_error_on_storage_failure(bus: As
 
 @pytest.mark.asyncio
 async def test_episodic_memory_recall_no_error_flag_on_success(bus: AsyncBus):
-    """Successful mnemos.recall must not carry error flag."""
+    """Successful episodic_memory.recall must not carry error flag."""
     emb = FakeEmbedder(latent_dim=8)
     await emb.load()
     storage = InMemoryStorage(latent_dim=8)
@@ -412,12 +412,12 @@ async def test_episodic_memory_recall_no_error_flag_on_success(bus: AsyncBus):
     await episodic_memory.initialize()
     try:
         await episodic_memory.recall("test query")
-        entries = await bus.read("mnemos.out", last_id="0", count=10)
-        recall_events = [e for _, e in entries if e.type == "mnemos.recall"]
+        entries = await bus.read("episodic_memory.out", last_id="0", count=10)
+        recall_events = [e for _, e in entries if e.type == "episodic_memory.recall"]
         assert recall_events
         ev = recall_events[0]
         assert not ev.payload.get("error"), (
-            "successful mnemos.recall must not carry error flag"
+            "successful episodic_memory.recall must not carry error flag"
         )
     finally:
         await episodic_memory.shutdown()

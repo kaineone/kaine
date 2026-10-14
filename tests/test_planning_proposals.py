@@ -25,7 +25,7 @@ async def bus():
     await bus.close()
 
 
-def _event(source="soma", type_="soma.report", salience=0.9, eid="e1"):
+def _event(source="interoception", type_="interoception.report", salience=0.9, eid="e1"):
     return eid, Event(
         source=source,
         type=type_,
@@ -40,7 +40,7 @@ def _snapshot(events=None):
 
 
 async def _read(bus: AsyncBus, type_: str):
-    entries = await bus.read("nous.out", last_id="0")
+    entries = await bus.read("planning.out", last_id="0")
     return [e for _, e in entries if e.type == type_]
 
 
@@ -89,8 +89,8 @@ class _TimedOutOnEngine(_RecordingFakeEngine):
 async def _publish_outcome(bus: AsyncBus, proposal_id: str, realized: bool, reason: str = "realized"):
     await bus.publish(
         Event(
-            source="volition_feedback",
-            type="volition.proposal_outcome",
+            source="action_selection_feedback",
+            type="action_selection.proposal_outcome",
             payload={"proposal_id": proposal_id, "realized": realized, "reason": reason},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -101,8 +101,8 @@ async def _publish_outcome(bus: AsyncBus, proposal_id: str, realized: bool, reas
 async def _publish_rest_request(bus: AsyncBus, proposal_id: str, accepted: bool, reason: str = ""):
     await bus.publish(
         Event(
-            source="hypnos",
-            type="hypnos.rest_request",
+            source="sleep",
+            type="sleep.rest_request",
             payload={"proposal_id": proposal_id, "accepted": accepted, "reason": reason},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -117,7 +117,7 @@ async def test_request_speak_gives_speak_proposal(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert len(proposals) == 1
         p = proposals[0].payload
         assert p["kind"] == "speak"
@@ -143,7 +143,7 @@ async def test_speak_proposal_salience_grows_with_preference(bus: AsyncBus):
     try:
         await planning.on_workspace(_snapshot([_event()]))
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert len(proposals) == 2
         saliences = [p.salience for p in proposals]
         for s in saliences:
@@ -160,7 +160,7 @@ async def test_request_maintenance_gives_rest_proposal(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert len(proposals) == 1
         p = proposals[0].payload
         assert p["kind"] == "rest"
@@ -177,7 +177,7 @@ async def test_no_op_publishes_no_proposal(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert proposals == []
     finally:
         await planning.shutdown()
@@ -190,7 +190,7 @@ async def test_realized_true_records_proposed_action(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
         await _publish_outcome(bus, pid, True)
         await planning.on_workspace(_snapshot([_event()]))
@@ -209,7 +209,7 @@ async def test_realized_false_records_no_op(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
         await _publish_outcome(bus, pid, False, reason="in_flight")
         await planning.on_workspace(_snapshot([_event()]))
@@ -242,7 +242,7 @@ async def test_outcome_for_older_proposal_increments_unknown_outcomes(bus: Async
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid1 = proposals[0].payload["proposal_id"]
         await _publish_outcome(bus, pid1, True)
         await planning.on_workspace(_snapshot([_event()]))
@@ -266,7 +266,7 @@ async def test_drive_actions_false_never_reads_feedback_and_records_no_op(bus: A
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         assert len(proposals) == 1
         pid = proposals[0].payload["proposal_id"]
         await _publish_outcome(bus, pid, True)
@@ -286,7 +286,7 @@ async def test_first_boot_cursor_ignores_pre_boot_outcome(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
         await _publish_outcome(bus, pid, True)
         await planning.on_workspace(_snapshot([_event()]))
@@ -307,7 +307,7 @@ async def test_realized_late_outcome_records_action_at_arrival_tick(bus: AsyncBu
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         # One full tick passes with no outcome for the original proposal.
@@ -337,11 +337,11 @@ async def test_two_proposals_last_realized_decides_taken_action(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid1 = proposals[0].payload["proposal_id"]
 
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid2 = proposals[-1].payload["proposal_id"]
 
         # P1 is declined, P2 is realized, both before the next tick.
@@ -384,7 +384,7 @@ async def test_error_step_does_not_insert_extra_no_op(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         await _publish_outcome(bus, pid, True)
@@ -414,7 +414,7 @@ async def test_rest_proposal_forwarded_then_accepted(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         rest_index = fake.actions.index("request_maintenance")
@@ -437,13 +437,13 @@ async def test_rest_proposal_forwarded_then_accepted(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_rest_proposal_forwarded_then_refused(bus: AsyncBus):
-    """A forwarded rest proposal removed on hypnos.rest_request accepted: false."""
+    """A forwarded rest proposal removed on sleep.rest_request accepted: false."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.7, 0.05])
     planning = Planning(bus, engine=fake)
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         no_op_index = fake.actions.index("no_op")
@@ -470,13 +470,13 @@ async def test_rest_proposal_forwarded_then_refused(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_unknown_rest_request_is_ignored(bus: AsyncBus):
-    """A hypnos.rest_request for an unknown id does not affect pending proposals."""
+    """A sleep.rest_request for an unknown id does not affect pending proposals."""
     fake = _RecordingFakeEngine(policy_efe=[0.9, 0.5, 0.7, 0.05])
     planning = Planning(bus, engine=fake)
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         no_op_index = fake.actions.index("no_op")
@@ -498,7 +498,7 @@ async def test_realized_action_survives_error_step(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         think_index = fake.actions.index("request_think")
@@ -528,7 +528,7 @@ async def test_realized_action_survives_timeout_step(bus: AsyncBus):
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         think_index = fake.actions.index("request_think")
@@ -558,7 +558,7 @@ async def test_forwarded_outcome_after_sleep_refusal_is_not_unknown(bus: AsyncBu
     await planning.initialize()
     try:
         await planning.on_workspace(_snapshot([_event()]))
-        proposals = await _read(bus, "nous.proposal")
+        proposals = await _read(bus, "planning.proposal")
         pid = proposals[0].payload["proposal_id"]
 
         no_op_index = fake.actions.index("no_op")

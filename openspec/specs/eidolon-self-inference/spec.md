@@ -6,8 +6,8 @@ The self-model module's `SelfInferenceEngine` populates the self-model fields fr
 ### Requirement: Self-model fields populated from observation
 The self-model module's `SelfInferenceEngine` SHALL populate `behavioral_norms`,
 `personality_baseline`, `values`, and `capability_map` in `self_model.json` from
-observed signals: `lingua.out` (internal-speech patterns), `thymos.report` and
-`thymos.drive` (VAD trajectories and drive crossings), and `nous.policy` (EFE
+observed signals: `language.out` (internal-speech patterns), `affect.report` and
+`affect.drive` (VAD trajectories and drive crossings), and `planning.policy` (EFE
 outcomes). Fields SHALL be written atomically. A field SHALL remain empty rather
 than be populated with speculative data when observations are insufficient
 (below `speech_pattern_min_count`).
@@ -42,7 +42,7 @@ successfully done). It SHALL be updated on maintenance cycle end.
 - **THEN** `capability_map` contains the corresponding capability entries
 
 ### Requirement: Operator-seeded first-boot fallback
-When `[eidolon.self_inference].seed_path` is set, the engine SHALL load the seed
+When `[self_model.self_inference].seed_path` is set, the engine SHALL load the seed
 on first boot and use it as the initial state for all four fields. Subsequent
 observation-driven updates SHALL be applied on top of the seed. The seed SHALL
 NOT be applied automatically if `seed_path` is not configured.
@@ -62,11 +62,11 @@ SHALL NOT write raw internal-speech text to any persistent store. Only counts,
 derived norms, and statistical summaries (VAD mean/variance) SHALL be persisted.
 
 #### Scenario: Engine inactive by default
-- **WHEN** `[eidolon.self_inference].enabled` is false
+- **WHEN** `[self_model.self_inference].enabled` is false
 - **THEN** no observation is recorded and self_model.json fields are not updated
   by this engine
 
 #### Scenario: No raw speech persisted
-- **WHEN** the engine processes `lingua.out` events
+- **WHEN** the engine processes `language.out` events
 - **THEN** no raw text content from those events appears in any written file
 

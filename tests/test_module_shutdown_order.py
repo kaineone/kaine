@@ -27,7 +27,7 @@ async def bus():
 
 
 class FakeAffect:
-    name = "thymos"
+    name = "affect"
 
     def __init__(self) -> None:
         self.down = False
@@ -102,7 +102,7 @@ def _make_sleep(bus, tmp_path, *, episodic_memory, affect, associative=False):
 
 def test_shutdown_order_puts_sleep_first():
     a = types.SimpleNamespace(name="a")
-    sleep = types.SimpleNamespace(name="hypnos")
+    sleep = types.SimpleNamespace(name="sleep")
     b = types.SimpleNamespace(name="b")
     assert shutdown_order([a, sleep, b]) == [sleep, a, b]
     assert shutdown_order([a, b]) == [a, b]
@@ -132,7 +132,7 @@ async def test_supervisor_shutdown_all_shuts_sleep_down_first():
 
     a = types.SimpleNamespace(name="a", shutdown=lambda: record_shutdown("a"))
     b = types.SimpleNamespace(name="b", shutdown=lambda: record_shutdown("b"))
-    sleep = types.SimpleNamespace(name="hypnos", shutdown=lambda: record_shutdown("hypnos"))
+    sleep = types.SimpleNamespace(name="sleep", shutdown=lambda: record_shutdown("sleep"))
     registry = types.SimpleNamespace(all_modules=lambda: [a, b, sleep])
     await Supervisor._shutdown_all(types.SimpleNamespace(_registry=registry))
-    assert order == ["hypnos", "a", "b"]
+    assert order == ["sleep", "a", "b"]

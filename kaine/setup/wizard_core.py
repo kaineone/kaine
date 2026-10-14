@@ -42,28 +42,28 @@ CAL_ARTICLE_4_SUMMARY = (
 
 # Canonical module order shown to the operator.
 MODULE_ORDER = [
-    "soma",
-    "chronos",
-    "thymos",
-    "eidolon",
-    "mnemos",
-    "nous",
-    "lingua",
-    "hypnos",
-    "topos",
-    "praxis",
+    "interoception",
+    "sequence",
+    "affect",
+    "self_model",
+    "episodic_memory",
+    "planning",
+    "language",
+    "sleep",
+    "vision",
+    "effectors",
     "audition",
-    "vox",
-    "empatheia",
-    "phantasia",
-    "perception",
-    "mundus",
+    "vocal",
+    "social_cognition",
+    "world_model",
+    "perceptual_locus",
+    "embodiment",
 ]
 
 #: Cognitive modules (the perceptual locus and embodiment modules, and the recorder module,
 #: which is test infrastructure, are never part of a preset).
 FULL_ENTITY_MODULES: dict[str, bool] = {
-    m: m not in ("perception", "mundus") for m in MODULE_ORDER
+    m: m not in ("perceptual_locus", "embodiment") for m in MODULE_ORDER
 }
 
 
@@ -79,7 +79,7 @@ def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
     if not isinstance(table, dict):
         raise FileNotFoundError(f"base-thesis profile has no [modules] table: {path}")
     modules = {m: bool(table.get(m, False)) for m in MODULE_ORDER}
-    modules["echo"] = False
+    modules["recorder"] = False
     return modules
 
 
@@ -171,9 +171,9 @@ def propose_device_assignments(
 
     return {
         # Heavy training / vision encoders.
-        "hypnos.voice_alignment.training_device": primary,
-        "phantasia.training_device": "cpu",  # jax[cpu] default; opt-in to GPU
-        "topos.device": secondary,
+        "sleep.voice_alignment.training_device": primary,
+        "world_model.training_device": "cpu",  # jax[cpu] default; opt-in to GPU
+        "vision.device": secondary,
         # Control / light paths always on CPU.
         "embedding.device": "cpu",
         "audition.emotion_device": "cpu",
@@ -194,12 +194,12 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     """Compute the optional-dependency extras implied by the chosen modules.
 
     Module-based:
-    - planning + [nous].backend == "pymdp" -> reasoning
+    - planning + [planning].backend == "pymdp" -> reasoning
     - audition + capture -> audio
     - the vision module + capture -> vision
     - oscillator.enabled -> oscillator
-    - hypnos.voice_alignment -> training
-    - world model + [phantasia].backend == "dreamerv3" + [phantasia].engine == "jax"
+    - sleep.voice_alignment -> training
+    - world model + [world_model].backend == "dreamerv3" + [world_model].engine == "jax"
       -> worldmodel
 
     Speech-edge:
@@ -218,32 +218,32 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     """
     extras: list[str] = []
     audition_cfg = shipped.get("audition") or {}
-    vision_cfg = shipped.get("topos") or {}
+    vision_cfg = shipped.get("vision") or {}
     oscillator_cfg = shipped.get("oscillator") or {}
-    sleep_va = (shipped.get("hypnos") or {}).get("voice_alignment") or {}
-    world_model_cfg = shipped.get("phantasia") or {}
+    sleep_va = (shipped.get("sleep") or {}).get("voice_alignment") or {}
+    world_model_cfg = shipped.get("world_model") or {}
     feed_mode = str((shipped.get("perception_feed") or {}).get("mode") or "off")
 
     audition_backend = str(audition_cfg.get("backend", "speaches")).strip().lower()
     transcription_on = bool(audition_cfg.get("transcription_enabled", False))
-    vocal_cfg = shipped.get("vox") or {}
+    vocal_cfg = shipped.get("vocal") or {}
     vocal_backend = str(vocal_cfg.get("backend", "chatterbox")).strip().lower()
-    planning_backend = str((shipped.get("nous") or {}).get("backend", "pymdp")).strip().lower()
+    planning_backend = str((shipped.get("planning") or {}).get("backend", "pymdp")).strip().lower()
     world_model_backend = str(world_model_cfg.get("backend", "dreamerv3")).strip().lower()
     world_model_engine = str(world_model_cfg.get("engine", "jax")).strip().lower()
 
-    if modules.get("nous") and planning_backend == "pymdp":
+    if modules.get("planning") and planning_backend == "pymdp":
         extras.append("reasoning")
     if modules.get("audition") and bool(audition_cfg.get("capture_enabled")):
         extras.append("audio")
-    if modules.get("topos") and bool(vision_cfg.get("capture_enabled")):
+    if modules.get("vision") and bool(vision_cfg.get("capture_enabled")):
         extras.append("vision")
     if bool(oscillator_cfg.get("enabled")):
         extras.append("oscillator")
-    if modules.get("hypnos") and bool(sleep_va.get("enabled")):
+    if modules.get("sleep") and bool(sleep_va.get("enabled")):
         extras.append("training")
     if (
-        modules.get("phantasia")
+        modules.get("world_model")
         and world_model_backend == "dreamerv3"
         and world_model_engine == "jax"
     ):
@@ -252,7 +252,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
         modules.get("audition")
         and audition_backend == "sherpa_onnx"
         and transcription_on
-    ) or (modules.get("vox") and vocal_backend == "sherpa_onnx"):
+    ) or (modules.get("vocal") and vocal_backend == "sherpa_onnx"):
         extras.append("speech-edge")
     # Perception-feed deps: playlist decodes media; live opens devices. Both
     # surfaces (video + audio) are driven from the one [perception_feed] source,
@@ -279,7 +279,7 @@ def _trainer_provisioning_step(
     training (default no — it is not needed for a first boot). Prints the
     vendor-appropriate guidance for ``host["backend"]``, runs a real probe for a
     usable external trainer interpreter, and — on a successful probe — offers
-    (consented) to record it as ``[hypnos.voice_alignment].trainer_python``
+    (consented) to record it as ``[sleep.voice_alignment].trainer_python``
     (+ ``trainer_backend = "subprocess"``). Never crashes the wizard on a failed
     probe/guide; on an unsupported backend it reports training unavailable and
     returns. Guidance only — it NEVER auto-installs the multi-GB trainer env.
@@ -315,7 +315,7 @@ def _trainer_provisioning_step(
             line(f"    - {step}")
 
         configured = (
-            (cfg.get("hypnos") or {}).get("voice_alignment") or {}
+            (cfg.get("sleep") or {}).get("voice_alignment") or {}
         ).get("trainer_python") or None
         found, detail = probe_trainer(configured, backend=backend)
         line(f"\n  probe: {detail}")
@@ -323,7 +323,7 @@ def _trainer_provisioning_step(
             line(
                 "  No usable trainer interpreter detected yet — install per the "
                 "steps\n  above, then set "
-                "[hypnos.voice_alignment].trainer_python to its python."
+                "[sleep.voice_alignment].trainer_python to its python."
             )
             return
 
@@ -336,10 +336,10 @@ def _trainer_provisioning_step(
         ):
             line("  Left trainer_python unset (configure it later).")
             return
-        _set_nested(cfg, "hypnos", "voice_alignment", "trainer_python", interpreter)
-        _set_nested(cfg, "hypnos", "voice_alignment", "trainer_backend", "subprocess")
+        _set_nested(cfg, "sleep", "voice_alignment", "trainer_python", interpreter)
+        _set_nested(cfg, "sleep", "voice_alignment", "trainer_backend", "subprocess")
         line(
-            "  Recorded [hypnos.voice_alignment].trainer_python (and set\n"
+            "  Recorded [sleep.voice_alignment].trainer_python (and set\n"
             "  trainer_backend = \"subprocess\")."
         )
     except Exception as exc:  # never crash the wizard on a failed probe/guide
@@ -372,7 +372,7 @@ def _cl1_substrate_step(
     if not _ask_yes_no(input_fn, "Set up the CL1 substrate plugin?", default=False):
         line("CL1 substrate plugin left off (the default).")
         return
-    modules = [m for m in ("chronos", "soma") if (cfg.get("modules") or {}).get(m)]
+    modules = [m for m in ("sequence", "interoception") if (cfg.get("modules") or {}).get(m)]
     if not modules:
         line(
             "Neither Chronos nor Soma is enabled, so there is nothing for the "

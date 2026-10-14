@@ -24,7 +24,7 @@ async def test_vision_constructs_lazy_encoder():
             device_preference="cpu",
         )
         # No initialize() — we don't want to download weights.
-        assert vision.name == "topos"
+        assert vision.name == "vision"
         assert isinstance(vision.serialize(), dict)
 
 

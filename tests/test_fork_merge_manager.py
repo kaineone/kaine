@@ -37,26 +37,26 @@ class FakeRegistry:
 
 def test_snapshot_captures_each_module(tmp_path):
     mgr = ForkManager(tmp_path)
-    interoception = FakeModule("soma", {"wellness": 0.92})
-    sequence = FakeModule("chronos", {"steps": 17})
+    interoception = FakeModule("interoception", {"wellness": 0.92})
+    sequence = FakeModule("sequence", {"steps": 17})
     snap = mgr.snapshot(FakeRegistry([interoception, sequence]), label="boot")
     assert snap.id
     assert snap.label == "boot"
     assert snap.parent_id is None
-    assert snap.modules["soma"]["wellness"] == 0.92
-    assert snap.modules["chronos"]["steps"] == 17
+    assert snap.modules["interoception"]["wellness"] == 0.92
+    assert snap.modules["sequence"]["steps"] == 17
     assert (tmp_path / snap.id / "snapshot.json").exists()
 
 
 def test_snapshot_deepcopies_state(tmp_path):
     mgr = ForkManager(tmp_path)
     state = {"nested": {"v": 1}}
-    interoception = FakeModule("soma", state)
+    interoception = FakeModule("interoception", state)
     snap = mgr.snapshot(FakeRegistry([interoception]))
     # Mutate after snapshot — must not affect saved state.
     state["nested"]["v"] = 999
     loaded = mgr.load(snap.id)
-    assert loaded.modules["soma"]["nested"]["v"] == 1
+    assert loaded.modules["interoception"]["nested"]["v"] == 1
 
 
 def test_snapshot_handles_serialize_error(tmp_path):
@@ -76,12 +76,12 @@ def test_snapshot_handles_serialize_error(tmp_path):
 
 def test_restore_round_trips_into_fresh_modules(tmp_path):
     mgr = ForkManager(tmp_path)
-    src_interoception = FakeModule("soma", {"wellness": 0.5})
-    src_sequence = FakeModule("chronos", {"steps": 42})
+    src_interoception = FakeModule("interoception", {"wellness": 0.5})
+    src_sequence = FakeModule("sequence", {"steps": 42})
     snap = mgr.snapshot(FakeRegistry([src_interoception, src_sequence]))
 
-    fresh_interoception = FakeModule("soma")
-    fresh_sequence = FakeModule("chronos")
+    fresh_interoception = FakeModule("interoception")
+    fresh_sequence = FakeModule("sequence")
     mgr.restore(snap.id, FakeRegistry([fresh_interoception, fresh_sequence]))
 
     assert fresh_interoception.serialize() == {"wellness": 0.5}
@@ -90,10 +90,10 @@ def test_restore_round_trips_into_fresh_modules(tmp_path):
 
 def test_restore_ignores_module_not_in_snapshot(tmp_path):
     mgr = ForkManager(tmp_path)
-    snap = mgr.snapshot(FakeRegistry([FakeModule("soma", {"wellness": 1.0})]))
+    snap = mgr.snapshot(FakeRegistry([FakeModule("interoception", {"wellness": 1.0})]))
 
-    extra = FakeModule("topos", {"latent": "frozen"})
-    interoception = FakeModule("soma")
+    extra = FakeModule("vision", {"latent": "frozen"})
+    interoception = FakeModule("interoception")
     mgr.restore(snap.id, FakeRegistry([interoception, extra]))
     # The vision module has no entry → state untouched
     assert extra.serialize() == {"latent": "frozen"}
@@ -105,21 +105,21 @@ def test_fork_excludes_shed_modules(tmp_path):
     parent = mgr.snapshot(
         FakeRegistry(
             [
-                FakeModule("soma", {"v": 1}),
-                FakeModule("chronos", {"v": 2}),
-                FakeModule("topos", {"v": 3}),
+                FakeModule("interoception", {"v": 1}),
+                FakeModule("sequence", {"v": 2}),
+                FakeModule("vision", {"v": 3}),
             ]
         )
     )
-    child = mgr.fork(parent.id, label="no-topos", shed=["topos"])
+    child = mgr.fork(parent.id, label="no-topos", shed=["vision"])
     assert child.parent_id == parent.id
-    assert set(child.modules) == {"soma", "chronos"}
-    assert child.metadata["shed"] == ["topos"]
+    assert set(child.modules) == {"interoception", "sequence"}
+    assert child.metadata["shed"] == ["vision"]
 
 
 def test_fork_default_carries_all_modules(tmp_path):
     mgr = ForkManager(tmp_path)
-    parent = mgr.snapshot(FakeRegistry([FakeModule("soma", {"v": 1})]))
+    parent = mgr.snapshot(FakeRegistry([FakeModule("interoception", {"v": 1})]))
     child = mgr.fork(parent.id)
     assert child.parent_id == parent.id
     assert child.modules == parent.modules
@@ -131,14 +131,14 @@ def test_merge_invokes_per_module_strategies(tmp_path):
         FakeRegistry(
             [
                 FakeModule(
-                    "mnemos",
+                    "episodic_memory",
                     {
                         "short_term_size": 5,
                         "collection_prefix": "mnemos_",
                     },
                 ),
                 # High-certainty (low-entropy) posterior.
-                FakeModule("nous", {"posterior": [[0.9, 0.1]]}),
+                FakeModule("planning", {"posterior": [[0.9, 0.1]]}),
             ]
         )
     )
@@ -146,33 +146,33 @@ def test_merge_invokes_per_module_strategies(tmp_path):
         FakeRegistry(
             [
                 FakeModule(
-                    "mnemos",
+                    "episodic_memory",
                     {
                         "short_term_size": 7,
                         "collection_prefix": "mnemos_",
                     },
                 ),
                 # Low-certainty (high-entropy) posterior — discarded on merge.
-                FakeModule("nous", {"posterior": [[0.5, 0.5]]}),
+                FakeModule("planning", {"posterior": [[0.5, 0.5]]}),
             ]
         )
     )
     merged = mgr.merge(a.id, b.id, label="merge")
     assert merged.parent_id == f"{a.id}+{b.id}"
-    assert merged.modules["mnemos"]["short_term_size"] == 12
+    assert merged.modules["episodic_memory"]["short_term_size"] == 12
     # One-sided selection keeps the more certain (lower-entropy) fork.
-    assert merged.modules["nous"]["posterior"] == [[0.9, 0.1]]
-    assert merged.modules["nous"].get("nous.merge_warning") is True
+    assert merged.modules["planning"]["posterior"] == [[0.9, 0.1]]
+    assert merged.modules["planning"].get("planning.merge_warning") is True
     assert merged.metadata["merged_from"] == [a.id, b.id]
 
 
 def test_merge_handles_module_present_in_only_one_parent(tmp_path):
     mgr = ForkManager(tmp_path)
-    a = mgr.snapshot(FakeRegistry([FakeModule("mnemos", {"short_term_size": 3})]))
-    b = mgr.snapshot(FakeRegistry([FakeModule("nous", {"posterior": [[1.0, 0.0]]})]))
+    a = mgr.snapshot(FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 3})]))
+    b = mgr.snapshot(FakeRegistry([FakeModule("planning", {"posterior": [[1.0, 0.0]]})]))
     merged = mgr.merge(a.id, b.id)
-    assert merged.modules["mnemos"]["short_term_size"] == 3
-    assert merged.modules["nous"]["posterior"] == [[1.0, 0.0]]
+    assert merged.modules["episodic_memory"]["short_term_size"] == 3
+    assert merged.modules["planning"]["posterior"] == [[1.0, 0.0]]
 
 
 def test_merge_falls_back_to_union_for_unknown_module(tmp_path):
@@ -186,11 +186,11 @@ def test_merge_falls_back_to_union_for_unknown_module(tmp_path):
 def test_merge_combines_adapters_via_fake_merger(tmp_path):
     mgr = ForkManager(tmp_path)
     a = mgr.snapshot(
-        FakeRegistry([FakeModule("soma", {"v": 1})]),
+        FakeRegistry([FakeModule("interoception", {"v": 1})]),
         adapters=["/state/hypnos/adapters/a"],
     )
     b = mgr.snapshot(
-        FakeRegistry([FakeModule("soma", {"v": 2})]),
+        FakeRegistry([FakeModule("interoception", {"v": 2})]),
         adapters=["/state/hypnos/adapters/b"],
     )
     # Both parents have adapters + FakeAdapterMerger → must refuse by default.
@@ -225,7 +225,7 @@ def test_merger_from_name_rejects_unknown():
 def test_snapshots_are_never_evicted(tmp_path):
     """The fork root holds preserved entities: no count cap deletes any of them."""
     mgr = ForkManager(tmp_path)
-    snaps = [mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})])) for i in range(70)]
+    snaps = [mgr.snapshot(FakeRegistry([FakeModule("interoception", {"i": i})])) for i in range(70)]
     forked = mgr.fork(snaps[0].id, label="child")
     merged = mgr.merge(snaps[1].id, snaps[2].id, label="merged")
     expected = {s.id for s in snaps} | {forked.id, merged.id}
@@ -256,7 +256,7 @@ def test_legacy_retention_key_warns_and_deletes_nothing(tmp_path, caplog):
     assert reason is None
     assert isinstance(mgr, ForkManager)
     assert any("max_snapshots_retained is ignored" in r.getMessage() for r in caplog.records)
-    ids = [mgr.snapshot(FakeRegistry([FakeModule("soma", {"i": i})])).id for i in range(5)]
+    ids = [mgr.snapshot(FakeRegistry([FakeModule("interoception", {"i": i})])).id for i in range(5)]
     assert set(mgr.list_snapshots()) == set(ids)
 
 
@@ -278,8 +278,8 @@ def test_custom_strategies_override_defaults(tmp_path):
         def merge(self, a, b):
             return {"answer": 42}
 
-    mgr = ForkManager(tmp_path, strategies={"mnemos": AlwaysFortyTwo()})
-    a = mgr.snapshot(FakeRegistry([FakeModule("mnemos", {"short_term_size": 1})]))
-    b = mgr.snapshot(FakeRegistry([FakeModule("mnemos", {"short_term_size": 2})]))
+    mgr = ForkManager(tmp_path, strategies={"episodic_memory": AlwaysFortyTwo()})
+    a = mgr.snapshot(FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 1})]))
+    b = mgr.snapshot(FakeRegistry([FakeModule("episodic_memory", {"short_term_size": 2})]))
     merged = mgr.merge(a.id, b.id)
-    assert merged.modules["mnemos"] == {"answer": 42}
+    assert merged.modules["episodic_memory"] == {"answer": 42}

@@ -36,21 +36,21 @@ The microphone and camera feed the modules directly and nothing records them. Th
 
 When `[audition].capture_enabled = true`, `LiveMicrophone` opens a `sounddevice.InputStream`. Raw PCM lives in process memory, is wrapped as an in-memory WAV (`wave.open(io.BytesIO(), 'wb')`, never a file path), is handed to Speaches for transcription, and is released. No `.wav`, `.pcm`, or `.raw` file is written to disk.
 
-When `[topos].capture_enabled = true`, `LiveCamera` opens `cv2.VideoCapture(device)`. Raw frames live in process memory, are converted to in-memory PIL images, are buffered in a RAM-only ring, are handed to the encoder as a clip, and are released as they age out. The ring buffer is never serialized and never written to disk. No `.png`, `.jpg`, `.mp4`, or `.webm` file is written to disk.
+When `[vision].capture_enabled = true`, `LiveCamera` opens `cv2.VideoCapture(device)`. Raw frames live in process memory, are converted to in-memory PIL images, are buffered in a RAM-only ring, are handed to the encoder as a clip, and are released as they age out. The ring buffer is never serialized and never written to disk. No `.png`, `.jpg`, `.mp4`, or `.webm` file is written to disk.
 
 `tests/test_zero_persistence_invariant.py` verifies it.
 
 What does persist from live perception:
 
 - Processed perceptions flowing through the bus and into the episodic memory module as ordinary memories. The episodic memory module strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
-- `state/perception/runtime.json` and `state/perception/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
+- `state/perceptual_locus/runtime.json` and `state/perceptual_locus/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
 - Standard logger lines for capture state transitions, never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.
-- The optional **dashboard record** (`[research_event_log.nexus_record]`, `data/nexus_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
+- The optional **dashboard record** (`[research_event_log.dashboard_record]`, `data/dashboard_record/`). It holds privacy-filtered diagnostics payloads with numeric vectors removed, plus stream name and entry id. It is local-only and never exported.
 
 The on-air banner (microphone on / camera on) appears on both the console and the diagnostics page whenever a stream is active. The operator holds the hardware kill switch as the strongest guarantee.
 
-Voice output (the vocal module, Chatterbox) is played and released. `[vox].sink_enabled` is `false` by default, so synthesized speech does not accumulate on disk. If the sink is enabled for debugging, it is bounded to `[vox].retain_count` clips.
+Voice output (the vocal module, Chatterbox) is played and released. `[vocal].sink_enabled` is `false` by default, so synthesized speech does not accumulate on disk. If the sink is enabled for debugging, it is bounded to `[vocal].retain_count` clips.
 
 ## State at rest
 
@@ -60,20 +60,20 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 
 | Store or file | Contents | Protection |
 |---|---|---|
-| `state/eidolon/self_model.json` | Name, values, norms, identity history | App-layer AES-256-GCM |
+| `state/self_model/self_model.json` | Name, values, norms, identity history | App-layer AES-256-GCM |
 | `state/identity/entity.json` | Entity id and lineage | Deliberately plaintext so it can be located before any key is available |
 | `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted world model weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
-| `state/phantasia/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
+| `state/world_model/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |
 | Preservation bundles and `state/cycle/preservation` | Preservation state | App-layer AES-256-GCM when `[security.state_encryption]` is on; `[preservation].require_encryption` (default `true`) refuses to write an unencrypted bundle |
 | `data/workspace_trajectory` | Workspace trajectory data | App-layer AES-256-GCM per line |
-| `state/hypnos/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
+| `state/sleep/voice_align_jobs/` (e.g. `pairs.jsonl`) | Voice-alignment trainer job data | OS-layer |
 | `kaine-organ-adapters` volume | Active voice adapter served by the organ (read-only to the organ) | OS-layer |
 | Qdrant collections (`kaine-qdrant-data`) | Episodic memory embeddings and social cognition agent-model vectors | Qdrant API key; plain HTTP on the host or compose network (the client does not use TLS); app-layer encryption not implemented |
-| `state/praxis/audit.log` | Effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
-| `state/lingua/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
-| `state/hypnos/adapters/` | Voice-alignment LoRA adapters | OS-layer |
-| `state/vox/` | Retained TTS clips if the sink is enabled | OS-layer |
+| `state/effectors/audit.log` | Effectors action audit | OS-layer; entries are hash-chained (`prev_hash`/`this_hash`) |
+| `state/language/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
+| `state/sleep/adapters/` | Voice-alignment LoRA adapters | OS-layer |
+| `state/vocal/` | Retained TTS clips if the sink is enabled | OS-layer |
 | `kaine-redis-data` volume | Bus AOF | OS-layer; bus is loopback |
 
 ### Cryptographic details
@@ -111,7 +111,7 @@ Even with application-layer encryption enabled, Qdrant collections, the Redis AO
 
 ### `intent_expression.jsonl` sensitivity
 
-`state/lingua/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `mundus.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/lingua/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the entity has spoken. Treat it with the same care as the episodic memory module's memories.
+`state/language/intent_expression.jsonl` is high sensitivity. Each record holds the assembled prompt and the entity's complete generated response, including its internal monologue. Heard speech never enters it: every external-input event (`audition.transcription`, and `embodiment.chat`, other avatars' chat) is replaced by `[heard speech]` at every text leaf before the record is written, as are heard-text fields nested on other events. When state encryption is enabled, each line is an AES-256-GCM envelope and readers decrypt line by line. The rotated per-sleep corpus files under `state/language/intent_log/` are encrypted the same way at the next sleep. A line that cannot be decrypted counts as evidence that the entity has spoken. Treat it with the same care as the episodic memory module's memories.
 
 Even with encryption on, plaintext can remain in:
 
@@ -146,8 +146,8 @@ Several sensitive operations require two independent conditions before they fire
 | Cognitive cycle start (research) | `[research].enabled` or `KAINE_RESEARCH_MODE=1`, plus the safety-net configuration | None: the operator-present requirement is replaced by the verified safety net |
 | Cognitive cycle start (unattended) | `[cycle].supervision_mode = "unattended"` or `KAINE_CYCLE_UNATTENDED=1`, plus the safety-net, supervisor, caretaker and perception configuration | None: replaced by conditions verified at every start |
 | First-boot script | any configuration | `KAINE_FIRST_BOOT_OPERATOR_PRESENT=1` |
-| Voice-alignment training | `[hypnos.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
-| Embodiment | `[modules].mundus = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
+| Voice-alignment training | `[sleep.voice_alignment].enabled = true` | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` |
+| Embodiment | `[modules].embodiment = true` | `KAINE_MUNDUS_OPERATOR_APPROVED=1` |
 
 ## Boot gate
 
@@ -169,9 +169,9 @@ The probe set contains prompts and deflection patterns such as "I cannot" or "I'
 
 The abliteration probe set must be non-empty when voice alignment is enabled. The cycle entrypoint checks this at boot and raises `EmptyAbliterationProbeSetError` with a remediation message if the probe set is missing or empty.
 
-A capability-loss veto runs in parallel: the adapter is also scored on a general capability probe set before and after the DPO step. If capability drops by more than `[hypnos.voice_alignment].capability_loss_threshold` (default `0.05`, i.e. 5%), the adapter is rejected and the temporary directory is removed.
+A capability-loss veto runs in parallel: the adapter is also scored on a general capability probe set before and after the DPO step. If capability drops by more than `[sleep.voice_alignment].capability_loss_threshold` (default `0.05`, i.e. 5%), the adapter is rejected and the temporary directory is removed.
 
-Adapter promotion is atomic (`os.replace` of a `.tmp` directory plus a temp-symlink replace for the `current` pointer). Concurrent readers never see a partial adapter state. Accepted adapter retention is controlled by `[hypnos.voice_alignment].adapter_retention`, which defaults to `0` and keeps all accepted adapters; the `current` target is never evicted. There are four hot-swap modes: `manual`, `reload_endpoint`, `restart_service`, and `organ_adapter`.
+Adapter promotion is atomic (`os.replace` of a `.tmp` directory plus a temp-symlink replace for the `current` pointer). Concurrent readers never see a partial adapter state. Accepted adapter retention is controlled by `[sleep.voice_alignment].adapter_retention`, which defaults to `0` and keeps all accepted adapters; the `current` target is never evicted. There are four hot-swap modes: `manual`, `reload_endpoint`, `restart_service`, and `organ_adapter`.
 
 ### Rollback
 
@@ -183,7 +183,7 @@ When a deployed adapter misbehaves:
 4. Reload the language module's backing service (model server).
 5. Restart KAINE.
 
-The base model at `[hypnos.voice_alignment].base_model_path` is never modified.
+The base model at `[sleep.voice_alignment].base_model_path` is never modified.
 
 ## Effectors effector boundary
 
@@ -200,9 +200,9 @@ The whitelist enforces these invariants at construction time:
 - Arg count must equal pattern count exactly.
 - Every arg is matched with `re.fullmatch` against a per-position regex.
 
-Commands are invoked via `asyncio.create_subprocess_exec` (no shell interpretation). A per-entry timeout kills the subprocess on `TimeoutError`. The file-write effector resolves every requested path under a fixed sandbox (`[praxis].sandbox_path = "state/praxis/files"`) and rejects absolute paths and `..` escapes.
+Commands are invoked via `asyncio.create_subprocess_exec` (no shell interpretation). A per-entry timeout kills the subprocess on `TimeoutError`. The file-write effector resolves every requested path under a fixed sandbox (`[effectors].sandbox_path = "state/effectors/files"`) and rejects absolute paths and `..` escapes.
 
-A JSONL audit log (`[praxis].audit_log_path = "state/praxis/audit.log"`) records every action, stripping `content`, `body`, and `stdout` fields before serialization. The log entries are hash-chained with `prev_hash` and `this_hash`.
+A JSONL audit log (`[effectors].audit_log_path = "state/effectors/audit.log"`) records every action, stripping `content`, `body`, and `stdout` fields before serialization. The log entries are hash-chained with `prev_hash` and `this_hash`.
 
 Inspect every whitelist entry before enabling it. A loose regex such as `.*` makes the whitelist useless. The recommended posture is alphanumeric, hyphen, dot, and underscore patterns only.
 
@@ -210,7 +210,7 @@ Inspect every whitelist entry before enabling it. A loose regex such as `.*` mak
 
 The whitelist and sandbox are the primary enforced gate. A second boundary authenticates that an `act` intent actually came from the cycle's action-selection step (the action selection module) before the effectors module realizes it.
 
-The access threshold and the action selection module's rule of deriving no intent from an inhibited broadcast belong to the cognitive model and are not an enforced boundary. KAINE runs as a single process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module (the language module is the most exposed, since its output comes from a language model) could `XADD` a crafted `act` event onto `volition.out` and have the effectors module act on it without passing through the action selection module.
+The access threshold and the action selection module's rule of deriving no intent from an inhibited broadcast belong to the cognitive model and are not an enforced boundary. KAINE runs as a single process today, so every module shares one Redis credential and the bus cannot tell which module published an event. Without provenance, a compromised or prompt-injected peripheral module (the language module is the most exposed, since its output comes from a language model) could `XADD` a crafted `act` event onto `action_selection.out` and have the effectors module act on it without passing through the action selection module.
 
 The boundary closes that path cryptographically:
 
@@ -251,14 +251,14 @@ Records without content are kept: welfare and incident logs (CAL Article 4.7), o
 
 The dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.
 
-`[nexus].access` controls who can use the dashboard:
+`[dashboard].access` controls who can use the dashboard:
 
 - `"open"` (default in `config/kaine.toml`): no token and no sign-in. Anyone who can reach the address can view and control the entity (freeze/resume and the protective-freeze override, rates, perception, forks/merges, preservation). The dashboard only listens on this computer by default (containers publish it on `127.0.0.1` only), so "anyone" means programs and people on this computer and the operator's tailnet if they choose to serve it there.
 - `"token"`: an operator token is required (sign-in page, or `Authorization: Bearer <token>` for scripts). Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_NEXUS_ACCESS=token`.
 
-Host and Origin checks apply in both modes. Every request's `Host` must be in `[nexus].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[nexus].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.
+Host and Origin checks apply in both modes. Every request's `Host` must be in `[dashboard].host_allowlist` (default `127.0.0.1`, `localhost`, `::1`); state-changing requests that carry an `Origin` must match `[dashboard].allowed_origins` (default: derived from `port`). Setting either option replaces its default, so list the loopback names too when adding a tailnet host or reverse-proxy hostname.
 
-Set `[nexus].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make the dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
+Set `[dashboard].read_only = true` (or `KAINE_NEXUS_READ_ONLY=1`) to make the dashboard a viewer only: every state-changing HTTP method is refused with 403, and only `GET/HEAD/OPTIONS` are allowed. A banner says so on every page. Use it whenever the dashboard watches a research run, because some controls act on the running entity through its event bus and any change makes the run inadmissible. An operator-local study-view compose overlay (not shipped) can set it.
 
 In token mode, the operator token must be at least 32 characters. Generate one with:
 
@@ -266,9 +266,9 @@ In token mode, the operator token must be at least 32 characters. Generate one w
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Store it in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[nexus].operator_token`. A token placed in `config/kaine.toml` or `config/kaine.operator.toml` is refused at startup, so committed configuration files cannot silently ship a credential. The token is never logged.
+Store it in `KAINE_NEXUS_TOKEN` or in `config/secrets.toml` under `[dashboard].operator_token`. A token placed in `config/kaine.toml` or `config/kaine.operator.toml` is refused at startup, so committed configuration files cannot silently ship a credential. The token is never logged.
 
-Browser sign-in: `GET /login` serves the form; its script (`/static/dashboard_auth.js`) POSTs the token to `POST /auth/login` with `Accept: application/json` and receives a session key plus a redirect once, plus an `HttpOnly` `SameSite=Strict` session cookie. The key is kept in `localStorage` (origin-scoped, so another `localhost` port cannot read it) and sent as `X-Dashboard-Session-Key` on every state-changing request. The session cookie alone authorizes only `GET/HEAD/OPTIONS` (page loads, reads, and the diagnostics stream); state-changing requests also require the session key or `Authorization: Bearer <token>`. Sessions expire after idle inactivity (`[nexus].session_idle_minutes`, default 720) or absolute age (`[nexus].session_max_hours`, default 24), and are cleared on restart. An operator logs out by posting to `POST /auth/logout`. A correct token always signs in. A wrong token returns 401; after `login_max_failures` failures within `login_failure_window_s`, further attempts from that client are serialized and each delayed by `login_block_delay_s` (default 2 s), and wrong ones return 429. A correct token submitted while the client is blocked still signs in after waiting its turn. The login limiter only slows an attacker; security rests primarily on the token's length.
+Browser sign-in: `GET /login` serves the form; its script (`/static/dashboard_auth.js`) POSTs the token to `POST /auth/login` with `Accept: application/json` and receives a session key plus a redirect once, plus an `HttpOnly` `SameSite=Strict` session cookie. The key is kept in `localStorage` (origin-scoped, so another `localhost` port cannot read it) and sent as `X-Dashboard-Session-Key` on every state-changing request. The session cookie alone authorizes only `GET/HEAD/OPTIONS` (page loads, reads, and the diagnostics stream); state-changing requests also require the session key or `Authorization: Bearer <token>`. Sessions expire after idle inactivity (`[dashboard].session_idle_minutes`, default 720) or absolute age (`[dashboard].session_max_hours`, default 24), and are cleared on restart. An operator logs out by posting to `POST /auth/logout`. A correct token always signs in. A wrong token returns 401; after `login_max_failures` failures within `login_failure_window_s`, further attempts from that client are serialized and each delayed by `login_block_delay_s` (default 2 s), and wrong ones return 429. A correct token submitted while the client is blocked still signs in after waiting its turn. The login limiter only slows an attacker; security rests primarily on the token's length.
 
 A non-loopback bind requires `non_loopback_allowed = true`. When `access = "token"`, a configured operator token is also required, and `python -m kaine.dashboard` exits before listening if no token is configured. In the shipped containers the dashboard binds `0.0.0.0` inside the container with `KAINE_NEXUS_NON_LOOPBACK_ALLOWED=1`, while the published port remains `127.0.0.1` only.
 
@@ -278,7 +278,7 @@ To serve the dashboard over your tailnet, run `tailscale serve --bg 8088` on the
 
 Operator responsibilities:
 
-- Do not change `[nexus].host` to `0.0.0.0` without a clear reason and, when `access = "token"`, a token configured.
+- Do not change `[dashboard].host` to `0.0.0.0` without a clear reason and, when `access = "token"`, a token configured.
 - When adding a tailnet or reverse-proxy name, add the loopback names to `host_allowlist` and the corresponding HTTPS origins to `allowed_origins`.
 - Do not flip `dev_content_override = true` on a shared machine.
 

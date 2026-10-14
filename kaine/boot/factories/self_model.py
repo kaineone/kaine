@@ -32,7 +32,7 @@ def make_self_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     }
     kw = _pop(section, allowed)
 
-    # Build the SelfInferenceEngine from the optional [eidolon.self_inference]
+    # Build the SelfInferenceEngine from the optional [self_model.self_inference]
     # sub-table.  Ships disabled by default — operator must set enabled = true.
     si_section = kw.pop("self_inference", None) or {}
     si_allowed = {

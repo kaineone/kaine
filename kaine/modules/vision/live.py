@@ -3,10 +3,10 @@
 
 """Live camera stream — eyes for the vision module's surface.
 
-LiveCamera runs as a sibling task launched from Topos.initialize() when
-[topos].capture_enabled = true. It opens cv2.VideoCapture(device) in a
+LiveCamera runs as a sibling task launched from Vision.initialize() when
+[vision].capture_enabled = true. It opens cv2.VideoCapture(device) in a
 background thread, polls a frame every capture_interval_s, converts
-BGR→RGB to an in-memory PIL.Image, and hands it to Topos.process_frame().
+BGR→RGB to an in-memory PIL.Image, and hands it to Vision.process_frame().
 
 ZERO PERSISTENCE INVARIANT: raw frames live only in process memory.
 The capture path never writes to disk — see the load-bearing test at
@@ -156,9 +156,9 @@ def _bgr_to_pil_rgb(frame: Any) -> Any:
 
 class LiveCamera:
     """Eyes-only camera stream. Constructed by the vision module when
-    [topos].capture_enabled is true. Lifecycle owned by the parent.
+    [vision].capture_enabled is true. Lifecycle owned by the parent.
 
-    `sink` is `Topos.process_frame`. The camera hands frames to it and
+    `sink` is `Vision.process_frame`. The camera hands frames to it and
     never touches the result. Static-scene throttling happens inside
     the vision module via change-detection + habituation; nothing here.
     """
@@ -208,7 +208,7 @@ class LiveCamera:
         """Content-free provenance of the item the underlying source is
         presenting, or ``None``. Only the playlist source exposes this (via the
         shared ``PlaylistClock``); the real camera and seeded feeds return
-        ``None``. Read by the vision module to stamp the playing item onto ``topos.report``
+        ``None``. Read by the vision module to stamp the playing item onto ``vision.report``
         so the media is legible off the bus rather than inferred from file
         descriptors."""
         return getattr(self._source, "current_item", None)

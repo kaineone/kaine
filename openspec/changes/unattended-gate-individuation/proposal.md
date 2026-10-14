@@ -20,7 +20,7 @@ states: the unattended gate covers every condition of the research net.
 - The unattended gate gains condition 9, "individuation wired", taken from the
   research net's existing `individuation_enabled` check. The predicate is not
   changed: `[individuation].enabled`, a valid `[individuation]` section, and
-  the `lingua` module enabled.
+  the `language` module enabled.
 - Conditions 6 to 8 keep their numbers, so the `checks` keys recorded in
   runtime.json, the incident log and the dashboard do not move.
 - The condition checks that the individuation producer will run. It does not

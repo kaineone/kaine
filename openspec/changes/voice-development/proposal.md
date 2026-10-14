@@ -11,7 +11,7 @@ Voice training exists so that the entity individuates away from its language org
   - The base loads in 4-bit.
 - **The divergence arm points the wrong way.** Consolidation divergence fires whenever the organ's output differs from the template, so a voice that learned to recite telemetry would *lower* it.
 - **Nothing links an utterance to what happened next.**
-- **Heard speech is persisted.** When transcription is on, heard speech enters the faithful rendering (`Speech heard: "…"`, `kaine/faithful/templates.py`) and the prompt (`## What was just said to me`). Both are written to `state/lingua/intent_expression.jsonl`. That breaks zero raw-sense persistence.
+- **Heard speech is persisted.** When transcription is on, heard speech enters the faithful rendering (`Speech heard: "…"`, `kaine/faithful/templates.py`) and the prompt (`## What was just said to me`). Both are written to `state/language/intent_expression.jsonl`. That breaks zero raw-sense persistence.
 
 ## What Changes
 
@@ -66,8 +66,8 @@ Voice alignment stays off in studies until Stages 0–2 pass offline validation.
 
 ### Modified Capabilities
 
-- `hypnos`: how preference pairs are formed, replacing "chosen is the faithful rendering".
-- `lingua`: the persona, the awareness heading, drive crossings and the intent-log contents.
+- `sleep`: how preference pairs are formed, replacing "chosen is the faithful rendering".
+- `language`: the persona, the awareness heading, drive crossings and the intent-log contents.
 
 ## Impact
 

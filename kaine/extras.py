@@ -52,7 +52,7 @@ def _perception_mode(config: dict) -> str | None:
 
 
 def _vision_cv2_needed(config: dict) -> bool:
-    if (config.get("topos") or {}).get("capture_enabled"):
+    if (config.get("vision") or {}).get("capture_enabled"):
         return True
     return _perception_mode(config) == "playlist"
 
@@ -74,7 +74,7 @@ def _audition_webrtcvad_needed(config: dict) -> bool:
     mode = _perception_mode(config)
     live_path = (
         (config.get("audition") or {}).get("capture_enabled")
-        or mode in {"playlist", "seeded", "womb", "screen"}
+        or mode in {"playlist", "seeded", "stimulus_source", "screen"}
     )
     if not live_path:
         return False
@@ -93,28 +93,28 @@ def _audition_sherpa(config: dict) -> bool:
 
 
 def _vocal_sherpa(config: dict) -> bool:
-    section = config.get("vox") or {}
+    section = config.get("vocal") or {}
     backend = str(section.get("backend") or "chatterbox").strip().lower()
     return backend == "sherpa_onnx"
 
 
 def _episodic_memory_qdrant(config: dict) -> bool:
-    return (config.get("mnemos") or {}).get("backend", "qdrant") == "qdrant"
+    return (config.get("episodic_memory") or {}).get("backend", "qdrant") == "qdrant"
 
 
 def _episodic_memory_sqlite_vec(config: dict) -> bool:
-    return (config.get("mnemos") or {}).get("backend", "qdrant") in {
+    return (config.get("episodic_memory") or {}).get("backend", "qdrant") in {
         "sqlite_vec",
         "sqlite-vec",
     }
 
 
 def _social_cognition_qdrant(config: dict) -> bool:
-    return (config.get("empatheia") or {}).get("backend", "qdrant") == "qdrant"
+    return (config.get("social_cognition") or {}).get("backend", "qdrant") == "qdrant"
 
 
 def _sleep_embedder_enabled(config: dict) -> bool:
-    return (config.get("hypnos") or {}).get("consolidation_embedder_enabled", True)
+    return (config.get("sleep") or {}).get("consolidation_embedder_enabled", True)
 
 
 def _embedding_torch_backend(config: dict) -> bool:
@@ -123,7 +123,7 @@ def _embedding_torch_backend(config: dict) -> bool:
 
 
 def _world_model_jax_engine(config: dict) -> bool:
-    world_model = config.get("phantasia") or {}
+    world_model = config.get("world_model") or {}
     return (
         world_model.get("backend", "dreamerv3") == "dreamerv3"
         and world_model.get("engine", "jax") == "jax"
@@ -131,37 +131,37 @@ def _world_model_jax_engine(config: dict) -> bool:
 
 
 def _interoception_torch_needed(config: dict) -> bool:
-    return (config.get("soma") or {}).get("cfc_backend", "numpy") == "torch"
+    return (config.get("interoception") or {}).get("cfc_backend", "numpy") == "torch"
 
 
 def _sequence_torch_needed(config: dict) -> bool:
-    return (config.get("chronos") or {}).get("cfc_backend", "numpy") == "torch"
+    return (config.get("sequence") or {}).get("cfc_backend", "numpy") == "torch"
 
 
 def _planning_pymdp_backend(config: dict) -> bool:
-    return (config.get("nous") or {}).get("backend", "pymdp") == "pymdp"
+    return (config.get("planning") or {}).get("backend", "pymdp") == "pymdp"
 
 
 #: Maps a module/service name to the requirements that must be satisfied when
 #: it is enabled.  The keys are the public names used by the config table
-#: ``[modules].<name>``; ``"nexus"`` is a service and is only checked when
+#: ``[modules].<name>``; ``"dashboard"`` is a service and is only checked when
 #: explicitly requested.
 REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
-    "soma": (
+    "interoception": (
         Requirement("torch", "core", predicate=_interoception_torch_needed),
         Requirement("ncps", "core", predicate=_interoception_torch_needed),
         Requirement("pynvml", "nvidia", severity="warning"),
     ),
-    "chronos": (
+    "sequence": (
         Requirement("torch", "core", predicate=_sequence_torch_needed),
         Requirement("ncps", "core", predicate=_sequence_torch_needed),
     ),
-    "mnemos": (
+    "episodic_memory": (
         Requirement("sentence_transformers", "memory", predicate=_embedding_torch_backend),
         Requirement("qdrant_client", "memory", predicate=_episodic_memory_qdrant),
         Requirement("sqlite_vec", "memory-edge", predicate=_episodic_memory_sqlite_vec),
     ),
-    "empatheia": (
+    "social_cognition": (
         Requirement("qdrant_client", "memory", predicate=_social_cognition_qdrant),
         Requirement(
             "sentence_transformers",
@@ -169,7 +169,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
             predicate=lambda c: _social_cognition_qdrant(c) and _embedding_torch_backend(c),
         ),
     ),
-    "hypnos": (
+    "sleep": (
         Requirement(
             "sentence_transformers",
             "memory",
@@ -177,7 +177,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
             predicate=lambda c: _sleep_embedder_enabled(c) and _embedding_torch_backend(c),
         ),
     ),
-    "topos": (
+    "vision": (
         Requirement("torch", "core"),
         Requirement("transformers", "vision"),
         Requirement("PIL", "vision"),
@@ -189,17 +189,17 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("av", "audio", predicate=_audition_av_needed),
         Requirement("sherpa_onnx", "speech-edge", predicate=_audition_sherpa),
     ),
-    "vox": (
+    "vocal": (
         Requirement("sherpa_onnx", "speech-edge", predicate=_vocal_sherpa),
     ),
-    "nous": (
+    "planning": (
         Requirement("pymdp", "reasoning", predicate=_planning_pymdp_backend),
         Requirement("jax", "reasoning", predicate=_planning_pymdp_backend),
     ),
-    "phantasia": (
+    "world_model": (
         Requirement("jax", "worldmodel", predicate=_world_model_jax_engine),
     ),
-    "nexus": (
+    "dashboard": (
         Requirement("fastapi", "nexus"),
         Requirement("uvicorn", "nexus"),
         Requirement("jinja2", "nexus", transitive_for="fastapi.templating"),
@@ -220,8 +220,8 @@ def check(config: dict, *, services: Optional[Iterable[str]] = None) -> list[Mis
 
     missing: list[Missing] = []
     for name, reqs in REQUIREMENTS.items():
-        if name == "nexus":
-            if "nexus" not in enabled_services:
+        if name == "dashboard":
+            if "dashboard" not in enabled_services:
                 continue
         elif name not in enabled_modules:
             continue

@@ -36,51 +36,51 @@ A boot outside research mode is either operator-supervised (`KAINE_CYCLE_OPERATO
 
 ## Module supervisor (Supervisor)
 
-The supervisor is the cycle-layer watchdog in [`kaine/cycle/supervisor.py`](../../kaine/cycle/supervisor.py), outside the module registry. It polls every module for liveness every `[spot].poll_interval_s` seconds (2 by default).
+The supervisor is the cycle-layer watchdog in [`kaine/cycle/supervisor.py`](../../kaine/cycle/supervisor.py), outside the module registry. It polls every module for liveness every `[supervisor].poll_interval_s` seconds (2 by default).
 
-The shipped config disables the supervisor (`[spot].enabled = false`). Enable it in `config/kaine.operator.toml`.
+The shipped config disables the supervisor (`[supervisor].enabled = false`). Enable it in `config/kaine.operator.toml`.
 
 ### Liveness model
 
 The supervisor distinguishes two fault modes:
 
 - A crash (`dead`): a module task exited with an exception, or returned while the module was not shutting down.
-- A hang (`hung`): the module's heartbeat is older than `[spot].heartbeat_timeout_s` (60 s by default) while a task is still running and the entity is not in a [sleep](../09-modules/sleep.md).
+- A hang (`hung`): the module's heartbeat is older than `[supervisor].heartbeat_timeout_s` (60 s by default) while a task is still running and the entity is not in a [sleep](../09-modules/sleep.md).
 
 The supervisor handles one fault per poll.
 
-A frozen cycle's modules are silent, so the supervisor stays out of any freeze it does not hold itself. The one exception is a freeze held only by `gestation` (set when the developmental stimulus is lost; see [the developmental phase](./development.md)), during which the supervisor repairs crashes and ignores hangs.
+A frozen cycle's modules are silent, so the supervisor stays out of any freeze it does not hold itself. The one exception is a freeze held only by `development` (set when the developmental stimulus is lost; see [the developmental phase](./development.md)), during which the supervisor repairs crashes and ignores hangs.
 
 ### Freeze and restart ladder
 
-On a fault, the supervisor freezes the cycle under its own holder (`spot`) and, on the first attempt, snapshots the last good state. It then tries to recover the module:
+On a fault, the supervisor freezes the cycle under its own holder (`supervisor`) and, on the first attempt, snapshots the last good state. It then tries to recover the module:
 
 1. A light restart calls `BaseModule.restart()`, for modules that hold no external resources.
 2. A heavy rebuild, for modules that hold external resources, shuts down the old instance, builds a fresh one through the injected factory, initializes it, replaces it in the registry, rewires its subscriptions and restores the last good snapshot.
 
-Between attempts the supervisor waits `[spot].restart_backoff_s` seconds (3 by default). When recovery succeeds, the supervisor releases its freeze. When the same module fails again, the attempt count rises.
+Between attempts the supervisor waits `[supervisor].restart_backoff_s` seconds (3 by default). When recovery succeeds, the supervisor releases its freeze. When the same module fails again, the attempt count rises.
 
 ### Escalation
 
-After `[spot].max_restart_attempts` failed attempts (5 by default), the supervisor:
+After `[supervisor].max_restart_attempts` failed attempts (5 by default), the supervisor:
 
 1. takes a final state snapshot;
 2. writes `state/cycle/escalation.json` under the data root, with the module name, the attempt count, the snapshot id and a reboot instruction;
-3. publishes a critical `spot.status` event;
+3. publishes a critical `supervisor.status` event;
 4. signals the entrypoint to halt and shuts down every module, and the entrypoint exits with a non-zero status.
 
 The supervisor never reboots the host. The operator reboots the machine and restarts the cycle, and `escalation.json` names the snapshot to restore from.
 
 ### Durable incident log
 
-The supervisor writes an append-only log of its fault-recovery work to `state/cycle/incidents/incidents-<UTC-date>.jsonl` under the data root. It is separate from the live `spot.out` bus events that the dashboard shows: the bus streams are trimmed on every publish, and the incident log is kept on disk for research, operator post-mortems and welfare review.
+The supervisor writes an append-only log of its fault-recovery work to `state/cycle/incidents/incidents-<UTC-date>.jsonl` under the data root. It is separate from the live `supervisor.out` bus events that the dashboard shows: the bus streams are trimmed on every publish, and the incident log is kept on disk for research, operator post-mortems and welfare review.
 
 Each lifecycle transition produces one record:
 
 | Transition | What is recorded |
 |---|---|
 | `detect` | Fault class (`dead` or `hung`), the crash exception repr with filesystem paths scrubbed to `<PATH>` (`null` for hangs), `heartbeat_age_s`, `tasks_failed`, `tasks_total`, and the poll index. |
-| `freeze` | Freeze reason, source (`spot`), and the structured fault type. |
+| `freeze` | Freeze reason, source (`supervisor`), and the structured fault type. |
 | `snapshot` | Snapshot ID, byte size, number of modules that serialized cleanly, names of any that errored, whether the bundle was encrypted, duration, and label. |
 | `restart` | Attempt number, restart path (`light` or `heavy`), outcome (`recovered` or `failed`), latency, whether last-good state was restored, and the post-restart assessment. |
 | `escalate` | Total attempts, the final snapshot ID, and the `halted` outcome. |
@@ -91,17 +91,17 @@ The log is never cleared at boot. `escalation.json` and `state/cycle/control.jso
 
 The incident log has no retention purge and no `retention_days` key, so its history is never deleted automatically.
 
-The log is governed by `[spot.incident_log]`. The shipped config sets `[spot.incident_log].enabled = true`, so turning the supervisor on also turns on the log. Set `[spot.incident_log].enabled = false` to opt out.
+The log is governed by `[supervisor.incident_log]`. The shipped config sets `[supervisor.incident_log].enabled = true`, so turning the supervisor on also turns on the log. Set `[supervisor.incident_log].enabled = false` to opt out.
 
 ### Research-log annotation
 
-At each transition the supervisor also publishes a structured `spot.incident` bus event beside the live `spot.status` and `spot.log` events. When the curated research event log is enabled (`[research_event_log].enabled = true`; off in the shipped config), its observer writes each `spot.incident` event, filtered to the same operational fields as the durable log and stamped with the run's `run_id`, into `data/evaluation/research_events/` under the data root.
+At each transition the supervisor also publishes a structured `supervisor.incident` bus event beside the live `supervisor.status` and `supervisor.log` events. When the curated research event log is enabled (`[research_event_log].enabled = true`; off in the shipped config), its observer writes each `supervisor.incident` event, filtered to the same operational fields as the durable log and stamped with the run's `run_id`, into `data/evaluation/research_events/` under the data root.
 
 Run-level analysis can therefore see a freeze: the `incident_id` joins a record to the durable incident log, and the `run_id` joins it to the run. Each record carries the supervisor's `poll_index`, and the cycle's `tick_index` when it is available. No sensory content and no operator paths are included.
 
 ### Enabling and configuration
 
-Enable the supervisor with `[spot].enabled = true` in `config/kaine.operator.toml`. All `[spot]` keys and defaults are documented in the [configuration reference](../appendix-a-configuration/core.md).
+Enable the supervisor with `[supervisor].enabled = true` in `config/kaine.operator.toml`. All `[supervisor]` keys and defaults are documented in the [configuration reference](../appendix-a-configuration/core.md).
 
 ### Dashboard indicators
 
@@ -109,4 +109,4 @@ The [dashboard](../05-dashboard.md) diagnostics page (`/diagnostics/`) shows thr
 
 - A pulsing border around the whole window, yellow while a recovery is in progress and red after an escalation, when the operator must act. With no fault there is no border.
 - A text banner below the header with the state (`SPOT RECOVERY` or `SPOT CRITICAL`) and the affected module.
-- The supervisor console panel, a live log fed from the `spot.out` stream that shows each fault detection, restart attempt and outcome.
+- The supervisor console panel, a live log fed from the `supervisor.out` stream that shows each fault detection, restart attempt and outcome.

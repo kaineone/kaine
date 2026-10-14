@@ -8,9 +8,9 @@ These exercise the wiring an operator boots for the live validation of the
 entity, no GPU, no network. They cover the seam that the module/assembler unit
 tests do not:
 
-  - ``make_lingua`` threads the ``[lingua]`` persona / context-budget config
+  - ``make_language`` threads the ``[language]`` persona / context-budget config
     into the ``ContextAssembler`` (tasks 3.4, 4.1, 4.2).
-  - ``_wire_lingua_self_model`` seeds the first-person persona from the self-model module
+  - ``_wire_language_self_model`` seeds the first-person persona from the self-model module
     self-model, and is a safe no-op when the self-model module is absent (task 3.4).
 
 The offline analogue of operator step 6.1 ("the captured prompt contains the
@@ -56,8 +56,8 @@ def _snap(triples):
 
 def _interoception_event(wellness: float = 0.5):
     return Event(
-        source="soma",
-        type="soma.report",
+        source="interoception",
+        type="interoception.report",
         payload={"wellness": wellness, "alerts": []},
         salience=0.9,
         timestamp=datetime.now(timezone.utc),
@@ -88,13 +88,13 @@ class _FakeSelfModel:
     wiring only reads ``.model`` (values / norms / name / baseline)."""
 
     def __init__(self, model: _FakeSelfModelModel):
-        self.name = "eidolon"
+        self.name = "self_model"
         self.model = model
 
 
 @pytest.mark.asyncio
 async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
-    """The [lingua] persona/context keys reach the assembler: the captured
+    """The [language] persona/context keys reach the assembler: the captured
     request carries the configured name + persona text and the rendered
     coalition, not the bare utterance (task 4.2 + 6.1 offline analogue)."""
     language = _language(
@@ -121,11 +121,11 @@ async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
 
 @pytest.mark.asyncio
 async def test_context_max_events_config_bounds_the_coalition(bus, tmp_path):
-    """context_max_events threaded through make_lingua actually caps rendering:
+    """context_max_events threaded through make_language actually caps rendering:
     with a cap of 1, only the highest-salience event survives."""
     language = _language(bus, tmp_path, context_max_events=1)
     high = Event(
-        source="soma", type="soma.report",
+        source="interoception", type="interoception.report",
         payload={"wellness": 0.5, "alerts": []},
         salience=0.95, timestamp=datetime.now(timezone.utc), causal_parent=None,
     )
@@ -147,14 +147,14 @@ async def test_language_persona_seeds_from_bus_mediated_self_model(bus, tmp_path
     """The language module seeds its first-person persona from the self-model it caches
     off the bus, so a populated self-model surfaces in the system prompt (task 3.4).
 
-    The distributed-deployment change made ``_wire_lingua_self_model`` a documented
-    no-op seam: the self-model now reaches the language module as an ``eidolon.self_model``
-    snapshot on ``eidolon.out``, cached by ``_self_model_cache_loop`` into
+    The distributed-deployment change made ``_wire_language_self_model`` a documented
+    no-op seam: the self-model now reaches the language module as an ``self_model.self_model``
+    snapshot on ``self_model.out``, cached by ``_self_model_cache_loop`` into
     ``_bus_self_model`` (the bus read itself is covered by
     ``test_language_bus_self_model.py``). Here we assert that the cached model
     surfaces in the persona — the behavior the old in-process wiring used to test."""
     language = _language(bus, tmp_path)
-    # The snapshot _self_model_cache_loop stores from an eidolon.self_model event.
+    # The snapshot _self_model_cache_loop stores from an self_model.self_model event.
     language._bus_self_model = {"values": ["honesty", "curiosity"]}
     await language.speak("hi", snapshot=None)
 

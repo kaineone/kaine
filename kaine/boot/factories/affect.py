@@ -34,10 +34,10 @@ def make_affect(
         "publish_interval_s",
         "baseline_salience",
         "alert_salience",
-        "soma_stream",
-        "chronos_stream",
-        "mnemos_stream",
-        "volition_stream",
+        "interoception_stream",
+        "sequence_stream",
+        "episodic_memory_stream",
+        "action_selection_stream",
         "fast_time_constant_s",
         "slow_time_constant_s",
         "learning_progress_floor",
@@ -46,12 +46,12 @@ def make_affect(
         "valence_time_constant_s",
         "valence_progress_gain",
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
-        "coupling",  # nested [thymos.coupling] sub-table
+        "coupling",  # nested [affect.coupling] sub-table
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
     retired = {"social_drive_time_scale_s"}
     _require_keys(section, allowed | retired)
-    _warn_retired_keys(section, retired, "[thymos]")
+    _warn_retired_keys(section, retired, "[affect]")
     baseline = DimensionalState(
         valence=float(section.get("baseline_valence", 0.0)),
         arousal=float(section.get("baseline_arousal", 0.3)),
@@ -66,10 +66,10 @@ def make_affect(
                 "publish_interval_s",
                 "baseline_salience",
                 "alert_salience",
-                "soma_stream",
-                "chronos_stream",
-                "mnemos_stream",
-                "volition_stream",
+                "interoception_stream",
+                "sequence_stream",
+                "episodic_memory_stream",
+                "action_selection_stream",
                 "fast_time_constant_s",
                 "slow_time_constant_s",
                 "learning_progress_floor",
@@ -81,15 +81,15 @@ def make_affect(
             Affect,
         )
     )
-    # Build DriveSet from the optional [thymos.drives] sub-tables.
+    # Build DriveSet from the optional [affect.drives] sub-tables.
     drives_section = section.get("drives")
     try:
         drives = DriveSet.from_config(drives_section)
     except ValueError as exc:
-        raise ConfigurationError(f"Invalid [thymos.drives] configuration: {exc}") from exc
+        raise ConfigurationError(f"Invalid [affect.drives] configuration: {exc}") from exc
     kwargs["drives"] = drives
 
-    # Build CouplingConfig from the optional [thymos.coupling] sub-table.
+    # Build CouplingConfig from the optional [affect.coupling] sub-table.
     coupling_section = section.get("coupling") or {}
     coupling_allowed = {
         "enabled",
@@ -102,7 +102,7 @@ def make_affect(
     # (thymos-emergent-affect-coupling).
     coupling_ignored = {"coupling_max_rate_per_s"}
     _require_keys(coupling_section, coupling_allowed | coupling_ignored)
-    _warn_retired_keys(coupling_section, coupling_ignored, "[thymos.coupling]")
+    _warn_retired_keys(coupling_section, coupling_ignored, "[affect.coupling]")
     coupling_kwargs = config_kwargs(coupling_section, coupling_allowed, CouplingConfig)
     kwargs["coupling"] = CouplingConfig(**coupling_kwargs)
     return Affect(bus, entity_clock=entity_clock, **kwargs)

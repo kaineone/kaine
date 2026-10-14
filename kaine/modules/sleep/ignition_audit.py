@@ -10,19 +10,19 @@ wiring stays thin.
 Taxonomy:
 
 * external input types (other-initiated ignition): ``audition.transcription``,
-  ``mundus.chat``;
-* drive type: ``thymos.drive``;
-* realization markers: ``external_speech`` (lingua.external),
-  ``internal_speech`` (lingua.internal), ``vox.synthesized`` (vox.out),
-  ``praxis.action`` (praxis.out), and ``hypnos.sleep.started`` with
+  ``embodiment.chat``;
+* drive type: ``affect.drive``;
+* realization markers: ``external_speech`` (language.external),
+  ``internal_speech`` (language.internal), ``vocal.synthesized`` (vocal.out),
+  ``effectors.action`` (effectors.out), and ``sleep.sleep.started`` with
   ``trigger == "requested"`` (a realized rest); ``realization_failed`` is
   excluded;
-* ``intent.*`` on ``nous.out`` is unrealizable — no effector reads
-  ``nous.out`` — and is counted separately, never as executed;
-* planning-originated intents (``origin == "nous"``) are classified
-  ``nous_initiated`` before the input/drive/self rules;
-* ``volition.proposal_outcome`` events contribute ``nous_proposals_realized``,
-  ``nous_proposals_declined`` and ``nous_proposals_forwarded`` counts;
+* ``intent.*`` on ``planning.out`` is unrealizable — no effector reads
+  ``planning.out`` — and is counted separately, never as executed;
+* planning-originated intents (``origin == "planning"``) are classified
+  ``planning_initiated`` before the input/drive/self rules;
+* ``action_selection.proposal_outcome`` events contribute ``planning_proposals_realized``,
+  ``planning_proposals_declined`` and ``planning_proposals_forwarded`` counts;
   forwarded rests are counted separately because the sleep module decides them, and
   an accepted one shows up as a requested sleep.
 """
@@ -36,22 +36,22 @@ from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
 # definition from kaine.faithful.external_input, also used by heard-speech
 # redaction.
 # Internal drive coalition member type.
-DRIVE_TYPE = "thymos.drive"
+DRIVE_TYPE = "affect.drive"
 # Realization markers (a realized ignition). realization_failed is NOT here.
 # NOTE: when the vocal module is enabled an utterance may appear as BOTH external_speech
-# and vox.synthesized (counted twice in realized_total; acceptable while the vocal module
+# and vocal.synthesized (counted twice in realized_total; acceptable while the vocal module
 # ships disabled in the base thesis — revisit if the vocal module is enabled).
 REALIZATION_TYPES = frozenset(
-    {"external_speech", "internal_speech", "vox.synthesized", "praxis.action"}
+    {"external_speech", "internal_speech", "vocal.synthesized", "effectors.action"}
 )
 REALIZATION_FAILED = "realization_failed"
 INTENT_SPEAK = "intent.speak"
 INTENT_THINK = "intent.think"
 INTENT_ACT = "intent.act"
 INTENT_REST = "intent.rest"
-# No effector reads nous.out — act intents published there are unrealizable
+# No effector reads planning.out — act intents published there are unrealizable
 # wiring signals, never executed actions.
-UNREALIZABLE_STREAM = "nous.out"
+UNREALIZABLE_STREAM = "planning.out"
 
 
 def _member_type(member: Dict[str, Any]) -> Optional[str]:
@@ -72,11 +72,11 @@ def _intent_kind(event_type: str) -> Optional[str]:
 
 
 def _realization_kind(event_type: str, payload: Dict[str, Any]) -> Optional[str]:
-    if event_type == "praxis.action":
+    if event_type == "effectors.action":
         return "act"
     if event_type == "internal_speech":
         return "think"
-    if event_type == "hypnos.sleep.started":
+    if event_type == "sleep.sleep.started":
         if payload.get("trigger") == "requested":
             return "rest"
         return None
@@ -146,26 +146,26 @@ def classify_realizations(
     ``selected`` / ``coalition`` list of members carrying ``entry_id``,
     ``source``, ``type``, ``salience``). ``intents`` and ``realizations`` are
     event records ``{"stream", "type", "payload"}`` in stream order.
-    ``proposal_outcomes`` are ``volition.proposal_outcome`` records with
+    ``proposal_outcomes`` are ``action_selection.proposal_outcome`` records with
     ``realized`` bool and optional ``reason``.
 
     A successful realization (external_speech / internal_speech /
-    vox.synthesized with success=True / praxis.action / hypnos.sleep.started
+    vocal.synthesized with success=True / effectors.action / sleep.sleep.started
     with trigger="requested", excluding realization_failed and
-    vox.synthesized with success=False) is linked to the most recent prior
+    vocal.synthesized with success=False) is linked to the most recent prior
     intent of the matching kind: via the realization payload's ``entry_id``
     when present, else the most recent intent of that kind. The intent's
     ``entry_id`` is then matched against broadcast coalition members:
-    The planning-module-originated intents (``origin == "nous"``) win first as
-    ``nous_initiated``; otherwise input-triggered if the resolved member's
+    The planning-module-originated intents (``origin == "planning"``) win first as
+    ``planning_initiated``; otherwise input-triggered if the resolved member's
     source/type is an external-input type, or such a type was anywhere in the
     winning coalition of the triggering broadcast; drive-triggered if
-    ``thymos.drive`` is in the coalition path; else self-initiated. A missing
+    ``affect.drive`` is in the coalition path; else self-initiated. A missing
     link classifies as self-initiated — the honest default; never guess.
-    ``intent.*`` records on ``nous.out`` are counted separately as unrealizable
-    and never counted among executed actions. ``volition.proposal_outcome``
-    events contribute ``nous_proposals_realized``, ``nous_proposals_declined``
-    and ``nous_proposals_forwarded`` counts; a ``forwarded`` rest outcome
+    ``intent.*`` records on ``planning.out`` are counted separately as unrealizable
+    and never counted among executed actions. ``action_selection.proposal_outcome``
+    events contribute ``planning_proposals_realized``, ``planning_proposals_declined``
+    and ``planning_proposals_forwarded`` counts; a ``forwarded`` rest outcome
     counts only as forwarded, because the sleep module decides it.
     """
     coalitions: List[List[Dict[str, Any]]] = []
@@ -181,7 +181,7 @@ def classify_realizations(
         event_type = rec.get("type", "")
         payload = rec.get("payload") or {}
         if event_type.startswith("intent.") and rec.get("stream") == UNREALIZABLE_STREAM:
-            # Wiring signal only — no effector reads nous.out.
+            # Wiring signal only — no effector reads planning.out.
             unrealizable += 1
             continue
         kind = _intent_kind(event_type)
@@ -231,7 +231,7 @@ def classify_realizations(
             report.realization_failed_count += 1
             continue
         payload = rec.get("payload") or {}
-        if event_type == "vox.synthesized":
+        if event_type == "vocal.synthesized":
             if payload.get("success") is False:
                 report.realization_failed_count += 1
                 continue
@@ -254,17 +254,17 @@ def classify_realizations(
         # origin (the language module copies it from the intent it realized), an intent
         # linked exactly by entry_id, or a requested sleep's intent.rest.
         # A speech realization is never marked planning-module-initiated merely because
-        # the last intent of that kind in the window had origin "nous".
-        if payload.get("origin") == "nous":
-            category = "nous"
-        elif linked_exactly and intent_payload.get("origin") == "nous":
-            category = "nous"
+        # the last intent of that kind in the window had origin "planning".
+        if payload.get("origin") == "planning":
+            category = "planning"
+        elif linked_exactly and intent_payload.get("origin") == "planning":
+            category = "planning"
         elif (
-            event_type == "hypnos.sleep.started"
+            event_type == "sleep.sleep.started"
             and payload.get("trigger") == "requested"
-            and intent_payload.get("origin") == "nous"
+            and intent_payload.get("origin") == "planning"
         ):
-            category = "nous"
+            category = "planning"
         else:
             category = _classify(intent_entry)
         report.realized_total += 1
@@ -280,7 +280,7 @@ def classify_realizations(
                 report.input_triggered_entry_ids.append(entry_str)
             elif category == "drive":
                 report.drive_triggered_entry_ids.append(entry_str)
-            elif category == "nous":
+            elif category == "planning":
                 report.planning_initiated_entry_ids.append(entry_str)
             else:
                 report.self_initiated_entry_ids.append(entry_str)
@@ -288,7 +288,7 @@ def classify_realizations(
             report.input_triggered += 1
         elif category == "drive":
             report.drive_triggered += 1
-        elif category == "nous":
+        elif category == "planning":
             report.planning_initiated += 1
         else:
             report.self_initiated += 1

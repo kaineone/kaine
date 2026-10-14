@@ -222,7 +222,7 @@ def test_render_text_names_failed_conditions():
     assert "2_b" in message
     assert "3_c" in message
     assert "1_a" not in message
-    assert notice["nexus_url"] in message
+    assert notice["dashboard_url"] in message
 
 
 def test_render_text_without_conditions():
@@ -230,7 +230,7 @@ def test_render_text_without_conditions():
     title, message = render_text(notice)
     assert title == "KAINE kaine: boot failed"
     assert "Failed gate conditions" not in message
-    assert notice["nexus_url"] in message
+    assert notice["dashboard_url"] in message
 
 
 def _gvariant_string(s: str) -> str:

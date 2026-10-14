@@ -81,8 +81,8 @@ def test_check_agreement_pass(tmp_path):
     )
     config = {
         "hardware": {"devices": {"organ": "cuda:0", "vision": "cuda:1"}},
-        "hypnos": {"voice_alignment": {"training_device": "cuda:0"}},
-        "topos": {"device": "cuda:1"},
+        "sleep": {"voice_alignment": {"training_device": "cuda:0"}},
+        "vision": {"device": "cuda:1"},
     }
     assert check_agreement(config, env_path=env_path) == (
         "pass",
@@ -109,11 +109,11 @@ def test_check_agreement_fail_key_mismatch(tmp_path):
     )
     config = {
         "hardware": {"devices": {"organ": "cuda:0", "vision": "cuda:1"}},
-        "topos": {"device": "cuda:2"},
+        "vision": {"device": "cuda:2"},
     }
     status, detail = check_agreement(config, env_path=env_path)
     assert status == "fail"
-    assert "topos.device = cuda:2" in detail
+    assert "vision.device = cuda:2" in detail
     assert "[hardware.devices].vision = cuda:1" in detail
 
 

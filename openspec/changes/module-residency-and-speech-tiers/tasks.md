@@ -2,7 +2,7 @@
 
 - [x] 1.1 `portability-tiers` was archived on 2026-09-17: `runtime-backends`, `deployment-tiers` and `host-probe` are living specs. The deltas are revised against them. `deployment-tiers` already specifies "Tier 2 with module residency required", so this change needs no MODIFIED delta (recorded in `design.md`, Decisions).
 - [x] 1.2 `specs/module-residency/spec.md` is `## ADDED Requirements` only, and adds calibration and the fit report, reversible unload, one owner of model memory, residency waits that are not faults, the bounded perception queue, and the `Residency fit` pre-boot row.
-- [x] 1.3 `specs/speech-backend-tiers/spec.md` is rewritten over the existing `[vox].backend` / `[audition].backend` values and sherpa model ids. KittenTTS, Piper and whisper.cpp are dropped (recorded in `design.md`, Decisions).
+- [x] 1.3 `specs/speech-backend-tiers/spec.md` is rewritten over the existing `[vocal].backend` / `[audition].backend` values and sherpa model ids. KittenTTS, Piper and whisper.cpp are dropped (recorded in `design.md`, Decisions).
 - [x] 1.4 The small-host premise is corrected. The wizard does not disable modules. The blockers are the recommender's "not yet implemented" warning and the `Tier fit` row on tiers with `unsupported_modules`. The behaviour is captured as ADDED requirements in `module-residency` (fit report, `Residency fit` row).
 - [x] 1.5 `openspec validate module-residency-and-speech-tiers --strict` passes.
 
@@ -42,9 +42,9 @@
 
 ## 6. LLM residency via the existing chat endpoint
 
-- [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[lingua].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
+- [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
 - [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
-- [ ] 6.3 A config-compatibility test showing `[lingua].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added.
+- [ ] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added.
 
 ## 7. Speech ladder
 

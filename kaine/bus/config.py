@@ -230,10 +230,10 @@ def maxlen_for(config: BusConfig, stream: str) -> int:
 #: the configured maxlen caps imply. They are not limits and nothing enforces
 #: them. A stream that is not listed uses DEFAULT_TYPICAL_EVENT_BYTES.
 TYPICAL_EVENT_BYTES: dict[str, int] = {
-    "topos.out": 40_000,
+    "vision.out": 40_000,
     "workspace.broadcast": 6_600,
-    "chronos.out": 1_300,
-    "soma.out": 550,
+    "sequence.out": 1_300,
+    "interoception.out": 550,
     "cycle.out": 250,
     "audition.out": 400,
 }

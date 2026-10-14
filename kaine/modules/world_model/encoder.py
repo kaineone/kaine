@@ -10,7 +10,7 @@ content of one :class:`WorkspaceSnapshot`:
   * a per-source salience-weighted coalition bucket (one float per known
     module source — how loudly that source spoke into the workspace this tick),
   * an affect summary (intensity / valence / dominance) read from any
-    ``thymos.state`` event present in the coalition,
+    ``affect.state`` event present in the coalition,
   * the inhibition flag (1.0 when the broadcast was inhibited, else 0.0).
 
 This contains NO raw audio bytes, NO image bytes, NO transcript text — only
@@ -37,21 +37,21 @@ VERSION: str = "phantasia-encoder-v1"
 # Order is LOAD-BEARING: it fixes the observation-vector layout for VERSION.
 # Appending a new source (and bumping VERSION) is the supported evolution path.
 SOURCE_ORDER: tuple[str, ...] = (
-    "soma",
-    "chronos",
-    "topos",
+    "interoception",
+    "sequence",
+    "vision",
     "audition",
-    "vox",
-    "mnemos",
-    "nous",
-    "thymos",
-    "eidolon",
-    "empatheia",
-    "lingua",
-    "praxis",
-    "perception",
-    "mundus",
-    "phantasia",
+    "vocal",
+    "episodic_memory",
+    "planning",
+    "affect",
+    "self_model",
+    "social_cognition",
+    "language",
+    "effectors",
+    "perceptual_locus",
+    "embodiment",
+    "world_model",
 )
 
 # Affect summary slots (intensity, valence, dominance) + inhibition flag.
@@ -92,21 +92,21 @@ def encode_snapshot(snapshot: WorkspaceSnapshot) -> list[float]:
         if idx is not None:
             # Accumulate salience per source (a source can speak more than once).
             buckets[idx] = _clip01(buckets[idx] + float(event.salience))
-        # Read affect from a thymos.state event if one is in the coalition.
-        if event.type == "thymos.state":
+        # Read affect from a affect.state event if one is in the coalition.
+        if event.type == "affect.state":
             state = event.payload.get("state") or {}
             try:
                 affect_intensity = _clip01(abs(float(state.get("arousal", 0.0))))
                 affect_valence = float(state.get("valence", 0.0))
                 affect_dominance = float(state.get("dominance", 0.0))
             except (TypeError, ValueError):
-                # Malformed thymos.state payload (non-numeric arousal/valence/
+                # Malformed affect.state payload (non-numeric arousal/valence/
                 # dominance) — keep the affect slots at their prior/default
                 # values rather than crashing observation encoding, but log it:
                 # this shape of failure previously indicated a real producer/
                 # consumer event-contract bug elsewhere in the workspace.
                 log.debug(
-                    "phantasia encoder: malformed thymos.state affect fields",
+                    "phantasia encoder: malformed affect.state affect fields",
                     exc_info=True,
                 )
 

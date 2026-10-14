@@ -22,7 +22,7 @@ def _cfg(**over) -> mg.MaturationConfig:
             "endogenous_self_sustain": True,
             "entrain_then_autonomy": True,
             "hrv_variability_floor": 0.2,
-            "womb_prediction_error_ceiling": 0.3,
+            "stimulus_source_prediction_error_ceiling": 0.3,
             "return_to_baseline_seconds_ceiling": 30.0,
         },
     }

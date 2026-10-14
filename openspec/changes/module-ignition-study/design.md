@@ -9,7 +9,7 @@
   4. then, for k = 1…9, branch k followed by accumulate k.
 
   One start at a time.
-- **The seed.** A developmental-phase run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_birth = false`).
+- **The seed.** A developmental-phase run with staging on, the local stimulus source and automatic maturation (`require_operator_ack_for_maturation = false`).
   - When `runtime.json` reports the embodied stage, the runner waits until the maturation bloom has completed (the stimulus source reports matured), then requests a preservation with stop.
   - That preservation is the seed, S. The stage file in S carries the stimulus source's time at maturation.
 - **Branch k.** Revive S with the base set plus `order[:k]`.
@@ -38,7 +38,7 @@
   - the film-aligned ignition log;
   - a record of every stream the dashboard displays, after the same privacy filter the dashboard applies;
   - the language module's external utterances (local only, never export-eligible).
-- **Inner speech** (`lingua.internal`, `internal_speech`) is never recorded. See `run-recording`.
+- **Inner speech** (`language.internal`, `internal_speech`) is never recorded. See `run-recording`.
 - **Raw sense data is never persisted.** The raw bus archive stays off.
 
 ## Ignition analysis

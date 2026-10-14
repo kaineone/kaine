@@ -31,16 +31,16 @@ async def test_self_model_internal_speech_does_not_leak_to_external(tmp_path):
         e = SelfModel(
             h.bus,
             persistence_path=tmp_path / "x.json",
-            internal_speech_stream="lingua.internal",
+            internal_speech_stream="language.internal",
         )
         await h.register(e)
         await h.inject_to_stream(
-            "lingua.internal",
-            source="lingua",
+            "language.internal",
+            source="language",
             type="internal_speech",
             payload={"text": "private musing"},
         )
         # the self-model module SHOULD NOT publish that text on any external stream.
-        external = await h.collect("eidolon.out", count=1, timeout=0.3)
+        external = await h.collect("self_model.out", count=1, timeout=0.3)
         for ev in external:
             assert "private musing" not in json.dumps(ev.payload)

@@ -17,7 +17,7 @@ def test_roundtrip_nested_table():
         "count": 7,
         "rate": 1.5,
         "tags": ["research", "ignition"],
-        "modules": {"soma": True, "mnemos": False},
+        "modules": {"interoception": True, "episodic_memory": False},
         "perception_feed": {"mode": "playlist", "playlist_manifest": "/x.toml"},
     }
     out = dumps(data)
@@ -25,8 +25,8 @@ def test_roundtrip_nested_table():
     assert "enabled = true" in out
     assert "count = 7" in out
     assert "[modules]" in out
-    assert "soma = true" in out
-    assert "mnemos = false" in out
+    assert "interoception = true" in out
+    assert "episodic_memory = false" in out
     assert "[perception_feed]" in out
     assert 'mode = "playlist"' in out
 

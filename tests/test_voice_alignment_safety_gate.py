@@ -3,7 +3,7 @@
 
 """Tests for the two-layer voice-alignment safety gate.
 
-Both `[hypnos.voice_alignment].enabled` AND the env var
+Both `[sleep.voice_alignment].enabled` AND the env var
 KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1 must be set or no real
 training fires. Missing either condition produces a clean skip
 PhaseResult rather than an error.

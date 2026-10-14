@@ -31,7 +31,7 @@ Operator rules this design follows:
    - The fork draw is therefore exchangeable with the null draws. The decision `fork > 95th percentile of null` (`:396-397`) fires with probability about 6.7% per run whatever the drift. A 200,000-trial simulation of this exact rule (linear-interpolated 95th percentile of 50 draws) gave 0.0668.
    - Real drift moves the null and the fork together, so power equals the false-positive rate.
 2. **The maturation reference is never captured.**
-   - Nothing in `kaine/` constructs `IndividuationTest` except the operator CLI (`kaine/evaluation/benchmarks/individuation_runner.py:136`). No code captures or stores a maturation transcript (`git grep birth_state` finds docstrings only).
+   - Nothing in `kaine/` constructs `IndividuationTest` except the operator CLI (`kaine/evaluation/benchmarks/individuation_runner.py:136`). No code captures or stores a maturation transcript (`git grep maturation_state` finds docstrings only).
    - The module docstring says it is "never called from cycle/__main__.py" (`individuation.py:15`).
    - Yet `individuation-instrument-gate` tasks 1.2/1.3 are marked done.
 3. **There is no runtime producer.**
@@ -102,14 +102,14 @@ The probe does not measure individuation carried only by memories or by workspac
 
 **When**
 
-- On the maturation gate's maturation transition: register a maturation hook next to `gate_runner.set_birth_hook` (`gate_runner.py:138-140`). Capture runs as soon as the organ is loaded (`organ_unloaded()` false), before the first post-maturation sleep.
+- On the maturation gate's maturation transition: register a maturation hook next to `gate_runner.set_maturation_hook` (`gate_runner.py:138-140`). Capture runs as soon as the organ is loaded (`organ_unloaded()` false), before the first post-maturation sleep.
 - If capture fails or is pre-empted, retry with backoff. Until it succeeds every look is "inconclusive: no reference".
 - If the first post-maturation sleep with an accepted adapter completes first, the maturation state is gone. The reference is then labelled `reference_kind="capture"` with its timestamp; it is never presented as a maturation reference.
 - Entities matured before this change, and preserved bundles without a reference, are covered in section 5.
 
 **What is stored** (one encrypted document, `state/individuation/reference.json`, atomic write through the state encryptor):
 
-- `reference_id` (uuid4), `reference_kind` (`birth` | `capture` | `reconstructed`), `captured_at`, `born_at` (from `state/lifecycle/stage.json`).
+- `reference_id` (uuid4), `reference_kind` (`maturation` | `capture` | `reconstructed`), `captured_at`, `born_at` (from `state/lifecycle/stage.json`).
 - The battery texts and battery digest.
 - Conditions: model id, server build if the server reports one (to be checked in the smoke test), temperature, `max_tokens`, `think`, persona template version and `persona_name`, embedder id and dimension.
 - Maturation conditioning: adapter identity (manifest sha256, or "none") and the self-model `values[:5]`/`behavioral_norms[:5]`. If the maturation adapter is non-empty, a copy of the adapter file sits next to the reference, so the maturation configuration can be served again later (section 5, open question 7).
@@ -243,20 +243,20 @@ Statistically the floors are no longer needed: the test is valid at any time, an
 - `kaine/cycle/individuation_producer.py` (core). Statistics, storage, ledger and reader live in `kaine/lifecycle/individuation_*.py`.
 - The language-module-specific sampler is built in `kaine/cycle/__main__.py`, the allowed coupling point, and injected as a callable `sample(prompt, seed) -> ProbeSample | ProbeFailure`.
 - The language module gains one public, side-effect-free method, `probe_request(about, *, seed, max_tokens) -> ChatRequest`. It calls `self._assembler.assemble(about=about, snapshot=None, self_model=self._self_model(), mode="external")` and fills the language module's model, temperature and `think`.
-- The sampler calls `lingua.chat_client.complete(req)` directly. It never calls `speak()`, `think()` or `_produce` (`module.py:492-572`), so nothing is written to the intent log that feeds consolidation divergence and DPO training (`:522-532`), and no `*_speech` event is published (`:554-571`).
+- The sampler calls `language.chat_client.complete(req)` directly. It never calls `speak()`, `think()` or `_produce` (`module.py:492-572`), so nothing is written to the intent log that feeds consolidation divergence and DPO training (`:522-532`), and no `*_speech` event is published (`:554-571`).
 - The producer runs only when `[individuation].enabled`; the research boot gate requires it (section 7).
 
 **Schedule**
 
 1. Maturation capture (2.2), or capture of a legacy reference (section 5).
-2. A look is attempted 120 s after `hypnos.sleep.completed` (published at `kaine/modules/sleep/module.py:742`, after Phase 5 voice alignment, the only phase that changes adapters). A daily timer covers identity-clause changes made outside sleep.
+2. A look is attempted 120 s after `sleep.sleep.completed` (published at `kaine/modules/sleep/module.py:742`, after Phase 5 voice alignment, the only phase that changes adapters). A daily timer covers identity-clause changes made outside sleep.
 3. Preconditions, all checked before any request; any failure means "skip" (logged, no report):
    - a reference exists and the ledger is readable
    - warm-up met
    - the conditioning digest changed since the last look
    - `min_look_interval_s` elapsed
    - `organ_unloaded()` is false (`kaine/organ_window_state.py:98-109`)
-   - the sleep module is not asleep (no `hypnos.sleep.started` without a matching completion)
+   - the sleep module is not asleep (no `sleep.sleep.started` without a matching completion)
    - the cycle is not paused or frozen (`kaine/cycle/control_state`), because a paused entity is not probed
    - a semantic embedder is loaded
    - the served adapter can be verified. Only the `organ_adapter` hot-swap mode attaches the adapter to each request and reports it on the response. In the other modes a promoted adapter sits on disk while the organ may still serve older weights, so once an adapter exists, probes and captures are skipped as `adapter_unverifiable`. Measuring then would record the new adapter's digest against the old weights. The entity stays protected meanwhile, because preservation already counts a present adapter as divergence, and the long-inconclusive alert tells the operator.
@@ -264,10 +264,10 @@ Statistically the floors are no longer needed: the test is valid at any time, an
 **Organ contention**
 
 - One request at a time, `max_tokens = 160`, so one probe request holds the single llama-server slot for a few seconds.
-- Before each request the producer waits until an injected `lingua_idle()` predicate holds: no generation in flight and no speech in the last `lingua_quiet_s = 10 s`. It polls once a second.
+- Before each request the producer waits until an injected `language_idle()` predicate holds: no generation in flight and no speech in the last `language_quiet_s = 10 s`. It polls once a second.
 - The worst-case added delay to a language module request is one probe completion, far below the language module's 60 s timeout (`module.py:94`).
 - `run_deadline_s = 2700`. If the run cannot finish in time, it is inconclusive.
-- A `hypnos.sleep.started`, an organ unload or a pause during a run aborts it as inconclusive.
+- A `sleep.sleep.started`, an organ unload or a pause during a run aborts it as inconclusive.
 
 **Fail-closed run handling**
 
@@ -319,7 +319,7 @@ An inconclusive run is never scored, spends no alpha, writes a report with no p,
 **One decision for both consumers**
 
 - `assess_divergence(..., individuation=None)` takes optional in-memory evidence (live path) and otherwise reads the ledger and reports (CLI path). Both go through one pure function: `individuation_individuated = ledger.latched OR (fresh scored report with significant)`.
-- `diverged = individuation_individuated OR consolidation_diverged OR eidolon_drift OR adapters_present`.
+- `diverged = individuation_individuated OR consolidation_diverged OR self_model_drift OR adapters_present`.
 - The p-value ceiling, effect floor and warm-up apply inside the individuation decision (2.7), which both consumers share. `DivergenceMonitor._crosses_threshold` becomes `assessment.diverged`. `individuation_p_value_max` and `fork_divergence_min` are removed from `[preservation.divergence_monitor]` and rejected with a message pointing to `[individuation]`.
 - The monitor's own warm-up (`preservation_monitor.py:561-578`) is removed. It is replaced by a short `boot_settle_s = 120` before the first poll, so state can finish loading.
 
@@ -331,7 +331,7 @@ A non-significant individuation report does not suppress the secondary arms. Rea
 - A non-significant small-sample test is absence of evidence, not evidence of absence.
 - Preservation errors are asymmetric: a missed preservation can be irreversible, an extra one cannot.
 
-Rising-edge state is persisted per divergence arm (individuation, consolidation, eidolon_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
+Rising-edge state is persisted per divergence arm (individuation, consolidation, self_model_drift, adapters) in `state/preservation/divergence_edge.json`, a content-free list of arm names. Restarting with unchanged evidence then does not re-preserve on every boot, while a new arm crossing or a new latch does. An arm that falls back is recorded, so crossing it again preserves again. A failed preservation is not recorded and is retried after `min_interval_s`. An unreadable edge file reads as empty, which errs toward preserving again.
 
 The verdict computes the freshness digest from the configured adapter directory, the same one the producer uses, and from `self_model.json` on disk. Freshness only decides between "not individuated" and "stale", which the live monitor treats alike: neither preserves. The decommission CLI runs on a stopped entity whose self-model was saved at shutdown. So the short window in which the on-disk self-model lags the snapshot the producer probed cannot cause a missed preservation. A corrupt report line makes the individuation state unreadable, which counts as individuated.
 
@@ -378,7 +378,7 @@ An entity matured before this change, or revived from a bundle without `state/in
    - (b) a known test LoRA. It is trained by the existing voice-alignment pipeline (job queue, `kaine-trainer`, vetoes, GGUF conversion) on a fixed synthetic preference set written for the purpose: generic everyday prompts, with a plain first-person present-tense reply preferred over a generic assistant reply. That is the direction real voice alignment moves the organ. The production hyperparameters are used, so the shift has the size of a real alignment step rather than an exaggerated one. The adapter never touches entity data, and it lives on separate calibration volumes that the study's organ never mounts.
 
    Power at the look-10 threshold (α ≈ 3.8e-4) must be ≥ 0.8 against (b). Below 0.5, the instrument is not enabled.
-4. **No contamination.** During a full probe run, the intent log line count is unchanged and there are zero `lingua.*`/`*_speech` events.
+4. **No contamination.** During a full probe run, the intent log line count is unchanged and there are zero `language.*`/`*_speech` events.
 5. **Language impact.** Zero language module timeouts; added p95 language module latency ≤ one probe completion.
 6. **Seed behaviour.** Two requests with the same seed and same conditions: record whether the texts are identical (informational).
 7. **Cost.** Measure per-request latency and permutation wall time at B = 10^6; update the budgets in this design.
@@ -419,7 +419,7 @@ An entity matured before this change, or revived from a bundle without `state/in
 
 - MODIFY "Individuation warm-up fails closed": the runtime producer supplies persisted counters; the CLI becomes a simulation and validation harness.
 
-**nexus-observability**
+**dashboard-observability**
 
 - MODIFY: the individuation panel reads through the decrypting reader and shows only scalars.
 
@@ -448,8 +448,8 @@ Defaults taken without objection:
 3. **Chat client:** `ChatRequest.seed`; body field; `ChatResponse` exposes `finish_reason` and whether text came from `content`; tests for resting and reasoning-only responses.
 4. **Storage:** `kaine/lifecycle/individuation_store.py`. Encrypted reference and ledger (atomic; k never decreases; corrupt means fail closed), reports sink (`retention_days=0`), decrypting reader with kind, schema, reference and staleness filters, conditioning-digest helper over inputs, shared lived-time accumulator factored from `gate_runner.py`. Tests with encryption on and off.
 5. **Probe seam:** `Language.probe_request()`. Sampler built in `kaine/cycle/__main__.py` from the language module's client and self-model, `snapshot=None`, `cache_prompt` off. Contamination tests: intent log untouched, no bus events.
-6. **Producer:** `kaine/cycle/individuation_producer.py`. Maturation hook and legacy capture, look scheduling (sleep-completed trigger, digest change, rate limit, warm-up, organ, sleep and pause checks), `lingua_idle` yielding, deadline, fail-closed runs, report and ledger write, `individuation.out` publish, in-memory `IndividuationState`. Tests with a fake organ, including every failure path.
+6. **Producer:** `kaine/cycle/individuation_producer.py`. Maturation hook and legacy capture, look scheduling (sleep-completed trigger, digest change, rate limit, warm-up, organ, sleep and pause checks), `language_idle` yielding, deadline, fail-closed runs, report and ledger write, `individuation.out` publish, in-memory `IndividuationState`. Tests with a fake organ, including every failure path.
 7. **Shared verdict:** the single decision function in `kaine/lifecycle/divergence.py`; `assess_divergence(individuation=...)`; latch; STALE, INCONCLUSIVE and capture summaries; `DivergenceMonitor` simplified (no secondary-arm veto, no per-boot warm-up, persisted rising edge); config moves to `[individuation]` and old keys are rejected. Parity tests: one fixture matrix, both consumers agree on every row.
 8. **Preservation, revive and decommission backup** carry `state/individuation/`; research boot gate checks the producer and ledger. Tests.
-9. **Dashboard, config and docs:** `nexus_tab` through the shared reader; `config/kaine.toml` `[individuation]` with defaults (disabled); retire `kaine/evaluation/individuation.py` (or reduce it to a re-export); docs; spec deltas; `openspec validate --strict`.
+9. **Dashboard, config and docs:** `dashboard_tab` through the shared reader; `config/kaine.toml` `[individuation]` with defaults (disabled); retire `kaine/evaluation/individuation.py` (or reduce it to a re-export); docs; spec deltas; `openspec validate --strict`.
 10. **Real-organ smoke test** (operator-run, section 6), then set `effect_min` and the budgets from measurements, then enable in the research config only if every acceptance threshold passed.

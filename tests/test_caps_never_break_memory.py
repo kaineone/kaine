@@ -41,15 +41,15 @@ def test_positive_retention_is_still_honored():
 
 
 def test_shipped_identity_history_is_uncapped():
-    assert _shipped()["eidolon"]["identity_history_cap"] == 0
+    assert _shipped()["self_model"]["identity_history_cap"] == 0
 
 
 def test_shipped_voice_observations_are_uncapped():
-    assert _shipped()["eidolon"]["voice_observations_cap"] == 0
+    assert _shipped()["self_model"]["voice_observations_cap"] == 0
 
 
 def test_shipped_adapter_retention_keeps_every_adapter():
-    assert _shipped()["hypnos"]["voice_alignment"]["adapter_retention"] == 0
+    assert _shipped()["sleep"]["voice_alignment"]["adapter_retention"] == 0
 
 
 def test_shipped_config_has_no_snapshot_count_cap():

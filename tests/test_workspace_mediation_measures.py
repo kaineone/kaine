@@ -67,12 +67,12 @@ def test_mean_gain_negative_skip_raises():
 
 def test_headline_gain_means_processors():
     """The headline gain averages per-processor gains."""
-    assert headline_gain({"soma": 1.0, "topos": 3.0}) == 2.0
+    assert headline_gain({"interoception": 1.0, "vision": 3.0}) == 2.0
 
 
 def test_headline_gain_none_if_any_processor_missing():
     """The headline gain is undefined when any processor is undefined."""
-    assert headline_gain({"soma": None, "topos": 3.0}) is None
+    assert headline_gain({"interoception": None, "vision": 3.0}) is None
 
 
 def test_headline_gain_empty():
@@ -86,8 +86,8 @@ def test_pooled_snapshot_retains_candidates():
         (
             "a",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={},
                 salience=0.1,
                 timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -96,8 +96,8 @@ def test_pooled_snapshot_retains_candidates():
         (
             "b",
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={},
                 salience=0.9,
                 timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -128,8 +128,8 @@ def test_broadcast_context_adopts_pooled_snapshot():
         (
             "s",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={},
                 salience=0.6,
                 timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -138,8 +138,8 @@ def test_broadcast_context_adopts_pooled_snapshot():
         (
             "t",
             Event(
-                source="topos",
-                type="topos.report",
+                source="vision",
+                type="vision.report",
                 payload={},
                 salience=0.7,
                 timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -148,8 +148,8 @@ def test_broadcast_context_adopts_pooled_snapshot():
         (
             "c",
             Event(
-                source="chronos",
-                type="chronos.report",
+                source="sequence",
+                type="sequence.report",
                 payload={},
                 salience=0.5,
                 timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -164,8 +164,8 @@ def test_broadcast_context_adopts_pooled_snapshot():
 def test_broadcast_context_rejects_thresholded_snapshot():
     """A workspace-style snapshot below its own access threshold is not adopted."""
     event = Event(
-        source="soma",
-        type="soma.report",
+        source="interoception",
+        type="interoception.report",
         payload={},
         salience=0.8,
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),

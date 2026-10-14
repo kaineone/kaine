@@ -4,7 +4,7 @@
 """Homeostatic regulation detector for the interoception module.
 
 When prediction error remains above ``regulation_threshold`` for
-``sustain_window_s`` seconds, emits a ``soma.regulation`` advisory
+``sustain_window_s`` seconds, emits a ``interoception.regulation`` advisory
 event.  The interoception module NEVER actuates directly; it publishes intents and the
 cycle engine acts on them (separation of perception from control).
 
@@ -89,7 +89,7 @@ class RegulationDetector:
 
         Exposed so the interoception module's warm-up can record how long an advisory would have
         been sustaining when it withholds it (the ``sustain_elapsed_s`` field on
-        ``soma.regulation.withheld``), without re-parsing the advisory reason.
+        ``interoception.regulation.withheld``), without re-parsing the advisory reason.
         """
         if self._stress_start is None:
             return 0.0

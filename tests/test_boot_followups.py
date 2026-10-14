@@ -15,7 +15,7 @@ import kaine.cycle.__main__ as cyc
 from kaine.config import ConfigShapeError, validate_config_shape
 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT, ReviveRefused
 
-_VOCAL = "vox"
+_VOCAL = "vocal"
 
 
 def test_failing_phase_releases_resources_and_reraises(monkeypatch):
@@ -141,11 +141,11 @@ def test_revive_refusal_order():
 
 
 def test_social_cognition_operator_sources_shape():
-    validate_config_shape({"empatheia": {"operator_sources": ["live_mic", "manual"]}})
-    validate_config_shape({"empatheia": {}})
+    validate_config_shape({"social_cognition": {"operator_sources": ["live_mic", "manual"]}})
+    validate_config_shape({"social_cognition": {}})
     with pytest.raises(ConfigShapeError) as exc_info:
-        validate_config_shape({"empatheia": {"operator_sources": "live_mic"}})
-    assert "empatheia.operator_sources expected list of strings, got str" in str(
+        validate_config_shape({"social_cognition": {"operator_sources": "live_mic"}})
+    assert "social_cognition.operator_sources expected list of strings, got str" in str(
         exc_info.value
     )
 

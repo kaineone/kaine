@@ -59,7 +59,7 @@ def test_select_chatterbox_voice_explicit_default_wins(default_voice, expected_f
     choice = select_chatterbox_voice(CHATTERBOX_VOICES, default_voice=default_voice)
     assert choice.name == expected_filename
     assert choice.source == "default_voice"
-    assert choice.note == "named in [vox].default_voice"
+    assert choice.note == "named in [vocal].default_voice"
 
 
 def test_select_chatterbox_voice_invalid_gender_ignored_when_default_matches():
@@ -76,7 +76,7 @@ def test_select_chatterbox_voice_unknown_default_raises():
     with pytest.raises(VoiceSelectionError) as exc_info:
         select_chatterbox_voice(CHATTERBOX_VOICES, default_voice="nobody")
     message = str(exc_info.value)
-    assert "[vox].default_voice" in message
+    assert "[vocal].default_voice" in message
     assert "3 voices" in message
 
 
@@ -84,7 +84,7 @@ def test_select_chatterbox_voice_empty_list_raises():
     with pytest.raises(VoiceSelectionError) as exc_info:
         select_chatterbox_voice([])
     message = str(exc_info.value)
-    assert "[vox].predefined_voice_id" in message
+    assert "[vocal].predefined_voice_id" in message
     assert "\n" not in message
 
 
@@ -157,7 +157,7 @@ def test_normalize_gender_valid(value, expected):
 def test_normalize_gender_invalid(value):
     with pytest.raises(ValueError) as exc_info:
         normalize_gender(value)
-    assert "[vox].voice_gender" in str(exc_info.value)
+    assert "[vocal].voice_gender" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -214,7 +214,7 @@ def test_select_kokoro_speaker_explicit_default():
 def test_select_kokoro_speaker_unknown_default_raises():
     with pytest.raises(VoiceSelectionError) as exc_info:
         select_kokoro_speaker(FAKE_SPEAKERS, default_voice="nobody")
-    assert "[vox].default_voice" in str(exc_info.value)
+    assert "[vocal].default_voice" in str(exc_info.value)
 
 
 def test_select_kokoro_speaker_no_matching_gender():
@@ -222,7 +222,7 @@ def test_select_kokoro_speaker_no_matching_gender():
     with pytest.raises(VoiceSelectionError) as exc_info:
         select_kokoro_speaker(small_table, gender="male", model_id="test-model")
     assert "test-model" in str(exc_info.value)
-    assert "[vox].voice_gender" in str(exc_info.value)
+    assert "[vocal].voice_gender" in str(exc_info.value)
 
 
 def test_select_kokoro_speaker_empty_table_any():
@@ -235,7 +235,7 @@ def test_select_kokoro_speaker_empty_table_any():
 def test_select_kokoro_speaker_empty_table_gender_raises():
     with pytest.raises(VoiceSelectionError) as exc_info:
         select_kokoro_speaker([], gender="female")
-    assert "[vox].voice_gender" in str(exc_info.value)
+    assert "[vocal].voice_gender" in str(exc_info.value)
 
 
 def test_select_kokoro_speaker_empty_table_default_raises():

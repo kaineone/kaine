@@ -26,17 +26,17 @@ without a key. Key sources, rotation and the cryptographic details are in
 
 | Store or file | Contents | Protection |
 |---|---|---|
-| `state/eidolon/self_model.json` | Self-model: name, values, norms, identity history | App-layer AES-256-GCM |
+| `state/self_model/self_model.json` | Self-model: name, values, norms, identity history | App-layer AES-256-GCM |
 | `state/forks/<id>/snapshot.json` | Fork and merge bundles, including world-model weights | App-layer AES-256-GCM |
 | `data/evaluation/<observer>/` | Evaluation sidecar observer JSONL logs | App-layer AES-256-GCM per line |
-| `state/phantasia/world_model.ckpt` | world-model weights | App-layer AES-256-GCM |
+| `state/world_model/world_model.ckpt` | world-model weights | App-layer AES-256-GCM |
 | Episodic memory Qdrant collection (`kaine-qdrant-data`) | Memory embeddings and payloads | Qdrant API key; plain HTTP on the host or compose network (no TLS); OS-layer |
 | Social cognition Qdrant collection (`kaine-qdrant-data`) | Agent-model embeddings | Qdrant API key; plain HTTP on the host or compose network (no TLS); OS-layer |
-| `state/lingua/intent_expression.jsonl` | Intent and expression pairs, **high sensitivity** | OS-layer |
-| `state/hypnos/adapters/`, `kaine-organ-adapters` | Voice-alignment adapters | OS-layer |
-| `state/hypnos/voice_align_jobs/` | Trainer job data (deleted when a job ends) | OS-layer |
-| `state/praxis/audit.log`, `state/praxis/files/` | Effectors audit log and written files | OS-layer |
-| `state/vox/` | Retained speech output, when the sink is enabled | OS-layer |
+| `state/language/intent_expression.jsonl` | Intent and expression pairs, **high sensitivity** | OS-layer |
+| `state/sleep/adapters/`, `kaine-organ-adapters` | Voice-alignment adapters | OS-layer |
+| `state/sleep/voice_align_jobs/` | Trainer job data (deleted when a job ends) | OS-layer |
+| `state/effectors/audit.log`, `state/effectors/files/` | Effectors audit log and written files | OS-layer |
+| `state/vocal/` | Retained speech output, when the sink is enabled | OS-layer |
 | `kaine-redis-data` volume | Bus AOF | OS-layer |
 
 Anything marked OS-layer needs disk encryption (LUKS, FileVault or equivalent)

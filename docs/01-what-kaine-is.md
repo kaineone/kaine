@@ -26,7 +26,7 @@ The system runs continuously whether or not anyone interacts with it, on local h
 
 Before more modules join, a planned test asks whether competition for the workspace does work that pooling the same reports does not. Its measure is the cross-module broadcast information gain: at each report, the vision, audition and interoception modules evaluate their forward models once with the context they hold and once with a null context in which the other modules' share is replaced by its running mean, and the difference in prediction error, scaled by the processor's running mean error, is the gain. The thesis predicts a higher gain under competitive selection than under two controls: a matched arm that draws a coalition of the same size without regard to score, and a pooled arm that adopts every candidate as context with no selection or access gate.
 
-The per-report gain and the three arms are built: the vision, audition and interoception modules publish the gain as `context_gain`, and `[syneidesis].arm` selects the arm. The positive control that checks the measure detects injected information is built and off by default. The calibration of the intensity levels, the access threshold and the report bars is not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
+The per-report gain and the three arms are built: the vision, audition and interoception modules publish the gain as `context_gain`, and `[workspace].arm` selects the arm. The positive control that checks the measure detects injected information is built and off by default. The calibration of the intensity levels, the access threshold and the report bars is not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
 
 The second study is the module-addition study (the `ignition_study` in the code). It seeds an entity through the developmental phase and then adds held modules one at a time on branches from the preserved seed, starting with the episodic memory, world model, planning, self-model, social cognition and vocal modules. See [The module-addition study](15-experiments/ignition-study.md).
 
@@ -49,10 +49,10 @@ If you start the cycle with no profile selected, the loader in `kaine/config.py`
 Besides the seven modules, the `thesis_test` profile sets:
 
 - `[perception_feed]` mode `"seeded"` with seed `0`;
-- `[topos].foveation = true`;
-- `[chronos].forward_prediction = true`;
+- `[vision].foveation = true`;
+- `[sequence].forward_prediction = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
-- `[volition]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
+- `[action_selection]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
 
 Every other value comes from the shipped `config/kaine.toml`. State encryption at rest is enabled there, and an empty encryption key makes the cycle refuse to boot. See [Security and privacy](13-security-and-privacy.md).
 

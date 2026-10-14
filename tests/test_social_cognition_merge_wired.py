@@ -55,7 +55,7 @@ def _profile(
 
 
 def test_default_strategies_registers_social_cognition():
-    assert isinstance(default_strategies()["empatheia"], SocialCognitionMergeStrategy)
+    assert isinstance(default_strategies()["social_cognition"], SocialCognitionMergeStrategy)
 
 
 def test_fork_manager_merge_reconciles_social_cognition(tmp_path):
@@ -78,14 +78,14 @@ def test_fork_manager_merge_reconciles_social_cognition(tmp_path):
         last_seen=40.0,
     )
 
-    reg_a = FakeRegistry([FakeModule("empatheia", {"profiles": {"agent-1": profile_a}})])
-    reg_b = FakeRegistry([FakeModule("empatheia", {"profiles": {"agent-1": profile_b}})])
+    reg_a = FakeRegistry([FakeModule("social_cognition", {"profiles": {"agent-1": profile_a}})])
+    reg_b = FakeRegistry([FakeModule("social_cognition", {"profiles": {"agent-1": profile_b}})])
 
     snap_a = mgr.snapshot(reg_a)
     snap_b = mgr.snapshot(reg_b)
 
     merged = mgr.merge(snap_a.id, snap_b.id)
-    profile = merged.modules["empatheia"]["profiles"]["agent-1"]
+    profile = merged.modules["social_cognition"]["profiles"]["agent-1"]
 
     assert profile["interaction_count"] == 8
     assert profile["emotion_histogram"]["joy"] == pytest.approx(5 / 8)
@@ -116,8 +116,8 @@ def test_merge_reloads_from_disk(tmp_path):
         last_seen=40.0,
     )
 
-    reg_a = FakeRegistry([FakeModule("empatheia", {"profiles": {"agent-1": profile_a}})])
-    reg_b = FakeRegistry([FakeModule("empatheia", {"profiles": {"agent-1": profile_b}})])
+    reg_a = FakeRegistry([FakeModule("social_cognition", {"profiles": {"agent-1": profile_a}})])
+    reg_b = FakeRegistry([FakeModule("social_cognition", {"profiles": {"agent-1": profile_b}})])
 
     snap_a = mgr.snapshot(reg_a)
     snap_b = mgr.snapshot(reg_b)
@@ -125,4 +125,4 @@ def test_merge_reloads_from_disk(tmp_path):
     merged = mgr.merge(snap_a.id, snap_b.id)
 
     reloaded = mgr.load(merged.id)
-    assert reloaded.modules["empatheia"]["profiles"]["agent-1"]["interaction_count"] == 8
+    assert reloaded.modules["social_cognition"]["profiles"]["agent-1"]["interaction_count"] == 8

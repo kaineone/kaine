@@ -114,7 +114,7 @@ async def test_fake_encoder_satisfies_protocol():
 
 @pytest.mark.asyncio
 async def test_playlist_item_provenance_is_stamped_on_report(bus: AsyncBus):
-    """When a playlist feed is active, topos.report carries the CONTENT-FREE item
+    """When a playlist feed is active, vision.report carries the CONTENT-FREE item
     identity (basename + manifest order) read off the shared clock, so the
     playing show is legible on the bus rather than inferred from file descriptors
     (playlist-realtime-av-sync task 3.2/3.3)."""
@@ -129,8 +129,8 @@ async def test_playlist_item_provenance_is_stamped_on_report(bus: AsyncBus):
         current_item=PlaylistPosition(title="episode-01.mkv", order=0, offset=1.5, item_idx=0)
     )
     await vision.process_frame(object())
-    _, event = (await bus.read("topos.out", last_id="0"))[0]
-    assert event.type == "topos.report"
+    _, event = (await bus.read("vision.out", last_id="0"))[0]
+    assert event.type == "vision.report"
     assert event.payload["item"] == "episode-01.mkv"
     assert event.payload["item_order"] == 0
     # Content-free: only a basename str + an int order, never any pixels/bytes.
@@ -147,7 +147,7 @@ async def test_report_has_no_item_keys_without_a_playlist(bus: AsyncBus):
     enc = FakeEncoder([[1.0, 0.0, 0.0, 0.0]])
     vision = Vision(bus, encoder=enc)  # no live camera wired
     await vision.process_frame(object())
-    _, event = (await bus.read("topos.out", last_id="0"))[0]
+    _, event = (await bus.read("vision.out", last_id="0"))[0]
     assert "item" not in event.payload
     assert "item_order" not in event.payload
 
@@ -158,10 +158,10 @@ async def test_one_frame_produces_one_report(bus: AsyncBus):
     vision = Vision(bus, encoder=enc)
     entry_id = await vision.process_frame(object())
     assert entry_id
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     assert len(entries) == 1
     _, event = entries[0]
-    assert event.type == "topos.report"
+    assert event.type == "vision.report"
     assert event.payload["latent"] == [1.0, 0.0, 0.0, 0.0]
     assert event.payload["change_score"] == 0.0  # first frame
     assert 0.0 <= event.payload["habituation_score"] <= 1.0
@@ -179,7 +179,7 @@ async def test_orthogonal_frames_trigger_alert_salience(bus: AsyncBus):
     )
     await vision.process_frame(None)
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, second = entries[1]
     assert second.payload["change_score"] >= 1.0 - 1e-9
     assert second.salience == pytest.approx(0.85)
@@ -196,7 +196,7 @@ async def test_identical_frames_keep_baseline_salience(bus: AsyncBus):
     )
     await vision.process_frame(None)
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, second = entries[1]
     assert second.payload["change_score"] == pytest.approx(0.0, abs=1e-9)
     assert second.salience == pytest.approx(0.15)
@@ -259,7 +259,7 @@ async def test_custom_components_substitute(bus: AsyncBus):
         change_alert_threshold=200.0,  # 99.0 doesn't trigger
     )
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[0]
     assert ev.payload["change_score"] == 99.0
     assert ev.payload["habituation_score"] == pytest.approx(0.42)
@@ -288,7 +288,7 @@ async def test_prediction_error_on_payload(bus: AsyncBus):
     vision = Vision(bus, encoder=enc, forward_prediction=True)
     vision._forward_model = FakeForwardModel(latent_dim=4, preset_errors=[0.0])
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, event = entries[0]
     assert "prediction_error" in event.payload
     assert isinstance(event.payload["prediction_error"], float)
@@ -302,7 +302,7 @@ async def test_payload_retains_change_and_habituation(bus: AsyncBus):
     vision = Vision(bus, encoder=enc, forward_prediction=True)
     vision._forward_model = FakeForwardModel(latent_dim=4, preset_errors=[0.0])
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, event = entries[0]
     assert "change_score" in event.payload
     assert "habituation_score" in event.payload
@@ -343,15 +343,15 @@ async def test_predictable_motion_lower_salience_than_surprise(bus: AsyncBus):
     for _ in range(9):
         await vision_pred.process_frame(None)
 
-    await bus.client.delete("topos.out")  # clear bus for isolation
+    await bus.client.delete("vision.out")  # clear bus for isolation
     await vision_pred.process_frame(None)
 
-    entries_pred = await bus.read("topos.out", last_id="0")
+    entries_pred = await bus.read("vision.out", last_id="0")
     _, ev_pred = entries_pred[-1]
     predictable_salience = ev_pred.salience
 
     # --- Surprise frame: very high error against a low-error mean ---
-    await bus.client.delete("topos.out")
+    await bus.client.delete("vision.out")
     enc_surp = FakeEncoder([[0.9, 0.9, 0.9, 0.9]])
     vision_surp = Vision(
         bus,
@@ -366,7 +366,7 @@ async def test_predictable_motion_lower_salience_than_surprise(bus: AsyncBus):
 
     await vision_surp.process_frame(None)
 
-    entries_surp = await bus.read("topos.out", last_id="0")
+    entries_surp = await bus.read("vision.out", last_id="0")
     _, ev_surp = entries_surp[-1]
     surprise_salience = ev_surp.salience
 
@@ -390,7 +390,7 @@ async def test_forward_model_disabled_behavior_unchanged(bus: AsyncBus):
     assert vision._forward_model is None
     await vision.process_frame(None)
     await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, second = entries[1]
     # Orthogonal frames → change_score ≈ 1.0 > 0.5 → alert_salience
     assert second.salience == pytest.approx(0.85)
@@ -431,7 +431,7 @@ async def test_serialize_roundtrip_with_forward_model(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# Attention-driven foveation integration (topos-foveation)
+# Attention-driven foveation integration (vision-foveation)
 # ---------------------------------------------------------------------------
 
 
@@ -446,7 +446,7 @@ async def test_foveation_off_is_single_encode_and_no_extra_keys(bus: AsyncBus):
     vision = Vision(bus, encoder=enc)
     await vision.process_frame(_rgb_frame())
     assert enc.calls == 1  # single whole-frame encode
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[0]
     assert ev.payload["latent"] == [1.0, 0.0, 0.0, 0.0]
     assert "peripheral" not in ev.payload
@@ -463,7 +463,7 @@ async def test_foveation_on_emits_two_latents_and_content_free_fovea(bus: AsyncB
     vision = Vision(bus, encoder=enc, foveation_enabled=True)
     await vision.process_frame(_rgb_frame())
     assert enc.calls == 2  # peripheral + foveal
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[0]
     # First encode (peripheral) drives `latent`; second is the foveal detail.
     assert ev.payload["latent"] == [0.1, 0.2, 0.3, 0.4]
@@ -498,7 +498,7 @@ async def test_attention_schema_predicts_toward_the_fovea_trajectory(bus: AsyncB
     f2 = _rgb_frame(fill=0)
     f2[180:240, 260:320] = 255
     await vision.process_frame(f2)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[-1]
     fovea = ev.payload["fovea"]
     predicted = ev.payload["predicted_fovea"]
@@ -516,7 +516,7 @@ async def test_foveation_targets_the_changed_region(bus: AsyncBus):
     f = _rgb_frame(fill=0)
     f[180:240, 260:320] = 255  # brighten lower-right
     await vision.process_frame(f)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[-1]
     fovea = ev.payload["fovea"]
     assert fovea["x"] > 0.5 and fovea["y"] > 0.5  # lower-right
@@ -537,7 +537,7 @@ async def test_top_down_bias_provider_moves_the_fovea(bus: AsyncBus):
     f = _rgb_frame(fill=0)
     f[180:240, 260:320] = 255  # bottom-up wants lower-right...
     await vision.process_frame(f)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[-1]
     fovea = ev.payload["fovea"]
     assert fovea["x"] < 0.5 and fovea["y"] < 0.5  # ...but top-down wins: top-left
@@ -555,7 +555,7 @@ async def test_arousal_provider_sizes_the_fovea(bus: AsyncBus):
         vision = Vision(local_bus, encoder=enc, foveation_enabled=True)
         vision.set_arousal_provider(lambda: arousal)
         await vision.process_frame(_rgb_frame())
-        entries = await local_bus.read("topos.out", last_id="0")
+        entries = await local_bus.read("vision.out", last_id="0")
         await local_bus.close()
         return entries[-1][1].payload["fovea"]["size"]
 
@@ -577,7 +577,7 @@ async def test_provider_failure_degrades_to_bottom_up(bus: AsyncBus):
     vision.set_arousal_provider(_boom)
     entry_id = await vision.process_frame(_rgb_frame())  # must not raise
     assert entry_id
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     assert "fovea" in entries[-1][1].payload
 
 
@@ -640,7 +640,7 @@ async def test_change_step_alerts_relative_to_own_baseline(bus: AsyncBus):
     )
     for _ in range(5):
         await vision.process_frame(None)
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     saliences = [ev.salience for _, ev in entries]
     # The four steady frames stay at baseline; the step alerts.
     assert all(s == pytest.approx(0.2) for s in saliences[:4])
@@ -670,7 +670,7 @@ async def test_change_alert_is_embedding_scale_agnostic(bus: AsyncBus):
         )
         for _ in range(5):
             await vision.process_frame(None)
-        entries = await local_bus.read("topos.out", last_id="0")
+        entries = await local_bus.read("vision.out", last_id="0")
         return entries[4][1].payload["alert"] is True
 
     # cosine change is scale-invariant, so both scales alert on the step — the
@@ -707,7 +707,7 @@ async def test_change_step_alerts_with_foveation_on(bus: AsyncBus):
     )
     for _ in range(5):
         await vision.process_frame(_rgb_frame())
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     saliences = [ev.salience for _, ev in entries]
     assert all(s == pytest.approx(0.2) for s in saliences[:4])
     assert saliences[4] == pytest.approx(0.7)
@@ -755,7 +755,7 @@ async def test_foveation_accepts_pil_frames_from_the_live_feed(bus: AsyncBus):
     pil_frame = Image.new("RGB", (320, 240), (30, 60, 90))
     entry_id = await vision.process_frame(pil_frame)  # must not raise
     assert entry_id
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[0]
     assert "peripheral" in ev.payload and "foveal" in ev.payload
     assert "fovea" in ev.payload
@@ -857,7 +857,7 @@ async def test_skipped_first_report_publishes_no_vector_and_no_habituation(bus):
     vision = Vision(bus, encoder=FakeEncoder([[float("nan"), 0.0, 0.0, 0.0]]))
     await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     _, ev = entries[0]
 
     assert ev.payload["latent"] is None
@@ -884,7 +884,7 @@ async def test_foveation_skip_publishes_no_non_finite_vector(bus):
     for _ in range(3):
         await vision.process_frame(_rgb_frame())
 
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     payloads = [ev.payload for _, ev in entries]
     assert len(payloads) == 3
 

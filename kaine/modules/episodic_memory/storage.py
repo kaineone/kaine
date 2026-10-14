@@ -7,7 +7,7 @@
 default (Tier 2); `InMemoryStorage` is the deterministic fallback for
 tests; `SqliteVecStorage` is the in-process edge backend (Tier 0/1) —
 an ``asg017/sqlite-vec`` vector index with near-zero idle footprint and
-no server, selected by ``[mnemos].backend = "sqlite_vec"`` (openspec
+no server, selected by ``[episodic_memory].backend = "sqlite_vec"`` (openspec
 runtime-backends). All three satisfy the SAME protocol and store the same
 CLS collections, so selecting a backend never changes the episodic memory module's semantics.
 """

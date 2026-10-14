@@ -63,8 +63,8 @@ def make_sequence(
         types = kwargs["interaction_event_types"]
         if isinstance(types, str) or not isinstance(types, (list, tuple)):
             raise ConfigurationError(
-                "[chronos].interaction_event_types must be a list of event types"
+                "[sequence].interaction_event_types must be a list of event types"
             )
         kwargs["interaction_event_types"] = tuple(str(t) for t in types)
-    kwargs.update(_check_injections("chronos", injections, {"network"}))
+    kwargs.update(_check_injections("sequence", injections, {"network"}))
     return Sequence(bus, entity_clock=entity_clock, **kwargs)

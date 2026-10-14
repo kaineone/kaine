@@ -67,4 +67,4 @@ The language module's default backend SHALL be named `"openai"`, for the OpenAI-
 
 #### Scenario: The shipped profiles use the canonical name
 - **WHEN** the tier2 or tier3 profile is read
-- **THEN** its `[lingua].backend` is `"openai"`
+- **THEN** its `[language].backend` is `"openai"`

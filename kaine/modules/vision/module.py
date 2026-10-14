@@ -62,11 +62,11 @@ def _finite_or_none(vector: Any) -> Optional[list[float]]:
     return vector
 
 
-_SLEEP_STREAM: str = "hypnos.out"
+_SLEEP_STREAM: str = "sleep.out"
 
 
 class Vision(BaseModule):
-    name: ClassVar[str] = "topos"
+    name: ClassVar[str] = "vision"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
 
     def holds_external_resources(self) -> bool:
@@ -129,13 +129,13 @@ class Vision(BaseModule):
         # sampling rhythm dilates with the mind). Defaults to a real-time clock
         # → behavior-identical.
         entity_clock: Optional[EntityClock] = None,
-        # Attention-driven foveation (topos-foveation). Off by default → the
+        # Attention-driven foveation (vision-foveation). Off by default → the
         # existing single whole-frame encode is unchanged. When enabled, each
         # native-resolution frame yields a coarse spatial saliency map, a single
         # precision-weighted fovea target (bottom-up saliency + an optional
         # top-down bias, sized by arousal), and two encodes — a downsampled
         # peripheral gist plus a native foveal crop. See
-        # kaine/modules/vision/foveation.py and openspec topos-foveation.
+        # kaine/modules/vision/foveation.py and openspec vision-foveation.
         foveation_enabled: bool = False,
         foveation_grid: tuple[int, int] = (12, 12),
         foveation_hysteresis: float = 0.15,
@@ -188,7 +188,7 @@ class Vision(BaseModule):
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
-            PositiveControl("topos", positive_control)
+            PositiveControl("vision", positive_control)
             if positive_control is not None and positive_control.enabled
             else None
         )
@@ -225,14 +225,14 @@ class Vision(BaseModule):
         # frame was dropped before. `clip_len` is the encoder's frame count
         # (1 for the DINOv2 fallback / per-frame test doubles, 16 for
         # InternVideo-Next). One clip latent is produced every `clip_stride`
-        # frame-ticks once the buffer fills; no topos.report is published during
+        # frame-ticks once the buffer fills; no vision.report is published during
         # the warmup before the first fill.
         self._clip_len: int = int(getattr(self._encoder, "clip_len", 1))
         self._clip_stride: int = int(clip_stride)
         self._frame_buffer: deque[Any] = deque(maxlen=self._clip_len)
         self._frames_seen: int = 0
 
-        # Spatial foveation (topos-foveation) composes with a temporally-native
+        # Spatial foveation (vision-foveation) composes with a temporally-native
         # clip encoder (perception-drives-salience task 3): the peripheral gist and
         # foveal crop are each encoded through the encoder's clip seam
         # (`_encode_clip`), which encodes a `clip_len`-frame clip — for a per-frame
@@ -248,7 +248,7 @@ class Vision(BaseModule):
         # Initialize resolves this to the current stream tail via last_entry_id().
         self._sleep_cursor: str = "$"
 
-        # Attention-driven foveation state (topos-foveation). All memory-only.
+        # Attention-driven foveation state (vision-foveation). All memory-only.
         self._foveation_enabled: bool = bool(foveation_enabled)
         self._foveation_size_range: tuple[float, float] = (
             float(foveation_size_range[0]),
@@ -267,7 +267,7 @@ class Vision(BaseModule):
             SpatialSaliency(grid=foveation_grid) if self._foveation_enabled else None
         )
         self._prev_fovea: Optional[FoveaTarget] = None
-        # Attention schema (topos-foveation Phase 2): a small forward model of the
+        # Attention schema (vision-foveation Phase 2): a small forward model of the
         # fovea's own trajectory. Each foveated tick it predicts the *next* fovea
         # location from the recent gaze motion; the content-free prediction rides
         # in the report for the self-model and diagnostics. Memory-only, only
@@ -376,7 +376,7 @@ class Vision(BaseModule):
 
     @property
     def foveation_enabled(self) -> bool:
-        """Whether attention-driven foveation is active (topos-foveation)."""
+        """Whether attention-driven foveation is active (vision-foveation)."""
         return self._foveation_enabled
 
     @property
@@ -590,7 +590,7 @@ class Vision(BaseModule):
             # stays responsive during vision processing (performance-test-coverage).
             formed_stamp: tuple[Optional[int], Optional[float]] = (None, None)
             if getattr(self._forward_model, "context_dim", 0) > 0:
-                ctx, null = self._context.context_and_null(("topos",))
+                ctx, null = self._context.context_and_null(("vision",))
                 # Read before the step yields to the event loop, so a broadcast
                 # received during the step cannot change the stamp.
                 formed_stamp = self._context.last_reading
@@ -736,7 +736,7 @@ class Vision(BaseModule):
                 report["item"] = position.title
                 report["item_order"] = position.order
         event_id = await self.publish(
-            "topos.report",
+            "vision.report",
             report,
             salience=salience,
         )
@@ -860,7 +860,7 @@ class Vision(BaseModule):
         self._context.observe(snapshot)
 
     async def _sleep_loop(self) -> None:
-        """Subscribe to hypnos.out to gate adaptation during sleep."""
+        """Subscribe to sleep.out to gate adaptation during sleep."""
         try:
             while not self._stopped.is_set():
                 try:
@@ -873,12 +873,12 @@ class Vision(BaseModule):
                     if last_scanned is not None:
                         self._sleep_cursor = last_scanned
                         for _, event in entries:
-                            if event.type == "hypnos.sleep.started":
+                            if event.type == "sleep.sleep.started":
                                 self._in_sleep = True
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = True
                                 log.debug("topos: adaptation suspended (hypnos sleep started)")
-                            elif event.type == "hypnos.sleep.completed":
+                            elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 if self._forward_model is not None:
                                     self._forward_model.suspended = False

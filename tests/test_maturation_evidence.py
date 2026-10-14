@@ -125,8 +125,8 @@ async def test_sleeps_before_first_tick_are_ignored(
     for _ in range(2):
         await fake_async_bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -141,8 +141,8 @@ async def test_sleeps_before_first_tick_are_ignored(
     for _ in range(2):
         await fake_async_bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -161,8 +161,8 @@ async def test_only_sleep_completed_events_count(
 
     await fake_async_bus.publish(
         Event(
-            source="hypnos",
-            type="hypnos.sleep.started",
+            source="sleep",
+            type="sleep.sleep.started",
             payload={},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -170,8 +170,8 @@ async def test_only_sleep_completed_events_count(
     )
     await fake_async_bus.publish(
         Event(
-            source="hypnos",
-            type="hypnos.sleep.completed",
+            source="sleep",
+            type="sleep.sleep.completed",
             payload={},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -180,7 +180,7 @@ async def test_only_sleep_completed_events_count(
     await fake_async_bus.publish(
         Event(
             source="other",
-            type="hypnos.sleep.completed",
+            type="sleep.sleep.completed",
             payload={},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -200,8 +200,8 @@ async def test_sleep_count_resumes_across_restarts(
     for _ in range(2):
         await fake_async_bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -212,8 +212,8 @@ async def test_sleep_count_resumes_across_restarts(
 
     await fake_async_bus.publish(
         Event(
-            source="hypnos",
-            type="hypnos.sleep.completed",
+            source="sleep",
+            type="sleep.sleep.completed",
             payload={},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -247,11 +247,11 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
 
     # Wrong event type is ignored.
     await bus.client.xadd(
-        "gestation.out",
+        "development.out",
         _encode_event(
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="womb.heartbeat",
+                type="stimulus_source.heartbeat",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -260,16 +260,16 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         id="1000001-0",
     )
     assert await runner._stimulus_source_readiness_readout() is None
-    await bus.client.delete("gestation.out")
+    await bus.client.delete("development.out")
 
     # A readout from just before this boot is ignored even though it is young
     # enough to pass the age window (500 ms old against a 3 s window).
     await bus.client.xadd(
-        "gestation.out",
+        "development.out",
         _encode_event(
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -278,15 +278,15 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         id="999500-0",
     )
     assert await runner._stimulus_source_readiness_readout() is None
-    await bus.client.delete("gestation.out")
+    await bus.client.delete("development.out")
 
     # A readout from a source other than the developmental-phase owner is ignored.
     await bus.client.xadd(
-        "gestation.out",
+        "development.out",
         _encode_event(
             Event(
                 source="impostor",
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": {"x": 2}},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -295,15 +295,15 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
         id="1000500-0",
     )
     assert await runner._stimulus_source_readiness_readout() is None
-    await bus.client.delete("gestation.out")
+    await bus.client.delete("development.out")
 
     # Fresh valid readout -> the embedded readout dict.
     await bus.client.xadd(
-        "gestation.out",
+        "development.out",
         _encode_event(
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -316,13 +316,13 @@ async def test_stimulus_source_readiness_readout_trustworthiness(
 
     # Stale by age (default 3 cadences * 1.0 s).
     monkeypatch.setattr(bus, "server_time_ms", AsyncMock(return_value=1_010_000))
-    await bus.client.delete("gestation.out")
+    await bus.client.delete("development.out")
     await bus.client.xadd(
-        "gestation.out",
+        "development.out",
         _encode_event(
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": {"x": 1}},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),

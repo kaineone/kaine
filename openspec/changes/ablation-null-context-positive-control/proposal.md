@@ -13,7 +13,7 @@ The positive control (§6.3, A.8) is not built in this change. The paper leaves 
 ## What Changes
 
 - `BroadcastContext.context_and_null(kept_sources)` returns the context and its null from one reading of the clock, so the two share the age and flags exactly. The vision, audition and interoception modules use it
-- Each of `topos.report`, `audition.perception` and `soma.report` carries `null_prediction_error` and `mean_prediction_error`, set exactly when `context_gain` is set, so that the gain equals the null error minus the error over the mean. The curated research log copies both, and the post-run range sweep declares them non-negative.
+- Each of `vision.report`, `audition.perception` and `interoception.report` carries `null_prediction_error` and `mean_prediction_error`, set exactly when `context_gain` is set, so that the gain equals the null error minus the error over the mean. The curated research log copies both, and the post-run range sweep declares them non-negative.
 - When the interoception module's forward model skips a non-finite reading it clears its null error and its stored prediction, context and hidden state, so neither that reading nor the next one reports a gain and the next one makes no update from stale state. The interoception module leaves the skipped reading out of its running mean error.
 
 ## Capabilities

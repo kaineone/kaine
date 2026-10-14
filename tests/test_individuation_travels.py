@@ -243,7 +243,7 @@ async def test_decommission_backup_and_delete(real_encryptor, tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},  # no Qdrant: the runtime default would need a live store
         out_root=tmp_path / "backups",
         entity_name="decom",
         assessment=assessment,
@@ -276,7 +276,7 @@ def test_research_gate_requires_individuation(monkeypatch):
     assert result.checks["individuation_enabled"] is False
     assert any("[individuation]" in failure for failure in result.failures)
 
-    config = {"modules": {"lingua": True, "eidolon": True}}
+    config = {"modules": {"language": True, "self_model": True}}
     result2 = research_gate.evaluate_safety_net(config)
     assert not result2.ok
     assert result2.checks["individuation_enabled"] is False

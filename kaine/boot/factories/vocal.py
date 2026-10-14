@@ -42,8 +42,8 @@ def make_vocal(
         "request_timeout_s",
         "baseline_salience",
         "alert_salience",
-        "lingua_external_stream",
-        "thymos_state_stream",
+        "language_external_stream",
+        "affect_state_stream",
         # Runtime backend selection (openspec runtime-backends). "chatterbox"
         # (default) uses the HTTP service above; "sherpa_onnx" runs Kokoro
         # in-process through sherpa-onnx (no torch, no service).
@@ -82,7 +82,7 @@ def make_vocal(
         "sherpa_num_threads",
     }
     kw = config_kwargs(section, sorted(allowed - {"mirroring"} - backend_keys), Vocal)
-    # [vox.mirroring] sub-table.
+    # [vocal.mirroring] sub-table.
     mirroring_section = section.get("mirroring") or {}
     mirroring_allowed = {"enabled", "mirror_strength", "mirror_ceiling", "decay_s"}
     _require_keys(mirroring_section, mirroring_allowed)
@@ -132,7 +132,7 @@ def make_vocal(
         if sherpa_speaker_id is not None:
             speaker_id = int(sherpa_speaker_id)
             name = kokoro_speaker_name(speakers, speaker_id)
-            note = "configured in [vox].sherpa_speaker_id"
+            note = "configured in [vocal].sherpa_speaker_id"
         else:
             choice = select_kokoro_speaker(
                 speakers,
@@ -153,7 +153,7 @@ def make_vocal(
             num_threads=int(sherpa_num_threads),
         )
 
-    registry = BackendRegistry[TTSClient]("vox", default="chatterbox").register(
+    registry = BackendRegistry[TTSClient]("vocal", default="chatterbox").register(
         "chatterbox", _chatterbox_factory
     ).register("sherpa_onnx", _sherpa_factory)
     try:

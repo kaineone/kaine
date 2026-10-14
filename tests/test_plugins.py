@@ -68,7 +68,7 @@ def test_no_plugins_section_does_not_call_entry_points():
     called = []
     lp = load_plugins(
         {},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=lambda group: called.append(group) or [_NeverLoadEP()],
     )
     assert not lp
@@ -78,7 +78,7 @@ def test_no_plugins_section_does_not_call_entry_points():
 def test_installed_but_not_enabled_is_not_loaded():
     lp = load_plugins(
         {"plugins": {"enabled": []}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(_NeverLoadEP()),
     )
     assert not lp
@@ -89,7 +89,7 @@ def test_missing_plugin_raises():
     with pytest.raises(PluginError, match="missing"):
         load_plugins(
             {"plugins": {"enabled": ["missing"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(),
         )
 
@@ -100,7 +100,7 @@ def test_duplicate_entry_point_name_raises():
     with pytest.raises(PluginError, match="dup"):
         load_plugins(
             {"plugins": {"enabled": ["dup"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(ep1, ep2),
         )
 
@@ -116,7 +116,7 @@ def test_entry_point_load_failure_raises():
     with pytest.raises(PluginError, match="bad"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(BadEP()),
         )
 
@@ -128,7 +128,7 @@ def test_factory_failure_raises():
     with pytest.raises(PluginError, match="bad"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", boom)),
         )
 
@@ -146,7 +146,7 @@ def test_seams_failure_raises():
     with pytest.raises(PluginError, match="bad"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", P)),
         )
 
@@ -154,7 +154,7 @@ def test_seams_failure_raises():
 def test_seams_non_set_raises():
     class P:
         def seams(self, config):
-            return ["chronos.network"]
+            return ["sequence.network"]
 
         def injections(self, module, config):
             return {}
@@ -162,17 +162,17 @@ def test_seams_non_set_raises():
     with pytest.raises(PluginError, match="bad"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", P)),
         )
 
 
 def test_unknown_seam_raises():
-    p = _ConfigurablePlugin("bad", {"chronos.cfc_units"})
-    with pytest.raises(PluginError, match="chronos\\.cfc_units"):
+    p = _ConfigurablePlugin("bad", {"sequence.cfc_units"})
+    with pytest.raises(PluginError, match="sequence\\.cfc_units"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", lambda: p)),
         )
 
@@ -182,18 +182,18 @@ def test_unknown_oscillator_module_raises():
     with pytest.raises(PluginError, match="oscillator\\.unknown"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", lambda: p)),
         )
 
 
 def test_two_plugins_same_seam_raises():
-    p1 = _ConfigurablePlugin("p1", {"chronos.network"})
-    p2 = _ConfigurablePlugin("p2", {"chronos.network"})
-    with pytest.raises(PluginError, match="chronos\\.network"):
+    p1 = _ConfigurablePlugin("p1", {"sequence.network"})
+    p2 = _ConfigurablePlugin("p2", {"sequence.network"})
+    with pytest.raises(PluginError, match="sequence\\.network"):
         load_plugins(
             {"plugins": {"enabled": ["p1", "p2"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(
                 FakeEP("p1", lambda: p1),
                 FakeEP("p2", lambda: p2),
@@ -202,91 +202,91 @@ def test_two_plugins_same_seam_raises():
 
 
 def test_oscillator_seam_when_layer_off_raises():
-    p = _ConfigurablePlugin("bad", {"oscillator.chronos"})
-    with pytest.raises(PluginError, match="oscillator\\.chronos"):
+    p = _ConfigurablePlugin("bad", {"oscillator.sequence"})
+    with pytest.raises(PluginError, match="oscillator\\.sequence"):
         load_plugins(
             {"plugins": {"enabled": ["bad"]}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("bad", lambda: p)),
         )
 
 
 def test_oscillator_seam_when_layer_on_loads():
-    p = _ConfigurablePlugin("good", {"oscillator.chronos"})
+    p = _ConfigurablePlugin("good", {"oscillator.sequence"})
     lp = load_plugins(
         {"plugins": {"enabled": ["good"]}, "oscillator": {"enabled": True}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("good", lambda: p)),
     )
     assert lp
-    assert lp.declares_oscillator("chronos")
+    assert lp.declares_oscillator("sequence")
 
 
 def test_injections_for_returns_merged_values_and_logs(caplog):
     p = _ConfigurablePlugin(
         "good",
-        {"chronos.network", "soma.forward_model"},
+        {"sequence.network", "interoception.forward_model"},
         {
-            "chronos": {"network": "chronos-model"},
-            "soma": {"forward_model": "soma-model"},
+            "sequence": {"network": "chronos-model"},
+            "interoception": {"forward_model": "soma-model"},
         },
     )
     lp = load_plugins(
         {"plugins": {"enabled": ["good"]}},
-        known_modules=["chronos", "soma"],
+        known_modules=["sequence", "interoception"],
         entry_points=_eps(FakeEP("good", lambda: p)),
     )
     with caplog.at_level(logging.WARNING, logger="kaine.plugins"):
-        assert lp.injections_for("chronos") == {"network": "chronos-model"}
-        assert lp.injections_for("soma") == {"forward_model": "soma-model"}
+        assert lp.injections_for("sequence") == {"network": "chronos-model"}
+        assert lp.injections_for("interoception") == {"forward_model": "soma-model"}
     logs = [rec.message for rec in caplog.records]
-    assert "plugin good fills chronos.network" in logs
-    assert "plugin good fills soma.forward_model" in logs
+    assert "plugin good fills sequence.network" in logs
+    assert "plugin good fills interoception.forward_model" in logs
 
 
 def test_injections_for_undeclared_key_raises():
-    p = _ConfigurablePlugin("bad", {"chronos.network"}, {"chronos": {"network": 1, "extra": 2}})
+    p = _ConfigurablePlugin("bad", {"sequence.network"}, {"sequence": {"network": 1, "extra": 2}})
     lp = load_plugins(
         {"plugins": {"enabled": ["bad"]}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("bad", lambda: p)),
     )
     with pytest.raises(PluginError, match="extra"):
-        lp.injections_for("chronos")
+        lp.injections_for("sequence")
 
 
 def test_injections_for_missing_declared_key_raises():
-    p = _ConfigurablePlugin("bad", {"chronos.network"})
+    p = _ConfigurablePlugin("bad", {"sequence.network"})
     lp = load_plugins(
         {"plugins": {"enabled": ["bad"]}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("bad", lambda: p)),
     )
-    with pytest.raises(PluginError, match="chronos\\.network"):
-        lp.injections_for("chronos")
+    with pytest.raises(PluginError, match="sequence\\.network"):
+        lp.injections_for("sequence")
 
 
 def test_injections_for_module_with_no_seam_does_not_call_plugin():
-    p = _ConfigurablePlugin("p", {"chronos.network"})
+    p = _ConfigurablePlugin("p", {"sequence.network"})
     lp = load_plugins(
         {"plugins": {"enabled": ["p"]}},
-        known_modules=["chronos", "soma"],
+        known_modules=["sequence", "interoception"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
-    assert lp.injections_for("soma") == {}
+    assert lp.injections_for("interoception") == {}
     assert p.inject_calls == 0
 
 
 def test_injections_for_is_called_fresh_each_time():
-    p = _ConfigurablePlugin("p", {"chronos.network"}, {"chronos": {"network": object()}})
+    p = _ConfigurablePlugin("p", {"sequence.network"}, {"sequence": {"network": object()}})
     lp = load_plugins(
         {"plugins": {"enabled": ["p"]}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
-    a = lp.injections_for("chronos")
-    b = lp.injections_for("chronos")
-    c = lp.injections_for("chronos")
+    a = lp.injections_for("sequence")
+    b = lp.injections_for("sequence")
+    c = lp.injections_for("sequence")
     assert p.inject_calls == 3
     assert a is not b and b is not c
 
@@ -295,66 +295,66 @@ def test_oscillator_for_declared_returns_object():
     expected = object()
 
     def maker(module, config, defaults):
-        assert module == "chronos"
+        assert module == "sequence"
         assert config == {"x": 1}
         assert defaults == {"d": 2}
         return expected
 
-    p = _ConfigurablePlugin("p", {"oscillator.chronos"}, maker=maker)
+    p = _ConfigurablePlugin("p", {"oscillator.sequence"}, maker=maker)
     lp = load_plugins(
         {"plugins": {"enabled": ["p"], "p": {"x": 1}}, "oscillator": {"enabled": True}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
-    assert lp.oscillator_for("chronos", {"d": 2}) is expected
+    assert lp.oscillator_for("sequence", {"d": 2}) is expected
     assert p.make_calls == 1
 
 
 def test_oscillator_for_missing_method_raises():
     class P:
         def seams(self, config):
-            return frozenset({"oscillator.chronos"})
+            return frozenset({"oscillator.sequence"})
 
         def injections(self, module, config):
             return {}
 
     lp = load_plugins(
         {"plugins": {"enabled": ["p"]}, "oscillator": {"enabled": True}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", P)),
     )
     with pytest.raises(PluginError, match="make_oscillator"):
-        lp.oscillator_for("chronos", {})
+        lp.oscillator_for("sequence", {})
 
 
 def test_oscillator_for_none_return_raises():
-    p = _ConfigurablePlugin("p", {"oscillator.chronos"}, maker=lambda *_: None)
+    p = _ConfigurablePlugin("p", {"oscillator.sequence"}, maker=lambda *_: None)
     lp = load_plugins(
         {"plugins": {"enabled": ["p"]}, "oscillator": {"enabled": True}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
     with pytest.raises(PluginError, match="returned None"):
-        lp.oscillator_for("chronos", {})
+        lp.oscillator_for("sequence", {})
 
 
 def test_oscillator_for_undeclared_module_returns_none():
-    p = _ConfigurablePlugin("p", {"chronos.network"})
+    p = _ConfigurablePlugin("p", {"sequence.network"})
     lp = load_plugins(
         {"plugins": {"enabled": ["p"]}, "oscillator": {"enabled": True}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
-    assert lp.oscillator_for("chronos", {}) is None
+    assert lp.oscillator_for("sequence", {}) is None
     assert p.make_calls == 0
 
 
 def test_manifest_entry_lists_metadata_and_sorted_seams():
-    p1 = _ConfigurablePlugin("p1", {"soma.forward_model", "chronos.network"})
-    p2 = _ConfigurablePlugin("p2", {"nous.engine"})
+    p1 = _ConfigurablePlugin("p1", {"interoception.forward_model", "sequence.network"})
+    p2 = _ConfigurablePlugin("p2", {"planning.engine"})
     lp = load_plugins(
         {"plugins": {"enabled": ["p1", "p2"]}},
-        known_modules=["chronos", "soma", "nous"],
+        known_modules=["sequence", "interoception", "planning"],
         entry_points=_eps(
             FakeEP("p1", lambda: p1, FakeDist("dist-one", "1.2.3")),
             FakeEP("p2", lambda: p2, FakeDist("dist-two", "4.5.6")),
@@ -364,13 +364,13 @@ def test_manifest_entry_lists_metadata_and_sorted_seams():
         "p1": {
             "distribution": "dist-one",
             "version": "1.2.3",
-            "seams": sorted(["chronos.network", "soma.forward_model"]),
+            "seams": sorted(["sequence.network", "interoception.forward_model"]),
             "observes_cycle": False,
         },
         "p2": {
             "distribution": "dist-two",
             "version": "4.5.6",
-            "seams": ["nous.engine"],
+            "seams": ["planning.engine"],
             "observes_cycle": False,
         },
     }
@@ -378,27 +378,27 @@ def test_manifest_entry_lists_metadata_and_sorted_seams():
 
 
 def test_manifest_entry_empty_when_no_plugins():
-    lp = load_plugins({}, known_modules=["chronos"], entry_points=_eps())
+    lp = load_plugins({}, known_modules=["sequence"], entry_points=_eps())
     assert lp.manifest_entry() == {}
     assert bool(lp) is False
 
 
 def test_plugin_receives_its_own_config_table():
-    p = _ConfigurablePlugin("p", {"chronos.network"})
+    p = _ConfigurablePlugin("p", {"sequence.network"})
     load_plugins(
         {"plugins": {"enabled": ["p"], "p": {"alpha": 1}}},
-        known_modules=["chronos"],
+        known_modules=["sequence"],
         entry_points=_eps(FakeEP("p", lambda: p)),
     )
     assert p.seen_config == {"alpha": 1}
 
 
 def test_non_dict_plugin_table_raises():
-    p = _ConfigurablePlugin("p", {"chronos.network"})
+    p = _ConfigurablePlugin("p", {"sequence.network"})
     with pytest.raises(PluginError, match="p"):
         load_plugins(
             {"plugins": {"enabled": ["p"], "p": "not-a-table"}},
-            known_modules=["chronos"],
+            known_modules=["sequence"],
             entry_points=_eps(FakeEP("p", lambda: p)),
         )
 

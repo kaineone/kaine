@@ -115,7 +115,7 @@ def fit_report(
     budgets: tuple[Domain, ...] | list[Domain],
     needs: tuple[Need, ...] | list[Need],
     *,
-    pin: str = "lingua",
+    pin: str = "language",
 ) -> FitReport:
     """Build a fit report from budgets and per-domain needs."""
     budget_by_domain = {b.name: b for b in budgets}

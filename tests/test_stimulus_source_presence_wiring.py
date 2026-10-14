@@ -33,7 +33,7 @@ async def test_stimulus_source_clock_starts_a_publisher_that_announces_deliverie
     clock.mark_delivered("audio", 3)
     stop = asyncio.Event()
     task = _start_stimulus_source_presence(
-        {"perception_feed": {"mode": "womb", "_shared_womb_clock": clock}}, _Bus(), stop
+        {"perception_feed": {"mode": "stimulus_source", "_shared_stimulus_source_clock": clock}}, _Bus(), stop
     )
     assert task is not None
     await asyncio.sleep(0.05)
@@ -41,5 +41,5 @@ async def test_stimulus_source_clock_starts_a_publisher_that_announces_deliverie
     await asyncio.wait_for(task, timeout=2.0)
     assert published
     assert published[0].source == DEVELOPMENT_SOURCE
-    assert published[0].type == "gestation.womb"
+    assert published[0].type == "development.stimulus_source"
     assert published[0].payload == {"provider": "local", "frame_index": 7}

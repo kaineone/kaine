@@ -5,8 +5,8 @@
 
 Detects and counts four welfare-relevant conditions:
 
-(a) Unmaintained fatigue — a ``soma.fatigue`` threshold crossing occurs
-    but no ``hypnos.sleep.completed`` (maintenance) follows within a
+(a) Unmaintained fatigue — a ``interoception.fatigue`` threshold crossing occurs
+    but no ``sleep.sleep.completed`` (maintenance) follows within a
     configurable window (``maintenance_window_s``, default 900 s / 15 min).
 
 (b) Sustained extreme affect module VAD — the affect module's VAD (valence + arousal)
@@ -14,12 +14,12 @@ Detects and counts four welfare-relevant conditions:
     arousal > extreme_vad_threshold) for longer than ``extreme_vad_duration_s``
     (default 60 s).
 
-(c) Replay write-rate excess — the rate of ``mnemos.replay`` events within
+(c) Replay write-rate excess — the rate of ``episodic_memory.replay`` events within
     the consolidation window exceeds ``replay_rate_threshold`` events per
     ``consolidation_window_s`` seconds (defaults 10 events / 5 s).
 
 (d) Sustained interoceptive distress — the ``prediction_error`` magnitude
-    carried by ``soma.report`` events on ``soma.out`` stays at or above
+    carried by ``interoception.report`` events on ``interoception.out`` stays at or above
     ``interoceptive_distress_threshold`` (default 0.8) continuously for at
     least ``interoceptive_distress_duration_s`` (default 30 s).  The sustain
     timer resets whenever the magnitude drops below the threshold, so a single
@@ -39,9 +39,9 @@ It NEVER copies any field from a source event payload into the emitted (or
 sink-written) gray-zone dict. The published payload is byte-for-byte the same
 content-free dict written to the sink.
 
-The observer also follows ``topos.out`` and ``audition.out``. At start it
+The observer also follows ``vision.out`` and ``audition.out``. At start it
 writes a one-time ``{"advisory": "reset"}`` line to its JSONL sink and begins
-reading ``topos.out`` and ``audition.out`` from their current tail, so a
+reading ``vision.out`` and ``audition.out`` from their current tail, so a
 restart never replays stale history and rollup readers treat the reset as
 clearing every processor's blind and silent state. It publishes a
 ``welfare.blind_sensor`` advisory on ``welfare.out`` when a processor's
@@ -50,7 +50,7 @@ readings stay undefined (N consecutive null ``prediction_error`` samples,
 one interoceptive-distress duration), and ``welfare.blind_sensor_cleared``
 when a defined sample returns. It also publishes a
 ``welfare.sensor_silent`` advisory when a processor that reports on a steady
-cadence (``soma``, ``topos`` or ``audition_acoustic``) has published at least
+cadence (``interoception``, ``vision`` or ``audition_acoustic``) has published at least
 once and then publishes nothing for one interoceptive-distress duration of
 unfrozen time, plus ``welfare.sensor_silent_cleared`` when it publishes
 again. ``audition_tone`` is left out because ``audition.emotion`` reports only
@@ -103,11 +103,11 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
 
 log = logging.getLogger(__name__)
 
-_INTEROCEPTION_STREAM = "soma.out"
-_SLEEP_STREAM = "hypnos.out"
-_AFFECT_STREAM = "thymos.out"
-_EPISODIC_MEMORY_STREAM = "mnemos.out"
-_VISION_STREAM = "topos.out"
+_INTEROCEPTION_STREAM = "interoception.out"
+_SLEEP_STREAM = "sleep.out"
+_AFFECT_STREAM = "affect.out"
+_EPISODIC_MEMORY_STREAM = "episodic_memory.out"
+_VISION_STREAM = "vision.out"
 _AUDITION_STREAM = "audition.out"
 
 # Emitted gray-zone signal: source "welfare" → stream "welfare.out".
@@ -187,7 +187,7 @@ class WelfareObserver(StreamSubscriberObserver):
         self._extreme_vad_since: float | None = None
 
         # --- State for (c): replay write-rate. ---
-        # Timestamps of recent mnemos.replay events (for sliding window).
+        # Timestamps of recent episodic_memory.replay events (for sliding window).
         self._replay_timestamps: deque[float] = deque()
 
         # --- State for (d): sustained interoceptive distress. ---
@@ -547,7 +547,7 @@ class WelfareObserver(StreamSubscriberObserver):
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1
         # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
-        # the raw soma.report prediction_error is NOT copied — only the
+        # the raw interoception.report prediction_error is NOT copied — only the
         # derived seconds_sustained scalar.
         await self._emit_gray_zone(
             {
@@ -563,11 +563,11 @@ class WelfareObserver(StreamSubscriberObserver):
     # --- Stream handlers -------------------------------------------------
 
     async def _handle_interoception(self, entry_id: str, event: Event) -> None:
-        if event.type == "soma.fatigue":
+        if event.type == "interoception.fatigue":
             # Record fatigue threshold crossing time.
             self._fatigue_crossed_at = self._unfrozen.now()
-            log.debug("welfare_observer: soma.fatigue crossing recorded at %s", entry_id)
-        elif event.type == "soma.report":
+            log.debug("welfare_observer: interoception.fatigue crossing recorded at %s", entry_id)
+        elif event.type == "interoception.report":
             # (d) Track interoceptive prediction-error magnitude through the
             # shared sustained-threshold tracker. ``prediction_error`` is a
             # scalar float published by the interoception module's SubstrateForwardModel on every
@@ -595,7 +595,7 @@ class WelfareObserver(StreamSubscriberObserver):
                 )
 
     async def _handle_sleep(self, entry_id: str, event: Event) -> None:
-        if event.type != "hypnos.sleep.completed":
+        if event.type != "sleep.sleep.completed":
             return
         # Maintenance completed — clear the pending fatigue alarm.
         self._fatigue_crossed_at = None
@@ -605,7 +605,7 @@ class WelfareObserver(StreamSubscriberObserver):
         )
 
     async def _handle_affect(self, entry_id: str, event: Event) -> None:
-        if event.type != "thymos.state":
+        if event.type != "affect.state":
             return
         payload = event.payload or {}
         state = payload.get("state") or {}
@@ -623,7 +623,7 @@ class WelfareObserver(StreamSubscriberObserver):
             self._extreme_vad_since = None
 
     async def _handle_episodic_memory(self, entry_id: str, event: Event) -> None:
-        if event.type != "mnemos.replay":
+        if event.type != "episodic_memory.replay":
             return
         now = time.monotonic()
         self._replay_timestamps.append(now)
@@ -635,7 +635,7 @@ class WelfareObserver(StreamSubscriberObserver):
         if len(self._replay_timestamps) > self._replay_rate_threshold:
             self._replay_overload_count += 1
             # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only.
-            # NO field from the source mnemos.replay event payload is copied here.
+            # NO field from the source episodic_memory.replay event payload is copied here.
             record = {
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "gray_zone_event": "replay_overload",

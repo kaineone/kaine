@@ -357,7 +357,7 @@ class DreamerV3WorldModel:
             raise ImportError(
                 "Phantasia backend 'dreamerv3' engine='jax' requires the [worldmodel] extra "
                 "(jax). Install it with: pip install '.[worldmodel]' — or set "
-                '[phantasia].backend = "fake" / engine = "numpy".'
+                '[world_model].backend = "fake" / engine = "numpy".'
             ) from exc
 
         self._rssm = _rssm

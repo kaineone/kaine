@@ -3,10 +3,10 @@
 
 """Affect/drive dependency-injection seam for the live salience factors.
 
-The paper's four-factor salience (`intensity × novelty × goal × thymos`) needs
+The paper's four-factor salience (`intensity × novelty × goal × affect`) needs
 the entity's current affect (for the affect factor) and current drives (for the
-goal factor). Both are produced by the affect module and ride the ``thymos.out`` stream as
-``thymos.state`` events that the cognitive cycle already collects each tick.
+goal factor). Both are produced by the affect module and ride the ``affect.out`` stream as
+``affect.state`` events that the cognitive cycle already collects each tick.
 
 Rather than have the workspace layer import ``kaine.modules`` to read
 the affect module's interior (an architecture-boundary violation), the cycle — the
@@ -16,7 +16,7 @@ hand (no new bus read), and the salience factors read it back through injected
 callables (``dimensional_state`` for :class:`StateModulator`, ``drive_values``
 for :class:`DriveRelevanceGoalScorer`). Dependency injection, not import.
 
-Purity: ``observe`` folds the last-known ``thymos.state`` from a batch the cycle
+Purity: ``observe`` folds the last-known ``affect.state`` from a batch the cycle
 already gathered. No wall-clock, no RNG, no bus I/O — so salience stays a pure
 function of ``(event, affect_state, goal_state)`` and the deterministic-cycle
 guarantee is preserved.
@@ -30,9 +30,9 @@ from kaine.modules.affect.state import DimensionalState
 
 
 class AffectStateProvider:
-    """Last-known affect + drive snapshot, refreshed from ``thymos.state``.
+    """Last-known affect + drive snapshot, refreshed from ``affect.state``.
 
-    Before the first ``thymos.state`` is observed the provider reports the
+    Before the first ``affect.state`` is observed the provider reports the
     affect module baseline (``DimensionalState()``) and empty drives, so a real factor
     reads a well-defined neutral value rather than raising.
     """
@@ -42,14 +42,14 @@ class AffectStateProvider:
         self._drives: dict[str, float] = {}
 
     def observe(self, events: Iterable[tuple[str, Event]]) -> None:
-        """Fold the latest ``thymos.state`` in ``events`` into the snapshot.
+        """Fold the latest ``affect.state`` in ``events`` into the snapshot.
 
         The cycle passes the canonically-ordered event batch it collected this
-        tick; the last ``thymos.state`` (freshest under that ordering) wins. A
-        tick with no ``thymos.state`` leaves the snapshot unchanged (last-known).
+        tick; the last ``affect.state`` (freshest under that ordering) wins. A
+        tick with no ``affect.state`` leaves the snapshot unchanged (last-known).
         """
         for _, event in events:
-            if event.type != "thymos.state":
+            if event.type != "affect.state":
                 continue
             state = event.payload.get("state")
             if isinstance(state, dict):

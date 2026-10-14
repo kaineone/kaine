@@ -33,7 +33,7 @@ modality per factor.
 Everything is built as **JAX arrays / lists-of-arrays over factors/modalities**
 to match the pymdp 1.0 API. The :class:`GenerativeModel` dataclass holds the
 A/B/C/D tensors plus the labels needed to translate a posterior back into the
-preserved ``nous.belief`` contract.
+preserved ``planning.belief`` contract.
 
 Seam to grow factors online
 ---------------------------
@@ -70,7 +70,7 @@ ACTION_SPACE: tuple[str, ...] = (
 )
 
 # Default perceptual factor labels (states). These are the human-readable
-# labels surfaced in the preserved `nous.belief.statement` field.
+# labels surfaced in the preserved `planning.belief.statement` field.
 SALIENCE_BANDS: tuple[str, ...] = ("salience_low", "salience_medium", "salience_high")
 
 AFFECT_QUADRANTS: tuple[str, ...] = (
@@ -94,14 +94,14 @@ DEFAULT_EVENT_CLUSTERS: tuple[str, ...] = (
 # Mapping from event SOURCE (module name) to an event-cluster label. Unmapped
 # sources fall through to `cluster_other`. This is intentionally small in v1.
 _SOURCE_TO_CLUSTER: dict[str, str] = {
-    "soma": "cluster_perception",
-    "topos": "cluster_perception",
+    "interoception": "cluster_perception",
+    "vision": "cluster_perception",
     "audition": "cluster_perception",
-    "chronos": "cluster_perception",
-    "thymos": "cluster_affect",
-    "empatheia": "cluster_affect",
-    "eidolon": "cluster_self",
-    "mnemos": "cluster_self",
+    "sequence": "cluster_perception",
+    "affect": "cluster_affect",
+    "social_cognition": "cluster_affect",
+    "self_model": "cluster_self",
+    "episodic_memory": "cluster_self",
 }
 
 # Factor / modality ordering. Factor 0 is the (single) control factor.
@@ -120,7 +120,7 @@ class GenerativeModel:
     the model is cheap to serialize and so :mod:`engine` can hand them to
     :class:`pymdp.agent.Agent` (which casts to JAX). ``state_labels`` gives the
     human-readable label for every (factor, state) so a posterior can be
-    rendered into the preserved ``nous.belief`` contract.
+    rendered into the preserved ``planning.belief`` contract.
     """
 
     A: list[np.ndarray]
@@ -438,7 +438,7 @@ def encode_snapshot(
     arousal: Optional[float] = None
     for _eid, event in getattr(snapshot, "selected_events", []) or []:
         payload = getattr(event, "payload", {}) or {}
-        if getattr(event, "source", "") == "thymos":
+        if getattr(event, "source", "") == "affect":
             state = payload.get("state") if isinstance(payload, dict) else None
             if isinstance(state, dict):
                 if "valence" in state:

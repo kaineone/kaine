@@ -116,8 +116,8 @@ async def test_vision_reports_context_gain(bus):
             (
                 "1-0",
                 Event(
-                    source="soma",
-                    type="soma.report",
+                    source="interoception",
+                    type="interoception.report",
                     payload={"k": 1},
                     salience=0.6,
                     timestamp=datetime.now(timezone.utc),
@@ -133,7 +133,7 @@ async def test_vision_reports_context_gain(bus):
     for _ in range(3):
         await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     payload = _last_payload(entries)
     assert "context_gain" in payload
     assert "context_age_s" in payload
@@ -155,8 +155,8 @@ async def test_vision_gain_is_zero_when_the_context_carries_nothing(bus):
                 (
                     f"{i}-0",
                     Event(
-                        source="soma",
-                        type="soma.report",
+                        source="interoception",
+                        type="interoception.report",
                         payload={"k": 1},
                         salience=0.5,
                         timestamp=datetime.now(timezone.utc),
@@ -170,7 +170,7 @@ async def test_vision_gain_is_zero_when_the_context_carries_nothing(bus):
         await vision.on_workspace(snapshot)
         await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     payload = _last_payload(entries)
     assert payload["context_gain"] == 0.0
     assert payload["null_prediction_error"] == payload["prediction_error"]
@@ -190,8 +190,8 @@ async def test_vision_report_carries_the_paired_evaluations(bus):
             (
                 "1-0",
                 Event(
-                    source="soma",
-                    type="soma.report",
+                    source="interoception",
+                    type="interoception.report",
                     payload={"k": 1},
                     salience=0.5,
                     timestamp=datetime.now(timezone.utc),
@@ -211,8 +211,8 @@ async def test_vision_report_carries_the_paired_evaluations(bus):
             (
                 "2-0",
                 Event(
-                    source="thymos",
-                    type="thymos.report",
+                    source="affect",
+                    type="affect.report",
                     payload={"k": 1},
                     salience=0.75,
                     timestamp=datetime.now(timezone.utc),
@@ -229,7 +229,7 @@ async def test_vision_report_carries_the_paired_evaluations(bus):
     for _ in range(2):
         await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0")
+    entries = await bus.read("vision.out", last_id="0")
     payload = _last_payload(entries)
     assert isinstance(payload["null_prediction_error"], float)
     assert isinstance(payload["mean_prediction_error"], float)
@@ -288,8 +288,8 @@ async def test_vision_skips_a_non_finite_latent(bus):
             (
                 "1-0",
                 Event(
-                    source="soma",
-                    type="soma.report",
+                    source="interoception",
+                    type="interoception.report",
                     payload={"k": 1},
                     salience=0.6,
                     timestamp=datetime.now(timezone.utc),
@@ -324,8 +324,8 @@ async def test_vision_skips_a_non_finite_latent(bus):
     for _ in range(2):
         await vision.process_frame(None)
 
-    entries = await bus.read("topos.out", last_id="0", count=50)
-    events = [e for _, e in entries if e.type == "topos.report"]
+    entries = await bus.read("vision.out", last_id="0", count=50)
+    events = [e for _, e in entries if e.type == "vision.report"]
     assert len(events) == 6
     assert isinstance(events[2].payload["context_gain"], float)
     assert events[3].payload["context_gain"] is None
@@ -386,8 +386,8 @@ async def test_vision_periodic_gaps_keep_zeros_out_of_the_window(bus):
             (
                 "1-0",
                 Event(
-                    source="soma",
-                    type="soma.report",
+                    source="interoception",
+                    type="interoception.report",
                     payload={"k": 1},
                     salience=0.6,
                     timestamp=datetime.now(timezone.utc),
@@ -408,8 +408,8 @@ async def test_vision_periodic_gaps_keep_zeros_out_of_the_window(bus):
     assert window[0] == 0.0
     assert all(e > 0.0 for e in window[1:])
 
-    entries = await bus.read("topos.out", last_id="0", count=50)
-    events = [e for _, e in entries if e.type == "topos.report"]
+    entries = await bus.read("vision.out", last_id="0", count=50)
+    events = [e for _, e in entries if e.type == "vision.report"]
     assert len(events) == 15
     for idx in (3, 4, 6, 7, 9, 10, 12, 13):
         assert events[idx].payload["prediction_error"] is None

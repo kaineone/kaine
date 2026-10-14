@@ -104,7 +104,7 @@ class AccessRateConfig:
         )
 
 
-EXCLUDED_SOURCES = frozenset({"cycle", "syneidesis"})
+EXCLUDED_SOURCES = frozenset({"cycle", "workspace"})
 
 
 def tonic_drive(arousal: float | None, baseline: float) -> float:
@@ -138,7 +138,7 @@ def max_report_salience(events: Iterable[tuple[str, Event]]) -> float | None:
 
     Only events whose payload marks a categorical alert (``payload["alert"]``
     is ``True``) are considered. Events whose source is ``cycle`` or
-    ``syneidesis`` are ignored (the cycle's own telemetry and the workspace's
+    ``workspace`` are ignored (the cycle's own telemetry and the workspace's
     own broadcasts are not module reports). Returns ``None`` when there are no
     qualifying reports.
     """

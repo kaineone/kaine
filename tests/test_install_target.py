@@ -175,15 +175,15 @@ def test_plan_termux():
     runs_text = " ".join(plan.runs)
     assert "soma (NumPy CfC)" in runs_text
     assert "chronos (NumPy CfC)" in runs_text
-    assert "nous" in runs_text
-    assert "phantasia" in runs_text
+    assert "planning" in runs_text
+    assert "world_model" in runs_text
     assert "audition" in runs_text
-    assert "vox" in runs_text
+    assert "vocal" in runs_text
     modules = {m for m, _ in plan.will_not_run}
-    assert "topos" in modules
-    assert "phantasia" not in modules
+    assert "vision" in modules
+    assert "world_model" not in modules
     assert any("qdrant" in m for m, _ in plan.will_not_run)
-    assert not any(m in {"soma", "chronos", "nous"} for m, _ in plan.will_not_run)
+    assert not any(m in {"interoception", "sequence", "planning"} for m, _ in plan.will_not_run)
 
 
 def test_plan_unsupported():
@@ -233,7 +233,7 @@ def test_cli_json(monkeypatch, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["target"]["name"] == "termux"
     assert data["plan"]["extras"] == "memory-edge"
-    assert any(item["module"] == "topos" for item in data["plan"]["will_not_run"])
+    assert any(item["module"] == "vision" for item in data["plan"]["will_not_run"])
 
 
 def test_cli_unsupported_exit_code(monkeypatch, capsys):

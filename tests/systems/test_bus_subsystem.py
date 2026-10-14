@@ -16,13 +16,13 @@ from tests.systems._harness import SubsystemHarness
 async def test_publish_read_roundtrip():
     async with SubsystemHarness() as h:
         entry_id = await h.inject(
-            "soma.out", source="soma", type="soma.tick", payload={"v": 1}
+            "interoception.out", source="interoception", type="interoception.tick", payload={"v": 1}
         )
         assert entry_id
-        entries = await h.bus.read("soma.out", last_id="0")
+        entries = await h.bus.read("interoception.out", last_id="0")
         assert len(entries) == 1
         _, event = entries[0]
-        assert event.source == "soma"
+        assert event.source == "interoception"
         assert event.payload == {"v": 1}
 
 
@@ -31,13 +31,13 @@ async def test_publish_to_reserved_workspace_rejected():
     from kaine.bus.schema import ReservedStreamError, ensure_writable
 
     with pytest.raises(ReservedStreamError):
-        ensure_writable("workspace.broadcast", "soma")
+        ensure_writable("workspace.broadcast", "interoception")
 
 
 def test_validate_event_rejects_out_of_range_salience():
     with pytest.raises(EventValidationError):
         validate_event(
-            source="soma",
+            source="interoception",
             type="x",
             payload={},
             salience=1.5,
@@ -48,7 +48,7 @@ def test_validate_event_rejects_out_of_range_salience():
 def test_validate_event_rejects_negative_salience():
     with pytest.raises(EventValidationError):
         validate_event(
-            source="soma",
+            source="interoception",
             type="x",
             payload={},
             salience=-0.1,

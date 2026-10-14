@@ -112,7 +112,7 @@ def test_drive_mode_records_taken_proposal():
                 tag=tag,
             )
 
-    territory = ChannelTerritory(module="nous", channels=tuple(range(10)))
+    territory = ChannelTerritory(module="planning", channels=tuple(range(10)))
     engine = WetwarePolicyEngine(StubInner(), StubBroker(), territory, mode="drive")
     result = engine.step(None)
     assert recorded == [2]
@@ -138,7 +138,7 @@ class FakeBroker:
         )
 
 
-TERRITORY = ChannelTerritory("nous", tuple(range(1, 11)))
+TERRITORY = ChannelTerritory("planning", tuple(range(1, 11)))
 
 
 @pytest.fixture
@@ -157,7 +157,7 @@ def substrate():
     )
     session.open()
     broker = SubstrateBroker(channel_count=64, ticks_per_second=100, nesting_factor=6)
-    territory = broker.allocate("nous", 10)
+    territory = broker.allocate("planning", 10)
     broker.open(session.neurons)
     try:
         yield broker, territory
@@ -173,12 +173,12 @@ def _cfg(planning=None):
             "accelerated_time": True,
             "ticks_per_second": 100,
             "cognitive_rate": 3.333,
-            "territories": {"nous": 10},
+            "territories": {"planning": 10},
         },
-        "backends": {"nous": "cl1"},
+        "backends": {"planning": "cl1"},
     }
     if planning is not None:
-        cfg["nous"] = planning
+        cfg["planning"] = planning
     return cfg
 
 
@@ -236,7 +236,7 @@ def test_stimulation_encoding():
     wrapper.step(None)
     assert len(broker.calls) == 1
     module, requests = broker.calls[0]
-    assert module == "nous"
+    assert module == "planning"
     channels = {r.channel for r in requests}
     assert channels == set(range(1, 9))
     amplitudes = {r.channel: r.amplitude_uA for r in requests}
@@ -369,7 +369,7 @@ def test_attribute_forwarding_and_private_raised():
 
 
 def test_territory_and_mode_validation():
-    small = ChannelTerritory("nous", tuple(range(1, 10)))
+    small = ChannelTerritory("planning", tuple(range(1, 10)))
     with pytest.raises(ValueError, match=r"at least 10"):
         WetwarePolicyEngine(FakeEngine(), FakeBroker(), small, mode="shadow")
 
@@ -381,7 +381,7 @@ def test_agreement_log(caplog):
     engine = FakeEngine()
     broker = FakeBroker(spike_channels=[1, 2])
     wrapper = WetwarePolicyEngine(engine, broker, TERRITORY, mode="shadow")
-    with caplog.at_level(logging.INFO, logger="kaine_cl1.backends.nous"):
+    with caplog.at_level(logging.INFO, logger="kaine_cl1.backends.planning"):
         for _ in range(LOG_EVERY):
             wrapper.step(None)
     relevant = [
@@ -417,24 +417,24 @@ def test_config_default_and_drive_modes():
 
 
 def test_config_invalid_mode_raises():
-    with pytest.raises(ValueError, match=r"\[nous\]\.mode"):
+    with pytest.raises(ValueError, match=r"\[planning\]\.mode"):
         overlay_from_mapping(_cfg({"mode": "fast"}))
 
-    with pytest.raises(ValueError, match=r"\[nous\]\.mode"):
+    with pytest.raises(ValueError, match=r"\[planning\]\.mode"):
         overlay_from_mapping(_cfg({"mode": 3}))
 
 
 def test_config_backend_options():
     overlay = overlay_from_mapping(_cfg({"mode": "drive"}))
-    assert overlay.backend_options("nous") == {
+    assert overlay.backend_options("planning") == {
         "mode": "drive",
         "seed": overlay.substrate.random_seed,
     }
-    assert overlay.backend_options("chronos") == {}
+    assert overlay.backend_options("sequence") == {}
 
 
 def test_boot_row():
-    row = WETWARE_BACKENDS["nous"]
+    row = WETWARE_BACKENDS["planning"]
     assert row.inject_kwarg == "engine_wrapper"
 
     make = row.make(FakeBroker(), TERRITORY, mode="drive", seed=3)
@@ -464,7 +464,7 @@ def test_plugin_seams(caplog):
     try:
         with caplog.at_level(logging.INFO, logger="kaine_cl1.plugin"):
             seams = plugin.seams(_cfg())
-        assert "nous.engine_wrapper" in seams
+        assert "planning.engine_wrapper" in seams
         assert any("shadow mode" in r.message for r in caplog.records)
         assert not any("DRIVE" in r.message for r in caplog.records)
     finally:
@@ -476,7 +476,7 @@ def test_plugin_seams(caplog):
     try:
         with caplog.at_level(logging.WARNING, logger="kaine_cl1.plugin"):
             seams = plugin.seams(_cfg({"mode": "drive"}))
-        assert "nous.engine_wrapper" in seams
+        assert "planning.engine_wrapper" in seams
         assert any("DRIVE mode" in r.message for r in caplog.records)
     finally:
         plugin.close()

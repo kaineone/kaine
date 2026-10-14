@@ -7,9 +7,9 @@ Consumes ``audition.emotion`` and ``audition.transcription`` events and
 the workspace broadcast to build and maintain per-agent social models.
 Publishes:
 
-- ``empatheia.agent_model`` — familiarity, reliability, interaction_count
+- ``social_cognition.agent_model`` — familiarity, reliability, interaction_count
   (numeric metadata only — no raw sense data).
-- ``empatheia.social_error`` — salience-only signal (agent id, salience,
+- ``social_cognition.social_error`` — salience-only signal (agent id, salience,
   deviation magnitude only — never raw behavioral data or transcript text).
 
 Agent identity v1: a single operator-set speaker label (default
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 class SocialCognition(BaseModule):
-    name: ClassVar[str] = "empatheia"
+    name: ClassVar[str] = "social_cognition"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive"})
     preservation_state_key: ClassVar[str | None] = "profiles"
 
@@ -267,7 +267,7 @@ class SocialCognition(BaseModule):
     async def _publish_agent_model(
         self, model: AgentModel, *, source_label: str | None = None
     ) -> None:
-        """Publish empatheia.agent_model: numeric metadata and labels, no content.
+        """Publish social_cognition.agent_model: numeric metadata and labels, no content.
 
         If source_label is provided it is included so listeners can map the
         model back to the originating audio channel.
@@ -286,7 +286,7 @@ class SocialCognition(BaseModule):
         if source_label is not None:
             payload["source_label"] = str(source_label)
         await self.publish(
-            "empatheia.agent_model",
+            "social_cognition.agent_model",
             payload,
             salience=salience,
         )
@@ -294,7 +294,7 @@ class SocialCognition(BaseModule):
     async def _publish_social_error(
         self, model: AgentModel, deviation: float
     ) -> None:
-        """Publish empatheia.social_error — salience-only signal.
+        """Publish social_cognition.social_error — salience-only signal.
 
         Payload contains ONLY: agent id, salience, deviation magnitude.
         No raw behavioral data, no transcript text, no histogram.
@@ -305,7 +305,7 @@ class SocialCognition(BaseModule):
             self._baseline_salience + deviation * (self._alert_salience - self._baseline_salience),
         )
         await self.publish(
-            "empatheia.social_error",
+            "social_cognition.social_error",
             {
                 "agent_id": model.id,
                 "agent_label": model.label,

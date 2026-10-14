@@ -113,8 +113,8 @@ def test_live_modules_disabled_capture():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True, "audition": True},
-            "topos": {"capture_enabled": False},
+            "modules": {"vision": True, "audition": True},
+            "vision": {"capture_enabled": False},
             "audition": {"capture_enabled": False},
         }
     )
@@ -127,8 +127,8 @@ def test_live_camera_success():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True, "audition": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True, "audition": True},
+            "vision": {"capture_enabled": True},
             "audition": {"capture_enabled": True},
         },
         camera_factory=_make_camera_factory(frame=object()),
@@ -142,8 +142,8 @@ def test_camera_open_false():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True},
+            "vision": {"capture_enabled": True},
         },
         camera_factory=_make_camera_factory(opened=False),
     )
@@ -155,8 +155,8 @@ def test_camera_read_empty():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True},
+            "vision": {"capture_enabled": True},
         },
         camera_factory=_make_camera_factory(ok=False, frame=None),
     )
@@ -195,8 +195,8 @@ def test_perception_unavailable_error_is_caught():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True},
+            "vision": {"capture_enabled": True},
         },
         camera_factory=lambda _d, width=None, height=None: (_
             for _ in ()
@@ -213,8 +213,8 @@ def test_one_surface_failing_still_passes():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True, "audition": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True, "audition": True},
+            "vision": {"capture_enabled": True},
             "audition": {"capture_enabled": True},
         },
         camera_factory=_make_camera_factory(frame=object()),
@@ -234,7 +234,7 @@ def test_seeded_pass():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "seeded"},
-            "modules": {"topos": True, "audition": True},
+            "modules": {"vision": True, "audition": True},
         },
         perception_check=_check,
     )
@@ -253,8 +253,8 @@ def test_stimulus_source_is_continuous_input():
 
     cond = check_input_condition(
         {
-            "perception_feed": {"mode": "womb"},
-            "modules": {"topos": True, "audition": True},
+            "perception_feed": {"mode": "stimulus_source"},
+            "modules": {"vision": True, "audition": True},
         },
         perception_check=_check,
     )
@@ -270,7 +270,7 @@ def test_seeded_fail():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "seeded"},
-            "modules": {"topos": True, "audition": True},
+            "modules": {"vision": True, "audition": True},
         },
         perception_check=_check,
     )
@@ -284,8 +284,8 @@ def test_camera_release_on_read_error():
     cond = check_input_condition(
         {
             "perception_feed": {"mode": "live"},
-            "modules": {"topos": True},
-            "topos": {"capture_enabled": True},
+            "modules": {"vision": True},
+            "vision": {"capture_enabled": True},
         },
         camera_factory=factory,
     )
@@ -314,8 +314,8 @@ def test_probe_leaves_no_trace(tmp_path, monkeypatch):
         cond = check_input_condition(
             {
                 "perception_feed": {"mode": "live"},
-                "modules": {"topos": True, "audition": True},
-                "topos": {"capture_enabled": True},
+                "modules": {"vision": True, "audition": True},
+                "vision": {"capture_enabled": True},
                 "audition": {"capture_enabled": True},
             },
             camera_factory=_make_camera_factory(frame=object()),

@@ -5,7 +5,7 @@
 
 Scenarios verified:
 - Selection ranks high-affect/recent traces first.
-- replay() emits mnemos.replay events with trace content inside a window.
+- replay() emits episodic_memory.replay events with trace content inside a window.
 - replay() raises ReplayWindowError and emits nothing outside a window.
 """
 from __future__ import annotations
@@ -158,7 +158,7 @@ async def _new_episodic_memory(bus: AsyncBus, *, capacity: int = 8, **kwargs) ->
 
 @pytest.mark.asyncio
 async def test_replay_emits_events_with_content_inside_window(bus: AsyncBus):
-    """Scenario: replay() inside a window emits mnemos.replay with trace content."""
+    """Scenario: replay() inside a window emits episodic_memory.replay with trace content."""
     episodic_memory = await _new_episodic_memory(
         bus,
         capacity=8,
@@ -182,13 +182,13 @@ async def test_replay_emits_events_with_content_inside_window(bus: AsyncBus):
 
         assert len(events) > 0
 
-        # Check that bus received mnemos.replay events.
-        bus_entries = await bus.read("mnemos.out", last_id="0")
-        replay_events = [e for _, e in bus_entries if e.type == "mnemos.replay"]
+        # Check that bus received episodic_memory.replay events.
+        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
         assert len(replay_events) == len(events)
 
         # Each event must carry text content (redact_content=False).
-        for _, ev in (e for e in bus_entries if e[1].type == "mnemos.replay"):
+        for _, ev in (e for e in bus_entries if e[1].type == "episodic_memory.replay"):
             assert "text" in ev.payload
             assert "memory_id" in ev.payload
     finally:
@@ -213,9 +213,9 @@ async def test_replay_raises_outside_window_and_emits_nothing(bus: AsyncBus):
         with pytest.raises(ReplayWindowError):
             await episodic_memory.replay_now()
 
-        # No mnemos.replay events should have been emitted.
-        bus_entries = await bus.read("mnemos.out", last_id="0")
-        replay_events = [e for _, e in bus_entries if e.type == "mnemos.replay"]
+        # No episodic_memory.replay events should have been emitted.
+        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
         assert replay_events == []
     finally:
         await episodic_memory.shutdown()

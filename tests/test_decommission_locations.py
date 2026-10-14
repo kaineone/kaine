@@ -63,8 +63,8 @@ def test_config_paths_are_rebased(tmp_path):
     data_root = tmp_path / "data"
     fork_root = tmp_path / "forks"
     config = {
-        "mnemos": {"db_path": "state/mem/m.db"},
-        "vox": {"sink_path": "/abs/vox"},
+        "episodic_memory": {"db_path": "state/mem/m.db"},
+        "vocal": {"sink_path": "/abs/vox"},
     }
     locs = {
         loc.key: loc
@@ -120,7 +120,7 @@ def test_replay_and_dashboard_record_follow_their_flags(tmp_path):
     assert locs["dashboard.record"].decision == dl.RETAIN
     config = {
         "evaluation": {"observers": {"replay_redact_content": False}},
-        "nexus": {"dev_content_override": True},
+        "dashboard": {"dev_content_override": True},
     }
     locs2 = {
         loc.key: loc

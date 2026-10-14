@@ -58,7 +58,7 @@ def check_input_condition(
                     "playlist ends: a playlist runs out, leaving the entity without input"
                 ),
             )
-        if mode not in ("live", "seeded", "womb", "screen"):
+        if mode not in ("live", "seeded", "stimulus_source", "screen"):
             return Condition(
                 number=8,
                 name=CONDITION_NAMES[8],
@@ -67,13 +67,13 @@ def check_input_condition(
             )
 
         modules = dict(config.get("modules") or {})
-        vision_on = bool(modules.get("topos"))
+        vision_on = bool(modules.get("vision"))
         audition_on = bool(modules.get("audition"))
 
         surfaces: list[tuple[str, Callable[..., tuple[bool, str]], tuple[Any, ...]]] = []
 
         if mode == "live":
-            vision_cfg = dict(config.get("topos") or {})
+            vision_cfg = dict(config.get("vision") or {})
             audition_cfg = dict(config.get("audition") or {})
             vision_ready = vision_on and bool(vision_cfg.get("capture_enabled"))
             audition_ready = audition_on and bool(audition_cfg.get("capture_enabled"))

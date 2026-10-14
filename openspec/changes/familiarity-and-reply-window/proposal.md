@@ -2,17 +2,17 @@
 
 Two wiring faults found in the documentation sweep.
 
-- The affect module caches each agent's familiarity from `empatheia.agent_model` under
+- The affect module caches each agent's familiarity from `social_cognition.agent_model` under
   the payload's `agent_id`, but looks it up by the perceived speaker's
   `source_label` (the audio channel). The social cognition module's agent ids are the speaker
   label for operator channels and `media:<channel>` otherwise, so the lookup
   never matches and the emotional-coupling weight is always `coupling_base`.
-- The utterance-outcome observer reads `[lingua].outcome_reply_window_s`, but
+- The utterance-outcome observer reads `[language].outcome_reply_window_s`, but
   the language module factory's key check does not accept it, so setting it stops boot.
 
 ## What Changes
 
-- `empatheia.agent_model` carries the `source_label` of the audio event that
+- `social_cognition.agent_model` carries the `source_label` of the audio event that
   updated the model, and the affect module caches the familiarity under that label as
   well as under `agent_id`, so its lookup by `source_label` finds it.
 - The language module factory accepts `outcome_reply_window_s` and leaves it to the
@@ -22,8 +22,8 @@ Two wiring faults found in the documentation sweep.
 
 ### Modified Capabilities
 
-- `thymos`: familiarity reaches the coupling weight.
-- `lingua`: the reply-window key is accepted.
+- `affect`: familiarity reaches the coupling weight.
+- `language`: the reply-window key is accepted.
 
 ## Impact
 

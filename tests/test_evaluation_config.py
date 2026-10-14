@@ -116,7 +116,7 @@ def test_shipped_language_organ_is_abliterated():
 
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
     raw = tomllib.loads(config_path.read_text())
-    assert "abliterat" in raw["lingua"]["model_id"].lower()
+    assert "abliterat" in raw["language"]["model_id"].lower()
     # And the eval block must not pin its own chat_model_id (it derives).
     assert "chat_model_id" not in (raw.get("evaluation") or {})
 
@@ -263,7 +263,7 @@ def test_research_event_log_config_threads_profile(tmp_path, monkeypatch):
 
 def test_action_selection_interrupt_threshold_reaches_report_policy():
     # Same wiring the cycle applies (kaine/cycle/__main__.py): an absent
-    # [volition].interrupt_threshold stays None (opt-in); a configured value
+    # [action_selection].interrupt_threshold stays None (opt-in); a configured value
     # reaches the policy instance.
     from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
@@ -288,7 +288,7 @@ def test_action_selection_interrupt_threshold_reaches_report_policy():
 
 
 def test_cycle_main_wires_interrupt_threshold():
-    # The cycle entrypoint must actually read [volition].interrupt_threshold
+    # The cycle entrypoint must actually read [action_selection].interrupt_threshold
     # and hand it to the report policy (interruptible-utterance reachability).
     import pathlib
 

@@ -63,7 +63,7 @@ def _canonical_app(tmp_path: Path, **overrides):
         shipped.write_text(real_shipped.read_text(encoding="utf-8"), encoding="utf-8")
     else:
         shipped.write_text(
-            "[lingua]\nmodel_id = 'model-a'\n[vox]\nbackend = 'chatterbox'\n"
+            "[language]\nmodel_id = 'model-a'\n[vocal]\nbackend = 'chatterbox'\n"
             "predefined_voice_id = 'voice-a'\n[audition]\nbackend = 'speaches'\n"
             "stt_model = 'stt-a'\n",
             encoding="utf-8",
@@ -1179,7 +1179,7 @@ def test_dashboard_job_log_lives_under_the_state_dir(tmp_path, monkeypatch):
         operator_path=tmp_path / "kaine.operator.toml",
         state_dir=state_dir,
     )
-    dashboard_specs = [s for s in specs if s.name == "nexus"]
+    dashboard_specs = [s for s in specs if s.name == "dashboard"]
     assert len(dashboard_specs) == 1
     assert dashboard_specs[0].log_path == state_dir / "logs" / "nexus.log"
 

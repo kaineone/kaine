@@ -4,8 +4,8 @@
 """Fatigue accumulator for the interoception module.
 
 Integrates prediction error over waking time with continuous decay.
-Crossing the maintenance threshold triggers a ``soma.fatigue`` event
-that ``hypnos-restructure`` uses as its emergent sleep-pressure signal
+Crossing the maintenance threshold triggers a ``interoception.fatigue`` event
+that ``sleep-restructure`` uses as its emergent sleep-pressure signal
 instead of a wall-clock timer.
 
 Design constraints
@@ -42,7 +42,7 @@ class FatigueAccumulator:
     ------------------
     When ``F`` crosses ``maintenance_threshold`` from below, the
     accumulator sets ``threshold_crossed = True`` and records that a
-    ``soma.fatigue`` event should be published.  The flag is cleared
+    ``interoception.fatigue`` event should be published.  The flag is cleared
     on ``reset()``.  Repeated crossings (if fatigue is not reset
     promptly) do not re-raise the flag; the caller must publish once
     per crossing.
@@ -115,7 +115,7 @@ class FatigueAccumulator:
         -------
         bool
             True on the tick that *value* first crosses *threshold*
-            (i.e. a ``soma.fatigue`` event should be published).
+            (i.e. a ``interoception.fatigue`` event should be published).
         """
         if now is None:
             now = time.monotonic()

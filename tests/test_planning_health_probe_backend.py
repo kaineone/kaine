@@ -26,7 +26,7 @@ def _block_jax_and_pymdp(monkeypatch):
 
 
 def _planning_spec(specs):
-    return next(s for s in specs if s.module == "nous")
+    return next(s for s in specs if s.module == "planning")
 
 
 @pytest.mark.asyncio

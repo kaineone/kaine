@@ -17,8 +17,8 @@ async def test_build_registry_logs_vision_device(caplog):
             registry = build_registry(
                 h.bus,
                 {
-                    "modules": {"topos": True, "mnemos": True, "audition": True},
-                    "topos": {
+                    "modules": {"vision": True, "episodic_memory": True, "audition": True},
+                    "vision": {
                         "encoder_backend": "dinov2",
                         "encoder_model_id": "facebook/dinov2-small",
                         "device": "cuda:1",
@@ -26,7 +26,7 @@ async def test_build_registry_logs_vision_device(caplog):
                         "baseline_salience": 0.2,
                         "alert_salience": 0.7,
                     },
-                    "mnemos": {
+                    "episodic_memory": {
                         "backend": "inmemory",
                         "collection_prefix": "mnemos_",
                         "short_term_capacity": 8,
@@ -46,7 +46,7 @@ async def test_build_registry_logs_vision_device(caplog):
                 },
             )
         text = "\n".join(rec.message for rec in caplog.records)
-        assert "device assignment: topos.encoder → cuda:1" in text
+        assert "device assignment: vision.encoder → cuda:1" in text
         assert "device assignment: embedding → sentence_transformers:cpu" in text
         assert "device assignment: audition.emotion → cpu" in text
-        assert "topos" in registry
+        assert "vision" in registry

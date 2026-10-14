@@ -25,14 +25,14 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
     into the constructed modules so this stays cheap and never raises.
     """
     rows: list[tuple[str, str]] = []
-    if "topos" in registry:
+    if "vision" in registry:
         rows.append(
             (
-                "topos.encoder",
-                str((kaine_config.get("topos") or {}).get("device", "auto")),
+                "vision.encoder",
+                str((kaine_config.get("vision") or {}).get("device", "auto")),
             )
         )
-    if any(m in registry for m in ("mnemos", "empatheia", "hypnos")):
+    if any(m in registry for m in ("episodic_memory", "social_cognition", "sleep")):
         cfg = resolve_embedding_config(kaine_config)
         if cfg["backend"] == "sentence_transformers":
             value = f"{cfg['backend']}:{cfg['device']}"
@@ -46,11 +46,11 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
                 str((kaine_config.get("audition") or {}).get("emotion_device", "cpu")),
             )
         )
-    if "chronos" in registry:
-        rows.append(("chronos.network", "cpu (pinned)"))
-    if "hypnos" in registry:
-        va = (kaine_config.get("hypnos") or {}).get("voice_alignment") or {}
-        rows.append(("hypnos.voice_alignment", str(va.get("training_device", "cuda:0"))))
+    if "sequence" in registry:
+        rows.append(("sequence.network", "cpu (pinned)"))
+    if "sleep" in registry:
+        va = (kaine_config.get("sleep") or {}).get("voice_alignment") or {}
+        rows.append(("sleep.voice_alignment", str(va.get("training_device", "cuda:0"))))
         raw_hot_swap = str(va.get("hot_swap_mode", "manual"))
         effective_hot_swap = _effective_hot_swap_mode(raw_hot_swap, kaine_config)
         shared_server = (
@@ -63,7 +63,7 @@ def _log_device_assignments(registry: ModuleRegistry, kaine_config: dict[str, An
         )
         rows.append(
             (
-                "hypnos.voice_alignment.hot_swap",
+                "sleep.voice_alignment.hot_swap",
                 display_hot_swap,
             )
         )

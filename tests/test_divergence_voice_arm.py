@@ -185,7 +185,7 @@ def test_non_finite_or_negative_threshold_falls_back_to_protective_zero(tmp_path
 def test_config_threshold_reader_never_silences_the_arm(bad):
     from kaine.lifecycle.divergence import voice_alignment_thresholds_from_config
 
-    cfg = {"hypnos": {"voice_alignment": {"distinctiveness_threshold": bad}}}
+    cfg = {"sleep": {"voice_alignment": {"distinctiveness_threshold": bad}}}
     assert voice_alignment_thresholds_from_config(cfg)[2] == 0.0
 
 
@@ -236,8 +236,8 @@ def test_configured_voice_paths_find_speech_outside_default(tmp_path):
         json.dumps({"generated_text": "hello custom"}) + "\n", encoding="utf-8"
     )
     cfg = {
-        "lingua": {"intent_log_path": str(live)},
-        "hypnos": {"voice_alignment": {"intent_log_path": str(live)}},
+        "language": {"intent_log_path": str(live)},
+        "sleep": {"voice_alignment": {"intent_log_path": str(live)}},
     }
     voice_paths = voice_paths_for(cfg, root)
 

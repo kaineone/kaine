@@ -11,6 +11,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from kaine import legacy_aliases
+from kaine.bus import Event
 from kaine.dashboard.diagnostics import asset_url, build_diagnostics_context
 from kaine.dashboard.health import HealthProber
 from kaine.lifecycle.manager import ForkManager
@@ -18,8 +20,52 @@ from kaine.lifecycle.manager import ForkManager
 log = logging.getLogger(__name__)
 
 
-LANGUAGE_EXTERNAL_STREAM = "lingua.external"
-SLEEP_STREAM = "hypnos.out"
+LANGUAGE_EXTERNAL_STREAM = "language.external"
+SLEEP_STREAM = "sleep.out"
+
+
+def _entry_order(entry_id: Any) -> tuple[int, int]:
+    if isinstance(entry_id, bytes):
+        entry_id = entry_id.decode()
+    ms, _, seq = str(entry_id).partition("-")
+    return (int(ms), int(seq or 0))
+
+
+async def read_conversation_history(bus: Any, n: int) -> list[tuple[str, Event]]:
+    """The first ``n`` external utterances, across the renamed stream and its old name.
+
+    After the keys rename the language module writes ``language.external``, while
+    utterances from before the rename stay in the old stream until the cleanup
+    command removes it. Both are read and merged in Redis id order (ids are
+    time-ordered across streams); old events are mapped to the new source and type.
+    """
+    try:
+        new_entries = await bus.read(LANGUAGE_EXTERNAL_STREAM, last_id="0", count=n, block_ms=0)
+    except Exception:
+        log.exception("conversation history backfill failed")
+        return []
+    old_entries: list[tuple[str, Event]] = []
+    old_stream = legacy_aliases.old_stream_name(LANGUAGE_EXTERNAL_STREAM)
+    if old_stream:
+        try:
+            if await bus.client.exists(old_stream):
+                raw_old = await bus.read(old_stream, last_id="0", count=n, block_ms=0)
+                old_entries = [
+                    (
+                        entry_id,
+                        event.model_copy(
+                            update={
+                                "source": legacy_aliases.map_module_key(event.source),
+                                "type": legacy_aliases.map_stream(event.type),
+                            }
+                        ),
+                    )
+                    for entry_id, event in raw_old
+                ]
+        except Exception:
+            log.exception("conversation history read of the old stream failed")
+    merged = sorted(new_entries + old_entries, key=lambda item: _entry_order(item[0]))
+    return merged[:n]
 
 
 def _templates() -> Jinja2Templates:
@@ -43,9 +89,9 @@ class ConversationState:
             self.entity_name = name.strip()
 
     def update_from_sleep(self, event_type: str) -> None:
-        if event_type == "hypnos.sleep.started":
+        if event_type == "sleep.sleep.started":
             self.sleeping = True
-        elif event_type == "hypnos.sleep.completed":
+        elif event_type == "sleep.sleep.completed":
             self.sleeping = False
 
 

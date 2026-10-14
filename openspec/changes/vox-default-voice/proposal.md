@@ -1,12 +1,12 @@
 ## Why
 
-The shipped `[vox]` section leaves `predefined_voice_id` unset, because a voice filename is operator-local. With `backend = "chatterbox"` an enabled vocal module therefore cannot speak: the Chatterbox server answers every `/tts` request with 400 ("Missing 'predefined_voice_id'"). The setup wizard makes the same assumption from the other side and turns the vocal module off when no voice id is given.
+The shipped `[vocal]` section leaves `predefined_voice_id` unset, because a voice filename is operator-local. With `backend = "chatterbox"` an enabled vocal module therefore cannot speak: the Chatterbox server answers every `/tts` request with 400 ("Missing 'predefined_voice_id'"). The setup wizard makes the same assumption from the other side and turns the vocal module off when no voice id is given.
 
 Both speech engines ship voices of their own. The Chatterbox TTS server ships a set of predefined voices in its `voices/` directory and lists them at `GET /get_predefined_voices`. The Kokoro model that KAINE pins for the sherpa-onnx backend ships eleven preset speakers whose names encode a gender. The operator approved (2026-10-12) that the vocal module picks one of these shipped voices when none is configured, with an optional gender preference, and that the project never adds voice files of its own.
 
 ## What Changes
 
-- Two new `[vox]` keys:
+- Two new `[vocal]` keys:
   - `voice_gender`: `"any"` (the default), `"female"` or `"male"`.
   - `default_voice`: an optional name of a voice the engine ships, a Chatterbox voice filename or a Kokoro speaker name.
 - When no voice is configured, the vocal module picks one deterministically from the engine's own list:
@@ -24,11 +24,11 @@ Both speech engines ship voices of their own. The Chatterbox TTS server ships a 
 
 ### Modified Capabilities
 
-- `vox`: the vocal module picks a shipped default voice when none is configured, filtered by an optional gender preference, and degrades to silence with a clear message when it cannot.
+- `vocal`: the vocal module picks a shipped default voice when none is configured, filtered by an optional gender preference, and degrades to silence with a clear message when it cannot.
 
 ## Impact
 
 - `kaine/modules/vocal/voices.py` (new), `kaine/modules/vocal/client.py`, `kaine/modules/vocal/module.py`, `kaine/boot/factories/vocal.py`, `kaine/speech_manifest.py`, `kaine/setup/__main__.py`, `kaine/setup/wizard_steps.py`.
-- `config/kaine.toml` (`[vox]` comments and the two keys), `docs/09-modules/vocal.md`, `docs/appendix-a-configuration/modules.md`.
+- `config/kaine.toml` (`[vocal]` comments and the two keys), `docs/09-modules/vocal.md`, `docs/appendix-a-configuration/modules.md`.
 - Tests with fake servers and fake model metadata.
 - No voice files enter the repository. The research configuration is unchanged.

@@ -115,7 +115,7 @@ def test_planning_merge_warning_set_when_forks_diverge():
     certain = {"posterior": [[0.98, 0.02]]}
     uncertain = {"posterior": [[0.5, 0.5]]}  # entropy 1.0 vs ~0.14
     out = s.merge(certain, uncertain)
-    assert out.get("nous.merge_warning") is True
+    assert out.get("planning.merge_warning") is True
 
 
 def test_planning_merge_no_warning_when_forks_agree():
@@ -123,7 +123,7 @@ def test_planning_merge_no_warning_when_forks_agree():
     a = {"posterior": [[0.9, 0.1]]}
     b = {"posterior": [[0.88, 0.12]]}
     out = s.merge(a, b)
-    assert "nous.merge_warning" not in out
+    assert "planning.merge_warning" not in out
 
 
 def test_planning_no_restart_or_pending_fields():
@@ -219,4 +219,4 @@ def test_affect_averages_dim_max_drives_unions_goals():
 
 def test_default_strategies_present():
     strats = default_strategies()
-    assert set(strats) == {"mnemos", "nous", "eidolon", "thymos", "empatheia"}
+    assert set(strats) == {"episodic_memory", "planning", "self_model", "affect", "social_cognition"}

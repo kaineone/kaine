@@ -13,4 +13,4 @@ beliefs on them in the normal cognitive cycle.
 
 #### Scenario: Sleep has no Planning argument
 - **WHEN** the sleep module's constructor's parameters are inspected
-- **THEN** neither `nous_process` nor `nous_step_burst` is among them
+- **THEN** neither `planning_process` nor `planning_step_burst` is among them

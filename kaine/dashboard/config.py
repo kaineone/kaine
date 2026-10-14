@@ -37,7 +37,7 @@ class DashboardConfig:
     read_only: bool = False
     # Operator authentication. Empty string means no token is configured;
     # state-changing endpoints and privileged read surfaces return 401.
-    # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [nexus] operator_token.
+    # Loaded from KAINE_NEXUS_TOKEN env or config/secrets.toml [dashboard] operator_token.
     operator_token: str = field(default="", repr=False)
     # CSRF/Origin protection. Defaults cover loopback-only operation.
     allowed_origins: tuple[str, ...] = (
@@ -80,7 +80,7 @@ class DashboardConfig:
             ),
             host_allowlist=cls._parse_string_tuple(data.get("host_allowlist", cls.host_allowlist)),
             non_loopback_allowed=bool(data.get("non_loopback_allowed", cls.non_loopback_allowed)),
-            access=_validate_access(data.get("access", cls.access), "[nexus].access"),
+            access=_validate_access(data.get("access", cls.access), "[dashboard].access"),
             session_idle_minutes=int(data.get("session_idle_minutes", cls.session_idle_minutes)),
             session_max_hours=int(data.get("session_max_hours", cls.session_max_hours)),
             login_max_failures=int(data.get("login_max_failures", cls.login_max_failures)),
@@ -221,7 +221,7 @@ def load_dashboard_config(
     raw = _normalize_dashboard_layer(raw, target)
 
     # The committed, tracked config/kaine.toml is not a secrets file.
-    _raise_if_config_token(raw.get("nexus"), target)
+    _raise_if_config_token(raw.get("dashboard"), target)
 
     base_dir = target.parent
     operator_target = Path(operator_path or base_dir / "kaine.operator.toml")
@@ -236,12 +236,12 @@ def load_dashboard_config(
         overlay = _normalize_dashboard_layer(overlay, operator_target)
 
     # Operator overlays are config files, not secrets files.
-    _raise_if_config_token(overlay.get("nexus"), operator_target)
+    _raise_if_config_token(overlay.get("dashboard"), operator_target)
 
     if overlay:
         raw = deep_merge(raw, overlay)
 
-    merged_dashboard = raw.get("nexus") or {}
+    merged_dashboard = raw.get("dashboard") or {}
     config = DashboardConfig.from_mapping(merged_dashboard)
 
     # Deployment overrides. A container mounts the baked, always-current kaine.toml
@@ -251,7 +251,7 @@ def load_dashboard_config(
     # interfaces inside the container — the shipped default 127.0.0.1 is unreachable
     # via the published port mapping — while the compose publish rule keeps external
     # exposure loopback-only. KAINE_NEXUS_CONVERSATION_ENABLED toggles the
-    # conversation surface (the only [nexus] delta with no other env knob).
+    # conversation surface (the only [dashboard] delta with no other env knob).
     host = _env("KAINE_NEXUS_HOST")
     port = _env("KAINE_NEXUS_PORT")
     if host or port:
@@ -276,7 +276,7 @@ def load_dashboard_config(
     if access_env is not None and access_env.strip():
         access_env = access_env.strip()
         config = replace(
-            config, access=_validate_access(access_env, "[nexus].access")
+            config, access=_validate_access(access_env, "[dashboard].access")
         )
 
     env_token = (_env("KAINE_NEXUS_TOKEN") or "").strip()
@@ -293,7 +293,7 @@ def load_dashboard_config(
                 ) from e
             # Name the file by role, never by path: the path is derived from the secrets location.
             secrets_raw = _normalize_dashboard_layer(secrets_raw, "the dashboard secrets file")
-            secrets_token = (secrets_raw.get("nexus") or {}).get("operator_token")
+            secrets_token = (secrets_raw.get("dashboard") or {}).get("operator_token")
             if secrets_token:
                 token = str(secrets_token).strip()
                 if token:

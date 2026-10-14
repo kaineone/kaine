@@ -3,7 +3,7 @@
 """Boot stock KAINE's planning module through kaine's own plugin loader.
 
 This file validates that the CL1 plugin wraps KAINE's engine through the
-``nous.engine_wrapper`` seam defined by the OpenSpec nous-on-wetware contract.
+``planning.engine_wrapper`` seam defined by the OpenSpec nous-on-wetware contract.
 """
 
 import os
@@ -32,14 +32,14 @@ from kaine.plugins import PluginError, load_plugins  # noqa: E402
 
 def _config(*, territory=10, mode=None):
     cl1 = {
-        "substrate": {"target": "simulator", "accelerated_time": True, "territories": {"nous": territory}},
-        "backends": {"nous": "cl1"},
+        "substrate": {"target": "simulator", "accelerated_time": True, "territories": {"planning": territory}},
+        "backends": {"planning": "cl1"},
     }
     if mode is not None:
-        cl1["nous"] = {"mode": mode}
+        cl1["planning"] = {"mode": mode}
     return {
-        "modules": {"nous": True},
-        "nous": {"efe_timeout_ms": 60000.0},
+        "modules": {"planning": True},
+        "planning": {"efe_timeout_ms": 60000.0},
         "plugins": {"enabled": ["cl1"], "cl1": cl1},
     }
 
@@ -80,7 +80,7 @@ def reference_culture():
 def test_manifest_declares_the_engine_wrapper_seam():
     plugins = _load(_config())
     try:
-        assert plugins.manifest_entry()["cl1"]["seams"] == ["nous.engine_wrapper"]
+        assert plugins.manifest_entry()["cl1"]["seams"] == ["planning.engine_wrapper"]
     finally:
         _close_cl1(plugins)
 
@@ -92,7 +92,7 @@ async def test_booted_planning_wraps_kaines_engine(reference_culture):
 
     try:
         reg = build_registry(bus, cfg, plugins=plugins)
-        planning = reg.get("nous")
+        planning = reg.get("planning")
 
         assert isinstance(planning.engine, WetwarePolicyEngine)
         assert len(planning.engine.actions) == 4
@@ -144,11 +144,11 @@ async def test_rebuild_reuses_the_territory(reference_culture):
 
     try:
         reg1 = build_registry(bus, cfg, plugins=plugins)
-        planning1 = reg1.get("nous")
+        planning1 = reg1.get("planning")
         assert isinstance(planning1.engine, WetwarePolicyEngine)
 
         reg2 = build_registry(bus, cfg, plugins=plugins)
-        planning2 = reg2.get("nous")
+        planning2 = reg2.get("planning")
         assert isinstance(planning2.engine, WetwarePolicyEngine)
         assert planning1.engine is not planning2.engine
     finally:

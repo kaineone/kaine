@@ -39,7 +39,7 @@ from kaine.storage import resolve
 
 CONTROL_PATH = Path("state/cycle/control.json")
 OVERRIDABLE_SOURCES = ("welfare", "gestation", "programme_end")
-SELF_RELEASING_SOURCES = ("spot", "preserve")
+SELF_RELEASING_SOURCES = ("supervisor", "preserve")
 OVERRIDE_AUDIT_PATH = Path("state/cycle/override_audit.jsonl")
 
 
@@ -71,7 +71,7 @@ class CycleControl:
     frozen_at: Optional[str] = None
     reason: Optional[str] = None
     # Who commanded the freeze: "operator" (the default and the operator's
-    # control file), "spot" (the module supervisor), or "welfare" (the
+    # control file), "supervisor" (the module supervisor), or "welfare" (the
     # preservation monitor). The supervisor only resumes its own freeze and never
     # clears an operator or welfare freeze.
     source: str = "operator"

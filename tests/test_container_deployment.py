@@ -622,7 +622,7 @@ def test_provision_plans_all_models_without_network():
     assert "facebook/dinov2-small" not in repos
 
     # Selecting the DINOv2 backend swaps in DINOv2 as a plain aux download.
-    dino_repos = {m.repo for m in aux_models({"topos": {"encoder_backend": "dinov2"}})}
+    dino_repos = {m.repo for m in aux_models({"vision": {"encoder_backend": "dinov2"}})}
     assert "facebook/dinov2-small" in dino_repos
 
     # Inject a fake runner so NOTHING hits the network.
@@ -637,7 +637,7 @@ def test_provision_plans_all_models_without_network():
 
         return _R()
 
-    config = {"modules": {"lingua": True}}
+    config = {"modules": {"language": True}}
     _, aux_results = run_provision(config, consent=True, runner=fake_runner)
     # consent=False provisions nothing.
     assert run_provision(config, consent=False, runner=fake_runner) == ([], [])
@@ -658,7 +658,7 @@ def test_provision_plans_all_models_without_network():
         return fake_runner(cmd, **kwargs)
 
     run_provision(
-        {"modules": {"lingua": True}, "topos": {"encoder_backend": "dinov2"}},
+        {"modules": {"language": True}, "vision": {"encoder_backend": "dinov2"}},
         consent=True,
         runner=dino_runner,
     )
@@ -894,7 +894,7 @@ def test_study_volume_is_a_declared_named_volume():
 # --------------------------------------------------------------------------
 def test_dashboard_record_dir_is_on_a_durable_volume_in_every_cycle_deployment():
     cfg = tomllib.loads((_REPO_ROOT / "config" / "kaine.toml").read_text())
-    log_dir = cfg["research_event_log"]["nexus_record"]["log_dir"]
+    log_dir = cfg["research_event_log"]["dashboard_record"]["log_dir"]
     target = "/app/" + log_dir
 
     doc = _load_compose()

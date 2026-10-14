@@ -460,7 +460,7 @@ async def test_regulation_uses_action_error(bus) -> None:
         src.t += 1.0
         await interoception.tick_once()
 
-    entries = await bus.read("soma.out", last_id="0", count=10000)
+    entries = await bus.read("interoception.out", last_id="0", count=10000)
     last_id = entries[-1][0]
 
     # Phase 2: the learned residual should not trigger regulation.
@@ -468,11 +468,11 @@ async def test_regulation_uses_action_error(bus) -> None:
         src.t += 1.0
         await interoception.tick_once()
 
-    entries_after = await bus.read("soma.out", last_id=last_id, count=10000)
-    regulation_events = [ev for _, ev in entries_after if ev.type == "soma.regulation"]
+    entries_after = await bus.read("interoception.out", last_id=last_id, count=10000)
+    regulation_events = [ev for _, ev in entries_after if ev.type == "interoception.regulation"]
     assert not regulation_events
 
-    reports = [ev for _, ev in entries_after if ev.type == "soma.report"]
+    reports = [ev for _, ev in entries_after if ev.type == "interoception.report"]
     last_report = reports[-1]
     assert last_report.payload["prediction_error"] == 0.5
 
@@ -658,10 +658,10 @@ def test_real_forward_model_unexpected_error_avoids_crossing() -> None:
 
 
 def test_log_schema_interoception_report_bounds() -> None:
-    fat_bound = _bound_for("soma.report", "fatigue_value")
+    fat_bound = _bound_for("interoception.report", "fatigue_value")
     assert fat_bound == (0.0, math.inf)
     assert not _out_of_range(57.3, fat_bound)
 
-    unexp_bound = _bound_for("soma.report", "unexpected_error")
+    unexp_bound = _bound_for("interoception.report", "unexpected_error")
     assert unexp_bound == (0.0, math.inf)
     assert _out_of_range(-0.1, unexp_bound)

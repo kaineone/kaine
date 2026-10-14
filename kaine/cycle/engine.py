@@ -69,7 +69,7 @@ class CycleHooks:
 
 
 class CognitiveCycle:
-    # Tick-rate bounds for soma.regulation reduce_rate advisory.
+    # Tick-rate bounds for interoception.regulation reduce_rate advisory.
     _MIN_PROCESSING_RATE_HZ: float = 0.5  # floor: never slower than 0.5 Hz
     _MAX_PROCESSING_RATE_HZ: float = 20.0  # ceiling: never faster than 20 Hz
     # Factor by which reduce_rate lowers the current processing rate.
@@ -231,11 +231,11 @@ class CognitiveCycle:
         self._recent_slip_ms: deque[float] = deque(maxlen=self._PACING_WINDOW_TICKS)
         self._overrun_ticks: int = 0
 
-        # soma.regulation consumer state.
+        # interoception.regulation consumer state.
         self._interoception_out_cursor: str = "0"
         # Advisory / diagnostic latch only. The early-maintenance trigger is
-        # event-driven: the sleep module observes the soma.regulation/request_maintenance
-        # event on soma.out directly. Nothing reads this flag to drive behaviour.
+        # event-driven: the sleep module observes the interoception.regulation/request_maintenance
+        # event on interoception.out directly. Nothing reads this flag to drive behaviour.
         self.maintenance_requested: bool = False
 
     def set_ablation_recorder(
@@ -592,7 +592,7 @@ class CognitiveCycle:
         ]
 
         # Refresh the affect/drive snapshot the live salience factors read, from
-        # the canonically-ordered batch above (so which thymos.state "wins" a
+        # the canonically-ordered batch above (so which affect.state "wins" a
         # multi-event tick is deterministic). No-op when no real factor is wired.
         if self._affect_observer is not None:
             try:
@@ -719,9 +719,9 @@ class CognitiveCycle:
         """Invoke action selection and publish produced intents.
 
         The cycle never calls effectors directly: it publishes intents to
-        ``volition.out`` and effectors realize them off the bus. An inhibited
+        ``action_selection.out`` and effectors realize them off the bus. An inhibited
         snapshot yields no intents (the action selection module's gate), so nothing is published
-        there. Proposal outcomes always go to ``volition_feedback.out`` (when a
+        there. Proposal outcomes always go to ``action_selection_feedback.out`` (when a
         planning module proposal source is wired) so the planning module can learn what happened.
         """
         from kaine.workspace.action_selection import (
@@ -860,8 +860,8 @@ class CognitiveCycle:
             if event.type == "cycle.set_rates":
                 await self.apply_rate_control_event(event.payload)
 
-    async def consume_interoception_regulation(self, interoception_stream: str = "soma.out") -> None:
-        """Drain pending ``soma.regulation`` events from the interoception stream.
+    async def consume_interoception_regulation(self, interoception_stream: str = "interoception.out") -> None:
+        """Drain pending ``interoception.regulation`` events from the interoception stream.
 
         Actions are advisory only: the cycle acts on them within safe
         bounds and logs each one.  Unknown ``action`` values are ignored
@@ -881,8 +881,8 @@ class CognitiveCycle:
             Latch ``self.maintenance_requested = True`` as an advisory /
             diagnostic signal.  This flag is NOT what schedules maintenance:
             the actual early-maintenance trigger is event-driven — the sleep module
-            observes the ``soma.regulation`` / ``request_maintenance`` event
-            directly on ``soma.out`` and fires an earlier offline cycle.  The
+            observes the ``interoception.regulation`` / ``request_maintenance`` event
+            directly on ``interoception.out`` and fires an earlier offline cycle.  The
             flag is retained purely as a latched advisory for diagnostics and
             introspection; nothing reads it to drive behaviour.
         """
@@ -911,7 +911,7 @@ class CognitiveCycle:
         if not entries:
             return
         for entry_id, event in entries:
-            if event.type != "soma.regulation":
+            if event.type != "interoception.regulation":
                 continue
             action = event.payload.get("action")
             reason = event.payload.get("reason", "")
@@ -925,7 +925,7 @@ class CognitiveCycle:
                     ),
                 )
                 log.info(
-                    "soma.regulation advisory reduce_rate "
+                    "interoception.regulation advisory reduce_rate "
                     "(severity=%s, reason=%r): processing_rate %.3f → %.3f Hz",
                     severity,
                     reason,
@@ -938,7 +938,7 @@ class CognitiveCycle:
                 self._apply_processing_rate(new_rate)
             elif action == "shed_module":
                 log.info(
-                    "soma.regulation advisory shed_module "
+                    "interoception.regulation advisory shed_module "
                     "(severity=%s, reason=%r): requesting low-priority suspension",
                     severity,
                     reason,
@@ -950,17 +950,17 @@ class CognitiveCycle:
                         log.warning("registry.request_shed_low_priority raised", exc_info=True)
             elif action == "request_maintenance":
                 log.info(
-                    "soma.regulation advisory request_maintenance "
+                    "interoception.regulation advisory request_maintenance "
                     "(severity=%s, reason=%r): flagging for Hypnos",
                     severity,
                     reason,
                 )
                 self.maintenance_requested = True
             elif action is None:
-                log.warning("soma.regulation event missing 'action' field; ignoring")
+                log.warning("interoception.regulation event missing 'action' field; ignoring")
             else:
                 log.debug(
-                    "soma.regulation: unknown action %r; ignoring gracefully",
+                    "interoception.regulation: unknown action %r; ignoring gracefully",
                     action,
                 )
 

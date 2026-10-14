@@ -208,8 +208,8 @@ def test_preview_lists_files_and_excluded_footer(tmp_path: Path):
     # EXCLUDED footer names every sensitive content type.
     assert "EXCLUDED" in text
     assert "intent log" in text.lower() or "intent_expression" in text.lower()
-    assert "memories" in text.lower() or "mnemos" in text.lower()
-    assert "self-model" in text.lower() or "eidolon" in text.lower()
+    assert "memories" in text.lower() or "episodic_memory" in text.lower()
+    assert "self-model" in text.lower() or "self_model" in text.lower()
     assert "conversation" in text.lower()
     assert "monologue" in text.lower()
     assert "raw bus archive" in text.lower()

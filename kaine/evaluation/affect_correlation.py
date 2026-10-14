@@ -153,7 +153,7 @@ class AffectCorrelationRecorder(StreamSubscriberObserver):
 def correlate_from_log(log_path: Path) -> dict[str, dict[str, float]]:
     """Read every line in `log_path`, compute pearson correlations
     between each affect module dimension and each output characteristic.
-    Returns dict[thymos_key][char_key] = pearson value.
+    Returns dict[affect_key][char_key] = pearson value.
     """
     if not log_path.exists():
         return {}

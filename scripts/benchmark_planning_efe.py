@@ -11,7 +11,7 @@ non-zero on failure so CI can refuse a slow configuration before the main suite.
 Usage:
     python scripts/benchmark_planning_efe.py [--iterations N] [--threshold-ms MS]
 
-The envelope is read from ``[nous]`` in ``config/kaine.toml`` when present
+The envelope is read from ``[planning]`` in ``config/kaine.toml`` when present
 (``factors``, ``max_states_per_factor``, ``planning_horizon``); otherwise the
 default compact model is used. KAINE is CPU-only — JAX logs a one-line
 GPU-fallback notice, which is expected and correct.
@@ -34,7 +34,7 @@ def _load_planning_config() -> dict[str, Any]:
         import tomllib
 
         cfg = tomllib.loads(toml_path.read_text())
-        return dict(cfg.get("nous") or {})
+        return dict(cfg.get("planning") or {})
     except Exception:
         return {}
 
@@ -76,8 +76,8 @@ def main() -> int:
 
     snapshot = _Snapshot(
         [
-            _Event("soma", {}, 0.9),
-            _Event("thymos", {"state": {"valence": 0.4, "arousal": 0.7}}, 0.5),
+            _Event("interoception", {}, 0.9),
+            _Event("affect", {"state": {"valence": 0.4, "arousal": 0.7}}, 0.5),
         ]
     )
 

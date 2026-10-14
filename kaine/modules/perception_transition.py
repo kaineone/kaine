@@ -4,7 +4,7 @@
 """The stimulus-source-to-world transition that opens a viewing after maturation.
 
 A born entity's first playlist viewing of a boot opens with a crossfade from the
-field it last perceived in the stimulus source (the bloom peak at ``womb_t_at_birth``) to
+field it last perceived in the stimulus source (the bloom peak at ``stimulus_source_t_at_maturation``) to
 the programme's opening frame, held still. The programme's sound is silent
 during the crossfade, as the bloom ended in silence, and fades in once
 programme time starts.
@@ -15,12 +15,12 @@ The pieces:
   :func:`transition_alpha`), the video blend (:func:`blend_frames`), a
   deterministic resize (:func:`resize_bilinear`) and the audio fade-in
   (:func:`audio_fade_gain`, :func:`apply_audio_fade`);
-- :func:`render_birth_field`: the stimulus source generator's bloom-peak frame, a pure
+- :func:`render_maturation_field`: the stimulus source generator's bloom-peak frame, a pure
   function of the recorded seed, stimulus source time, lived time and parameters;
 - :class:`TransitionController`: one per boot, shared by both surfaces. It holds
   the shared ``PlaylistClock`` paused under the holder ``transition`` from
   construction. The crossfade advances only while it is perceived: while no
-  other holder (``freeze``, ``hypnos``) pauses the clock and the primary
+  other holder (``freeze``, ``sleep``) pauses the clock and the primary
   surface is wanted. The holder is released exactly once, when the perceived
   crossfade time reaches ``transition_seconds``; a timer guarantees the release
   even when no surface reads. Programme time zero is the release;
@@ -88,7 +88,7 @@ def transition_alpha(elapsed: float, transition_seconds: float) -> float:
 
 
 def blend_frames(stimulus_source: np.ndarray, film: np.ndarray, alpha: float) -> np.ndarray:
-    """Return ``womb + alpha * (film - womb)`` as uint8.
+    """Return ``stimulus_source + alpha * (film - stimulus_source)`` as uint8.
 
     ``alpha`` is clamped to [0, 1]. Both frames must have the same shape. The
     endpoints are exact: alpha 0 returns the stimulus source frame's values and alpha 1 the
@@ -202,11 +202,11 @@ def render_maturation_field(
     width: int,
     height: int,
 ) -> np.ndarray:
-    """Render the stimulus source's bloom-peak field at ``womb_t_at_birth``.
+    """Render the stimulus source's bloom-peak field at ``stimulus_source_t_at_maturation``.
 
     The stimulus source generator's own pure function (``StimulusSourceProceduralSource.frame_at``
-    at ``birth_progress = 1.0``: bright, pulse-free, full colour) at frame index
-    ``floor(womb_t_at_birth * frame_rate_hz)``, with the recorded seed and the
+    at ``maturation_progress = 1.0``: bright, pulse-free, full colour) at frame index
+    ``floor(stimulus_source_t_at_maturation * frame_rate_hz)``, with the recorded seed and the
     entity's lived developmental time.
     """
     from kaine.modules.vision.feed import (
@@ -249,7 +249,7 @@ class TransitionController:
     the only surface.
 
     The crossfade advances only while it is perceived: while no other holder
-    (``freeze``, ``hypnos``, ...) pauses the clock, and while
+    (``freeze``, ``sleep``, ...) pauses the clock, and while
     ``perceiving(video_present)`` is true (the boot wiring checks the desired
     perception flags and the freeze control). Holder changes are applied the
     moment they happen; ``perceiving`` is re-sampled on every video read and on

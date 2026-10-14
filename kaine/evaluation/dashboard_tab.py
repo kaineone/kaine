@@ -249,11 +249,11 @@ def _aggregate_coherence(
 
 
 def _aggregate_planning_policy(logs_root: Path) -> dict[str, Any]:
-    """Aggregate the nous_policy rollup (active-inference policy logs).
+    """Aggregate the planning_policy rollup (active-inference policy logs).
 
     The PlanningPolicyObserver records ``expected_free_energy`` (EFE), ``horizon``,
     and the selected ``policy`` (action id string) to
-    ``<evaluation_logs>/nous_policy/nous_policy-*.jsonl`` — numeric/string
+    ``<evaluation_logs>/planning_policy/planning_policy-*.jsonl`` — numeric/string
     metadata only, no raw content. Returns the recent EFE series, the latest
     selected policy, and a count; ``source: none`` when no rollup exists.
 

@@ -32,7 +32,7 @@ def _make_planted_pc(n: int, seed: int) -> PrincipalComponent:
     estimator = PrincipalComponentEstimator()
     for x in samples:
         estimator.add(x.tolist())
-    return estimator.result(processor="topos", run_id="runA"), v, mean
+    return estimator.result(processor="vision", run_id="runA"), v, mean
 
 
 def test_estimator_recovers_planted_direction() -> None:
@@ -57,7 +57,7 @@ def test_estimator_matches_numpy_covariance() -> None:
     estimator = PrincipalComponentEstimator()
     for x in samples:
         estimator.add(x.tolist())
-    pc = estimator.result(processor="topos", run_id="runB")
+    pc = estimator.result(processor="vision", run_id="runB")
     cov = np.cov(samples, rowvar=False)
     eigvals = np.linalg.eigvalsh(cov)
     assert pc.variance == pytest.approx(float(np.max(eigvals)), rel=1e-9)
@@ -99,7 +99,7 @@ def test_project() -> None:
 
 def test_write_load_round_trip(tmp_path: Path) -> None:
     pc = PrincipalComponent(
-        processor="topos",
+        processor="vision",
         run_id="run1",
         n_inputs=3,
         dim=2,
@@ -130,7 +130,7 @@ def test_write_load_round_trip(tmp_path: Path) -> None:
 
 
 def test_principal_component_path() -> None:
-    processor = "topos"
+    processor = "vision"
     with pytest.raises(PrincipalComponentError):
         principal_component_path(Path("x"), "../x", processor)
     with pytest.raises(PrincipalComponentError):

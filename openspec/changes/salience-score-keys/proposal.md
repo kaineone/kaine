@@ -18,7 +18,7 @@ ablation's top score and candidate count are affected.
 ## What Changes
 
 - The cycle names each candidate by a stream-qualified key,
-  `<stream>:<entry_id>` (for example `soma.out:1760000000000-0`), when it
+  `<stream>:<entry_id>` (for example `interoception.out:1760000000000-0`), when it
   gathers the tick's batch. That key is the candidate's id everywhere
   downstream: in `selected_events`, in `salience_scores`, in each coalition
   member's `entry_id` in the broadcast payload, and in an intent's
@@ -66,7 +66,7 @@ been complete, so no derived setting depends on records with bare keys.
 
 ## Impact
 
-- Specs: `syneidesis` (one added requirement), `cognitive-cycle` (the
+- Specs: `workspace` (one added requirement), `cognitive-cycle` (the
   canonical ordering requirement), `research-event-log` and
   `planned-test-calibration` (one added requirement each).
 - Code: `kaine/bus/schema.py`, `kaine/cycle/engine.py`,

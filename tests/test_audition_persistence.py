@@ -222,8 +222,8 @@ async def test_sleep_suspends_both_forward_models(bus):
         start = time.monotonic()
         await bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.sleep.started",
+                source="sleep",
+                type="sleep.sleep.started",
                 payload={},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),
@@ -242,8 +242,8 @@ async def test_sleep_suspends_both_forward_models(bus):
 
         await bus.publish(
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.1,
                 timestamp=datetime.now(timezone.utc),

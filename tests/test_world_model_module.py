@@ -3,8 +3,8 @@
 
 """world model module (BaseModule) — event-driven behavior with fakeredis.
 
-Waking emits salience-only world_error; a mnemos.replay cue (during an open
-sleep window) emits phantasia.scenario re-injected onto phantasia.out; the
+Waking emits salience-only world_error; a episodic_memory.replay cue (during an open
+sleep window) emits world_model.scenario re-injected onto world_model.out; the
 trajectory buffer is bounded; no raw sense data lands on the bus.
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _snapshot(events, *, inhibited: bool = False, tick: int = 1) -> WorkspaceSna
     )
 
 
-async def _drain(bus: AsyncBus, stream: str = "phantasia.out") -> list[Event]:
+async def _drain(bus: AsyncBus, stream: str = "world_model.out") -> list[Event]:
     entries = await bus.read(stream, last_id="0")
     return [e for _, e in entries]
 
@@ -63,10 +63,10 @@ async def test_waking_emits_world_error(bus: AsyncBus):
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
-        await ph.on_workspace(_snapshot([_event("topos", "topos.report", salience=0.9)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
+        await ph.on_workspace(_snapshot([_event("vision", "vision.report", salience=0.9)]))
         events = await _drain(bus)
-        world_errors = [e for e in events if e.type == "phantasia.world_error"]
+        world_errors = [e for e in events if e.type == "world_model.world_error"]
         assert len(world_errors) == 2
         for e in world_errors:
             assert 0.0 <= e.salience <= 1.0
@@ -79,9 +79,9 @@ async def test_world_error_carries_no_scenario_content(bus: AsyncBus):
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph.on_workspace(_snapshot([_event("nous", "nous.belief", salience=0.5)]))
+        await ph.on_workspace(_snapshot([_event("planning", "planning.belief", salience=0.5)]))
         events = await _drain(bus)
-        we = [e for e in events if e.type == "phantasia.world_error"]
+        we = [e for e in events if e.type == "world_model.world_error"]
         assert we
         for e in we:
             keys = set(e.payload.keys())
@@ -99,18 +99,18 @@ async def test_surprising_trajectory_raises_world_error(bus: AsyncBus):
     await ph.initialize()
     try:
         # Repeated identical snapshots → low error after the first.
-        steady = _snapshot([_event("soma", "soma.report", salience=0.4)])
+        steady = _snapshot([_event("interoception", "interoception.report", salience=0.4)])
         for _ in range(4):
             await ph.on_workspace(steady)
         # A sharply different coalition → elevated error.
         surprising = _snapshot([
             _event("audition", "audition.transcription", salience=0.95),
-            _event("topos", "topos.report", salience=0.95),
+            _event("vision", "vision.report", salience=0.95),
         ])
         await ph.on_workspace(surprising)
 
         events = await _drain(bus)
-        we = [e.payload["world_error"] for e in events if e.type == "phantasia.world_error"]
+        we = [e.payload["world_error"] for e in events if e.type == "world_model.world_error"]
         # Last (surprising) error should exceed the steady-state error.
         assert we[-1] >= we[-2]
     finally:
@@ -118,7 +118,7 @@ async def test_surprising_trajectory_raises_world_error(bus: AsyncBus):
 
 
 # ---------------------------------------------------------------------------
-# Offline: mnemos.replay cue -> scenario
+# Offline: episodic_memory.replay cue -> scenario
 # ---------------------------------------------------------------------------
 
 
@@ -129,18 +129,18 @@ async def test_replay_cue_during_window_emits_scenario(bus: AsyncBus):
     try:
         # Accumulate some waking trajectory first.
         for i in range(6):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
 
-        # The sleep module opens the scenario window, then a mnemos.replay cue arrives.
+        # The sleep module opens the scenario window, then a episodic_memory.replay cue arrives.
         ph.open_scenario_window()
         assert ph.window_active is True
         await ph._handle_peer_event(
-            "mnemos.out",
-            _event("mnemos", "mnemos.replay", {"memory_id": "m-1", "text": "secret"}),
+            "episodic_memory.out",
+            _event("episodic_memory", "episodic_memory.replay", {"memory_id": "m-1", "text": "secret"}),
         )
 
         events = await _drain(bus)
-        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        scenarios = [e for e in events if e.type == "world_model.scenario"]
         assert len(scenarios) >= 1
         payload = scenarios[-1].payload
         assert payload["horizon"] == 5
@@ -158,34 +158,34 @@ async def test_replay_cue_while_awake_emits_nothing(bus: AsyncBus):
     try:
         assert ph.window_active is False
         await ph._handle_peer_event(
-            "mnemos.out",
-            _event("mnemos", "mnemos.replay", {"memory_id": "m-2"}),
+            "episodic_memory.out",
+            _event("episodic_memory", "episodic_memory.replay", {"memory_id": "m-2"}),
         )
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.scenario"] == []
+        assert [e for e in events if e.type == "world_model.scenario"] == []
     finally:
         await ph.shutdown()
 
 
 @pytest.mark.asyncio
 async def test_scenario_reinjected_onto_world_model_out(bus: AsyncBus):
-    """phantasia.scenario must be published on phantasia.out so the workspace
+    """world_model.scenario must be published on world_model.out so the workspace
     selection re-injects it into the broadcast for downstream on_workspace
     consumers (the planning, affect and self-model modules)."""
     ph = WorldModel(bus, backend="fake", rollout_horizon=4)
     await ph.initialize()
     try:
         for i in range(4):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
         await ph.generate_scenario(seed_memory_id="seed-x")
 
         # The event is readable on the module's output stream — that IS the
         # re-injection path (the workspace selects from module .out streams).
-        events = await _drain(bus, "phantasia.out")
-        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        events = await _drain(bus, "world_model.out")
+        scenarios = [e for e in events if e.type == "world_model.scenario"]
         assert scenarios
-        assert scenarios[-1].source == "phantasia"
+        assert scenarios[-1].source == "world_model"
     finally:
         await ph.shutdown()
 
@@ -209,51 +209,51 @@ async def test_window_close_stops_scenarios(bus: AsyncBus, monkeypatch):
         assert ph.window_active is False
         cue = Event(
             timestamp=t0 + timedelta(seconds=20),
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m"},
             salience=0.0,
         )
-        await ph._handle_peer_event("mnemos.out", cue)
+        await ph._handle_peer_event("episodic_memory.out", cue)
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.scenario"] == []
+        assert [e for e in events if e.type == "world_model.scenario"] == []
     finally:
         await ph.shutdown()
 
 
 async def test_sleep_started_does_not_open_the_window(bus: AsyncBus):
-    """hypnos.sleep.started only pauses the waking path; the window stays closed."""
+    """sleep.sleep.started only pauses the waking path; the window stays closed."""
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
         assert ph.window_active is False
         await ph._handle_peer_event(
-            "mnemos.out", _event("mnemos", "mnemos.replay", {"memory_id": "m"})
+            "episodic_memory.out", _event("episodic_memory", "episodic_memory.replay", {"memory_id": "m"})
         )
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.scenario"] == []
+        assert [e for e in events if e.type == "world_model.scenario"] == []
 
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.world_error"] == []
+        assert [e for e in events if e.type == "world_model.world_error"] == []
     finally:
         await ph.shutdown()
 
 
 async def test_sleep_completed_closes_the_window(bus: AsyncBus):
-    """hypnos.sleep.completed clears the sleep flag and closes the window as a backstop."""
+    """sleep.sleep.completed clears the sleep flag and closes the window as a backstop."""
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
         ph.open_scenario_window()
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.completed"))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.completed"))
         assert ph.window_active is False
 
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.world_error"] != []
+        assert [e for e in events if e.type == "world_model.world_error"] != []
     finally:
         await ph.shutdown()
 
@@ -264,15 +264,15 @@ async def test_cue_published_in_window_is_answered_after_close(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(4):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
 
         ph.open_scenario_window()
-        cue = _event("mnemos", "mnemos.replay", {"memory_id": "m-late"})
+        cue = _event("episodic_memory", "episodic_memory.replay", {"memory_id": "m-late"})
         ph.close_scenario_window()
-        await ph._handle_peer_event("mnemos.out", cue)
+        await ph._handle_peer_event("episodic_memory.out", cue)
 
         events = await _drain(bus)
-        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        scenarios = [e for e in events if e.type == "world_model.scenario"]
         assert len(scenarios) == 1
         assert scenarios[0].payload["seed_memory_id"] == "m-late"
     finally:
@@ -287,8 +287,8 @@ async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus, monkeyp
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
         cue = Event(
             timestamp=t0,
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m-early"},
             salience=0.0,
         )
@@ -296,10 +296,10 @@ async def test_cue_published_before_the_window_is_ignored(bus: AsyncBus, monkeyp
         ph.open_scenario_window()
         monkeypatch.setattr("kaine.modules.world_model.module._utc_now", lambda: t0 + timedelta(seconds=20))
         ph.close_scenario_window()
-        await ph._handle_peer_event("mnemos.out", cue)
+        await ph._handle_peer_event("episodic_memory.out", cue)
 
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.scenario"] == []
+        assert [e for e in events if e.type == "world_model.scenario"] == []
     finally:
         await ph.shutdown()
 
@@ -310,33 +310,33 @@ async def test_stale_cue_during_an_open_window_is_ignored(bus: AsyncBus, monkeyp
     await ph.initialize()
     try:
         for i in range(4):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
 
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
         stale = Event(
             timestamp=t0,
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m-stale"},
             salience=0.0,
         )
         monkeypatch.setattr("kaine.modules.world_model.module._utc_now", lambda: t0 + timedelta(seconds=10))
         ph.open_scenario_window()
-        await ph._handle_peer_event("mnemos.out", stale)
+        await ph._handle_peer_event("episodic_memory.out", stale)
 
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.scenario"] == []
+        assert [e for e in events if e.type == "world_model.scenario"] == []
 
         fresh = Event(
             timestamp=t0 + timedelta(seconds=15),
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m-fresh"},
             salience=0.0,
         )
-        await ph._handle_peer_event("mnemos.out", fresh)
+        await ph._handle_peer_event("episodic_memory.out", fresh)
         events = await _drain(bus)
-        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        scenarios = [e for e in events if e.type == "world_model.scenario"]
         assert len(scenarios) == 1
         assert scenarios[0].payload["seed_memory_id"] == "m-fresh"
     finally:
@@ -349,7 +349,7 @@ async def test_late_cue_from_back_to_back_windows_is_answered(bus: AsyncBus, mon
     await ph.initialize()
     try:
         for i in range(4):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
 
         t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
         monkeypatch.setattr("kaine.modules.world_model.module._utc_now", lambda: t0 + timedelta(seconds=10))
@@ -362,27 +362,27 @@ async def test_late_cue_from_back_to_back_windows_is_answered(bus: AsyncBus, mon
 
         first = Event(
             timestamp=t0 + timedelta(seconds=15),
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m-first"},
             salience=0.0,
         )
-        await ph._handle_peer_event("mnemos.out", first)
+        await ph._handle_peer_event("episodic_memory.out", first)
         events = await _drain(bus)
-        scenarios = [e for e in events if e.type == "phantasia.scenario"]
+        scenarios = [e for e in events if e.type == "world_model.scenario"]
         assert len(scenarios) == 1
         assert scenarios[0].payload["seed_memory_id"] == "m-first"
 
         between = Event(
             timestamp=t0 + timedelta(seconds=25),
-            source="mnemos",
-            type="mnemos.replay",
+            source="episodic_memory",
+            type="episodic_memory.replay",
             payload={"memory_id": "m-between"},
             salience=0.0,
         )
-        await ph._handle_peer_event("mnemos.out", between)
+        await ph._handle_peer_event("episodic_memory.out", between)
         events = await _drain(bus)
-        seeds = [e.payload["seed_memory_id"] for e in events if e.type == "phantasia.scenario"]
+        seeds = [e.payload["seed_memory_id"] for e in events if e.type == "world_model.scenario"]
         assert seeds == ["m-first"]
     finally:
         await ph.shutdown()
@@ -393,15 +393,15 @@ async def test_restart_clears_sleep_state(bus: AsyncBus):
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
         ph.open_scenario_window()
         await ph.restart()
 
         assert ph._window_active is False
 
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=0))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=0))
         events = await _drain(bus)
-        assert any(e.type == "phantasia.world_error" for e in events)
+        assert any(e.type == "world_model.world_error" for e in events)
     finally:
         await ph.shutdown()
 
@@ -417,7 +417,7 @@ async def test_trajectory_buffer_is_bounded(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(50):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         assert ph.buffer_size == 10
     finally:
         await ph.shutdown()
@@ -442,8 +442,8 @@ async def test_no_raw_sense_data_on_bus(bus: AsyncBus):
             await ph.on_workspace(snap)
         ph.open_scenario_window()
         await ph._handle_peer_event(
-            "mnemos.out",
-            _event("mnemos", "mnemos.replay",
+            "episodic_memory.out",
+            _event("episodic_memory", "episodic_memory.replay",
                    {"memory_id": "m", "text": "memory transcript text"}),
         )
 
@@ -470,7 +470,7 @@ async def test_training_disabled_does_not_train(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(5):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         # Opening the window triggers _maybe_train, which is a no-op when disabled.
         outcome = await ph._maybe_train()
         assert outcome is None
@@ -484,7 +484,7 @@ async def test_training_enabled_runs_in_memory(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(5):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         outcome = ph.train_now()
         assert outcome is not None
         assert outcome.steps == 5
@@ -513,7 +513,7 @@ async def test_fake_backend_does_not_count_as_consolidation(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(5):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         outcome = ph.train_now()
         assert outcome is not None
         assert not outcome.learned
@@ -532,7 +532,7 @@ async def test_learned_pass_counts_as_consolidation(bus: AsyncBus):
     try:
         ph._wm = _LearningFakeWorldModel(obs_dim=ph._wm.obs_dim)
         for i in range(5):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         before = ph._successful_training_passes
         ph._save_weights = lambda reason: None
         await ph._maybe_train()
@@ -547,7 +547,7 @@ async def test_serialize_emits_metadata_only(bus: AsyncBus):
     await ph.initialize()
     try:
         for i in range(3):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
         state = ph.serialize()
         # Metadata only — never the buffer or raw weights.
         assert "encoder_version" in state
@@ -557,7 +557,7 @@ async def test_serialize_emits_metadata_only(bus: AsyncBus):
         assert "weights" not in state
         assert "params" not in state
         blob = str(state).lower()
-        assert "soma.report" not in blob
+        assert "interoception.report" not in blob
     finally:
         await ph.shutdown()
 
@@ -568,28 +568,28 @@ async def test_no_inference_during_window(bus: AsyncBus):
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)]))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)]))
         events = await _drain(bus)
-        assert [e for e in events if e.type == "phantasia.world_error"] == []
+        assert [e for e in events if e.type == "world_model.world_error"] == []
     finally:
         await ph.shutdown()
 
 
 # ---------------------------------------------------------------------------
-# H7: backend disclosure — every phantasia.* event must carry 'backend'
+# H7: backend disclosure — every world_model.* event must carry 'backend'
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_world_error_discloses_backend(bus: AsyncBus):
-    """phantasia.world_error must carry 'backend' in every payload."""
+    """world_model.world_error must carry 'backend' in every payload."""
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.5)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.5)]))
         events = await _drain(bus)
-        world_errors = [e for e in events if e.type == "phantasia.world_error"]
+        world_errors = [e for e in events if e.type == "world_model.world_error"]
         assert world_errors, "expected at least one world_error event"
         for e in world_errors:
             assert "backend" in e.payload, "world_error payload missing 'backend'"
@@ -600,13 +600,13 @@ async def test_world_error_discloses_backend(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_scenario_discloses_backend(bus: AsyncBus):
-    """phantasia.scenario must carry 'backend' in every payload."""
+    """world_model.scenario must carry 'backend' in every payload."""
     ph = WorldModel(bus, backend="fake", rollout_horizon=4)
     await ph.initialize()
     try:
         for i in range(4):
-            await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.4)], tick=i))
-        await ph._handle_peer_event("hypnos.out", _event("hypnos", "hypnos.sleep.started"))
+            await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.4)], tick=i))
+        await ph._handle_peer_event("sleep.out", _event("sleep", "sleep.sleep.started"))
         payloads = await ph.generate_scenario(seed_memory_id="test-h7")
         assert payloads, "expected at least one scenario payload"
         for p in payloads:
@@ -622,7 +622,7 @@ async def test_backend_value_matches_constructor_arg(bus: AsyncBus):
     ph = WorldModel(bus, backend="fake")
     await ph.initialize()
     try:
-        await ph.on_workspace(_snapshot([_event("soma", "soma.report", salience=0.5)]))
+        await ph.on_workspace(_snapshot([_event("interoception", "interoception.report", salience=0.5)]))
         events = await _drain(bus)
         for e in events:
             if "backend" in e.payload:

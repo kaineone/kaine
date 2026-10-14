@@ -56,8 +56,8 @@ class FakeAffect:
 
 def test_sleep_takes_no_planning_collaborator():
     params = inspect.signature(Sleep.__init__).parameters
-    assert "nous_process" not in params
-    assert "nous_step_burst" not in params
+    assert "planning_process" not in params
+    assert "planning_step_burst" not in params
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ async def test_no_nar_burst_during_full_maintenance_cycle(bus: AsyncBus, tmp_pat
 
 @pytest.mark.asyncio
 async def test_replay_reaches_workspace_not_via_burst(bus: AsyncBus, tmp_path: Path):
-    """Replay drives the normal path (mnemos.replay_now invoked during the window)."""
+    """Replay drives the normal path (episodic_memory.replay_now invoked during the window)."""
     episodic_memory = FakeEpisodicMemory()
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",

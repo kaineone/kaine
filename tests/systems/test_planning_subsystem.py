@@ -18,7 +18,7 @@ from kaine.modules.planning import FakeEngine, Planning
 from tests.systems._harness import SubsystemHarness
 
 
-def _selected_event(source="soma", type_="soma.report", salience=0.9):
+def _selected_event(source="interoception", type_="interoception.report", salience=0.9):
     return {
         "entry_id": "e1",
         "source": source,
@@ -35,7 +35,7 @@ async def test_planning_constructs_with_fake_engine():
     async with SubsystemHarness() as h:
         planning = Planning(h.bus, engine=FakeEngine())
         await h.register(planning)
-        assert planning.name == "nous"
+        assert planning.name == "planning"
         assert isinstance(planning.serialize(), dict)
 
 
@@ -48,7 +48,7 @@ async def test_planning_publishes_belief_and_policy_on_broadcast():
             {"tick_index": 0, "selected": [_selected_event()]}
         )
         beliefs = await h.collect(
-            "nous.out", count=1, timeout=1.0, filter_type="nous.belief"
+            "planning.out", count=1, timeout=1.0, filter_type="planning.belief"
         )
         assert len(beliefs) == 1
         assert beliefs[0].payload["kind"] == "belief"
@@ -67,6 +67,6 @@ async def test_planning_against_real_pymdp_engine():
             {"tick_index": 0, "selected": [_selected_event()]}
         )
         beliefs = await h.collect(
-            "nous.out", count=1, timeout=2.0, filter_type="nous.belief"
+            "planning.out", count=1, timeout=2.0, filter_type="planning.belief"
         )
         assert len(beliefs) == 1

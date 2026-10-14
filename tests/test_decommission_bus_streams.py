@@ -5,10 +5,22 @@
 
 import pytest
 
-from kaine import legacy_names
+from kaine import legacy_aliases, legacy_names
 from kaine.bus.streams import KNOWN_STREAMS
 from kaine.evaluation import stream_registry as eval_stream_registry
 from kaine.lifecycle import decommission
+
+
+def _old(new: str) -> str:
+    """The module key a renamed module had before the keys step."""
+    return next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == new)
+
+
+# Old stream names, derived from the rename table so the keys codemod leaves
+# them alone: the decommission must clear streams under both names.
+OLD_AFFECT = f"{_old('affect')}.out"
+OLD_LANGUAGE_EXTERNAL = legacy_aliases.old_stream_name("language.external") or "language.external"
+OLD_LANGUAGE_INTERNAL = legacy_aliases.old_stream_name("language.internal") or "language.internal"
 
 
 def test_stream_list_covers_evaluation_produced_streams():
@@ -28,14 +40,14 @@ def test_stream_list_covers_registry_and_both_names():
     assert "cycle.control" in names
     assert all("*" not in name for name in names)
 
-    old = "thymos"
+    old = _old("affect")
     entry = legacy_names.MODULES[old]
     new = entry["new_key"]
     assert old != new
     assert f"{old}.out" in names, f"missing legacy stream {old}.out"
     assert f"{new}.out" in names, f"missing modern stream {new}.out"
 
-    old = "volition"
+    old = _old("action_selection")
     entry = legacy_names.MODULES[old]
     new = entry["new_key"]
     assert old != new
@@ -49,17 +61,18 @@ def test_decommission_clears_streams_with_fakeredis():
 
     client = fakeredis.FakeRedis()
     seeded = [
-        "thymos.out",
+        OLD_AFFECT,
         "affect.out",
         "workspace.broadcast",
         "cycle.control",
-        "lingua.external",
+        OLD_LANGUAGE_EXTERNAL,
+        "language.external",
     ]
     for name in seeded:
         client.xadd(name, {"data": "1"})
 
     client.xadd("affect.out.backup", {"data": "2"})
-    client.set("lingua.internal", "keep")
+    client.set(OLD_LANGUAGE_INTERNAL, "keep")
     client.set("operator:note", "keep")
 
     result = decommission.clear_entity_streams(
@@ -75,9 +88,9 @@ def test_decommission_clears_streams_with_fakeredis():
         assert client.exists(name) == 0, f"{name!r} still exists"
 
     assert client.exists("affect.out.backup") == 1
-    assert client.get("lingua.internal") == b"keep"
+    assert client.get(OLD_LANGUAGE_INTERNAL) == b"keep"
     assert client.get("operator:note") == b"keep"
-    assert "lingua.internal (string)" in result.skipped_non_streams
+    assert f"{OLD_LANGUAGE_INTERNAL} (string)" in result.skipped_non_streams
 
 
 def test_dry_run_lists_only_existing_streams():
@@ -85,7 +98,7 @@ def test_dry_run_lists_only_existing_streams():
     fakeredis = pytest.importorskip("fakeredis")
 
     client = fakeredis.FakeRedis()
-    existing = ["thymos.out", "affect.out"]
+    existing = [OLD_AFFECT, "affect.out"]
     for name in existing:
         client.xadd(name, {"data": "1"})
 

@@ -36,7 +36,7 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     if "operator_sources" in kwargs:
         ops = kwargs["operator_sources"]
         if not isinstance(ops, list) or not all(isinstance(x, str) for x in ops):
-            raise ValueError("empatheia.operator_sources must be a list of strings")
+            raise ValueError("social_cognition.operator_sources must be a list of strings")
     if "host" in qdrant:
         kwargs["qdrant_host"] = qdrant["host"]
     if "port" in qdrant:

@@ -106,26 +106,26 @@ def _event(
 
 @pytest.mark.asyncio
 async def test_default_stream_is_development_out():
-    assert DEFAULT_STIMULUS_SOURCE_READOUT_STREAM == "gestation.out"
+    assert DEFAULT_STIMULUS_SOURCE_READOUT_STREAM == "development.out"
 
 
 @pytest.mark.asyncio
 async def test_readout_found_behind_presence(tmp_path: Path):
     readout_payload = {"endogenous_self_sustain": True}
     stream_entries = [
-        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": readout_payload}, 1_001_000),
-        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_002_000),
-        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_003_000),
-        _event(DEVELOPMENT_SOURCE, "gestation.womb", {}, 1_004_000),
+        _event(DEVELOPMENT_SOURCE, "development.readiness", {"readout": readout_payload}, 1_001_000),
+        _event(DEVELOPMENT_SOURCE, "development.stimulus_source", {}, 1_002_000),
+        _event(DEVELOPMENT_SOURCE, "development.stimulus_source", {}, 1_003_000),
+        _event(DEVELOPMENT_SOURCE, "development.stimulus_source", {}, 1_004_000),
     ]
-    bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
+    bus = _make_bus({"development.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
         bus=bus,
         config=_make_config(),
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        stimulus_source_readout_stream="gestation.out",
+        stimulus_source_readout_stream="development.out",
     )
     await runner._begin_boot()
     result = await runner._stimulus_source_readiness_readout()
@@ -135,16 +135,16 @@ async def test_readout_found_behind_presence(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_readout_older_than_max_age_ignored(tmp_path: Path):
     stream_entries = [
-        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": {}}, 994_000),
+        _event(DEVELOPMENT_SOURCE, "development.readiness", {"readout": {}}, 994_000),
     ]
-    bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
+    bus = _make_bus({"development.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
         bus=bus,
         config=_make_config(),
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        stimulus_source_readout_stream="gestation.out",
+        stimulus_source_readout_stream="development.out",
     )
     await runner._begin_boot()
     result = await runner._stimulus_source_readiness_readout()
@@ -154,16 +154,16 @@ async def test_readout_older_than_max_age_ignored(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_readout_older_than_boot_ignored(tmp_path: Path):
     stream_entries = [
-        _event(DEVELOPMENT_SOURCE, "gestation.readiness", {"readout": {}}, 999_000),
+        _event(DEVELOPMENT_SOURCE, "development.readiness", {"readout": {}}, 999_000),
     ]
-    bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
+    bus = _make_bus({"development.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
         bus=bus,
         config=_make_config(),
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        stimulus_source_readout_stream="gestation.out",
+        stimulus_source_readout_stream="development.out",
     )
     await runner._begin_boot()
     result = await runner._stimulus_source_readiness_readout()
@@ -173,16 +173,16 @@ async def test_readout_older_than_boot_ignored(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_readout_from_wrong_source_ignored(tmp_path: Path):
     stream_entries = [
-        _event("womb", "gestation.readiness", {"readout": {"a": 1}}, 1_002_000),
+        _event("stimulus_source", "development.readiness", {"readout": {"a": 1}}, 1_002_000),
     ]
-    bus = _make_bus({"gestation.out": stream_entries}, boot_ms=1_000_000)
+    bus = _make_bus({"development.out": stream_entries}, boot_ms=1_000_000)
     runner = MaturationGateRunner(
         bus=bus,
         config=_make_config(),
         registry=_make_registry(),
         entity_clock=MagicMock(),
         stage_state=_fresh_stage(tmp_path),
-        stimulus_source_readout_stream="gestation.out",
+        stimulus_source_readout_stream="development.out",
     )
     await runner._begin_boot()
     result = await runner._stimulus_source_readiness_readout()

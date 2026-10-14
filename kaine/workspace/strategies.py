@@ -40,7 +40,7 @@ class StaticGoalScorer:
     Returns the same value for every event, so the product-form salience score
     collapses to ``intensity × novelty × <constant>``. It is NOT the default in
     the live cycle (the real :class:`DriveRelevanceGoalScorer` is selectable via
-    ``[syneidesis].salience_goal_factor``); it is retained as the runnable
+    ``[workspace].salience_goal_factor``); it is retained as the runnable
     two-factor negative control and as a fixed-value seam for crafted tests.
     """
 
@@ -58,7 +58,7 @@ class StaticAffectModulator:
 
     Returns a constant, bypassing affect-weighting. NOT the live default — the
     real :class:`kaine.modules.affect.modulator.StateModulator` is wired in by
-    default (``[syneidesis].salience_thymos_factor``); this stays as the runnable
+    default (``[workspace].salience_affect_factor``); this stays as the runnable
     unweighted negative control and a fixed-value seam for crafted tests.
     """
 
@@ -90,7 +90,7 @@ DRIVES: frozenset[str] = frozenset({"curiosity", "boredom", "social_drive", "res
 
 # Event sources that are workspace scaffolding, not registry modules. The action selection module's
 # action events relieve restlessness.
-SCAFFOLDING_DRIVE_SOURCES: dict[str, frozenset[str]] = {"volition": frozenset({"restlessness"})}
+SCAFFOLDING_DRIVE_SOURCES: dict[str, frozenset[str]] = {"action_selection": frozenset({"restlessness"})}
 
 
 def build_drive_sources(tags_by_source: Mapping[str, Iterable[str]]) -> dict[str, frozenset[str]]:

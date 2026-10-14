@@ -19,7 +19,7 @@ from kaine.bus.schema import module_stream
 pytestmark = pytest.mark.integration
 
 
-def _event(source: str = "soma", salience: float = 0.5, **payload) -> Event:
+def _event(source: str = "interoception", salience: float = 0.5, **payload) -> Event:
     return Event(
         source=source,
         type="integration.test",
@@ -45,7 +45,7 @@ async def test_publish_and_read_roundtrip_live_redis():
     bus = AsyncBus(cfg)
     try:
         await bus.audit()
-        stream = module_stream("soma")
+        stream = module_stream("interoception")
         await bus.client.delete(stream)
 
         ev = _event(salience=0.30000000000000004, nested={"a": [1, 2, 3]})

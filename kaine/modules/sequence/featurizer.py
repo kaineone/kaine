@@ -45,14 +45,14 @@ from kaine.cycle.types import WorkspaceSnapshot
 
 DEFAULT_FEATURE_DIM: int = 24
 DEFAULT_KNOWN_SOURCES: tuple[str, ...] = (
-    "soma",
-    "chronos",
-    "topos",
-    "nous",
-    "mnemos",
-    "thymos",
-    "lingua",
-    "praxis",
+    "interoception",
+    "sequence",
+    "vision",
+    "planning",
+    "episodic_memory",
+    "affect",
+    "language",
+    "effectors",
 )
 
 AUDITION_SOURCE: str = "audition"

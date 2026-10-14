@@ -8,7 +8,7 @@ Provide canonical stream names and validation so modules, the dashboard, evaluat
 All consumers of module output streams SHALL derive the stream name from `kaine.bus.schema.module_stream()` or from shared constants exported by the producing module, rather than hard-coding raw string literals.
 
 #### Scenario: Module stream derivation is used in consumers
-- **WHEN** `grep -rn "lingua\.out\|thymos\.out\|mnemos\.out" kaine/ tests/ config/` is run
+- **WHEN** `grep -rn "language\.out\|affect\.out\|episodic_memory\.out" kaine/ tests/ config/` is run
 - **THEN** the only matches are in `kaine/bus/schema.py`, module definitions, or the canonical constants module
 
 #### Scenario: Renaming a module updates all consumers

@@ -60,7 +60,7 @@ async def test_phase_1_end_to_end_delivery():
         await recorder.publish_one(salience=0.8)
 
         # 2. Run one cycle tick. The cycle should collect the event from
-        #    echo.out, hand it to the workspace, broadcast the resulting
+        #    recorder.out, hand it to the workspace, broadcast the resulting
         #    snapshot to workspace.broadcast.
         result = await cycle.tick()
         assert result.events_collected == 1
@@ -76,7 +76,7 @@ async def test_phase_1_end_to_end_delivery():
 
         snap = recorder.snapshots[-1]
         assert any(
-            ev.source == "echo" and ev.type == "echo.ping"
+            ev.source == "recorder" and ev.type == "recorder.ping"
             for _, ev in snap.selected_events
         ), "broadcast did not include the echo event"
         assert snap.tick_index == 0

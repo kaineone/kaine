@@ -122,7 +122,7 @@ async def test_vocal_initialize_degrades_on_warm_up_failure(bus: AsyncBus, tmp_p
     assert vocal._tts_unavailable is not None
     assert "native boom" in vocal._tts_unavailable
     assert any(
-        _failure_matches(f, module="vox", backend="sherpa_onnx", reason_sub="native boom")
+        _failure_matches(f, module="vocal", backend="sherpa_onnx", reason_sub="native boom")
         for f in kaine.backend_state.backend_failures()
     )
 

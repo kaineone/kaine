@@ -10,13 +10,13 @@ observer does not read it either.
 
 ## What Changes
 
-- Research-log taxonomy: `topos.report` and `soma.report` gain `alert`,
+- Research-log taxonomy: `vision.report` and `interoception.report` gain `alert`,
   `context_gain` and `context_age_s` (the interoception module gains `alert`; the vision module already has
-  it); `chronos.report` gains `alert`; `audition.perception` is added with its
+  it); `sequence.report` gains `alert`; `audition.perception` is added with its
   numeric fields (`prediction_error`, `normalised_error`, `change_score`,
   `energy_dbfs`, `attended_window`, `attended_seconds`, `alert`,
-  `context_gain`, `context_age_s`); `thymos.drive`, `thymos.emotion` and
-  `hypnos.sleep.completed` gain `alert`.
+  `context_gain`, `context_age_s`); `affect.drive`, `affect.emotion` and
+  `sleep.sleep.completed` gain `alert`.
 - The workspace record copies `access_threshold` from the broadcast metadata
   and the broadcast's `published_at` when present.
 - The prediction-error observer reads `audition.perception`.

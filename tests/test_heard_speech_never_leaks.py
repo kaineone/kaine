@@ -105,14 +105,14 @@ async def test_heard_sentinel_never_leaves_language(bus: AsyncBus, tmp_path: Pat
         # user_input and unredacted rendering carried the heard text back in.
         echo = dict(first_payload)
         echo["user_input"] = sentinel  # a legacy event that still carries it
-        later = _snapshot([("l1", _event("lingua", "external_speech", echo))])
+        later = _snapshot([("l1", _event("language", "external_speech", echo))])
         await _say(
             language, about="reflecting on what just happened", snapshot=later, about_kind="event"
         )
 
         for payload in _payloads(await bus.client.xrange(EXTERNAL_STREAM)):
             assert sentinel not in json.dumps(payload)
-        language_out = await bus.client.xrange("lingua.out")
+        language_out = await bus.client.xrange("language.out")
         assert language_out
         assert sentinel not in json.dumps(language_out)
         records = _records(language.intent_log.path)
@@ -138,7 +138,7 @@ def test_redact_heard_speech_by_field():
     assert redact_heard_speech(transcription) == f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
 
     # `text` is heard only on audition.transcription.
-    assert redact_heard_speech(_event("vox", "vox.something", {"text": "spoken by me"})) is None
+    assert redact_heard_speech(_event("vocal", "vocal.something", {"text": "spoken by me"})) is None
 
 
 @pytest.mark.asyncio
@@ -170,7 +170,7 @@ async def test_felt_phrase_echoed_by_language_stays_felt(bus: AsyncBus, tmp_path
         felt = "a pull towards company"
         await _say(language, about=felt, snapshot=_snapshot(), about_kind="felt")
         first_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
-        later = _snapshot([("l1", _event("lingua", "external_speech", first_payload))])
+        later = _snapshot([("l1", _event("language", "external_speech", first_payload))])
         await _say(language, about=felt, snapshot=later, about_kind="felt")
         second_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
         assert second_payload["user_input"] == felt
@@ -183,7 +183,7 @@ async def test_felt_phrase_echoed_by_language_stays_felt(bus: AsyncBus, tmp_path
 @pytest.mark.asyncio
 async def test_default_report_policy_intents_are_events(bus: AsyncBus, tmp_path: Path):
     policy = SelfInitiatedReportPolicy()
-    top_event = _event("topos", "topos.surprise", {"surprise": 0.95}, 0.9)
+    top_event = _event("vision", "vision.surprise", {"surprise": 0.95}, 0.9)
     snapshot = WorkspaceSnapshot(
         tick_index=1,
         selected_events=[("e1", top_event)],
@@ -229,10 +229,10 @@ def test_every_report_policy_branch_tags_its_intent_as_an_event():
             salience_scores={"e1": surprise},
         )
 
-    think = policy(snap("soma", 0.5))
+    think = policy(snap("interoception", 0.5))
     assert [i.kind for i in think] == ["think"]
     t[0] += 10.0
-    speak = policy(snap("topos", 0.7))
+    speak = policy(snap("vision", 0.7))
     assert [i.kind for i in speak] == [SPEAK] and not speak[0].interrupt
     t[0] += 1.0
     interrupt = policy(snap("audition", 0.95))
@@ -251,7 +251,7 @@ async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Pa
     await language.initialize()
     try:
         chat = _snapshot(
-            [("t1", _event("mundus", "mundus.chat", {"message": sentinel, "sender": sender}, 0.9))]
+            [("t1", _event("embodiment", "embodiment.chat", {"message": sentinel, "sender": sender}, 0.9))]
         )
         await _say(language, about="chat event", snapshot=chat, about_kind="event")
         await _say(language, about=sentinel, snapshot=_snapshot(), about_kind="heard")
@@ -293,8 +293,8 @@ async def test_nested_heard_field_never_leaves_language(bus: AsyncBus, tmp_path:
                 (
                     "n1",
                     _event(
-                        "nexus",
-                        "nexus.note",
+                        "dashboard",
+                        "dashboard.note",
                         {"x": {"user_input": sentinel}, "items": [{"heard_text": sentinel}]},
                         0.9,
                     ),
@@ -322,7 +322,7 @@ async def test_nested_heard_field_never_leaves_language(bus: AsyncBus, tmp_path:
 def test_redact_heard_speech_external_types_and_nesting():
     sentinel = "PURPLE-HERON-4471"
 
-    chat = _event("mundus", "mundus.chat", {"message": sentinel, "sender": "Avatar Two"})
+    chat = _event("embodiment", "embodiment.chat", {"message": sentinel, "sender": "Avatar Two"})
     line = redact_heard_speech(chat)
     assert line is not None
     assert sentinel not in line
@@ -330,8 +330,8 @@ def test_redact_heard_speech_external_types_and_nesting():
     assert HEARD_SPEECH_PLACEHOLDER in line
 
     nested = _event(
-        "nexus",
-        "nexus.note",
+        "dashboard",
+        "dashboard.note",
         {"x": {"user_input": sentinel}, "items": [{"heard_text": sentinel}]},
     )
     line = redact_heard_speech(nested)
@@ -343,7 +343,7 @@ def test_redact_heard_speech_external_types_and_nesting():
     assert redact_heard_speech(plain) is None
 
     original = {"message": sentinel, "sender": "Avatar Two"}
-    chat2 = _event("mundus", "mundus.chat", original)
+    chat2 = _event("embodiment", "embodiment.chat", original)
     redact_heard_speech(chat2)
     assert chat2.payload == original
 
@@ -380,7 +380,7 @@ async def test_nested_external_input_text_makes_an_event_about_heard(
     await language.initialize()
     try:
         chat = _snapshot(
-            [("c1", _event("mundus", "mundus.chat", {"message": {"text": sentinel}}, 0.9))]
+            [("c1", _event("embodiment", "embodiment.chat", {"message": {"text": sentinel}}, 0.9))]
         )
         await _say(language, about=sentinel, snapshot=chat, about_kind="event")
         await _assert_sentinel_nowhere(bus, language, sentinel)
@@ -399,7 +399,7 @@ async def test_nested_heard_field_value_is_scrubbed_from_an_event_about(
     await language.initialize()
     try:
         note = _snapshot(
-            [("n1", _event("nexus", "nexus.note", {"x": {"user_input": sentinel}}, 0.9))]
+            [("n1", _event("dashboard", "dashboard.note", {"x": {"user_input": sentinel}}, 0.9))]
         )
         await _say(language, about=sentinel, snapshot=note, about_kind="event")
         assert sentinel not in language.intent_log.path.read_text()
@@ -415,7 +415,7 @@ def _events_from_entries(entries):
             payload = json.loads(payload) if payload else {}
         elif payload is None:
             payload = {}
-        source = fields.get("source", "lingua")
+        source = fields.get("source", "language")
         type_ = fields.get("type", "external_speech")
         salience = fields.get("salience")
         if salience is not None:
@@ -478,8 +478,8 @@ async def test_heard_list_payload_never_leaves_language(bus: AsyncBus, tmp_path:
     await language.initialize()
     try:
         event = _event(
-            "nexus",
-            "nexus.note",
+            "dashboard",
+            "dashboard.note",
             {"user_input": [sentinel]},
             0.9,
         )
@@ -503,8 +503,8 @@ async def test_about_matching_list_field_value_is_scrubbed(
     await language.initialize()
     try:
         event = _event(
-            "nexus",
-            "nexus.note",
+            "dashboard",
+            "dashboard.note",
             {"user_input": [sentinel]},
             0.9,
         )

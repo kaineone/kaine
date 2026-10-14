@@ -114,7 +114,7 @@ async def test_full_stack_with_dashboard_co_existence(tmp_path):
         publication_threshold=0.0,
     )
     registry = ModuleRegistry()
-    modules = build_fakes(["soma", "chronos", "lingua"], bus)
+    modules = build_fakes(["interoception", "sequence", "language"], bus)
     for module in modules.values():
         registry.register(module)
         await module.initialize()
@@ -130,10 +130,10 @@ async def test_full_stack_with_dashboard_co_existence(tmp_path):
     bridge = BusBridge(
         bus,
         PrivacyFilter(),
-        streams=["lingua.out"],
+        streams=["language.out"],
         poll_interval_s=0.01,
     )
-    bridge._cursors["lingua.out"] = "0"
+    bridge._cursors["language.out"] = "0"
     diag_client = bridge.add_client("diagnostics")
     await bridge.start()
     try:
@@ -143,7 +143,7 @@ async def test_full_stack_with_dashboard_co_existence(tmp_path):
             result = await cycle.tick()
             assert result.error is False
             await asyncio.sleep(0.01)
-        # The dashboard diagnostics SSE saw at least one event from lingua.out
+        # The dashboard diagnostics SSE saw at least one event from language.out
         # (scrubbed of content fields, but the event itself surfaced).
         assert diag_client.queue.qsize() > 0
     finally:

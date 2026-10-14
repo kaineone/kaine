@@ -747,8 +747,8 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         interoception_entry = (
             "1-0",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"k": 1},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -768,8 +768,8 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         affect_entry = (
             "2-0",
             Event(
-                source="thymos",
-                type="thymos.report",
+                source="affect",
+                type="affect.report",
                 payload={"k": 1},
                 salience=0.75,
                 timestamp=datetime.now(timezone.utc),
@@ -825,8 +825,8 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
         interoception_entry = (
             "1-0",
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"k": 1},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),

@@ -54,7 +54,7 @@ def test_h6_merge_refuses_when_both_parents_have_adapters(tmp_path):
     from kaine.lifecycle.manager import ForkManager, UnmergedAdaptersError
 
     mgr = ForkManager(tmp_path)
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
     b = mgr.snapshot(reg, adapters=["state/hypnos/adapters/b"])
 
@@ -73,7 +73,7 @@ def test_h6_merge_proceeds_with_allow_flag(tmp_path):
     from kaine.lifecycle.manager import ForkManager
 
     mgr = ForkManager(tmp_path)
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
     b = mgr.snapshot(reg, adapters=["state/hypnos/adapters/b"])
 
@@ -89,7 +89,7 @@ def test_h6_merge_no_refusal_when_only_one_parent_has_adapters(tmp_path):
     from kaine.lifecycle.manager import ForkManager
 
     mgr = ForkManager(tmp_path)
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["state/hypnos/adapters/a"])
     b = mgr.snapshot(reg, adapters=[])
 
@@ -102,7 +102,7 @@ def test_h6_merge_no_refusal_when_neither_parent_has_adapters(tmp_path):
     from kaine.lifecycle.manager import ForkManager
 
     mgr = ForkManager(tmp_path)
-    reg = _FakeRegistry([_FakeModule("soma")])
+    reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=[])
     b = mgr.snapshot(reg, adapters=[])
 
@@ -233,7 +233,7 @@ def test_m1_backup_encryption_failure_returns_not_ok(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
+            qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},
             out_root=tmp_path / "backups",
             entity_name="Test",
             assessment=_assessment(),
@@ -272,7 +272,7 @@ def test_m1_backup_encryption_success_still_ok(tmp_path, monkeypatch):
         result = capture_backup(
             state_root=state_root,
             fork_root=tmp_path / "forks",
-            qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
+            qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},
             out_root=tmp_path / "backups",
             entity_name="Test",
             assessment=_assessment(),
@@ -296,7 +296,7 @@ def test_m1_backup_plaintext_when_encryption_disabled_is_ok(tmp_path):
     result = capture_backup(
         state_root=state_root,
         fork_root=tmp_path / "forks",
-        qdrant_cfg={"mnemos": {"backend": "inmemory"}, "empatheia": {"backend": "inmemory"}},
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},
         out_root=tmp_path / "backups",
         entity_name="Test",
         assessment=_assessment(),
@@ -437,7 +437,7 @@ def test_l4_get_collections_failure_records_error_and_skips_delete(tmp_path):
     ):
         result = delete_entity_state(
             state_root=state_root,
-            qdrant_cfg={"modules": {"mnemos": True}, "host": "127.0.0.1", "port": 6533},
+            qdrant_cfg={"modules": {"episodic_memory": True}, "host": "127.0.0.1", "port": 6533},
             dry_run=False,
         )
 
@@ -488,7 +488,7 @@ def test_l4_get_collections_success_deletes_normally(tmp_path):
     ):
         result = delete_entity_state(
             state_root=state_root,
-            qdrant_cfg={"modules": {"mnemos": True}, "host": "127.0.0.1", "port": 6533},
+            qdrant_cfg={"modules": {"episodic_memory": True}, "host": "127.0.0.1", "port": 6533},
             dry_run=False,
         )
 

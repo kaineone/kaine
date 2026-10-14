@@ -143,7 +143,7 @@ from auto-registering Audition.
 
 ### Requirement: Heard audio carries its channel
 Audio delivered through the live-microphone path SHALL carry the channel
-it came from: the perception-feed mode (`playlist`, `seeded`, `womb`,
+it came from: the perception-feed mode (`playlist`, `seeded`, `stimulus_source`,
 `screen`) when a feed plays, and `live_mic` for a real device. Only
 speech from an operator channel SHALL be treated as a user utterance
 addressed to the entity; speech from other channels SHALL still be

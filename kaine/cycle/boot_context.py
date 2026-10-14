@@ -38,8 +38,8 @@ class BootContext:
     bus: Any = None  # set by _phase_bus
     preservation_cfg: Any = None  # set by _phase_bus
     welfare_producer: Any = None  # set by _phase_bus
-    _publish_lifecycle: Any = None  # set by _phase_womb_hold
-    stimulus_source_ready: Any = None  # set by _phase_womb_hold
+    _publish_lifecycle: Any = None  # set by _phase_stimulus_source_hold
+    stimulus_source_ready: Any = None  # set by _phase_stimulus_source_hold
     intent_secret: Any = None  # set by _phase_registry
     registry: Any = None  # set by _phase_registry
     ds_config: Any = None  # set by _phase_maturation_gate
@@ -50,7 +50,7 @@ class BootContext:
     access_rate: Any = None  # set by _phase_workspace
     affect_observer: Any = None  # set by _phase_workspace
     workspace: Any = None  # set by _phase_workspace
-    action_selection: Any = None  # set by _phase_volition
+    action_selection: Any = None  # set by _phase_action_selection
     cycle: Any = None  # set by _phase_cycle
     supervisor_cfg: Any = None  # set by _phase_supervision
     fork_manager: Any = None  # set by _phase_supervision
@@ -61,7 +61,7 @@ class BootContext:
     perception_preview: Any = None  # set by _phase_preview
     remote_bridge: Any = None  # set by _phase_remote_bridge
     stop_event: Any = None  # set by _phase_signals
-    supervisor: Any = None  # set by _phase_spot
+    supervisor: Any = None  # set by _phase_supervisor
     divergence_monitor: Any = None  # set by _phase_safety_net
     unfrozen_clock: Any = None  # set by _phase_safety_net; one per process, shared by the welfare timers
     welfare_monitor: Any = None  # set by _phase_safety_net
@@ -72,13 +72,13 @@ class BootContext:
     supervisor_task: Any = None  # set by _phase_launch
     divergence_task: Any = None  # set by _phase_launch
     welfare_task: Any = None  # set by _phase_launch
-    gate_task: Any = None  # set by _phase_birth
-    individuation_task: Any = None  # set by _phase_birth
-    stimulus_source_watch_task: Any = None  # set by _phase_womb_watch
+    gate_task: Any = None  # set by _phase_maturation
+    individuation_task: Any = None  # set by _phase_maturation
+    stimulus_source_watch_task: Any = None  # set by _phase_stimulus_source_watch
     caretaker_task: Any = None  # set by _phase_caretaker
     input_watch_task: Any = None  # set by _phase_caretaker
-    stimulus_source_presence_task: Any = None  # set by _phase_gestation
-    development_task: Any = None  # set by _phase_gestation
+    stimulus_source_presence_task: Any = None  # set by _phase_development
+    development_task: Any = None  # set by _phase_development
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
     utterance_outcome: Any = None  # set by _phase_watchers

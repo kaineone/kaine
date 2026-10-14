@@ -6,7 +6,7 @@
 Real subprocess is mocked; HTTP is mocked. The downloader must run a REAL
 `hf download` reporting real success/failure (never a faked no-op), pick the
 right format(s) for the host's role, capture the resolved revision, and verify
-the served alias against the configured [lingua].model_id.
+the served alias against the configured [language].model_id.
 """
 from __future__ import annotations
 
@@ -48,14 +48,14 @@ def test_detect_backend_cpu_guide_only():
 
 
 def test_plan_nothing_when_language_disabled():
-    plan = plan_organ_download({"lingua": False}, detect_organ_backend("cuda"))
+    plan = plan_organ_download({"language": False}, detect_organ_backend("cuda"))
     assert plan.needed is False
     assert plan.artifacts == ()
 
 
 def test_plan_gguf_only_for_serve_only_host():
     plan = plan_organ_download(
-        {"lingua": True}, detect_organ_backend("cuda"), config={"modules": {"lingua": True}}
+        {"language": True}, detect_organ_backend("cuda"), config={"modules": {"language": True}}
     )
     assert plan.needed is True
     repos = [a.repo for a in plan.artifacts]
@@ -65,8 +65,8 @@ def test_plan_gguf_only_for_serve_only_host():
 
 def test_plan_adds_safetensors_when_stage2_enabled():
     config = {
-        "modules": {"lingua": True, "hypnos": True},
-        "hypnos": {"voice_alignment": {"enabled": True}},
+        "modules": {"language": True, "sleep": True},
+        "sleep": {"voice_alignment": {"enabled": True}},
     }
     plan = plan_organ_download(
         config["modules"], detect_organ_backend("cuda"), config=config
@@ -78,8 +78,8 @@ def test_plan_adds_safetensors_when_stage2_enabled():
 
 def test_plan_no_safetensors_when_stage2_disabled():
     config = {
-        "modules": {"lingua": True, "hypnos": True},
-        "hypnos": {"voice_alignment": {"enabled": False}},
+        "modules": {"language": True, "sleep": True},
+        "sleep": {"voice_alignment": {"enabled": False}},
     }
     plan = plan_organ_download(
         config["modules"], detect_organ_backend("cuda"), config=config
@@ -93,7 +93,7 @@ def test_plan_no_safetensors_when_stage2_disabled():
 def test_no_download_without_consent(monkeypatch):
     calls = []
     monkeypatch.setattr(organ.shutil, "which", lambda _x: "/usr/bin/hf")
-    plan = plan_organ_download({"lingua": True}, detect_organ_backend("cuda"))
+    plan = plan_organ_download({"language": True}, detect_organ_backend("cuda"))
     results = run_organ_download(
         plan, consent=False, runner=lambda *a, **k: calls.append(a)
     )
@@ -113,7 +113,7 @@ def test_real_download_reports_success_and_revision(monkeypatch):
             cmd, 0, stdout=f"/home/u/.cache/huggingface/hub/.../snapshots/{sha}/model.gguf\n", stderr=""
         )
 
-    plan = plan_organ_download({"lingua": True}, detect_organ_backend("cuda"))
+    plan = plan_organ_download({"language": True}, detect_organ_backend("cuda"))
     results = run_organ_download(plan, consent=True, runner=fake_run)
     assert len(results) == 1
     assert results[0].ok is True
@@ -127,7 +127,7 @@ def test_real_download_reports_failure(monkeypatch):
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(1, cmd, stderr="403 gated repo")
 
-    plan = plan_organ_download({"lingua": True}, detect_organ_backend("cuda"))
+    plan = plan_organ_download({"language": True}, detect_organ_backend("cuda"))
     results = run_organ_download(plan, consent=True, runner=fake_run)
     assert results[0].ok is False
     assert "403" in results[0].detail
@@ -136,7 +136,7 @@ def test_real_download_reports_failure(monkeypatch):
 def test_download_honest_failure_when_hf_absent(monkeypatch):
     monkeypatch.setattr(organ.shutil, "which", lambda _x: None)
     ran = []
-    plan = plan_organ_download({"lingua": True}, detect_organ_backend("cuda"))
+    plan = plan_organ_download({"language": True}, detect_organ_backend("cuda"))
     results = run_organ_download(
         plan, consent=True, runner=lambda *a, **k: ran.append(a)
     )
@@ -250,9 +250,9 @@ def test_gather_model_ids_pins_organ_revision(tmp_path, monkeypatch):
     monkeypatch.setattr("kaine.organ_probe.ORGAN_REVISION_STATE_PATH", str(state))
 
     ids = _gather_model_ids(
-        {"lingua": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=ORGAN_GGUF_REPO
+        {"language": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=ORGAN_GGUF_REPO
     )
-    assert ids["lingua"] == ORGAN_GGUF_REPO
+    assert ids["language"] == ORGAN_GGUF_REPO
     assert ids["lingua_revision"] == sha
 
 
@@ -263,6 +263,6 @@ def test_gather_model_ids_no_revision_when_absent(tmp_path, monkeypatch):
     from kaine.cycle.__main__ import _gather_model_ids
 
     ids = _gather_model_ids(
-        {"lingua": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=None
+        {"language": {"model_id": ORGAN_GGUF_REPO}}, eval_chat_model_id=None
     )
     assert "lingua_revision" not in ids

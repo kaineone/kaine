@@ -24,7 +24,7 @@ async def test_effectors_file_write_lands_in_sandbox(tmp_path):
             whitelist=CommandWhitelist(),  # empty shell whitelist
         )
         await h.register(effectors)
-        # the effectors module observes the bus for action requests on praxis.action stream.
+        # the effectors module observes the bus for action requests on effectors.action stream.
         # Smoke: serialize works.
         assert isinstance(effectors.serialize(), dict)
 

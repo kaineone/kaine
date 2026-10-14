@@ -47,19 +47,19 @@ def test_empty_state_yields_zero_drift():
 def test_stable_distribution_low_drift():
     d = SourceDistributionDrift(window=20)
     for _ in range(40):
-        d.observe(["soma", "chronos", "topos"])
-    r = d.observe(["soma", "chronos", "topos"])
+        d.observe(["interoception", "sequence", "vision"])
+    r = d.observe(["interoception", "sequence", "vision"])
     assert r.score < 0.1
 
 
 def test_novel_source_increases_drift():
     d = SourceDistributionDrift(window=20)
     for _ in range(40):
-        d.observe(["soma", "chronos"])
-    baseline = d.observe(["soma", "chronos"])
+        d.observe(["interoception", "sequence"])
+    baseline = d.observe(["interoception", "sequence"])
     for _ in range(10):
-        d.observe(["mnemos", "mnemos", "mnemos"])
-    drifted = d.observe(["mnemos", "mnemos"])
+        d.observe(["episodic_memory", "episodic_memory", "episodic_memory"])
+    drifted = d.observe(["episodic_memory", "episodic_memory"])
     assert drifted.score > baseline.score
 
 
@@ -129,13 +129,13 @@ def test_stable_mix_over_many_observations_low_drift():
 def test_new_score_is_at_least_old_cumulative_formula_score():
     d = SourceDistributionDrift(window=20, epsilon=1e-3)
     for _ in range(40):
-        d.observe(["soma", "chronos"])
+        d.observe(["interoception", "sequence"])
     for _ in range(20):
-        d.observe(["mnemos", "mnemos", "soma"])
-    r = d.observe(["mnemos", "mnemos", "soma"])
+        d.observe(["episodic_memory", "episodic_memory", "interoception"])
+    r = d.observe(["episodic_memory", "episodic_memory", "interoception"])
 
-    recent_counter = Counter({"soma": 20, "mnemos": 40})
-    cumulative_counter = Counter({"soma": 60, "chronos": 40, "mnemos": 40})
+    recent_counter = Counter({"interoception": 20, "episodic_memory": 40})
+    cumulative_counter = Counter({"interoception": 60, "sequence": 40, "episodic_memory": 40})
     old = _old_score(recent_counter, cumulative_counter, eps=1e-3)
 
     assert r.score >= old

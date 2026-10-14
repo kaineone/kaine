@@ -4,7 +4,7 @@
 """Dev-gated, in-memory perception PREVIEW holder (never persisted).
 
 The live perception path is eyes and ears, not a recorder: raw frames/audio are
-transduced and dropped (topos.out / audition.out carry metadata only, no
+transduced and dropped (vision.out / audition.out carry metadata only, no
 pixels/PCM). This module adds the *explicit development override* the privacy
 architecture (paper §4.4) allows for cognitive content: when the operator sets
 the dev flag ``KAINE_PERCEPTION_PREVIEW=1`` the perception modules may mirror the

@@ -76,12 +76,12 @@ The code does not follow it.
   without `log_base` is an old bundle and is backfilled; a bundle without it
   but with `log_base` is refused, since the offsets mean nothing without $L$.
 - Decommission deletes the strength meta with the embedding-space stamp.
-- Config: `[mnemos.strength]` with `retention_per_day = 0.82` and
-  `prune_floor = 0.01`, both in (0, 1), and `[mnemos].storage_budget_bytes`
+- Config: `[episodic_memory.strength]` with `retention_per_day = 0.82` and
+  `prune_floor = 0.01`, both in (0, 1), and `[episodic_memory].storage_budget_bytes`
   (default 10 GiB; the paper leaves $B$ to the operator). $N_{\rm day}$ is
-  `[mnemos.strength].traces_per_day`, default 288,000, the paper's
+  `[episodic_memory.strength].traces_per_day`, default 288,000, the paper's
   86400 x f0 with f0 = 10/3, independent of the tunable cycle rate.
-  `[hypnos.consolidation].downscale_factor` is removed and its presence fails
+  `[sleep.consolidation].downscale_factor` is removed and its presence fails
   the boot, since it never changed a recall.
 
 ## Impact
@@ -89,7 +89,7 @@ The code does not follow it.
 - The episodic memory module is held, so the base-thesis form is unaffected: with the episodic memory module absent
   phase 2 is skipped as before.
 - Affected code: `kaine/modules/episodic_memory/{storage,memory,module,replay}.py`,
-  `kaine/modules/sleep/{phases,module}.py`, `kaine/boot/factories/{mnemos,hypnos}.py`,
+  `kaine/modules/sleep/{phases,module}.py`, `kaine/boot/factories/{episodic_memory,sleep}.py`,
   `kaine/memory_kinds.py`, `kaine/lifecycle/decommission.py`,
   `config/kaine.toml`, `pyproject.toml`, docs.
 - Known gaps. Phase 3's period buckets and `recent_points` keep the

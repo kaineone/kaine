@@ -165,9 +165,9 @@ async def test_control_tick_publishes_efference_copy(bus):
                continuous_expose={"drive": True}, mirror_speech=False,
                locus_reader=lambda: "virtual")
     await m._drive_control({"drive": 2.0})  # over-range → clamped in efference
-    seen = {ev.type: ev for _id, ev in await bus.read("mundus.out", last_id="0", count=50)}
-    assert "mundus.efference" in seen
-    eff = seen["mundus.efference"].payload
+    seen = {ev.type: ev for _id, ev in await bus.read("embodiment.out", last_id="0", count=50)}
+    assert "embodiment.efference" in seen
+    eff = seen["embodiment.efference"].payload
     assert eff["channels"]["drive"] == 1.0  # clamped efference copy
     assert eff["forwarded"] is True
 
@@ -316,7 +316,7 @@ async def test_producer_to_body_via_intent_bus(bus, monkeypatch):
     try:
         cmd = surface.emit()
         await bus.publish(validate_event(
-            source="volition", type="intent.avatar.control",
+            source="action_selection", type="intent.avatar.control",
             payload=surface.intent_payload(cmd), salience=0.4,
             timestamp=datetime.now(timezone.utc)))
         # Wait for the setpoint to reach the stub body.

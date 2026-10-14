@@ -5,4 +5,4 @@ The `thesis_test` profile SHALL set the language organ's sampling temperature to
 
 #### Scenario: Profile temperature
 - **WHEN** the runtime configuration is resolved with the `thesis_test` profile
-- **THEN** `[lingua].temperature` is 0.0
+- **THEN** `[language].temperature` is 0.0

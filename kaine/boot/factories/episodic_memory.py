@@ -43,10 +43,10 @@ def make_episodic_memory(
     }
     if "embedder_model_id" in section:
         raise ConfigurationError(
-            "[mnemos].embedder_model_id is replaced by [embedding].model_id"
+            "[episodic_memory].embedder_model_id is replaced by [embedding].model_id"
         )
     if "device" in section:
-        raise ConfigurationError("[mnemos].device is replaced by [embedding].device")
+        raise ConfigurationError("[episodic_memory].device is replaced by [embedding].device")
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     replay = section.get("replay") or {}
@@ -60,7 +60,7 @@ def make_episodic_memory(
         value = kwargs["storage_budget_bytes"]
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ConfigurationError(
-                "[mnemos].storage_budget_bytes must be a positive integer number of bytes"
+                "[episodic_memory].storage_budget_bytes must be a positive integer number of bytes"
             )
         kwargs["storage_budget_bytes"] = int(value)
     if "host" in qdrant:
@@ -95,7 +95,7 @@ def make_episodic_memory(
             or value <= 0
         ):
             raise ConfigurationError(
-                "[mnemos.strength].traces_per_day must be a positive number"
+                "[episodic_memory.strength].traces_per_day must be a positive number"
             )
         kwargs["traces_per_day"] = float(value)
     kwargs["embedder"] = embedder

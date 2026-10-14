@@ -3,7 +3,7 @@
 
 """Status vocabulary + individual dependency probe implementations.
 
-Each ``probe_*``/``nous_health_probe`` coroutine answers one question — is
+Each ``probe_*``/``planning_health_probe`` coroutine answers one question — is
 this external dependency reachable and correctly configured? — and returns
 ``(status, detail)``. They are pure I/O: no state, no caching (caching lives
 in :class:`~kaine.dashboard.health.prober.HealthProber`).

@@ -157,7 +157,7 @@
 
       // ── Live affect feed (read-only) ───────────────────────────────────────
       // thymos.out already rides the shared diagnostics SSE stream; its
-      // `thymos.state` events carry derived {valence, arousal} — privacy-safe
+      // `affect.state` events carry derived {valence, arousal} — privacy-safe
       // metrics, NOT raw audio/content (those are never streamed). Feed them to
       // setMood. With no entity running no events arrive and the viz stays
       // calm/idle.
@@ -172,7 +172,7 @@
           }
         }, 4000);
         NexusStream.subscribe((msg) => {
-          if (!msg || msg.type !== "thymos.state") return;
+          if (!msg || msg.type !== "affect.state") return;
           const st = (msg.payload && msg.payload.state) || {};
           const v = st.valence, a = st.arousal;
           if (typeof v === "number" && typeof a === "number") {

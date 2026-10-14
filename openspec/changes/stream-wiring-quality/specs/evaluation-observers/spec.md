@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Multi-stream observers reuse the base-class poll loop
-`StreamSubscriberObserver` in `kaine/evaluation/_base.py` SHALL support a tuple of stream names and SHALL implement the poll-read-dispatch-cursor-advance loop once. Multi-stream observers (`prediction_error_observer`, `empatheia_observer`, `research_event_observer`, `welfare_observer`) SHALL inherit this behavior and SHALL NOT reimplement the loop.
+`StreamSubscriberObserver` in `kaine/evaluation/_base.py` SHALL support a tuple of stream names and SHALL implement the poll-read-dispatch-cursor-advance loop once. Multi-stream observers (`prediction_error_observer`, `social_cognition_observer`, `research_event_observer`, `welfare_observer`) SHALL inherit this behavior and SHALL NOT reimplement the loop.
 
 #### Scenario: Base class handles multiple streams
 - **WHEN** a `StreamSubscriberObserver` subclass is initialized with `streams=("a.out", "b.out")`

@@ -248,7 +248,7 @@ print("numpy-engine-ok")
 
 
 def test_make_planning_selects_numpy_backend() -> None:
-    """boot.make_nous honours [nous].backend = "numpy"."""
+    """boot.make_planning honours [planning].backend = "numpy"."""
     from kaine.boot import ConfigurationError, make_planning
 
     fakeredis = pytest.importorskip("fakeredis.aioredis")
@@ -269,11 +269,11 @@ def test_make_planning_selects_numpy_backend() -> None:
 
 
 def test_numpy_backend_has_no_reasoning_requirement() -> None:
-    """[nous].backend = "numpy" must not pull in the reasoning extra."""
+    """[planning].backend = "numpy" must not pull in the reasoning extra."""
     from kaine.extras import REQUIREMENTS
 
-    numpy_cfg = {"modules": {"nous": True}, "nous": {"backend": "numpy"}}
-    for req in REQUIREMENTS["nous"]:
+    numpy_cfg = {"modules": {"planning": True}, "planning": {"backend": "numpy"}}
+    for req in REQUIREMENTS["planning"]:
         pred = getattr(req, "predicate", None)
         if pred is None or pred(numpy_cfg):
             assert req.import_name not in {"pymdp", "jax"}, (
@@ -281,10 +281,10 @@ def test_numpy_backend_has_no_reasoning_requirement() -> None:
             )
 
     # Default/pymdp backend still requires both.
-    pymdp_cfg = {"modules": {"nous": True}, "nous": {}}
+    pymdp_cfg = {"modules": {"planning": True}, "planning": {}}
     required = {
         req.import_name
-        for req in REQUIREMENTS["nous"]
+        for req in REQUIREMENTS["planning"]
         if getattr(req, "predicate", None) is None or req.predicate(pymdp_cfg)
     }
     assert "pymdp" in required

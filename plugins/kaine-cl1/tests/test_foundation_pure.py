@@ -29,8 +29,8 @@ class FakeSpike:
 # -- allocation -----------------------------------------------------------------
 def test_allocation_is_disjoint():
     b = SubstrateBroker(channel_count=64)
-    t1 = b.allocate("chronos", 12)
-    t2 = b.allocate("soma", 12)
+    t1 = b.allocate("sequence", 12)
+    t2 = b.allocate("interoception", 12)
     assert set(t1.channels).isdisjoint(t2.channels)
     assert len(t1.channels) == 12 and len(t2.channels) == 12
 
@@ -45,9 +45,9 @@ def test_oversubscription_fails_at_allocation():
 
 def test_double_allocation_rejected():
     b = SubstrateBroker(channel_count=64)
-    b.allocate("chronos", 8)
+    b.allocate("sequence", 8)
     with pytest.raises(ValueError):
-        b.allocate("chronos", 8)
+        b.allocate("sequence", 8)
 
 
 # -- routing --------------------------------------------------------------------

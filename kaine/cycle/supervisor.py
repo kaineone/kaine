@@ -9,20 +9,20 @@ or torn down by the shutdown it orchestrates. The entrypoint constructs and runs
 it alongside ``cycle.run_forever`` and the freeze-watch loop.
 
 Per poll the supervisor assesses each module (alive | dead | hung), and on a fault it
-freezes the cycle (humane suspend) with ``source="spot"``, snapshots last-good
+freezes the cycle (humane suspend) with ``source="supervisor"``, snapshots last-good
 state, and runs the restart ladder (light ``BaseModule.restart`` for pure
 modules; heavy rebuild via the injected ``rebuild_module`` closure +
 ``registry.replace`` + ``rewire_module`` + snapshot restore for modules holding
 external resources). One incident is handled per poll. After
 ``max_restart_attempts`` failures the supervisor escalates: a final snapshot, shutdown of
-every module, ``escalation.json``, a CRITICAL ``spot.status``, and a halt signal
+every module, ``escalation.json``, a CRITICAL ``supervisor.status``, and a halt signal
 so the entrypoint exits non-zero. The supervisor never reboots the host — it only asks.
 
 Incident annotation (research log)
 ----------------------------------
-At each lifecycle transition the supervisor also publishes a structured ``spot.incident``
-bus event (source ``"spot"``) IN ADDITION to the ephemeral ``spot.status`` /
-``spot.log`` events. The curated research-event observer captures it (privacy-
+At each lifecycle transition the supervisor also publishes a structured ``supervisor.incident``
+bus event (source ``"supervisor"``) IN ADDITION to the ephemeral ``supervisor.status`` /
+``supervisor.log`` events. The curated research-event observer captures it (privacy-
 filtered) into ``data/evaluation/research_events/``, where the run-context sink
 stamping stamps it with the active ``run_id`` — so a run whose data was collected
 across a supervisor freeze carries the annotation, joined to the run by ``run_id`` and
@@ -33,8 +33,8 @@ one). Free-text fields are path-scrubbed before publish.
 
 Durable incident log
 --------------------
-Alongside the ephemeral ``spot.status`` / ``spot.log`` bus events (which the dashboard
-shows live but which are trimmed away on every publish) and the ``spot.incident``
+Alongside the ephemeral ``supervisor.status`` / ``supervisor.log`` bus events (which the dashboard
+shows live but which are trimmed away on every publish) and the ``supervisor.incident``
 annotation, the supervisor writes a durable, append-only JSONL record at each lifecycle
 transition (detect, freeze, snapshot, restart, escalate) to
 ``state/cycle/incidents/`` via ``kaine.cycle.incident_log.IncidentLog``. Every record for one module fault
@@ -42,8 +42,8 @@ window shares a generated ``incident_id``. Unlike ``escalation.json`` /
 ``control.json`` — which hold single-state operational data and are wiped on
 every clean boot — the incident log is NEVER cleared at boot, so crash/recovery
 evidence accumulates across runs for research and post-mortem review. The log is
-governed by ``[spot.incident_log]`` (ships ``enabled = true`` but dormant while
-``[spot].enabled = false``) and is encrypted at rest when state encryption is on.
+governed by ``[supervisor.incident_log]`` (ships ``enabled = true`` but dormant while
+``[supervisor].enabled = false``) and is encrypted at rest when state encryption is on.
 """
 from __future__ import annotations
 
@@ -73,10 +73,10 @@ _SUPERVISOR_OUT_SALIENCE = 0.5
 
 @dataclass
 class IncidentLogConfig:
-    """``[spot.incident_log]`` — the durable incident-log side-channel.
+    """``[supervisor.incident_log]`` — the durable incident-log side-channel.
 
     Ships ``enabled = true`` so any operator who turns the supervisor on automatically gets
-    the research-value log; it is dormant while ``[spot].enabled = false``. There
+    the research-value log; it is dormant while ``[supervisor].enabled = false``. There
     is deliberately NO ``retention_days`` key: the retention purge is
     unconditionally disabled for the incident log (see incident_log.py).
     """
@@ -87,7 +87,7 @@ class IncidentLogConfig:
     @classmethod
     def from_section(cls, section: dict[str, Any]) -> "IncidentLogConfig":
         allowed = {"enabled", "path"}
-        require_known_keys(section, allowed, "[spot.incident_log]")
+        require_known_keys(section, allowed, "[supervisor.incident_log]")
         return cls(
             enabled=bool(section.get("enabled", True)),
             path=str(section.get("path", "state/cycle/incidents")),
@@ -117,7 +117,7 @@ class SupervisorConfig:
             "incident_log",
             "selftest_timeout_s",
         }
-        require_known_keys(section, allowed, "[spot]")
+        require_known_keys(section, allowed, "[supervisor]")
         per_module = {
             str(k): float(v)
             for k, v in (section.get("per_module_timeout_s") or {}).items()
@@ -141,7 +141,7 @@ class AssessResult(NamedTuple):
 
     ``exception_repr`` is the repr of the exception that marked a module dead
     (or ``None`` for "hung" / "alive"). It is captured at the point where
-    ``Spot.assess`` previously read ``t.exception()`` and discarded it, so it can
+    ``Supervisor.assess`` previously read ``t.exception()`` and discarded it, so it can
     reach the durable ``detect`` incident record. It is NOT yet path-scrubbed —
     scrubbing happens just before write.
     """
@@ -185,7 +185,7 @@ class Supervisor:
         self._clock = clock
         self._on_halt = on_halt
         # Best-effort reader of the cycle's current tick_index for the
-        # tick<->poll bridge in spot.incident events. None => events carry
+        # tick<->poll bridge in supervisor.incident events. None => events carry
         # poll_index only and never a fabricated tick (honest limitation when
         # the cycle reference is not wired, e.g. in unit tests).
         self._tick_index_provider = tick_index_provider
@@ -209,9 +209,9 @@ class Supervisor:
 
     def _sleeping(self) -> bool:
         try:
-            if "hypnos" not in self._registry:
+            if "sleep" not in self._registry:
                 return False
-            sleep = self._registry.get("hypnos")
+            sleep = self._registry.get("sleep")
             return bool(getattr(sleep, "is_sleeping", False))
         except Exception:
             return False
@@ -263,7 +263,7 @@ class Supervisor:
         try:
             await self._bus.publish(
                 validate_event(
-                    source="spot",
+                    source="supervisor",
                     type=type_,
                     payload=payload,
                     salience=_SUPERVISOR_OUT_SALIENCE,
@@ -323,13 +323,13 @@ class Supervisor:
             return None
 
     async def _publish_incident(self, record: dict[str, Any]) -> None:
-        """Publish a structured ``spot.incident`` bus event for one transition.
+        """Publish a structured ``supervisor.incident`` bus event for one transition.
 
         Copies the allowlisted operational fields from the durable incident
         record, scrubs the free-text fields of operator paths, and stamps the
         cycle position (``poll_index`` always; ``tick_index`` when a provider is
-        wired). Published IN ADDITION to the ephemeral ``spot.status`` /
-        ``spot.log`` events and the durable incident log — never in place of
+        wired). Published IN ADDITION to the ephemeral ``supervisor.status`` /
+        ``supervisor.log`` events and the durable incident log — never in place of
         them. Guarded by ``_publish``; a publish failure degrades to a debug log.
         """
         payload: dict[str, Any] = {}
@@ -344,7 +344,7 @@ class Supervisor:
         tick = self._current_tick_index()
         if tick is not None:
             payload["tick_index"] = tick
-        await self._publish("spot.incident", payload)
+        await self._publish("supervisor.incident", payload)
 
     async def _snapshot(
         self, label: str, module_name: str, incident_id: Optional[str]
@@ -368,7 +368,7 @@ class Supervisor:
             snap = self._fork_manager.snapshot(
                 self._registry,
                 label=label,
-                metadata={"module": module_name, "reason": "spot"},
+                metadata={"module": module_name, "reason": "supervisor"},
             )
             snapshot_id = snap.id
             for name, state in snap.modules.items():
@@ -411,7 +411,7 @@ class Supervisor:
         self, record: dict[str, Any], *, publish: bool = True
     ) -> None:
         """Durably append one incident transition record AND publish the
-        structured ``spot.incident`` bus event for it (both no-op-safe).
+        structured ``supervisor.incident`` bus event for it (both no-op-safe).
 
         ``ts`` is stamped by IncidentLog if absent. The durable write and the
         bus publish are independently guarded so neither a broken sink nor a
@@ -512,7 +512,7 @@ class Supervisor:
             }
         )
         await self._publish(
-            "spot.status",
+            "supervisor.status",
             {
                 "state": "critical",
                 "module": name,
@@ -547,10 +547,10 @@ class Supervisor:
         """
         snapshot_id: Optional[str] = None
         try:
-            snapshot_id = await self._snapshot("spot-supervision-lost", "spot", None)
+            snapshot_id = await self._snapshot("spot-supervision-lost", "supervisor", None)
             await self._shutdown_all()
             await self._escalate(
-                "spot",
+                "supervisor",
                 0,
                 snapshot_id,
                 None,
@@ -597,7 +597,7 @@ class Supervisor:
         under_development = control.frozen and any(
             entry.get("source") == "gestation" for entry in control.stack
         )
-        if control.frozen and control.source != "spot" and not development_only:
+        if control.frozen and control.source != "supervisor" and not development_only:
             # A frozen cycle's modules are silent by design, so heartbeat
             # staleness is not a valid liveness signal for a freeze the supervisor does
             # not own. The supervisor keeps working for its OWN recovery freeze (on
@@ -639,7 +639,7 @@ class Supervisor:
             )
             freeze_reason = f"spot: {name} {state}"
             control_state.freeze(
-                reason=freeze_reason, path=self._control_path, source="spot"
+                reason=freeze_reason, path=self._control_path, source="supervisor"
             )
             await self._write_incident_record(
                 {
@@ -647,16 +647,16 @@ class Supervisor:
                     "module": name,
                     "transition": "freeze",
                     "reason": freeze_reason,
-                    "source": "spot",
+                    "source": "supervisor",
                     "fault_type": state,
                 }
             )
             await self._publish(
-                "spot.status",
+                "supervisor.status",
                 {"state": "recovery", "module": name, "fault": state},
             )
             await self._publish(
-                "spot.log",
+                "supervisor.log",
                 {
                     "module": name,
                     "message": f"detected {state} module '{name}'; recovering",
@@ -688,7 +688,7 @@ class Supervisor:
             )
             if recovered:
                 await self._publish(
-                    "spot.log",
+                    "supervisor.log",
                     {
                         "module": name,
                         "message": (
@@ -702,8 +702,8 @@ class Supervisor:
                 # present in the stack, pop the newest one; other sources
                 # remain frozen.
                 control = control_state.read_control(path=self._control_path)
-                if any(entry.get("source") == "spot" for entry in control.stack):
-                    control_state.pop_freeze(path=self._control_path, source="spot")
+                if any(entry.get("source") == "supervisor" for entry in control.stack):
+                    control_state.pop_freeze(path=self._control_path, source="supervisor")
                 return  # one incident per poll
             if incident.attempts >= self._config.max_restart_attempts:
                 final_snap = await self._snapshot(
@@ -718,7 +718,7 @@ class Supervisor:
                 stop_event.set()
                 return
             await self._publish(
-                "spot.log",
+                "supervisor.log",
                 {
                     "module": name,
                     "message": (

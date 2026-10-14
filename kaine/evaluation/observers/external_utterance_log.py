@@ -5,7 +5,7 @@
 
 NEVER EXPORT-ELIGIBLE
 ---------------------
-This recorder subscribes ONLY to ``lingua.external`` and writes one record
+This recorder subscribes ONLY to ``language.external`` and writes one record
 per ``external_speech`` event to ``state/research/external_utterances/``.
 
 - The external-utterance log NEVER leaves the host.
@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 class ExternalUtteranceLog(StreamSubscriberObserver):
     """Local-only recorder for the entity's external speech stream."""
 
-    streams = ("lingua.external",)
+    streams = ("language.external",)
     name = "external_utterance_log"
 
     def __init__(

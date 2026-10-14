@@ -134,7 +134,7 @@ When a model fails to load — the engine crashes, memory is exhausted, the engi
 - **THEN** the loop responds with a spoken and written message naming the blocker, and retries or parks per policy — it never drops the turn silently.
 
 ### Requirement: LLM tier delegation via the existing chat endpoint
-KAINE SHALL adopt llama-swap or llama-server router mode for the LLM tier strictly behind the existing `[lingua].chat_url` OpenAI-compatible endpoint without changing any module's calling contract, SHALL reconcile the proxy's loaded models into the residency ledger and request unloads through the proxy's unload API when admission requires it, and SHALL default `llm_proxy = none` so existing hosts keep today's single-server behaviour.
+KAINE SHALL adopt llama-swap or llama-server router mode for the LLM tier strictly behind the existing `[language].chat_url` OpenAI-compatible endpoint without changing any module's calling contract, SHALL reconcile the proxy's loaded models into the residency ledger and request unloads through the proxy's unload API when admission requires it, and SHALL default `llm_proxy = none` so existing hosts keep today's single-server behaviour.
 
 #### Scenario: Chat model unloads after TTL and returns transparently
 - **WHEN** `llm_proxy = llama-swap`, the chat model has been idle past its TTL, and a later chat turn arrives

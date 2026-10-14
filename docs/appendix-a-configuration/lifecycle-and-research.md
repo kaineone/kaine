@@ -18,15 +18,15 @@ The evaluation sidecar watches the bus read-only and adds no dependencies to the
 | `memory_probes` | boolean | `true` | Run memory-coherence probe queries. |
 | `memory_probe_interval_minutes` | integer | `60` | How often memory probes are run. |
 | `proactive_audit` | boolean | `true` | Enable the proactive anomaly audit. |
-| `eidolon_accuracy` | boolean | `true` | Probe the entity's self-knowledge and score it against the self-model. |
-| `eidolon_accuracy_interval_hours` | integer | `24` | How often the self-model module's accuracy probes run. |
+| `self_model_accuracy` | boolean | `true` | Probe the entity's self-knowledge and score it against the self-model. |
+| `self_model_accuracy_interval_hours` | integer | `24` | How often the self-model module's accuracy probes run. |
 | `sleep_snapshots` | boolean | `true` | Record the sleep module's consolidation-phase metadata. |
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | OpenAI-compatible server base URL for the A/B divergence bare-baseline call. Point at the `/v1` base; a missing `/v1` is appended. |
-| `chat_model_id` | string | *(unset)* | Intentionally not set. The baseline MUST use the same model as the language organ ([`[lingua]`](../09-modules/language.md)), so it derives from `[lingua].model_id` at cycle startup. Setting it to a different value is a fail-closed error and the cycle refuses to boot. |
+| `chat_model_id` | string | *(unset)* | Intentionally not set. The baseline MUST use the same model as the language organ ([`[language]`](../09-modules/language.md)), so it derives from `[language].model_id` at cycle startup. Setting it to a different value is a fail-closed error and the cycle refuses to boot. |
 | `chat_timeout_s` | float | `60.0` | HTTP timeout for A/B divergence calls. |
 | `llm_context_window_seconds` | integer | `3600` | Window, in seconds, before which a memory is considered out-of-context for memory-coherence probing. |
 | `chat_think` | boolean | `false` | Whether the baseline chat request may use chain-of-thought reasoning. |
-| `chat_api_key` | string | *(unset)* | API key for the baseline chat endpoint. If unset, it derives from `[lingua].api_key` at cycle startup. |
+| `chat_api_key` | string | *(unset)* | API key for the baseline chat endpoint. If unset, it derives from `[language].api_key` at cycle startup. |
 | `require_semantic_embedder` | boolean | `false` | Fail closed if the semantic-embedder dependency is missing. |
 | `oscillatory_ablation` | boolean | `false` | Record the live oscillatory ablation: each broadcast tick is scored a second time with the coherence layer forced off, and the content-free difference is written to `data/evaluation/ablation/`. The entity's own selection is unchanged. |
 
@@ -47,12 +47,12 @@ Each toggle below is gated by `[evaluation].enabled`, except that the welfare ob
 | `coherence` | boolean | `true` | Log pairwise PLV between module oscillators. |
 | `replay` | boolean | `true` | Log the sleep module's replay selections (memory IDs and association metadata). |
 | `replay_redact_content` | boolean | `true` | Privacy default: log memory IDs only, not trace text. Set to `false` only with explicit operator/Guardian consent. |
-| `empatheia` | boolean | `true` | Log the social cognition module's agent-model accuracy and social-prediction errors. |
+| `social_cognition` | boolean | `true` | Log the social cognition module's agent-model accuracy and social-prediction errors. |
 | `voice_alignment_divergence` | boolean | `true` | Record each sleep's voice-alignment outcome category and training metrics. |
 | `fatigue` | boolean | `true` | Log the interoception module's fatigue-accumulator trajectory. |
 | `prediction_error` | boolean | `true` | Log per-module prediction-error statistics over sliding windows. |
 | `welfare` | boolean | `true` | Log welfare events (sustained high interoceptive error, extreme affect states, fatigue without maintenance). When `[preservation.welfare_response].enabled` is true, the cycle runs this observer as part of the welfare net and this toggle has no effect. |
-| `nous_policy` | boolean | `true` | Log the planning module's policy selections and EFE scores. |
+| `planning_policy` | boolean | `true` | Log the planning module's policy selections and EFE scores. |
 
 ### `[evaluation.welfare]`
 
@@ -66,15 +66,15 @@ Tune the sidecar welfare observer's interoceptive-distress rule and its sensor a
 
 ### `[individuation]`
 
-Cycle-layer individuation producer. Ships disabled. Requires the `lingua` module; otherwise the cycle refuses to boot.
+Cycle-layer individuation producer. Ships disabled. Requires the `language` module; otherwise the cycle refuses to boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. When true, the cycle measures whether the entity has changed since its maturation reference. |
 | `disclosure` | string | *(operator-approved text)* | Disclosure text inserted as a situation fact in the entity's self-model. Probes fail closed until the fact is present. |
 | `battery_path` | string | `""` | Path to an operator-supplied JSONL preference battery. Empty uses the bundled default. |
-| `lingua_quiet_s` | float | `10.0` | Seconds the language module must be silent before a probe runs, so the entity's own speech goes first. |
-| `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[lingua].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
+| `language_quiet_s` | float | `10.0` | Seconds the language module must be silent before a probe runs, so the entity's own speech goes first. |
+| `probe_temperature` | float | `0.0` | Decoding temperature of the probe, at least 0. It is fixed apart from the voice's `[language].temperature`, so a study or a change to the voice never changes the probe's conditions. `0.0` is greedy. |
 | `n_reference` | integer | `16` | Answers captured per prompt in a maturation reference. |
 | `n_current` | integer | `8` | Answers sampled per prompt in a look. |
 | `max_tokens` | integer | `160` | Maximum tokens per probe answer. |
@@ -119,9 +119,9 @@ Only consulted when `adapter_merger` resolves to the real merger (`"auto"` with 
 | `density` | float | `0.5` | DARE survival fraction (per Yu et al. 2024). Ignored for pure `"ties"`. |
 | `weights` | list of floats | `[]` | Per-adapter scalar weights. Empty = uniform weighting. |
 | `output_dir` | string | `"state/forks/merged_adapters"` | Directory where merged adapters land (one timestamped subdirectory per merge). |
-| `capability_loss_threshold` | float | `0.05` | Must lie in [0, 1). Reject the merge if the merged-adapter capability score falls more than this below the mean of the parent adapters. Mirrors [`[hypnos.voice_alignment]`](./perception-and-sleep.md). Every merged adapter is also checked against the abliteration probes, and a merge whose checks cannot run is refused; see [Forks and merges](../12-forks-and-merges.md#merged-adapter-checks). |
+| `capability_loss_threshold` | float | `0.05` | Must lie in [0, 1). Reject the merge if the merged-adapter capability score falls more than this below the mean of the parent adapters. Mirrors [`[sleep.voice_alignment]`](./perception-and-sleep.md). Every merged adapter is also checked against the abliteration probes, and a merge whose checks cannot run is refused; see [Forks and merges](../12-forks-and-merges.md#merged-adapter-checks). |
 | `base_model_path` | string | `""` | Path to local Hugging Face-format base model weights for PEFT adapter loading. Empty falls back to `FakeAdapterMerger` with a logged warning. |
-| `capability_probe_path` | string | `""` | Capability-probe JSONL for the merged-adapter checks. Empty uses the bundled default, as in `[hypnos.voice_alignment]`. An empty or missing probe set refuses every merge. |
+| `capability_probe_path` | string | `""` | Capability-probe JSONL for the merged-adapter checks. Empty uses the bundled default, as in `[sleep.voice_alignment]`. An empty or missing probe set refuses every merge. |
 | `abliteration_probe_path` | string | `""` | Abliteration-probe JSONL for the merged-adapter checks (welfare-load-bearing; must not be empty). Empty uses the bundled default. |
 
 ## `[developmental_stage]`
@@ -135,13 +135,13 @@ The maturation gate that decides when an entity in its developmental phase matur
 | `min_consolidation_passes` | integer | `3` | Consolidation passes the entity must complete before maturation. |
 | `min_lived_seconds` | float | `86400.0` | Lived seconds (entity clock) required before maturation. |
 | `gate_cadence_seconds` | float | `60.0` | How often the gate evaluates readiness. |
-| `readout_max_age_cadences` | float | `3.0` | How many gate cadences back the gate reads `gestation.readiness` markers from the bus; older readouts are ignored. |
-| `require_operator_ack_for_birth` | boolean | `false` | Hold a ready entity until the operator acknowledges maturation. |
-| `womb_ready_retry_seconds` | float | `5.0` | Retry interval while boot holds an entity in its developmental phase until the stimulus source is ready. Nothing is spawned during the hold. |
-| `womb_check_seconds` | float | `1.0` | How often the stimulus-source-loss watcher checks that the stimulus source is still live. |
-| `womb_loss_after_seconds` | float | `5.0` | Seconds without stimulus source presence before the watcher freezes the entity in its developmental phase. It releases the freeze when the stimulus source returns. |
-| `womb_arm_timeout_seconds` | float | `120.0` | How long the watcher waits for the stimulus source to first appear before it arms. |
-| `womb_presence_window_seconds` | float | `3.0` | Window over which stimulus source presence is measured. |
+| `readout_max_age_cadences` | float | `3.0` | How many gate cadences back the gate reads `development.readiness` markers from the bus; older readouts are ignored. |
+| `require_operator_ack_for_maturation` | boolean | `false` | Hold a ready entity until the operator acknowledges maturation. |
+| `stimulus_source_ready_retry_seconds` | float | `5.0` | Retry interval while boot holds an entity in its developmental phase until the stimulus source is ready. Nothing is spawned during the hold. |
+| `stimulus_source_check_seconds` | float | `1.0` | How often the stimulus-source-loss watcher checks that the stimulus source is still live. |
+| `stimulus_source_loss_after_seconds` | float | `5.0` | Seconds without stimulus source presence before the watcher freezes the entity in its developmental phase. It releases the freeze when the stimulus source returns. |
+| `stimulus_source_arm_timeout_seconds` | float | `120.0` | How long the watcher waits for the stimulus source to first appear before it arms. |
+| `stimulus_source_presence_window_seconds` | float | `3.0` | Window over which stimulus source presence is measured. |
 
 ### `[developmental_stage.regulation_thresholds]`
 
@@ -150,7 +150,7 @@ The maturation gate that decides when an entity in its developmental phase matur
 | `endogenous_self_sustain` | boolean | `true` | Require the endogenous self-sustain readiness marker. |
 | `entrain_then_autonomy` | boolean | `true` | Require the entrain-then-autonomy readiness marker. |
 | `hrv_variability_floor` | float | `0.2` | Minimum variability of the self-rhythm's period (marker 3). |
-| `womb_prediction_error_ceiling` | float | `0.3` | Maximum stimulus source prediction-error marker. |
+| `stimulus_source_prediction_error_ceiling` | float | `0.3` | Maximum stimulus source prediction-error marker. |
 | `return_to_baseline_seconds_ceiling` | float | `30.0` | Maximum seconds to return to baseline. |
 
 ## `[caretaker]`
@@ -161,8 +161,8 @@ Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caret
 |---|---|---|---|
 | `install_label` | string | `"kaine"` | Label for this install. Must be 1 to 64 characters. |
 | `reminder_interval_s` | float | `14400.0` | Seconds between caretaker reminders (must be ≥ 900). |
-| `input_loss_after_s` | float | `60.0` | Seconds of unfrozen time with no events on `topos.out` or `audition.out` (for whichever of those modules is enabled) before the caretaker sends an `input_lost` notice. Time while the cycle is frozen does not count. Must be greater than 0. |
-| `nexus_url` | string | `"http://127.0.0.1:8088/"` | The dashboard URL the caretaker links to in reminders. |
+| `input_loss_after_s` | float | `60.0` | Seconds of unfrozen time with no events on `vision.out` or `audition.out` (for whichever of those modules is enabled) before the caretaker sends an `input_lost` notice. Time while the cycle is frozen does not count. Must be greater than 0. |
+| `dashboard_url` | string | `"http://127.0.0.1:8088/"` | The dashboard URL the caretaker links to in reminders. |
 
 Channels are defined under `[[caretaker.channels]]`:
 
@@ -206,7 +206,7 @@ Autonomous welfare-protective response. Watches the interoceptive-distress signa
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Default is disabled. |
-| `poll_interval_s` | float | `1.0` | Poll cadence for draining `soma.out`. |
+| `poll_interval_s` | float | `1.0` | Poll cadence for draining `interoception.out`. |
 | `action` | string | `"pause"` | `"pause"` (preserve then freeze the cycle, resumable), `"end"` (preserve then signal the run to stop), or `"notify"` (preserve, record a flagged event, and continue). |
 | `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in wall time while distress samples arrive and unfrozen time after the last sample. |
@@ -232,7 +232,7 @@ Unsupervised-research boot mode. When enabled (or `KAINE_RESEARCH_MODE=1`), the 
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `lingua` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
+| `enabled` | boolean | `false` | When true, the boot refuses to start with exit code `5` unless preservation is enabled, the welfare-protective response is wired, `[individuation].enabled` is true with the `language` module loaded, full logging and admissibility are active, and a dry `preserve→revive` self-check passes on this install. A run is either operator-present or research-safety-net-verified, never neither. |
 
 ## `[positive_control]`
 
@@ -332,7 +332,7 @@ This is doubly gated: it requires `enabled = true` and both attestation flags se
 
 ### `[research_event_log.external_utterances]`
 
-Optional local-only external-speech recorder. Never export-eligible. Subscribes only to `lingua.external` and writes one record per `external_speech` event. The record contains the `text` field only; `user_input` (bystander speech) and all other payload fields are dropped. It never subscribes to `lingua.internal` or `lingua.out`, so inner speech is never recorded.
+Optional local-only external-speech recorder. Never export-eligible. Subscribes only to `language.external` and writes one record per `external_speech` event. The record contains the `text` field only; `user_input` (bystander speech) and all other payload fields are dropped. It never subscribes to `language.internal` or `language.out`, so inner speech is never recorded.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -340,14 +340,14 @@ Optional local-only external-speech recorder. Never export-eligible. Subscribes 
 | `log_dir` | string | `"state/research/external_utterances"` | Directory for the utterance log. |
 | `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file. |
 
-### `[research_event_log.nexus_record]`
+### `[research_event_log.dashboard_record]`
 
 Optional local-only dashboard diagnostics recorder. Never export-eligible. Subscribes to the same diagnostics streams the dashboard bridge reads and writes the payload produced by `PrivacyFilter` with `dev_content_override=false` and numeric vectors removed, plus the stream name and entry id. Studies never enable it. Filter failures drop the event with a warning.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `false` | Master gate. |
-| `log_dir` | string | `"data/nexus_record"` | Directory for the diagnostics log. |
+| `log_dir` | string | `"data/dashboard_record"` | Directory for the diagnostics log. |
 | `retention_days` | integer | `0` | Daily-rotated file retention window in days. `0` keeps every file. |
 
 ## `[ignition_log]`

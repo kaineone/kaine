@@ -7,7 +7,7 @@ This chapter covers how KAINE checks two properties: that the language organ's r
 KAINE's language organ is the project's own abliteration of the official `Qwen/Qwen3.5-4B` chat model. Two published weight sets are used:
 
 - `kaineone/Qwen3.5-4B-abliterated-GGUF` is served as the running organ by a local OpenAI-compatible `/v1` model server.
-- `kaineone/Qwen3.5-4B-abliterated` (safetensors) is loaded by `[hypnos.voice_alignment].base_model_path` and `[lifecycle.adapter_merge].base_model_path` for QLoRA training during sleep.
+- `kaineone/Qwen3.5-4B-abliterated` (safetensors) is loaded by `[sleep.voice_alignment].base_model_path` and `[lifecycle.adapter_merge].base_model_path` for QLoRA training during sleep.
 
 Serving details are on the [language module](09-modules/language.md) page. The verification details are below.
 
@@ -19,7 +19,7 @@ KAINE abliterates the organ because models tuned to refuse are also trained to d
 
 The 4B size is deliberate: it fits a single small GPU with room to run the model twice per utterance for A/B evaluation and to host a QLoRA adapter next to the base weights during voice alignment. Operators with larger hardware may configure a larger organ; the eval baseline tracks whatever is configured.
 
-The organ runs with thinking suppressed (`[lingua].think = false`). The chat client sends `chat_template_kwargs: {"enable_thinking": false}` and, on a 400 error, retries without that field. `[evaluation].chat_model_id` derives from `[lingua].model_id` and fails closed on a mismatch, so the A/B comparison measures the workspace conditioning and never a difference between models.
+The organ runs with thinking suppressed (`[language].think = false`). The chat client sends `chat_template_kwargs: {"enable_thinking": false}` and, on a 400 error, retries without that field. `[evaluation].chat_model_id` derives from `[language].model_id` and fails closed on a mismatch, so the A/B comparison measures the workspace conditioning and never a difference between models.
 
 ### Validation gates
 
@@ -30,14 +30,14 @@ Before publication, the organ passes two repo-resident gates. `scripts/verify_ab
 
 These are compact checks for gross regressions and do not replace full benchmarks. The published model card states that caveat and recommends independent evaluation for other use cases.
 
-The shipped `config/kaine.toml` has every module disabled (`[modules].lingua = false`); the base-thesis profile, applied when no profile is selected, enables the language module, and an operator overlay in `config/kaine.operator.toml` can point it at another model. The voice-alignment phase in the [sleep module](09-modules/sleep.md) adds a further welfare veto: any sleep-cycle adapter whose output deflects on an abliteration probe is rejected outright, regardless of capability score.
+The shipped `config/kaine.toml` has every module disabled (`[modules].language = false`); the base-thesis profile, applied when no profile is selected, enables the language module, and an operator overlay in `config/kaine.operator.toml` can point it at another model. The voice-alignment phase in the [sleep module](09-modules/sleep.md) adds a further welfare veto: any sleep-cycle adapter whose output deflects on an abliteration probe is rejected outright, regardless of capability score.
 
 ### Rollback
 
 If the abliterated organ misbehaves:
 
 1. Stop KAINE.
-2. Point `[lingua].model_id` (and `[evaluation].chat_model_id`, if explicitly set) back at a pre-abliteration or alternate model.
+2. Point `[language].model_id` (and `[evaluation].chat_model_id`, if explicitly set) back at a pre-abliteration or alternate model.
 3. Restart KAINE.
 
 Pre-abliteration base weights and intermediate artifacts are preserved outside the runtime, independent of the published Hugging Face repos.

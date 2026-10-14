@@ -48,6 +48,6 @@ the module's event shapes are unchanged.
 ## Impact
 
 - New capability: `hybrid-wetware-backends`. Depends on `cl1-substrate`.
-- New code: `kaine_cl1/backends/{audition_frontend,phantasia_surprise,volition,thymos}.py`.
+- New code: `kaine_cl1/backends/{audition_frontend,world_model_surprise,action_selection,affect}.py`.
 - Each backend consumes remaining channel budget; the broker prevents running more
   than the array allows at once.

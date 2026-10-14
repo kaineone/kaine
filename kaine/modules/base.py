@@ -23,7 +23,7 @@ class BaseModule(ABC):
     """Common contract for every KAINE module.
 
     Subclasses MUST declare a class-level `name` matching their bus
-    output stream prefix (e.g. `name = "soma"` publishes to `soma.out`).
+    output stream prefix (e.g. `name = "interoception"` publishes to `interoception.out`).
     Subclasses override `on_workspace` to react to each global
     broadcast and may override `serialize` and `deserialize` to support
     Phase 7 fork/merge.

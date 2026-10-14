@@ -5,11 +5,11 @@
 
 Subscribes to five predictive-module output streams:
 
-    soma.out       → soma.report         → ``prediction_error``
-    chronos.out    → chronos.report      → ``temporal_prediction_error``
-    topos.out      → topos.report        → ``prediction_error``
+    interoception.out       → interoception.report         → ``prediction_error``
+    sequence.out    → sequence.report      → ``temporal_prediction_error``
+    vision.out      → vision.report        → ``prediction_error``
     audition.out   → audition.*          → ``prediction_error``
-    phantasia.out  → phantasia.world_error → ``world_error``
+    world_model.out  → world_model.world_error → ``world_error``
 
 Maintains an in-memory sliding window per source and computes mean / p95 /
 p99 statistics on each flush interval.  Statistics are written to
@@ -42,18 +42,18 @@ log = logging.getLogger(__name__)
 # (stream, accepted_types, error_field)
 _SOURCES: list[tuple[str, frozenset[str], str]] = [
     (
-        "soma.out",
-        frozenset({"soma.report"}),
+        "interoception.out",
+        frozenset({"interoception.report"}),
         "prediction_error",
     ),
     (
-        "chronos.out",
-        frozenset({"chronos.report"}),
+        "sequence.out",
+        frozenset({"sequence.report"}),
         "temporal_prediction_error",
     ),
     (
-        "topos.out",
-        frozenset({"topos.report"}),
+        "vision.out",
+        frozenset({"vision.report"}),
         "prediction_error",
     ),
     (
@@ -62,8 +62,8 @@ _SOURCES: list[tuple[str, frozenset[str], str]] = [
         "prediction_error",
     ),
     (
-        "phantasia.out",
-        frozenset({"phantasia.world_error"}),
+        "world_model.out",
+        frozenset({"world_model.world_error"}),
         "world_error",
     ),
 ]

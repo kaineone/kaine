@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
     from kaine.storage import resolve
     from kaine.text_embedding import DEFAULT_LATENT_DIM
 
-    episodic_memory = config.get("mnemos", {})
+    episodic_memory = config.get("episodic_memory", {})
     backend = episodic_memory.get("backend", "qdrant").lower().replace("-", "_")
 
     if backend == "qdrant":
@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None, *, out=None, err=None) -> int:
         if not api_key:
             err.write(
                 "mnemos-recover: qdrant backend needs an api_key in "
-                "[mnemos.qdrant], KAINE_QDRANT_API_KEY, or [qdrant] of "
+                "[episodic_memory.qdrant], KAINE_QDRANT_API_KEY, or [qdrant] of "
                 "secrets.toml\n"
             )
             return 6

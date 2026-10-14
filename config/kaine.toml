@@ -28,13 +28,13 @@ max_connections = 1024
 # Per-stream overrides. The key is the full stream name
 # (`<module>.out` or `workspace.broadcast`). The caps give observers and the
 # research archive a long lookback: 12000 entries is about 20 minutes at 10 Hz,
-# so a restart of several minutes loses no records. A topos.out entry is about
-# 40 KB, so topos.out is the largest stream in memory. The memory these caps
+# so a restart of several minutes loses no records. A vision.out entry is about
+# 40 KB, so vision.out is the largest stream in memory. The memory these caps
 # imply is checked before boot by the "Bus budget" row of
 # `python -m kaine.preboot` against Redis maxmemory (KAINE_REDIS_MAXMEMORY).
 [bus.per_stream_maxlen]
 "workspace.broadcast" = 100000
-"topos.out" = 12000
+"vision.out" = 12000
 "audition.out" = 12000
 # The perception feed's transition outcomes: a few events per world entry.
 "perception_feed.out" = 1000
@@ -79,7 +79,7 @@ auto_time_scale_window_s = 30.0
 # (Aston-Jones & Cohen 2005): LC-NE has a tonic mode tracking arousal and a
 # phasic mode driven by salient events. Each tick:
 #   drive = max(tonic, phasic)
-#   tonic  = Thymos arousal above baseline_arousal, scaled to [0, 1]
+#   tonic  = Affect arousal above baseline_arousal, scaled to [0, 1]
 #            (the affect module's arousal rises with perceptual prediction error)
 #   phasic = the most salient module report above salience_floor, scaled to
 #            [0, 1], held as a peak that decays over phasic_decay_s (subjective)
@@ -89,9 +89,9 @@ auto_time_scale_window_s = 30.0
 enabled = true
 salience_floor = 0.5       # routine module reports sit at or below this; alerts rise above
 phasic_decay_s = 1.0       # subjective seconds for a salient report's effect to decay by 1/e
-# baseline_arousal defaults to [thymos].baseline_arousal; set it here only to override.
+# baseline_arousal defaults to [affect].baseline_arousal; set it here only to override.
 
-[syneidesis]
+[workspace]
 top_k = 5
 publication_threshold = 0.35
 novelty_window = 32
@@ -101,10 +101,10 @@ novelty_window = 32
 # fallback / runnable two-factor negative control (a degraded-mode warning fires
 # when either is selected).
 #
-# salience_thymos_factor: "state_modulator" (default) wires the real
+# salience_affect_factor: "state_modulator" (default) wires the real
 # arousal-weighted StateModulator — the paper's affect factor is LIVE. "static"
 # bypasses affect weighting (negative control).
-salience_thymos_factor = "state_modulator"
+salience_affect_factor = "state_modulator"
 # salience_goal_factor: "static" (default) leaves the goal factor at a constant.
 # The real "drive_relevance" scorer is BUILT and selectable, but ships OFF by
 # default: it is an engineering extension of the under-specified paper goal
@@ -151,7 +151,7 @@ write_manifest = true
 # (real wall-clock time); used by the controlled oscillatory-ablation runner.
 deterministic = false
 
-[spot]
+[supervisor]
 # The supervisor (watchdog). A cycle-layer component that polls
 # every module's liveness and, on a crash or hang, freezes the cycle (humane
 # suspend), snapshots last-good state, and restarts the faulted module. After
@@ -168,10 +168,10 @@ max_restart_attempts = 5
 restart_backoff_s = 3.0
 selftest_timeout_s = 10.0        # unattended gate: bound on supervisor's scratch freeze/restart self-test
 # Optional per-module heartbeat overrides, e.g.:
-#   [spot.per_module_timeout_s]
-#   lingua = 120.0
+#   [supervisor.per_module_timeout_s]
+#   language = 120.0
 
-[spot.incident_log]
+[supervisor.incident_log]
 # Durable, append-only record of the supervisor's fault-recovery lifecycle. The supervisor writes one
 # encrypted JSONL line per transition (detect, freeze, snapshot, restart,
 # escalate) under `path`, all sharing a generated incident_id. Unlike
@@ -181,7 +181,7 @@ selftest_timeout_s = 10.0        # unattended gate: bound on supervisor's scratc
 # on. Retention purge is UNCONDITIONALLY DISABLED for this sink (no retention_days
 # key is exposed) — research history is never auto-deleted. Ships enabled = true
 # so any operator who turns the supervisor on gets the log automatically, but the whole
-# block is dormant while [spot].enabled = false (the shipped first-boot default).
+# block is dormant while [supervisor].enabled = false (the shipped first-boot default).
 enabled = true
 path = "state/cycle/incidents"
 
@@ -311,29 +311,29 @@ base_drive = 1.5
 # Per-module enable flags. EchoModule is permanent test infrastructure and
 # must stay disabled in production deployments. The interoception module defaults to disabled
 # so first boot remains operator-supervised.
-echo = false
-soma = false
-chronos = false
-topos = false
-nous = false
-mnemos = false
-eidolon = false
-thymos = false
-praxis = false
-lingua = false
-vox = false
+recorder = false
+interoception = false
+sequence = false
+vision = false
+planning = false
+episodic_memory = false
+self_model = false
+affect = false
+effectors = false
+language = false
+vocal = false
 audition = false
-hypnos = false
-empatheia = false
-phantasia = false
+sleep = false
+social_cognition = false
+world_model = false
 # Embodiment helpers. The perceptual locus module arbitrates the physical-XOR-virtual sense
 # locus; the embodiment module routes intents/perception to a body through a pluggable adapter
 # (the shipped default is the transport-free `stub` reference body). Both off by
-# default; Mundus additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
-perception = false
-mundus = false
+# default; Embodiment additionally requires KAINE_MUNDUS_OPERATOR_APPROVED=1.
+perceptual_locus = false
+embodiment = false
 
-[soma]
+[interoception]
 # CfC backend: "numpy" (default; needs no torch) or "torch" (ncps). Both build
 # the same reservoir from the seed kept in the interoception module's snapshot.
 cfc_backend = "numpy"
@@ -370,7 +370,7 @@ expected_error_band = 2.0
 # newborn is not put through self-inflicted distress+maintenance for its own
 # model's ignorance. The prediction-error signal itself is STILL published and
 # logged at full fidelity (the "cry" is observed, not erased), and the absolute
-# [soma.thresholds] limits below are NEVER gated: a real substrate breach (e.g.
+# [interoception.thresholds] limits below are NEVER gated: a real substrate breach (e.g.
 # GPU >= 83 C) overrides warm-up and actuates + integrates fatigue at full
 # weight. Grounded in the paper's warmed-up-signal logic (§6.6), applied to
 # The interoception module's allostatic regulation (§3.4.1) — a developmental stage, not a hardcode.
@@ -402,19 +402,19 @@ self_rhythm_step_hz = 20.0      # subjective-time cadence the self-rhythm integr
 # so entrainment can never be earned.
 self_rhythm_eta = 0.0025
 
-[soma.thresholds]
+[interoception.thresholds]
 "cpu_percent" = 90.0
 "ram_percent" = 90.0
 "gpu_*_temp_c" = 83.0
 "gpu_*_vram_percent" = 92.0
 "cycle_latency_avg_ms" = 600.0
 
-[soma.weights]
+[interoception.weights]
 "cpu_percent" = 1.0
 "ram_percent" = 1.0
 "cycle_latency_avg_ms" = 1.0
 
-[chronos]
+[sequence]
 # CfC backend: "numpy" (default; needs no torch) or "torch" (ncps). Both build
 # the same reservoir from the seed kept in the sequence module's snapshot.
 cfc_backend = "numpy"
@@ -432,7 +432,7 @@ forward_prediction = false
 # Rolling window size (ticks) for normalising the prediction error signal.
 prediction_error_window = 32
 
-[topos]
+[vision]
 # Encoder backend selector (topos-temporal-video-encoder).
 #   "internvideo_next" — temporally-native InternVideo-Next clip encoder (MIT,
 #                        OpenGVLab, vendored + revision-pinned, loaded with
@@ -462,7 +462,7 @@ encoder_local_dir = "state/models/internvideo_next_base_p14_res224_f16"
 # shipped vision_sample_hz = 10, clip_stride = 3 emits ~3.33 Hz, aligning the
 # visual percept with the access rate. PROVISIONAL
 # pending the shakedown GPU benchmark on the secondary GPU (same gate that
-# cleared vision_sample_hz). Warmup: no topos.report until the buffer first
+# cleared vision_sample_hz). Warmup: no vision.report until the buffer first
 # fills (~1.6 s at 10 Hz). pooling: "attention" uses the model's native
 # attention-pool head (CLIP-aligned 768-d); "mean" mean-pools the patch tokens.
 clip_len = 16
@@ -531,7 +531,7 @@ forward_model_units = 256
 prediction_error_window = 32
 # Number of recent latents to keep in the recurrent visual buffer.
 visual_buffer_size = 16
-# Attention-driven foveation (topos-foveation). OFF by default → the vision module runs the
+# Attention-driven foveation (vision-foveation). OFF by default → the vision module runs the
 # single whole-frame encode, byte-for-byte unchanged. When on, each frame yields
 # a coarse spatial saliency map, one precision-weighted fovea (bottom-up saliency
 # + an optional top-down bias), and TWO encodes: a downsampled peripheral gist
@@ -552,18 +552,18 @@ peripheral_width = 320              # downsampled whole-field gist geometry
 peripheral_height = 180
 foveal_size = 224                   # square foveal crop fed to the encoder
 
-[nous]
+[planning]
 # backend = "pymdp"  # "pymdp" (JAX/pymdp) or "numpy" (pure NumPy, no JAX)
 # Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra
 # (inferactively-pymdp + jax[cpu]) to enable; KAINE is CPU-only.
-# Complexity envelope — validated at startup by make_nous. The worst-case step
+# Complexity envelope — validated at startup by make_planning. The worst-case step
 # product (factors * max_states_per_factor * actions * planning_horizon) must
 # stay under the engine's threshold so EFE planning fits the ~300 ms cycle.
 factors = 4                    # action latent + salience + affect + event cluster
 max_states_per_factor = 4
 actions = 4                    # ACTION_SPACE: no_op/request_think/request_speak/request_maintenance
 planning_horizon = 1
-efe_timeout_ms = 250           # hard guard; on overrun return last posterior + nous.timeout
+efe_timeout_ms = 250           # hard guard; on overrun return last posterior + planning.timeout
 baseline_salience = 0.4
 # drive_actions: when true (default), the planning module's chosen actions become proposals
 # that the action selection module may realize (think/speak via the language module, rest via the sleep module) once they
@@ -571,12 +571,12 @@ baseline_salience = 0.4
 # action actually taken. false = observational ablation (nothing is realized).
 drive_actions = true
 alert_salience = 0.8
-# Salience of the nous.timeout event emitted when EFE planning overruns
+# Salience of the planning.timeout event emitted when EFE planning overruns
 # efe_timeout_ms (the planning module returns the last posterior rather than blocking the
 # cycle). Kept modest so a timeout nudges attention without dominating it.
 timeout_salience = 0.3
 # How much perceptual state is expected to persist across actions (0 = uniform,
-# 1 = identity). The rest is spread uniformly, so Nous starts out uncertain
+# 1 = identity). The rest is spread uniformly, so Planning starts out uncertain
 # about what any action does.
 # transition_persistence = 0.8
 # Confidence of the Dirichlet prior over perceptual transitions. Low values let
@@ -598,7 +598,7 @@ backend = "numpy"
 model_id = "sentence-transformers/all-MiniLM-L6-v2"
 device = "cpu"
 
-[mnemos]
+[episodic_memory]
 backend = "qdrant"            # or "inmemory" for tests / minimal deployments
 collection_prefix = "mnemos_"
 short_term_capacity = 128
@@ -611,11 +611,11 @@ alert_salience = 0.6
 # fit. The paper gives no value; 10 GiB is a safe default, not a recommendation.
 storage_budget_bytes = 10737418240
 
-[mnemos.qdrant]
+[episodic_memory.qdrant]
 host = "127.0.0.1"
 port = 6533
 
-[mnemos.replay]
+[episodic_memory.replay]
 # How many traces to re-inject per maintenance window.
 selection_top_k = 5
 # Weight on affect intensity in the selection score.
@@ -629,7 +629,7 @@ redact_content = true
 # replay) reads, without vectors. Matches short_term_capacity.
 cross_period_candidates = 128
 
-[mnemos.strength]
+[episodic_memory.strength]
 # Strength a trace that is never replayed keeps over one entity day of storage
 # at the resting broadcast rate (paper A.10 and Table A1, after the mean
 # decrease of synaptic size in sleep that de Vivo et al. 2017 measured).
@@ -642,12 +642,12 @@ traces_per_day = 288000
 # weakened it (paper A.10).
 prune_floor = 0.01
 
-[eidolon]
+[self_model]
 persistence_path = "state/eidolon/self_model.json"
 drift_window = 100
 drift_threshold = 0.6
 save_interval_s = 30.0
-internal_speech_stream = "lingua.internal"
+internal_speech_stream = "language.internal"
 # Maximum drift episodes kept in identity_history. Each entry summarises one
 # contiguous run of alerting broadcasts (onset, end, peak score, alert count,
 # per-source counts), so a sustained shift adds one entry. 0 = no cap: the
@@ -661,7 +661,7 @@ voice_observations_cap = 0
 baseline_salience = 0.05
 alert_salience = 0.7
 
-[eidolon.self_inference]
+[self_model.self_inference]
 # Observation-driven self-model population (eidolon-self-inference).
 # SHIPS DISABLED — operator must set enabled = true to activate.
 # When disabled the four self-model fields (values, behavioral_norms,
@@ -680,7 +680,7 @@ speech_pattern_min_count = 5
 # capability_map).  Applied once on first boot; never re-applied automatically.
 # seed_path = ""
 
-[thymos]
+[affect]
 baseline_valence = 0.0
 baseline_arousal = 0.3
 baseline_dominance = 0.0
@@ -688,7 +688,7 @@ drift_rate_per_s = 0.05
 publish_interval_s = 1.0
 # Valence relaxes toward the appraisal's pleasantness (learning progress + coupling)
 # shifted by wellness (Joffily and Coricelli 2013). The time constant is subjective seconds.
-volition_stream = "volition.out"
+action_selection_stream = "action_selection.out"
 # Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
 fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
@@ -702,11 +702,11 @@ valence_time_constant_s = 30.0
 valence_progress_gain = 2.0
 baseline_salience = 0.1
 alert_salience = 0.7
-soma_stream = "soma.out"
-chronos_stream = "chronos.out"
-mnemos_stream = "mnemos.out"
+interoception_stream = "interoception.out"
+sequence_stream = "sequence.out"
+episodic_memory_stream = "episodic_memory.out"
 
-[thymos.coupling]
+[affect.coupling]
 # Emergent affect coupling (thymos-affect-coupling). A perceived speaker
 # emotion is folded into the entity's OWN Scherer appraisal as a transient,
 # familiarity-weighted, decaying input — never written directly to the
@@ -730,31 +730,31 @@ decay_s = 10.0
 # learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
 # relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest action selection intent).
 # Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
-[thymos.drives.curiosity]
+[affect.drives.curiosity]
 build_rate = 0.05
 decay_rate = 0.0055
 threshold = 0.7
 relief_gain = 0.5
 
-[thymos.drives.boredom]
+[affect.drives.boredom]
 build_rate = 0.04
 decay_rate = 0.0045
 threshold = 0.7
 relief_gain = 0.3
 
-[thymos.drives.social_drive]
+[affect.drives.social_drive]
 build_rate = 0.01
 decay_rate = 0.0011
 threshold = 0.7
 relief_gain = 0.8
 
-[thymos.drives.restlessness]
+[affect.drives.restlessness]
 build_rate = 0.03
 decay_rate = 0.0033
 threshold = 0.7
 relief_gain = 0.5
 
-[praxis]
+[effectors]
 sandbox_path = "state/praxis/files"
 audit_log_path = "state/praxis/audit.log"
 notification_command = "notify-send"
@@ -773,13 +773,13 @@ enabled_effectors = []
 
 # Empty by default — operators add commands explicitly.
 # Example entry:
-# [praxis.shell_whitelist.echo]
+# [effectors.shell_whitelist.echo]
 # arg_patterns = ["[A-Za-z0-9]+"]
 # timeout_s = 2.0
 # description = "echo a single token"
-[praxis.shell_whitelist]
+[effectors.shell_whitelist]
 
-[lingua]
+[language]
 # OpenAI-compatible model server (Unsloth Studio on CUDA, or any conforming
 # llama.cpp/vLLM server). The language module POSTs to /v1/chat/completions and suppresses the
 # organ's chain-of-thought via chat_template_kwargs (enable_thinking=false) — the
@@ -912,7 +912,7 @@ tone_rule = "categorical"
 #              by an external maternal state, over a low-passed soundscape carrying
 #              the same beat. One shared clock keeps the beat seen and heard
 #              together; the maternal trajectory continues across boots. For a
-#              gestating entity on a single host. See [perception_feed.womb].
+#              gestating entity on a single host. See [perception_feed.stimulus_source].
 #   live     — the real camera + real microphone paths (NON-reproducible;
 #              operator-present demos only, never a research run).
 #   screen   — the entity sees a shared desktop/window and hears its audio monitor
@@ -931,7 +931,7 @@ playlist_manifest = ""          # playlist: path to the shared checksummed manif
 transition_seconds = 20.0
 transition_audio_fade_seconds = 3.0  # programme sound fades in over this once it starts (0 = no fade)
 
-[perception_feed.video]         # seeded-video knobs (geometry from [topos])
+[perception_feed.video]         # seeded-video knobs (geometry from [vision])
 surprise_interval = 150         # shared cross-modal cadence of surprise events
 surprise_strength = 1.0         # magnitude of the visual surprise blob (0 = none)
 
@@ -941,7 +941,7 @@ channels = 1
 base_strength = 0.3             # learnable base soundscape amplitude
 surprise_strength = 1.0         # seed-keyed surprise-burst amplitude (0 = none)
 
-[perception_feed.womb]          # womb: the external maternal channel (mode = "womb")
+[perception_feed.stimulus_source]          # stimulus_source: the external maternal channel (mode = "stimulus_source")
 heartbeat_bpm = 70              # maternal beat rate (40-120)
 heartbeat_drift = 0.03          # slow fractional drift, so the beat is not a metronome
 maternal_state_rate = 0.02      # how fast the mother's emotional weather drifts
@@ -951,28 +951,28 @@ maternal_distress_max_magnitude = 0.3
 maternal_distress_max_seconds = 30
 external_drive_to_self_rhythm = true    # read by the self-rhythm oscillator once built
 external_drive_max_amplitude = 0.4
-birth_transition_seconds = 5        # the bounded maturation bloom, then the stimulus source falls silent (max 30)
+maturation_transition_seconds = 5        # the bounded maturation bloom, then the stimulus source falls silent (max 30)
 
-[perception_feed.womb.video]
+[perception_feed.stimulus_source.video]
 luminance_mean = 0.15           # dim field
 luminance_contrast = 0.10       # low contrast
 luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
 maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
 colour_ramp_seconds = 3600      # lived seconds over which colour rises from grey
 
-[perception_feed.womb.audio]
+[perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 
-[perception_feed.womb.readout]  # gestation readiness readout and its probe protocol
+[perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a gestating being perceives, so
-# they are bounded, announced on gestation.out (gestation.probe events), and
+# they are bounded, announced on development.out (development.probe events), and
 # never run while the entity is frozen (including a welfare response), within
 # a readout period of boot or of a thaw, or within 60 s of another probe.
 # Their timing is jittered from the run seed so the entity cannot learn the
 # schedule (an exactly periodic probe would shape what it measures), while a
 # research run with the same seed reproduces it exactly.
 # All durations are subjective seconds (the entity clock).
-readout_period_seconds = 60       # how often gestation.readiness is published
+readout_period_seconds = 60       # how often development.readiness is published
 sample_hz = 10                    # self-rhythm sampling rate
 withdrawal_period_seconds = 1800  # drive withdrawn (0) once per this period
 withdrawal_seconds = 20           # hard maximum 30
@@ -999,7 +999,7 @@ baseline_withdrawals = 3          # the entity's own undriven frequency, from it
 entrainment_replications = 3
 surrogate_count = 19              # foreign mothers each withdrawal is tested against
 # Viability watch: after each withdrawal the readout judges, on lived time,
-# whether the developmental phase can still reach maturation, and publishes gestation.viability
+# whether the developmental phase can still reach maturation, and publishes development.viability
 # when it cannot (the study runner then ends the step early, keeping its data).
 # Thresholds come from the offline validation of earned entrainment: no viable
 # developmental phase was flagged, every unviable one was flagged by 24-27 h.
@@ -1027,17 +1027,17 @@ recovery_cap_seconds = 300
 # display = ":0.0"              # X11 display (ignored off X11)
 # framerate = 10                # capture frames per second
 # cursor = true                 # draw the mouse pointer into the frame
-# native = false                # NATIVE GRAB (topos-foveation): capture at the
+# native = false                # NATIVE GRAB (vision-foveation): capture at the
 #                               # display's own resolution with no downscale, so a
 #                               # foveal crop carries true native detail. Detected
 #                               # via xrandr on X11; on a platform without a probe
 #                               # it falls back to capture_width/height with a note.
-#                               # Enable together with [topos].foveation.
+#                               # Enable together with [vision].foveation.
 # monitor_device = ""           # desktop-audio monitor source; Linux defaults to
 #                               # the current sink's .monitor when unset
 # ffmpeg_path = "ffmpeg"        # override if ffmpeg is not on PATH
 
-[vox]
+[vocal]
 chatterbox_url = "http://127.0.0.1:8883"
 # backend selects the speech synthesiser: "chatterbox" (default; the Chatterbox
 # service above) or "sherpa_onnx" (Kokoro through sherpa-onnx; no torch, no
@@ -1079,10 +1079,10 @@ baseline_cfg_weight = 0.5
 request_timeout_s = 120.0
 baseline_salience = 0.3
 alert_salience = 0.7
-lingua_external_stream = "lingua.external"
-thymos_state_stream = "thymos.out"
+language_external_stream = "language.external"
+affect_state_stream = "affect.out"
 
-[vox.mirroring]
+[vocal.mirroring]
 # Prosodic mirroring (vox-prosodic-mirroring). SHIPS DISABLED. When enabled,
 # The vocal module subscribes to audition.prosody and blends a bounded residual of the
 # interlocutor's prosody (pace, energy, pitch variation) into its affect-driven
@@ -1101,7 +1101,7 @@ mirror_ceiling = 0.5
 # decays fully to zero (linear decay).
 decay_s = 10.0
 
-[hypnos]
+[sleep]
 interval_seconds = 3600.0      # one sleep per hour by default; also the max-interval safety net
 max_deferral_seconds = 600.0   # 10 minutes of deferral allowed
 per_defer_seconds = 60.0
@@ -1110,20 +1110,20 @@ alert_salience = 0.8
 # Minimum entity-time seconds between a sleep's end and a planning module-requested rest; bounds rest requests from an exploring planning module.
 requested_rest_min_interval_s = 1800.0
 
-[hypnos.consolidation]
-# Whether the sleep module subscribes to soma.fatigue and triggers on threshold crossing.
+[sleep.consolidation]
+# Whether the sleep module subscribes to interoception.fatigue and triggers on threshold crossing.
 # interval_seconds above remains as a max-interval safety net regardless.
 fatigue_triggered = true
 # Replay window duration in seconds (informational; replay completes synchronously).
 replay_window_s = 5.0
 # Phase-3 associative cross-period replay. When true, the sleep module selects traces
-# spanning >= 2 memory periods, cues Phantasia for scenario extensions, and
+# spanning >= 2 memory periods, cues WorldModel for scenario extensions, and
 # re-injects the resulting novel associations into the workspace for the planning module
 # (pymdp) / the affect module via the normal cognitive cycle. Ships off; degrades to a
 # no-op when the world model module is disabled/absent.
 associative_replay = false
 
-[hypnos.voice_alignment]
+[sleep.voice_alignment]
 # Master gate. Even with `enabled = true`, the env var
 # KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1 must also be set or the
 # phase refuses to construct a real trainer. Keep false by default
@@ -1182,7 +1182,7 @@ adapter_retention = 0
 # "manual" the operator owns the reload, so the system does not stop the
 # server out from under them.
 hot_swap_mode = "manual"
-# When hot_swap_mode = "reload_endpoint": URL Hypnos POSTs to with
+# When hot_swap_mode = "reload_endpoint": URL Sleep POSTs to with
 # body {"adapter_path": "<path>"}.
 reload_endpoint_url = ""
 # When hot_swap_mode = "restart_service": systemd --user unit name.
@@ -1231,7 +1231,7 @@ trainer_timeout_s = 21600.0
 organ_adapters_dir = "/organ-adapters"
 # URL of the served organ. Used by the "organ_adapter" hot-swap mode to
 # wait for the organ to report ready after activation. Empty defaults to
-# [lingua].chat_url.
+# [language].chat_url.
 organ_url = ""
 # Organ-level consolidation-divergence thresholds the welfare-gated
 # decommission's divergence assessment reads (lifecycle/divergence.py). Every
@@ -1247,7 +1247,7 @@ organ_url = ""
 consolidation_divergence_rate_threshold = 0.5
 consolidation_divergence_magnitude_threshold = 0.25
 
-[empatheia]
+[social_cognition]
 # Social-cognition / theory-of-mind module. Ships disabled.
 # Requires rename-audition-vox to be merged before enabling.
 backend = "qdrant"            # or "inmemory" for tests / minimal deployments
@@ -1258,16 +1258,16 @@ speaker_label = "operator"
 # Channels whose voices are attributed to the operator. Audio from any other
 # channel is modelled as media:<channel>; the action selection module only answers these channels.
 # operator_sources = ["live_mic", "microphone", "remote"]
-# Deviation above this triggers empatheia.social_error.
+# Deviation above this triggers social_cognition.social_error.
 deviation_threshold = 0.5
 baseline_salience = 0.15
 alert_salience = 0.6
 
-[empatheia.qdrant]
+[social_cognition.qdrant]
 host = "127.0.0.1"
 port = 6533
 
-[phantasia]
+[world_model]
 # World-model / imagination module (DreamerV3 RSSM core). Ships disabled.
 # The world model module is a world model only — no actor/critic. The planning module owns action selection.
 #
@@ -1279,14 +1279,14 @@ port = 6533
 #                         predictions improve with experience. No actor, critic,
 #                         or reward head (action selection lives in the planning module).
 #                         Requires the [worldmodel] optional extra (jax) — see
-#                         pyproject.toml. Every phantasia.* event discloses
+#                         pyproject.toml. Every world_model.* event discloses
 #                         backend = "dreamerv3" in its payload.
 # backend = "fake"      — DEVELOPMENT-ONLY fallback. A NON-LEARNING exponential
 #                         moving-average stub: predicts via a running average,
 #                         does NOT learn from experience, and its trajectories
 #                         are NOT grounded in any learned world model. Needs no
 #                         extra deps and keeps CI/tests dependency-free. This is
-#                         NOT the configuration under test — every phantasia.*
+#                         NOT the configuration under test — every world_model.*
 #                         event discloses backend = "fake" so it can never be
 #                         mistaken for the learning model.
 backend = "dreamerv3"          # shipped default; "fake" = dev-only EMA fallback
@@ -1318,11 +1318,11 @@ checkpoint_path = "state/phantasia/world_model.ckpt"
 # Imagined-trajectory length for offline scenario generation.
 rollout_horizon = 8
 
-[phantasia.salience]
+[world_model.salience]
 baseline = 0.1
 alert = 0.7
 
-[phantasia.world_model]
+[world_model.world_model]
 # Real-backend (dreamerv3) RSSM hyper-parameters. Ignored by the fake backend.
 deter_dim = 64
 stoch_dim = 16
@@ -1331,14 +1331,14 @@ hidden_dim = 64
 latent_kind = "categorical"    # or "gaussian"
 learning_rate = 0.001
 
-[perception]
+[perceptual_locus]
 # Perceptual locus arbiter (physical XOR virtual sense gating). Enabled via
-# [modules].perception. When the entity is embodied in a virtual world its
+# [modules].perceptual_locus. When the entity is embodied in a virtual world its
 # physical camera/mic are inhibited, and vice-versa.
 # Allow the entity to switch its own sense locus via the effectors module's intents. Off by
 # default — locus changes are operator-driven until trust is established.
 # NOTE: allow_self_switch is reserved for deferred virtual-world embodiment work;
-# no module currently produces intent.perception.switch, so this flag has no
+# no module currently produces intent.perceptual_locus.switch, so this flag has no
 # effect until that change is implemented.
 allow_self_switch = false
 # Minimum seconds the locus must hold before another switch is honoured.
@@ -1356,10 +1356,10 @@ min_dwell_s = 30.0
 # `port` is the loopback port the cycle serves on and the dashboard proxies to.
 port = 8089
 
-[mundus]
+[embodiment]
 # Body-agnostic embodiment control plane. The embodiment module routes perception/action to a
 # body through a pluggable adapter; `adapter` selects exactly one, and only that
-# adapter's nested `[mundus.<adapter>]` table is read. Enabled via [modules].mundus
+# adapter's nested `[embodiment.<adapter>]` table is read. Enabled via [modules].embodiment
 # AND the two-layer operational gate: this `enabled` flag (config layer) AND the
 # KAINE_MUNDUS_OPERATOR_APPROVED=1 environment variable (operator layer). Both
 # must be true before any action reaches a body.
@@ -1368,13 +1368,13 @@ enabled = true
 # that pins the protocol (including the continuous-channel path). No transport-
 # backed body ships today; a virtual-world (Paracosmic) adapter is planned.
 # The stub needs no configuration; adapter-specific settings live under their own
-# `[mundus.<adapter>]` table (added when a transport-backed adapter ships).
+# `[embodiment.<adapter>]` table (added when a transport-backed adapter ships).
 adapter = "stub"
 # Mirror the language module's external speech into the body's local chat.
 mirror_speech = true
-speech_stream = "lingua.external"
+speech_stream = "language.external"
 
-[mundus.control_surface]
+[embodiment.control_surface]
 # The minimal, continuous, learnable embodiment control surface (the entity's
 # per-tick motor producer) — `intuitive-embodiment-control-surface`. Off by
 # default: the entity drives a body on its own ONLY when this is explicitly
@@ -1399,8 +1399,8 @@ window = 64
 # BORN into the embodied world exactly once (developmental phase -> embodied; never back).
 # SHIP-INERT (matches the supervisor and embodiment module convention): when disabled the entity runs
 # un-staged exactly as today. Enable ONLY alongside a configured stimulus source feed
-# ([perception_feed].mode = "womb"); if enabled without one, the loud, repeated
-# `stage.gestation.no_stimulus` signal fires rather than a silent senseless hold.
+# ([perception_feed].mode = "stimulus_source"); if enabled without one, the loud, repeated
+# `stage.development.no_stimulus` signal fires rather than a silent senseless hold.
 # The gate MEASURES readiness (stimulus source readout + the sleep module's count + the world model module's
 # consolidation + lived time) and imposes no development — a readiness gate, not a
 # target (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
@@ -1410,21 +1410,21 @@ min_consolidation_passes = 3      # successful world model sleep-training passes
 min_lived_seconds = 86400         # floor of lived subjective time in the developmental phase (C3)
 gate_cadence_seconds = 60         # how often the maturation gate is evaluated
 readout_max_age_cadences = 3      # a stimulus source readout older than this many cadences is stale (C1)
-require_operator_ack_for_birth = false  # autonomous by default; true for supervised shakedowns
+require_operator_ack_for_maturation = false  # autonomous by default; true for supervised shakedowns
 # stimulus source before spawn and stimulus source loss (the stimulus-source-liveness interface):
-womb_ready_retry_seconds = 5      # boot re-checks a not-ready stimulus source this often; nothing spawns meanwhile
-womb_check_seconds = 1            # how often a running stimulus source's presence is checked
-womb_loss_after_seconds = 5       # sustained absence before a gestating entity is frozen
-womb_arm_timeout_seconds = 120    # a stimulus source never seen live within this is lost
-womb_presence_window_seconds = 3  # presence must advance within this window
+stimulus_source_ready_retry_seconds = 5      # boot re-checks a not-ready stimulus source this often; nothing spawns meanwhile
+stimulus_source_check_seconds = 1            # how often a running stimulus source's presence is checked
+stimulus_source_loss_after_seconds = 5       # sustained absence before a gestating entity is frozen
+stimulus_source_arm_timeout_seconds = 120    # a stimulus source never seen live within this is lost
+stimulus_source_presence_window_seconds = 3  # presence must advance within this window
 
 [developmental_stage.regulation_thresholds]
-# C1 thresholds the stimulus source change's `gestation.readiness` markers must cross. This
+# C1 thresholds the stimulus source change's `development.readiness` markers must cross. This
 # change owns the thresholds + the decision; the stimulus source change owns the measurement.
 endogenous_self_sustain = true       # must demonstrate a self-sustaining rhythm
 entrain_then_autonomy = true         # entrain-then-autonomy demonstrated
 hrv_variability_floor = 0.2          # autonomic-maturation marker floor
-womb_prediction_error_ceiling = 0.3  # generative-model-seeded ceiling
+stimulus_source_prediction_error_ceiling = 0.3  # generative-model-seeded ceiling
 return_to_baseline_seconds_ceiling = 30
 
 [evaluation]
@@ -1446,7 +1446,7 @@ memory_probes = true
 memory_probe_interval_minutes = 60
 proactive_audit = true
 eidolon_accuracy = true
-eidolon_accuracy_interval_hours = 24
+self_model_accuracy_interval_hours = 24
 sleep_snapshots = true
 # OpenAI-compatible model server for the A/B-divergence baseline. POSTs to
 # /v1/chat/completions (mirrors the language module, same server and same model), suppressing
@@ -1455,7 +1455,7 @@ chat_url = "http://127.0.0.1:11434/v1"
 # chat_model_id is intentionally NOT set here. The A/B-divergence baseline MUST
 # use the SAME model as the language organ, or the divergence measures a model
 # difference instead of the architecture's conditioning. It therefore DERIVES
-# from [lingua].model_id at cycle startup. Setting it explicitly to a DIFFERENT
+# from [language].model_id at cycle startup. Setting it explicitly to a DIFFERENT
 # value is a fail-closed error (the cycle refuses to boot).
 chat_timeout_s = 60.0
 llm_context_window_seconds = 3600
@@ -1476,7 +1476,7 @@ replay = true
 # Privacy default: replay observer logs memory IDs only, not text content.
 # Set to false only with explicit operator/Guardian consent.
 replay_redact_content = true
-empatheia = true
+social_cognition = true
 voice_alignment_divergence = true
 fatigue = true
 prediction_error = true
@@ -1500,8 +1500,8 @@ disclosure = "You are periodically and privately assessed for how much you have 
 # JSONL prompt battery; empty uses the bundled preference battery.
 battery_path = ""
 # Probe requests wait until the language module has been silent this long, so the entity speaks first.
-lingua_quiet_s = 10.0
-# Decoding temperature of the probe, fixed apart from the voice's [lingua].temperature
+language_quiet_s = 10.0
+# Decoding temperature of the probe, fixed apart from the voice's [language].temperature
 # so study or voice settings never change the probe's conditions. 0 is greedy.
 probe_temperature = 0.0
 # Answers per battery prompt in the reference.
@@ -1575,7 +1575,7 @@ weights = []
 output_dir = "state/forks/merged_adapters"
 # Reject the merge if merged-adapter capability score falls more than
 # this far below the mean of the parent adapters. Mirrors
-# [hypnos.voice_alignment].capability_loss_threshold.
+# [sleep.voice_alignment].capability_loss_threshold.
 capability_loss_threshold = 0.05
 # Path to LOCAL HuggingFace-format base model weights — required for
 # PEFT to load adapters. Empty = falls back to FakeAdapterMerger with
@@ -1585,7 +1585,7 @@ base_model_path = ""
 # the sleep module runs before promoting a trained adapter: capability loss against
 # the parents (capability_loss_threshold) and the welfare-load-bearing
 # abliteration veto. A merge whose checks cannot run is refused.
-# Empty = the bundled probe sets (as in [hypnos.voice_alignment]).
+# Empty = the bundled probe sets (as in [sleep.voice_alignment]).
 capability_probe_path = ""
 abliteration_probe_path = ""
 
@@ -1634,7 +1634,7 @@ entity_name = "kaine"
 
 [preservation.welfare_response]
 # Autonomous welfare-protective response. Watches the interoception module's interoceptive-
-# distress signal (soma.report prediction_error on soma.out) using the SAME
+# distress signal (interoception.report prediction_error on interoception.out) using the SAME
 # sustained-distress rule as the sidecar welfare observer (shared core
 # primitive — no kaine.evaluation import). On a sustained-distress crossing (or
 # repeated distress episodes within repeat_window_s) it PRESERVES the entity
@@ -1692,7 +1692,7 @@ enabled = false
 # Positive control of the broadcast information-gain measure (paper §6.3,
 # Appendix A.8). Off by default; only the workspace-mediation study
 # configurations enable it, each in one mode:
-#   mode = "estimate_pc"  the preliminary run. Each of Topos, Audition and Soma
+#   mode = "estimate_pc"  the preliminary run. Each of Vision, Audition and Interoception
 #                         accumulates its inputs' mean and covariance and, at
 #                         shutdown, writes the first principal component and
 #                         the mean under data/evaluation/positive_control/.
@@ -1715,7 +1715,7 @@ enabled = false
 enabled = false
 seed = 0
 
-[nexus]
+[dashboard]
 host = "127.0.0.1"
 port = 8088
 # Surface toggles. A single-surface deployment is supported. The conversation
@@ -1732,13 +1732,13 @@ conversation_history_lookback = 50
 # bodies, internal speech, affect reasons) and the page banner says "dev
 # mode" so operators know they are seeing privileged content.
 dev_content_override = false
-# Access mode. "open" = no sign-in, for a Nexus reachable only from this
+# Access mode. "open" = no sign-in, for a Dashboard reachable only from this
 # computer (loopback) or the operator's tailnet; "token" = operator token
 # required (use for any wider exposure); the Host allowlist and Origin checks
 # apply in both.
 access = "open"
 # Operator authentication. The token lives ONLY in KAINE_NEXUS_TOKEN or in
-# config/secrets.toml [nexus] operator_token (at least 32 characters); the dashboard
+# config/secrets.toml [dashboard] operator_token (at least 32 characters); the dashboard
 # refuses to start if operator_token appears in this file or in
 # config/kaine.operator.toml. Browsers sign in once at /login: the session
 # cookie authorizes page loads and reads, and every state-changing request also
@@ -1905,10 +1905,10 @@ retention_days = 0
 [research_event_log.external_utterances]
 # OPTIONAL local-only external-speech recorder. NEVER export-eligible.
 #
-# Subscribes ONLY to lingua.external and writes one record per external_speech
+# Subscribes ONLY to language.external and writes one record per external_speech
 # event to state/research/external_utterances/. The record contains the text
 # field only; user_input (bystander speech) and all other payload fields are
-# dropped. It NEVER subscribes to lingua.internal or lingua.out, so inner speech
+# dropped. It NEVER subscribes to language.internal or language.out, so inner speech
 # is never recorded.
 #
 # Local only, never exported.
@@ -1917,7 +1917,7 @@ log_dir = "state/research/external_utterances"
 # 0 = keep forever.
 retention_days = 0
 
-[research_event_log.nexus_record]
+[research_event_log.dashboard_record]
 # OPTIONAL local-only dashboard diagnostics recorder. NEVER export-eligible.
 #
 # Subscribes to the same diagnostics_streams() the dashboard bridge reads and, for
@@ -1957,7 +1957,7 @@ level = "INFO"
 # install_label = "kaine"          # Operator-chosen label for this install (1-64 chars).
 # reminder_interval_s = 14400.0    # Seconds between reminder notices (minimum 900).
 # input_loss_after_s = 60.0        # Seconds without input before the input-lost notice.
-# nexus_url = "http://127.0.0.1:8088/"  # Address shown in notices for the dashboard.
+# dashboard_url = "http://127.0.0.1:8088/"  # Address shown in notices for the dashboard.
 #
 # Desktop notification on the D-Bus session bus of the user running the unit.
 # [[caretaker.channels]]

@@ -69,7 +69,7 @@ def test_make_interoception_from_config():
             "alert_salience": 0.7,
         },
     )
-    assert interoception.name == "soma"
+    assert interoception.name == "interoception"
 
 
 def test_make_interoception_wires_cycle_latency_window():
@@ -91,7 +91,7 @@ def test_make_sequence_from_config():
             "anomaly_alert_threshold": 3.0,
         },
     )
-    assert sequence.name == "chronos"
+    assert sequence.name == "sequence"
 
 
 def test_make_sequence_wires_anomaly_and_rumination_windows():
@@ -125,7 +125,7 @@ def test_make_vision_from_config_does_not_load_transformers():
             "alert_salience": 0.7,
         },
     )
-    assert vision.name == "topos"
+    assert vision.name == "vision"
     # Encoder is lazy — the model is not loaded at __init__.
     assert hasattr(vision, "_encoder")
     # Default (no perception_feed) leaves the live cv2 path: no source_factory.
@@ -204,14 +204,14 @@ def test_make_vision_rejects_bad_feed_mode():
 
 
 def test_make_vision_foveation_off_by_default():
-    """No [topos].foveation key → foveation stays off (single whole-frame encode)."""
+    """No [vision].foveation key → foveation stays off (single whole-frame encode)."""
     bus = _bus()
     vision = make_vision(bus, {"encoder_model_id": "facebook/dinov2-small"})
     assert vision.foveation_enabled is False
 
 
 def test_make_vision_foveation_threads_config():
-    """[topos].foveation = true plus knobs flow through to the module."""
+    """[vision].foveation = true plus knobs flow through to the module."""
     bus = _bus()
     vision = make_vision(
         bus,
@@ -279,7 +279,7 @@ def test_make_planning_from_config():
             "alert_salience": 0.8,
         },
     )
-    assert planning.name == "nous"
+    assert planning.name == "planning"
 
 
 def test_make_planning_rejects_oversized_envelope():
@@ -312,7 +312,7 @@ def test_make_episodic_memory_from_config_does_not_connect_qdrant():
             "alert_salience": 0.6,
         },
     )
-    assert episodic_memory.name == "mnemos"
+    assert episodic_memory.name == "episodic_memory"
 
 
 def test_make_episodic_memory_rejects_embedder_model_id():
@@ -356,13 +356,13 @@ def test_make_self_model_from_config(tmp_path):
             "drift_window": 100,
             "drift_threshold": 0.6,
             "save_interval_s": 30.0,
-            "internal_speech_stream": "lingua.internal",
+            "internal_speech_stream": "language.internal",
             "identity_history_cap": 256,
             "baseline_salience": 0.05,
             "alert_salience": 0.7,
         },
     )
-    assert self_model.name == "eidolon"
+    assert self_model.name == "self_model"
 
 
 def test_make_affect_from_config_builds_baseline():
@@ -379,11 +379,11 @@ def test_make_affect_from_config_builds_baseline():
             "alert_salience": 0.7,
         },
     )
-    assert affect.name == "thymos"
+    assert affect.name == "affect"
 
 
 def test_make_affect_tolerates_legacy_coupling_max_rate_key(caplog):
-    """A stale [thymos.coupling].coupling_max_rate_per_s key is ignored with a warning.
+    """A stale [affect.coupling].coupling_max_rate_per_s key is ignored with a warning.
 
     The DriftSafeguard it backed was removed (thymos-emergent-affect-coupling);
     existing local configs that still carry the key must not break boot.
@@ -401,15 +401,15 @@ def test_make_affect_tolerates_legacy_coupling_max_rate_key(caplog):
                 },
             },
         )
-    assert affect.name == "thymos"
+    assert affect.name == "affect"
     assert affect._coupling.enabled is True
     assert affect._coupling.decay_s == 8.0
     assert not hasattr(affect._coupling, "coupling_max_rate_per_s")
-    assert "[thymos.coupling].coupling_max_rate_per_s is retired" in caplog.text
+    assert "[affect.coupling].coupling_max_rate_per_s is retired" in caplog.text
 
 
 def test_make_affect_ignores_retired_social_drive_time_scale(caplog):
-    """A stale [thymos].social_drive_time_scale_s key is ignored with a warning."""
+    """A stale [affect].social_drive_time_scale_s key is ignored with a warning."""
     with caplog.at_level(logging.WARNING):
         affect = make_affect(
             _bus(),
@@ -418,9 +418,9 @@ def test_make_affect_ignores_retired_social_drive_time_scale(caplog):
                 "social_drive_time_scale_s": 600.0,
             },
         )
-    assert affect.name == "thymos"
+    assert affect.name == "affect"
     assert not hasattr(affect, "_social_drive_time_scale_s")
-    assert "[thymos].social_drive_time_scale_s is retired" in caplog.text
+    assert "[affect].social_drive_time_scale_s is retired" in caplog.text
 
 
 def test_make_affect_rejects_truly_unknown_coupling_key():
@@ -442,7 +442,7 @@ def test_make_effectors_with_empty_whitelist(tmp_path):
             "alert_salience": 0.7,
         },
     )
-    assert effectors.name == "praxis"
+    assert effectors.name == "effectors"
 
 
 def test_make_effectors_translates_shell_whitelist_entries(tmp_path):
@@ -461,7 +461,7 @@ def test_make_effectors_translates_shell_whitelist_entries(tmp_path):
             },
         },
     )
-    assert effectors.name == "praxis"
+    assert effectors.name == "effectors"
     # The shell effector should have a non-empty whitelist now.
     shell = effectors._effectors["shell"]
     assert "echo" in shell._whitelist._entries
@@ -480,7 +480,7 @@ def test_make_language_from_config(tmp_path):
             "intent_log_path": str(tmp_path / "intent.jsonl"),
         },
     )
-    assert language.name == "lingua"
+    assert language.name == "language"
 
 
 def test_make_audition_from_config():
@@ -602,7 +602,7 @@ def test_make_vocal_from_config(tmp_path):
             "request_timeout_s": 120.0,
         },
     )
-    assert a.name == "vox"
+    assert a.name == "vocal"
 
 
 def test_make_social_cognition_from_config():
@@ -618,7 +618,7 @@ def test_make_social_cognition_from_config():
             "alert_salience": 0.6,
         },
     )
-    assert emp.name == "empatheia"
+    assert emp.name == "social_cognition"
 
 
 def test_make_social_cognition_rejects_unknown_keys():
@@ -643,7 +643,7 @@ def test_make_world_model_from_config():
             "world_model": {"deter_dim": 32, "stoch_dim": 8},
         },
     )
-    assert world_model.name == "phantasia"
+    assert world_model.name == "world_model"
 
 
 def test_make_world_model_rejects_unknown_keys():
@@ -667,17 +667,17 @@ def test_make_sleep_without_deps(tmp_path):
             },
         },
     )
-    assert sleep.name == "hypnos"
+    assert sleep.name == "sleep"
 
 
 def test_make_sleep_ignores_retired_planning_step_burst(tmp_path, caplog):
-    """A stale [hypnos].nous_step_burst key is ignored with a warning."""
+    """A stale [sleep].planning_step_burst key is ignored with a warning."""
     with caplog.at_level(logging.WARNING):
         sleep = make_sleep(
             _bus(),
             {
                 "interval_seconds": 3600.0,
-                "nous_step_burst": 200,
+                "planning_step_burst": 200,
                 "voice_alignment": {
                     "intent_log_path": str(tmp_path / "intent.jsonl"),
                     "adapter_output_dir": str(tmp_path / "adapters"),
@@ -685,15 +685,15 @@ def test_make_sleep_ignores_retired_planning_step_burst(tmp_path, caplog):
                 },
             },
         )
-    assert sleep.name == "hypnos"
+    assert sleep.name == "sleep"
     assert not hasattr(sleep, "_planning_step_burst")
-    assert "[hypnos].nous_step_burst is retired" in caplog.text
+    assert "[sleep].planning_step_burst is retired" in caplog.text
 
 
 def test_make_sleep_still_rejects_unknown_key():
     """A typoed sleep key is still rejected."""
     with pytest.raises(ValueError, match="unknown config keys"):
-        make_sleep(_bus(), {"nous_step_bursts": 200})
+        make_sleep(_bus(), {"planning_step_bursts": 200})
 
 
 def test_build_registry_respects_disabled_toggles():
@@ -701,8 +701,8 @@ def test_build_registry_respects_disabled_toggles():
     registry = build_registry(
         bus,
         {
-            "modules": {"soma": True, "chronos": False, "topos": False},
-            "soma": {
+            "modules": {"interoception": True, "sequence": False, "vision": False},
+            "interoception": {
                 "read_interval_s": 1.0,
                 "cycle_latency_target_ms": 300.0,
                 "baseline_salience": 0.1,
@@ -710,9 +710,9 @@ def test_build_registry_respects_disabled_toggles():
             },
         },
     )
-    assert "soma" in registry
-    assert "chronos" not in registry
-    assert "topos" not in registry
+    assert "interoception" in registry
+    assert "sequence" not in registry
+    assert "vision" not in registry
 
 
 def test_build_registry_constructs_sleep_last():
@@ -721,35 +721,35 @@ def test_build_registry_constructs_sleep_last():
         bus,
         {
             "modules": {
-                "mnemos": True,
-                "thymos": True,
-                "hypnos": True,
+                "episodic_memory": True,
+                "affect": True,
+                "sleep": True,
             },
-            "mnemos": {
+            "episodic_memory": {
                 "backend": "inmemory",
                 "collection_prefix": "mnemos_",
                 "short_term_capacity": 128,
                 "recall_top_k": 5,
                 "qdrant": {"host": "127.0.0.1", "port": 6533},
             },
-            "thymos": {
+            "affect": {
                 "baseline_valence": 0.0,
                 "baseline_arousal": 0.3,
                 "baseline_dominance": 0.0,
                 "drift_rate_per_s": 0.05,
                 "publish_interval_s": 1.0,
             },
-            "hypnos": {
+            "sleep": {
                 "interval_seconds": 3600.0,
                 "max_deferral_seconds": 600.0,
             },
         },
     )
-    assert set(["mnemos", "thymos", "hypnos"]).issubset(set(registry._modules))
-    sleep = registry.get("hypnos")
+    assert set(["episodic_memory", "affect", "sleep"]).issubset(set(registry._modules))
+    sleep = registry.get("sleep")
     # the sleep module should have been wired to the constructed episodic memory module and the affect module.
-    assert sleep._episodic_memory is registry.get("mnemos")
-    assert sleep._affect is registry.get("thymos")
+    assert sleep._episodic_memory is registry.get("episodic_memory")
+    assert sleep._affect is registry.get("affect")
 
 
 def test_factory_rejects_unknown_config_key():
@@ -760,21 +760,21 @@ def test_factory_rejects_unknown_config_key():
 
 def test_simple_factories_covers_expected_modules():
     assert set(SIMPLE_FACTORIES) == {
-        "soma",
-        "chronos",
-        "topos",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
+        "interoception",
+        "sequence",
+        "vision",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
         "audition",
-        "vox",
-        "mundus",
-        "perception",
-        "empatheia",
-        "phantasia",
+        "vocal",
+        "embodiment",
+        "perceptual_locus",
+        "social_cognition",
+        "world_model",
     }
     # the sleep module is intentionally outside SIMPLE_FACTORIES (interdependency
     # wiring happens in build_registry's second pass).
@@ -815,20 +815,20 @@ def test_committed_config_ships_all_modules_disabled():
 
 
 def test_shipped_language_model_id_is_published_kaine_organ():
-    """The shipped [lingua].model_id is the PUBLISHED KAINE organ's served alias.
+    """The shipped [language].model_id is the PUBLISHED KAINE organ's served alias.
 
     The wizard downloads, and scripts/model-server-bootstrap.sh serves, the organ
     under this exact alias — so the alias is part of the served-name contract, not
-    free text. Reads the working-copy file (matches test_shipped_lingua_organ_is_
+    free text. Reads the working-copy file (matches test_shipped_language_organ_is_
     abliterated; a local operator scale-up still satisfies the kaineone/ prefix)."""
     import tomllib
     from pathlib import Path
 
     root = Path(__file__).parent.parent
     raw = tomllib.loads((root / "config" / "kaine.toml").read_text())
-    model_id = raw["lingua"]["model_id"]
+    model_id = raw["language"]["model_id"]
     assert model_id == "kaineone/Qwen3.5-4B-abliterated-GGUF", (
-        "shipped [lingua].model_id must be the published KAINE organ's served "
+        "shipped [language].model_id must be the published KAINE organ's served "
         f"alias; got {model_id!r}"
     )
 
@@ -836,24 +836,24 @@ def test_shipped_language_model_id_is_published_kaine_organ():
 def test_shipped_config_ships_supervisor_disabled():
     """Guard: the shipped config/kaine.toml must keep the supervisor off.
 
-    Reads the working-copy file directly (the [spot] section may not yet be in
+    Reads the working-copy file directly (the [supervisor] section may not yet be in
     HEAD), matching the all-off first-boot convention for module toggles."""
     import tomllib
     from pathlib import Path
 
     root = Path(__file__).parent.parent
     config = tomllib.loads((root / "config" / "kaine.toml").read_text())
-    supervisor = config.get("spot", {})
+    supervisor = config.get("supervisor", {})
     assert supervisor.get("enabled", False) is False, (
-        "shipped config must ship [spot].enabled = false (operator-supervised first boot)"
+        "shipped config must ship [supervisor].enabled = false (operator-supervised first boot)"
     )
-    # [spot.incident_log] ships enabled = true, but it is dormant because the supervisor
+    # [supervisor.incident_log] ships enabled = true, but it is dormant because the supervisor
     # itself ships disabled — turning the supervisor on later gives the operator the
     # durable incident log automatically.
     incident_log = supervisor.get("incident_log", {})
     assert incident_log.get("enabled", False) is True, (
-        "shipped config must ship [spot.incident_log].enabled = true (dormant "
-        "while [spot].enabled = false)"
+        "shipped config must ship [supervisor.incident_log].enabled = true (dormant "
+        "while [supervisor].enabled = false)"
     )
 
 
@@ -902,7 +902,7 @@ def test_make_language_api_key_from_config_wins_over_env(monkeypatch, tmp_path):
 
 
 def test_wire_self_model_capabilities_injects_effectors_whitelist(tmp_path):
-    """_wire_eidolon_capabilities feeds the effectors module's effector whitelist into
+    """_wire_self_model_capabilities feeds the effectors module's effector whitelist into
     the self-model module's self-inference engine, so the self-model's capability_map reflects
     what the entity can execute (eidolon-self-inference spec)."""
     from kaine.boot import _wire_self_model_capabilities
@@ -1005,7 +1005,7 @@ def test_rewire_module_reseeds_self_model_whitelist(tmp_path):
     registry.register(effectors)
     registry.register(self_model)
 
-    rewire_module(registry, "eidolon", {})
+    rewire_module(registry, "self_model", {})
     model = self_model.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert model.capability_map.get("effectors") == ["file_write", "notify"]
 
@@ -1017,8 +1017,8 @@ def test_rewire_module_reseeds_self_model_whitelist(tmp_path):
             "self_inference": {"enabled": True},
         },
     )
-    registry.replace("eidolon", new_self_model)
-    rewire_module(registry, "eidolon", {})
+    registry.replace("self_model", new_self_model)
+    rewire_module(registry, "self_model", {})
 
     new_model = new_self_model.self_inference.maintenance_cycle_end(SelfModelDocument())
     assert new_model.capability_map.get("effectors") == ["file_write", "notify"]
@@ -1042,14 +1042,14 @@ def test_rewire_module_leaves_oscillators_untouched():
 
     existing = object()
     interoception.attach_oscillator(existing)
-    rewire_module(registry, "soma", kaine_config)
+    rewire_module(registry, "interoception", kaine_config)
     assert interoception.oscillator is existing
 
     # A freshly rebuilt instance swapped in without the supervisor's hand-over is not
     # given an oscillator by rewire_module.
     new_interoception = make_interoception(bus, dict(section))
-    registry.replace("soma", new_interoception)
-    rewire_module(registry, "soma", kaine_config)
+    registry.replace("interoception", new_interoception)
+    rewire_module(registry, "interoception", kaine_config)
     assert new_interoception.oscillator is None
 
 

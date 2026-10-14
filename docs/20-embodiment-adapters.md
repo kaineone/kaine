@@ -13,7 +13,7 @@ A body is a small adapter that:
 
 ```
  entity ──intent.avatar.*──▶  Embodiment core  ──apply_action / apply_setpoints──▶  YOUR ADAPTER ──▶ body
- entity ◀──mundus.* events──  Embodiment core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
+ entity ◀──embodiment.* events──  Embodiment core  ◀──────── feed() yields FeedFrame ───  YOUR ADAPTER ◀── body
 ```
 
 The core reads the descriptor instead of hardcoding any platform's tables, so adding a body never touches the core. You add one file under [`kaine/modules/embodiment/adapters/`](../kaine/modules/embodiment/adapters/), register it in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py), and select it in [`config/kaine.toml`](../config/kaine.toml).
@@ -76,14 +76,14 @@ class EmbodimentCapabilities:
 
 | Field | Meaning | Example |
 |---|---|---|
-| `name` | Adapter identity (non-empty). It matches the `[mundus].adapter` value that selects it. | `"robot"` |
+| `name` | Adapter identity (non-empty). It matches the `[embodiment].adapter` value that selects it. | `"robot"` |
 | `transitional` | `True` marks a body expected to be retired, such as a reference or conformance body. `False` marks a real body. | `False` |
-| `feed_events` | feed `kind` → `(bus event type, baseline intensity in [0,1])`. The core maps each `FeedFrame.kind` to this event type and publishes it at that intensity (the event's `salience` field). A `kind` not in this map is dropped with a debug log. | `{"proprio": ("mundus.proprio", 0.3), "frame": ("mundus.visual.raw", 0.1)}` |
+| `feed_events` | feed `kind` → `(bus event type, baseline intensity in [0,1])`. The core maps each `FeedFrame.kind` to this event type and publishes it at that intensity (the event's `salience` field). A `kind` not in this map is dropped with a debug log. | `{"proprio": ("embodiment.proprio", 0.3), "frame": ("embodiment.visual.raw", 0.1)}` |
 | `action_families` | symbolic family → default exposure (bool). World-mutating or consent-sensitive verbs should default to `False`; the operator opts in. The core merges operator overrides on top. | `{"move": True, "say": True, "teleport": False}` |
 | `continuous_channels` | Names of the graded continuous channels this body supports (empty for symbolic-only). The canonical vocabulary lives in `kaine/modules/embodiment/channels.py`. `__post_init__` rejects repeats and empty names; unknown names are accepted and fall back to a default range of `(-1, 1)`. | `("drive", "yaw_rate")` |
 | `raw_buffer_keys` | Payload keys naming raw sense buffers the core must strip before publishing. | `("frame_bytes", "pcm")` |
 
-The current consumers of `mundus.*` feed events are the research observer (`mundus.proprio`, `mundus.scene`, `mundus.notice`), and the sleep module's realization audit and the external-input redaction list, which treat `mundus.chat` as external input. Reusing those names lets those modules consume your feed directly. Other event names are accepted, but nothing built-in listens to them.
+The current consumers of `embodiment.*` feed events are the research observer (`embodiment.proprio`, `embodiment.scene`, `embodiment.notice`), and the sleep module's realization audit and the external-input redaction list, which treat `embodiment.chat` as external input. Reusing those names lets those modules consume your feed directly. Other event names are accepted, but nothing built-in listens to them.
 
 ## Perception
 
@@ -132,7 +132,7 @@ The control seam receives motor commands as `intent.avatar.control` events with 
 The core's `_drive_control` handles the event in two ways:
 
 - If the body declares no `continuous_channels`, the core forwards the raw dict to `apply_setpoints` before any locus check or clamping. A symbolic-only adapter must reject or ignore the dict itself.
-- If the body declares channels, the core clamps and per-channel-gates them (`_gate_channels`): a channel not on the body is dropped; an unexposed channel is dropped; the value is clamped to its declared range. The locus gate is checked. The producer is never trusted; clamping and gating happen at the boundary, in the core, before `apply_setpoints` is called. The core then calls `apply_setpoints(gated_channels)` with the surviving, clamped channels and publishes an efference copy on `mundus.efference` with a `forwarded` flag.
+- If the body declares channels, the core clamps and per-channel-gates them (`_gate_channels`): a channel not on the body is dropped; an unexposed channel is dropped; the value is clamped to its declared range. The locus gate is checked. The producer is never trusted; clamping and gating happen at the boundary, in the core, before `apply_setpoints` is called. The core then calls `apply_setpoints(gated_channels)` with the surviving, clamped channels and publishes an efference copy on `embodiment.efference` with a `forwarded` flag.
 
 Your `apply_setpoints` receives a clamped, gated dict only when the body declares channels. Translate it to your body's velocity or actuator commands and return `True`. A symbolic-only body returns `False`, and the core logs the setpoints as unsupported.
 
@@ -152,11 +152,11 @@ The vocabulary and clamp ranges live in [`kaine/modules/embodiment/channels.py`]
 
 ### How the loop closes
 
-The continuous embodiment control surface in [`kaine/modules/embodiment/control_surface.py`](../kaine/modules/embodiment/control_surface.py) is built but inert at runtime. Its `emit()` returns a `ControlCommand`; it does not publish a bus event. `on_birth()` is not called by the runtime, so the surface stays dormant and nothing drives the per-tick loop.
+The continuous embodiment control surface in [`kaine/modules/embodiment/control_surface.py`](../kaine/modules/embodiment/control_surface.py) is built but inert at runtime. Its `emit()` returns a `ControlCommand`; it does not publish a bus event. `on_maturation()` is not called by the runtime, so the surface stays dormant and nothing drives the per-tick loop.
 
-When the loop is wired, the surface will run the entity's learned `MotorPolicy`, mask channels the freeze-then-free `MotorCurriculum` has not yet freed, clamp the rest, and hand the command to the core. The loop is closed by `EfferenceLoop.observe()` (via `observe_feedback`) on the surface's own `SubstrateForwardModel` instance, not on the interoception module's forward model. The core publishes the efference copy on `mundus.efference` with a `forwarded` flag; nothing consumes that event at runtime.
+When the loop is wired, the surface will run the entity's learned `MotorPolicy`, mask channels the freeze-then-free `MotorCurriculum` has not yet freed, clamp the rest, and hand the command to the core. The loop is closed by `EfferenceLoop.observe()` (via `observe_feedback`) on the surface's own `SubstrateForwardModel` instance, not on the interoception module's forward model. The core publishes the efference copy on `embodiment.efference` with a `forwarded` flag; nothing consumes that event at runtime.
 
-Your adapter's job is simple: when a control command reaches it, actuate the clamped, gated channels and report the sensory consequence back through `feed()` (for example, resulting velocity or heading on `mundus.proprio`). See [the embodiment module](09-modules/embodiment.md) for the producer's internals.
+Your adapter's job is simple: when a control command reaches it, actuate the clamped, gated channels and report the sensory consequence back through `feed()` (for example, resulting velocity or heading on `embodiment.proprio`). See [the embodiment module](09-modules/embodiment.md) for the producer's internals.
 
 ## Gates your adapter must respect
 
@@ -165,7 +165,7 @@ Nothing your adapter does reaches the body unless every gate below passes. You d
 | Gate | Rule |
 |---|---|
 | Perceptual locus | Symbolic actions and continuous commands for a body that declares `continuous_channels` flow only when the locus is `virtual` (`perception_state.read_desired().locus`). In `physical` or `off`, in-world action is suppressed. Selecting `virtual` also turns off the real camera and microphone (mutual exclusion). |
-| Two-layer operational gate | The body opens and drives only when `[mundus].enabled = true` (config layer) and `KAINE_MUNDUS_OPERATOR_APPROVED=1` (operator/env layer). If either is absent, the embodiment module logs which gate failed and never calls `open()`. `[modules].mundus = true` is additionally required to construct the module at all. |
+| Two-layer operational gate | The body opens and drives only when `[embodiment].enabled = true` (config layer) and `KAINE_MUNDUS_OPERATOR_APPROVED=1` (operator/env layer). If either is absent, the embodiment module logs which gate failed and never calls `open()`. `[modules].embodiment = true` is additionally required to construct the module at all. |
 | Per-family exposure | Each symbolic family is gated by its exposure flag; world-mutating or consent-sensitive verbs default to `False`. |
 | Per-channel exposure | Every declared continuous channel defaults unexposed and is dropped until explicitly exposed. |
 
@@ -175,10 +175,10 @@ Design your descriptor defaults conservatively: expose only benign families and 
 
 ## Wiring at boot
 
-Adapters are constructed in `make_mundus` in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py). It:
+Adapters are constructed in `make_embodiment` in [`kaine/boot/factories/embodiment.py`](../kaine/boot/factories/embodiment.py). It:
 
-1. reads `[mundus].adapter` (default `"stub"`);
-2. reads that adapter's own nested `[mundus.<adapter>]` table for adapter-specific settings and `expose_<family>` overrides;
+1. reads `[embodiment].adapter` (default `"stub"`);
+2. reads that adapter's own nested `[embodiment.<adapter>]` table for adapter-specific settings and `expose_<family>` overrides;
 3. constructs exactly the selected adapter. An unknown adapter name raises and fails closed: no body is constructed.
 
 The embodiment module may be created dormant during the developmental phase and only call `open()` later, when `activate()` runs. During `probe_available()`, the embodiment module uses the adapter's optional `probe()` method; if the adapter lacks one, the embodiment module calls `open()` and then `close()` to test reachability. `close()` must tolerate that probe-time open.
@@ -186,31 +186,31 @@ The embodiment module may be created dormant during the developmental phase and 
 To register a new adapter named `robot`, add a branch:
 
 ```python
-# in make_mundus(), alongside the stub branch
+# in make_embodiment(), alongside the stub branch
 if adapter_name == "stub":
     from kaine.modules.embodiment.adapters.stub import StubAdapter
     adapter = StubAdapter()
 elif adapter_name == "robot":
     from kaine.modules.embodiment.adapters.robot import RobotAdapter
-    adapter = RobotAdapter(**adapter_section)   # host/port etc. from [mundus.robot]
+    adapter = RobotAdapter(**adapter_section)   # host/port etc. from [embodiment.robot]
 else:
-    raise ValueError(f"mundus: unknown adapter {adapter_name!r}; ... (fail-closed)")
+    raise ValueError(f"embodiment: unknown adapter {adapter_name!r}; ... (fail-closed)")
 ```
 
 Select it in [`config/kaine.toml`](../config/kaine.toml):
 
 ```toml
-[mundus]
+[embodiment]
 enabled = true
 adapter = "robot"
 
-[mundus.robot]
+[embodiment.robot]
 host = "127.0.0.1"
 port = 5599
 expose_move = true      # symbolic-family exposure override (merged over descriptor defaults)
 ```
 
-`make_mundus` routes each `expose_<name>` key by your descriptor: a declared continuous channel goes to continuous exposure, a declared action family to symbolic exposure, and any other name refuses boot with the body's declared names in the error. Every continuous channel defaults to off. Keep that posture: continuous channels are as consequential as world-mutating verbs.
+`make_embodiment` routes each `expose_<name>` key by your descriptor: a declared continuous channel goes to continuous exposure, a declared action family to symbolic exposure, and any other name refuses boot with the body's declared names in the error. Every continuous channel defaults to off. Keep that posture: continuous channels are as consequential as world-mutating verbs.
 
 ## Testing a new adapter
 
@@ -221,7 +221,7 @@ The recipe:
 1. Descriptor sanity. Construct your `capabilities()` and assert it. A malformed descriptor raises in `__post_init__`, so simply constructing it is a test. Assert your feed kinds, exposure defaults, channel set, and `raw_buffer_keys` are what you intend.
 2. Feed mapping and raw-strip. Drive the core with your adapter, push a frame carrying a declared raw-buffer key, and assert the published event has the key stripped. That tests the zero-raw-sense-data guarantee.
 3. Symbolic gating. With `locus_reader=lambda: "virtual"`, publish an `intent.avatar.<family>` and assert `apply_action` recorded it. Flip locus to `physical`, or leave a family unexposed, and assert it was dropped.
-4. Continuous path. For a continuous-capable body, with `continuous_expose={"drive": True, ...}`, publish `intent.avatar.control` and assert `apply_setpoints` received the clamped, gated channels and that a `mundus.efference` copy with a `forwarded` flag was published. `test_producer_to_body_via_intent_bus` drives producer → control plane → body end to end over the `StubAdapter`, with no entity booted.
+4. Continuous path. For a continuous-capable body, with `continuous_expose={"drive": True, ...}`, publish `intent.avatar.control` and assert `apply_setpoints` received the clamped, gated channels and that a `embodiment.efference` copy with a `forwarded` flag was published. `test_producer_to_body_via_intent_bus` drives producer → control plane → body end to end over the `StubAdapter`, with no entity booted.
 5. Unsupported/symbolic-only. If your body has no continuous channels, assert `apply_setpoints` receives the raw dict and the core treats setpoints as unsupported when you return `False`.
 6. Probe and lifecycle. If you implement `probe()`, assert it does not leave the adapter open and that `close()` is safe after a probe-time `open()`. Assert a dormant embodiment module calls `open()` only after `activate()`.
 
@@ -263,10 +263,10 @@ class RobotAdapter:
             transitional=False,
             # feed kind -> (bus event, baseline salience). Use names that the
             # current consumers already understand: the research observer reads
-            # mundus.proprio / mundus.scene / mundus.notice, and Sleep reads mundus.chat.
+            # embodiment.proprio / embodiment.scene / embodiment.notice, and Sleep reads embodiment.chat.
             feed_events={
-                "proprio": ("mundus.proprio", 0.3),
-                "frame": ("mundus.visual.raw", 0.1),
+                "proprio": ("embodiment.proprio", 0.3),
+                "frame": ("embodiment.visual.raw", 0.1),
             },
             # Symbolic verbs; default exposure. Keep consequential verbs False.
             action_families={"say": True},
@@ -340,7 +340,7 @@ class RobotAdapter:
     async def _read_message(self) -> dict[str, Any] | None: ...  # TODO
 ```
 
-The adapter above is a complete, contract-conformant body. To bring it up: add the `robot` branch to `make_mundus`, set `[mundus].adapter = "robot"` and its `[mundus.robot]` table, pass the two-layer gate (`[mundus].enabled = true` and `KAINE_MUNDUS_OPERATOR_APPROVED=1`), put the locus in `virtual`, and expose the channels and families you want. Then conformance-test it transport-free exactly as the stub is tested.
+The adapter above is a complete, contract-conformant body. To bring it up: add the `robot` branch to `make_embodiment`, set `[embodiment].adapter = "robot"` and its `[embodiment.robot]` table, pass the two-layer gate (`[embodiment].enabled = true` and `KAINE_MUNDUS_OPERATOR_APPROVED=1`), put the locus in `virtual`, and expose the channels and families you want. Then conformance-test it transport-free exactly as the stub is tested.
 
 ## Checklist
 
@@ -349,12 +349,12 @@ The adapter above is a complete, contract-conformant body. To bring it up: add t
 - [ ] `apply_action` performs symbolic verbs; `apply_setpoints` actuates clamped, gated channels when the body declares channels, or returns `False` for a symbolic-only body (and defends itself against the raw dict the core forwards in that case).
 - [ ] `open` and `close` own the transport; `close` is idempotent and survives a probe-time `open()`.
 - [ ] Optional `probe()` is implemented and leaves the transport closed.
-- [ ] Adapter is registered in `make_mundus`; unknown names still fail closed.
+- [ ] Adapter is registered in `make_embodiment`; unknown names still fail closed.
 - [ ] Adapter is conformance-tested transport-free against the core, modeled on [`tests/test_embodiment_module.py`](../tests/test_embodiment_module.py) and [`tests/test_embodiment_control_surface.py`](../tests/test_embodiment_control_surface.py).
 
 ## See also
 
 - [the embodiment module](09-modules/embodiment.md): the control plane, gating, and the continuous control surface.
 - [the perceptual locus module](08-cognitive-cycle/perceptual-locus.md): how KAINE chooses between physical and virtual perception.
-- [Configuration reference](appendix-a-configuration/modules.md): `[mundus]`, `[mundus.control_surface]`, and adapter tables.
+- [Configuration reference](appendix-a-configuration/modules.md): `[embodiment]`, `[embodiment.control_surface]`, and adapter tables.
 - [`kaine/modules/embodiment/adapters/stub.py`](../kaine/modules/embodiment/adapters/stub.py): the shipped reference body to copy.

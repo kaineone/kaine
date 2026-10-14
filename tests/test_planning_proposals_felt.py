@@ -21,7 +21,7 @@ def _event(source: str, type_: str, payload: dict) -> Event:
 
 
 def test_drive_event_summarized_as_felt_with_no_digits():
-    ev = _event("thymos", "thymos.drive", {"drive": "curiosity", "value": 0.9})
+    ev = _event("affect", "affect.drive", {"drive": "curiosity", "value": 0.9})
     about, kind = _summarize_event_with_kind(None, ev)
     assert kind == "felt"
     assert not any(ch.isdigit() for ch in about)
@@ -30,7 +30,7 @@ def test_drive_event_summarized_as_felt_with_no_digits():
 
 
 def test_drive_event_at_moderate_value_is_moderate_phrase():
-    ev = _event("thymos", "thymos.drive", {"drive": "boredom", "value": 0.5})
+    ev = _event("affect", "affect.drive", {"drive": "boredom", "value": 0.5})
     about, kind = _summarize_event_with_kind(None, ev)
     assert kind == "felt"
     assert about == "I feel bored."

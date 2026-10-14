@@ -30,7 +30,7 @@ def _make_engine(**kwargs) -> SelfInferenceEngine:
 
 
 def _language_payload(text: str = "hello") -> dict:
-    """Simulate a lingua.out payload.  text is provided to show it is discarded."""
+    """Simulate a language.out payload.  text is provided to show it is discarded."""
     return {"text": text, "model": "qwen"}
 
 
@@ -119,7 +119,7 @@ def test_vad_stats_update_on_maintenance_cycle():
     engine = _make_engine(vad_window_cycles=5)
     model = SelfModelDocument()
 
-    # Feed two VAD samples via thymos.state events.
+    # Feed two VAD samples via affect.state events.
     engine.observe_affect_state(_affect_state_payload(0.5, 0.3, 0.1))
     updated = engine.maintenance_cycle_end(model)
     # After first cycle, the window has one sample.
@@ -169,7 +169,7 @@ def test_no_raw_speech_text_in_self_model(tmp_path: Path):
 
     # Simulate 5 observations that include the secret text in the payload.
     for _ in range(3):
-        # observe_lingua intentionally discards the text field.
+        # observe_language intentionally discards the text field.
         engine.observe_language({"text": secret}, "internal.thought")
 
     model = engine.maintenance_cycle_end(model)

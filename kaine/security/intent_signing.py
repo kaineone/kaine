@@ -7,7 +7,7 @@ KAINE runs single-process today: every module is an asyncio task sharing one
 Redis connection and one bus credential. That means the bus cannot tell *which*
 module published an event — a compromised or prompt-injected peripheral module
 (the language module is the most exposed, being LLM-output-driven) could ``XADD`` a crafted
-``{kind: "act", effector, params}`` onto ``volition.out`` and have the effectors module realize
+``{kind: "act", effector, params}`` onto ``action_selection.out`` and have the effectors module realize
 it, bypassing the workspace's threshold and the action selection module's inhibition gate entirely.
 
 This module closes that boundary cryptographically. A per-boot secret, generated

@@ -126,7 +126,7 @@ async def test_snapshot_reconstructs_selected_events(real_bus: AsyncBus):
                 "selected": [
                     {
                         "entry_id": "1-0",
-                        "source": "soma",
+                        "source": "interoception",
                         "type": "wellness.update",
                         "salience": 0.8,
                         "payload": {"score": 0.9},
@@ -147,7 +147,7 @@ async def test_snapshot_reconstructs_selected_events(real_bus: AsyncBus):
         assert snap.tick_index == 9
         assert len(snap.selected_events) == 1
         _, ev = snap.selected_events[0]
-        assert ev.source == "soma"
+        assert ev.source == "interoception"
         assert ev.payload == {"score": 0.9}
         assert snap.metadata == {"note": "hi"}
     finally:

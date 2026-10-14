@@ -109,12 +109,12 @@ def _make_interoception(bus, *, error=0.0, detector=None, clock_src=None, **kw) 
 
 
 async def _types_on(bus) -> list[str]:
-    entries = await bus.read("soma.out", last_id="0", count=200)
+    entries = await bus.read("interoception.out", last_id="0", count=200)
     return [ev.type for _, ev in entries]
 
 
 async def _events_on(bus, type_: str) -> list:
-    entries = await bus.read("soma.out", last_id="0", count=200)
+    entries = await bus.read("interoception.out", last_id="0", count=200)
     return [ev for _, ev in entries if ev.type == type_]
 
 
@@ -196,8 +196,8 @@ async def test_coldstart_advisory_withheld_during_warmup(bus: AsyncBus):
     await interoception.tick_once()  # > one sustain window → advisory would fire
 
     types = await _types_on(bus)
-    assert "soma.regulation" not in types, "advisory must be withheld in warm-up"
-    withheld = await _events_on(bus, "soma.regulation.withheld")
+    assert "interoception.regulation" not in types, "advisory must be withheld in warm-up"
+    withheld = await _events_on(bus, "interoception.regulation.withheld")
     assert len(withheld) == 1
     p = withheld[0].payload
     assert p["would_be_action"] in ("reduce_rate", "shed_module", "request_maintenance")
@@ -207,14 +207,14 @@ async def test_coldstart_advisory_withheld_during_warmup(bus: AsyncBus):
 
     # Signal path intact: the report still carries the RAW prediction error and
     # flags warm-up without lowering any numeric field.
-    reports = await _events_on(bus, "soma.report")
+    reports = await _events_on(bus, "interoception.report")
     assert reports
     assert reports[-1].payload["prediction_error"] == pytest.approx(1.0)
     assert reports[-1].payload["warmup_active"] is True
 
     # Warm-up start marker emitted, and no completion yet.
-    assert await _events_on(bus, "soma.warmup.started")
-    assert not await _events_on(bus, "soma.warmup.completed")
+    assert await _events_on(bus, "interoception.warmup.started")
+    assert not await _events_on(bus, "interoception.warmup.completed")
 
 
 @pytest.mark.asyncio
@@ -234,9 +234,9 @@ async def test_coldstart_fatigue_dampened_not_crossed(bus: AsyncBus):
         await interoception_on.tick_once()
     assert interoception_on._fatigue.value < interoception_on._fatigue.threshold
     # No fatigue crossing was published.
-    assert not await _events_on(bus, "soma.fatigue")
+    assert not await _events_on(bus, "interoception.fatigue")
     # And the report's prediction_error stays raw.
-    reports = await _events_on(bus, "soma.report")
+    reports = await _events_on(bus, "interoception.report")
     assert reports[-1].payload["prediction_error"] == pytest.approx(1.0)
 
 
@@ -256,11 +256,11 @@ async def test_disabled_warmup_accrues_full_fatigue(bus: AsyncBus):
         await interoception_off.tick_once()
     # Full accrual crosses the threshold.
     assert interoception_off._fatigue.value >= interoception_off._fatigue.threshold
-    assert await _events_on(bus, "soma.fatigue")
-    assert all(e.payload["alert"] is True for e in await _events_on(bus, "soma.fatigue"))
+    assert await _events_on(bus, "interoception.fatigue")
+    assert all(e.payload["alert"] is True for e in await _events_on(bus, "interoception.fatigue"))
     # No warm-up markers when disabled.
-    assert not await _events_on(bus, "soma.warmup.started")
-    reports = await _events_on(bus, "soma.report")
+    assert not await _events_on(bus, "interoception.warmup.started")
+    reports = await _events_on(bus, "interoception.report")
     assert reports[-1].payload["warmup_active"] is False
 
 
@@ -277,8 +277,8 @@ async def test_disabled_warmup_publishes_advisory(bus: AsyncBus):
     src_off.t = 2.0
     await interoception_off.tick_once()
     types = await _types_on(bus)
-    assert "soma.regulation" in types
-    assert "soma.regulation.withheld" not in types
+    assert "interoception.regulation" in types
+    assert "interoception.regulation.withheld" not in types
 
 
 # ---------------------------------------------------------------------------
@@ -308,17 +308,17 @@ async def test_hard_threshold_breach_overrides_warmup(bus: AsyncBus):
     await interoception.tick_once()
 
     # Still in warm-up...
-    reports = await _events_on(bus, "soma.report")
+    reports = await _events_on(bus, "interoception.report")
     assert reports[-1].payload["warmup_active"] is True
     assert "gpu_0_temp_c" in reports[-1].payload["alerts"]
 
-    # ...yet the advisory actuated (published as soma.regulation, NOT withheld).
+    # ...yet the advisory actuated (published as interoception.regulation, NOT withheld).
     types = await _types_on(bus)
-    assert "soma.regulation" in types
-    assert "soma.regulation.withheld" not in types
+    assert "interoception.regulation" in types
+    assert "interoception.regulation.withheld" not in types
 
     # ...and fatigue integrated at full weight, crossing the threshold.
-    assert await _events_on(bus, "soma.fatigue")
+    assert await _events_on(bus, "interoception.fatigue")
     assert interoception._fatigue.value >= interoception._fatigue.threshold
 
 
@@ -340,8 +340,8 @@ async def test_warmup_completes_and_emits_completed(bus: AsyncBus):
         src.t = float(i * 2)  # 0, 2, 4, 6 → lived reaches 6 >= 5
         await interoception.tick_once()
 
-    started = await _events_on(bus, "soma.warmup.started")
-    completed = await _events_on(bus, "soma.warmup.completed")
+    started = await _events_on(bus, "interoception.warmup.started")
+    completed = await _events_on(bus, "interoception.warmup.completed")
     assert started, "warm-up start marker should have been emitted"
     assert len(completed) == 1, "warm-up should complete exactly once"
     payload = completed[0].payload
@@ -349,7 +349,7 @@ async def test_warmup_completes_and_emits_completed(bus: AsyncBus):
     assert payload["lived_seconds"] >= 5.0
 
     # After completion the report flags warm-up inactive.
-    reports = await _events_on(bus, "soma.report")
+    reports = await _events_on(bus, "interoception.report")
     assert reports[-1].payload["warmup_active"] is False
 
 
@@ -372,7 +372,7 @@ async def test_regulation_resumes_after_warmup(bus: AsyncBus):
     src.t = 6.0
     await interoception.tick_once()
     types = await _types_on(bus)
-    assert "soma.regulation" in types
+    assert "interoception.regulation" in types
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +392,7 @@ async def test_warmup_defaults(bus: AsyncBus):
 def test_shipped_config_ships_warmup_knobs():
     root = Path(__file__).parent.parent
     cfg = tomllib.loads((root / "config" / "kaine.toml").read_text())
-    interoception = cfg["soma"]
+    interoception = cfg["interoception"]
     assert interoception["regulation_warmup_enabled"] is True
     assert interoception["regulation_warmup_min_samples"] == 1000
     assert interoception["regulation_warmup_min_seconds"] == pytest.approx(1200.0)

@@ -66,24 +66,24 @@ class _Answers:
 def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path]:
     shipped = tmp_path / "kaine.toml"
     shipped.write_text(
-        '[modules]\nall_off = false\n[lingua]\nbackend = "ollama"\nmodel_id = "base"\n'
+        '[modules]\nall_off = false\n[language]\nbackend = "ollama"\nmodel_id = "base"\n'
     )
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "thesis_test.toml").write_text(
-        '[modules]\nsoma = true\nchronos = true\nlingua = false\n[lingua]\nmodel_id = "thesis-model"\n'
+        '[modules]\nsoma = true\nchronos = true\nlingua = false\n[language]\nmodel_id = "thesis-model"\n'
     )
     (profiles / "tier0.toml").write_text(
         '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n'
     )
     (profiles / "tier1.toml").write_text(
-        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "http"\n'
+        '[tier]\nname = "tier1"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "http"\n'
     )
     (profiles / "tier2.toml").write_text(
-        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "llama_cpp"\n'
+        '[tier]\nname = "tier2"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "llama_cpp"\n'
     )
     (profiles / "tier3.toml").write_text(
-        '[tier]\nname = "tier3"\nunsupported_modules = []\noscillator_supported = true\n[lingua]\nbackend = "datacenter"\n'
+        '[tier]\nname = "tier3"\nunsupported_modules = []\noscillator_supported = true\n[language]\nbackend = "datacenter"\n'
     )
     monkeypatch.setattr("kaine.config.PROFILES_DIR", profiles)
     return shipped, profiles
@@ -98,12 +98,12 @@ def test_load_runtime_config_default_thesis_test_plus_tier(monkeypatch, tmp_path
     cfg = load_runtime_config(shipped, op)
 
     # thesis_test's module set survives...
-    assert cfg["modules"]["soma"] is True
-    assert cfg["modules"]["chronos"] is True
+    assert cfg["modules"]["interoception"] is True
+    assert cfg["modules"]["sequence"] is True
     # ...while the tier bounds backends.
-    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["language"]["backend"] == "llama_cpp"
     # Siblings from the module profile survive where the tier is silent.
-    assert cfg["lingua"]["model_id"] == "thesis-model"
+    assert cfg["language"]["model_id"] == "thesis-model"
 
 
 def test_load_runtime_config_env_profile_with_tier_overlay(monkeypatch, tmp_path: Path):
@@ -114,7 +114,7 @@ def test_load_runtime_config_env_profile_with_tier_overlay(monkeypatch, tmp_path
     cfg = load_runtime_config(shipped, op, env={"KAINE_PROFILE": "tier1"})
 
     # tier1 module profile applies, but tier2 backend bound wins on top.
-    assert cfg["lingua"]["backend"] == "llama_cpp"
+    assert cfg["language"]["backend"] == "llama_cpp"
 
 
 def test_load_runtime_config_kaine_tier_overrides_overlay(monkeypatch, tmp_path: Path):
@@ -124,7 +124,7 @@ def test_load_runtime_config_kaine_tier_overrides_overlay(monkeypatch, tmp_path:
 
     cfg = load_runtime_config(shipped, op, env={"KAINE_TIER": "tier1"})
 
-    assert cfg["lingua"]["backend"] == "http"
+    assert cfg["language"]["backend"] == "http"
 
 
 def test_load_runtime_config_kaine_tier_equal_profile_refused_if_not_tier(monkeypatch, tmp_path: Path):
@@ -207,7 +207,7 @@ def test_preboot_uses_load_runtime_config(monkeypatch):
     def fake_load_runtime_config(*args, **kwargs):
         calls.append((args, kwargs))
         return {
-            "modules": {"soma": True},
+            "modules": {"interoception": True},
             "preservation": {},
             "security": {"state_encryption": {"enabled": False}},
         }

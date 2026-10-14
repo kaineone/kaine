@@ -56,14 +56,14 @@ def test_adapter_dir_for_defaults_and_custom():
     assert adapter_dir_for(None, root) == root / "hypnos" / "adapters"
     assert (
         adapter_dir_for(
-            {"hypnos": {"voice_alignment": {"adapter_output_dir": "state/hypnos/adapters"}}},
+            {"sleep": {"voice_alignment": {"adapter_output_dir": "state/hypnos/adapters"}}},
             root,
         )
         == root / "hypnos" / "adapters"
     )
 
     custom = adapter_dir_for(
-        {"hypnos": {"voice_alignment": {"adapter_output_dir": "custom/gen1"}}},
+        {"sleep": {"voice_alignment": {"adapter_output_dir": "custom/gen1"}}},
         root,
     )
     assert custom == resolve(Path("custom/gen1"))

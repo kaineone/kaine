@@ -43,8 +43,8 @@ Both wizards ask the same questions, in this order (the terminal wizard runs eve
 2. CAL welfare acknowledgement: a summary of the Article 4 care obligations and a required typed acknowledgement before any entity is configured.
 3. Hardware: lists every compute device, allowed-device selection, the proposed device map (`[hardware.devices]`: `organ` and `vision`), CPU threads, shared services (`[services.<name>].shared`), and data-root selection. It also recommends a deployment tier and warns about accelerator mismatches.
 4. Module selection: the wizard offers two presets or a custom set. The base-thesis preset is the module set of `config/profiles/thesis_test.toml` (the interoception, sequence, affect, language, vision, audition and sleep modules). The full-entity preset turns on all fourteen cognitive modules and leaves the perceptual locus and embodiment modules off. The recorder module, which is test infrastructure, is never part of a preset. The wizard recommends the full entity when the hardware step found a tier of 2 or higher that runs every module at once without swapping modules in and out, and the base thesis otherwise, including when it has no tier recommendation. The custom choice asks about each module, starting from the recommended preset. `--defaults` takes the recommendation. The wizard writes a full `[modules]` table to `config/kaine.operator.toml`, which merges last and wins, so after the wizard has run its choices replace the `thesis_test` profile's.
-5. Model, voice, and STT: discovers served options from the model server, Chatterbox, and Speaches when reachable, otherwise accepts manual entry, and records `[lingua].model_id`, `[vox].predefined_voice_id`, and `[audition].stt_model`. The voice may be left empty, and the vocal module then picks a voice the Chatterbox server ships.
-6. Trainer: if the sleep module's voice alignment is enabled, provisions the Stage-2 trainer (`[hypnos.voice_alignment].trainer_backend`).
+5. Model, voice, and STT: discovers served options from the model server, Chatterbox, and Speaches when reachable, otherwise accepts manual entry, and records `[language].model_id`, `[vocal].predefined_voice_id`, and `[audition].stt_model`. The voice may be left empty, and the vocal module then picks a voice the Chatterbox server ships.
+6. Trainer: if the sleep module's voice alignment is enabled, provisions the Stage-2 trainer (`[sleep.voice_alignment].trainer_backend`).
 7. Research metrics: an opt-in, metrics-only research submission. Answering No turns submission off, including on a re-run after an earlier Yes.
 8. State encryption: the question defaults to the current value. Answering No while encryption is on keeps it on: turning it off would leave already-encrypted state unreadable, so the wizard says so and leaves it to a manual decrypting migration. If encryption is enabled, a missing or wrong key refuses boot.
 9. Optional CL1 plugin: an opt-in connection to the CL1 substrate (skipped under `--defaults`). Answering No removes a CL1 setup an earlier run recorded; other plugins stay enabled. See [Plugins and CL1](../19-plugins-and-cl1.md).
@@ -58,7 +58,7 @@ Both wizards ask the same questions, in this order (the terminal wizard runs eve
 
 In the browser, steps 1 to 10 are the wizard pages and the review page. The browser wizard does not write the container settings (step 11); run the terminal wizard for those. After you save, the browser wizard offers the remaining setup work (optional extras, the organ download, shared services and the dashboard) as consented jobs, and its finish page takes the place of the summary.
 
-Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_NEXUS_TOKEN` environment variable is unset. The token is only needed when `[nexus].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_NEXUS_TOKEN` environment variable is unset. The token is only needed when `[dashboard].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
 
 The finish page shows a service status light for each known local service and for the dashboard, a **Start Dashboard** button when the dashboard is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_NEXUS_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 
@@ -132,13 +132,13 @@ Every runtime service is local. Model weights download from public repositories 
 | Speaches | STT for Audition when transcription is on (`Systran/faster-distil-whisper-medium.en`) | `127.0.0.1:8000` |
 | Chatterbox TTS | Voice synthesis for Vocal | `127.0.0.1:8883` |
 
-If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns the interoception, sequence, vision, audition, language, affect and sleep modules on and every other module off. It also sets `[perception_feed]` to `seeded` with seed 0, `[topos].foveation = true`, `[chronos].forward_prediction = true`, `[audition].transcription_enabled = false` with `general_audition = true`, and `[volition]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value comes from the shipped `config/kaine.toml`.
+If no profile is selected, the loader applies the `thesis_test` profile automatically. That profile turns the interoception, sequence, vision, audition, language, affect and sleep modules on and every other module off. It also sets `[perception_feed]` to `seeded` with seed 0, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false` with `general_audition = true`, and `[action_selection]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value comes from the shipped `config/kaine.toml`.
 
 `config/kaine.operator.toml` merges last and wins, and the first-run wizard always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's.
 
 The bootstrap script already starts Redis and Qdrant, and the first-run wizard checks that both answer before the entity can boot. Bring both up even when the enabled modules do not use Qdrant. The model server is needed for the language module. Speaches is needed only when the audition module's transcription is enabled with the default `speaches` backend; Chatterbox is needed only when the vocal module is enabled with the default `chatterbox` backend. You can also use the on-device `sherpa_onnx` backend for STT and TTS instead (see [On-device speech](#on-device-speech)).
 
-The model server unloads the language organ after 600 seconds of idle time by default (`[lingua].model_server_sleep_idle_seconds`), freeing VRAM. Set it to `-1` to keep the organ loaded.
+The model server unloads the language organ after 600 seconds of idle time by default (`[language].model_server_sleep_idle_seconds`), freeing VRAM. Set it to `-1` to keep the organ loaded.
 
 > Speaches must run on CPU with the configured `medium.en` model. On GPU it hits a cuDNN crash when the secondary GPU also serves Chatterbox, and a missing model returns HTTP 404, which breaks the voice loop. See [Troubleshooting](../06-operation/troubleshooting.md).
 
@@ -196,7 +196,7 @@ bash scripts/install.sh --python /path/to/python3.12
 | `core` | Vision; Interoception and Sequence with `cfc_backend = "torch"` (`torch`, `ncps`) | |
 | `memory` | Episodic memory, Social cognition, Sleep (`qdrant-client`, `sentence-transformers`) | |
 | `memory-edge` | Episodic memory `backend = "sqlite_vec"` (`sqlite-vec`) | |
-| `nexus` | `python -m kaine.dashboard` (`fastapi`, `uvicorn`, `jinja2`) |
+| `dashboard` | `python -m kaine.dashboard` (`fastapi`, `uvicorn`, `jinja2`) |
 | `nvidia` | Interoception GPU telemetry (`pynvml`) | |
 | `vision` | Vision capture and playlist (`opencv-python-headless`, `transformers`, `Pillow`) | |
 | `audio` | Audition capture and playlist (`sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av`) |
@@ -204,7 +204,7 @@ bash scripts/install.sh --python /path/to/python3.12
 | `reasoning` | The pymdp engine for Planning (`inferactively-pymdp`, `jax[cpu]`) | |
 | `worldmodel` | World model DreamerV3 (`jax[cpu]`, `chex`, `einops`) | |
 | `oscillator` | Workspace oscillatory layer and Interoception's self-rhythm (`snntorch`, `scipy`) | |
-| `full` | `core, memory, memory-edge, nexus, nvidia, vision, audio, reasoning, worldmodel, oscillator, internvideo` (desktop default; does not include `speech-edge`, `training`, or `internvideo-flash`) |
+| `full` | `core, memory, memory-edge, dashboard, nvidia, vision, audio, reasoning, worldmodel, oscillator, internvideo` (desktop default; does not include `speech-edge`, `training`, or `internvideo-flash`) |
 | `training` | Voice-alignment DPO stack; opt-in, never in `full` |
 | `internvideo` | Dependencies of the vendored InternVideo-Next code for Vision (`einops`, `timm`, `easydict`); included in `full` | |
 | `internvideo-flash` | Flash-attention fast path; opt-in, GPU only |
@@ -244,7 +244,7 @@ NVIDIA CUDA is the primary tested configuration, and CPU-only always works. No R
 
 See [Accelerators and PyTorch wheels](../03-hardware/accelerators.md) for detailed wheel selection.
 
-The dashboard ships with `[nexus].access = "open"` by default: viewing and control are open with no token or sign-in. Set it to `"token"` or export `KAINE_NEXUS_ACCESS=token` to require the operator token and session sign-in. `KAINE_NEXUS_READ_ONLY=1` refuses every request except GET/HEAD/OPTIONS with 403. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet hostnames. Host and Origin checks always apply.
+The dashboard ships with `[dashboard].access = "open"` by default: viewing and control are open with no token or sign-in. Set it to `"token"` or export `KAINE_NEXUS_ACCESS=token` to require the operator token and session sign-in. `KAINE_NEXUS_READ_ONLY=1` refuses every request except GET/HEAD/OPTIONS with 403. `KAINE_NEXUS_EXTRA_HOSTS` adds tailnet hostnames. Host and Origin checks always apply.
 
 For container hosts, see [Containers](../07-deployment/containers.md).
 
@@ -252,7 +252,7 @@ For container hosts, see [Containers](../07-deployment/containers.md).
 
 ### Live perception
 
-Required when `[audition].capture_enabled = true` or `[topos].capture_enabled = true`:
+Required when `[audition].capture_enabled = true` or `[vision].capture_enabled = true`:
 
 ```bash
 .venv/bin/pip install -e ".[audio,vision]"
@@ -285,7 +285,7 @@ As an alternative to Speaches and Chatterbox, set both backends to `sherpa_onnx`
 [audition]
 backend = "sherpa_onnx"
 
-[vox]
+[vocal]
 backend = "sherpa_onnx"
 ```
 
@@ -312,7 +312,7 @@ bash scripts/install.sh --research
 
 ### Active inference
 
-Required when `[modules].nous = true`:
+Required when `[modules].planning = true`:
 
 ```bash
 .venv/bin/pip install -e ".[reasoning]"
@@ -332,7 +332,7 @@ Installs `snntorch>=0.9` and `scipy`. Without this extra, modules report a neutr
 
 ### World model
 
-Required when `[phantasia].backend = "dreamerv3"`:
+Required when `[world_model].backend = "dreamerv3"`:
 
 ```bash
 .venv/bin/pip install -e ".[worldmodel]"
@@ -342,7 +342,7 @@ Installs `jax[cpu]`, `chex`, and `einops`. The shipped default is `backend = "dr
 
 ### Voice alignment training
 
-Required when `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` is set:
+Required when `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` is set:
 
 ```bash
 .venv/bin/pip install -e ".[training]"
@@ -350,9 +350,9 @@ Required when `[hypnos.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNME
 
 Installs `unsloth`, `trl`, `peft`, and `datasets`. Without this extra the sleep cycle's voice-alignment phase logs a clean "extras not installed" message and continues; no other sleep phase is affected.
 
-`[hypnos.voice_alignment].trainer_backend`, `[hypnos.voice_alignment].trainer_python`, and `[hypnos.voice_alignment].hot_swap_mode` all live in that section. The shipped defaults are `trainer_backend = "in_process"` and `hot_swap_mode = "manual"`. To run Stage-2 in a separate Python environment, set `trainer_backend = "subprocess"` and point `trainer_python` at that interpreter. On a container host, use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service.
+`[sleep.voice_alignment].trainer_backend`, `[sleep.voice_alignment].trainer_python`, and `[sleep.voice_alignment].hot_swap_mode` all live in that section. The shipped defaults are `trainer_backend = "in_process"` and `hot_swap_mode = "manual"`. To run Stage-2 in a separate Python environment, set `trainer_backend = "subprocess"` and point `trainer_python` at that interpreter. On a container host, use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service.
 
-> The `[training]` extra trains from Hugging Face-format base model weights on disk. A model-server model id or a `.gguf` file will not work. Set `[hypnos.voice_alignment].base_model_path` to the directory containing `config.json`, `tokenizer.*`, and `model.safetensors`.
+> The `[training]` extra trains from Hugging Face-format base model weights on disk. A model-server model id or a `.gguf` file will not work. Set `[sleep.voice_alignment].base_model_path` to the directory containing `config.json`, `tokenizer.*`, and `model.safetensors`.
 
 For Qwen3.5 trainer prerequisites, see [Voice alignment](../10-sleep/voice-alignment.md).
 
@@ -360,6 +360,6 @@ For Qwen3.5 trainer prerequisites, see [Voice alignment](../10-sleep/voice-align
 
 1. Bring up Redis, Qdrant, and any other services your modules need. See [Supporting services](services.md).
 2. Boot the entity. See [First boot](first-boot.md).
-3. Open the dashboard. With `[nexus].access = "open"` there is no token or sign-in. When conversation is off, the root path `/` redirects to `/diagnostics/`.
+3. Open the dashboard. With `[dashboard].access = "open"` there is no token or sign-in. When conversation is off, the root path `/` redirects to `/diagnostics/`.
 
 The cycle refuses to start if the language organ returns no content, unless you set `KAINE_ALLOW_MUTE_ORGAN=1`.

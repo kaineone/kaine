@@ -160,7 +160,7 @@ class PlanningMergeStrategy:
     entropy) and discard the other.
 
     If the discarded fork's mean posterior entropy differs from the kept fork's
-    by more than ``warning_threshold``, a ``nous.merge_warning`` flag is set on
+    by more than ``warning_threshold``, a ``planning.merge_warning`` flag is set on
     the result so the operator/sidecar can review a contentious merge (the two
     forks reached substantially different confidence).
     """
@@ -185,7 +185,7 @@ class PlanningMergeStrategy:
         out["selected_fork_entropy"] = kept_ent
         out["discarded_fork_entropy"] = discarded_ent
         if abs(discarded_ent - kept_ent) > self._warning_threshold:
-            out["nous.merge_warning"] = True
+            out["planning.merge_warning"] = True
         return out
 
 
@@ -429,9 +429,9 @@ def _merge_profiles(
 def default_strategies() -> dict[str, MergeStrategy]:
     """Map of module-name → strategy for KAINE's stock modules."""
     return {
-        "mnemos": EpisodicMemoryMergeStrategy(),
-        "nous": PlanningMergeStrategy(),
-        "eidolon": SelfModelMergeStrategy(),
-        "thymos": AffectMergeStrategy(),
-        "empatheia": SocialCognitionMergeStrategy(),
+        "episodic_memory": EpisodicMemoryMergeStrategy(),
+        "planning": PlanningMergeStrategy(),
+        "self_model": SelfModelMergeStrategy(),
+        "affect": AffectMergeStrategy(),
+        "social_cognition": SocialCognitionMergeStrategy(),
     }

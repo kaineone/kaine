@@ -39,7 +39,7 @@ class OverlayConfig:
     hardware_acknowledgement: str = ""
     #: The operator's institutional approval or protocol reference for a hardware target.
     ethics_reference: str = ""
-    #: The planning module's hybrid mode ([nous] table): "shadow" logs the substrate's proposals only,
+    #: The planning module's hybrid mode ([planning] table): "shadow" logs the substrate's proposals only,
     #: "drive" acts on them.
     planning_mode: str = "shadow"
 
@@ -58,7 +58,7 @@ class OverlayConfig:
 
     def backend_options(self, module: str) -> dict[str, Any]:
         """Keyword options the module's wetware backend takes from the overlay."""
-        if module == "nous":
+        if module == "planning":
             return {"mode": self.planning_mode, "seed": self.substrate.random_seed}
         return {}
 
@@ -161,10 +161,10 @@ def overlay_from_mapping(raw: Mapping[str, Any]) -> OverlayConfig:
             raise ValueError("[hardware].ethics_reference must be a string")
         ethics_reference = value.strip()
 
-    planning_raw = raw.get("nous", {}) or {}
+    planning_raw = raw.get("planning", {}) or {}
     planning_mode = planning_raw.get("mode", "shadow")
     if not isinstance(planning_mode, str) or planning_mode not in ("shadow", "drive"):
-        raise ValueError(f"[nous].mode must be 'shadow' or 'drive', got {planning_mode!r}")
+        raise ValueError(f"[planning].mode must be 'shadow' or 'drive', got {planning_mode!r}")
 
     return OverlayConfig(
         substrate=substrate,

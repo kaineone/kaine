@@ -31,7 +31,7 @@ class ThresholdContrastError(ValueError):
     """A threshold-contrast input record was malformed."""
 
 
-REPORT_TYPES = ("topos.report", "audition.perception", "soma.report")
+REPORT_TYPES = ("vision.report", "audition.perception", "interoception.report")
 BROADCAST_EVENT_TYPE = "workspace.broadcast"
 
 MIN_DISTINCT_PER_SIDE = 10  # Paper A.8, Table A1

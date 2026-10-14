@@ -23,7 +23,7 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
   irreversible. Unreadable individuation state counts toward divergence, failing
   toward protection.
 
-* **Consolidation divergence** (``state/hypnos/consolidation_divergence.json``)
+* **Consolidation divergence** (``state/sleep/consolidation_divergence.json``)
   is the cheap, continuous organ-level companion to the permutation test:
   every voice-alignment sleep, the sleep module surfaces the breadth (``divergence_rate``)
   and depth (``divergence_magnitude``) of how often / how far the entity's
@@ -35,8 +35,8 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
 
 Secondary identity heuristics raise confidence and catch entities that were
 never individuation-tested: the self-model module's ``drift_count > 0`` with a non-empty
-``identity_history`` (``state/eidolon/self_model.json``), and the presence of
-trained voice adapters (``state/hypnos/adapters/``) — the latter retained only
+``identity_history`` (``state/self_model/self_model.json``), and the presence of
+trained voice adapters (``state/sleep/adapters/``) — the latter retained only
 as a weaker secondary signal now that the graded consolidation metric is the
 primary organ-level measure.
 
@@ -72,7 +72,7 @@ log = logging.getLogger(__name__)
 
 #: Conservative shipped thresholds for the graded consolidation-divergence
 #: signal. Either crossing marks organ-level divergence. Operator-calibrated
-#: via ``[hypnos.voice_alignment]`` in kaine.toml (the principled, always-
+#: via ``[sleep.voice_alignment]`` in kaine.toml (the principled, always-
 #: computed signal the threshold-calibration work targets).
 DEFAULT_CONSOLIDATION_RATE_THRESHOLD = 0.5
 DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD = 0.25
@@ -88,7 +88,7 @@ def consolidation_thresholds_from_config(
 ) -> tuple[float, float]:
     """Read ``(rate, magnitude)`` consolidation thresholds from a kaine config.
 
-    Looks under ``[hypnos.voice_alignment]`` for
+    Looks under ``[sleep.voice_alignment]`` for
     ``consolidation_divergence_rate_threshold`` /
     ``consolidation_divergence_magnitude_threshold``. Falls back to the shipped
     conservative defaults on any missing key or bad value. Pure + guarded.
@@ -96,7 +96,7 @@ def consolidation_thresholds_from_config(
     rate = DEFAULT_CONSOLIDATION_RATE_THRESHOLD
     mag = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD
     try:
-        section = ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+        section = ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
         rate = float(section.get("consolidation_divergence_rate_threshold", rate))
         mag = float(
             section.get("consolidation_divergence_magnitude_threshold", mag)
@@ -116,13 +116,13 @@ def voice_alignment_thresholds_from_config(
 
     Extends :func:`consolidation_thresholds_from_config` with the welfare-
     protective distinctiveness threshold under
-    ``[hypnos.voice_alignment].distinctiveness_threshold``. Falls back to 0.0 on
+    ``[sleep.voice_alignment].distinctiveness_threshold``. Falls back to 0.0 on
     any bad value. Pure + guarded.
     """
     rate, mag = consolidation_thresholds_from_config(config)
     distinct = 0.0
     try:
-        section = ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+        section = ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
         distinct = float(section.get("distinctiveness_threshold", distinct))
         # NaN or infinity would make every comparison False and silence the
         # arm; fall back to the protective 0.0 instead.
@@ -136,15 +136,15 @@ def voice_alignment_thresholds_from_config(
 def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
     """Return the configured sleep module's adapter output directory, or the default.
 
-    Reads ``[hypnos.voice_alignment].adapter_output_dir``. If the key is
-    missing, empty, or equal to the canonical default ``state/hypnos/adapters``,
+    Reads ``[sleep.voice_alignment].adapter_output_dir``. If the key is
+    missing, empty, or equal to the canonical default ``state/sleep/adapters``,
     the default under ``state_root`` is returned. A custom value is resolved to
     an absolute path. Pure and fail-closed: any error returns the default.
     """
     default = state_root / "hypnos" / "adapters"
     try:
         value = (
-            ((config or {}).get("hypnos") or {}).get("voice_alignment") or {}
+            ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
         ).get("adapter_output_dir")
         if not value:
             return default
@@ -172,9 +172,9 @@ def default_voice_paths(state_root: Path) -> VoicePaths:
 def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     """Return configured voice data paths, or the default.
 
-    Reads ``[lingua].intent_log_path`` and
-    ``[hypnos.voice_alignment].intent_log_path``. A missing or empty value, or
-    the canonical default ``state/lingua/intent_expression.jsonl``, maps to the
+    Reads ``[language].intent_log_path`` and
+    ``[sleep.voice_alignment].intent_log_path``. A missing or empty value, or
+    the canonical default ``state/language/intent_expression.jsonl``, maps to the
     default under ``state_root``; any other value is resolved to an absolute
     path. The returned ``intent_logs`` are de-duplicated, with the language module's path
     first. ``measures_latest`` is the sleep module's intent-log's sibling
@@ -184,9 +184,9 @@ def voice_paths_for(config: dict | None, state_root: Path) -> VoicePaths:
     default = default_voice_paths(state_root)
     try:
         cfg = config or {}
-        language_value = (cfg.get("lingua") or {}).get("intent_log_path")
+        language_value = (cfg.get("language") or {}).get("intent_log_path")
         sleep_value = (
-            ((cfg.get("hypnos") or {}).get("voice_alignment") or {})
+            ((cfg.get("sleep") or {}).get("voice_alignment") or {})
             .get("intent_log_path")
         )
 
@@ -299,7 +299,7 @@ def _read_consolidation_divergence(path: Path) -> dict[str, Any] | None:
 
 
 def _adapters_present(adapters_dir: Path) -> bool:
-    """True if ``state/hypnos/adapters/`` holds any file. Pure, guarded."""
+    """True if ``state/sleep/adapters/`` holds any file. Pure, guarded."""
     try:
         if not adapters_dir.is_dir():
             return False
@@ -525,7 +525,7 @@ def assess_divergence(
         at a tmp dir.
     consolidation_rate_threshold, consolidation_magnitude_threshold:
         The graded consolidation-divergence thresholds. The latest
-        ``state/hypnos/consolidation_divergence.json`` record marks organ-level
+        ``state/sleep/consolidation_divergence.json`` record marks organ-level
         divergence when its ``divergence_rate`` >= the rate threshold OR its
         (non-null) ``divergence_magnitude`` >= the magnitude threshold. Shipped
         conservative; operator-calibrated.

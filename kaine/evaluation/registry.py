@@ -248,7 +248,7 @@ class SidecarRegistry:
             # LOCAL-ONLY: exact dashboard-diagnostics display after privacy filter.
             sink = self._make_sink_at(
                 rcfg.dashboard_record.log_dir,
-                "nexus_record",
+                "dashboard_record",
                 rcfg.dashboard_record.retention_days,
             )
             self._observers.append(
@@ -352,7 +352,7 @@ class SidecarRegistry:
             self._observers.append(replay_wrapper._episodic_memory)
             self._observers.append(replay_wrapper._world_model)
         if obs_cfg.social_cognition:
-            sink = self._make_sink("empatheia", "empatheia")
+            sink = self._make_sink("social_cognition", "social_cognition")
             self._observers.append(SocialCognitionObserver(self._bus, sink))
         if obs_cfg.voice_alignment_divergence:
             sink = self._make_sink(

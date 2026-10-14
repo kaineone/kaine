@@ -174,8 +174,8 @@ SENSOR_SILENT_CLEARED_TYPE = "welfare.sensor_silent_cleared"
 #: Report event type -> processor label, for each report that carries a
 #: forward-model prediction error.
 BLIND_SENSOR_PROCESSORS: dict[str, str] = {
-    "soma.report": "soma",
-    "topos.report": "topos",
+    "interoception.report": "interoception",
+    "vision.report": "vision",
     "audition.perception": "audition_acoustic",
     "audition.emotion": "audition_tone",
 }
@@ -183,7 +183,7 @@ BLIND_SENSOR_PROCESSORS: dict[str, str] = {
 #: Processors that report on a steady cadence, so a long silence means the
 #: sensor stopped. ``audition_tone`` is left out: it reports only when speech
 #: is heard, so a silent room is a normal reason for it to publish nothing.
-SILENCE_TRACKED_PROCESSORS: frozenset[str] = frozenset({"soma", "topos", "audition_acoustic"})
+SILENCE_TRACKED_PROCESSORS: frozenset[str] = frozenset({"interoception", "vision", "audition_acoustic"})
 
 #: The ``advisory`` label of the rollup line the observer writes when it starts.
 #: Readers treat it as clearing every processor's blind and silent state.

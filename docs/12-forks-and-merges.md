@@ -46,7 +46,7 @@ flowchart TD
 
 `ForkManager.fork(parent_id, shed=[])` loads the parent snapshot and creates a child with the parent's module states (deep-copied), minus any modules named in `shed`. The metadata carries a `"shed"` key listing the dropped module names. Adapter paths are inherited from the parent, and the parent's module artifacts are copied into the child's own snapshot directory (excluding shed modules), so every fork owns an independent copy.
 
-Module shedding lets KAINE degrade gracefully under resource constraints: forking with `shed=["topos", "audition"]` creates a text-only branch without vision or hearing.
+Module shedding lets KAINE degrade gracefully under resource constraints: forking with `shed=["vision", "audition"]` creates a text-only branch without vision or hearing.
 
 ### restore(snapshot_id, registry)
 
@@ -93,7 +93,7 @@ mean_posterior_entropy = mean(normalised_entropy(factor_posterior))
 Lower entropy wins. Ties go to state A. The merged planning module state records:
 - `selected_fork_entropy`, the entropy of the kept state;
 - `discarded_fork_entropy`, the entropy of the dropped state;
-- `nous.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
+- `planning.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
 
 ### SelfModelMergeStrategy
 
@@ -226,7 +226,7 @@ Fork/merge is offline and does not publish bus events, but `ForkSnapshot.metadat
 | `merged_from_entity` | `merge()` | The merged-in entity's `entity_id` |
 | `forked_from_unidentified` | `fork()` | Parent snapshot ID, when the parent carried no identity |
 
-Module-specific merge notes (the planning module entropy values and `nous.merge_warning`, and the episodic memory module prefix and embedding-space mismatch flags) are written into the merged module state and not into the snapshot metadata.
+Module-specific merge notes (the planning module entropy values and `planning.merge_warning`, and the episodic memory module prefix and embedding-space mismatch flags) are written into the merged module state and not into the snapshot metadata.
 
 ## Entity identity
 

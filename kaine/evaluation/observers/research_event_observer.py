@@ -16,7 +16,7 @@ levels, so a new content field can never leak by default:
 
 1. Stream/type allowlist — only event types present in :data:`_TAXONOMY`
    ever produce a record. ``audition.transcription`` and
-   ``mundus.visual.raw`` are deliberately absent, so they are NEVER logged.
+   ``embodiment.visual.raw`` are deliberately absent, so they are NEVER logged.
 
 2. Field allowlist — every record is first passed through
    :meth:`PrivacyFilter.filter_for_diagnostics` (stripping ``CONTENT_FIELDS``:
@@ -27,11 +27,11 @@ levels, so a new content field can never leak by default:
    is dropped.
 
 Plus per-type redactions:
-- ``mnemos.recall`` / ``mnemos.replay``: ``text`` dropped via the shared
+- ``episodic_memory.recall`` / ``episodic_memory.replay``: ``text`` dropped via the shared
   ``_REDACTED_DROP`` set (also covered by ``memory_text``/``text`` in
   ``CONTENT_FIELDS``); only memory ids + affect intensity + selection scores.
-- ``praxis.action``: ``_sanitize`` strips content/body/stdout.
-- ``mundus.proprio``: raw coordinates are NEVER logged; only an opaque
+- ``effectors.action``: ``_sanitize`` strips content/body/stdout.
+- ``embodiment.proprio``: raw coordinates are NEVER logged; only an opaque
   position hash + region label.
 
 Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
@@ -119,14 +119,14 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     "intent.act": frozenset({"kind", "about_tag", "effector", "origin"}),
     "intent.rest": frozenset({"kind", "about_tag", "origin"}),
     # planning module's proposal / action selection module's feedback / sleep module's rest request (change nous-drives-action)
-    "nous.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
-    "volition.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
-    "hypnos.rest_request": frozenset({"accepted", "reason", "origin"}),
-    # Stimulus-source-to-world transition outcome (perception.out): phase is
+    "planning.proposal": frozenset({"proposal_id", "action", "kind", "step", "preference"}),
+    "action_selection.proposal_outcome": frozenset({"proposal_id", "realized", "reason"}),
+    "sleep.rest_request": frozenset({"accepted", "reason", "origin"}),
+    # Stimulus-source-to-world transition outcome (perceptual_locus.out): phase is
     # started/completed/abandoned; reason is a fixed code on abandon.
     "perception.transition": frozenset({"phase", "transition_seconds", "reason"}),
     # --- Prediction / precision ---
-    "soma.report": frozenset(
+    "interoception.report": frozenset(
         {
             "prediction_error",
             "unexpected_error",
@@ -144,7 +144,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "awake",
         }
     ),
-    "topos.report": frozenset(
+    "vision.report": frozenset(
         {
             "prediction_error",
             "normalised_error",
@@ -164,7 +164,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # the sequence module's report (kaine/modules/sequence/module.py) — content-free
     # aggregates ONLY: `temporal_context` and `feature_vector` are latent
     # content and are deliberately excluded.
-    "chronos.report": frozenset(
+    "sequence.report": frozenset(
         {
             "anomaly_score",
             "habituation_score",
@@ -174,26 +174,26 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "alert",
         }
     ),
-    "phantasia.world_error": frozenset({"error"}),
-    "nous.belief": frozenset(
+    "world_model.world_error": frozenset({"error"}),
+    "planning.belief": frozenset(
         {"kind", "frequency", "confidence", "expected_free_energy", "elapsed_ms"}
     ),
-    "nous.policy": frozenset(
+    "planning.policy": frozenset(
         {"kind", "frequency", "confidence", "expected_free_energy", "elapsed_ms"}
     ),
-    "nous.error": frozenset(
+    "planning.error": frozenset(
         {"kind", "frequency", "confidence", "expected_free_energy", "elapsed_ms"}
     ),
-    "nous.timeout": frozenset(
+    "planning.timeout": frozenset(
         {"kind", "frequency", "confidence", "expected_free_energy", "elapsed_ms"}
     ),
     # --- Affect / motivation ---
-    "thymos.state": frozenset(
+    "affect.state": frozenset(
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
     ),
-    "thymos.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert"}),
-    "thymos.drive": frozenset({"drive", "value", "alert"}),
-    "thymos.goal": frozenset({"action", "goal_id"}),
+    "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert"}),
+    "affect.drive": frozenset({"drive", "value", "alert"}),
+    "affect.goal": frozenset({"action", "goal_id"}),
     # --- Perception (derived only) ---
     # The tone error ratio, the tone rule and whether the tone was classified,
     # for the tone analysis (paper A.8).
@@ -251,12 +251,12 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # NOTE: `audition.transcription` is intentionally ABSENT — never logged.
     # --- Memory / sleep ---
-    "mnemos.recall": frozenset(
+    "episodic_memory.recall": frozenset(
         {"memory_ids", "max_affect_intensity", "selection_scores", "count", "collection"}
     ),
-    "mnemos.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
-    "hypnos.sleep.started": frozenset({"started_at"}),
-    "hypnos.sleep.completed": frozenset(
+    "episodic_memory.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
+    "sleep.sleep.started": frozenset({"started_at"}),
+    "sleep.sleep.completed": frozenset(
         {
             "phases_completed",
             "replay_count",
@@ -275,7 +275,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # diverged from its bare language organ this sleep. NO utterance text — the
     # prompt/chosen/rejected stay in the deny-patterned intent log. `embedder`
     # is the embedder-kind disclosure tag (or null when magnitude is null).
-    "hypnos.consolidation_divergence": frozenset(
+    "sleep.consolidation_divergence": frozenset(
         {
             "records_scanned",
             "usable_pairs",
@@ -287,11 +287,11 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # sleep-ignition-audit: content-free numeric allowlist only. The entry_id
     # lists, event types and salience values ride the sleep_snapshots payload
-    # (via the PhaseResult metadata on hypnos.sleep.completed); the research
+    # (via the PhaseResult metadata on sleep.sleep.completed); the research
     # log keeps the lean numeric core. Registry note: new event types MUST be
     # registered in this _TAXONOMY — unlisted event types are dropped by the
     # observer.
-    "hypnos.ignition_audit": frozenset(
+    "sleep.ignition_audit": frozenset(
         {
             "sleep_index",
             "audit_error",
@@ -307,16 +307,16 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "realization_failed_count",
         }
     ),
-    "hypnos.fork": frozenset({"snapshot_id", "parent_ids", "strategy"}),
-    "hypnos.merge": frozenset({"snapshot_id", "parent_ids", "strategy"}),
+    "sleep.fork": frozenset({"snapshot_id", "parent_ids", "strategy"}),
+    "sleep.merge": frozenset({"snapshot_id", "parent_ids", "strategy"}),
     # --- Self / social ---
-    "eidolon.drift": frozenset(
+    "self_model.drift": frozenset(
         {"score", "drift_scalar", "significant", "recent_count", "historical_count"}
     ),
-    "empatheia.agent_model": frozenset({"agent_label", "familiarity_scalar"}),
-    "empatheia.social_error": frozenset({"agent_label", "error_magnitude"}),
+    "social_cognition.agent_model": frozenset({"agent_label", "familiarity_scalar"}),
+    "social_cognition.social_error": frozenset({"agent_label", "error_magnitude"}),
     # --- Action ---
-    "praxis.action": frozenset(
+    "effectors.action": frozenset(
         {
             "action_family",
             "effector",
@@ -336,7 +336,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # / supervisor.py). `incident_id` and `tick_index` are lifted to the top level by
     # _build_record; the rest are non-sensitive operational metadata. NO content
     # fields, NO operator paths (free-text is path-scrubbed at the producer).
-    "spot.incident": frozenset(
+    "supervisor.incident": frozenset(
         {
             "transition",
             "module",
@@ -428,12 +428,12 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     SENSOR_SILENT_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
     "individuation.divergence": frozenset({"divergence_scalar", "significant"}),
     "individuation.alert": frozenset({"inconclusive_since", "days"}),
-    "perception.locus.changed": frozenset({"locus", "changed_by"}),
-    "perception.locus.denied": frozenset({"locus_requested", "denied_by", "reason_label"}),
-    # mundus.proprio handled specially (position hash + region label only).
-    "mundus.proprio": frozenset({"region_label"}),
-    "mundus.scene": frozenset({"object_count", "scene_change_scalar"}),
-    "mundus.notice": frozenset({"notice_kind"}),
+    "perceptual_locus.changed": frozenset({"locus", "changed_by"}),
+    "perceptual_locus.denied": frozenset({"locus_requested", "denied_by", "reason_label"}),
+    # embodiment.proprio handled specially (position hash + region label only).
+    "embodiment.proprio": frozenset({"region_label"}),
+    "embodiment.scene": frozenset({"object_count", "scene_change_scalar"}),
+    "embodiment.notice": frozenset({"notice_kind"}),
 }
 
 # EXACT numeric-field allowlist for welfare gray-zone records. This is the
@@ -494,7 +494,7 @@ _SENSOR_SILENT_NUMERIC_FIELDS = frozenset(
 # `event.type` strings ride on these `<module>.out` streams. Derived from the
 # canonical registry (kaine.evaluation.stream_registry) so the observer, the
 # raw archive, and the dashboard monitor never drift. Curated exclusions
-# (vox.out — raw audio content; lingua.out — transcripts are never curated)
+# (vocal.out — raw audio content; language.out — transcripts are never curated)
 # are documented in the registry and enforced by the drift test
 # (tests/test_stream_registry_drift.py).
 
@@ -572,7 +572,7 @@ class ResearchEventObserver(StreamSubscriberObserver):
         allowed = _allowed_fields(event.type)
         if allowed is None:
             # Not in the curated taxonomy — never logged (covers
-            # audition.transcription, mundus.visual.raw, and anything else).
+            # audition.transcription, embodiment.visual.raw, and anything else).
             return None
 
         # 1) Strip all CONTENT_FIELDS from the raw payload before extraction.
@@ -580,10 +580,10 @@ class ResearchEventObserver(StreamSubscriberObserver):
         payload = dict(scrubbed.payload or {})
 
         # 2) Per-type pre-redactions.
-        if event.type in ("mnemos.recall", "mnemos.replay"):
+        if event.type in ("episodic_memory.recall", "episodic_memory.replay"):
             for f in _REDACTED_DROP:
                 payload.pop(f, None)
-        elif event.type == "praxis.action":
+        elif event.type == "effectors.action":
             payload = _effectors_sanitize(payload)
 
         record: dict[str, Any] = {
@@ -601,8 +601,8 @@ class ResearchEventObserver(StreamSubscriberObserver):
         if event.type == "audition.emotion" and entry_id is not None:
             record["entry_id"] = entry_id
 
-        # 3) mundus.proprio: opaque hash + region label only, NEVER coordinates.
-        if event.type == "mundus.proprio":
+        # 3) embodiment.proprio: opaque hash + region label only, NEVER coordinates.
+        if event.type == "embodiment.proprio":
             pos_hash = _opaque_position_hash(payload)
             if pos_hash is not None:
                 record["avatar_position_hash"] = pos_hash
@@ -624,9 +624,9 @@ def _allowed_fields(event_type: str) -> frozenset[str] | None:
     is not in the curated taxonomy (and so must not be logged at all)."""
     if event_type in _TAXONOMY:
         return _TAXONOMY[event_type]
-    # spot.incident.* family (cross-linked by incident_id).
-    if event_type.startswith("spot.incident"):
-        return _TAXONOMY["spot.incident"]
+    # supervisor.incident.* family (cross-linked by incident_id).
+    if event_type.startswith("supervisor.incident"):
+        return _TAXONOMY["supervisor.incident"]
     # preservation.* family (the autonomous safety-net monitors, cross-linked by
     # incident_id). Any forward-compatible preservation.* subtype shares the
     # preserved record's operational allowlist — never any content field.
@@ -719,7 +719,7 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     record: dict[str, Any] = {
         "ts": _iso_now(),
         "event_type": "workspace.broadcast",
-        "source": "syneidesis",
+        "source": "workspace",
     }
     if "tick_index" in snapshot:
         record["tick_index"] = snapshot.get("tick_index")

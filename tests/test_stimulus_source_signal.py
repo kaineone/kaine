@@ -67,12 +67,12 @@ def test_params_numeric_fields_must_not_be_bool() -> None:
 @pytest.mark.parametrize(
     ("table", "key", "bad_value"),
     [
-        ("womb", "heartbeat_bpm", 39),
-        ("womb", "heartbeat_bpm", 121),
-        ("womb", "heartbeat_drift", -0.01),
-        ("womb", "heartbeat_drift", 0.21),
-        ("womb", "maternal_state_rate", 0.0),
-        ("womb", "maternal_state_rate", 1.1),
+        ("stimulus_source", "heartbeat_bpm", 39),
+        ("stimulus_source", "heartbeat_bpm", 121),
+        ("stimulus_source", "heartbeat_drift", -0.01),
+        ("stimulus_source", "heartbeat_drift", 0.21),
+        ("stimulus_source", "maternal_state_rate", 0.0),
+        ("stimulus_source", "maternal_state_rate", 1.1),
         ("video", "luminance_mean", 0.0),
         ("video", "luminance_mean", 0.51),
         ("video", "luminance_contrast", -0.1),
@@ -85,17 +85,17 @@ def test_params_numeric_fields_must_not_be_bool() -> None:
         ("video", "colour_ramp_seconds", -1.0),
         ("audio", "lowpass_hz", 50.0),
         ("audio", "lowpass_hz", 2001.0),
-        ("womb", "external_drive_max_amplitude", -0.1),
-        ("womb", "external_drive_max_amplitude", 1.1),
-        ("womb", "maternal_distress_max_magnitude", 1.1),
-        ("womb", "maternal_distress_max_seconds", 0.0),
+        ("stimulus_source", "external_drive_max_amplitude", -0.1),
+        ("stimulus_source", "external_drive_max_amplitude", 1.1),
+        ("stimulus_source", "maternal_distress_max_magnitude", 1.1),
+        ("stimulus_source", "maternal_distress_max_seconds", 0.0),
     ],
 )
 def test_params_range_rejected(table: str, key: str, bad_value: float) -> None:
-    sections: dict[str, dict[str, object] | None] = {"womb": None, "video": None, "audio": None}
+    sections: dict[str, dict[str, object] | None] = {"stimulus_source": None, "video": None, "audio": None}
     sections[table] = {key: bad_value}
     with pytest.raises(ValueError, match="outside allowed range"):
-        StimulusSourceParams.from_sections(sections["womb"], sections["video"], sections["audio"])
+        StimulusSourceParams.from_sections(sections["stimulus_source"], sections["video"], sections["audio"])
 
 
 def test_params_key_in_wrong_table_rejected() -> None:

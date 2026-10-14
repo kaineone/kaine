@@ -4,11 +4,11 @@
 # The run's seed comes from [experiment].seed; the boot refuses a seed that the
 # preliminary or a pilot run used.
 
-[lingua]
+[language]
 # Greedy decoding in the planned runs (paper §6.1).
 temperature = 0.0
 
-[syneidesis]
+[workspace]
 arm = "competitive"
 
 [planned_test]

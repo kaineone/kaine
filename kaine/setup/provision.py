@@ -16,7 +16,7 @@ What it provisions:
     ``kaine.setup.organ`` provisioning — a real ``hf download``),
   - the speech-to-text model (faster-distil-Whisper medium.en),
   - the emotion encoder (emotion2vec+),
-  - the vision encoder — the shipped default ``[topos].encoder_backend =
+  - the vision encoder — the shipped default ``[vision].encoder_backend =
     "internvideo_next"`` fetches the revision-pinned InternVideo-Next weights
     (reusing ``kaine.setup.internvideo_next``); only when the operator selects
     ``encoder_backend = "dinov2"`` is DINOv2-small fetched instead,
@@ -51,7 +51,7 @@ from kaine.text_embedding import resolve_embedding_config
 # (grep: all-MiniLM-L6-v2, faster-distil-whisper, emotion2vec_plus_base) plus
 # the Chatterbox TTS weights (kaine/setup/dependencies.py: resemble-ai/chatterbox).
 # DEFAULT_VISION_REPO is the DINOv2 fallback, fetched only when
-# [topos].encoder_backend = "dinov2"; the shipped InternVideo-Next weights are
+# [vision].encoder_backend = "dinov2"; the shipped InternVideo-Next weights are
 # fetched by kaine.setup.internvideo_next.
 DEFAULT_STT_REPO = "Systran/faster-distil-whisper-medium.en"
 DEFAULT_EMOTION_REPO = "emotion2vec/emotion2vec_plus_base"
@@ -61,7 +61,7 @@ DEFAULT_TTS_REPO = "resemble-ai/chatterbox"
 
 # Shipped-default vision encoder backend. Kept in sync with
 # kaine.modules.vision.encoder.DEFAULT_ENCODER_BACKEND and config/kaine.toml
-# [topos].encoder_backend. Held as a bare string so the setup phase never pulls
+# [vision].encoder_backend. Held as a bare string so the setup phase never pulls
 # the heavy torch-bearing encoder module just to read a default.
 DEFAULT_ENCODER_BACKEND = "internvideo_next"
 
@@ -69,7 +69,7 @@ DEFAULT_ENCODER_BACKEND = "internvideo_next"
 def encoder_backend(config: Optional[dict[str, Any]] = None) -> str:
     """The configured vision encoder backend, lower-cased; the shipped default
     (``internvideo_next``) when the operator sets none."""
-    vision = (config or {}).get("topos") or {}
+    vision = (config or {}).get("vision") or {}
     val = vision.get("encoder_backend")
     return str(val).strip().lower() if val else DEFAULT_ENCODER_BACKEND
 
@@ -120,7 +120,7 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     The faster-distil-Whisper STT repo is fetched only when Audition uses the
     Speaches backend; the Chatterbox TTS repo only when the vocal module uses the Chatterbox
     backend.  The vision encoder is backend-dependent and only DINOv2 is a plain
-    repo download: it appears here ONLY when ``[topos].encoder_backend = "dinov2"``.
+    repo download: it appears here ONLY when ``[vision].encoder_backend = "dinov2"``.
     The shipped default (``internvideo_next``) is a revision-pinned single-file
     fetch handled separately (see :func:`internvideo_next_fetch_cmd` and
     ``run_provision``), so it is deliberately NOT an ``AuxModel``."""
@@ -145,7 +145,7 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
 
     if encoder_backend(cfg) == "dinov2":
         models.append(
-            AuxModel(_cfg_repo(cfg, "topos", "encoder_model_id", DEFAULT_VISION_REPO),
+            AuxModel(_cfg_repo(cfg, "vision", "encoder_model_id", DEFAULT_VISION_REPO),
                      "vision encoder (DINOv2-small)")
         )
     emb_cfg = resolve_embedding_config(cfg)
@@ -157,7 +157,7 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     )
     models.append(AuxModel(emb_repo, emb_label))
 
-    vocal = cfg.get("vox") or {}
+    vocal = cfg.get("vocal") or {}
     if str(vocal.get("backend", "chatterbox")).strip().lower() == "chatterbox":
         models.append(AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"))
 

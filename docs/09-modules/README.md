@@ -4,13 +4,13 @@ KAINE is built from modules that publish events to the bus, compete for access t
 
 ## Module roster
 
-The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) has 17 flags: 14 cognitive modules, 2 embodiment helpers (the embodiment and perceptual locus modules), and `echo`, which is permanent test infrastructure.
+The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) has 17 flags: 14 cognitive modules, 2 embodiment helpers (the embodiment and perceptual locus modules), and `recorder`, which is permanent test infrastructure.
 
 | Module | Role | Enabled in `thesis_test` |
 |---|---|---|
 | [Audition](audition.md) | Raw hearing: predicts the next window's spectral encoding and the tone of detected speech, conditioned on the broadcast context. Speech-to-text is built and off by default. | Yes |
 | [Sequence](sequence.md) | Temporal prediction: takes every broadcast as its input, predicts the next one, detects recurrence, and tracks the time since a voice was last heard. | Yes |
-| [Recorder](recorder.md) | Test infrastructure: records every workspace snapshot and can publish `echo.ping`. | No |
+| [Recorder](recorder.md) | Test infrastructure: records every workspace snapshot and can publish `recorder.ping`. | No |
 | [Self-model](self-model.md) | Self-model: identity maintenance and drift detection over workspace sources. | No |
 | [Social cognition](social-cognition.md) | Social cognition: per-agent theory-of-mind models and familiarity tracking. | No |
 | [Sleep](sleep.md) | Sleep analog: fatigue-triggered offline periods with welfare gates on operations that modify models. | Yes |
@@ -26,7 +26,7 @@ The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) 
 | [Vision](vision.md) | Foveated vision: predicts the next clip embedding from earlier ones and the broadcast context. | Yes |
 | [Vocal](vocal.md) | Voice output: synthesizes external speech with prosody modulated by Affect. | No |
 
-`echo` must stay disabled in production. `mundus` also needs `KAINE_MUNDUS_OPERATOR_APPROVED=1` before it leaves the default stub body.
+`recorder` must stay disabled in production. `embodiment` also needs `KAINE_MUNDUS_OPERATOR_APPROVED=1` before it leaves the default stub body.
 
 The vision, audition, interoception, and sequence modules are the four predictive processors. In the base-thesis profile each one scales its prediction error by its own recent errors, reports an intensity graded by that ratio, and marks every report with a boolean `alert`. See each module's page and [The global workspace](../08-cognitive-cycle/global-workspace.md) for how the reports compete.
 
@@ -38,17 +38,17 @@ Modules that are off in `thesis_test` are built and tested in isolation and held
 
 ## The base-thesis profile
 
-The base-thesis profile in [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml) is a research profile, not a deployment tier. It enables the four predictive processors in distinct signal domains (`soma`, `chronos`, `topos`, `audition`), the language organ (`lingua`), the affective core (`thymos`), and the sleep analog (`hypnos`, with voice alignment off):
+The base-thesis profile in [`config/profiles/thesis_test.toml`](../../config/profiles/thesis_test.toml) is a research profile, not a deployment tier. It enables the four predictive processors in distinct signal domains (`interoception`, `sequence`, `vision`, `audition`), the language organ (`language`), the affective core (`affect`), and the sleep analog (`sleep`, with voice alignment off):
 
 ```toml
 [modules]
-soma = true
-chronos = true
-topos = true
+interoception = true
+sequence = true
+vision = true
 audition = true
-lingua = true
-thymos = true
-hypnos = true
+language = true
+affect = true
+sleep = true
 ```
 
 The profile also turns on the vision module's foveation, the audition module's general acoustic path, and the sequence module's forward prediction, keeps speech-to-text off, and selects the seeded perception feed. The language organ samples at the shipped temperature; study configurations set greedy decoding.

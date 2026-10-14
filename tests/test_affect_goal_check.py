@@ -48,7 +48,7 @@ def _snapshot(events=None) -> WorkspaceSnapshot:
     )
 
 
-def _ev(source="soma", type_="t", salience=0.5, eid="e0", **payload):
+def _ev(source="interoception", type_="t", salience=0.5, eid="e0", **payload):
     return eid, Event(
         source=source,
         type=type_,
@@ -60,7 +60,7 @@ def _ev(source="soma", type_="t", salience=0.5, eid="e0", **payload):
 
 DRIVE_SOURCES = {
     "social_drive": frozenset({"audition"}),
-    "curiosity": frozenset({"topos"}),
+    "curiosity": frozenset({"vision"}),
     "boredom": frozenset(),
     "restlessness": frozenset(),
 }
@@ -97,7 +97,7 @@ async def test_social_drive_ignored_by_interoception_negative(bus: AsyncBus):
         affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
         affect.drives.social_drive.value = 0.8
         scores = affect._score_snapshot(
-            _snapshot([_ev(source="soma", type_="report", salience=0.9, eid="e1")])
+            _snapshot([_ev(source="interoception", type_="report", salience=0.9, eid="e1")])
         )
         assert scores.goal_significance == pytest.approx(-0.8)
         assert affect._goal_method == "drive_relevance_v1"
@@ -115,7 +115,7 @@ async def test_half_salience_served_yields_zero(bus: AsyncBus):
         affect.drives.social_drive.value = 0.8
         events = [
             _ev(source="audition", type_="perception", salience=0.5, eid="e1"),
-            _ev(source="soma", type_="report", salience=0.5, eid="e2"),
+            _ev(source="interoception", type_="report", salience=0.5, eid="e2"),
         ]
         scores = affect._score_snapshot(_snapshot(events))
         assert scores.goal_significance == pytest.approx(0.0)
@@ -168,7 +168,7 @@ async def test_no_table_active_goal_token_overlap(bus: AsyncBus):
     try:
         affect.goals.add("navigate", priority=1.0)
         scores = affect._score_snapshot(
-            _snapshot([_ev(source="soma", type_="navigate_event", salience=0.9, eid="e1", text="navigate")])
+            _snapshot([_ev(source="interoception", type_="navigate_event", salience=0.9, eid="e1", text="navigate")])
         )
         assert scores.goal_significance > 0.0
         assert affect._goal_method == "token_overlap_v1"
@@ -185,7 +185,7 @@ async def test_table_plus_active_goal_max_positive(bus: AsyncBus):
         affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
         affect.goals.add("navigate", priority=1.0)
         scores = affect._score_snapshot(
-            _snapshot([_ev(source="soma", type_="navigate_event", salience=0.9, eid="e1", text="navigate")])
+            _snapshot([_ev(source="interoception", type_="navigate_event", salience=0.9, eid="e1", text="navigate")])
         )
         assert scores.goal_significance > 0.0
         assert affect._goal_method == "drive_relevance_v1+token_overlap_v1"
@@ -209,9 +209,9 @@ async def test_emotion_event_carries_goal_significance_method(bus: AsyncBus):
         await affect.on_workspace(
             _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1", normalised_error=3.0)])
         )
-        entries = await bus.read("thymos.out", last_id="0", count=20)
-        emotion_events = [e for _, e in entries if e.type == "thymos.emotion"]
-        assert emotion_events, "expected a thymos.emotion event"
+        entries = await bus.read("affect.out", last_id="0", count=20)
+        emotion_events = [e for _, e in entries if e.type == "affect.emotion"]
+        assert emotion_events, "expected a affect.emotion event"
         ev = emotion_events[0]
         assert ev.payload.get("goal_significance_method") == "drive_relevance_v1"
     finally:
@@ -252,7 +252,7 @@ async def test_drive_relevance_goal_scorer_results_unchanged():
         timestamp=datetime.now(timezone.utc),
     )
     non_serving = Event(
-        source="soma",
+        source="interoception",
         type="report",
         payload={},
         salience=0.5,
@@ -280,7 +280,7 @@ async def test_boot_wiring_gives_affect_the_drive_table(bus: AsyncBus):
     registry.register(_Audition(bus))
     registry.register(Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0))
     _wire_affect_drive_relevance(registry)
-    affect = registry.get("thymos")
+    affect = registry.get("affect")
     affect.drives.social_drive.value = 0.8
     scores = affect._score_snapshot(
         _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1")])
@@ -296,9 +296,9 @@ async def test_restarted_affect_is_rewired(bus: AsyncBus):
     registry.register(Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0))
     _wire_affect_drive_relevance(registry)
     fresh = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
-    registry.replace("thymos", fresh)
-    rewire_module(registry, "thymos", {})
-    fresh._score_snapshot(_snapshot([_ev(source="soma", salience=0.5)]))
+    registry.replace("affect", fresh)
+    rewire_module(registry, "affect", {})
+    fresh._score_snapshot(_snapshot([_ev(source="interoception", salience=0.5)]))
     assert fresh._goal_method == "drive_relevance_v1"
 
 

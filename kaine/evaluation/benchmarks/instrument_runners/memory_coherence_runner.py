@@ -28,7 +28,7 @@ honest non-recall (scored 0), and (c) the emptied episodic memory module's advan
 **NULL** otherwise.
 
 Boundary note: ``kaine.evaluation`` does not import ``kaine.modules.*`` at module
-import time. The real episodic memory module is built by a ``mnemos_builder`` callable injected by
+import time. The real episodic memory module is built by a ``episodic_memory_builder`` callable injected by
 the caller; only when none is supplied does the runner perform a lazy,
 function-local import as a convenience for the CLI.
 """
@@ -226,7 +226,7 @@ async def run_memory_coherence(
 ) -> dict[str, Any]:
     """Run the controlled memory-coherence battery; return records + verdict.
 
-    ``mnemos_builder`` returns a fresh, initialized real ``EpisodicMemoryCore``; the
+    ``episodic_memory_builder`` returns a fresh, initialized real ``EpisodicMemoryCore``; the
     runner builds two — one loaded with the battery (full-system arm) and one left
     empty (the retrieval proof). When omitted, a lazy default builds an in-memory
     episodic memory module so the CLI works out of the box.

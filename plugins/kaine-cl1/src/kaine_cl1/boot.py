@@ -10,9 +10,9 @@ carries it:
 - **Sequence** injects a forward model through ``network=`` (the sequence module builds its
   silicon ``CfCNetwork`` only when ``network is None``).
 - **Interoception** injects its interoceptive forward model through ``forward_model=``
-  (kaine's ``soma.forward_model`` seam).
+  (kaine's ``interoception.forward_model`` seam).
 - **Planning** injects an engine wrapper through ``engine_wrapper=`` (kaine's
-  ``nous.engine_wrapper`` seam): kaine's own engine keeps beliefs and expected
+  ``planning.engine_wrapper`` seam): kaine's own engine keeps beliefs and expected
   free energy, and the wrapper adds the substrate's policy proposal.
 - **Oscillator** runs through the plugin's ``make_oscillator`` hook on
   ``oscillator.<module>`` seams, not through this table.
@@ -59,15 +59,15 @@ def _planning_wrapper(
 
 #: The implemented module backends (oscillators use the plugin's make_oscillator hook).
 WETWARE_BACKENDS: dict[str, WetwareBackendSpec] = {
-    "chronos": WetwareBackendSpec(
+    "sequence": WetwareBackendSpec(
         make=WetwareTimingModel,
         inject_kwarg="network",
     ),
-    "soma": WetwareBackendSpec(
+    "interoception": WetwareBackendSpec(
         make=WetwareInteroceptiveModel,
         inject_kwarg="forward_model",
     ),
-    "nous": WetwareBackendSpec(
+    "planning": WetwareBackendSpec(
         make=_planning_wrapper,
         inject_kwarg="engine_wrapper",
     ),
@@ -80,7 +80,7 @@ def wetware_injection(
     """Return ``(constructor_kwarg, injected_object)`` for a converted module.
 
     Example:
-        kwarg, obj = wetware_injection("chronos", broker, territory)
+        kwarg, obj = wetware_injection("sequence", broker, territory)
         sequence = Sequence(bus, **{kwarg: obj}, featurizer=..., anomaly=..., ...)
     """
     try:

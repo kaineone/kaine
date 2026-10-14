@@ -27,7 +27,7 @@ def test_overrides_and_per_module():
             "heartbeat_timeout_s": 90.0,
             "max_restart_attempts": 3,
             "restart_backoff_s": 5.0,
-            "per_module_timeout_s": {"lingua": 120.0, "nous": 200},
+            "per_module_timeout_s": {"language": 120.0, "planning": 200},
         }
     )
     assert cfg.enabled is True
@@ -35,7 +35,7 @@ def test_overrides_and_per_module():
     assert cfg.heartbeat_timeout_s == 90.0
     assert cfg.max_restart_attempts == 3
     assert cfg.restart_backoff_s == 5.0
-    assert cfg.per_module_timeout_s == {"lingua": 120.0, "nous": 200.0}
+    assert cfg.per_module_timeout_s == {"language": 120.0, "planning": 200.0}
 
 
 def test_unknown_key_raises():

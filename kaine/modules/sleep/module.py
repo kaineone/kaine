@@ -54,7 +54,7 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-# Bound on each wait in Hypnos.shutdown(): the in-flight sleep, then the held tasks.
+# Bound on each wait in Sleep.shutdown(): the in-flight sleep, then the held tasks.
 _SHUTDOWN_WAIT_S = 5.0
 
 
@@ -70,7 +70,7 @@ class SleepBusyError(RuntimeError):
 
 
 class Sleep(BaseModule):
-    name: ClassVar[str] = "hypnos"
+    name: ClassVar[str] = "sleep"
 
     def holds_external_resources(self) -> bool:
         return True
@@ -216,24 +216,24 @@ class Sleep(BaseModule):
         )
         self._requested_sleep_trigger: bool = False
         # The rest request a requested sleep answers; acceptance is announced
-        # from inside the pipeline right after ``hypnos.sleep.started``.
+        # from inside the pipeline right after ``sleep.sleep.started``.
         self._pending_rest: Optional[dict[str, Any]] = None
         self._requested_rest_accepted: bool = False
         # Sleep-time ignition audit (change sleep-ignition-audit): per-stream
         # cursors, seeded at initialize() to the CURRENT stream tails (the same
-        # persisted-cursor pattern as _soma_cursor) so the first sleep audits
+        # persisted-cursor pattern as _interoception_cursor) so the first sleep audits
         # only the post-boot waking window, never history.
         self._audit_cursors: dict[str, str] = {
             stream: "0"
             for stream in (
-                "volition.out",
-                "volition_feedback.out",
-                "lingua.external",
-                "lingua.internal",
-                "praxis.out",
-                "nous.out",
-                "vox.out",
-                "hypnos.out",
+                "action_selection.out",
+                "action_selection_feedback.out",
+                "language.external",
+                "language.internal",
+                "effectors.out",
+                "planning.out",
+                "vocal.out",
+                "sleep.out",
             )
         }
         self._broadcast_cursor: str = "0"
@@ -268,14 +268,14 @@ class Sleep(BaseModule):
         self._sleep_task = None
         # M1 — interval-based maintenance poll: RestScheduler.is_due() is
         # checked periodically and fires enter_sleep() when due, entirely
-        # independent of the soma.fatigue consumer (fulfilling the boot.py
+        # independent of the interoception.fatigue consumer (fulfilling the boot.py
         # promise). Due-ness itself is judged on the scheduler's (subjective)
         # clock; this loop only polls often enough to notice.
         self._tasks.append(
             asyncio.create_task(self._maintenance_poll_loop(), name="hypnos-maintenance-poll")
         )
         # Ignition-audit cursors: seed to the current stream tails (mirrors the
-        # _soma_cursor seeding below) — each sleep then reads everything new
+        # _interoception_cursor seeding below) — each sleep then reads everything new
         # since its cursor, bounded to the window since _last_sleep_at.
         for stream in self._audit_cursors:
             try:
@@ -298,7 +298,7 @@ class Sleep(BaseModule):
             self._broadcast_cursor = tail
         # Seed cursor so we only process new action selection module intents from now on.
         try:
-            latest = await self._bus.client.xrevrange("volition.out", count=1)
+            latest = await self._bus.client.xrevrange("action_selection.out", count=1)
         except Exception:
             latest = []
         if latest:
@@ -312,7 +312,7 @@ class Sleep(BaseModule):
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
             try:
-                latest = await self._bus.client.xrevrange("soma.out", count=1)
+                latest = await self._bus.client.xrevrange("interoception.out", count=1)
             except Exception:
                 latest = []
             if latest:
@@ -330,7 +330,7 @@ class Sleep(BaseModule):
         Awaits ``BaseModule.shutdown()`` first so the background loops stop
         and no new sleep can start. If a sleep is still running it is cancelled
         and awaited, so it ends the way a cancelled sleep always does: the
-        affective reset runs and an aborted ``hypnos.sleep.completed`` is published.
+        affective reset runs and an aborted ``sleep.sleep.completed`` is published.
         The held tasks are then awaited so none is left pending when the event
         loop closes. Each wait is bounded by ``_SHUTDOWN_WAIT_S``, and a task still
         pending after that is logged and left.
@@ -362,19 +362,19 @@ class Sleep(BaseModule):
                     task.exception()
 
     async def _interoception_consumer_loop(self) -> None:
-        """Background loop: watch soma.out for maintenance triggers.
+        """Background loop: watch interoception.out for maintenance triggers.
 
-        Two event shapes on ``soma.out`` trigger an immediate maintenance
+        Two event shapes on ``interoception.out`` trigger an immediate maintenance
         cycle when the sleep module is not already sleeping (subject to the same
         non-interruptibility / freeze-preemption guards as the interval-based
         trigger):
 
-        * ``soma.fatigue`` with ``crossed == true`` — the fatigue accumulator
+        * ``interoception.fatigue`` with ``crossed == true`` — the fatigue accumulator
           crossed its maintenance threshold.
-        * ``soma.regulation`` with ``action == "request_maintenance"`` — the
+        * ``interoception.regulation`` with ``action == "request_maintenance"`` — the
           homeostatic regulator escalated to requesting an earlier offline
           cycle.  The linkage is event-driven: the sleep module observes the advisory
-          directly on ``soma.out`` (the cycle engine separately latches an
+          directly on ``interoception.out`` (the cycle engine separately latches an
           advisory ``maintenance_requested`` flag for diagnostics, but the sleep module
           does not read that flag).
         """
@@ -382,7 +382,7 @@ class Sleep(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "soma.out",
+                        "interoception.out",
                         last_id=self._interoception_cursor,
                         count=32,
                         block_ms=0,
@@ -393,23 +393,23 @@ class Sleep(BaseModule):
                         self._interoception_cursor = last_scanned
                     if entries:
                         for _, event in entries:
-                            fatigue_trigger = event.type == "soma.fatigue" and event.payload.get(
+                            fatigue_trigger = event.type == "interoception.fatigue" and event.payload.get(
                                 "crossed", False
                             )
                             regulation_trigger = (
-                                event.type == "soma.regulation"
+                                event.type == "interoception.regulation"
                                 and event.payload.get("action") == "request_maintenance"
                             )
                             if not (fatigue_trigger or regulation_trigger):
                                 continue
                             if fatigue_trigger:
                                 log.info(
-                                    "hypnos: soma.fatigue crossed=true — "
+                                    "hypnos: interoception.fatigue crossed=true — "
                                     "triggering fatigue-driven maintenance"
                                 )
                             else:
                                 log.info(
-                                    "hypnos: soma.regulation request_maintenance "
+                                    "hypnos: interoception.regulation request_maintenance "
                                     "— triggering regulation-driven maintenance"
                                 )
                             # L3 — hold the task reference (no GC mid-sleep)
@@ -434,18 +434,18 @@ class Sleep(BaseModule):
             raise
 
     async def _action_selection_consumer_loop(self) -> None:
-        """Background loop: watch volition.out for rest requests.
+        """Background loop: watch action_selection.out for rest requests.
 
         The planning-module-originated ``intent.rest`` events (and any other rest intents)
         request an entity-time sleep. Accepted requests start a maintenance
         cycle with trigger ``"requested"``; refusals publish a content-free
-        ``hypnos.rest_request`` event.
+        ``sleep.rest_request`` event.
         """
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "volition.out",
+                        "action_selection.out",
                         last_id=self._action_selection_cursor,
                         count=32,
                         block_ms=0,
@@ -469,7 +469,7 @@ class Sleep(BaseModule):
             raise
 
     async def _fatigue_triggered_enter_sleep_inner(self) -> None:
-        """Fire a maintenance cycle in response to soma.fatigue threshold crossing."""
+        """Fire a maintenance cycle in response to interoception.fatigue threshold crossing."""
         try:
             self._fatigue_triggered_sleep = True
             await self.enter_sleep()
@@ -488,7 +488,7 @@ class Sleep(BaseModule):
     async def _publish_rest_request(
         self, accepted: bool, reason: str, origin: Any, proposal_id: Any = None
     ) -> None:
-        """Emit the content-free ``hypnos.rest_request`` diagnostic.
+        """Emit the content-free ``sleep.rest_request`` diagnostic.
 
         Always salience 0.0 so the diagnostic never competes for the workspace.
         """
@@ -497,7 +497,7 @@ class Sleep(BaseModule):
             payload["proposal_id"] = proposal_id
         try:
             await self.publish(
-                "hypnos.rest_request",
+                "sleep.rest_request",
                 payload,
                 salience=0.0,
             )
@@ -507,11 +507,11 @@ class Sleep(BaseModule):
     async def _handle_rest_request(self, payload: dict[str, Any]) -> None:
         """Accept or refuse a planning/action selection module rest request.
 
-        Publishes a content-free ``hypnos.rest_request`` diagnostic at
+        Publishes a content-free ``sleep.rest_request`` diagnostic at
         salience 0.0 and, when accepted, starts a requested sleep through the
         same guarded path as fatigue/regulation triggers. ``accepted: true`` is
         announced from inside the pipeline immediately after
-        ``hypnos.sleep.started``; otherwise the reason is ``busy``,
+        ``sleep.sleep.started``; otherwise the reason is ``busy``,
         ``too_soon`` or, if the pipeline starts and then aborts, ``aborted``.
         """
         origin = payload.get("origin")
@@ -636,7 +636,7 @@ class Sleep(BaseModule):
         # clock (non-playlist modes) is an honest no-op, not a crash.
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.pause("hypnos")
+                self._playlist_clock.pause("sleep")
             except Exception:
                 log.warning("hypnos: playlist clock pause failed", exc_info=True)
 
@@ -663,21 +663,21 @@ class Sleep(BaseModule):
         # perception suspended).
         if self._playlist_clock is not None:
             try:
-                self._playlist_clock.resume("hypnos")
+                self._playlist_clock.resume("sleep")
             except Exception:
                 log.warning("hypnos: playlist clock resume failed", exc_info=True)
 
     async def _reinject_association(self, scenario: dict[str, Any]) -> None:
         """Re-inject a phase-3 cross-period association into the workspace.
 
-        Published as ``hypnos.association`` on the sleep module's out-stream; the
+        Published as ``sleep.association`` on the sleep module's out-stream; the
         workspace broadcast then surfaces it to the planning module (pymdp belief update)
         and the affect module (re-appraisal) through the NORMAL cognitive cycle — there
         is no separate belief-revision burst.  Carries only compact scenario
         descriptors (no raw sense data); zero-persistence invariant holds.
         """
         await self.publish(
-            "hypnos.association",
+            "sleep.association",
             dict(scenario),
             salience=self._baseline_salience,
         )
@@ -725,7 +725,7 @@ class Sleep(BaseModule):
         # infrastructural: real time, not subjective
         start = time.monotonic()
         await self.publish(
-            "hypnos.sleep.started",
+            "sleep.sleep.started",
             # infrastructural: real time. "trigger" is present only for a
             # requested rest, so ordinary sleeps publish exactly as before.
             {"started_at": time.time(), **({"trigger": trigger} if trigger else {})},
@@ -752,10 +752,10 @@ class Sleep(BaseModule):
             )
 
             # --- Phases 2 and 3 cue the world model module ---
-            # Phase 2's replay cues it through mnemos.replay events on the bus
+            # Phase 2's replay cues it through episodic_memory.replay events on the bus
             # and phase 3 calls it directly. The sleep module opens the world model module's scenario
             # window around both, so the window never depends on the world model module
-            # having seen hypnos.sleep.started, and closes it on any exit.
+            # having seen sleep.sleep.started, and closes it on any exit.
             self._open_world_model_window()
             try:
                 # --- Phase 2: Deep Consolidation + Downscaling ---
@@ -923,7 +923,7 @@ class Sleep(BaseModule):
         elapsed_ms = (time.monotonic() - start) * 1000.0
         # Capture the previous sleep mark BEFORE overwriting it; the ignition
         # audit window must start at the prior sleep (or boot), never the
-        # current one. The current sleep's own hypnos.sleep.started has a
+        # current one. The current sleep's own sleep.sleep.started has a
         # timestamp >= previous_sleep_at, so it is included in the window.
         previous_sleep_at = self._last_sleep_at
         self._last_sleep_at = time.time()
@@ -994,23 +994,23 @@ class Sleep(BaseModule):
         summary["alert"] = not all_succeeded
         # Sleep-time ignition audit (change sleep-ignition-audit): runs
         # unconditionally on EVERY sleep, before the completed publish, so the
-        # content-free payload is emitted on hypnos.out AND merged into the
-        # completed metadata — riding hypnos.sleep.completed into the
+        # content-free payload is emitted on sleep.out AND merged into the
+        # completed metadata — riding sleep.sleep.completed into the
         # sleep_snapshots JSONL, carrying sleep_index.
         try:
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("hypnos: ignition audit step failed (continuing)", exc_info=True)
-        # Publishing hypnos.sleep.completed causes the interoception module to reset its
-        # FatigueAccumulator (soma._hypnos_event_loop handles this event).
-        await self.publish("hypnos.sleep.completed", summary, salience=salience)
+        # Publishing sleep.sleep.completed causes the interoception module to reset its
+        # FatigueAccumulator (interoception._sleep_event_loop handles this event).
+        await self.publish("sleep.sleep.completed", summary, salience=salience)
         return summary
 
     async def _drain_audit_stream(self, stream: str) -> list[tuple[str, Any]]:
         """Read everything new on ``stream`` since its audit cursor.
 
         Batch loop with ``block_ms=0`` until empty, advancing by the last
-        SCANNED id (decodable or not) exactly like ``_soma_consumer_loop`` so a
+        SCANNED id (decodable or not) exactly like ``_interoception_consumer_loop`` so a
         poison batch cannot wedge the cursor.
         """
         events: list[tuple[str, Any]] = []
@@ -1032,16 +1032,16 @@ class Sleep(BaseModule):
         """Sleep-time ignition audit (change sleep-ignition-audit) — pure data.
 
         Unconditional on every sleep: collects intents/realizations from
-        ``volition.out`` / ``lingua.external`` / ``lingua.internal`` /
-        ``praxis.out`` since the per-stream cursors, plus
+        ``action_selection.out`` / ``language.external`` / ``language.internal`` /
+        ``effectors.out`` since the per-stream cursors, plus
         ``workspace.broadcast`` snapshots since the broadcast cursor (read via
         the decode-safe workspace path — never ``bus.range``, which cannot
         decode broadcast entries), bounded to the window starting at ``since``.
         ``None`` means from boot. Classification itself is the PURE
         ``classify_realizations`` — no bus, no I/O. The payload is content-free
         (counts, entry_ids, event types, salience values, sleep_index only);
-        ``intent.act`` on ``nous.out`` is counted separately as unrealizable
-        because no effector reads ``nous.out``. ANY exception degrades to a
+        ``intent.act`` on ``planning.out`` is counted separately as unrealizable
+        because no effector reads ``planning.out``. ANY exception degrades to a
         logged warning + ``{"error": <ExcTypeName>}`` — the sleep must never
         fail because auditing failed. Boundary: The sleep module never imports
         ``kaine.evaluation``; only ``kaine.modules.sleep.ignition_audit``.
@@ -1065,14 +1065,14 @@ class Sleep(BaseModule):
             realizations: list[dict[str, Any]] = []
             proposal_outcomes: list[dict[str, Any]] = []
             for stream in (
-                "volition.out",
-                "volition_feedback.out",
-                "lingua.external",
-                "lingua.internal",
-                "praxis.out",
-                "nous.out",
-                "vox.out",
-                "hypnos.out",
+                "action_selection.out",
+                "action_selection_feedback.out",
+                "language.external",
+                "language.internal",
+                "effectors.out",
+                "planning.out",
+                "vocal.out",
+                "sleep.out",
             ):
                 for entry_id, event in await self._drain_audit_stream(stream):
                     if not _in_window(entry_id):
@@ -1084,9 +1084,9 @@ class Sleep(BaseModule):
                     }
                     if event.type.startswith("intent."):
                         intents.append(record)
-                    elif event.type == "volition.proposal_outcome":
+                    elif event.type == "action_selection.proposal_outcome":
                         proposal_outcomes.append(record)
-                    elif event.type == "hypnos.sleep.started":
+                    elif event.type == "sleep.sleep.started":
                         # A requested sleep counts as a realized rest event.
                         realizations.append(record)
                     else:
@@ -1127,11 +1127,11 @@ class Sleep(BaseModule):
                 "nous_proposals_forwarded": 0,
                 "audit_error": type(exc).__name__,
             }
-        # Content-free bus event on hypnos.out. An intermediate publish must
+        # Content-free bus event on sleep.out. An intermediate publish must
         # never propagate (same catch-and-continue as the divergence metric).
         try:
             await self.publish(
-                "hypnos.ignition_audit",
+                "sleep.ignition_audit",
                 dict(payload),
                 salience=self._baseline_salience,
             )
@@ -1155,7 +1155,7 @@ class Sleep(BaseModule):
         Returns ``(pairs, metric_payload)``. ``pairs`` is reused by the training
         path so the log is not scanned twice; ``metric_payload`` is the
         content-free aggregate dict merged into the phase metadata. The metric
-        is published on ``hypnos.consolidation_divergence`` and persisted to a
+        is published on ``sleep.consolidation_divergence`` and persisted to a
         small state file for the core ``assess_divergence`` to read.
 
         Boundary: only counts + a scalar magnitude leave here. The magnitude is
@@ -1219,7 +1219,7 @@ class Sleep(BaseModule):
         # not wedge on a transient bus failure (M2).
         try:
             await self.publish(
-                "hypnos.consolidation_divergence",
+                "sleep.consolidation_divergence",
                 dict(payload),
                 salience=self._baseline_salience,
             )
@@ -1242,7 +1242,7 @@ class Sleep(BaseModule):
             merged.update(extra)
             return merged
 
-        # Two-layer safety gate. Both `[hypnos.voice_alignment].enabled`
+        # Two-layer safety gate. Both `[sleep.voice_alignment].enabled`
         # AND the env var KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
         # must be set. Mirrors KAINE_CYCLE_OPERATOR_PRESENT for first boot.
         if not self._voice_config.enabled:
@@ -1488,14 +1488,14 @@ class Sleep(BaseModule):
             log.info("hypnos: snapshot has no schedule; starting a fresh interval")
 
     async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
-        """M2: guarantee ``hypnos.sleep.completed`` is published.
+        """M2: guarantee ``sleep.sleep.completed`` is published.
 
         The pipeline body publishes the normal completed event on success.
         If the body raises, including a transient failure of its own
         completed publish, this wrapper publishes a completed event
         carrying an ``"aborted": True`` flag (content-free: the reason field
         carries only the exception class name). The interoception module treats it identically
-        to a normal completion, so ``_in_hypnos`` can never wedge and
+        to a normal completion, so ``_in_sleep`` can never wedge and
         faster_decay always stops.
 
         ``BaseException`` is caught so a cancellation also publishes the
@@ -1512,7 +1512,7 @@ class Sleep(BaseModule):
                 log.warning("hypnos: sleep pipeline cancelled (%s)", type(exc).__name__)
             publish = asyncio.ensure_future(
                 self.publish(
-                    "hypnos.sleep.completed",
+                    "sleep.sleep.completed",
                     {"aborted": True, "reason": type(exc).__name__},
                     salience=self._baseline_salience,
                 )
@@ -1558,7 +1558,7 @@ class Sleep(BaseModule):
         """M1 — periodic RestScheduler.is_due()/enter_sleep() poll.
 
         Satisfies the boot.py promise that interval-based rest fires
-        without any soma.fatigue consumer: the scheduler (whose clock is
+        without any interoception.fatigue consumer: the scheduler (whose clock is
         the subjective clock) decides due-ness; this loop polls often
         enough to notice and reuses the same non-interruptibility /
         pending-guard path as the fatigue trigger.

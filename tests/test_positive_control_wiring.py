@@ -102,7 +102,7 @@ def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) 
     return wave.tobytes()
 
 
-async def _reports(bus: AsyncBus, stream: str = "topos.out") -> list[dict]:
+async def _reports(bus: AsyncBus, stream: str = "vision.out") -> list[dict]:
     return _payloads(await bus.read(stream, last_id="0"))
 
 
@@ -229,10 +229,10 @@ def test_interoception_factory_builds_the_control_only_when_enabled():
 def test_construct_module_passes_the_section():
     bus = _bus()
     module = construct_module(
-        "soma",
+        "interoception",
         bus,
         {
-            "soma": {},
+            "interoception": {},
             "positive_control": {"enabled": True, "mode": "estimate_pc"},
         },
         registry=ModuleRegistry(),
@@ -264,7 +264,7 @@ async def test_vision_control_publishes_and_leaves_the_live_report_untouched() -
         encoder=Varying(),
         forward_prediction=True,
         entity_clock=_FixedClock(),
-        positive_control=_control({"topos": 4}),
+        positive_control=_control({"vision": 4}),
     )
     controlled._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -273,18 +273,18 @@ async def test_vision_control_publishes_and_leaves_the_live_report_untouched() -
         seed=4,
     )
 
-    await uncontrolled.on_workspace(_workspace("soma", 0.6, 0.6))
-    await controlled.on_workspace(_workspace("soma", 0.6, 0.6))
+    await uncontrolled.on_workspace(_workspace("interoception", 0.6, 0.6))
+    await controlled.on_workspace(_workspace("interoception", 0.6, 0.6))
 
     for i in range(8):
         if i == 3:
-            await uncontrolled.on_workspace(_workspace("thymos", 0.75, 0.75))
-            await controlled.on_workspace(_workspace("thymos", 0.75, 0.75))
+            await uncontrolled.on_workspace(_workspace("affect", 0.75, 0.75))
+            await controlled.on_workspace(_workspace("affect", 0.75, 0.75))
         await uncontrolled.process_frame(None)
         await controlled.process_frame(None)
 
-    un_reports = await _reports(uncontrolled_bus, "topos.out")
-    co_reports = await _reports(controlled_bus, "topos.out")
+    un_reports = await _reports(uncontrolled_bus, "vision.out")
+    co_reports = await _reports(controlled_bus, "vision.out")
 
     assert len(un_reports) == len(co_reports)
     for a, b in zip(un_reports, co_reports):
@@ -301,9 +301,9 @@ async def test_vision_control_publishes_and_leaves_the_live_report_untouched() -
     pc_events = await controlled_bus.read("positive_control.out", last_id="0")
     assert pc_events
     pc_payloads = _payloads(pc_events)
-    assert any(p.get("processor") == "topos" for p in pc_payloads)
+    assert any(p.get("processor") == "vision" for p in pc_payloads)
     for p in pc_payloads:
-        if p.get("processor") == "topos":
+        if p.get("processor") == "vision":
             assert set(p.keys()) == set(RESULT_FIELDS)
             break
 
@@ -321,9 +321,9 @@ async def test_interoception_control_publishes_results(bus: AsyncBus) -> None:
         # Built directly, not from config, to check the payload shape in control
         # mode. In control mode the minimum effect comes from the settings
         # record, so every tick records a verdict.
-        positive_control=_control({"soma": 8}),
+        positive_control=_control({"interoception": 8}),
     )
-    await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
+    await interoception.on_workspace(_workspace("vision", 0.7, 0.5))
     for _ in range(6):
         await interoception.tick_once()
 
@@ -332,7 +332,7 @@ async def test_interoception_control_publishes_results(bus: AsyncBus) -> None:
     events = await bus.read("positive_control.out", last_id="0")
     assert events
     payloads = _payloads(events)
-    assert all(p.get("processor") == "soma" for p in payloads)
+    assert all(p.get("processor") == "interoception" for p in payloads)
     assert all(p.get("mode") == "control" for p in payloads)
     assert all(p.get("min_effect") == 0.01 for p in payloads)
     assert all(p.get("min_reports") == 1 for p in payloads)
@@ -345,7 +345,7 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=_control({"topos": 4}),
+        positive_control=_control({"vision": 4}),
     )
     vision._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -359,19 +359,19 @@ async def test_failing_control_switches_itself_off(bus: AsyncBus) -> None:
 
     vision._positive_control.after_report = _raise
 
-    await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+    await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
     for _ in range(3):
         await vision.process_frame(None)
 
     # The failure is handled asynchronously on the control queue.
     await vision._pc_queue.drain()
     assert vision._positive_control is None
-    assert len(await _reports(bus, "topos.out")) == 3
+    assert len(await _reports(bus, "vision.out")) == 3
     positive_reports = await _reports(bus, "positive_control.out")
     assert len(positive_reports) == 1
     assert positive_reports[0]["failed"] is True
     assert positive_reports[0]["passed"] is False
-    assert positive_reports[0]["processor"] == "topos"
+    assert positive_reports[0]["processor"] == "vision"
     assert positive_reports[0]["final"] is True
 
 
@@ -384,7 +384,7 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=_control({"topos": 4}),
+            positive_control=_control({"vision": 4}),
         )
         vision._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -393,7 +393,7 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
             seed=4,
         )
 
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         for _ in range(5):
             await vision.process_frame(None)
         await vision.shutdown()
@@ -401,7 +401,7 @@ async def test_shutdown_publishes_a_terminal_record() -> None:
         events = await bus.read("positive_control.out", last_id="0")
         assert events
         payload = _payloads(events)[-1]
-        assert payload["processor"] == "topos"
+        assert payload["processor"] == "vision"
         assert payload["final"] is True
         assert payload["failed"] is False
     finally:
@@ -416,9 +416,9 @@ async def test_interoception_shutdown_publishes_a_terminal_record() -> None:
             bus,
             reader=FakeMetricsReader({"cpu_percent": 10.0, "ram_percent": 20.0}),
             detector=NeverAlertDetector(),
-            positive_control=_control({"soma": 8}),
+            positive_control=_control({"interoception": 8}),
         )
-        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.on_workspace(_workspace("vision", 0.7, 0.5))
         for _ in range(6):
             await interoception.tick_once()
         await interoception.shutdown()
@@ -426,7 +426,7 @@ async def test_interoception_shutdown_publishes_a_terminal_record() -> None:
         events = await bus.read("positive_control.out", last_id="0")
         assert events
         payload = _payloads(events)[-1]
-        assert payload["processor"] == "soma"
+        assert payload["processor"] == "interoception"
         assert payload["final"] is True
         assert payload["failed"] is False
     finally:
@@ -439,7 +439,7 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
         bus,
         encoder=Varying(),
         forward_prediction=True,
-        positive_control=_control({"topos": 4}),
+        positive_control=_control({"vision": 4}),
     )
     vision._forward_model = LatentForwardModel(
         latent_dim=4,
@@ -459,7 +459,7 @@ async def test_unpublishable_failure_is_logged_at_error(bus: AsyncBus, caplog) -
     vision_module.publish_result = _raise_publish
 
     try:
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         for _ in range(3):
             await vision.process_frame(None)
     finally:
@@ -492,10 +492,10 @@ async def _vision_run(control_settings):
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         for i in range(12):
             if i == 6:
-                await vision.on_workspace(_workspace("thymos", 0.75, 0.75))
+                await vision.on_workspace(_workspace("affect", 0.75, 0.75))
             await vision.process_frame(None)
         return (
             vision._forward_model.state_dict(),
@@ -510,7 +510,7 @@ async def _vision_run(control_settings):
 @pytest.mark.asyncio
 async def test_vision_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _vision_run(None)
-    on = await _vision_run(_control({"topos": 4}))
+    on = await _vision_run(_control({"vision": 4}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -548,7 +548,7 @@ async def _interoception_run(control_settings):
             seed=5,
             context_dim=CONTEXT_DIM,
         )
-        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.on_workspace(_workspace("vision", 0.7, 0.5))
         for _ in range(12):
             await interoception.tick_once()
         return (
@@ -564,7 +564,7 @@ async def _interoception_run(control_settings):
 @pytest.mark.asyncio
 async def test_interoception_control_leaves_live_weights_and_rng_states_identical() -> None:
     off = await _interoception_run(None)
-    on = await _interoception_run(_control({"soma": 8}))
+    on = await _interoception_run(_control({"interoception": 8}))
 
     assert off[0] == on[0]
     _rng_states_equal(off[1], on[1])
@@ -589,10 +589,10 @@ async def _audition_run(control_settings):
             positive_control=control_settings,
         )
         await audition.initialize()
-        await audition.on_workspace(_workspace("soma", 0.6, 0.6))
+        await audition.on_workspace(_workspace("interoception", 0.6, 0.6))
         for i, freq in enumerate(range(4000, 9000, 500)):
             if i == 5:
-                await audition.on_workspace(_workspace("thymos", 0.75, 0.75))
+                await audition.on_workspace(_workspace("affect", 0.75, 0.75))
             await audition.process_audio(_tone(freq), sample_rate=16000)
         return (
             audition._acoustic_forward_model.state_dict(),
@@ -643,7 +643,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=_control({"topos": 4}),
+            positive_control=_control({"vision": 4}),
         )
         vision._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -652,7 +652,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
             seed=4,
         )
 
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         for _ in range(6):
             await vision.process_frame(None)
 
@@ -665,7 +665,7 @@ async def test_terminal_record_reaches_the_research_log(tmp_path) -> None:
             rec
             for _, rec in run.all_records()
             if rec.get("event_type") == "positive_control.result"
-            and rec.get("processor") == "topos"
+            and rec.get("processor") == "vision"
         ]
         assert pc_records
         assert pc_records[-1]["final"] is True
@@ -696,17 +696,17 @@ async def test_vision_report_carries_entity_time_and_awake() -> None:
             seed=4,
         )
 
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         await vision.process_frame(None)
 
-        reports = await _reports(bus, "topos.out")
+        reports = await _reports(bus, "vision.out")
         assert reports
         assert reports[0]["entity_time_s"] == clock.now()
         assert reports[0]["awake"] is True
 
         vision._in_sleep = True
         await vision.process_frame(None)
-        reports = await _reports(bus, "topos.out")
+        reports = await _reports(bus, "vision.out")
         assert reports[-1]["awake"] is False
     finally:
         await bus.close()
@@ -714,7 +714,7 @@ async def test_vision_report_carries_entity_time_and_awake() -> None:
 
 def test_research_observer_keeps_ladder_fields() -> None:
     payload = {field: 0.0 for field in LADDER_FIELDS}
-    payload["processor"] = "topos"
+    payload["processor"] = "vision"
     payload["pc_sha256"] = "0" * 64
     payload["x"] = "extra"
     result = _apply_taxonomy_fields("positive_control.ladder", payload, {})
@@ -742,7 +742,7 @@ async def test_vision_control_stays_paired_across_a_skip():
             encoder=_VaryingWithGap(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=_control({"topos": 4}),
+            positive_control=_control({"vision": 4}),
         )
         vision._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -750,12 +750,12 @@ async def test_vision_control_stays_paired_across_a_skip():
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
         control = vision._positive_control
 
         for i in range(10):
             if i == 3:
-                await vision.on_workspace(_workspace("thymos", 0.75, 0.75))
+                await vision.on_workspace(_workspace("affect", 0.75, 0.75))
             await vision.process_frame(None)
             # Drain the queued control step before comparing shadow and live state.
             await vision._pc_queue.drain()
@@ -764,7 +764,7 @@ async def test_vision_control_stays_paired_across_a_skip():
                     list(v) for v in probe._shadow._buffer
                 ] == [list(v) for v in vision._forward_model._buffer]
 
-        reports = await _reports(bus, "topos.out")
+        reports = await _reports(bus, "vision.out")
         gains = [r["context_gain"] for r in reports]
         assert gains[5] is None
         assert gains[6] is None
@@ -790,7 +790,7 @@ async def test_report_is_published_before_positive_control_steps() -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=_control({"topos": 4}),
+            positive_control=_control({"vision": 4}),
         )
         vision._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -798,7 +798,7 @@ async def test_report_is_published_before_positive_control_steps() -> None:
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
 
         # Process three frames with the control unblocked so the shadow has a baseline.
         for _ in range(3):
@@ -817,7 +817,7 @@ async def test_report_is_published_before_positive_control_steps() -> None:
 
         await vision.process_frame(None)
 
-        reports = await _reports(bus, "topos.out")
+        reports = await _reports(bus, "vision.out")
         assert len(reports) == 4
         pc_while_blocked = await bus.read("positive_control.out", last_id="0")
         assert len(pc_while_blocked) == len(initial_pc)
@@ -841,7 +841,7 @@ async def test_full_queue_fails_the_control_once() -> None:
             encoder=Varying(),
             forward_prediction=True,
             entity_clock=_FixedClock(),
-            positive_control=_control({"topos": 4}),
+            positive_control=_control({"vision": 4}),
         )
         vision._forward_model = LatentForwardModel(
             latent_dim=4,
@@ -849,7 +849,7 @@ async def test_full_queue_fails_the_control_once() -> None:
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
 
         import threading
 
@@ -893,7 +893,7 @@ async def test_shutdown_drain_has_a_budget() -> None:
     try:
         import dataclasses
         settings = dataclasses.replace(
-            _control({"topos": 4}),
+            _control({"vision": 4}),
             shutdown_drain_s=0.2,
         )
         vision = vision_module.Vision(
@@ -909,7 +909,7 @@ async def test_shutdown_drain_has_a_budget() -> None:
             context_dim=CONTEXT_DIM,
             seed=4,
         )
-        await vision.on_workspace(_workspace("soma", 0.6, 0.6))
+        await vision.on_workspace(_workspace("interoception", 0.6, 0.6))
 
         for _ in range(3):
             await vision.process_frame(None)
@@ -936,7 +936,7 @@ async def test_fail_positive_control_publishes_once() -> None:
     """Calling _fail_positive_control twice publishes a single failure record."""
     bus = _bus()
     try:
-        control = _control({"topos": 4})
+        control = _control({"vision": 4})
         vision = vision_module.Vision(
             bus,
             encoder=Varying(),

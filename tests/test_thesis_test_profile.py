@@ -19,9 +19,9 @@ def test_enables_exactly_the_thesis_processors():
     # The base thesis is the four predictive processors plus language, affect (the
     # affective precision core whose arousal weights the competition) and sleep
     # (fatigue-triggered sleep; voice alignment stays off).
-    assert enabled == sorted(["audition", "chronos", "hypnos", "lingua", "soma", "thymos", "topos"])
+    assert enabled == sorted(["audition", "sequence", "sleep", "language", "interoception", "affect", "vision"])
     # Richer faculties stay off.
-    for off in ("mnemos", "eidolon", "nous", "phantasia", "vox"):
+    for off in ("episodic_memory", "self_model", "planning", "world_model", "vocal"):
         assert cfg["modules"][off] is False
 
 
@@ -33,7 +33,7 @@ def test_audio_is_prediction_error_not_transcript():
 
 def test_vision_is_foveated_and_feed_runs_out_of_box():
     cfg = _cfg()
-    assert cfg["topos"]["foveation"] is True
+    assert cfg["vision"]["foveation"] is True
     # The committed profile defaults to the seeded feed so a fresh install runs
     # with no media; the reproducible perceptual run upgrades to a reference
     # stimulus corpus (mode="playlist" + a manifest) via the operator config.
@@ -42,11 +42,11 @@ def test_vision_is_foveated_and_feed_runs_out_of_box():
 
 def test_voice_is_self_initiated_no_chatbot():
     cfg = _cfg()
-    assert cfg["volition"]["policy"] == "self_initiated_report"
-    assert cfg["volition"]["drive_initiative"] is False
+    assert cfg["action_selection"]["policy"] == "self_initiated_report"
+    assert cfg["action_selection"]["drive_initiative"] is False
 
 
 def test_language_organ_samples_in_general_use():
     cfg = _cfg()
     # Greedy decoding is set only by study configurations.
-    assert cfg["lingua"]["temperature"] == 0.7
+    assert cfg["language"]["temperature"] == 0.7

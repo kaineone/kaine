@@ -5,20 +5,20 @@
 
 There are two distinct moments:
 
-* ``check_womb_ready`` is called before spawn.  For ``mode == "womb"`` it runs
+* ``check_stimulus_source_ready`` is called before spawn.  For ``mode == "stimulus_source"`` it runs
   the local, discard-only perception probe; for any other mode it checks
   the presence contract for an external provider.
-* ``check_womb_live`` is called while the entity is gestating.  It checks the
+* ``check_stimulus_source_live`` is called while the entity is gestating.  It checks the
   presence contract for both local and external providers.
 
 A running local stimulus source is proven by
 ``kaine.cycle.stimulus_source_presence.StimulusSourcePresencePublisher`` from real deliveries.
-Presence contract: an event with ``source == "gestation"`` and
-``type == "gestation.womb"`` must be published to ``gestation.out``.  The
+Presence contract: an event with ``source == "development"`` and
+``type == "development.stimulus_source"`` must be published to ``development.out``.  The
 payload must contain ``provider`` and ``frame_index``.  A live stimulus source must
 publish at least once per second and ``frame_index`` must advance.  The whole
-configured window is read, not only the newest entry, because ``gestation.out``
-also carries ``gestation.readiness`` events.
+configured window is read, not only the newest entry, because ``development.out``
+also carries ``development.readiness`` events.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from kaine.bus.streams import DEVELOPMENT_SOURCE, DEVELOPMENT_STREAM
 DEFAULT_PRESENCE_WINDOW_S = 3.0
 STIMULUS_SOURCE_STREAM = DEVELOPMENT_STREAM
 STIMULUS_SOURCE_SOURCE = DEVELOPMENT_SOURCE
-STIMULUS_SOURCE_PRESENCE_TYPE = "gestation.womb"
+STIMULUS_SOURCE_PRESENCE_TYPE = "development.stimulus_source"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,7 +58,7 @@ async def check_stimulus_source_ready(
     feed = dict(config.get("perception_feed") or {})
     mode = str(feed.get("mode", "off")).lower()
 
-    if mode == "womb":
+    if mode == "stimulus_source":
         return await _check_local_stimulus_source(config, perception_check)
     return await _check_presence(bus, window_s, local=False)
 
@@ -74,7 +74,7 @@ async def check_stimulus_source_live(
     feed = dict(config.get("perception_feed") or {})
     mode = str(feed.get("mode", "off")).lower()
 
-    return await _check_presence(bus, window_s, local=(mode == "womb"))
+    return await _check_presence(bus, window_s, local=(mode == "stimulus_source"))
 
 
 async def _check_local_stimulus_source(
@@ -82,11 +82,11 @@ async def _check_local_stimulus_source(
     perception_check: Callable[[dict[str, Any]], Awaitable[list[Any]]] | None,
 ) -> StimulusSourceLiveness:
     modules = dict(config.get("modules") or {})
-    if not modules.get("topos"):
+    if not modules.get("vision"):
         return StimulusSourceLiveness(
             False,
             "local",
-            "[modules].topos is disabled — the womb cannot be seen",
+            "[modules].vision is disabled — the womb cannot be seen",
         )
     if not modules.get("audition"):
         return StimulusSourceLiveness(
@@ -94,19 +94,19 @@ async def _check_local_stimulus_source(
             "local",
             "[modules].audition is disabled — the womb cannot be heard",
         )
-    if not modules.get("soma"):
+    if not modules.get("interoception"):
         return StimulusSourceLiveness(
             False,
             "local",
-            "[modules].soma is disabled — the womb's self-rhythm has no host",
+            "[modules].interoception is disabled — the womb's self-rhythm has no host",
         )
 
-    interoception_section = dict(config.get("soma") or {})
+    interoception_section = dict(config.get("interoception") or {})
     if not interoception_section.get("self_rhythm_enabled"):
         return StimulusSourceLiveness(
             False,
             "local",
-            "[soma].self_rhythm_enabled is off — a gestating entity needs its own rhythm",
+            "[interoception].self_rhythm_enabled is off — a gestating entity needs its own rhythm",
         )
 
     from kaine.oscillator import snntorch_available

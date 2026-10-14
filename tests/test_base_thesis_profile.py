@@ -3,7 +3,7 @@
 
 """The thesis_test profile is the single definition of the base-thesis module set."""
 
-BASE_THESIS = {"soma", "chronos", "topos", "audition", "lingua", "thymos", "hypnos"}
+BASE_THESIS = {"interoception", "sequence", "vision", "audition", "language", "affect", "sleep"}
 
 
 def test_wizard_preset_reads_the_profile():

@@ -342,7 +342,7 @@ To restore the desktop later, run `sudo systemctl set-default graphical.target &
 
 ## 7. Reach the dashboard over the private network
 
-The dashboard listens on loopback by default: `[nexus].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-dashboard.container`. No other device can reach it. The shipped `[nexus].access` is `"open"` (no token) because the dashboard is reachable only from the host.
+The dashboard listens on loopback by default: `[dashboard].host = "127.0.0.1"` in `config/kaine.toml`, and `PublishPort=127.0.0.1:8088:8088` in `quadlet/kaine-dashboard.container`. No other device can reach it. The shipped `[dashboard].access` is `"open"` (no token) because the dashboard is reachable only from the host.
 
 Do not widen the bind to `0.0.0.0`, which would expose the port on every interface the host has. Keep the loopback bind and proxy to it from the private network.
 
@@ -350,12 +350,12 @@ Do not widen the bind to `0.0.0.0`, which would expose the port on every interfa
 
 The reference host runs Tailscale, so `tailscale serve` puts a tailnet HTTPS address in front of the loopback port, and Tailscale provisions the certificate for the node's MagicDNS name.
 
-The dashboard refuses a request whose `Host` header is not in `[nexus].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_NEXUS_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
+The dashboard refuses a request whose `Host` header is not in `[dashboard].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_NEXUS_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
 
 In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` and keep the loopback names:
 
 ```toml
-[nexus]
+[dashboard]
 host_allowlist = ["127.0.0.1", "localhost", "::1", "myhost.tail1234.ts.net"]
 ```
 
@@ -373,7 +373,7 @@ systemctl --user daemon-reload
 systemctl --user restart kaine-nexus
 ```
 
-If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[nexus].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[nexus]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart the dashboard afterwards.
+If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[dashboard].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[dashboard]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart the dashboard afterwards.
 
 Then start the proxy:
 
@@ -399,7 +399,7 @@ On a host without Tailscale, use any proxy on the private network, for example a
 
 ### Privacy consequence
 
-Serving the dashboard over a tailnet makes it reachable from every device on the tailnet. Keep `[nexus].dev_content_override` at `false`, because it gates raw message text, beliefs, memory bodies, inner speech and affect reasons. Keep `conversation_enabled` at `false` unless you have deliberately decided otherwise. Both are `false` in the shipped `config/kaine.toml`, and the `thesis_test` profile does not change them.
+Serving the dashboard over a tailnet makes it reachable from every device on the tailnet. Keep `[dashboard].dev_content_override` at `false`, because it gates raw message text, beliefs, memory bodies, inner speech and affect reasons. Keep `conversation_enabled` at `false` unless you have deliberately decided otherwise. Both are `false` in the shipped `config/kaine.toml`, and the `thesis_test` profile does not change them.
 
 Verify the shipped values:
 
@@ -450,7 +450,7 @@ tailscale serve status                             # expect: https://<host>.<tai
                                                    #         proxying to http://127.0.0.1:8088
 ```
 
-Unit names follow the files in `quadlet/`: `kaine-nexus.container` generates `kaine-nexus.service`. Run the user-unit check as the user that owns the KAINE services.
+Unit names follow the files in `quadlet/`: `kaine-dashboard.container` generates `kaine-dashboard.service`. Run the user-unit check as the user that owns the KAINE services.
 
 Then, from another device:
 

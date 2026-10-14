@@ -317,7 +317,7 @@ The `memory` block SHALL give the `gpu-preflight` gate enough information to
 distinguish known-discrete, known-unified, and unknown memory states.
 
 The dict SHALL be JSON-serializable so the interoception module can include it in its
-`soma.report` payloads and the dashboard can render it in diagnostics, and SHALL NOT
+`interoception.report` payloads and the dashboard can render it in diagnostics, and SHALL NOT
 raise when a backend probe or a memory probe fails; a failing probe SHALL
 degrade to the explicit unknown markers above instead of an exception.
 

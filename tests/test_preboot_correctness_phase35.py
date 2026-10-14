@@ -98,7 +98,7 @@ async def test_restart_does_not_replay_stale_events():
     eng = _engine_stub(bus)
     eng._seed_cursors_to_tail = True  # tail-seeding behavior under test
     # the interoception module's consumer: cursor must be seeded to the tail before any read...
-    await eng.consume_interoception_regulation("soma.out")
+    await eng.consume_interoception_regulation("interoception.out")
     assert all(last_id == tail for _, last_id in bus.reads), (
         "cursor must be seeded at the stream tail, not 0"
     )
@@ -117,12 +117,12 @@ async def test_poison_batch_does_not_stall_streams():
     # Engine interoception consumer: a fully-undecodable batch returns no decoded
     # events, but the cursor must still advance past it.
     bus = _ScriptedBus(
-        batches=[([], "5-1"), ([("5-2", _evt("soma.regulation", action="noop"))], "5-2")]
+        batches=[([], "5-1"), ([("5-2", _evt("interoception.regulation", action="noop"))], "5-2")]
     )
     eng = _engine_stub(bus)
-    await eng.consume_interoception_regulation("soma.out")
+    await eng.consume_interoception_regulation("interoception.out")
     assert eng._interoception_out_cursor == "5-1"  # advanced past the poison batch
-    await eng.consume_interoception_regulation("soma.out")
+    await eng.consume_interoception_regulation("interoception.out")
     assert eng._interoception_out_cursor == "5-2"  # subsequent entries consumed
     # _safe_read path (workspace streams).
     bus2 = _ScriptedBus(batches=[([], "9-1")])
@@ -205,7 +205,7 @@ async def test_persistent_redis_failure_is_visible(caplog):
         for _ in range(5):
             await eng.consume_control_events("control.in")
         for _ in range(5):
-            await eng.consume_interoception_regulation("soma.out")
+            await eng.consume_interoception_regulation("interoception.out")
     control_warns = [r for r in caplog.records if "control consumer read failed" in r.getMessage()]
     interoception_warns = [r for r in caplog.records if "soma consumer read failed" in r.getMessage()]
     assert len(control_warns) == 1, "exactly one rate-limited WARNING per window"
@@ -261,11 +261,11 @@ class _M2Stub:
         self._shielded_tasks = set()  # the sleep module holds its shielded publish here
 
     async def _run_pipeline_inner(self):
-        await self.publish("hypnos.sleep.completed", {})
+        await self.publish("sleep.sleep.completed", {})
 
     async def publish(self, type_, payload, salience=None):
         if (
-            type_ == "hypnos.sleep.completed"
+            type_ == "sleep.sleep.completed"
             and not payload.get("aborted")
             and not self._failed_once
         ):
@@ -279,10 +279,10 @@ async def test_transient_publish_failure_does_not_wedge_interoception():
     stub = _M2Stub()
     with pytest.raises(ConnectionError):  # the original failure re-raises honestly
         await Sleep._run_pipeline(stub)
-    completed = [p for t, p in stub.published if t == "hypnos.sleep.completed"]
+    completed = [p for t, p in stub.published if t == "sleep.sleep.completed"]
     assert completed, "a completed event MUST be published even after failure"
     assert completed[0].get("aborted") is True
-    # the interoception module consumes hypnos.sleep.completed to exit _in_hypnos; the aborted
+    # the interoception module consumes sleep.sleep.completed to exit _in_sleep; the aborted
     # flavour is the same event type, so it exits and faster_decay stops.
 
 
@@ -307,11 +307,11 @@ class _HypConsumerStub:
 
 @pytest.mark.asyncio
 async def test_sleep_task_not_collected_and_no_double_trigger():
-    fatigue = ("1-1", _evt("soma.fatigue", crossed=True))
+    fatigue = ("1-1", _evt("interoception.fatigue", crossed=True))
     bus = _ScriptedBus(
         batches=[
             ([fatigue], "1-1"),
-            ([("1-2", _evt("soma.fatigue", crossed=True))], "1-2"),
+            ([("1-2", _evt("interoception.fatigue", crossed=True))], "1-2"),
         ]
     )
     stub = _HypConsumerStub(bus)

@@ -22,8 +22,8 @@ name = "tier2"
 unsupported_modules = []
 oscillator_supported = true
 
-[lingua]
+[language]
 backend = "openai"      # OpenAI-compatible HTTP server (today's default)
 
-[mnemos]
+[episodic_memory]
 backend = "qdrant"      # KAINE-owned Qdrant container (today's default)

@@ -48,4 +48,4 @@ def test_shipped_tier_profiles_use_openai_backend() -> None:
         path = REPO_ROOT / "config" / "profiles" / name
         with path.open("rb") as f:
             config = tomllib.load(f)
-        assert config.get("lingua", {}).get("backend") == "openai", name
+        assert config.get("language", {}).get("backend") == "openai", name

@@ -117,9 +117,9 @@ def _make_sleep(
 
 
 async def _read_consolidation_event(bus: AsyncBus) -> dict:
-    entries = await bus.read("hypnos.out", last_id="0", count=50)
+    entries = await bus.read("sleep.out", last_id="0", count=50)
     evt = next(
-        e for _, e in entries if e.type == "hypnos.consolidation_divergence"
+        e for _, e in entries if e.type == "sleep.consolidation_divergence"
     )
     return dict(evt.payload)
 
@@ -420,7 +420,7 @@ def test_consolidation_thresholds_from_config():
         DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     )
     cfg = {
-        "hypnos": {
+        "sleep": {
             "voice_alignment": {
                 "consolidation_divergence_rate_threshold": 0.7,
                 "consolidation_divergence_magnitude_threshold": 0.4,
@@ -449,7 +449,7 @@ def test_research_taxonomy_has_consolidation_divergence():
         _allowed_fields,
     )
 
-    allowed = _allowed_fields("hypnos.consolidation_divergence")
+    allowed = _allowed_fields("sleep.consolidation_divergence")
     assert allowed is not None
     assert allowed == frozenset(
         {
@@ -477,8 +477,8 @@ def test_research_record_is_numeric_only(tmp_path: Path):
     from datetime import datetime, timezone
 
     event = Event(
-        type="hypnos.consolidation_divergence",
-        source="hypnos",
+        type="sleep.consolidation_divergence",
+        source="sleep",
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
         payload={

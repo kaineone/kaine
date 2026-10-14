@@ -16,66 +16,66 @@ _BANNED_PHRASES = (
 
 
 _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
-    ("soma", "soma.report"): {"wellness": 0.85, "alerts": []},
-    ("soma", "soma.fatigue"): {"value": 75.3, "threshold": 100.0, "crossed": False},
-    ("soma", "soma.regulation"): {
+    ("interoception", "interoception.report"): {"wellness": 0.85, "alerts": []},
+    ("interoception", "interoception.fatigue"): {"value": 75.3, "threshold": 100.0, "crossed": False},
+    ("interoception", "interoception.regulation"): {
         "action": "reduce_rate",
         "reason": "prediction error 0.8 sustained above threshold",
         "severity": 1,
     },
-    ("chronos", "chronos.report"): {
+    ("sequence", "sequence.report"): {
         "anomaly_score": 0.3,
         "habituation_score": 0.4,
         "rumination_detected": False,
         "time_since_last_interaction_s": 12.5,
     },
-    ("topos", "topos.report"): {
+    ("vision", "vision.report"): {
         "change_score": 0.2,
         "habituation_score": 0.7,
         "encoder_model_id": "facebook/dinov2-small",
     },
-    ("nous", "nous.belief"): {
+    ("planning", "planning.belief"): {
         "statement": "salience_high",
         "frequency": 0.9,
         "confidence": 0.5,
         "kind": "belief",
     },
-    ("nous", "nous.policy"): {
+    ("planning", "planning.policy"): {
         "policy": "request_think",
         "expected_free_energy": -1.531,
         "horizon": 1,
     },
-    ("nous", "nous.proposal"): {
+    ("planning", "planning.proposal"): {
         "proposal_id": "0f3c9a1e2b4d4c6f8a1b2c3d4e5f6a7b",
         "action": "request_think",
         "kind": "think",
         "step": 12,
         "preference": 0.42,
     },
-    ("hypnos", "hypnos.rest_request"): {
+    ("sleep", "sleep.rest_request"): {
         "accepted": False,
         "reason": "too_soon",
-        "origin": "nous",
+        "origin": "planning",
     },
-    ("mnemos", "mnemos.recall"): {
+    ("episodic_memory", "episodic_memory.recall"): {
         "count": 3,
         "collection": "episodic",
         "max_affect_intensity": 0.6,
     },
-    ("thymos", "thymos.emotion"): {"emotion": "joy"},
-    ("thymos", "thymos.drive"): {"drive": "curiosity", "value": 0.75},
-    ("thymos", "thymos.state"): {
+    ("affect", "affect.emotion"): {"emotion": "joy"},
+    ("affect", "affect.drive"): {"drive": "curiosity", "value": 0.75},
+    ("affect", "affect.state"): {
         "state": {"valence": 0.1, "arousal": 0.5},
         "drives": {"curiosity": 0.3},
         "emotion": "neutral",
     },
-    ("thymos", "thymos.goal"): {
+    ("affect", "affect.goal"): {
         "action": "added",
         "description": "explore the perimeter",
     },
-    ("eidolon", "eidolon.drift"): {
+    ("self_model", "self_model.drift"): {
         "score": 0.8,
-        "top_drifted_sources": ["soma", "chronos"],
+        "top_drifted_sources": ["interoception", "sequence"],
     },
     ("cycle", "cycle.tick"): {
         "tick_index": 42,
@@ -90,25 +90,25 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "category": "calm",
         "confidence": 0.7,
     },
-    ("empatheia", "empatheia.agent_model"): {
+    ("social_cognition", "social_cognition.agent_model"): {
         "agent_id": "operator",
         "agent_label": "operator",
         "familiarity": 0.45,
         "reliability": 0.88,
         "interaction_count": 12,
     },
-    ("empatheia", "empatheia.social_error"): {
+    ("social_cognition", "social_cognition.social_error"): {
         "agent_id": "operator",
         "agent_label": "operator",
         "salience": 0.72,
         "deviation_magnitude": 0.84,
     },
-    ("phantasia", "phantasia.world_error"): {
+    ("world_model", "world_model.world_error"): {
         "world_error": 0.42,
         "salience": 0.35,
         "tick_index": 17,
     },
-    ("phantasia", "phantasia.scenario"): {
+    ("world_model", "world_model.scenario"): {
         "seed_memory_id": "m-1",
         "horizon": 8,
         "step_magnitudes": [0.1, 0.2, 0.3],
@@ -116,7 +116,7 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "encoder_version": "phantasia-encoder-v1",
     },
     # --- v4 additions ---
-    ("nous", "nous.timeout"): {
+    ("planning", "planning.timeout"): {
         "elapsed_ms": 120.0,
         "num_factors": 3,
         "num_actions": 4,
@@ -127,7 +127,7 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "mean_energy": 0.42,
         "speaking_rate_syllables_per_s": 4.1,
     },
-    ("vox", "vox.synthesized"): {
+    ("vocal", "vocal.synthesized"): {
         "text_length": 42,
         "bytes_produced": 24000,
         "output_format": "wav",
@@ -139,17 +139,17 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "latency_ms": 220.0,
         "success": True,
     },
-    ("mnemos", "mnemos.replay"): {
+    ("episodic_memory", "episodic_memory.replay"): {
         "memory_id": "short_term:3",
         "affect_intensity": 0.6,
         "affect": {"valence": 0.3, "arousal": 0.5},
         "source_timestamp": 1700000000.0,
         "replayed_at": 1700001000.0,
     },
-    ("hypnos", "hypnos.sleep.started"): {
+    ("sleep", "sleep.sleep.started"): {
         "started_at": 1700000000.0,
     },
-    ("hypnos", "hypnos.sleep.completed"): {
+    ("sleep", "sleep.sleep.completed"): {
         "total_elapsed_ms": 4200.0,
         "phases": [
             {"name": "light_consolidation", "success": True, "elapsed_ms": 800.0},
@@ -157,12 +157,12 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         ],
         "fatigue_triggered": False,
     },
-    ("hypnos", "hypnos.association"): {
+    ("sleep", "sleep.association"): {
         "seed_memory_id": "m-42",
         "horizon": 5,
         "trajectory_drift": 0.03,
     },
-    ("eidolon", "eidolon.self_model"): {
+    ("self_model", "self_model.document"): {
         "values": ["autonomy", "honesty"],
         "behavioral_norms": ["non-deception"],
         "personality_baseline": {"openness": 0.8, "conscientiousness": 0.7},
@@ -206,13 +206,13 @@ def test_fallback_with_empty_payload():
 
 
 def test_interoception_report_alerts_branch():
-    out = TEMPLATES[("soma", "soma.report")]({"wellness": 0.2, "alerts": ["cpu_percent"]})
+    out = TEMPLATES[("interoception", "interoception.report")]({"wellness": 0.2, "alerts": ["cpu_percent"]})
     assert "cpu_percent" in out
     assert "alerts" in out
 
 
 def test_affect_state_renders_state_and_drives():
-    out = TEMPLATES[("thymos", "thymos.state")]({
+    out = TEMPLATES[("affect", "affect.state")]({
         "state": {"valence": 0.0, "arousal": 0.5, "dominance": 0.0},
         "drives": {"curiosity": 0.4, "boredom": 0.2},
         "emotion": "neutral",
@@ -228,18 +228,18 @@ def test_cycle_tick_omits_slip_when_zero():
 
 
 def test_interoception_fatigue_crossed_branch():
-    out = TEMPLATES[("soma", "soma.fatigue")]({"value": 105.0, "threshold": 100.0, "crossed": True})
+    out = TEMPLATES[("interoception", "interoception.fatigue")]({"value": 105.0, "threshold": 100.0, "crossed": True})
     assert "crossed" in out.lower() or "maintenance" in out.lower()
     assert "105" in out or "105.0" in out
 
 
 def test_interoception_fatigue_not_crossed():
-    out = TEMPLATES[("soma", "soma.fatigue")]({"value": 50.0, "threshold": 100.0, "crossed": False})
+    out = TEMPLATES[("interoception", "interoception.fatigue")]({"value": 50.0, "threshold": 100.0, "crossed": False})
     assert "50" in out
 
 
 def test_interoception_regulation_renders_action():
-    out = TEMPLATES[("soma", "soma.regulation")](
+    out = TEMPLATES[("interoception", "interoception.regulation")](
         {"action": "shed_module", "reason": "too hot", "severity": 2}
     )
     assert "shed_module" in out

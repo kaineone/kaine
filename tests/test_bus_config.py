@@ -127,7 +127,7 @@ def test_operator_overlay_merges_per_stream_maxlen(tmp_path: Path):
         operator,
         """
         [bus.per_stream_maxlen]
-        "topos.out" = 2000
+        "vision.out" = 2000
         "audition.out" = 2000
         """,
     )
@@ -139,7 +139,7 @@ def test_operator_overlay_merges_per_stream_maxlen(tmp_path: Path):
         operator_toml=operator,
     )
     assert cfg.per_stream_maxlen["workspace.broadcast"] == 50000
-    assert cfg.per_stream_maxlen["topos.out"] == 2000
+    assert cfg.per_stream_maxlen["vision.out"] == 2000
     assert cfg.per_stream_maxlen["audition.out"] == 2000
     assert cfg.default_maxlen == 100000
 
@@ -152,7 +152,7 @@ def test_committed_config_ships_latent_stream_maxlen_caps():
         env={"KAINE_REDIS_PASSWORD": "x"},
         operator_toml=root / "config" / "kaine.operator.toml.missing",
     )
-    assert cfg.per_stream_maxlen.get("topos.out") == 12000
+    assert cfg.per_stream_maxlen.get("vision.out") == 12000
     assert cfg.per_stream_maxlen.get("audition.out") == 12000
     assert cfg.per_stream_maxlen.get("workspace.broadcast") == 100000
     assert cfg.default_maxlen == 100000
@@ -161,13 +161,13 @@ def test_committed_config_ships_latent_stream_maxlen_caps():
 def test_typical_event_bytes_uses_measured_sizes_and_default():
     from kaine.bus.config import DEFAULT_TYPICAL_EVENT_BYTES, typical_event_bytes
 
-    assert typical_event_bytes("topos.out") == 40_000
+    assert typical_event_bytes("vision.out") == 40_000
     assert typical_event_bytes("workspace.broadcast") == 6_600
-    assert typical_event_bytes("chronos.out") == 1_300
-    assert typical_event_bytes("soma.out") == 550
+    assert typical_event_bytes("sequence.out") == 1_300
+    assert typical_event_bytes("interoception.out") == 550
     assert typical_event_bytes("cycle.out") == 250
     assert typical_event_bytes("audition.out") == 400
-    assert typical_event_bytes("mnemos.out") == DEFAULT_TYPICAL_EVENT_BYTES == 2_000
+    assert typical_event_bytes("episodic_memory.out") == DEFAULT_TYPICAL_EVENT_BYTES == 2_000
 
 
 def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):
@@ -183,7 +183,7 @@ def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):
         [bus]
         default_maxlen = 100000
         [bus.per_stream_maxlen]
-        "topos.out" = 2000
+        "vision.out" = 2000
         "audition.out" = 2000
         """,
     )
@@ -195,5 +195,5 @@ def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):
         env={},
         operator_toml=operator,
     )
-    assert cfg.per_stream_maxlen.get("topos.out") == 2000
+    assert cfg.per_stream_maxlen.get("vision.out") == 2000
     assert cfg.per_stream_maxlen.get("audition.out") == 2000

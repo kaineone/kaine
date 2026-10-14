@@ -16,7 +16,7 @@ The top-down channel stays unwired, as the foveation design decided ("no pretend
 
 ### New Capabilities
 
-- `topos-foveation`: precision-weighted bottom-up saliency and real foveated clips.
+- `vision-foveation`: precision-weighted bottom-up saliency and real foveated clips.
 
 ## Impact
 

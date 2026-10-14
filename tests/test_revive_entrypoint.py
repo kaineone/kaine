@@ -404,7 +404,7 @@ def test_install_shared_stimulus_source_clock_uses_stage_state_and_ignores_file(
     clock = built[0]
     assert clock.lived_offset_seconds == 123.0
     assert clock.born is True
-    assert feed["_shared_womb_clock"] is clock
+    assert feed["_shared_stimulus_source_clock"] is clock
 
 
 @pytest.mark.asyncio

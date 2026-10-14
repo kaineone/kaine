@@ -50,7 +50,7 @@ async def test_diagnostics_route_returns_200():
 async def test_diagnostics_strips_content_at_bridge():
     pf = PrivacyFilter()
     ev = Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload={"text": "private", "metric": 1},
         salience=0.5,
@@ -67,7 +67,7 @@ async def test_no_surface_passes_content_through():
     # surface, so even a "conversation" surface name content-strips.
     pf = PrivacyFilter()
     ev = Event(
-        source="lingua",
+        source="language",
         type="external_speech",
         payload={"text": "hello", "metric": 1},
         salience=0.5,

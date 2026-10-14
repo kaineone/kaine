@@ -36,8 +36,8 @@ SNAPSHOT: dict[str, Any] = {
     "selected": [
         {
             "entry_id": "1-0",
-            "source": "topos",
-            "type": "topos.report",
+            "source": "vision",
+            "type": "vision.report",
             "salience": 0.7,
             "payload": {"change_score": 0.2},
             "timestamp": "2026-10-03T00:00:00+00:00",
@@ -68,7 +68,7 @@ async def test_published_broadcast_reads_back_as_event():
     assert len(entries) == 1
 
     _, event = entries[0]
-    assert event.source == "syneidesis"
+    assert event.source == "workspace"
     assert event.type == WORKSPACE_STREAM
     assert event.payload == snapshot
     assert event.salience == pytest.approx(0.7)
@@ -99,7 +99,7 @@ async def test_corrupt_snapshot_is_skipped():
         {
             "snapshot": "not json {",
             "timestamp": "2026-10-03T00:00:00+00:00",
-            "source": "syneidesis",
+            "source": "workspace",
         },
     )
     entries = await bus.read("workspace.broadcast", last_id="0")
@@ -147,8 +147,8 @@ async def test_bridge_relays_events_published_after_start():
 
     # History published before the bridge starts must not be relayed.
     history = Event(
-        source="topos",
-        type="topos.report",
+        source="vision",
+        type="vision.report",
         payload={"change_score": 0.1},
         salience=0.3,
         timestamp=datetime.now(timezone.utc),
@@ -158,7 +158,7 @@ async def test_bridge_relays_events_published_after_start():
     bridge = BusBridge(
         bus,
         PrivacyFilter(),
-        streams=["topos.out", "cycle.out", "workspace.broadcast"],
+        streams=["vision.out", "cycle.out", "workspace.broadcast"],
         poll_interval_s=0.01,
     )
     client = bridge.add_client("diagnostics")
@@ -167,8 +167,8 @@ async def test_bridge_relays_events_published_after_start():
     await bridge._tick_once()
 
     vision_event = Event(
-        source="topos",
-        type="topos.report",
+        source="vision",
+        type="vision.report",
         payload={"change_score": 0.2, "latent": [0.1] * 768},
         salience=0.6,
         timestamp=datetime.now(timezone.utc),
@@ -191,8 +191,8 @@ async def test_bridge_relays_events_published_after_start():
         "selected": [
             {
                 "entry_id": "1-0",
-                "source": "topos",
-                "type": "topos.report",
+                "source": "vision",
+                "type": "vision.report",
                 "salience": 0.8,
                 "payload": {"latent": [0.2] * 768, "change_score": 0.3},
                 "timestamp": "2026-10-03T00:00:00+00:00",
@@ -216,7 +216,7 @@ async def test_bridge_relays_events_published_after_start():
     assert len(drained) == 3
 
     vision_payloads = [
-        event.payload for _, event in drained if event.type == "topos.report"
+        event.payload for _, event in drained if event.type == "vision.report"
     ]
     assert all(payload.get("change_score") != 0.1 for payload in vision_payloads)
     assert {"change_score": 0.2} in vision_payloads
@@ -311,10 +311,10 @@ async def test_chart_routing_in_real_browser():
                             return msgs.map(m => routing.chartSamples(m));
                         }""",
                         [
-                            {"source": "syneidesis", "type": "workspace.broadcast", "salience": 0.7, "payload": {"metadata": {"coherence": 0.42}}},
+                            {"source": "workspace", "type": "workspace.broadcast", "salience": 0.7, "payload": {"metadata": {"coherence": 0.42}}},
                             {"source": "cycle", "type": "cycle.tick", "salience": 0.05, "payload": {"processing_rate_hz": 10, "experiential_rate_hz": 3.3}},
-                            {"source": "topos", "type": "topos.report", "salience": 0.6, "payload": {}},
-                            {"source": "syneidesis", "type": "workspace.broadcast", "salience": 0.7, "payload": {"metadata": {}}},
+                            {"source": "vision", "type": "vision.report", "salience": 0.6, "payload": {}},
+                            {"source": "workspace", "type": "workspace.broadcast", "salience": 0.7, "payload": {"metadata": {}}},
                         ],
                     )
 

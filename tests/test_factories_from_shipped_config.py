@@ -85,7 +85,7 @@ def test_factory_builds_from_shipped_config(name, profile, tier, tmp_path):
         section = cfg[section_name]
         if not isinstance(section, dict):
             continue
-        if "qdrant" in section or section_name in {"mnemos", "empatheia"}:
+        if "qdrant" in section or section_name in {"episodic_memory", "social_cognition"}:
             cfg.setdefault(section_name, {}).setdefault("qdrant", {})["api_key"] = "test-key"
 
     bus = MagicMock(spec=kaine.bus.client.AsyncBus)

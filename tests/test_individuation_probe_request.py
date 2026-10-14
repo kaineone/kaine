@@ -183,7 +183,7 @@ async def test_probe_request(bus: AsyncBus, tmp_path: Path):
 
     assert await bus.client.xlen(EXTERNAL_STREAM) == 0
     assert await bus.client.xlen(INTERNAL_STREAM) == 0
-    assert await bus.client.xlen("lingua.out") == 0
+    assert await bus.client.xlen("language.out") == 0
 
 
 def test_probe_self_model_none_until_snapshot(bus: AsyncBus, tmp_path: Path):
@@ -213,8 +213,8 @@ def test_openai_chat_client_body_cache_prompt():
 def test_privacy_filter_strips_situation_facts():
     pf = PrivacyFilter()
     event = Event(
-        source="eidolon",
-        type="eidolon.self_model",
+        source="self_model",
+        type="self_model.document",
         payload={
             "name": "Kaine",
             "values": ["v"],
@@ -240,8 +240,8 @@ async def test_probe_ignores_the_live_workspace(bus: AsyncBus, tmp_path: Path):
 
     language = _make_language(bus, tmp_path, responses=["response"])
     live = Event(
-        source="topos",
-        type="topos.report",
+        source="vision",
+        type="vision.report",
         payload={"change_score": 0.9, "alert": True},
         salience=0.9,
         timestamp=datetime.now(timezone.utc),

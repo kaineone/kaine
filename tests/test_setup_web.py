@@ -31,7 +31,7 @@ def _shipped_config(tmp_path: Path) -> Path:
         return real
     fallback = tmp_path / "kaine.toml"
     fallback.write_text(
-        "[lingua]\nmodel_id = 'model-a'\n[vox]\nbackend = 'chatterbox'\n"
+        "[language]\nmodel_id = 'model-a'\n[vocal]\nbackend = 'chatterbox'\n"
         "predefined_voice_id = 'voice-a'\n[audition]\nbackend = 'speaches'\n"
         "stt_model = 'stt-a'\n"
     )
@@ -403,7 +403,7 @@ def test_absent_boolean_field_uses_default(tmp_path):
     sid = client.cookies["setup_session"]
     config = app.state.setup.store.sessions[sid]["config"]
     assert (
-        config.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
+        config.get("sleep", {}).get("voice_alignment", {}).get("trainer_python")
         == "/fake/trainer/python3"
     )
 
@@ -526,7 +526,7 @@ def test_save_refused_when_cycle_running(tmp_path, monkeypatch):
     assert r.status_code in (302, 303)
     sid = client.cookies["setup_session"]
     app.state.setup.store.sessions[sid]["config"] = {
-        "lingua": {"model_id": "model-a"}
+        "language": {"model_id": "model-a"}
     }
     app.state.setup.store.sessions[sid]["step_index"] = len(app.state.setup.steps)
     app.state.setup.store.sessions[sid]["acknowledged"] = True
@@ -975,7 +975,7 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
     seen: list[str] = []
     config_no = walk(app, client, seen_ids=seen)
     assert "trainer-provisioning" in seen
-    assert config_no.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python") is None
+    assert config_no.get("sleep", {}).get("voice_alignment", {}).get("trainer_python") is None
 
     # Ticked: the step records the probed interpreter.
     app2 = _mk_app(tmp_path, host=host, probe_trainer=probe_trainer)
@@ -992,11 +992,11 @@ def test_trainer_step_appears_and_records_when_ticked(tmp_path):
         },
     )
     assert (
-        config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_python")
+        config_yes.get("sleep", {}).get("voice_alignment", {}).get("trainer_python")
         == "/fake/trainer/python3"
     )
     assert (
-        config_yes.get("hypnos", {}).get("voice_alignment", {}).get("trainer_backend")
+        config_yes.get("sleep", {}).get("voice_alignment", {}).get("trainer_backend")
         == "subprocess"
     )
 

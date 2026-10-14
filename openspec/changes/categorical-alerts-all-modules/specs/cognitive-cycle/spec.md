@@ -4,9 +4,9 @@
 An event a module publishes at its alert level SHALL carry `alert` true in its payload, and an event whose intensity a module chooses between its baseline and its alert level SHALL carry `alert` set to whether the alert level was chosen, so that the access rate's phasic input counts every categorical alert the paper defines.
 
 #### Scenario: A drive crossing is an alert
-- **WHEN** the affect module publishes a `thymos.drive` crossing at its alert level
+- **WHEN** the affect module publishes a `affect.drive` crossing at its alert level
 - **THEN** the payload has `alert` true and the access rate's phasic input counts it
 
 #### Scenario: A successful sleep is not an alert
 - **WHEN** the sleep module completes a sleep in which every phase succeeded
-- **THEN** `hypnos.sleep.completed` is published at the baseline level with `alert` false
+- **THEN** `sleep.sleep.completed` is published at the baseline level with `alert` false

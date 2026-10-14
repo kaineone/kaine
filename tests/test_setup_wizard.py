@@ -78,9 +78,9 @@ def _collect_out() -> tuple[list[str], callable]:
 
 def test_voice_id_prompt_is_bounded():
     shipped = copy.deepcopy(_shipped())
-    shipped.setdefault("vox", {})["predefined_voice_id"] = ""
-    if shipped.get("vox", {}).get("backend", "chatterbox").lower() != "chatterbox":
-        shipped["vox"]["backend"] = "chatterbox"
+    shipped.setdefault("vocal", {})["predefined_voice_id"] = ""
+    if shipped.get("vocal", {}).get("backend", "chatterbox").lower() != "chatterbox":
+        shipped["vocal"]["backend"] = "chatterbox"
 
     calls: list[str] = []
 
@@ -102,22 +102,22 @@ def test_voice_id_prompt_is_bounded():
         host=_host(cuda=0),
         shipped_config=shipped,
     )
-    assert result.config["modules"]["vox"] is False
+    assert result.config["modules"]["vocal"] is False
     assert len(calls) < 200
 
 
 def test_propose_devices_multi_gpu():
     d = propose_device_assignments(_host(cuda=2))
-    assert d["hypnos.voice_alignment.training_device"] == "cuda:0"
-    assert d["topos.device"] == "cuda:1"
+    assert d["sleep.voice_alignment.training_device"] == "cuda:0"
+    assert d["vision.device"] == "cuda:1"
     assert d["embedding.device"] == "cpu"
     assert d["audition.emotion_device"] == "cpu"
 
 
 def test_propose_devices_single_gpu():
     d = propose_device_assignments(_host(cuda=1))
-    assert d["hypnos.voice_alignment.training_device"] == "cuda:0"
-    assert d["topos.device"] == "cuda:0"
+    assert d["sleep.voice_alignment.training_device"] == "cuda:0"
+    assert d["vision.device"] == "cuda:0"
     assert d["embedding.device"] == "cpu"
 
 
@@ -128,7 +128,7 @@ def test_propose_devices_cpu_only():
 
 def test_implied_extras():
     shipped = _shipped()
-    extras = implied_extras({"nous": True, "audition": False, "topos": False}, shipped)
+    extras = implied_extras({"planning": True, "audition": False, "vision": False}, shipped)
     assert "reasoning" in extras
     # capture flags are off in shipped config, so no audio/vision
     assert "audio" not in extras
@@ -166,10 +166,10 @@ def test_implied_extras_seeded_feed_implies_nothing_extra():
 def test_implied_extras_deduplicates():
     # vision capture + playlist feed both imply the vision module; the result must not repeat.
     shipped = {
-        "topos": {"capture_enabled": True},
+        "vision": {"capture_enabled": True},
         "perception_feed": {"mode": "playlist"},
     }
-    extras = implied_extras({"topos": True}, shipped)
+    extras = implied_extras({"vision": True}, shipped)
     assert extras.count("vision") == 1
     assert extras.count("audio") == 1
 
@@ -206,7 +206,7 @@ def test_full_run_multi_gpu_produces_config():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     # enable only the interoception module + the language module, the rest off
     for m in MODULE_ORDER:
-        answers.append("y" if m in ("soma", "lingua") else "n")
+        answers.append("y" if m in ("interoception", "language") else "n")
     answers.append("my-model:latest")  # language organ model id
     answers.append("n")  # research
     answers.append("n")  # encryption
@@ -222,12 +222,12 @@ def test_full_run_multi_gpu_produces_config():
     )
     assert result.acknowledged is True
     cfg = result.config
-    assert cfg["modules"]["soma"] is True
-    assert cfg["modules"]["lingua"] is True
-    assert cfg["modules"]["echo"] is False
-    assert cfg["lingua"]["model_id"] == "my-model:latest"
-    assert cfg["hypnos"]["voice_alignment"]["training_device"] == "cuda:0"
-    assert cfg["topos"]["device"] == "cuda:1"
+    assert cfg["modules"]["interoception"] is True
+    assert cfg["modules"]["language"] is True
+    assert cfg["modules"]["recorder"] is False
+    assert cfg["language"]["model_id"] == "my-model:latest"
+    assert cfg["sleep"]["voice_alignment"]["training_device"] == "cuda:0"
+    assert cfg["vision"]["device"] == "cuda:1"
     # research disabled
     assert "research_submission" not in cfg
     # the config round-trips through the emitter
@@ -237,7 +237,7 @@ def test_full_run_multi_gpu_produces_config():
 def test_vocal_enabled_with_blank_voice_id_stays_on():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
-        answers.append("y" if m in ("lingua", "vox") else "n")
+        answers.append("y" if m in ("language", "vocal") else "n")
     answers.append("the-model")  # language organ model id
     # vocal voice id: blank answer accepts shipped voice
     answers.append("")
@@ -253,8 +253,8 @@ def test_vocal_enabled_with_blank_voice_id_stays_on():
         shipped_config=_shipped(),
         probe_services=lambda: {},
     )
-    assert result.config["modules"]["vox"] is True
-    assert "predefined_voice_id" not in result.config.get("vox", {})
+    assert result.config["modules"]["vocal"] is True
+    assert "predefined_voice_id" not in result.config.get("vocal", {})
     assert (
         "no voice id given; the vocal module picks a shipped voice at startup."
         in "\n".join(out)
@@ -264,7 +264,7 @@ def test_vocal_enabled_with_blank_voice_id_stays_on():
 def test_vocal_enabled_records_given_voice_id():
     answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
-        answers.append("y" if m in ("lingua", "vox") else "n")
+        answers.append("y" if m in ("language", "vocal") else "n")
     answers.append("the-model")  # language organ model id
     # vocal voice id: a specific voice file is recorded
     answers.append("Abigail.wav")
@@ -280,8 +280,8 @@ def test_vocal_enabled_records_given_voice_id():
         shipped_config=_shipped(),
         probe_services=lambda: {},
     )
-    assert result.config["modules"]["vox"] is True
-    assert result.config["vox"]["predefined_voice_id"] == "Abigail.wav"
+    assert result.config["modules"]["vocal"] is True
+    assert result.config["vocal"]["predefined_voice_id"] == "Abigail.wav"
 
 
 def test_metrics_only_when_opted_in():
@@ -452,8 +452,8 @@ def test_defaults_writes_valid_file(tmp_path: Path):
         data = tomllib.load(fh)
     assert "modules" in data
     # default safe set: interoception on, recorder off
-    assert data["modules"]["soma"] is True
-    assert data["modules"]["echo"] is False
+    assert data["modules"]["interoception"] is True
+    assert data["modules"]["recorder"] is False
     assert "security" not in data or not data["security"]["state_encryption"]["enabled"]
     # no metrics by default
     assert "research_submission" not in data
@@ -516,7 +516,7 @@ def test_provision_organ_declined_prints_guide():
     shipped = _shipped()
     # Operator answers "n" to the download prompt.
     _provision_organ(
-        {"modules": {"lingua": True}},
+        {"modules": {"language": True}},
         shipped=shipped,
         host={"backend": "cuda"},
         input_fn=lambda _p: "n",
@@ -533,7 +533,7 @@ def test_provision_organ_skipped_when_language_disabled():
 
     out: list[str] = []
     _provision_organ(
-        {"modules": {"lingua": False}},
+        {"modules": {"language": False}},
         shipped=_shipped(),
         host={"backend": "cuda"},
         input_fn=lambda _p: "y",
@@ -585,7 +585,7 @@ def test_provision_organ_consent_downloads_then_offers_launch(monkeypatch, tmp_p
     answers = iter(["y", "y"])  # download? yes; launch? yes
     out: list[str] = []
     _provision_organ(
-        {"modules": {"lingua": True}},
+        {"modules": {"language": True}},
         shipped=_shipped(),
         host={"backend": "cuda"},
         input_fn=lambda _p: next(answers, ""),
@@ -619,7 +619,7 @@ def test_defaults_subprocess_smoke(tmp_path: Path):
     with op.open("rb") as fh:
         tomllib.load(fh)
     with secrets_path.open("rb") as fh:
-        assert len(tomllib.load(fh)["nexus"]["operator_token"]) >= 32
+        assert len(tomllib.load(fh)["dashboard"]["operator_token"]) >= 32
     after = real_secrets.read_bytes() if real_secrets.exists() else None
     assert after == before
 
@@ -755,7 +755,7 @@ def test_dashboard_token_generated_on_fresh_install(tmp_path: Path) -> None:
     assert status == "generated"
     with path.open("rb") as f:
         data = tomllib.load(f)
-    token = data["nexus"]["operator_token"]
+    token = data["dashboard"]["operator_token"]
     assert isinstance(token, str)
     assert len(token) >= 32
     assert path.stat().st_mode & 0o777 == 0o600
@@ -773,15 +773,15 @@ def test_dashboard_token_generated_keeps_other_tables(tmp_path: Path) -> None:
     with path.open("rb") as f:
         data = tomllib.load(f)
     assert data["redis"]["password"] == "abc"
-    assert isinstance(data["nexus"]["operator_token"], str)
-    assert len(data["nexus"]["operator_token"]) >= 32
+    assert isinstance(data["dashboard"]["operator_token"], str)
+    assert len(data["dashboard"]["operator_token"]) >= 32
 
 
 def test_dashboard_token_existing_is_kept(tmp_path: Path) -> None:
     from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
-    original = b'[nexus]\noperator_token = "' + b"x" * 40 + b'"\n'
+    original = b'[dashboard]\noperator_token = "' + b"x" * 40 + b'"\n'
     path.write_bytes(original)
     out = io.StringIO()
     status = _ensure_dashboard_token(path, out=out.write, env={})
@@ -804,7 +804,7 @@ def test_dashboard_token_malformed_file_untouched(tmp_path: Path) -> None:
     from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
-    original = b"[nexus\nbroken"
+    original = b"[dashboard\nbroken"
     path.write_bytes(original)
     out = io.StringIO()
     status = _ensure_dashboard_token(path, out=out.write, env={})
@@ -828,7 +828,7 @@ def test_dashboard_token_generated_token_is_accepted_by_dashboard(
         secrets_path=secrets_path,
     )
     with secrets_path.open("rb") as f:
-        token = tomllib.load(f)["nexus"]["operator_token"]
+        token = tomllib.load(f)["dashboard"]["operator_token"]
     assert config.operator_token == token
 
 
@@ -848,7 +848,7 @@ def test_defaults_run_generates_token_in_redirected_path(tmp_path: Path) -> None
     assert rc == 0
     with secrets_path.open("rb") as f:
         data = tomllib.load(f)
-    token = data["nexus"]["operator_token"]
+    token = data["dashboard"]["operator_token"]
     assert isinstance(token, str)
     assert len(token) >= 32
 
@@ -857,7 +857,7 @@ def test_dashboard_token_too_short_in_file_is_reported_not_kept(tmp_path: Path) 
     from kaine.setup.__main__ import _ensure_dashboard_token
 
     path = tmp_path / "secrets.toml"
-    path.write_text('[nexus]\noperator_token = "short-token"\n')
+    path.write_text('[dashboard]\noperator_token = "short-token"\n')
     before = path.read_bytes()
     out = io.StringIO()
     status = _ensure_dashboard_token(path, out=out.write, env={})
@@ -906,7 +906,7 @@ def test_compose_messages_go_to_the_output(tmp_path: Path, monkeypatch):
     (tmp_path / "compose" / "kaine.yml").write_text("")
     op = tmp_path / "op.toml"
     op.write_text(f'[storage]\ndata_root = "{tmp_path / "data"}"\n')
-    monkeypatch.setattr(setup_main_mod, "device_map", lambda _cfg: {"lingua": "cuda:0"})
+    monkeypatch.setattr(setup_main_mod, "device_map", lambda _cfg: {"language": "cuda:0"})
     monkeypatch.setattr(setup_main_mod, "compose_gpu_env", lambda _m: {"KAINE_ORGAN_GPU": "0"})
     monkeypatch.setattr(setup_main_mod, "write_env_values", lambda *_a, **_k: None)
     monkeypatch.setattr(setup_main_mod, "existing_volumes", lambda: [])

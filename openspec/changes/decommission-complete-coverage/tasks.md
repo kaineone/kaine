@@ -29,7 +29,7 @@
 - [x] 4.4 Incomplete deletion reports INCOMPLETE, audit outcome `incomplete`, exit 8.
 - [x] 4.5 Qdrant probed before copying; failed backups purge plaintext or restrict permissions.
 - [x] 4.6 The end-to-end test seeds an independent list of real paths; the log test drives the language and vocal emit paths.
-- [x] 4.7 `[lifecycle].snapshots_path`, `[lifecycle.adapter_merge].output_dir` and `[hypnos.voice_alignment].trainer_workdir` honoured.
+- [x] 4.7 `[lifecycle].snapshots_path`, `[lifecycle.adapter_merge].output_dir` and `[sleep.voice_alignment].trainer_workdir` honoured.
 - [x] 4.8 Deletion refuses paths outside the roots and the configured allow-list.
 - [x] 4.9 Licence sections cited as "CAL Article".
 - [x] 4.10 CI runs the Redis end-to-end and authentication tests against a real redis-server.

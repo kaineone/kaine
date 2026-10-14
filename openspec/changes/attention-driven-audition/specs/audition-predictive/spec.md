@@ -51,8 +51,8 @@ Audition SHALL serialize the acoustic forward model's weights and statistical bu
 - **THEN** the new state still holds encoder A's entry unchanged
 
 ### Requirement: Auditory adaptation pauses during sleep
-Audition SHALL suspend adaptation of its forward models from `hypnos.sleep.started` until `hypnos.sleep.completed`, while continuing to perceive and to compute prediction error.
+Audition SHALL suspend adaptation of its forward models from `sleep.sleep.started` until `sleep.sleep.completed`, while continuing to perceive and to compute prediction error.
 
 #### Scenario: No learning while asleep
-- **WHEN** `hypnos.sleep.started` has been received and Audition perceives windows
-- **THEN** the forward models' weights do not change until `hypnos.sleep.completed` is received
+- **WHEN** `sleep.sleep.started` has been received and Audition perceives windows
+- **THEN** the forward models' weights do not change until `sleep.sleep.completed` is received

@@ -51,10 +51,10 @@ class FakeAdapter:
             name="fake",
             transitional=False,
             feed_events={
-                "chat": ("mundus.chat", 0.6),
-                "proprio": ("mundus.proprio", 0.3),
-                "entity": ("mundus.entity", 0.2),
-                "frame": ("mundus.visual.raw", 0.1),
+                "chat": ("embodiment.chat", 0.6),
+                "proprio": ("embodiment.proprio", 0.3),
+                "entity": ("embodiment.entity", 0.2),
+                "frame": ("embodiment.visual.raw", 0.1),
             },
             action_families={"say": True, "gesture": True, "teleport": False},
             continuous_channels=self._continuous,
@@ -129,7 +129,7 @@ async def test_feed_maps_through_descriptor(bus, monkeypatch):
     await m.initialize()
     try:
         adapter.push_frame(FeedFrame(kind="chat", payload={"message": "yo"}))
-        ev = await _wait_event(bus, "mundus.out", "mundus.chat")
+        ev = await _wait_event(bus, "embodiment.out", "embodiment.chat")
         assert ev.payload["message"] == "yo"
     finally:
         await m.shutdown()
@@ -148,7 +148,7 @@ async def test_raw_buffer_stripped_before_bus(bus, monkeypatch):
             kind="frame",
             payload={"w": 224, "h": 224, "encoding": "rgb8", "seq": 1,
                      "data": b"\x00" * 16}))
-        ev = await _wait_event(bus, "mundus.out", "mundus.visual.raw")
+        ev = await _wait_event(bus, "embodiment.out", "embodiment.visual.raw")
         assert ev.payload["w"] == 224
         assert "data" not in ev.payload
     finally:
@@ -165,11 +165,11 @@ async def test_salience_policy_bumps_notable_events(bus, monkeypatch):
     await m.initialize()
     try:
         adapter.push_frame(FeedFrame(kind="proprio", payload={"dying": True}))
-        ev = await _wait_event(bus, "mundus.out", "mundus.proprio")
+        ev = await _wait_event(bus, "embodiment.out", "embodiment.proprio")
         assert ev.salience == pytest.approx(0.8)  # bumped from baseline 0.3
 
         adapter.push_frame(FeedFrame(kind="entity", payload={"arrived": ["a"]}))
-        ev = await _wait_event(bus, "mundus.out", "mundus.entity")
+        ev = await _wait_event(bus, "embodiment.out", "embodiment.entity")
         assert ev.salience == pytest.approx(0.5)  # bumped from baseline 0.2
     finally:
         await m.shutdown()
@@ -186,12 +186,12 @@ async def test_intent_and_speech_reach_the_body(bus, monkeypatch):
     try:
         # intent.avatar.say → symbolic action on the body
         await bus.publish(validate_event(
-            source="volition", type="intent.avatar.say",
+            source="action_selection", type="intent.avatar.say",
             payload={"message": "hi there", "channel": 0}, salience=0.5,
             timestamp=datetime.now(timezone.utc)))
         # mirrored external speech → avatar say
         await bus.publish(validate_event(
-            source="linguatest", type="lingua.external",
+            source="linguatest", type="language.external",
             payload={"text": "spoken aloud"}, salience=0.4,
             timestamp=datetime.now(timezone.utc)))
 
@@ -215,7 +215,7 @@ async def test_physical_locus_blocks_avatar_actions(bus, monkeypatch):
     await m.initialize()
     try:
         await bus.publish(validate_event(
-            source="volition", type="intent.avatar.say",
+            source="action_selection", type="intent.avatar.say",
             payload={"message": "should not reach the body"}, salience=0.5,
             timestamp=datetime.now(timezone.utc)))
         await asyncio.sleep(0.5)
@@ -233,7 +233,7 @@ async def test_unexposed_action_is_dropped(bus, monkeypatch):
     await m.initialize()
     try:
         await bus.publish(validate_event(
-            source="volition", type="intent.avatar.teleport",
+            source="action_selection", type="intent.avatar.teleport",
             payload={"region": "Welcome", "x": 128, "y": 128, "z": 25},
             salience=0.5, timestamp=datetime.now(timezone.utc)))
         await asyncio.sleep(0.5)
@@ -251,7 +251,7 @@ def test_capabilities_descriptor_is_frozen_and_validated():
     with pytest.raises(ValueError):
         EmbodimentCapabilities(
             name="bad", transitional=False,
-            feed_events={"x": ("mundus.x", 1.5)}, action_families={})
+            feed_events={"x": ("embodiment.x", 1.5)}, action_families={})
     # family names must be non-empty
     with pytest.raises(ValueError):
         EmbodimentCapabilities(

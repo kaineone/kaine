@@ -18,9 +18,9 @@ import pytest
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 ALLOWED_URL_KEYS = {
-    ("lingua", "chat_url"),
+    ("language", "chat_url"),
     ("audition", "speaches_url"),
-    ("vox", "chatterbox_url"),
+    ("vocal", "chatterbox_url"),
 }
 
 
@@ -46,8 +46,8 @@ def test_no_other_url_keys_in_runtime_modules():
     isn't in the allowlist."""
     config = _kaine_toml()
     runtime_module_sections = {
-        "soma", "chronos", "topos", "nous", "mnemos", "eidolon",
-        "thymos", "praxis", "lingua", "vox", "audition", "hypnos",
+        "interoception", "sequence", "vision", "planning", "episodic_memory", "self_model",
+        "affect", "effectors", "language", "vocal", "audition", "sleep",
     }
     new_url_keys: list[tuple[str, str]] = []
     for section in runtime_module_sections:

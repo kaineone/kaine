@@ -78,10 +78,10 @@ def shutdown_order(modules: Iterable[BaseModule]) -> list[BaseModule]:
     """Return *modules* in shutdown order: the sleep module first, the rest as given.
 
     The sleep module's shutdown ends a sleep still in flight with the affective reset and
-    an aborted hypnos.sleep.completed. Shutting it down first keeps the modules
+    an aborted sleep.sleep.completed. Shutting it down first keeps the modules
     that the sleep module calls (the episodic memory module, the affect module, the world model module) up while it does.
     """
     modules = list(modules)
-    return [m for m in modules if m.name == "hypnos"] + [
-        m for m in modules if m.name != "hypnos"
+    return [m for m in modules if m.name == "sleep"] + [
+        m for m in modules if m.name != "sleep"
     ]

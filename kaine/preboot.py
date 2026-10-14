@@ -74,10 +74,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
+from kaine import legacy_aliases
 from kaine.boot import (
     _build_perception_feed_audio_factory,
     _build_perception_feed_video_factory,
 )
+from kaine.bus import legacy_streams
 from kaine.bus.config import (
     TYPICAL_EVENT_BYTES,
     BusConfig,
@@ -247,13 +249,13 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
     completion through ``verify_organ_generates`` and require non-empty text.
     """
     modules = config.get("modules") or {}
-    if not modules.get("lingua"):
+    if not modules.get("language"):
         return [
             CheckResult(
                 GROUP_ORGAN,
                 "Organ content",
                 SKIP,
-                "[modules].lingua = false — no organ configured for this run",
+                "[modules].language = false — no organ configured for this run",
             )
         ]
 
@@ -273,7 +275,7 @@ async def check_organ(config: dict[str, Any]) -> list[CheckResult]:
     except Exception:
         log.debug("organ_unloaded() check failed; probing anyway", exc_info=True)
 
-    language_cfg = config.get("lingua") or {}
+    language_cfg = config.get("language") or {}
     gate = await verify_organ_generates(
         language_section_chat_url(language_cfg),
         str(language_cfg.get("model_id") or ""),
@@ -334,7 +336,7 @@ async def check_perception(config: dict[str, Any]) -> list[CheckResult]:
 
 
 def _check_perception_video(config: dict[str, Any], feed: dict[str, Any], mode: str) -> CheckResult:
-    vision_cfg = config.get("topos") or {}
+    vision_cfg = config.get("vision") or {}
     width = int(vision_cfg.get("capture_width", 640))
     height = int(vision_cfg.get("capture_height", 480))
     try:
@@ -570,8 +572,8 @@ SIZE_ESTIMATE = "estimate"  # the 2 KB default for an unmeasured stream
 _CORE_BUDGET_STREAMS: tuple[str, ...] = ("workspace.broadcast", "cycle.out")
 # Streams an enabled module produces besides its own ``<module>.out``.
 _EXTRA_MODULE_STREAMS: dict[str, tuple[str, ...]] = {
-    "lingua": ("lingua.internal", "lingua.external"),
-    "nous": ("volition.out", "volition_feedback.out"),
+    "language": ("language.internal", "language.external"),
+    "planning": ("action_selection.out", "action_selection_feedback.out"),
 }
 
 # ``[preboot]`` defaults. GB here is 2**30 bytes, as ``df -h`` reports.
@@ -879,10 +881,10 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
     evaluation_paths = _table(config, "evaluation", "paths")
     research = _table(config, "research_event_log")
     raw_archive = _table(config, "research_event_log", "raw_archive")
-    voice = _table(config, "hypnos", "voice_alignment")
+    voice = _table(config, "sleep", "voice_alignment")
     lifecycle = _table(config, "lifecycle")
-    incident_log = _table(config, "spot", "incident_log")
-    self_model = _table(config, "eidolon")
+    incident_log = _table(config, "supervisor", "incident_log")
+    self_model = _table(config, "self_model")
 
     paths: list[tuple[str, Path]] = [
         ("[preboot].state_root", resolve(Path(settings["state_root"]))),
@@ -913,20 +915,20 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
             resolve(_dir_of(raw_archive.get("archive_dir"), "state/research/raw_bus_archive")),
         ),
         (
-            "[hypnos.voice_alignment].adapter_output_dir",
+            "[sleep.voice_alignment].adapter_output_dir",
             resolve(_dir_of(voice.get("adapter_output_dir"), "state/hypnos/adapters")),
         ),
         (
-            "[hypnos.voice_alignment].trainer_workdir",
+            "[sleep.voice_alignment].trainer_workdir",
             resolve(_dir_of(
                 str(voice.get("trainer_workdir") or "").strip() or None,
                 "state/hypnos/voice_align_jobs",
             )),
         ),
         ("[ignition_log].directory", resolve(Path(ignition.directory))),
-        ("[spot.incident_log].path", resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents"))),
+        ("[supervisor.incident_log].path", resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents"))),
         (
-            "[eidolon].persistence_path",
+            "[self_model].persistence_path",
             resolve(_dir_of(
                 self_model.get("persistence_path"), "state/eidolon/self_model.json", is_file=True
             )),
@@ -1094,9 +1096,103 @@ def check_storage(config: dict[str, Any], *, disk_usage=None) -> list[CheckResul
     ]
 
 
+async def _probe_old_streams() -> list[legacy_streams.OldStream]:
+    """List the old-named streams that remain on the KAINE Redis after the keys rename."""
+    import redis.asyncio as aioredis
+
+    from kaine.bus.config import load_bus_config
+
+    bus_cfg = load_bus_config()
+    client = aioredis.from_url(
+        bus_cfg.url,
+        decode_responses=True,
+        socket_connect_timeout=BUS_PROBE_TIMEOUT_S,
+        socket_timeout=BUS_PROBE_TIMEOUT_S,
+    )
+    try:
+        entries: list[legacy_streams.OldStream] = []
+        for old, new in legacy_streams.stream_map():
+            present = bool(await client.exists(old))
+            is_stream = present and (await client.type(old)) in ("stream", b"stream")
+            length = await client.xlen(old) if is_stream else 0
+            memory_bytes = 0
+            if present:
+                try:
+                    memory_bytes = await client.memory_usage(old) or 0
+                except Exception:
+                    memory_bytes = 0
+            entries.append(
+                legacy_streams.OldStream(
+                    old=old,
+                    new=new,
+                    present=present,
+                    is_stream=is_stream,
+                    length=length,
+                    memory_bytes=memory_bytes,
+                )
+            )
+        return entries
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            log.debug("bus close after old-stream probe failed", exc_info=True)
+
+
+async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
+    name = "Old stream names"
+    if not legacy_aliases.scope_done("keys"):
+        return [
+            CheckResult(
+                group=GROUP_RESOURCES,
+                name=name,
+                status=SKIP,
+                detail="the keys rename has not run",
+            )
+        ]
+    if probe is None:
+        probe = _probe_old_streams
+    try:
+        entries = await asyncio.wait_for(probe(), timeout=BUS_PROBE_TIMEOUT_S)
+    except Exception as exc:
+        return [
+            CheckResult(
+                group=GROUP_RESOURCES,
+                name=name,
+                status=WARN,
+                detail=f"could not check for old-named streams ({type(exc).__name__})",
+            )
+        ]
+    to_delete = legacy_streams.deletable(entries)
+    if to_delete:
+        total = sum(entry.memory_bytes for entry in to_delete)
+        first = to_delete[0].old
+        return [
+            CheckResult(
+                group=GROUP_RESOURCES,
+                name=name,
+                status=WARN,
+                detail=(
+                    f"{len(to_delete)} old-named streams still hold {total} bytes "
+                    f"(for example {first}); nothing reads them now; "
+                    "run python -m kaine.bus.legacy_streams --delete"
+                ),
+            )
+        ]
+    return [
+        CheckResult(
+            group=GROUP_RESOURCES,
+            name=name,
+            status=PASS,
+            detail="no old-named streams remain",
+        )
+    ]
+
+
 async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
     """The RESOURCES group: the bus budget row, then the disk-free rows."""
     results = await check_bus_budget(config)
+    results.extend(await check_old_streams(config))
     results.extend(check_storage(config))
     results.extend(check_disk(config))
     return results

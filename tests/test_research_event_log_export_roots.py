@@ -69,7 +69,7 @@ def test_load_research_event_log_config_eval_logs_absolute(tmp_path):
             [research_event_log]
             enabled = true
 
-            [research_event_log.nexus_record]
+            [research_event_log.dashboard_record]
             log_dir = "{bad_dashboard}"
             """
         ).strip()
@@ -96,7 +96,7 @@ def test_load_research_event_log_config_data_root_resolves_export_root(tmp_path)
             [research_event_log]
             enabled = true
 
-            [research_event_log.nexus_record]
+            [research_event_log.dashboard_record]
             log_dir = "nexus"
             """
         ).strip()

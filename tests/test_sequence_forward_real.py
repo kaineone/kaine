@@ -57,15 +57,15 @@ async def test_real_head_publishes_calibrated_prediction_error(bus: AsyncBus):
     )
     await sequence.initialize()
     try:
-        steady = [("audition", 0.4), ("topos", 0.5), ("soma", 0.3)]
+        steady = [("audition", 0.4), ("vision", 0.5), ("interoception", 0.3)]
         for tick in range(4000):
             now["t"] += 0.3
             await sequence.on_workspace(_snapshot(tick, steady))
         now["t"] += 6.0
         await sequence.on_workspace(
-            _snapshot(4000, [("praxis", 0.95), ("lingua", 0.9), ("nous", 0.9)])
+            _snapshot(4000, [("effectors", 0.95), ("language", 0.9), ("planning", 0.9)])
         )
-        entries = await bus.read("chronos.out", last_id="0", count=5000)
+        entries = await bus.read("sequence.out", last_id="0", count=5000)
         errors = [e.payload["temporal_prediction_error"] for _, e in entries]
         assert len(errors) == 4001
         assert errors[0] == 0.0

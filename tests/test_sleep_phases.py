@@ -341,7 +341,7 @@ async def test_deep_consolidation_no_episodic_memory():
 
 @pytest.mark.asyncio
 async def test_downscaling_preserves_vectors_and_reports_factor():
-    """Mnemos.downscale() downscales trace strengths, not vectors, and reports the factor."""
+    """EpisodicMemory.downscale() downscales trace strengths, not vectors, and reports the factor."""
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     bus = AsyncBus(
         BusConfig(password="x", audit_required=False),
@@ -455,14 +455,14 @@ async def test_five_phase_pipeline_order_via_module(tmp_path: Path):
     await bus.close()
 
 
-# --- Fatigue reset via hypnos.sleep.completed event ---
+# --- Fatigue reset via sleep.sleep.completed event ---
 
 @pytest.mark.asyncio
 async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     """Phase 4 must cause the interoception module to reset its fatigue accumulator.
 
-    The reset path is: the sleep module publishes hypnos.sleep.completed →
-    Soma._hypnos_event_loop calls self._fatigue.reset().
+    The reset path is: the sleep module publishes sleep.sleep.completed →
+    Interoception._sleep_event_loop calls self._fatigue.reset().
     We verify this by checking the event is published after pipeline completion
     (the actual interoception module wiring is an integration concern tested in test_interoception_sleep_flag.py).
     """
@@ -488,11 +488,11 @@ async def test_fatigue_reset_on_sleep_completed(tmp_path: Path):
     )
     await sleep.enter_sleep()
 
-    # hypnos.sleep.completed MUST be published (the interoception module resets on this event)
-    entries = await bus.read("hypnos.out", last_id="0", count=20)
+    # sleep.sleep.completed MUST be published (the interoception module resets on this event)
+    entries = await bus.read("sleep.out", last_id="0", count=20)
     types = [e.type for _, e in entries]
-    assert "hypnos.sleep.completed" in types, (
-        "hypnos.sleep.completed must be published so Soma can reset fatigue"
+    assert "sleep.sleep.completed" in types, (
+        "sleep.sleep.completed must be published so Soma can reset fatigue"
     )
 
     await bus.close()

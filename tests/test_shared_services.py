@@ -20,7 +20,7 @@ from kaine.shared_services import (
 
 
 def test_make_sleep_without_voice_alignment_shared_model_server():
-    """Regression: absent [hypnos.voice_alignment] must not crash make_hypnos."""
+    """Regression: absent [sleep.voice_alignment] must not crash make_sleep."""
     bus = MagicMock()
     sleep = make_sleep(
         bus,

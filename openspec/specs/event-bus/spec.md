@@ -15,10 +15,10 @@ bus. The schema SHALL contain the fields `source` (string), `type`
 publish time and SHALL NOT enter the bus.
 
 #### Scenario: Valid event publishes successfully
-- **WHEN** a caller invokes `bus.publish` with `source="soma"`,
+- **WHEN** a caller invokes `bus.publish` with `source="interoception"`,
   `type="wellness.update"`, `payload={"score": 0.82}`, `salience=0.3`,
   a current UTC timestamp, and `causal_parent=None`
-- **THEN** the event is added to the `soma.out` stream and an entry id
+- **THEN** the event is added to the `interoception.out` stream and an entry id
   is returned
 
 #### Scenario: Out-of-range salience rejected
@@ -39,12 +39,12 @@ written to by no other module.
 
 #### Scenario: Module name maps to stream
 - **WHEN** the bus serves a `publish` call from a module registered as
-  `chronos`
-- **THEN** the event is appended to the Redis stream `chronos.out` and
+  `sequence`
+- **THEN** the event is appended to the Redis stream `sequence.out` and
   not to any other stream
 
 #### Scenario: Non-Workspace write to workspace.broadcast rejected
-- **WHEN** a module other than `syneidesis` calls `bus.publish_workspace`
+- **WHEN** a module other than `workspace` calls `bus.publish_workspace`
 - **THEN** the call raises `ReservedStreamError`
 
 ### Requirement: Async client and singleton accessor
@@ -80,7 +80,7 @@ available from any source.
 - **THEN** `get_bus()` raises `BusConfigError` on first call
 
 ### Requirement: Stream retention via MAXLEN
-Every `publish` call SHALL trim the target stream to the configured maximum length using Redis Streams' approximate trimming (`XADD ... MAXLEN ~ N`). The default maximum SHALL be 100000 entries per stream and SHALL be overridable in `config/kaine.toml` either globally or per stream. The shipped configuration SHALL keep enough lookback on the high-rate streams that an observer or archive restart of several minutes loses no records: `topos.out` and `audition.out` SHALL be 12000 entries (about 20 minutes at 10 Hz; a `topos.out` entry is about 40 KB) and `workspace.broadcast` SHALL be 100000 entries. The memory these caps imply is checked before boot by the pre-boot bus budget row. The bus config loader SHALL merge an operator overlay TOML (`kaine.operator.toml`) into the base config so per-stream maxlen overrides are honored.
+Every `publish` call SHALL trim the target stream to the configured maximum length using Redis Streams' approximate trimming (`XADD ... MAXLEN ~ N`). The default maximum SHALL be 100000 entries per stream and SHALL be overridable in `config/kaine.toml` either globally or per stream. The shipped configuration SHALL keep enough lookback on the high-rate streams that an observer or archive restart of several minutes loses no records: `vision.out` and `audition.out` SHALL be 12000 entries (about 20 minutes at 10 Hz; a `vision.out` entry is about 40 KB) and `workspace.broadcast` SHALL be 100000 entries. The memory these caps imply is checked before boot by the pre-boot bus budget row. The bus config loader SHALL merge an operator overlay TOML (`kaine.operator.toml`) into the base config so per-stream maxlen overrides are honored.
 
 #### Scenario: Stream stays under configured cap
 - **WHEN** 200000 events are published in succession to a stream with `maxlen = 100000`
@@ -88,12 +88,12 @@ Every `publish` call SHALL trim the target stream to the configured maximum leng
 
 #### Scenario: Latent-vector streams are capped lower by default
 - **WHEN** the committed `config/kaine.toml` is inspected
-- **THEN** `[bus.per_stream_maxlen]` contains `"topos.out" = 12000`, `"audition.out" = 12000` and `"workspace.broadcast" = 100000`
+- **THEN** `[bus.per_stream_maxlen]` contains `"vision.out" = 12000`, `"audition.out" = 12000` and `"workspace.broadcast" = 100000`
 - **AND** `[bus].default_maxlen` is 100000
 
 #### Scenario: Operator overlay overrides per-stream maxlen
-- **WHEN** `kaine.operator.toml` sets `"topos.out" = 500` and `load_bus_config()` is called
-- **THEN** the resulting `BusConfig.per_stream_maxlen["topos.out"]` is 500
+- **WHEN** `kaine.operator.toml` sets `"vision.out" = 500` and `load_bus_config()` is called
+- **THEN** the resulting `BusConfig.per_stream_maxlen["vision.out"]` is 500
 
 #### Scenario: Operator overlay does not affect unrelated keys
 - **WHEN** `kaine.operator.toml` only changes per-stream maxlen
@@ -222,18 +222,18 @@ still be rejected.
 - **THEN** the publish is rejected, unchanged by this resilience requirement
 
 ### Requirement: Typical event sizes for bus budgeting
-`kaine/bus/config.py` SHALL provide a table of typical serialized event sizes per stream, used only to estimate bus memory before boot. The table SHALL hold the measured values `topos.out` 40 KB, `workspace.broadcast` 6.6 KB, `chronos.out` 1.3 KB, `soma.out` 0.55 KB, `cycle.out` 0.25 KB and `audition.out` 0.4 KB, and every other stream SHALL use a 2 KB default. The table SHALL be documented as estimates, not limits.
+`kaine/bus/config.py` SHALL provide a table of typical serialized event sizes per stream, used only to estimate bus memory before boot. The table SHALL hold the measured values `vision.out` 40 KB, `workspace.broadcast` 6.6 KB, `sequence.out` 1.3 KB, `interoception.out` 0.55 KB, `cycle.out` 0.25 KB and `audition.out` 0.4 KB, and every other stream SHALL use a 2 KB default. The table SHALL be documented as estimates, not limits.
 
 #### Scenario: A measured stream uses its measured size
-- **WHEN** the typical size of `topos.out` is looked up
+- **WHEN** the typical size of `vision.out` is looked up
 - **THEN** it is 40 KB
 
 #### Scenario: An unmeasured stream uses the default
-- **WHEN** the typical size of `mnemos.out` is looked up
+- **WHEN** the typical size of `episodic_memory.out` is looked up
 - **THEN** it is 2 KB
 
 ### Requirement: Workspace entries decode as broadcast events on read
-On the read path (`read`, `range` and the cursor-advancing batch read), an entry with a `snapshot` field and no `type` field SHALL decode as an event with source `syneidesis`, type `workspace.broadcast`, the decoded snapshot as payload, the entry's timestamp, and salience equal to the highest selected member's salience clamped to [0, 1] (0.0 when there are no members). Publishing and `subscribe_workspace` SHALL be unchanged. An entry whose snapshot cannot be decoded SHALL still be skipped.
+On the read path (`read`, `range` and the cursor-advancing batch read), an entry with a `snapshot` field and no `type` field SHALL decode as an event with source `workspace`, type `workspace.broadcast`, the decoded snapshot as payload, the entry's timestamp, and salience equal to the highest selected member's salience clamped to [0, 1] (0.0 when there are no members). Publishing and `subscribe_workspace` SHALL be unchanged. An entry whose snapshot cannot be decoded SHALL still be skipped.
 
 #### Scenario: A published broadcast is readable
 - **WHEN** `publish_workspace` writes a snapshot and a consumer reads `workspace.broadcast` with `read`
@@ -297,7 +297,7 @@ The bus SHALL refuse a non-blocking stream read whose cursor is `"$"`, raising a
 - **WHEN** `read_entries`, `read` or `read_entries_block` is called with the cursor `"$"` and no block time
 - **THEN** it raises an error naming the stream
 
-#### Scenario: Sleep reaches a module that follows hypnos.out
-- **WHEN** the sequence module, the vision module, or the audition module has initialized and the sleep module then publishes `hypnos.sleep.started`
+#### Scenario: Sleep reaches a module that follows sleep.out
+- **WHEN** the sequence module, the vision module, or the audition module has initialized and the sleep module then publishes `sleep.sleep.started`
 - **THEN** that module suspends its forward-model adaptation
-- **AND** it resumes after `hypnos.sleep.completed`
+- **AND** it resumes after `sleep.sleep.completed`

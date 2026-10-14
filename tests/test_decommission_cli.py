@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import redis
 
+from kaine import legacy_aliases
 from kaine.bus.client import CYCLE_CLIENT_NAME
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.__main__ import (
@@ -125,7 +126,7 @@ def _hermetic_bus_client(monkeypatch):
     """Provide an isolated in-memory Redis client for decommission tests."""
     fakeredis = pytest.importorskip("fakeredis")
     client = fakeredis.FakeRedis()
-    client.xadd("thymos.out", {"data": "1"})
+    client.xadd("affect.out", {"data": "1"})
     monkeypatch.setattr(
         "kaine.lifecycle.__main__._open_bus_client",
         lambda: client,
@@ -141,8 +142,8 @@ def _args(tmp_path, *, dry_run=False, eval_root=None, extra_config=""):
         # The runtime default memory backend is Qdrant; these tests keep none.
         + (
             ""
-            if "[mnemos]" in extra_config
-            else '[mnemos]\nbackend = "inmemory"\n[empatheia]\nbackend = "inmemory"\n'
+            if "[episodic_memory]" in extra_config
+            else '[episodic_memory]\nbackend = "inmemory"\n[social_cognition]\nbackend = "inmemory"\n'
         )
         + extra_config,
         encoding="utf-8",
@@ -206,14 +207,14 @@ def test_non_diverged_ack_path_deletes(tmp_path, monkeypatch):
     assert "Entity state deleted" in out.getvalue()
     # Backup was written.
     assert list((tmp_path / "backups").glob("entity_*"))
-    assert "cleared stream: thymos.out" in out.getvalue()
+    assert "cleared stream: affect.out" in out.getvalue()
     audit_path = tmp_path / "state" / "audit" / "decommission.jsonl"
     assert audit_path.exists()
     lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["outcome"] == "deleted"
-    assert "thymos.out" in record["cleared_streams"]
+    assert "affect.out" in record["cleared_streams"]
     text = audit_path.read_text(encoding="utf-8")
     assert '{"x":1}' not in text
     assert "Kaine Nova" not in text
@@ -302,7 +303,7 @@ def test_running_voice_alignment_job_refuses(tmp_path, monkeypatch):
     rc = main(
         _args(
             tmp_path,
-            extra_config=f'[hypnos.voice_alignment]\ntrainer_jobs_dir = "{jobs_dir}"\n',
+            extra_config=f'[sleep.voice_alignment]\ntrainer_jobs_dir = "{jobs_dir}"\n',
         ),
         input_fn=_scripted_input(answers),
         out=out,
@@ -349,7 +350,7 @@ def test_qdrant_unreachable_fails_before_deletion(tmp_path, monkeypatch):
     ]
     cli_args = _args(
         tmp_path,
-        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+        extra_config='[episodic_memory]\nbackend = "qdrant"\n[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
     )
     # Module toggles come from the operator overlay (the default profile
     # leaves the episodic memory module off).
@@ -525,7 +526,7 @@ def test_dry_run_deletes_nothing(tmp_path, monkeypatch):
     assert rc == 0, out.getvalue()
     assert (tmp_path / "state" / "eidolon").exists()  # nothing deleted
     assert "dry-run" in out.getvalue().lower()
-    assert "redis stream: thymos.out" in out.getvalue()
+    assert "redis stream: affect.out" in out.getvalue()
 
 
 def test_bus_live_refusal(tmp_path, monkeypatch):
@@ -788,7 +789,7 @@ def test_argv_is_cycle(args, expected):
 def test_empty_subtree_dirs_only_refuses_decommission(tmp_path, monkeypatch):
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     state_root = tmp_path / "state"
-    for sub in ("eidolon", "forks", "cycle"):
+    for sub in ("self_model", "forks", "cycle"):
         (state_root / sub).mkdir(parents=True, exist_ok=True)
     out_root = tmp_path / "backups"
     cfg_dir = tmp_path / "config"
@@ -864,7 +865,7 @@ def test_incomplete_deletion_exits_8_and_is_audited(tmp_path, monkeypatch):
     real_rmtree = shutil.rmtree
 
     def guarded_rmtree(path, *args, **kwargs):
-        if Path(path).name == "eidolon":
+        if Path(path).name in legacy_aliases.name_forms("self_model"):
             raise PermissionError(path)
         return real_rmtree(path, *args, **kwargs)
 
@@ -904,7 +905,7 @@ def test_module_off_unreachable_qdrant_refuses_before_anything(tmp_path, monkeyp
         "Kaine Nova",
     ])
     rc = main(
-        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
+        _args(tmp_path, extra_config='[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
         input_fn=lambda prompt="": next(answers),
         out=out,
         err=err,
@@ -944,7 +945,7 @@ def test_qdrant_absent_flag_skips_qdrant_and_deletes(tmp_path, monkeypatch):
         "Kaine Nova",
     ])
     rc = main(
-        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n') + ["--qdrant-absent"],
+        _args(tmp_path, extra_config='[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n') + ["--qdrant-absent"],
         input_fn=lambda prompt="": next(answers),
         out=out,
         err=err,
@@ -974,7 +975,7 @@ def test_qdrant_absent_does_not_override_a_module_that_is_on(tmp_path, monkeypat
     err = io.StringIO()
     base_args = _args(
         tmp_path,
-        extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+        extra_config='[episodic_memory]\nbackend = "qdrant"\n[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
     )
     (tmp_path / "config" / "kaine.operator.toml").write_text(
         "[modules]\nmnemos = true\n", encoding="utf-8"
@@ -1025,7 +1026,7 @@ def test_stuck_job_names_directory_and_trainer_stopped_proceeds(tmp_path, monkey
     monkeypatch.setattr("kaine.lifecycle.__main__.cancel_voice_alignment_jobs", _fast_cancel)
 
     extra_config = (
-        f'[hypnos.voice_alignment]\n'
+        f'[sleep.voice_alignment]\n'
         f'trainer_jobs_dir = "{jobs_dir.as_posix()}"\n'
         f'trainer_workdir = "{(tmp_path / "state" / "work").as_posix()}"\n'
     )
@@ -1128,7 +1129,7 @@ def test_qdrant_failing_before_deletion_keeps_local_state(tmp_path, monkeypatch)
     rc = main(
         _args(
             tmp_path,
-            extra_config='[mnemos]\nbackend = "qdrant"\n[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+            extra_config='[episodic_memory]\nbackend = "qdrant"\n[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
         ),
         input_fn=input_fn,
         out=out,
@@ -1182,7 +1183,7 @@ def test_qdrant_absent_refused_when_qdrant_answers(tmp_path, monkeypatch):
     rc = main(
         _args(
             tmp_path,
-            extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
+            extra_config='[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n',
         ) + ["--qdrant-absent"],
         input_fn=lambda prompt="": next(answers),
         out=out,
@@ -1316,7 +1317,7 @@ def test_reprobe_stops_module_off_run_before_deletion(tmp_path, monkeypatch):
         return next(answers, "")
 
     rc = main(
-        _args(tmp_path, extra_config='[mnemos.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
+        _args(tmp_path, extra_config='[episodic_memory.qdrant]\nhost = "127.0.0.1"\nport = 1\n'),
         input_fn=_input_fn,
         out=out,
         err=err,

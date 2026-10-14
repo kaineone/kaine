@@ -8,7 +8,7 @@ biological forward model does real predictive work, not noise.
 `_LinearHead` mirrors `kaine.modules.sequence.network.ForwardPredictionHead`
 (a single-layer linear map, online-adapted) so this stays sim-only; the live
 integration injects the same `WetwareTimingModel` into the real
-`Chronos(bus, network=...)` seam.
+`Sequence(bus, network=...)` seam.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def _open():
     s = SubstrateSession(SubstrateConfig(accelerated_time=True, ticks_per_second=100))
     s.open()
     b = SubstrateBroker(channel_count=64, ticks_per_second=100, nesting_factor=6)
-    territory = b.allocate("chronos", 8)
+    territory = b.allocate("sequence", 8)
     b.open(s.neurons)
     return s, b, WetwareTimingModel(b, territory)
 

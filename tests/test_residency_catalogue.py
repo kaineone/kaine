@@ -25,7 +25,7 @@ def test_round_trip(tmp_path, monkeypatch):
         catalogue, "kaine_version_str", "0.0-test"
     )
     entry = Entry(
-        component="lingua",
+        component="language",
         backend="llama.cpp",
         model_id="test-model",
         bytes=2 * GIB,
@@ -84,11 +84,11 @@ def test_load_catalogue_skips_bad_entry(tmp_path, monkeypatch):
     p.write_text(json.dumps([good, bad]))
     entries = load_catalogue(p)
     assert len(entries) == 1
-    assert entries[0].component == "lingua"
+    assert entries[0].component == "language"
 
 
 def test_upsert_replace_and_append():
-    e1 = _make_entry("lingua", "llama.cpp", "a", "cpu", GIB)
+    e1 = _make_entry("language", "llama.cpp", "a", "cpu", GIB)
     e2 = _make_entry("audition", "sherpa_onnx", "b", "cpu", 2 * GIB)
     result = upsert((e1,), e2)
     assert len(result) == 2
@@ -101,27 +101,27 @@ def test_upsert_replace_and_append():
 
 
 def test_footprint_bytes_max_over_matches():
-    e1 = _make_entry("lingua", "llama.cpp", "a", "cpu", GIB)
-    e2 = _make_entry("lingua", "llama.cpp", "a", "cpu", 2 * GIB)
-    e3 = _make_entry("lingua", "llama.cpp", "b", "cpu", 512 * MIB)
-    assert footprint_bytes((e1, e2, e3), "lingua") == 2 * GIB
-    assert footprint_bytes((e1, e2, e3), "lingua", model_id="b") == 512 * MIB
+    e1 = _make_entry("language", "llama.cpp", "a", "cpu", GIB)
+    e2 = _make_entry("language", "llama.cpp", "a", "cpu", 2 * GIB)
+    e3 = _make_entry("language", "llama.cpp", "b", "cpu", 512 * MIB)
+    assert footprint_bytes((e1, e2, e3), "language") == 2 * GIB
+    assert footprint_bytes((e1, e2, e3), "language", model_id="b") == 512 * MIB
     assert footprint_bytes((e1, e2, e3), "audition") is None
 
 
 def test_compatibility_with_hardware_steps_loader(tmp_path, monkeypatch):
     monkeypatch.setattr(catalogue, "kaine_version_str", "0.0-test")
-    e1 = _make_entry("lingua", "llama.cpp", "a", "unified", 2 * GIB)
+    e1 = _make_entry("language", "llama.cpp", "a", "unified", 2 * GIB)
     e2 = _make_entry("audition", "sherpa_onnx", "b", "unified", 512 * MIB)
-    e3 = _make_entry("lingua", "llama.cpp", "a", "unified", 3 * GIB)  # larger duplicate
+    e3 = _make_entry("language", "llama.cpp", "a", "unified", 3 * GIB)  # larger duplicate
     path = write_catalogue((e1, e2, e3), path=tmp_path / "footprints.json")
     mapping = load_footprint_catalogue(path)
-    assert mapping == {"lingua": 3 * GIB, "audition": 512 * MIB}
+    assert mapping == {"language": 3 * GIB, "audition": 512 * MIB}
 
 
 def _valid_dict():
     return {
-        "component": "lingua",
+        "component": "language",
         "backend": "llama.cpp",
         "model_id": "test-model",
         "bytes": 2 * GIB,

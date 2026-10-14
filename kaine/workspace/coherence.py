@@ -13,7 +13,7 @@ PLV between two phase series ``a`` and ``b`` is
 phase-locked, ~0.0 when independent. It lies in ``[0, 1]``.
 
 The coherence factor multiplies a coalition's aggregate salience in
-``Syneidesis.select`` BEFORE top-k/threshold. The factor is bounded so a
+``Workspace.select`` BEFORE top-k/threshold. The factor is bounded so a
 pathologically self-reinforcing coalition cannot run away (paper §9).
 
 **Freshness rule.** ``CoherenceScorer.observe`` stores each phase together with a
@@ -25,7 +25,7 @@ restricted to positions where both samples are fresh). If fewer than
 contributes the **neutral PLV** instead. The neutral PLV maps to a coherence
 factor of exactly 1.0 whenever ``floor <= 1.0 <= ceiling``.
 
-**Disabled is bit-for-bit.** When ``enabled`` is false, `Syneidesis` never
+**Disabled is bit-for-bit.** When ``enabled`` is false, `Workspace` never
 constructs or consults a `CoherenceScorer`, so selection is identical to the
 pre-change behavior. This module's logic only runs on the enabled path.
 

@@ -32,8 +32,8 @@ from kaine.plugins import PluginError, load_plugins  # noqa: E402
 
 def _config(backends=None, territories=None, sequence=None, enabled=("cl1",)):
     return {
-        "modules": {"chronos": True},
-        "chronos": dict(sequence or {}),
+        "modules": {"sequence": True},
+        "sequence": dict(sequence or {}),
         "plugins": {
             "enabled": list(enabled),
             "cl1": {
@@ -41,11 +41,11 @@ def _config(backends=None, territories=None, sequence=None, enabled=("cl1",)):
                     "target": "simulator",
                     "accelerated_time": True,
                     "territories": dict(
-                        territories if territories is not None else {"chronos": 12}
+                        territories if territories is not None else {"sequence": 12}
                     ),
                 },
                 "backends": dict(
-                    backends if backends is not None else {"chronos": "cl1"}
+                    backends if backends is not None else {"sequence": "cl1"}
                 ),
             },
         },
@@ -71,13 +71,13 @@ class _FakeMetricsReader:
 
 
 def _interoception_config(*, interoception_backend="cl1", with_sequence=False):
-    modules = {"soma": True}
-    cl1_backends = {"soma": interoception_backend}
-    cl1_territories = {"soma": 12}
+    modules = {"interoception": True}
+    cl1_backends = {"interoception": interoception_backend}
+    cl1_territories = {"interoception": 12}
     if with_sequence:
-        modules["chronos"] = True
-        cl1_backends["chronos"] = "cl1"
-        cl1_territories["chronos"] = 12
+        modules["sequence"] = True
+        cl1_backends["sequence"] = "cl1"
+        cl1_territories["sequence"] = 12
     enabled = []
     if interoception_backend == "silicon" and not with_sequence:
         enabled = []
@@ -85,7 +85,7 @@ def _interoception_config(*, interoception_backend="cl1", with_sequence=False):
         enabled = ["cl1"]
     return {
         "modules": dict(modules),
-        "soma": {},
+        "interoception": {},
         "plugins": {
             "enabled": list(enabled),
             "cl1": {
@@ -132,7 +132,7 @@ def test_manifest_records_the_substitution():
     p = _load(_config())
     try:
         assert p.manifest_entry()["cl1"]["distribution"] == "kaine-cl1"
-        assert p.manifest_entry()["cl1"]["seams"] == ["chronos.network"]
+        assert p.manifest_entry()["cl1"]["seams"] == ["sequence.network"]
     finally:
         _close_cl1(p)
 
@@ -144,13 +144,13 @@ async def test_not_enabled_loads_nothing():
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        assert reg.get("chronos").has_network is False
+        assert reg.get("sequence").has_network is False
     finally:
         await bus.close()
 
 
 def test_unimplemented_backend_fails_the_boot():
-    cfg = _config(backends={"volition": "cl1"}, territories={"volition": 4})
+    cfg = _config(backends={"action_selection": "cl1"}, territories={"action_selection": 4})
     with pytest.raises(PluginError, match="hybrid-wetware-conversions"):
         _load(cfg)
 
@@ -168,7 +168,7 @@ async def test_booted_sequence_runs_on_the_substrate(reference_culture):
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        sequence = reg.get("chronos")
+        sequence = reg.get("sequence")
         assert isinstance(sequence._network, WetwareTimingModel)
         assert sequence._network.units == 12
 
@@ -178,10 +178,10 @@ async def test_booted_sequence_runs_on_the_substrate(reference_culture):
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         assert len(entries) == 4
         for _id, ev in entries:
-            assert ev.type == "chronos.report"
+            assert ev.type == "sequence.report"
             assert math.isfinite(float(ev.payload["temporal_prediction_error"]))
 
         await sequence.shutdown()
@@ -197,7 +197,7 @@ async def test_forward_prediction_uses_the_substrate_width(reference_culture):
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        sequence = reg.get("chronos")
+        sequence = reg.get("sequence")
         assert isinstance(sequence._network, WetwareTimingModel)
         assert sequence._network.units == 12
 
@@ -207,10 +207,10 @@ async def test_forward_prediction_uses_the_substrate_width(reference_culture):
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
 
-        entries = await bus.read("chronos.out", last_id="0")
+        entries = await bus.read("sequence.out", last_id="0")
         assert len(entries) == 3
         for _id, ev in entries:
-            assert ev.type == "chronos.report"
+            assert ev.type == "sequence.report"
             assert math.isfinite(float(ev.payload["temporal_prediction_error"]))
 
         await sequence.shutdown()
@@ -225,14 +225,14 @@ async def test_booted_interoception_runs_on_the_substrate(reference_culture):
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        interoception = reg.get("soma")
+        interoception = reg.get("interoception")
         assert type(interoception._forward_model).__name__ == "WetwareInteroceptiveModel"
         assert interoception._forward_model.units == 12
         interoception._reader = _FakeMetricsReader()
         await interoception.tick_once()
         await interoception.tick_once()
         await interoception.tick_once()
-        entries = await bus.read("soma.out", last_id="0")
+        entries = await bus.read("interoception.out", last_id="0")
         assert len(entries) >= 3
         assert interoception._forward_model.adaptation_steps >= 1
     finally:
@@ -243,12 +243,12 @@ async def test_booted_interoception_runs_on_the_substrate(reference_culture):
 async def test_sequence_and_interoception_share_the_substrate(reference_culture):
     cfg = _interoception_config(with_sequence=True)
     p = _load(cfg)
-    assert p.manifest_entry()["cl1"]["seams"] == ["chronos.network", "soma.forward_model"]
+    assert p.manifest_entry()["cl1"]["seams"] == ["sequence.network", "interoception.forward_model"]
     bus = _bus()
     try:
         reg = build_registry(bus, cfg, plugins=p)
-        interoception = reg.get("soma")
-        sequence = reg.get("chronos")
+        interoception = reg.get("interoception")
+        sequence = reg.get("sequence")
         interoception._reader = _FakeMetricsReader()
         await sequence.initialize()
         for t in range(3):
@@ -256,8 +256,8 @@ async def test_sequence_and_interoception_share_the_substrate(reference_culture)
                 WorkspaceSnapshot(tick_index=t, selected_events=[], inhibited=False)
             )
             await interoception.tick_once()
-        sequence_entries = await bus.read("chronos.out", last_id="0")
-        interoception_entries = await bus.read("soma.out", last_id="0")
+        sequence_entries = await bus.read("sequence.out", last_id="0")
+        interoception_entries = await bus.read("interoception.out", last_id="0")
         assert len(sequence_entries) == 3
         assert len(interoception_entries) >= 3
         assert set(sequence._network._channels).isdisjoint(interoception._forward_model._channels)
@@ -276,12 +276,12 @@ async def test_interoception_event_schema_matches_silicon(reference_culture):
         bus = _bus()
         try:
             reg = build_registry(bus, cfg, plugins=p)
-            interoception = reg.get("soma")
+            interoception = reg.get("interoception")
             interoception._reader = _FakeMetricsReader()
             await interoception.tick_once()
             await interoception.tick_once()
             await interoception.tick_once()
-            entries = await bus.read("soma.out", last_id="0")
+            entries = await bus.read("interoception.out", last_id="0")
             return [ev for _id, ev in entries]
         finally:
             await bus.close()

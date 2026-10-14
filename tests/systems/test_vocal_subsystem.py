@@ -23,7 +23,7 @@ async def test_vocal_constructs_with_fake_tts(tmp_path):
             sink_path=tmp_path / "audio",
         )
         await h.register(ao)
-        assert ao.name == "vox"
+        assert ao.name == "vocal"
 
 
 @pytest.mark.asyncio
@@ -36,17 +36,17 @@ async def test_vocal_renders_on_language_external(tmp_path):
             sink_path=tmp_path / "audio",
         )
         await h.register(ao)
-        # Inject a language module external_speech event into the lingua.external
-        # stream specifically (not lingua.out, which is what the default
+        # Inject a language module external_speech event into the language.external
+        # stream specifically (not language.out, which is what the default
         # publish() path would target).
         await h.inject_to_stream(
-            "lingua.external",
-            source="lingua",
+            "language.external",
+            source="language",
             type="external_speech",
             payload={"text": "hello"},
         )
         # Wait briefly for the consumer task to drain.
-        events = await h.collect("vox.out", count=1, timeout=1.5)
+        events = await h.collect("vocal.out", count=1, timeout=1.5)
         # Either an event was published or the fake was invoked.
         assert events or fake.requests
 
@@ -61,4 +61,4 @@ async def test_vocal_against_real_chatterbox(tmp_path):
         ao = Vocal(h.bus, sink_path=tmp_path / "audio")
         await h.register(ao)
         # Smoke only.
-        assert ao.name == "vox"
+        assert ao.name == "vocal"

@@ -128,11 +128,11 @@ async def test_interoception_report_carries_entity_time_and_awake() -> None:
             seed=5,
             context_dim=CONTEXT_DIM,
         )
-        await interoception.on_workspace(_workspace("topos", 0.7, 0.5))
+        await interoception.on_workspace(_workspace("vision", 0.7, 0.5))
         await interoception.tick_once()
 
-        events = await bus.read("soma.out", last_id="0")
-        reports = _typed_payloads(events, "soma.report")
+        events = await bus.read("interoception.out", last_id="0")
+        reports = _typed_payloads(events, "interoception.report")
         assert reports
         assert reports[0]["entity_time_s"] == clock.now()
         assert reports[0]["awake"] is True
@@ -155,7 +155,7 @@ async def test_audition_perception_carries_entity_time_and_awake() -> None:
             entity_clock=clock,
         )
         await audition.initialize()
-        await audition.on_workspace(_workspace("soma", 0.6, 0.6))
+        await audition.on_workspace(_workspace("interoception", 0.6, 0.6))
         await audition.process_audio(_tone(440), sample_rate=16000)
 
         events = await bus.read("audition.out", last_id="0")

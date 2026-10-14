@@ -23,30 +23,30 @@ from tests._module_packages import identifier_for_key
 
 # The previous hardcoded drive-to-source table. Behaviour must not change.
 PREVIOUS = {
-    "curiosity": frozenset({"perception", "topos", "audition", "mundus", "mnemos"}),
-    "boredom": frozenset({"perception", "topos", "audition", "mundus", "mnemos", "nous", "phantasia", "lingua"}),
-    "social_drive": frozenset({"audition", "empatheia", "vox", "lingua", "chronos"}),
-    "restlessness": frozenset({"praxis", "volition", "vox", "mundus"}),
+    "curiosity": frozenset({"perceptual_locus", "vision", "audition", "embodiment", "episodic_memory"}),
+    "boredom": frozenset({"perceptual_locus", "vision", "audition", "embodiment", "episodic_memory", "planning", "world_model", "language"}),
+    "social_drive": frozenset({"audition", "social_cognition", "vocal", "language", "sequence"}),
+    "restlessness": frozenset({"effectors", "action_selection", "vocal", "embodiment"}),
 }
 
 _MODULE_NAMES = [
-    "perception",
-    "topos",
-    "mnemos",
+    "perceptual_locus",
+    "vision",
+    "episodic_memory",
     "audition",
-    "mundus",
-    "nous",
-    "phantasia",
-    "lingua",
-    "empatheia",
-    "chronos",
-    "vox",
-    "praxis",
-    "soma",
-    "thymos",
-    "eidolon",
-    "hypnos",
-    "echo",
+    "embodiment",
+    "planning",
+    "world_model",
+    "language",
+    "social_cognition",
+    "sequence",
+    "vocal",
+    "effectors",
+    "interoception",
+    "affect",
+    "self_model",
+    "sleep",
+    "recorder",
 ]
 
 
@@ -129,12 +129,12 @@ def test_drive_sources_for_includes_registered_modules_and_scaffolding():
     assert sources["curiosity"] == frozenset({"fake_a"})
     assert sources["boredom"] == frozenset({"fake_b"})
     assert sources["social_drive"] == frozenset({"fake_b"})
-    assert sources["restlessness"] == frozenset({"volition"})
+    assert sources["restlessness"] == frozenset({"action_selection"})
 
 
 def test_make_salience_factors_drive_relevance_requires_drive_sources():
     with pytest.raises(ConfigurationError, match="drive_relevance needs the registered modules"):
         make_salience_factors(
-            {"syneidesis": {"salience_goal_factor": "drive_relevance"}},
+            {"workspace": {"salience_goal_factor": "drive_relevance"}},
             AffectStateProvider(),
         )

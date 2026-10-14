@@ -50,7 +50,7 @@ def make_language(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     kw.pop("model_server_sleep_idle_seconds", None)
     kw.pop("outcome_reply_window_s", None)
     # Bearer token for a keyed model server (e.g. Unsloth Studio). Resolve from
-    # [lingua].api_key, else the model-server key environment variable (so the secret
+    # [language].api_key, else the model-server key environment variable (so the secret
     # can stay out of the config file). None → keyless server (llama-server).
     kw["api_key"] = language_section_api_key(kw)
 

@@ -12,7 +12,7 @@ Unified memory makes this cheap. With no PCIe hop, "loading onto the GPU" is mak
 **What has changed since this change was first proposed.** The change was drafted (#118) while `portability-tiers` was pending. Since then:
 
 - `portability-tiers` was archived (2026-09-17). `runtime-backends`, `deployment-tiers` and `host-probe` are living specs, and `deployment-tiers` already names the outcome this change delivers ("Tier 2 with module residency required", including an explicit 8 GB unified Jetson scenario). This change builds on those specs; it needs no MODIFIED delta against them, because it implements a state they already describe.
-- `sherpa-onnx-speech` (#260) shipped torch-free speech: Moonshine STT and Kokoro TTS as the `sherpa_onnx` backend of `[audition].backend` and `[vox].backend`, through `BackendRegistry` fallback chains, with consent-gated model downloads (`python -m kaine.setup.speech_models`). The speech ladder in this change is therefore expressed over those existing backends and model ids instead of new engines.
+- `sherpa-onnx-speech` (#260) shipped torch-free speech: Moonshine STT and Kokoro TTS as the `sherpa_onnx` backend of `[audition].backend` and `[vocal].backend`, through `BackendRegistry` fallback chains, with consent-gated model downloads (`python -m kaine.setup.speech_models`). The speech ladder in this change is therefore expressed over those existing backends and model ids instead of new engines.
 - The earlier draft said the first-run wizard disables modules on small hosts. It does not: the wizard keeps the selected module set and records a tier only on consent. The blockers are the recommender's warning and the `Tier fit` row, as described above.
 - The earlier draft assumed facts the code does not have. Nothing records a model's resident footprint (only download sizes), the tier budget is computed from total rather than available memory, and no engine can be unloaded and reloaded: `aclose()` on the sherpa clients is terminal, and the vision module, the emotion classifier and the embedders only load. The one working unload/reload is the sleep module's voice-alignment organ window.
 
@@ -27,7 +27,7 @@ The limits are stated, not hidden. Some combinations do not fit an 8 GB budget, 
   - The fit report states the residency budget derived from available memory minus a reserve, whether the enabled set co-resides, and, if not, the shortfall and which components would be time-multiplexed.
 - **Capability `module-residency` (ADDED).** One residency manager per host owns a ledger-based budget, admission control, demand-driven eviction, a keep-resident TTL, one pinned always-hot organ, two work lanes (interactive and background) with a preemption contract, and surfaced residency events. On hosts where everything fits it is passive.
 - **Reversible unload.** Engine clients gain an `ensure_loaded()` / `unload()` pair that releases the model and can load it again, without closing the client: the sherpa STT and TTS clients, the vision encoders, the emotion classifier and the text embedders. External services (the organ's `llama-server`, Chatterbox, Speaches) are stopped and started through the same controller pattern the sleep module's organ window already uses.
-- **LLM residency is delegated.** `[lingua].chat_url` may point at llama-swap or llama.cpp's router mode. KAINE performs no LLM model management of its own; the manager reconciles what the proxy holds into its ledger and uses the proxy's unload API. The default (`llm_proxy = "none"`) keeps today's single `llama-server`.
+- **LLM residency is delegated.** `[language].chat_url` may point at llama-swap or llama.cpp's router mode. KAINE performs no LLM model management of its own; the manager reconciles what the proxy holds into its ledger and uses the proxy's unload API. The default (`llm_proxy = "none"`) keeps today's single `llama-server`.
 - **Capability `speech-backend-tiers` (ADDED), over existing backends.**
   - TTS: `chatterbox` → `sherpa_onnx` with `kokoro-en`.
   - STT: `speaches` (faster-whisper `medium.en`) → `sherpa_onnx` with `moonshine-base-en` → `sherpa_onnx` with `moonshine-tiny-en`.
@@ -40,7 +40,7 @@ The limits are stated, not hidden. Some combinations do not fit an 8 GB budget, 
 
 ### New Capabilities
 - `module-residency`: time-multiplexed model residency within a measured memory budget, with calibration, admission, eviction, pinning, preemption, LLM delegation, surfaced events, and honest limits.
-- `speech-backend-tiers`: ordered speech ladders over the existing `[audition].backend` and `[vox].backend` values and sherpa model ids, with probe recommendation, surfaced downgrades, consent-gated acquisition, and voice-latency measurement.
+- `speech-backend-tiers`: ordered speech ladders over the existing `[audition].backend` and `[vocal].backend` values and sherpa model ids, with probe recommendation, surfaced downgrades, consent-gated acquisition, and voice-latency measurement.
 
 ### Modified Capabilities
 - (none) `deployment-tiers` already specifies "Tier 2 with module residency required"; `runtime-backends` already specifies fallback chains and surfaced failures; `host-probe` is unchanged. This change implements behaviour those specs anticipate.

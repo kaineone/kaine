@@ -29,8 +29,8 @@ async def _publish_three_events(bus, tick):
     for i in range(3):
         await bus.publish(
             Event(
-                source="soma",
-                type="soma.report",
+                source="interoception",
+                type="interoception.report",
                 payload={"i": i, "tick": tick},
                 salience=0.2 + 0.2 * i,
                 timestamp=datetime.now(timezone.utc),
@@ -59,7 +59,7 @@ async def test_matched_draws_only_on_broadcast_ticks():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=syn,
-        registry=FakeRegistry(["soma.out"]),
+        registry=FakeRegistry(["interoception.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,
         clock=clock,
@@ -97,7 +97,7 @@ async def test_pooled_publishes_only_broadcast_ticks():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=syn,
-        registry=FakeRegistry(["soma.out"]),
+        registry=FakeRegistry(["interoception.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,
         clock=clock,
@@ -140,7 +140,7 @@ async def test_competitive_default_publishes_coalition_of_top_k():
     cycle = CognitiveCycle(
         bus=bus,
         workspace=syn,
-        registry=FakeRegistry(["soma.out"]),
+        registry=FakeRegistry(["interoception.out"]),
         processing_rate_hz=10.0,
         experiential_rate_hz=10.0 / 3.0,
         clock=clock,

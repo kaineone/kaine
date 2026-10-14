@@ -49,7 +49,7 @@ training time SHALL reject the adapter rather than score both models 0.
   point at the new final directory
 
 #### Scenario: Boot refuses an empty capability probe set
-- **WHEN** voice alignment is enabled and operator-approved and `[hypnos.voice_alignment].capability_probe_path` names an empty or missing file, on any trainer backend
+- **WHEN** voice alignment is enabled and operator-approved and `[sleep.voice_alignment].capability_probe_path` names an empty or missing file, on any trainer backend
 - **THEN** boot raises `EmptyCapabilityProbeSetError` naming the path
 
 #### Scenario: The external trainer rejects on an empty capability probe set
@@ -71,7 +71,7 @@ auto-reload mode) never see a partial state.
 
 ### Requirement: Operator-opt-in safety gate
 The voice-alignment phase SHALL fire training only when BOTH
-`[hypnos.voice_alignment].enabled = true` AND
+`[sleep.voice_alignment].enabled = true` AND
 `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` are set. When either
 condition is missing, the phase SHALL log a clear remediation line
 and return a `PhaseResult` with metadata `{"skipped": "<reason>"}`.
@@ -89,7 +89,7 @@ and return a `PhaseResult` with metadata `{"skipped": "<reason>"}`.
 
 ### Requirement: Adapter retention bounded
 Accepted adapters are the entity's learned voice, so infrastructure SHALL NOT
-cull them by default. `[hypnos.voice_alignment].adapter_retention` SHALL ship
+cull them by default. `[sleep.voice_alignment].adapter_retention` SHALL ship
 as `0` (and default to `0` when absent), meaning every accepted adapter under
 `adapter_output_dir` is kept. A positive value SHALL keep at most that many
 accepted adapters: older accepted adapters SHALL be evicted after every
@@ -118,7 +118,7 @@ SHALL read `kaine/modules/sleep/eval_probes/default.jsonl` and
 compute `correct / total` against the model. The operator MAY
 substitute their own evaluator by passing one explicitly or by
 overriding the probe-set path via
-`[hypnos.voice_alignment].capability_probe_path`.
+`[sleep.voice_alignment].capability_probe_path`.
 
 #### Scenario: Custom evaluator honored
 - **WHEN** an operator-provided CapabilityEval is passed to
@@ -128,7 +128,7 @@ overriding the probe-set path via
   capability-loss check
 
 ### Requirement: Language hot-swap mode is operator-configurable
-`[hypnos.voice_alignment].hot_swap_mode` SHALL accept one of `"manual"` (default), `"reload_endpoint"`, `"restart_service"` or `"organ_adapter"`. On a single-GPU host it SHALL bracket the training step with an organ **unload** before training and an organ **reload** after, so the trainer and the served organ do not contend for the one device.
+`[sleep.voice_alignment].hot_swap_mode` SHALL accept one of `"manual"` (default), `"reload_endpoint"`, `"restart_service"` or `"organ_adapter"`. On a single-GPU host it SHALL bracket the training step with an organ **unload** before training and an organ **reload** after, so the trainer and the served organ do not contend for the one device.
 
 On adapter accept:
 - **`manual`** SHALL write a marker file, `<adapter_output_dir>/PENDING_OPERATOR_RELOAD`, and log a line pointing the operator at the manual reload step. There is no service call.
@@ -140,7 +140,7 @@ When a second GPU has enough free VRAM to both serve and train, the unload brack
 
 #### Scenario: Manual mode is the default
 - **WHEN** an operator inspects the shipped `config/kaine.toml`
-- **THEN** `[hypnos.voice_alignment].hot_swap_mode = "manual"`
+- **THEN** `[sleep.voice_alignment].hot_swap_mode = "manual"`
 
 #### Scenario: Manual mode writes the marker
 - **WHEN** an adapter is accepted under `hot_swap_mode = "manual"`
@@ -167,7 +167,7 @@ phase SHALL log the message and continue the rest of the sleep
 cycle.
 
 #### Scenario: Missing extras don't crash sleep
-- **WHEN** `[hypnos.voice_alignment].enabled = true` and the env
+- **WHEN** `[sleep.voice_alignment].enabled = true` and the env
   var is set but `unsloth` is not installed
 - **THEN** `train()` returns a TrainingResult with `accepted=False`
   and `reason` naming the `training` extras group, and the sleep
@@ -177,7 +177,7 @@ cycle.
 ### Requirement: TrainingResult populates voice-tracking fields
 The returned `TrainingResult` SHALL include the fields the
 evaluation sidecar's `voice_tracking.py` already consumes from the
-published `hypnos.cycle_complete` event:
+published `sleep.cycle_complete` event:
 `pairs_processed`, `pairs_above_threshold`, `dpo_loss`,
 `adapter_accepted`, `capability_score_before`,
 `capability_score_after`, `mean_intent_expression_similarity_before`,
@@ -187,7 +187,7 @@ real.
 
 #### Scenario: Sidecar sees real numbers
 - **WHEN** a real training pass completes and the
-  `hypnos.cycle_complete` event is published
+  `sleep.cycle_complete` event is published
 - **THEN** the evaluation sidecar's `voice_tracking-<date>.jsonl`
   contains an entry with non-None `dpo_loss`, `mean_similarity_before`,
   and `mean_similarity_after` fields
@@ -245,7 +245,7 @@ The following paths remain unchanged:
 - **THEN** `_resolve_trainer` returns `None`
 
 ### Requirement: The trainer trains from the abliterated safetensors base
-The trainer SHALL load its base weights from `[hypnos.voice_alignment].base_model_path`
+The trainer SHALL load its base weights from `[sleep.voice_alignment].base_model_path`
 pointing at the KAINE abliterated Qwen3.5-4B **safetensors** directory (not the
 served GGUF), so the on-device QLoRA/bf16-LoRA step has real weights to attach a
 LoRA to. The served (GGUF) form and the trained-from (safetensors) form SHALL
@@ -310,14 +310,14 @@ The launcher SHALL need no Docker socket and SHALL read the adapter volume read-
 - **THEN** the organ starts without an adapter and the launcher logs the mismatch
 
 ### Requirement: The job-queue trainer uses Language's organ key
-The job-queue voice-alignment trainer SHALL authenticate to the organ with the same key the language module uses: `[lingua].api_key` from the merged configuration when it is non-empty, otherwise `KAINE_MODEL_SERVER_API_KEY`. The trainer SHALL receive the merged configuration as an argument and SHALL NOT depend on a module-level name.
+The job-queue voice-alignment trainer SHALL authenticate to the organ with the same key the language module uses: `[language].api_key` from the merged configuration when it is non-empty, otherwise `KAINE_MODEL_SERVER_API_KEY`. The trainer SHALL receive the merged configuration as an argument and SHALL NOT depend on a module-level name.
 
 #### Scenario: The configured key reaches the trainer
-- **WHEN** `[lingua].api_key` is set and `KAINE_MODEL_SERVER_API_KEY` is unset
+- **WHEN** `[language].api_key` is set and `KAINE_MODEL_SERVER_API_KEY` is unset
 - **THEN** the job-queue trainer is built with the configured key
 
 ### Requirement: Hot-swap modes are paired with the backends that can serve them
-Boot SHALL refuse `[hypnos.voice_alignment].hot_swap_mode = "organ_adapter"` unless `trainer_backend = "job_queue"`, because only the trainer service converts an accepted adapter to the GGUF form the organ loads. Every trainer backend SHALL dispatch the configured hot swap after it promotes an accepted adapter; a failed notification SHALL be logged and SHALL NOT undo the promotion.
+Boot SHALL refuse `[sleep.voice_alignment].hot_swap_mode = "organ_adapter"` unless `trainer_backend = "job_queue"`, because only the trainer service converts an accepted adapter to the GGUF form the organ loads. Every trainer backend SHALL dispatch the configured hot swap after it promotes an accepted adapter; a failed notification SHALL be logged and SHALL NOT undo the promotion.
 
 #### Scenario: An unservable pairing is refused
 - **WHEN** voice alignment is enabled with `trainer_backend = "subprocess"` and `hot_swap_mode = "organ_adapter"`

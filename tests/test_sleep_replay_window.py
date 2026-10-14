@@ -149,9 +149,9 @@ async def test_sleep_replays_consolidated_traces_through_the_bus(bus: AsyncBus, 
 
         assert summary["alert"] is False
 
-        events = await bus.read("mnemos.out", last_id="0")
+        events = await bus.read("episodic_memory.out", last_id="0")
         replay_texts = {
-            ev.payload["text"] for _, ev in events if ev.type == "mnemos.replay"
+            ev.payload["text"] for _, ev in events if ev.type == "episodic_memory.replay"
         }
         assert replay_texts == {"trace 0", "trace 1", "trace 2"}
 

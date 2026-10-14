@@ -54,10 +54,10 @@ from kaine.perception_state import write_desired_locus
 
 log = logging.getLogger(__name__)
 
-# Default stream the stimulus source module publishes ``gestation.readiness`` readouts to.
+# Default stream the stimulus source module publishes ``development.readiness`` readouts to.
 # The stimulus source change owns the measurement; the maturation gate only reads it.
-DEFAULT_STIMULUS_SOURCE_READOUT_STREAM = "gestation.out"
-DEFAULT_STIMULUS_SOURCE_READOUT_TYPE = "gestation.readiness"
+DEFAULT_STIMULUS_SOURCE_READOUT_STREAM = "development.out"
+DEFAULT_STIMULUS_SOURCE_READOUT_TYPE = "development.readiness"
 
 
 class MaturationGateRunner:
@@ -75,7 +75,7 @@ class MaturationGateRunner:
         stimulus_source_feed_configured: bool = False,
         stimulus_source_readout_stream: str = DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
         stimulus_source_readout_type: str = DEFAULT_STIMULUS_SOURCE_READOUT_TYPE,
-        sleep_stream: str = "hypnos.out",
+        sleep_stream: str = "sleep.out",
         paused_seconds: Callable[[], float] | None = None,
         maturation_request_path: Path | None = None,
         maturation_ack_path: Path | None = None,
@@ -138,7 +138,7 @@ class MaturationGateRunner:
         self._lived.set_paused_source(paused_seconds)
 
     def set_maturation_hook(self, fn: Callable[[], None] | None) -> None:
-        """Hand over the stimulus source's ``begin_birth``; the runner calls it once, after the stage file says embodied."""
+        """Hand over the stimulus source's ``begin_maturation``; the runner calls it once, after the stage file says embodied."""
         self._on_maturation = fn
 
     @property
@@ -147,7 +147,7 @@ class MaturationGateRunner:
 
     @property
     def status(self) -> dict[str, Any]:
-        """Content-free snapshot of the latest maturation-gate status for Nexus."""
+        """Content-free snapshot of the latest maturation-gate status for Dashboard."""
         return dict(self._last_status)
 
     def _lifecycle_event(
@@ -168,22 +168,22 @@ class MaturationGateRunner:
             log.warning("could not publish %s", type, exc_info=True)
 
     def _world_model_consolidation_passes(self) -> int | None:
-        if "phantasia" not in self._registry:
+        if "world_model" not in self._registry:
             return None
         try:
-            world_model = self._registry.get("phantasia")
+            world_model = self._registry.get("world_model")
             return int(getattr(world_model, "successful_training_passes", 0))
         except Exception:
             return None
 
     async def _embodiment_availability(self) -> tuple[bool, bool, bool]:
         """Return (config_enabled, operator_approved, reachable)."""
-        if "mundus" not in self._registry:
+        if "embodiment" not in self._registry:
             return False, False, False
         try:
             from kaine.modules.embodiment import module as embodiment_module
 
-            embodiment = self._registry.get("mundus")
+            embodiment = self._registry.get("embodiment")
             config_enabled = bool(getattr(embodiment, "enabled_by_config", False))
             approved = bool(embodiment_module.operator_approved())
             reachable = bool(await embodiment.probe_available())
@@ -208,7 +208,7 @@ class MaturationGateRunner:
 
         A fresh cursor is anchored at the stream tail on the first tick.
         Thereafter we scan forward from the persisted cursor, counting each
-        ``hypnos.sleep.completed`` event from ``hypnos`` exactly once.
+        ``sleep.sleep.completed`` event from ``sleep`` exactly once.
         Bus errors fail closed for this tick: they leave the stage unchanged.
         """
         stream = self._sleep_stream
@@ -226,7 +226,7 @@ class MaturationGateRunner:
                     stream, last_id=cursor, count=100
                 )
                 for _, event in entries:
-                    if event.type == "hypnos.sleep.completed" and event.source == "hypnos":
+                    if event.type == "sleep.sleep.completed" and event.source == "sleep":
                         total += 1
                 if last_scanned is None:
                     break
@@ -275,7 +275,7 @@ class MaturationGateRunner:
             self._stage = replace(self._stage, lived_seconds=self._stage.lived_seconds + delta)
 
     async def _stimulus_source_readiness_readout(self) -> Mapping[str, Any] | None:
-        """Read the latest stimulus source ``gestation.readiness`` event from the bus.
+        """Read the latest stimulus source ``development.readiness`` event from the bus.
 
         The stream also carries presence and probe events, so the newest entry is
         rarely the readout. We therefore search the stream window newest-first
@@ -340,9 +340,9 @@ class MaturationGateRunner:
             faculties = Faculties()
         else:
             faculties = Faculties(
-                sleep="hypnos" in self._registry,
-                world_model="phantasia" in self._registry,
-                embodiment="mundus" in self._registry,
+                sleep="sleep" in self._registry,
+                world_model="world_model" in self._registry,
+                embodiment="embodiment" in self._registry,
             )
         world = "embodied" if faculties.embodiment else "perceptual"
         conditions = {
@@ -357,7 +357,7 @@ class MaturationGateRunner:
             decision: Any = None,
             consolidation_passes: int | None = None,
         ) -> None:
-            """Store a content-free status snapshot for Nexus."""
+            """Store a content-free status snapshot for Dashboard."""
             self._last_status = {
                 "lived_seconds": float(self._stage.lived_seconds or 0.0),
                 "sleep_count": self._stage.sleep_count or 0,
@@ -395,7 +395,7 @@ class MaturationGateRunner:
         blocked = self._blocked_reason()
         if blocked == "no_stimulus_source_feed":
             # Loud, repeated warning: never a silent senseless hold.
-            log.warning("stage.gestation.no_stimulus: gestation active but no womb feed configured")
+            log.warning("stage.development.no_stimulus: gestation active but no womb feed configured")
             await self._publish(
                 STAGE_DEVELOPMENT_NO_STIMULUS,
                 development_no_stimulus_payload(),
@@ -508,7 +508,7 @@ class MaturationGateRunner:
                 self._maturation_request = None
                 self._awaiting_ack_logged = False
             if not self._awaiting_embodiment_logged:
-                log.warning("stage.birth.ready: awaiting embodiment (Mundus not available)")
+                log.warning("stage.maturation.ready: awaiting embodiment (Mundus not available)")
                 self._awaiting_embodiment_logged = True
             await self._publish(
                 STAGE_MATURATION_READY,
@@ -534,7 +534,7 @@ class MaturationGateRunner:
                         exc,
                     )
             if not self._awaiting_ack_logged:
-                log.warning("stage.birth.ready: awaiting operator ack for supervised birth")
+                log.warning("stage.maturation.ready: awaiting operator ack for supervised birth")
                 self._awaiting_ack_logged = True
             await self._publish(
                 STAGE_MATURATION_READY,
@@ -565,13 +565,13 @@ class MaturationGateRunner:
         # Start embodiment before the stage file is written, so the locus source
         # is actually available when the entity becomes embodied.
         # The vocal module is activated before the embodiment module so the voice is available at maturation.
-        if "vox" in self._registry:
-            vocal = self._registry.get("vox")
+        if "vocal" in self._registry:
+            vocal = self._registry.get("vocal")
             if hasattr(vocal, "set_dormant"):
                 vocal.set_dormant(False)
                 log.info("birth: vox activated")
-        if "mundus" in self._registry:
-            embodiment = self._registry.get("mundus")
+        if "embodiment" in self._registry:
+            embodiment = self._registry.get("embodiment")
             try:
                 ok = await embodiment.activate()
             except Exception:
@@ -635,7 +635,7 @@ class MaturationGateRunner:
             salience=0.9,
         )
         log.info(
-            "stage.birth: transitioned to embodied (sleep_count=%s, lived_seconds=%s)",
+            "stage.maturation: transitioned to embodied (sleep_count=%s, lived_seconds=%s)",
             sleep_count,
             lived_seconds,
         )

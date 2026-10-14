@@ -579,7 +579,7 @@ def test_fade_continues_across_blocks_to_full_gain():
         ("mode", logging.INFO, "not 'playlist'"),
         ("disabled", logging.INFO, "transition_seconds is 0"),
         ("no_stage", logging.INFO, "no developmental stage"),
-        ("gestating", logging.INFO, "not born yet"),
+        ("developing", logging.INFO, "not born yet"),
         ("never_born", logging.INFO, "never born from the womb"),
         ("missing_record", logging.WARNING, "no womb birth record"),
         ("digest_mismatch", logging.WARNING, "digest mismatch"),
@@ -594,14 +594,14 @@ def test_no_transition_logs_why(case, level, fragment, caplog):
         feed["transition_seconds"] = 0
     elif case == "no_stage":
         stage = None
-    elif case == "gestating":
+    elif case == "developing":
         stage = lifecycle_stage.StageState(stage=lifecycle_stage.DEVELOPMENT)
     elif case == "never_born":
         stage = lifecycle_stage.StageState(stage=lifecycle_stage.EMBODIED)
     elif case == "missing_record":
         stage = _born_stage(feed, womb_t_at_birth=None)
     elif case == "digest_mismatch":
-        feed["womb"] = {"heartbeat_bpm": 90}
+        feed["stimulus_source"] = {"heartbeat_bpm": 90}
     clock, timers = _FakeClock(), _TimerFactory()
     caplog.set_level(logging.INFO, logger="kaine.boot")
     transition, pclock = _build(feed, stage, clock, timers)
@@ -632,15 +632,15 @@ def test_invalid_transition_settings_are_refused(bad):
 def test_boot_hands_one_transition_to_both_surfaces(tmp_path):
     manifest = _write_manifest(tmp_path)
     feed = _feed(manifest)
-    kaine_config = {"perception_feed": dict(feed), "topos": {"capture_width": 16, "capture_height": 12}}
+    kaine_config = {"perception_feed": dict(feed), "vision": {"capture_width": 16, "capture_height": 12}}
     local = dict(feed)
     pclock = PlaylistClock(1)
     transition = _install_stimulus_source_world_transition(
         local, kaine_config, pclock, stage_state=_born_stage(feed)
     )
     assert transition is not None
-    assert local["_womb_world_transition"] is transition
-    assert kaine_config["perception_feed"]["_womb_world_transition"] is transition
+    assert local["_stimulus_source_world_transition"] is transition
+    assert kaine_config["perception_feed"]["_stimulus_source_world_transition"] is transition
     assert pclock.paused and transition.stimulus_source_frame.shape == (12, 16, 3)
     section = dict(kaine_config["perception_feed"], _shared_playlist_clock=pclock)
     video = _build_perception_feed_video_factory("playlist", section, width=16, height=12)(
@@ -766,7 +766,7 @@ def _controller(**kw):  # noqa: ANN003, ANN202
     return controller, pclock, clock, timers, events
 
 
-@pytest.mark.parametrize("holder", ["freeze", "hypnos"])
+@pytest.mark.parametrize("holder", ["freeze", "sleep"])
 def test_an_overlapping_pause_stops_the_crossfade_and_the_full_length_is_seen(holder):
     controller, pclock, clock, timers, events = _controller()
     controller.start("video")
@@ -794,12 +794,12 @@ def test_an_overlapping_pause_stops_the_crossfade_and_the_full_length_is_seen(ho
 
 def test_a_pause_held_before_the_start_delays_the_crossfade():
     controller, pclock, clock, timers, events = _controller()
-    pclock.pause("hypnos")
+    pclock.pause("sleep")
     controller.start("video")
     clock.t = 10.0
     assert controller.poll() is False and controller.progress() == 0.0
     assert events.phases == []  # nothing perceived yet: not started
-    pclock.resume("hypnos")
+    pclock.resume("sleep")
     assert events.phases == ["started"]
     clock.t = 14.0
     assert controller.poll() is True
@@ -1006,15 +1006,15 @@ async def test_ignition_records_name_the_pause_holders(tmp_path):
     payload = {"tick_index": 1, "selected": [], "inhibited": False, "salience_scores": {}}
     source.read()
     await ilog.on_broadcast(payload, "e1", None, 1.0)
-    pclock.pause("hypnos")
+    pclock.pause("sleep")
     await ilog.on_broadcast(payload, "e2", None, 2.0)
-    pclock.resume("hypnos")
+    pclock.resume("sleep")
     clock.t = 4.0
     source.read()
     await ilog.on_broadcast(payload, "e3", None, 3.0)
     records = [call.args[0]["programme"] for call in sink.write.await_args_list]
     assert records[0]["paused_by"] == ["transition"] and records[0]["paused"] is True
-    assert records[1]["paused_by"] == ["hypnos", "transition"]
+    assert records[1]["paused_by"] == ["sleep", "transition"]
     assert records[2]["paused_by"] == [] and records[2]["paused"] is False
     assert records[2]["offset_s"] == 0.0
 
@@ -1045,13 +1045,13 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
     def _recorder(name: str):  # noqa: ANN202
         def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
             captured[name] = dict(section)
-            if name == "topos" and not vision_loads:
+            if name == "vision" and not vision_loads:
                 return None
             return _Fake(name)
 
         return factory
 
-    for name in ("topos", "audition"):
+    for name in ("vision", "audition"):
         monkeypatch.setitem(SIMPLE_FACTORIES, name, _recorder(name))
     monkeypatch.setattr("kaine.boot.registry.install_state_encryption", lambda cfg: None)
     monkeypatch.setattr("kaine.boot.registry._wire_self_hearing_gate", lambda reg: None)
@@ -1061,9 +1061,9 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
     monkeypatch.setattr("kaine.boot.registry._wire_oscillators", lambda reg, cfg: None)
 
     kaine_config = {
-        "modules": {"topos": True, "audition": True},
+        "modules": {"vision": True, "audition": True},
         "perception_feed": dict(feed),
-        "topos": {"capture_width": 16, "capture_height": 12},
+        "vision": {"capture_width": 16, "capture_height": 12},
     }
     bus = _fake_bus()
     try:
@@ -1072,17 +1072,17 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
         asyncio.run(bus.close())
 
     section = kaine_config["perception_feed"]
-    transition = section["_womb_world_transition"]
+    transition = section["_stimulus_source_world_transition"]
     pclock = section["_shared_playlist_clock"]
     assert pclock.holders == frozenset({TRANSITION_HOLDER})
     assert transition.stimulus_source_frame.shape == (12, 16, 3)
-    for name in ("topos", "audition"):
-        assert captured[name]["perception_feed"]["_womb_world_transition"] is transition
+    for name in ("vision", "audition"):
+        assert captured[name]["perception_feed"]["_stimulus_source_world_transition"] is transition
         assert captured[name]["perception_feed"]["_shared_playlist_clock"] is pclock
     # A vision module that failed to load leaves the audio surface in charge.
     assert transition.controller.video_present is vision_loads
     video = _build_perception_feed_video_factory(
-        "playlist", captured["topos"]["perception_feed"], width=16, height=12
+        "playlist", captured["vision"]["perception_feed"], width=16, height=12
     )(0, width=16, height=12)
     audio = _build_perception_feed_audio_factory(
         "playlist", captured["audition"]["perception_feed"],

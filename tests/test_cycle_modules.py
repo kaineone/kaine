@@ -31,7 +31,7 @@ async def test_quiet_module_skipped_silently():
         cycle = CognitiveCycle(
             bus=bus,
             workspace=FakeWorkspace(),
-            registry=FakeRegistry(["chronos.out", "soma.out"]),
+            registry=FakeRegistry(["sequence.out", "interoception.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
         )
@@ -50,12 +50,12 @@ async def test_events_from_module_collected_and_cursor_advances():
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     try:
         for i in range(3):
-            await bus.publish(_ev("chronos", i))
+            await bus.publish(_ev("sequence", i))
         syn = FakeWorkspace()
         cycle = CognitiveCycle(
             bus=bus,
             workspace=syn,
-            registry=FakeRegistry(["chronos.out"]),
+            registry=FakeRegistry(["sequence.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
         )
@@ -75,20 +75,20 @@ async def test_erroring_read_does_not_stop_cycle():
     client = fakeredis.FakeRedis(decode_responses=True)
     real = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
     try:
-        await real.publish(_ev("soma", 1))
-        wrapped = FailingReadBus(real, fail_stream="chronos.out")
+        await real.publish(_ev("interoception", 1))
+        wrapped = FailingReadBus(real, fail_stream="sequence.out")
         cycle = CognitiveCycle(
             bus=wrapped,  # type: ignore[arg-type]
             workspace=FakeWorkspace(),
-            registry=FakeRegistry(["soma.out", "chronos.out"]),
+            registry=FakeRegistry(["interoception.out", "sequence.out"]),
             clock=FakeClock(),
             sleep=FakeClock().sleep,
         )
         result = await cycle.tick()
-        # soma.out's event was still collected; chronos.out errored and was
+        # interoception.out's event was still collected; sequence.out errored and was
         # counted but the cycle did not stop.
         assert result.events_collected == 1
-        assert cycle.error_counts.get("chronos.out", 0) >= 1
+        assert cycle.error_counts.get("sequence.out", 0) >= 1
     finally:
         await real.close()
 
@@ -157,8 +157,8 @@ async def test_dynamic_module_addition_picked_up_next_tick():
         )
         await cycle.tick()
         # Now register a new module mid-run and publish.
-        await bus.publish(_ev("soma", 42))
-        registry.set_streams(["soma.out"])
+        await bus.publish(_ev("interoception", 42))
+        registry.set_streams(["interoception.out"])
         result = await cycle.tick()
         assert result.events_collected == 1
     finally:

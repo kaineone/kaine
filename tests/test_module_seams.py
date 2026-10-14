@@ -355,7 +355,7 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
     captured_registry: list[dict[str, Any]] = []
     captured_direct: list[dict[str, Any]] = []
 
-    modules_under_test = ("topos", "soma", "praxis", "chronos")
+    modules_under_test = ("vision", "interoception", "effectors", "sequence")
     for name in modules_under_test:
         monkeypatch.setitem(
             SIMPLE_FACTORIES,
@@ -372,26 +372,26 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
 
     kaine_config = {
         "modules": {
-            "topos": True,
-            "soma": True,
-            "praxis": True,
-            "chronos": True,
-            "hypnos": False,
+            "vision": True,
+            "interoception": True,
+            "effectors": True,
+            "sequence": True,
+            "sleep": False,
             "audition": False,
-            "nous": False,
-            "mnemos": False,
-            "thymos": False,
-            "phantasia": False,
-            "lingua": False,
-            "eidolon": False,
-            "empatheia": False,
-            "vox": False,
+            "planning": False,
+            "episodic_memory": False,
+            "affect": False,
+            "world_model": False,
+            "language": False,
+            "self_model": False,
+            "social_cognition": False,
+            "vocal": False,
         },
         "perception_feed": {"mode": "off", "seed": 42},
-        "topos": {"encoder_model_id": "dummy", "device": "cpu"},
-        "praxis": {"model_id": "dummy"},
-        "soma": {"read_interval_s": 1.0},
-        "chronos": {
+        "vision": {"encoder_model_id": "dummy", "device": "cpu"},
+        "effectors": {"model_id": "dummy"},
+        "interoception": {"read_interval_s": 1.0},
+        "sequence": {
             "cfc_units": 8,
             "baseline_salience": 0.1,
             "alert_salience": 0.7,
@@ -446,14 +446,14 @@ def test_construct_module_matches_build_registry_calls(monkeypatch: pytest.Monke
         assert reg_call["injections"] == dir_call["injections"]
 
     # the vision and audition modules receive the shared perception feed.
-    vision_call = by_name_dir["topos"]
+    vision_call = by_name_dir["vision"]
     assert vision_call["section"]["perception_feed"] == kaine_config["perception_feed"]
 
     # The effectors module receives the intent secret.
-    assert by_name_dir["praxis"]["intent_secret"] is secret
+    assert by_name_dir["effectors"]["intent_secret"] is secret
 
     # The interoception module is clocked and receives the shared EntityClock instance.
-    assert by_name_dir["soma"]["entity_clock"] is clock
+    assert by_name_dir["interoception"]["entity_clock"] is clock
 
 
 @pytest.mark.asyncio
@@ -463,7 +463,7 @@ async def test_construct_module_rejects_injections_for_non_seam_modules(
     registry = ModuleRegistry()
     with pytest.raises(ConfigurationError, match="does not accept injections"):
         construct_module(
-            "topos",
+            "vision",
             bus,
             {},
             registry=registry,
@@ -515,12 +515,12 @@ def test_make_rebuild_module_passes_clock_and_secret(monkeypatch: pytest.MonkeyP
 
     try:
         rebuild = cycle_main._make_rebuild_module(bus, kaine_config, registry, secret)
-        result = rebuild("topos")
+        result = rebuild("vision")
         assert isinstance(result, _FakeModule)
-        assert result.name == "topos"
+        assert result.name == "vision"
         assert len(captured) == 1
         call = captured[0]
-        assert call["name"] == "topos"
+        assert call["name"] == "vision"
         assert call["bus"] is bus
         assert call["cfg"] is kaine_config
         assert call["registry"] is registry
@@ -545,7 +545,7 @@ async def test_sequence_restart_network_identity() -> None:
     feature_dim = SnapshotFeaturizer().feature_dim
     kaine_config = {
         "modules": {},
-        "chronos": {
+        "sequence": {
             "cfc_units": 16,
             "baseline_salience": 0.1,
             "alert_salience": 0.7,
@@ -560,7 +560,7 @@ async def test_sequence_restart_network_identity() -> None:
         net = CfCNetwork(input_size=feature_dim, units=units)
         injected_nets.append(net)
         sequence = construct_module(
-            "chronos",
+            "sequence",
             bus,
             kaine_config,
             registry=registry,
@@ -571,7 +571,7 @@ async def test_sequence_restart_network_identity() -> None:
         assert sequence._network is net
 
     default_sequence = construct_module(
-        "chronos",
+        "sequence",
         bus,
         kaine_config,
         registry=registry,

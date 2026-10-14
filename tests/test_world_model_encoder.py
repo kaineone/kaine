@@ -45,7 +45,7 @@ def test_observation_dim_is_fixed():
 
 
 def test_encode_produces_fixed_width_vector():
-    snap = _snapshot([_event("soma", "soma.report", {"wellness": 0.9}, 0.4)])
+    snap = _snapshot([_event("interoception", "interoception.report", {"wellness": 0.9}, 0.4)])
     vec = encode_snapshot(snap)
     assert isinstance(vec, list)
     assert len(vec) == OBS_DIM
@@ -68,8 +68,8 @@ def test_inhibition_flag_encoded():
 
 
 def test_salience_weighted_coalition_buckets():
-    quiet = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.1)]))
-    loud = encode_snapshot(_snapshot([_event("soma", "soma.report", salience=0.9)]))
+    quiet = encode_snapshot(_snapshot([_event("interoception", "interoception.report", salience=0.1)]))
+    loud = encode_snapshot(_snapshot([_event("interoception", "interoception.report", salience=0.9)]))
     # Higher-salience interoception event yields a larger interoception bucket value.
     assert max(loud) > max(quiet)
 
@@ -77,8 +77,8 @@ def test_salience_weighted_coalition_buckets():
 def test_affect_summary_from_affect_state():
     snap = _snapshot([
         _event(
-            "thymos",
-            "thymos.state",
+            "affect",
+            "affect.state",
             {"state": {"arousal": 0.8, "valence": -0.4, "dominance": 0.2}},
             0.5,
         )
@@ -106,8 +106,8 @@ def test_no_raw_sense_data_in_vector():
             0.6,
         ),
         _event(
-            "topos",
-            "topos.report",
+            "vision",
+            "vision.report",
             {"change_score": 0.3, "frame_data": "rawpixels"},
             0.5,
         ),
@@ -121,5 +121,5 @@ def test_no_raw_sense_data_in_vector():
 
 
 def test_encoder_is_deterministic():
-    snap = _snapshot([_event("nous", "nous.belief", {"statement": "x"}, 0.7)])
+    snap = _snapshot([_event("planning", "planning.belief", {"statement": "x"}, 0.7)])
     assert encode_snapshot(snap) == encode_snapshot(snap)

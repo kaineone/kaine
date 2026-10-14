@@ -73,7 +73,7 @@ HEARD_TEXT_FIELDS = frozenset({
 other event type it is not. `faithful_rendering` is included because a rendering
 can embed earlier heard lines.
 
-External-input event types (``audition.transcription`` and ``mundus.chat``) are
+External-input event types (``audition.transcription`` and ``embodiment.chat``) are
 redacted wholesale by type; on all other types, these fields are redacted at
 any depth.
 """
@@ -489,36 +489,36 @@ def _t_self_model_self_model(payload: dict[str, Any]) -> str:
 
 
 TEMPLATES: dict[tuple[str, str], TemplateFn] = {
-    ("soma", "soma.report"): _t_interoception_report,
-    ("chronos", "chronos.report"): _t_sequence_report,
-    ("topos", "topos.report"): _t_vision_report,
-    ("nous", "nous.belief"): _t_planning_belief,
-    ("nous", "nous.policy"): _t_planning_policy,
-    ("mnemos", "mnemos.recall"): _t_episodic_memory_recall,
-    ("thymos", "thymos.emotion"): _t_affect_emotion,
-    ("thymos", "thymos.drive"): _t_affect_drive,
-    ("thymos", "thymos.state"): _t_affect_state,
-    ("thymos", "thymos.goal"): _t_affect_goal,
-    ("eidolon", "eidolon.drift"): _t_self_model_drift,
+    ("interoception", "interoception.report"): _t_interoception_report,
+    ("sequence", "sequence.report"): _t_sequence_report,
+    ("vision", "vision.report"): _t_vision_report,
+    ("planning", "planning.belief"): _t_planning_belief,
+    ("planning", "planning.policy"): _t_planning_policy,
+    ("episodic_memory", "episodic_memory.recall"): _t_episodic_memory_recall,
+    ("affect", "affect.emotion"): _t_affect_emotion,
+    ("affect", "affect.drive"): _t_affect_drive,
+    ("affect", "affect.state"): _t_affect_state,
+    ("affect", "affect.goal"): _t_affect_goal,
+    ("self_model", "self_model.drift"): _t_self_model_drift,
     ("cycle", "cycle.tick"): _t_cycle_tick,
     ("audition", "audition.transcription"): _t_audition_transcription,
     ("audition", "audition.emotion"): _t_audition_emotion,
-    ("soma", "soma.fatigue"): _t_interoception_fatigue,
-    ("soma", "soma.regulation"): _t_interoception_regulation,
-    ("empatheia", "empatheia.agent_model"): _t_social_cognition_agent_model,
-    ("empatheia", "empatheia.social_error"): _t_social_cognition_social_error,
-    ("phantasia", "phantasia.world_error"): _t_world_model_world_error,
-    ("phantasia", "phantasia.scenario"): _t_world_model_scenario,
-    ("nous", "nous.timeout"): _t_planning_timeout,
-    ("nous", "nous.proposal"): _t_planning_proposal,
+    ("interoception", "interoception.fatigue"): _t_interoception_fatigue,
+    ("interoception", "interoception.regulation"): _t_interoception_regulation,
+    ("social_cognition", "social_cognition.agent_model"): _t_social_cognition_agent_model,
+    ("social_cognition", "social_cognition.social_error"): _t_social_cognition_social_error,
+    ("world_model", "world_model.world_error"): _t_world_model_world_error,
+    ("world_model", "world_model.scenario"): _t_world_model_scenario,
+    ("planning", "planning.timeout"): _t_planning_timeout,
+    ("planning", "planning.proposal"): _t_planning_proposal,
     ("audition", "audition.prosody"): _t_audition_prosody,
-    ("vox", "vox.synthesized"): _t_vocal_synthesized,
-    ("mnemos", "mnemos.replay"): _t_episodic_memory_replay,
-    ("hypnos", "hypnos.sleep.started"): _t_sleep_sleep_started,
-    ("hypnos", "hypnos.sleep.completed"): _t_sleep_sleep_completed,
-    ("hypnos", "hypnos.association"): _t_sleep_association,
-    ("hypnos", "hypnos.rest_request"): _t_sleep_rest_request,
-    ("eidolon", "eidolon.self_model"): _t_self_model_self_model,
+    ("vocal", "vocal.synthesized"): _t_vocal_synthesized,
+    ("episodic_memory", "episodic_memory.replay"): _t_episodic_memory_replay,
+    ("sleep", "sleep.sleep.started"): _t_sleep_sleep_started,
+    ("sleep", "sleep.sleep.completed"): _t_sleep_sleep_completed,
+    ("sleep", "sleep.association"): _t_sleep_association,
+    ("sleep", "sleep.rest_request"): _t_sleep_rest_request,
+    ("self_model", "self_model.document"): _t_self_model_self_model,
 }
 
 

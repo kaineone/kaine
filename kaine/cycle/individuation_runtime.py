@@ -152,7 +152,7 @@ class IndividuationConfig:
             "enabled",
             "disclosure",
             "battery_path",
-            "lingua_quiet_s",
+            "language_quiet_s",
             "probe_temperature",
         } | producer_keys | scheduler_keys
 
@@ -187,7 +187,7 @@ class IndividuationConfig:
         if not isinstance(battery_path, str):
             raise ValueError("battery_path must be a str")
 
-        language_quiet_s = explicit.get("lingua_quiet_s", cls.language_quiet_s)
+        language_quiet_s = explicit.get("language_quiet_s", cls.language_quiet_s)
         if (
             not isinstance(language_quiet_s, (int, float))
             or not math.isfinite(language_quiet_s)
@@ -353,7 +353,7 @@ class IndividuationRuntime:
     async def _watch_sleep(self, stop_event: asyncio.Event) -> None:
         while True:
             try:
-                cursor = await self.bus.last_entry_id("hypnos.out")
+                cursor = await self.bus.last_entry_id("sleep.out")
                 break
             except asyncio.CancelledError:
                 raise
@@ -369,7 +369,7 @@ class IndividuationRuntime:
         while not stop_event.is_set():
             try:
                 entries, last = await self.bus.read_entries(
-                    "hypnos.out", cursor, 100, 1000
+                    "sleep.out", cursor, 100, 1000
                 )
             except asyncio.CancelledError:
                 raise
@@ -382,9 +382,9 @@ class IndividuationRuntime:
                 continue
 
             for _id, event in entries:
-                if event.type == "hypnos.sleep.started":
+                if event.type == "sleep.sleep.started":
                     self.scheduler.notify_sleep_started()
-                elif event.type == "hypnos.sleep.completed":
+                elif event.type == "sleep.sleep.completed":
                     self.scheduler.notify_sleep_completed()
 
             if last is not None:

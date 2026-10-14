@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Operator acknowledgement gates supervised birth."""
+"""Operator acknowledgement gates supervised maturation."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _make_bus(
     sleep_count: int = 0,
     boot_ms: int = 1_000_000,
     stimulus_source_stream: str = DEFAULT_STIMULUS_SOURCE_READOUT_STREAM,
-    sleep_stream: str = "hypnos.out",
+    sleep_stream: str = "sleep.out",
 ) -> Any:
     """Return a minimal async bus double with the new cursor API surface."""
     bus = MagicMock()
@@ -64,7 +64,7 @@ def _make_bus(
             f"{boot_ms + 1}-0",
             Event(
                 source=DEVELOPMENT_SOURCE,
-                type="gestation.readiness",
+                type="development.readiness",
                 payload={"readout": readout},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -96,8 +96,8 @@ def _make_bus(
         (
             f"{i + 1}-0",
             Event(
-                source="hypnos",
-                type="hypnos.sleep.completed",
+                source="sleep",
+                type="sleep.sleep.completed",
                 payload={},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
@@ -154,7 +154,7 @@ def _make_registry(
     vocal.set_dormant = MagicMock()
 
     # The sleep module is present so the gate applies the sleep and consolidation floors.
-    modules = {"hypnos": MagicMock(), "phantasia": world_model, "mundus": embodiment, "vox": vocal}
+    modules = {"sleep": MagicMock(), "world_model": world_model, "embodiment": embodiment, "vocal": vocal}
 
     def _get(name: str):
         return modules[name]
@@ -296,7 +296,7 @@ async def test_matching_ack_maturations_and_clears_files(
 
     await runner._evaluate_once()
 
-    # The first evaluation announced the hold (stage.birth.ready, awaiting the
+    # The first evaluation announced the hold (stage.maturation.ready, awaiting the
     # operator); the acknowledged one matures exactly once.
     assert [e.type for e in published].count(STAGE_MATURATION) == 1
     assert published[-1].type == STAGE_MATURATION

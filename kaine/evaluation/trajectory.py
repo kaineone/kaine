@@ -18,7 +18,7 @@ from kaine.evaluation.sink import AsyncJsonlSink
 log = logging.getLogger(__name__)
 
 WORKSPACE_STREAM = "workspace.broadcast"
-AFFECT_STREAM = "thymos.out"
+AFFECT_STREAM = "affect.out"
 
 
 class TrajectoryRecorder(WorkspaceSubscriberObserver):

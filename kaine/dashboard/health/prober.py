@@ -189,7 +189,7 @@ class HealthProber:
         return {
             "dependencies": list(dep_rows),
             "modules": self._module_states(),
-            "spot": self._supervisor_block(),
+            "supervisor": self._supervisor_block(),
             "cycle_pacing": self._cycle_pacing_block(),
             "entity_care": self._entity_care_block(),
             "research": self._research_block(),
@@ -266,7 +266,7 @@ class HealthProber:
     async def _model_server_block(self) -> dict[str, Any]:
         return await blocks.model_server_block(
             self.model_server_cfg,
-            language_enabled=self._module_enabled("lingua"),
+            language_enabled=self._module_enabled("language"),
         )
 
     def _gpu_preflight_block(self) -> dict[str, Any]:
@@ -274,7 +274,7 @@ class HealthProber:
 
     def _episodic_memory_store_block(self) -> dict[str, Any]:
         return blocks.episodic_memory_store_block(
-            self.episodic_memory_store_health_path, self._module_enabled("mnemos")
+            self.episodic_memory_store_health_path, self._module_enabled("episodic_memory")
         )
 
     def _supervisor_block(self) -> dict[str, Any]:

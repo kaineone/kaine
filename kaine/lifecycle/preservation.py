@@ -133,7 +133,7 @@ DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("gestation_viability.json
 # Bundle member directories. The writer and every reader pass them through
 # legacy_aliases.map_bundle_member, so a bundle written before the keys step and
 # one written after it compare equal on either side of it.
-WORLD_MODEL_MEMBER = "phantasia"
+WORLD_MODEL_MEMBER = "world_model"
 DEVELOPMENT_MEMBER = "gestation"
 
 
@@ -549,7 +549,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
     """
     bundle = Path(bundle)
     # The bundle stores entity-interior content inside bundle.tar(.enc); a legacy
-    # bundle stored snapshot.json + phantasia/ loose. Resolve the snapshot from
+    # bundle stored snapshot.json + world_model/ loose. Resolve the snapshot from
     # whichever layout is present (fail loud if neither carries a snapshot).
     members = _read_bundle_members(bundle)
     if "snapshot.json" not in members:
@@ -652,7 +652,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
             continue
 
         if (
-            name == "phantasia"
+            name == "world_model"
             and getattr(module, "persists_weights", False)
             and not (wm_record and wm_record.get("captured"))
         ):
@@ -720,7 +720,7 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     ``stage.json`` bytes, if present.  Mirrors the tar handling in
     :func:`_read_bundle_members` so :func:`read_bundle_stage` can inspect the
     stage member even though the generic member reader is only interested in
-    snapshot.json and phantasia/ weights.
+    snapshot.json and world_model/ weights.
     """
     import io
     import tarfile
@@ -790,7 +790,7 @@ def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
     """Restore the bundled developmental-phase files into ``dest_dir``; return the names restored.
 
     Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
-    loose layout or a bundle without a ``gestation/`` member restores nothing.
+    loose layout or a bundle without a ``development/`` member restores nothing.
     """
     import io
     import tarfile
@@ -998,11 +998,11 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     """Return the bundle's entity-interior members from bundle.tar(.enc) or loose.
 
     Resolves both the current (tar+optionally-encrypted) layout and a legacy
-    loose layout (snapshot.json + phantasia/ on disk). Returns a dict:
+    loose layout (snapshot.json + world_model/ on disk). Returns a dict:
 
     * ``"snapshot.json"`` -> decoded snapshot JSON text (snapshot-level framing
       transparently decrypted via :meth:`StateEncryptor.maybe_decrypt`).
-    * ``"phantasia/<name>"`` -> raw checkpoint bytes for each captured weight file.
+    * ``"world_model/<name>"`` -> raw checkpoint bytes for each captured weight file.
 
     Fails loud (ReviveError) if an encrypted tar cannot be decrypted/opened.
     """
@@ -1076,7 +1076,7 @@ def _load_bundle_world_model_weights(
 ) -> bytes | None:
     """Decode the captured world-model checkpoint from the bundle members.
 
-    The checkpoint rode in the bundle under ``phantasia/<name>``; it is decoded
+    The checkpoint rode in the bundle under ``world_model/<name>``; it is decoded
     through the same checkpoint codec that wrote it (transparent for plaintext).
     Returns the param-tree blob, or None when the bundle has no world model
     checkpoint.

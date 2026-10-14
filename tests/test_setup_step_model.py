@@ -135,12 +135,12 @@ def test_owned_keys_are_within_allowlist():
         probe_trainer=lambda *_a, **_k: (True, "/opt/trainer/bin/python"),
     )
     assert result.acknowledged is True
-    assert result.config["hypnos"]["voice_alignment"]["trainer_python"] == "/opt/trainer/bin/python"
+    assert result.config["sleep"]["voice_alignment"]["trainer_python"] == "/opt/trainer/bin/python"
     assert_owned(owned_changes({}, result.config))
 
     custom_answers = [ACK_PHRASE, "", "", "y", "y", "c"]
     for m in MODULE_ORDER:
-        custom_answers.append("y" if m in ("soma", "lingua", "vox", "audition") else "n")
+        custom_answers.append("y" if m in ("interoception", "language", "vocal", "audition") else "n")
     custom_answers.extend(
         [
             "custom-model",
@@ -172,51 +172,51 @@ def test_owned_keys_are_within_allowlist():
 
     # [research] and operator-presence gates are not in the allowlist.
     assert not any(k.startswith("research.") for k in OWNED_KEYS)
-    assert "nexus.non_loopback_allowed" not in OWNED_KEYS
+    assert "dashboard.non_loopback_allowed" not in OWNED_KEYS
 
 
 def test_merge_preserves_unowned_keys_and_tables():
     existing = {
-        "nexus": {"non_loopback_allowed": True, "port": 9999},
+        "dashboard": {"non_loopback_allowed": True, "port": 9999},
         "unowned_table": {"a": 1, "nested": {"b": 2}},
     }
     updates = {
-        "modules": {"soma": True, "lingua": True, "echo": False},
+        "modules": {"interoception": True, "language": True, "recorder": False},
         "deployment": {"tier": "tier3"},
     }
     merged = tomlwriter.merge_owned(existing, updates, OWNED_KEYS)
-    assert merged["nexus"]["port"] == 9999
-    assert merged["nexus"]["non_loopback_allowed"] is True
+    assert merged["dashboard"]["port"] == 9999
+    assert merged["dashboard"]["non_loopback_allowed"] is True
     assert merged["unowned_table"]["a"] == 1
     assert merged["unowned_table"]["nested"]["b"] == 2
-    assert merged["modules"]["soma"] is True
+    assert merged["modules"]["interoception"] is True
     assert merged["deployment"]["tier"] == "tier3"
     assert tomllib.loads(tomlwriter.dumps(merged)) == merged
 
 
 def test_merge_replaces_owned_key():
-    existing = {"modules": {"soma": False, "lingua": False}}
-    updates = {"modules": {"soma": True, "lingua": True}}
+    existing = {"modules": {"interoception": False, "language": False}}
+    updates = {"modules": {"interoception": True, "language": True}}
     merged = tomlwriter.merge_owned(existing, updates, OWNED_KEYS)
-    assert merged["modules"]["soma"] is True
-    assert merged["modules"]["lingua"] is True
+    assert merged["modules"]["interoception"] is True
+    assert merged["modules"]["language"] is True
 
 
 def test_merge_rejects_unowned_update():
     with pytest.raises(ValueError):
         tomlwriter.merge_owned(
-            {}, {"nexus": {"port": 9999}}, OWNED_KEYS
+            {}, {"dashboard": {"port": 9999}}, OWNED_KEYS
         )
 
 
 def test_merge_rejects_unemittable_existing_value():
     with pytest.raises(ValueError):
         tomlwriter.merge_owned(
-            {"bad": None}, {"modules": {"soma": True}}, OWNED_KEYS
+            {"bad": None}, {"modules": {"interoception": True}}, OWNED_KEYS
         )
     with pytest.raises(ValueError):
         tomlwriter.merge_owned(
-            {"bad": [{"a": 1}]}, {"modules": {"soma": True}}, OWNED_KEYS
+            {"bad": [{"a": 1}]}, {"modules": {"interoception": True}}, OWNED_KEYS
         )
 
 
@@ -225,7 +225,7 @@ def test_idempotence_with_existing_config(tmp_path: Path):
     parsed file as existing_config must produce an identical operator file."""
     first_answers = [ACK_PHRASE, "", "", "y", "c"]
     for m in MODULE_ORDER:
-        first_answers.append("y" if m in ("soma", "lingua", "vox", "audition") else "n")
+        first_answers.append("y" if m in ("interoception", "language", "vocal", "audition") else "n")
     first_answers.extend(
         [
             "first-model",
@@ -302,10 +302,10 @@ def test_assert_owned_raises_on_unowned_keys():
 
 
 def test_merge_owned_refuses_to_replace_a_value_with_a_table():
-    existing = {"lingua": "hand-written scalar"}
+    existing = {"language": "hand-written scalar"}
     with pytest.raises(ValueError):
-        tomlwriter.merge_owned(existing, {"lingua": {"model_id": "m"}}, frozenset({"lingua.model_id"}))
-    assert existing == {"lingua": "hand-written scalar"}
+        tomlwriter.merge_owned(existing, {"language": {"model_id": "m"}}, frozenset({"language.model_id"}))
+    assert existing == {"language": "hand-written scalar"}
 
 
 def test_nothing_is_probed_before_the_acknowledgement():

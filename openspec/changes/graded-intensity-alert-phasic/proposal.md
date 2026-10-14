@@ -15,7 +15,7 @@ The revised paper (predictive-workspace-paper #21, decisions D2 and R4) settles 
 
 ### Modified Capabilities
 
-- `syneidesis`: predictive processors report graded intensity.
+- `workspace`: predictive processors report graded intensity.
 - `cognitive-cycle`: the access rate's phasic input counts categorical alerts only.
 
 ## Impact

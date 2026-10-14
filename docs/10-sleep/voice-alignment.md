@@ -6,12 +6,12 @@ Related pages: [Sleep and maintenance](README.md), [Sleep](../09-modules/sleep.m
 
 ## Current state: no training
 
-The phase trains nothing. Training needs a source of preferred examples, and `[hypnos.voice_alignment].preference_source` names it. Its only accepted value is `"none"`; a validated source and the offline check that must accompany it are still to be built. The intent-expression log does pair each utterance with the faithful rendering of the coalition that conditioned it, but that rendering is a readout of instrument state, and training the organ toward it would teach it to narrate readings. With `"none"`, the phase returns `skipped: no validated preference source (voice-development Stage 2)` even when both operator gates are open.
+The phase trains nothing. Training needs a source of preferred examples, and `[sleep.voice_alignment].preference_source` names it. Its only accepted value is `"none"`; a validated source and the offline check that must accompany it are still to be built. The intent-expression log does pair each utterance with the faithful rendering of the coalition that conditioned it, but that rendering is a readout of instrument state, and training the organ toward it would teach it to narrate readings. With `"none"`, the phase returns `skipped: no validated preference source (voice-development Stage 2)` even when both operator gates are open.
 
 Two things still run on every sleep:
 
 - the consolidation-divergence metric is computed and published (see [sleep module](../09-modules/sleep.md#consolidation-divergence)), and a scan that fails or finds no records keeps the earlier record in place;
-- after the phase, the sleep module moves the waking intent log into the per-sleep corpus under `state/lingua/intent_log/`.
+- after the phase, the sleep module moves the waking intent log into the per-sleep corpus under `state/language/intent_log/`.
 
 The training path described below (`Sleep._train_on_pairs` and the trainer backends) is built and tested, and runs only once a training source exists.
 
@@ -22,7 +22,7 @@ Training needs every gate below open. A closed gate returns a successful `PhaseR
 ```mermaid
 flowchart TD
     A[Phase 4 begins] --> M[Build pairs; publish consolidation divergence]
-    M --> B{"[hypnos.voice_alignment]\nenabled = true?"}
+    M --> B{"[sleep.voice_alignment]\nenabled = true?"}
     B -- no --> C["Skip: training_skipped=true"]
     B -- yes --> D{"KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1?"}
     D -- no --> C
@@ -33,7 +33,7 @@ flowchart TD
     Q -- yes --> G[Train through the configured backend]
 ```
 
-The config gate, `[hypnos.voice_alignment].enabled = true`, is the standing authorization. The environment gate, `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` in the shell that starts the cycle, is the operator's approval at boot. Without both, boot also builds no real trainer. The preference-source gate is the one that keeps training off today.
+The config gate, `[sleep.voice_alignment].enabled = true`, is the standing authorization. The environment gate, `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` in the shell that starts the cycle, is the operator's approval at boot. Without both, boot also builds no real trainer. The preference-source gate is the one that keeps training off today.
 
 Each pair also needs the system prompt the organ saw. The sleep module looks it up by the record's `system_digest` and drops pairs whose stored prompt is missing or fails verification.
 
@@ -41,7 +41,7 @@ Each pair also needs the system prompt the organ saw. The sleep module looks it 
 
 A training pass fits a small LoRA adapter by Direct Preference Optimization (DPO). The base model weights at `base_model_path` are never modified.
 
-`DPOPairBuilder` reads the live log at `intent_log_path` (default `state/lingua/intent_expression.jsonl`) and the per-sleep corpus beside it. It uses these fields of each record:
+`DPOPairBuilder` reads the live log at `intent_log_path` (default `state/language/intent_expression.jsonl`) and the per-sleep corpus beside it. It uses these fields of each record:
 
 | Field | Use |
 |-------|-----|
@@ -128,7 +128,7 @@ Because the trainer script does not import `kaine`, it cannot compute `mean_inte
 
 `kaine/modules/sleep/subprocess_trainer.py` runs the trainer stack in an external Python environment. The entry script `scripts/sleep_external_train.py` imports only unsloth, trl, peft, datasets and the standard library, never `kaine`, and is invoked by explicit path. The runtime and trainer environments share only the filesystem.
 
-`SubprocessVoiceTrainer` writes a per-job directory under `trainer_workdir` (default `state/hypnos/voice_align_jobs`):
+`SubprocessVoiceTrainer` writes a per-job directory under `trainer_workdir` (default `state/sleep/voice_align_jobs`):
 
 ```
 <trainer_workdir>/job-<timestamp>-<n>/
@@ -168,13 +168,13 @@ For GGUF conversion use mainline llama.cpp. Ollama's GGUF converter writes a non
 
 ### Job queue backend
 
-For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/hypnos/voice_align_jobs`; the module-addition study overlay uses `/trainer-jobs`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but phase 4 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
+For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/sleep/voice_align_jobs`; the module-addition study overlay uses `/trainer-jobs`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but phase 4 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
 
 `result.json` is written during the run, so the cycle decides completion by the `DONE` marker.
 
 The `kaine-trainer` service runs under the compose profile `training` (image target `trainer`). It has its own venv with the `[training]` stack and llama.cpp's LoRA converter pinned to the organ's build b11382. It waits until the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the external trainer with the same gates, promotes the vetted adapter atomically inside the job, converts it to `adapter.gguf`, computes `gguf_sha256`, writes `result.json` and `DONE`, and deletes the job's `pairs.jsonl`. The cycle-side `JobQueueVoiceTrainer` verifies the hash on pickup. The service sees only the jobs volume and the read-only models volume: no entity state, no Docker socket, no host ports, and no internet. The cycle then promotes the adapter into the entity's own `adapter_output_dir`.
 
-On the job-queue path the trainer authenticates to the organ with the language module's key: `[lingua].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
+On the job-queue path the trainer authenticates to the organ with the language module's key: `[language].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
 
 #### Module-addition study
 
@@ -191,7 +191,7 @@ The study overlay enables voice alignment with `job_queue`, `organ_adapter` and 
 `kaine/modules/sleep/adapter_store.py` manages:
 
 ```
-state/hypnos/adapters/
+state/sleep/adapters/
   <timestamp>.tmp/      ← training writes here
   <timestamp>/          ← os.replace promotes tmp → final
   current               ← symlink to the active adapter
@@ -229,7 +229,7 @@ Hot-swap failures are logged but not raised. The adapter on disk is the source o
 
 On a host with one usable GPU, `run_with_organ_window()` brackets in-process and subprocess training for `reload_endpoint` and `restart_service`. It does not bracket on multi-GPU hosts, when `hot_swap_mode` is `manual`, or with the `job_queue` backend, whose trainer service runs in its own container and waits until the organ reports it is asleep and the GPU has room. The served organ and a 4B bf16 LoRA training step (about 9.8 GB) do not fit together on one 12 GB device, so those modes time-share the GPU through the model-server lifecycle (`cmd_stop` and `cmd_start`):
 
-1. Consumers pause. The language module's generation defers with a resting no-op, and the A/B-divergence eval arm skips its samples. Both read `state/hypnos/organ_window.json` and resume on reload.
+1. Consumers pause. The language module's generation defers with a resting no-op, and the A/B-divergence eval arm skips its samples. Both read `state/sleep/organ_window.json` and resume on reload.
 2. The served organ is unloaded and its VRAM release is confirmed.
 3. Training runs against the unchanged `base_model_path` safetensors.
 4. A GPU preflight runs before reload. It only reports and never terminates a foreign process.
@@ -252,7 +252,7 @@ The language module applies the adapter per request through `set_lora_resolver`,
 If a deployed adapter misbehaves:
 
 1. Stop KAINE (or at least pause the language module).
-2. `rm -rf state/hypnos/adapters/<bad-timestamp>/`
+2. `rm -rf state/sleep/adapters/<bad-timestamp>/`
 3. Re-point `current` to the previous accepted adapter:
    ```bash
    ln -snfr state/hypnos/adapters/<previous> state/hypnos/adapters/current
@@ -260,7 +260,7 @@ If a deployed adapter misbehaves:
 4. Reload the language module's backing service.
 5. Restart KAINE.
 
-The base model weights at `base_model_path` are never modified. Deleting `state/hypnos/adapters/` entirely returns the language module to the base organ.
+The base model weights at `base_model_path` are never modified. Deleting `state/sleep/adapters/` entirely returns the language module to the base organ.
 
 ## Event types
 
@@ -268,19 +268,19 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 
 | Event type | Stream | Content |
 |------------|--------|---------|
-| `hypnos.consolidation_divergence` | `hypnos.out` | Content-free organ-divergence metric, emitted every sleep before the training gate. |
-| `hypnos.sleep.completed` | `hypnos.out` | Overall pipeline completion. `summary["voice_alignment"]` holds `accepted`, `adapter_path`, `capability_loss`, `reason`, and `samples_used`. The top-level summary holds `pairs_processed`, `dpo_loss`, and the before/after capability scores. |
+| `sleep.consolidation_divergence` | `sleep.out` | Content-free organ-divergence metric, emitted every sleep before the training gate. |
+| `sleep.sleep.completed` | `sleep.out` | Overall pipeline completion. `summary["voice_alignment"]` holds `accepted`, `adapter_path`, `capability_loss`, `reason`, and `samples_used`. The top-level summary holds `pairs_processed`, `dpo_loss`, and the before/after capability scores. |
 
 ## Configuration
 
-`[hypnos.voice_alignment]`, with the defaults from `config/kaine.toml`. Host-specific paths and secrets belong in `config/kaine.operator.toml`.
+`[sleep.voice_alignment]`, with the defaults from `config/kaine.toml`. Host-specific paths and secrets belong in `config/kaine.operator.toml`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `enabled` | bool | `false` | Config gate |
 | `preference_source` | string | `"none"` | Source of preferred examples; `"none"` is the only accepted value and trains nothing |
-| `intent_log_path` | string | `"state/lingua/intent_expression.jsonl"` | Live intent-expression log; the per-sleep corpus sits in `intent_log/` beside it |
-| `adapter_output_dir` | string | `"state/hypnos/adapters"` | Where promoted adapters and the `current` symlink live |
+| `intent_log_path` | string | `"state/language/intent_expression.jsonl"` | Live intent-expression log; the per-sleep corpus sits in `intent_log/` beside it |
+| `adapter_output_dir` | string | `"state/sleep/adapters"` | Where promoted adapters and the `current` symlink live |
 | `base_model_path` | string | `""` | Directory of HuggingFace-format weights to train from; required for training |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated"` | Display label only |
 | `max_samples` | int | `200` | Most DPO pairs per pass |
@@ -297,13 +297,13 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 | `reload_endpoint_url` | string | `""` | URL for `reload_endpoint` |
 | `restart_service_unit` | string | `""` | `systemd --user` unit for `restart_service` |
 | `organ_adapters_dir` | string | `"/organ-adapters"` | Shared organ-adapters volume for `organ_adapter` |
-| `organ_url` | string | `""` | Organ base URL for `organ_adapter`; empty uses `[lingua].chat_url` |
+| `organ_url` | string | `""` | Organ base URL for `organ_adapter`; empty uses `[language].chat_url` |
 | `capability_probe_path` | string | `""` | Capability probe JSONL; empty uses `kaine/modules/sleep/eval_probes/default.jsonl` |
 | `abliteration_probe_path` | string | `""` | Abliteration probe JSONL; empty uses `eval_probes/abliteration_probes.jsonl` |
 | `trainer_backend` | string | `"in_process"` | `in_process`, `subprocess` or `job_queue` |
 | `trainer_python` | string | `""` | External interpreter; required for `subprocess` |
-| `trainer_workdir` | string | `"state/hypnos/voice_align_jobs"` | Job directories for the `in_process` and `subprocess` backends |
-| `trainer_jobs_dir` | string | `"state/hypnos/voice_align_jobs"` | Shared jobs volume for `job_queue` |
+| `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Job directories for the `in_process` and `subprocess` backends |
+| `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared jobs volume for `job_queue` |
 | `trainer_timeout_s` | float | `21600.0` | Seconds the `job_queue` backend waits for a result |
 | `consolidation_divergence_rate_threshold` | float | `0.5` | Divergence rate at which the decommission check treats the organ as diverged |
 | `consolidation_divergence_magnitude_threshold` | float | `0.25` | Divergence magnitude at which the decommission check treats the organ as diverged |
@@ -332,7 +332,7 @@ export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 | File | Role |
 |------|------|
 | `kaine/modules/sleep/voice_alignment.py` | `VoiceAlignmentConfig`, `DPOPairBuilder`, `FakeTrainer`, `DPOPair`, `TrainingResult`, the preference sources. |
-| `kaine/boot/factories/sleep.py` | Parses `[hypnos.voice_alignment]`, validates the backend and hot-swap pairing, and picks the trainer. |
+| `kaine/boot/factories/sleep.py` | Parses `[sleep.voice_alignment]`, validates the backend and hot-swap pairing, and picks the trainer. |
 | `kaine/modules/sleep/subprocess_trainer.py` | `SubprocessVoiceTrainer`, the bridge used by the `in_process` and `subprocess` backends. |
 | `kaine/modules/sleep/job_queue_trainer.py` | `JobQueueVoiceTrainer`, the shared-directory bridge to the `kaine-trainer` service. |
 | `kaine/modules/sleep/trainer_service.py` | The `kaine-trainer` service that consumes jobs, runs the external trainer, and writes `DONE`. |

@@ -3,10 +3,10 @@
 
 """Encryption-aware read/write for the world-model checkpoints.
 
-Used by the opt-in weight-persistence path (``[phantasia].persist_weights``;
+Used by the opt-in weight-persistence path (``[world_model].persist_weights``;
 see ``module.py``): the shipped (``fake``) world model never checkpoints —
 only the real DreamerV3 backend's exported param tree lands under
-``state/phantasia/``, routed through the same
+``state/world_model/``, routed through the same
 :class:`~kaine.security.crypto.StateEncryptor` as every other at-rest state
 file: AES-256-GCM when ``[security.state_encryption].enabled`` is true, plain
 bytes otherwise. The world model module's zero-persistence guarantee for *experience data*

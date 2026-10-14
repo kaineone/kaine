@@ -740,6 +740,16 @@ def map_stream_keys(mapping: dict) -> dict:
     return result
 
 
+def old_stream_name(name: str) -> str | None:
+    """The stream's name before the keys step, or None when it had no other name or the keys scope is pending."""
+    if not scope_done("keys"):
+        return None
+    for entry in active(_table().STREAM_NAMES):
+        if entry["new"] == name and entry["old"] != name:
+            return entry["old"]
+    return None
+
+
 def orphaned_stream_names(live) -> list[str]:
     """Old stream names the cleanup command may delete once the keys step is done.
 

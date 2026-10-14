@@ -50,21 +50,21 @@ log = logging.getLogger(__name__)
 
 
 SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
-    "soma": make_interoception,
-    "chronos": make_sequence,
-    "topos": make_vision,
-    "nous": make_planning,
-    "mnemos": make_episodic_memory,
-    "eidolon": make_self_model,
-    "thymos": make_affect,
-    "praxis": make_effectors,
-    "lingua": make_language,
+    "interoception": make_interoception,
+    "sequence": make_sequence,
+    "vision": make_vision,
+    "planning": make_planning,
+    "episodic_memory": make_episodic_memory,
+    "self_model": make_self_model,
+    "affect": make_affect,
+    "effectors": make_effectors,
+    "language": make_language,
     "audition": make_audition,
-    "vox": make_vocal,
-    "mundus": make_embodiment,
-    "perception": make_perceptual_locus,
-    "empatheia": make_social_cognition,
-    "phantasia": make_world_model,
+    "vocal": make_vocal,
+    "embodiment": make_embodiment,
+    "perceptual_locus": make_perceptual_locus,
+    "social_cognition": make_social_cognition,
+    "world_model": make_world_model,
 }
 
 
@@ -73,7 +73,7 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 # clock dilates their integrals/cadences coherently with the cycle's tick
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
-_CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "chronos", "mnemos", "perception", "soma", "thymos", "topos", "vox"})
+_CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "sequence", "episodic_memory", "perceptual_locus", "interoception", "affect", "vision", "vocal"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
@@ -90,7 +90,7 @@ def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
 
 def known_module_names() -> list[str]:
     """Every module name boot can construct (for validating oscillator seams)."""
-    return [*SIMPLE_FACTORIES, "hypnos"]
+    return [*SIMPLE_FACTORIES, "sleep"]
 
 
 def build_registry(
@@ -147,7 +147,7 @@ def build_registry(
     # (unified-perception-feed) that parameterizes BOTH the vision surface
     # (the vision module) and the hearing surface (the audition module) from one source of truth. Read
     # it once and inject it into both factories' sections under a reserved key
-    # the factories pop. Keeping it top-level (not under [topos]/[audition])
+    # the factories pop. Keeping it top-level (not under [vision]/[audition])
     # means picture and sound cannot drift to different seeds/manifests.
     perception_feed = dict(kaine_config.get("perception_feed") or {})
     # A configured deterministic feed (seeded/playlist) is the entity's VIRTUAL
@@ -167,7 +167,7 @@ def build_registry(
     # picture and sound cannot drift onto different items. Any manifest problem is
     # left for the factories to surface with their existing errors.
     if _feed_mode == "playlist" and (
-        bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
+        bool(toggles.get("vision", False)) or bool(toggles.get("audition", False))
     ):
         try:
             from kaine.modules.vision.feed import (
@@ -208,19 +208,19 @@ def build_registry(
                 perception_feed["_shared_playlist_clock"],
                 stage_state=boot_stage,
                 bus=bus,
-                video_present=bool(toggles.get("topos", False)),
+                video_present=bool(toggles.get("vision", False)),
             )
     # Stimulus source (local-womb-feed): one shared stimulus source clock for both surfaces, offset by
     # the lived developmental time, so the heartbeat is seen and heard together and
     # the maternal trajectory continues across boots instead of replaying.
-    if _feed_mode == "womb" and (
-        bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
+    if _feed_mode == "stimulus_source" and (
+        bool(toggles.get("vision", False)) or bool(toggles.get("audition", False))
     ):
         _install_shared_stimulus_source_clock(
             perception_feed, kaine_config, entity_clock, stage_state=boot_stage
         )
-    if _feed_mode in ("seeded", "playlist", "womb") and (
-        bool(toggles.get("topos", False)) or bool(toggles.get("audition", False))
+    if _feed_mode in ("seeded", "playlist", "stimulus_source") and (
+        bool(toggles.get("vision", False)) or bool(toggles.get("audition", False))
     ):
         from kaine import perception_state as _ps
 
@@ -266,12 +266,12 @@ def build_registry(
         # The video surface starts and judges the crossfade only if the vision module is
         # really there; without it the audio surface does, so a vision module whose
         # backend could not load never leaves the programme held.
-        _stimulus_source_world_transition.controller.set_video_present("topos" in registry)
+        _stimulus_source_world_transition.controller.set_video_present("vision" in registry)
 
-    if bool(toggles.get("hypnos", False)):
+    if bool(toggles.get("sleep", False)):
         # construct_module hands the sleep module its sibling modules from the registry.
         sleep = construct_module(
-            "hypnos",
+            "sleep",
             bus,
             kaine_config,
             registry=registry,
@@ -310,26 +310,26 @@ def construct_module(
     configured backend could not load. The caller is responsible for skipping
     registration and surfacing the reason.
     """
-    if name not in SIMPLE_FACTORIES and name != "hypnos":
+    if name not in SIMPLE_FACTORIES and name != "sleep":
         raise ConfigurationError(f"unknown module {name!r}")
 
-    if injections and name not in {"chronos", "soma", "nous", "audition"}:
+    if injections and name not in {"sequence", "interoception", "planning", "audition"}:
         raise ConfigurationError(
             f"module {name!r} does not accept injections"
         )
 
     section = dict(kaine_config.get(name) or {})
-    if name in ("topos", "audition", "soma"):
+    if name in ("vision", "audition", "interoception"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
         section["positive_control"] = dict(kaine_config.get("positive_control") or {})
 
-    if name in ("mnemos", "empatheia"):
+    if name in ("episodic_memory", "social_cognition"):
         section["_embedder"] = shared_embedder(registry, kaine_config)
 
-    if name == "hypnos":
-        episodic_memory = registry.get("mnemos") if "mnemos" in registry else None
-        affect = registry.get("thymos") if "thymos" in registry else None
-        world_model = registry.get("phantasia") if "phantasia" in registry else None
+    if name == "sleep":
+        episodic_memory = registry.get("episodic_memory") if "episodic_memory" in registry else None
+        affect = registry.get("affect") if "affect" in registry else None
+        world_model = registry.get("world_model") if "world_model" in registry else None
         return make_sleep(
             bus,
             section,
@@ -343,14 +343,14 @@ def construct_module(
 
     factory = SIMPLE_FACTORIES[name]
     if name in _CLOCKED_FACTORIES:
-        if name in {"audition", "chronos", "soma", "nous"}:
+        if name in {"audition", "sequence", "interoception", "planning"}:
             return factory(
                 bus, section, entity_clock=entity_clock, injections=injections
             )
         return factory(bus, section, entity_clock=entity_clock)
-    if name == "praxis":
+    if name == "effectors":
         return factory(bus, section, intent_secret=intent_secret)
-    if name in {"chronos", "soma", "nous"}:
+    if name in {"sequence", "interoception", "planning"}:
         return factory(bus, section, injections=injections)
     return factory(bus, section)
 

@@ -550,8 +550,8 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
     # Publish three vision module reports in the first readout period.
     for err in [1.0, 1.1, 0.9]:
         event = Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={"prediction_error": err},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -574,8 +574,8 @@ async def test_readout_persists_vision_baseline(owner_factory, tmp_path: Path):
     # Lower errors in the next period produce a falling ratio.
     for err in [0.4, 0.5, 0.6]:
         event = Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={"prediction_error": err},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -617,8 +617,8 @@ async def test_new_owner_restores_baseline(owner_factory, tmp_path: Path):
     await owner.step()
     for err in [1.0, 1.0, 1.0]:
         event = Event(
-            source="topos",
-            type="topos.report",
+            source="vision",
+            type="vision.report",
             payload={"prediction_error": err},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),

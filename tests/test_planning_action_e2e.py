@@ -49,7 +49,7 @@ def _event(
 
 
 def _interoception_report(value: float = 0.5) -> tuple[str, Event]:
-    return ("s1", _event("soma", "soma.report", {"wellness": value}))
+    return ("s1", _event("interoception", "interoception.report", {"wellness": value}))
 
 
 def _proposal(
@@ -58,8 +58,8 @@ def _proposal(
     return (
         "p-" + proposal_id,
         _event(
-            "nous",
-            "nous.proposal",
+            "planning",
+            "planning.proposal",
             {
                 "proposal_id": proposal_id,
                 "action": action,
@@ -122,17 +122,17 @@ async def test_planning_proposal_drives_intent_and_internal_speech(
 
     await CognitiveCycle._run_action_selection(cycle, snap)
 
-    action_selection_events = [e for _, e in await bus.read("volition.out", last_id="0")]
+    action_selection_events = [e for _, e in await bus.read("action_selection.out", last_id="0")]
     think_events = [e for e in action_selection_events if e.type == "intent.think"]
     assert len(think_events) == 1
     think_event = think_events[0]
-    assert think_event.source == "volition"
-    assert think_event.payload.get("origin") == "nous"
+    assert think_event.source == "action_selection"
+    assert think_event.payload.get("origin") == "planning"
 
     feedback_events = [
         e
-        for _, e in await bus.read("volition_feedback.out", last_id="0")
-        if e.type == "volition.proposal_outcome"
+        for _, e in await bus.read("action_selection_feedback.out", last_id="0")
+        if e.type == "action_selection.proposal_outcome"
     ]
     assert len(feedback_events) == 1
     assert feedback_events[0].payload.get("realized") is True
@@ -144,7 +144,7 @@ async def test_planning_proposal_drives_intent_and_internal_speech(
     external = await _wait_for_events(bus, EXTERNAL_STREAM)
     assert len(internal) == 1
     assert internal[0].type == "internal_speech"
-    assert internal[0].source == "lingua"
+    assert internal[0].source == "language"
     assert len(external) == 0
 
 
@@ -158,16 +158,16 @@ async def test_inhibited_planning_proposal_publishes_no_intent_and_inhibited_out
 
     await CognitiveCycle._run_action_selection(cycle, snap)
 
-    action_selection_events = [e for _, e in await bus.read("volition.out", last_id="0")]
+    action_selection_events = [e for _, e in await bus.read("action_selection.out", last_id="0")]
     assert action_selection_events == []
 
     feedback_events = [
         e
-        for _, e in await bus.read("volition_feedback.out", last_id="0")
-        if e.type == "volition.proposal_outcome"
+        for _, e in await bus.read("action_selection_feedback.out", last_id="0")
+        if e.type == "action_selection.proposal_outcome"
     ]
     assert len(feedback_events) == 1
-    assert feedback_events[0].source == "volition_feedback"
+    assert feedback_events[0].source == "action_selection_feedback"
     assert feedback_events[0].payload.get("proposal_id") == "p1"
     assert feedback_events[0].payload.get("realized") is False
     assert feedback_events[0].payload.get("reason") == "inhibited"

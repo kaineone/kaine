@@ -78,7 +78,7 @@ def _collect_out():
 
 def test_full_entity_modules():
     for m in MODULE_ORDER:
-        if m in ("perception", "mundus", "echo"):
+        if m in ("perceptual_locus", "embodiment", "recorder"):
             assert FULL_ENTITY_MODULES[m] is False
         else:
             assert FULL_ENTITY_MODULES[m] is True
@@ -89,7 +89,7 @@ def test_base_thesis_modules_matches_profile():
     with path.open("rb") as fh:
         table = tomllib.load(fh).get("modules", {})
     expected = {m: bool(table.get(m, False)) for m in MODULE_ORDER}
-    expected["echo"] = False
+    expected["recorder"] = False
     assert base_thesis_modules() == expected
 
 
@@ -142,11 +142,11 @@ def test_interactive_default_full_entity():
     )
     assert result.acknowledged is True
     for m in MODULE_ORDER:
-        if m in ("perception", "mundus", "echo"):
+        if m in ("perceptual_locus", "embodiment", "recorder"):
             assert result.config["modules"][m] is False
         else:
             assert result.config["modules"][m] is True
-    assert result.config["modules"]["echo"] is False
+    assert result.config["modules"]["recorder"] is False
     assert "Recommended: full entity" in out()
     assert "Module preset: full entity" in out()
 
@@ -195,7 +195,7 @@ def test_custom_starts_from_the_recommended_preset(recommend, expected):
 
 def test_defaults_with_tier_recommendation_full_entity():
     shipped = _shipped()
-    shipped.setdefault("vox", {})["predefined_voice_id"] = "test-voice"
+    shipped.setdefault("vocal", {})["predefined_voice_id"] = "test-voice"
     out, sink = _collect_out()
     result = run_wizard(
         input_fn=_Answers([]),
@@ -207,7 +207,7 @@ def test_defaults_with_tier_recommendation_full_entity():
     )
     assert result.acknowledged is True
     for m in MODULE_ORDER:
-        if m in ("perception", "mundus", "echo"):
+        if m in ("perceptual_locus", "embodiment", "recorder"):
             assert result.config["modules"][m] is False
         else:
             assert result.config["modules"][m] is True
@@ -217,8 +217,8 @@ def test_defaults_with_tier_recommendation_full_entity():
 
 def test_full_entity_without_a_voice_keeps_vocal_on():
     shipped = _shipped()
-    shipped.setdefault("vox", {})["backend"] = "chatterbox"
-    shipped["vox"]["predefined_voice_id"] = ""
+    shipped.setdefault("vocal", {})["backend"] = "chatterbox"
+    shipped["vocal"]["predefined_voice_id"] = ""
     out, sink = _collect_out()
     result = run_wizard(
         input_fn=_Answers([]),
@@ -228,9 +228,9 @@ def test_full_entity_without_a_voice_keeps_vocal_on():
         recommend_tier_fn=_tier3_no_residency,
         defaults=True,
     )
-    assert result.config["modules"]["vox"] is True
-    assert result.config["modules"]["lingua"] is True
-    assert "predefined_voice_id" not in result.config.get("vox", {})
+    assert result.config["modules"]["vocal"] is True
+    assert result.config["modules"]["language"] is True
+    assert "predefined_voice_id" not in result.config.get("vocal", {})
     assert "no voice id given; the vocal module picks a shipped voice at startup." in out()
 
 

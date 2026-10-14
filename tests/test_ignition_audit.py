@@ -4,7 +4,7 @@
 
 Pure-function fixtures use the REAL payload shapes: ``intent.speak`` /
 ``intent.act`` events with ``entry_id``; ``external_speech`` /
-``vox.synthesized`` / ``praxis.action`` / ``realization_failed``
+``vocal.synthesized`` / ``effectors.action`` / ``realization_failed``
 realizations; workspace.broadcast snapshots with a ``selected`` coalition
 list of ``{entry_id, source, type, salience}`` members.
 """
@@ -48,13 +48,13 @@ FORBIDDEN_CONTENT_KEYS = frozenset(
 def test_vocal_synthesized_origin_planning_is_planning_initiated():
     """The vocal module copies the language module's origin, so a planning module utterance is attributed by it."""
     intents = [
-        {"stream": "volition.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
+        {"stream": "action_selection.out", "type": "intent.speak", "payload": {"kind": "speak", "entry_id": "e1"}},
     ]
     realizations = [
         {
-            "stream": "vox.out",
-            "type": "vox.synthesized",
-            "payload": {"success": True, "entry_id": "e1", "origin": "nous"},
+            "stream": "vocal.out",
+            "type": "vocal.synthesized",
+            "payload": {"success": True, "entry_id": "e1", "origin": "planning"},
         },
     ]
     report = classify_realizations([], intents, realizations)
@@ -64,7 +64,7 @@ def test_vocal_synthesized_origin_planning_is_planning_initiated():
     assert report.self_initiated == 0
 
 
-def _intent(entry_id=None, kind="intent.speak", stream="volition.out", salience=None):
+def _intent(entry_id=None, kind="intent.speak", stream="action_selection.out", salience=None):
     payload = {"kind": "speak" if kind == "intent.speak" else "act"}
     if entry_id is not None:
         payload["entry_id"] = entry_id
@@ -73,7 +73,7 @@ def _intent(entry_id=None, kind="intent.speak", stream="volition.out", salience=
     return {"stream": stream, "type": kind, "payload": payload}
 
 
-def _realization(rtype="external_speech", entry_id=None, stream="lingua.external"):
+def _realization(rtype="external_speech", entry_id=None, stream="language.external"):
     payload = {}
     if entry_id is not None:
         payload["entry_id"] = entry_id
@@ -83,14 +83,14 @@ def _realization(rtype="external_speech", entry_id=None, stream="lingua.external
 def test_realization_origin_uses_own_payload_not_last_intent():
     """Precise attribution: speech is planning-initiated from its own origin."""
     intents = [
-        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e1", "origin": "nous"}},
-        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e2"}},
-        {"stream": "volition.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e3", "origin": "nous"}},
+        {"stream": "action_selection.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e1", "origin": "planning"}},
+        {"stream": "action_selection.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e2"}},
+        {"stream": "action_selection.out", "type": "intent.think", "payload": {"kind": "think", "entry_id": "e3", "origin": "planning"}},
     ]
     realizations = [
-        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e1", "origin": "nous"}},
-        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e2"}},
-        {"stream": "lingua.internal", "type": "internal_speech", "payload": {"entry_id": "e3", "origin": "nous"}},
+        {"stream": "language.internal", "type": "internal_speech", "payload": {"entry_id": "e1", "origin": "planning"}},
+        {"stream": "language.internal", "type": "internal_speech", "payload": {"entry_id": "e2"}},
+        {"stream": "language.internal", "type": "internal_speech", "payload": {"entry_id": "e3", "origin": "planning"}},
     ]
     report = classify_realizations([], intents, realizations)
     assert report.planning_initiated == 2
@@ -106,7 +106,7 @@ def _vocal_synthesized(success=True, entry_id=None):
     payload = {"success": success}
     if entry_id is not None:
         payload["entry_id"] = entry_id
-    return {"stream": "vox.synthesized", "type": "vox.synthesized", "payload": payload}
+    return {"stream": "vocal.synthesized", "type": "vocal.synthesized", "payload": payload}
 
 
 def test_vocal_synthesized_failure_counts_as_realization_failed():
@@ -138,7 +138,7 @@ def _member(entry_id, mtype, salience=0.5, source=None):
 
 def test_realized_speak_self_initiated():
     broadcasts = [
-        _broadcast([_member("E1", "mnemos.trace", salience=0.9)])
+        _broadcast([_member("E1", "episodic_memory.trace", salience=0.9)])
     ]
     intents = [_intent("E1", salience=0.9)]
     realizations = [_realization("external_speech", entry_id="E1")]
@@ -153,16 +153,16 @@ def test_realized_speak_self_initiated():
 
 
 def test_internal_speech_and_vocal_realizations_count():
-    broadcasts = [_broadcast([_member("E1", "mnemos.trace")])]
+    broadcasts = [_broadcast([_member("E1", "episodic_memory.trace")])]
     intents = [_intent("E1"), _intent("E2")]
     realizations = [
-        _realization("internal_speech", entry_id="E1", stream="lingua.internal"),
-        _realization("vox.synthesized", entry_id="E2", stream="vox.out"),
+        _realization("internal_speech", entry_id="E1", stream="language.internal"),
+        _realization("vocal.synthesized", entry_id="E2", stream="vocal.out"),
     ]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.realized_total == 2
     assert report.self_initiated == 2
-    assert set(report.event_types) == {"internal_speech", "vox.synthesized"}
+    assert set(report.event_types) == {"internal_speech", "vocal.synthesized"}
 
 
 # --- Scenario: input-triggered classification ---
@@ -179,13 +179,13 @@ def test_input_triggered_via_resolved_transcription_member():
 
 
 def test_input_triggered_via_coalition_membership_embodiment_chat():
-    # The resolved member itself is not external, but mundus.chat was in the
+    # The resolved member itself is not external, but embodiment.chat was in the
     # winning coalition of the triggering broadcast.
     broadcasts = [
         _broadcast(
             [
-                _member("E1", "mnemos.trace"),
-                _member("M1", "mundus.chat"),
+                _member("E1", "episodic_memory.trace"),
+                _member("M1", "embodiment.chat"),
             ]
         )
     ]
@@ -197,9 +197,9 @@ def test_input_triggered_via_coalition_membership_embodiment_chat():
 
 
 def test_input_triggered_via_member_source_field():
-    broadcasts = [_broadcast([_member("E1", None, source="mundus.chat")])]
+    broadcasts = [_broadcast([_member("E1", None, source="embodiment.chat")])]
     intents = [_intent("E1")]
-    realizations = [_realization("vox.synthesized", entry_id="E1")]
+    realizations = [_realization("vocal.synthesized", entry_id="E1")]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.input_triggered == 1
 
@@ -211,7 +211,7 @@ def test_drive_triggered_via_coalition_path():
     broadcasts = [
         _broadcast(
             [
-                _member("E1", "mnemos.trace"),
+                _member("E1", "episodic_memory.trace"),
                 _member("D1", DRIVE_TYPE),
             ]
         )
@@ -229,7 +229,7 @@ def test_drive_triggered_realized_action():
     broadcasts = [_broadcast([_member("A1", DRIVE_TYPE)])]
     intents = [_intent("A1", kind="intent.act")]
     realizations = [
-        _realization("praxis.action", entry_id="A1", stream="praxis.out")
+        _realization("effectors.action", entry_id="A1", stream="effectors.out")
     ]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.drive_triggered == 1
@@ -244,8 +244,8 @@ def test_base_thesis_input_triggered_zero():
     # input types can appear in any coalition, so input_triggered == 0 —
     # the invariant holds every sleep.
     broadcasts = [
-        _broadcast([_member("E1", "mnemos.trace")]),
-        _broadcast([_member("E2", "thymos.affect")]),
+        _broadcast([_member("E1", "episodic_memory.trace")]),
+        _broadcast([_member("E2", "affect.affect")]),
     ]
     intents = [_intent("E1"), _intent("E2")]
     realizations = [
@@ -268,12 +268,12 @@ def test_base_thesis_no_broadcasts_at_all():
 
 
 def test_planning_origin_think_realized_as_internal_speech_is_planning_initiated():
-    # Even with a drive in the coalition, origin "nous" wins first.
-    broadcasts = [_broadcast([_member("D1", "thymos.drive"), _member("E1", "mnemos.trace")])]
+    # Even with a drive in the coalition, origin "planning" wins first.
+    broadcasts = [_broadcast([_member("D1", "affect.drive"), _member("E1", "episodic_memory.trace")])]
     intents = [
-        _intent("E1", kind="intent.think", stream="volition.out", salience=0.7),
+        _intent("E1", kind="intent.think", stream="action_selection.out", salience=0.7),
     ]
-    intents[0]["payload"]["origin"] = "nous"
+    intents[0]["payload"]["origin"] = "planning"
     realizations = [_realization("internal_speech", entry_id="E1")]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.planning_initiated == 1
@@ -284,10 +284,10 @@ def test_planning_origin_think_realized_as_internal_speech_is_planning_initiated
 def test_planning_origin_requested_sleep_is_planning_initiated_rest():
     broadcasts = []
     intents = [
-        {"stream": "volition.out", "type": "intent.rest", "payload": {"origin": "nous", "entry_id": "R1", "salience": 0.6}},
+        {"stream": "action_selection.out", "type": "intent.rest", "payload": {"origin": "planning", "entry_id": "R1", "salience": 0.6}},
     ]
     realizations = [
-        {"stream": "hypnos.out", "type": "hypnos.sleep.started", "payload": {"trigger": "requested", "entry_id": "R1"}},
+        {"stream": "sleep.out", "type": "sleep.sleep.started", "payload": {"trigger": "requested", "entry_id": "R1"}},
     ]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.realized_total == 1
@@ -297,8 +297,8 @@ def test_planning_origin_requested_sleep_is_planning_initiated_rest():
 
 def test_proposal_outcome_counts():
     outcomes = [
-        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
-        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False}},
+        {"stream": "action_selection_feedback.out", "type": "action_selection.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
+        {"stream": "action_selection_feedback.out", "type": "action_selection.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False}},
     ]
     report = classify_realizations([], [], [], proposal_outcomes=outcomes)
     assert report.planning_proposals_realized == 1
@@ -307,9 +307,9 @@ def test_proposal_outcome_counts():
 
 def test_proposal_outcome_counts_includes_forwarded():
     outcomes = [
-        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
-        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False, "reason": "refractory"}},
-        {"stream": "volition_feedback.out", "type": "volition.proposal_outcome", "payload": {"proposal_id": "p3", "realized": False, "reason": "forwarded"}},
+        {"stream": "action_selection_feedback.out", "type": "action_selection.proposal_outcome", "payload": {"proposal_id": "p1", "realized": True}},
+        {"stream": "action_selection_feedback.out", "type": "action_selection.proposal_outcome", "payload": {"proposal_id": "p2", "realized": False, "reason": "refractory"}},
+        {"stream": "action_selection_feedback.out", "type": "action_selection.proposal_outcome", "payload": {"proposal_id": "p3", "realized": False, "reason": "forwarded"}},
     ]
     report = classify_realizations([], [], [], proposal_outcomes=outcomes)
     assert report.planning_proposals_realized == 1
@@ -321,7 +321,7 @@ def test_any_intent_on_planning_out_is_unrealizable():
     for kind in ("intent.act", "intent.speak", "intent.think", "intent.rest"):
         report = classify_realizations(
             [],
-            [{"stream": "nous.out", "type": kind, "payload": {"entry_id": "x"}}],
+            [{"stream": "planning.out", "type": kind, "payload": {"entry_id": "x"}}],
             [],
         )
         assert report.unrealizable_planning_intents == 1, kind
@@ -331,14 +331,14 @@ def test_any_intent_on_planning_out_is_unrealizable():
 
 
 def test_unrealizable_planning_intents_counted_separately():
-    broadcasts = [_broadcast([_member("A1", "mnemos.trace")])]
+    broadcasts = [_broadcast([_member("A1", "episodic_memory.trace")])]
     intents = [
-        _intent("N1", kind="intent.act", stream="nous.out"),
-        _intent("N2", kind="intent.act", stream="nous.out"),
-        _intent("A1", kind="intent.act", stream="volition.out"),
+        _intent("N1", kind="intent.act", stream="planning.out"),
+        _intent("N2", kind="intent.act", stream="planning.out"),
+        _intent("A1", kind="intent.act", stream="action_selection.out"),
     ]
     realizations = [
-        _realization("praxis.action", entry_id="A1", stream="praxis.out")
+        _realization("effectors.action", entry_id="A1", stream="effectors.out")
     ]
     report = classify_realizations(broadcasts, intents, realizations)
     assert report.unrealizable_planning_intents == 2
@@ -351,7 +351,7 @@ def test_realization_failed_excluded():
     broadcasts = [_broadcast([_member("E1", "audition.transcription")])]
     intents = [_intent("E1")]
     realizations = [
-        {"stream": "volition.out", "type": "realization_failed", "payload": {}},
+        {"stream": "action_selection.out", "type": "realization_failed", "payload": {}},
         _realization("external_speech", entry_id="E1"),
     ]
     report = classify_realizations(broadcasts, intents, realizations)
@@ -375,7 +375,7 @@ def test_payload_content_free_allowlist():
     ]
     intents = [
         {
-            "stream": "volition.out",
+            "stream": "action_selection.out",
             "type": "intent.speak",
             "payload": {
                 "kind": "speak",
@@ -388,7 +388,7 @@ def test_payload_content_free_allowlist():
     ]
     realizations = [
         {
-            "stream": "lingua.external",
+            "stream": "language.external",
             "type": "external_speech",
             "payload": {"entry_id": "E1", "transcript": "spoken words"},
         }
@@ -423,8 +423,8 @@ def test_sleep_index_ordering():
 
 
 def test_constants():
-    assert EXTERNAL_INPUT_TYPES == frozenset({"audition.transcription", "mundus.chat"})
-    assert DRIVE_TYPE == "thymos.drive"
+    assert EXTERNAL_INPUT_TYPES == frozenset({"audition.transcription", "embodiment.chat"})
+    assert DRIVE_TYPE == "affect.drive"
 
 
 # --- Scenario: audit runs every sleep and rides sleep.completed (wiring) ---
@@ -436,8 +436,8 @@ def test_pipeline_wires_audit_every_sleep():
     src = inspect.getsource(sleep_module)
     # The audit step exists and is invoked in the sleep pipeline.
     assert "_run_ignition_audit" in src
-    assert '"hypnos.ignition_audit"' in src
-    # Merged into the completed metadata so it rides hypnos.sleep.completed
+    assert '"sleep.ignition_audit"' in src
+    # Merged into the completed metadata so it rides sleep.sleep.completed
     # into the sleep_snapshots JSONL.
     assert 'summary["ignition_audit"]' in src
     # Boundary (2.5): the sleep module never imports kaine.evaluation.
@@ -448,8 +448,8 @@ def test_pipeline_wires_audit_every_sleep():
 def test_research_event_taxonomy_registered():
     from kaine.evaluation.observers.research_event_observer import _TAXONOMY
 
-    assert "hypnos.ignition_audit" in _TAXONOMY
-    allowed = _TAXONOMY["hypnos.ignition_audit"]
+    assert "sleep.ignition_audit" in _TAXONOMY
+    allowed = _TAXONOMY["sleep.ignition_audit"]
     # Numeric/categorical only — no content fields in the research log.
     assert "text" not in allowed
     assert "transcript" not in allowed
@@ -482,7 +482,7 @@ def test_entry_in_multiple_coalitions_input_wins():
     input-triggered (conservative for the base-thesis zero-input invariant)."""
     broadcasts = [
         {"selected": [
-            {"entry_id": "E1", "source": "thymos", "type": "thymos.drive", "salience": 0.7},
+            {"entry_id": "E1", "source": "affect", "type": "affect.drive", "salience": 0.7},
         ]},
         {"selected": [
             {"entry_id": "E1", "source": "audition", "type": "audition.transcription", "salience": 0.9},

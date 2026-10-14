@@ -10,7 +10,7 @@ The sleep module's voice-alignment consolidation phase SHALL be able to run its
 DPO/QLoRA training in a separate, operator-configured Python environment as an
 isolated subprocess, so the entity-runtime interpreter is never coupled to the
 trainer's torch/CUDA stack. The trainer interpreter SHALL be configurable
-(`[hypnos.voice_alignment].trainer_python`), the training subprocess SHALL
+(`[sleep.voice_alignment].trainer_python`), the training subprocess SHALL
 receive the preference pairs, the base-model reference, and the LoRA/DPO
 configuration via a filesystem job spec and return a real trained adapter, and
 the external training entry point SHALL NOT import the `kaine` package (so the
@@ -72,7 +72,7 @@ leaving the entity voiceless on wake.
   silently leaving the organ unloaded
 
 ### Requirement: A containerized cycle trains through a trainer service
-With `trainer_backend = "job_queue"`, the voice-alignment phase SHALL write the existing filesystem job spec (the preference pairs, the base-model reference and the LoRA/DPO configuration) to a new directory under `[hypnos.voice_alignment].trainer_jobs_dir`, mark it ready, and await the trainer service's `result.json` asynchronously. It SHALL wait no longer than `[hypnos.voice_alignment].trainer_timeout_s` (default 21600).
+With `trainer_backend = "job_queue"`, the voice-alignment phase SHALL write the existing filesystem job spec (the preference pairs, the base-model reference and the LoRA/DPO configuration) to a new directory under `[sleep.voice_alignment].trainer_jobs_dir`, mark it ready, and await the trainer service's `result.json` asynchronously. It SHALL wait no longer than `[sleep.voice_alignment].trainer_timeout_s` (default 21600).
 
 The job's adapter output directory SHALL be inside the job directory, so the trainer service sees only the jobs volume and never the entity's state. The phase SHALL apply the same validation as the subprocess backend: success status, a non-empty adapter directory inside the job directory, and the unchanged capability and abliteration gates. On success, the phase SHALL promote the vetted adapter, together with its GGUF form, into the entity's configured `adapter_output_dir` through the existing atomic promotion. Whatever the outcome, it SHALL delete the job's preference pairs, which are entity language, once the job ends. A timeout, a failed result or a missing adapter SHALL fail loud and SHALL NEVER report a fake or no-op success.
 

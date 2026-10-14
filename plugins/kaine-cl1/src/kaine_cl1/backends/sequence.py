@@ -10,8 +10,8 @@ error becomes salience.
 The sequence module already exposes the exact seam we need: its constructor takes
 ``network=`` and only builds the silicon ``CfCNetwork`` when that is ``None``
 (``kaine/modules/sequence/module.py``). So the conversion is
-pure injection (``Chronos(bus, network=WetwareTimingModel(...))``), with the
-module body, its bus subscriptions, and its ``chronos.out`` event shapes unchanged.
+pure injection (``Sequence(bus, network=WetwareTimingModel(...))``), with the
+module body, its bus subscriptions, and its ``sequence.out`` event shapes unchanged.
 
 ``WetwareTimingModel`` matches ``CfCNetwork``'s ``.tick(feature_vec) -> hidden``
 interface, but realises the hidden state on the shared biological substrate:

@@ -64,11 +64,11 @@ def _watcher_factory(fake_async_bus):
 
 
 async def test_fresh_streams_no_loss(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out", "audition.out"], threshold_s=10.0)
+    watcher = _watcher_factory(["vision.out", "audition.out"], threshold_s=10.0)
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("900-0", None)}),
+        _latest_returning({"vision.out": ("1000-0", None), "audition.out": ("900-0", None)}),
     )
     await watcher._baseline()
     calls: list[None] = []
@@ -80,11 +80,11 @@ async def test_fresh_streams_no_loss(fake_async_bus, monkeypatch, _watcher_facto
 
 
 async def test_all_stale_notifies_once(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out", "audition.out"], threshold_s=1.0)
+    watcher = _watcher_factory(["vision.out", "audition.out"], threshold_s=1.0)
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
+        _latest_returning({"vision.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
     )
     await watcher._baseline()
     calls: list[None] = []
@@ -104,11 +104,11 @@ async def test_all_stale_notifies_once(fake_async_bus, monkeypatch, _watcher_fac
 
 
 async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out", "audition.out"], threshold_s=1.0)
+    watcher = _watcher_factory(["vision.out", "audition.out"], threshold_s=1.0)
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning({"topos.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
+        _latest_returning({"vision.out": ("1000-0", None), "audition.out": ("1000-0", None)}),
     )
     await watcher._baseline()
     calls: list[None] = []
@@ -122,7 +122,7 @@ async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _w
     monkeypatch.setattr(
         fake_async_bus,
         "latest",
-        _latest_returning({"topos.out": ("2000-0", None), "audition.out": ("1000-0", None)}),
+        _latest_returning({"vision.out": ("2000-0", None), "audition.out": ("1000-0", None)}),
     )
     watcher._fake_mono.value = 1.5
     assert not await watcher._poll_once(0)
@@ -134,7 +134,7 @@ async def test_rearm_after_fresh_then_loss_again(fake_async_bus, monkeypatch, _w
 
 
 async def test_empty_stream_recent_start_not_lost(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out"], threshold_s=10.0)
+    watcher = _watcher_factory(["vision.out"], threshold_s=10.0)
     monkeypatch.setattr(fake_async_bus, "latest", _latest_returning({}))
     await watcher._baseline()
     calls: list[None] = []
@@ -150,7 +150,7 @@ async def test_empty_stream_recent_start_not_lost(fake_async_bus, monkeypatch, _
 
 
 async def test_bus_error_skipped(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out"], threshold_s=1.0)
+    watcher = _watcher_factory(["vision.out"], threshold_s=1.0)
 
     async def _bad_latest(stream: str) -> Any:
         raise RuntimeError("redis down")
@@ -166,9 +166,9 @@ async def test_bus_error_skipped(fake_async_bus, monkeypatch, _watcher_factory):
 
 
 async def test_run_loop_respects_stop_event(fake_async_bus, monkeypatch, _watcher_factory):
-    watcher = _watcher_factory(["topos.out"], threshold_s=10.0, poll_s=0.01)
+    watcher = _watcher_factory(["vision.out"], threshold_s=10.0, poll_s=0.01)
     monkeypatch.setattr(
-        fake_async_bus, "latest", _latest_returning({"topos.out": ("1000-0", None)})
+        fake_async_bus, "latest", _latest_returning({"vision.out": ("1000-0", None)})
     )
     calls: list[None] = []
     watcher._on_loss = _record_into(calls)  # type: ignore[assignment]
@@ -187,9 +187,9 @@ async def test_entry_older_than_start_gets_the_boot_grace(
     """A stream whose newest entry predates the watcher's start (left over from
     a previous run) is measured from the start, so slow boot-time model loading
     is not reported as lost input."""
-    watcher = _watcher_factory(["topos.out"], threshold_s=10.0)
+    watcher = _watcher_factory(["vision.out"], threshold_s=10.0)
     monkeypatch.setattr(
-        fake_async_bus, "latest", _latest_returning({"topos.out": ("5-0", None)})
+        fake_async_bus, "latest", _latest_returning({"vision.out": ("5-0", None)})
     )
     watcher._fake_mono.value = 1.0
     await watcher._baseline()

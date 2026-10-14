@@ -49,9 +49,9 @@ def _module_preset_default(ctx: StepContext, recommended: str) -> str:
         return recommended
     base = _wizard.base_thesis_modules()
     full = _wizard.FULL_ENTITY_MODULES.copy()
-    if all(mods.get(m) == base.get(m) for m in _wizard.MODULE_ORDER) and mods.get("echo") is False:
+    if all(mods.get(m) == base.get(m) for m in _wizard.MODULE_ORDER) and mods.get("recorder") is False:
         return "b"
-    if all(mods.get(m) == full.get(m) for m in _wizard.MODULE_ORDER) and mods.get("echo") is False:
+    if all(mods.get(m) == full.get(m) for m in _wizard.MODULE_ORDER) and mods.get("recorder") is False:
         return "f"
     return "c"
 
@@ -264,12 +264,12 @@ def module_preset_step() -> Step:
         preset, why = _wizard.recommend_preset(ctx.extra.get("tier_rec"))
         if choice == "b":
             modules = _wizard.base_thesis_modules()
-            modules["echo"] = False
+            modules["recorder"] = False
             ctx.config["modules"] = modules
             label = "base thesis"
         elif choice == "f":
             modules = _wizard.FULL_ENTITY_MODULES.copy()
-            modules["echo"] = False
+            modules["recorder"] = False
             ctx.config["modules"] = modules
             label = "full entity"
         else:
@@ -328,7 +328,7 @@ def custom_modules_step() -> Step:
         modules: dict[str, bool] = {}
         for m in _wizard.MODULE_ORDER:
             modules[m] = bool(answers.get(m, seed.get(m, False)))
-        modules["echo"] = False
+        modules["recorder"] = False
         ctx.config["modules"] = modules
         ctx.extra["module_preset"] = "custom"
 
@@ -349,7 +349,7 @@ def custom_modules_step() -> Step:
 
 def language_model_step() -> Step:
     def applies(ctx: StepContext) -> bool:
-        return bool((ctx.config.get("modules") or {}).get("lingua"))
+        return bool((ctx.config.get("modules") or {}).get("language"))
 
     def explanation(ctx: StepContext) -> list[str]:
         models = (ctx.extra.get("discovered") or {}).get("served_models") or []
@@ -362,13 +362,13 @@ def language_model_step() -> Step:
         shipped = ctx.extra.get("shipped_config") or {}
         default = _existing(
             existing,
-            "lingua.model_id",
-            str((shipped.get("lingua") or {}).get("model_id", "")),
+            "language.model_id",
+            str((shipped.get("language") or {}).get("model_id", "")),
         )
         return (
             Field(
                 "model_id",
-                "  [lingua].model_id",
+                "  [language].model_id",
                 "text",
                 default=default,
             ),
@@ -377,7 +377,7 @@ def language_model_step() -> Step:
     def apply(_ctx: StepContext, answers: dict[str, Any]) -> None:
         # apply is bound to the current config dict via StepContext mutation.
         config = _ctx.config
-        config.setdefault("lingua", {})["model_id"] = answers.get("model_id", "")
+        config.setdefault("language", {})["model_id"] = answers.get("model_id", "")
 
     return Step(
         id="lingua-model",
@@ -391,7 +391,7 @@ def language_model_step() -> Step:
 
 def _vocal_backend(ctx: StepContext) -> str:
     shipped = ctx.extra.get("shipped_config") or {}
-    return str((shipped.get("vox") or {}).get("backend", "chatterbox")).strip().lower()
+    return str((shipped.get("vocal") or {}).get("backend", "chatterbox")).strip().lower()
 
 
 def vocal_voice_step() -> Step:
@@ -399,13 +399,13 @@ def vocal_voice_step() -> Step:
     # but an empty answer leaves the choice to the vocal module; any other backend asks
     # nothing and says so, as the terminal wizard does.
     def applies(ctx: StepContext) -> bool:
-        return bool((ctx.config.get("modules") or {}).get("vox"))
+        return bool((ctx.config.get("modules") or {}).get("vocal"))
 
     def explanation(ctx: StepContext) -> list[str]:
         if _vocal_backend(ctx) != "chatterbox":
             return [
                 "  Vox speaks through sherpa-onnx Kokoro (preset speaker "
-                "[vox].sherpa_speaker_id); no Chatterbox voice needed."
+                "[vocal].sherpa_speaker_id); no Chatterbox voice needed."
             ]
         voices = (ctx.extra.get("discovered") or {}).get("voices") or []
         lines: list[str] = []
@@ -426,8 +426,8 @@ def vocal_voice_step() -> Step:
         default = (
             _existing(
                 existing,
-                "vox.predefined_voice_id",
-                str((shipped.get("vox") or {}).get("predefined_voice_id", "")),
+                "vocal.predefined_voice_id",
+                str((shipped.get("vocal") or {}).get("predefined_voice_id", "")),
             )
             or (str(voices[0]) if voices else "")
         )
@@ -435,7 +435,7 @@ def vocal_voice_step() -> Step:
         return (
             Field(
                 "voice_id",
-                "  [vox].predefined_voice_id (empty: the vocal module picks a shipped voice)",
+                "  [vocal].predefined_voice_id (empty: the vocal module picks a shipped voice)",
                 "text",
                 default=default,
             ),
@@ -446,7 +446,7 @@ def vocal_voice_step() -> Step:
             return
         voice_id = answers.get("voice_id", "")
         if voice_id:
-            ctx.config.setdefault("vox", {})["predefined_voice_id"] = voice_id
+            ctx.config.setdefault("vocal", {})["predefined_voice_id"] = voice_id
         else:
             _make_line(ctx)("    no voice id given; the vocal module picks a shipped voice at startup.")
 

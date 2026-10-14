@@ -8,10 +8,10 @@ from kaine.research.ignition_study.__main__ import _default_order
 
 def test_default_first_round_order() -> None:
     assert _default_order() == [
-        "mnemos",
-        "phantasia",
-        "nous",
-        "eidolon",
-        "empatheia",
-        "vox",
+        "episodic_memory",
+        "world_model",
+        "planning",
+        "self_model",
+        "social_cognition",
+        "vocal",
     ]

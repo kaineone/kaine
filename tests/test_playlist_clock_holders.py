@@ -59,7 +59,7 @@ def test_overlapping_holders_keep_clock_paused_until_both_release():
     c.t = 1.0
     assert clock.elapsed() == 1.0
 
-    clock.pause("hypnos")
+    clock.pause("sleep")
     c.t = 2.0
     assert clock.paused
     assert clock.elapsed() == 1.0
@@ -69,7 +69,7 @@ def test_overlapping_holders_keep_clock_paused_until_both_release():
     assert clock.paused
     assert clock.elapsed() == 1.0
 
-    clock.resume("hypnos")
+    clock.resume("sleep")
     c.t = 4.0
     assert clock.paused
     assert clock.elapsed() == 1.0
@@ -87,7 +87,7 @@ def test_overlapping_holders_reverse_order():
     c.t = 10.0
 
     clock.pause("freeze")
-    clock.pause("hypnos")
+    clock.pause("sleep")
     c.t = 20.0
     assert clock.paused
     assert clock.elapsed() == 10.0
@@ -97,7 +97,7 @@ def test_overlapping_holders_reverse_order():
     assert clock.paused
     assert clock.elapsed() == 10.0
 
-    clock.resume("hypnos")
+    clock.resume("sleep")
     c.t = 40.0
     assert not clock.paused
     assert clock.elapsed() == 20.0  # 40 - origin(0) - paused_total(20: t=10..30)
@@ -163,7 +163,7 @@ def test_resume_non_held_holder_is_noop():
 def test_pending_pause_before_start_with_named_holder():
     clock = PlaylistClock(1, clock=_FakeClock())
     c = clock._clock
-    clock.pause("hypnos")
+    clock.pause("sleep")
     assert clock.paused
     assert clock.elapsed() == 0.0
 
@@ -173,7 +173,7 @@ def test_pending_pause_before_start_with_named_holder():
     assert clock.elapsed() == 0.0
 
     c.t = 20.0
-    clock.resume("hypnos")
+    clock.resume("sleep")
     assert not clock.paused
     assert clock.elapsed() == 0.0
 
@@ -254,7 +254,7 @@ def test_sleep_pause_survives_freeze_thaw(patched_control_path):
     async def _run():
         clock = PlaylistClock(1, clock=_FakeClock())
         clock.start()
-        clock.pause("hypnos")
+        clock.pause("sleep")
         clock._clock.t = 2.0
         assert clock.elapsed() == 0.0
 
@@ -274,12 +274,12 @@ def test_sleep_pause_survives_freeze_thaw(patched_control_path):
         pop_freeze()
         await _wait_for(lambda: "freeze" not in clock._holders)
         assert clock.paused  # the sleep module still holds the clock
-        assert "hypnos" in clock._holders
+        assert "sleep" in clock._holders
         assert clock.elapsed() == 0.0
 
         stop_event.set()
         await asyncio.wait_for(task, timeout=5.0)
-        clock.resume("hypnos")
+        clock.resume("sleep")
         assert not clock.paused
 
     asyncio.run(_run())

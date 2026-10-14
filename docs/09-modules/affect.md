@@ -2,11 +2,11 @@
 
 The affect module is the affective core. It holds a dimensional state of valence, arousal and dominance, runs an appraisal of every workspace broadcast, and keeps four homeostatic drives. Its arousal is the global gain on the workspace competition. Read this page if you enable the module, run the base-thesis `thesis_test` profile, or need to know what moves arousal and valence and what the sleep module resets.
 
-The affect module ships disabled in the default config (`[modules].thymos = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because a global gain that sets how readily content gains access, and that surprise itself moves, belongs to the minimal machinery of the base thesis. It needs nothing beyond the core stack.
+The affect module ships disabled in the default config (`[modules].affect = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because a global gain that sets how readily content gains access, and that surprise itself moves, belongs to the minimal machinery of the base thesis. It needs nothing beyond the core stack.
 
 ## Arousal: the global gain and contrast
 
-Every predictive processor scales its own prediction error by its recent errors (local precision). Arousal adds one gain across all of them, following the adaptive-gain account of locus coeruleus function. The workspace computes each candidate's priority as `p = clip(intensity × novelty × goal, 0, 1)`, with the goal factor held at 1 by default (`[syneidesis].salience_goal_factor = "static"`), and turns it into a score with two arousal terms:
+Every predictive processor scales its own prediction error by its recent errors (local precision). Arousal adds one gain across all of them, following the adaptive-gain account of locus coeruleus function. The workspace computes each candidate's priority as `p = clip(intensity × novelty × goal, 0, 1)`, with the goal factor held at 1 by default (`[workspace].salience_goal_factor = "static"`), and turns it into a score with two arousal terms:
 
 ```
 T = 0.2 + 0.8 × a                                 level gain, common to every candidate
@@ -14,11 +14,11 @@ g = g_max × clip((a - a0) / (1 - a0), 0, 1)       contrast gain, zero at or bel
 score = T × C_g(p)
 ```
 
-`a` is arousal, `a0` is `[thymos].baseline_arousal` (0.3), and `g_max` is `[syneidesis].arousal_contrast_gain` (8.0). `C_g` is a logistic in the priority, rescaled so that it fixes 0 and 1 and reduces to the identity at `g = 0`. Because the level gain is shared and `C_g` is strictly increasing, arousal never reorders the candidates of a tick. It moves the best score relative to the access threshold and the report bars, it decides which members of a coalition reach the threshold, and it widens the gap between the scores of strong and weak candidates.
+`a` is arousal, `a0` is `[affect].baseline_arousal` (0.3), and `g_max` is `[workspace].arousal_contrast_gain` (8.0). `C_g` is a logistic in the priority, rescaled so that it fixes 0 and 1 and reduces to the identity at `g = 0`. Because the level gain is shared and `C_g` is strictly increasing, arousal never reorders the candidates of a tick. It moves the best score relative to the access threshold and the report bars, it decides which members of a coalition reach the threshold, and it widens the gap between the scores of strong and weak candidates.
 
 Arousal also sizes the sensory apertures. The vision module narrows its fovea and the audition module shortens its attended window as arousal rises. Tonic arousal raises the access rate as well (see [The cognitive cycle](../08-cognitive-cycle/README.md)).
 
-The cycle reads arousal from the latest `thymos.state` event it has collected, through `AffectStateProvider` (`kaine/cycle/affect_state.py`), which starts at the baseline before the first event. The workspace gain, the fovea, the auditory window and the access rate therefore see arousal as it stood at the affect module's last state publication, up to one `publish_interval_s` old.
+The cycle reads arousal from the latest `affect.state` event it has collected, through `AffectStateProvider` (`kaine/cycle/affect_state.py`), which starts at the baseline before the first event. The workspace gain, the fovea, the auditory window and the access rate therefore see arousal as it stood at the affect module's last state publication, up to one `publish_interval_s` old.
 
 ### What moves arousal
 
@@ -26,9 +26,9 @@ The appraisal of a broadcast does not move arousal, so a higher access rate cann
 
 | Source | Condition | Change in arousal |
 |---|---|---|
-| `topos.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, r - 1))`, with `r` the report's `normalised_error` (its error over its running mean) |
-| `soma.report` | non-empty `alerts` list (a host metric past its hard limit) | `+0.05` |
-| `mnemos.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the base-thesis form) |
+| `vision.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, r - 1))`, with `r` the report's `normalised_error` (its error over its running mean) |
+| `interoception.report` | non-empty `alerts` list (a host metric past its hard limit) | `+0.05` |
+| `episodic_memory.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the base-thesis form) |
 
 An alert raised by a change criterion alone, with `r <= 1`, leaves arousal unchanged. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
 
@@ -62,9 +62,9 @@ Relief comes in two forms. Curiosity and boredom are relieved continuously, `D <
 
 `LP = max(0, g - learning_progress_floor) / (1 - learning_progress_floor)` is learning progress above a noise floor, so rectified noise in `g` does not relieve curiosity on a scene where nothing is being learned. `N = clip(r_fast / max(r_slow, 0.05) - 1 - alert_excess_margin, 0, 1)` is the novelty of the alert stream. Each perceptual alert raises the fast rate `r_fast` by `1 / fast_time_constant_s` and the slow rate `r_slow` by `1 / slow_time_constant_s`, and both decay with their own time constant. The alert criterion is self-calibrating, so even a still scene alerts at a steady base rate, and only alerts in excess of that habituated rate relieve boredom.
 
-The social drive reads the sequence module. The sequence module counts an interaction when a tone-of-voice or transcription event arrives from a live source (`live_mic`, `microphone` or `remote`). The first finite `time_since_last_interaction_s` in a `chronos.report` starts the drive building, and each later drop in that value relieves it. The intent rate is an exponential average updated on every broadcast, `r <- r + intent_rate_weight × (min(1, n) - r)`, with `n` the number of non-rest intents since the previous broadcast.
+The social drive reads the sequence module. The sequence module counts an interaction when a tone-of-voice or transcription event arrives from a live source (`live_mic`, `microphone` or `remote`). The first finite `time_since_last_interaction_s` in a `sequence.report` starts the drive building, and each later drop in that value relieves it. The intent rate is an exponential average updated on every broadcast, `r <- r + intent_rate_weight × (min(1, n) - r)`, with `n` the number of non-rest intents since the previous broadcast.
 
-A drive that crosses its threshold publishes one `thymos.drive` event and re-arms only after it falls below 0.9 of the threshold.
+A drive that crosses its threshold publishes one `affect.drive` event and re-arms only after it falls below 0.9 of the threshold.
 
 ## Appraisal
 
@@ -80,7 +80,7 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 
 The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × (2f - 1)`: `+v` when every member serves the drive and `-v` when none does. With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap score (`2 × relevance - 1`) is also computed and the check takes the larger of the two. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
 
-`goal_significance_method` in each `thymos.emotion` event records how the check was computed:
+`goal_significance_method` in each `affect.emotion` event records how the check was computed:
 
 | Method | Meaning |
 |---|---|
@@ -89,11 +89,11 @@ The cycle injects a drive-to-source table built from each registered module's `r
 | `token_overlap_v1` | No drive-to-source table was injected, and active ledger goals were scored |
 | `unavailable` | Neither exists; the score is `0.0` |
 
-A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `thymos.emotion` when the category changes. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust stays unreachable while norm compatibility is fixed at zero (`norm_compatibility_available: false`).
+A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust stays unreachable while norm compatibility is fixed at zero (`norm_compatibility_available: false`).
 
 ## Sleep reset
 
-At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice, the familiarity cache and the goal ledger are kept. The affect module then publishes a `thymos.state` event with `reset: true` at its alert intensity.
+At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice, the familiarity cache and the goal ledger are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
 
 ## Peer streams
 
@@ -104,14 +104,14 @@ Besides the workspace broadcast, the affect module reads the peer streams below 
 | Stream | Event type | Use |
 |---|---|---|
 | `workspace.broadcast` | broadcast snapshot | Every broadcast, accessed or inhibited: state update, then appraisal |
-| `topos.out` | `topos.report` | Learning-progress means; on `alert: true`, alert rates and arousal |
+| `vision.out` | `vision.report` | Learning-progress means; on `alert: true`, alert rates and arousal |
 | `audition.out` | `audition.perception` | Learning-progress means; on `alert: true`, alert rates and arousal |
 | `audition.out` | `audition.emotion` | Perceived speaker emotion, recorded only when coupling is enabled |
-| `soma.out` | `soma.report` | `wellness` shifts the valence target; a non-empty `alerts` list raises arousal |
-| `chronos.out` | `chronos.report` | `time_since_last_interaction_s` starts and relieves the social drive |
-| `volition.out` | `intent.*` | Each intent other than `intent.rest` relieves restlessness and counts toward the intent rate |
-| `mnemos.out` | `mnemos.recall` | `max_affect_intensity` raises arousal |
-| `empatheia.out` | `empatheia.agent_model` | Familiarity per `agent_id`, read only when coupling is enabled |
+| `interoception.out` | `interoception.report` | `wellness` shifts the valence target; a non-empty `alerts` list raises arousal |
+| `sequence.out` | `sequence.report` | `time_since_last_interaction_s` starts and relieves the social drive |
+| `action_selection.out` | `intent.*` | Each intent other than `intent.rest` relieves restlessness and counts toward the intent rate |
+| `episodic_memory.out` | `episodic_memory.recall` | `max_affect_intensity` raises arousal |
+| `social_cognition.out` | `social_cognition.agent_model` | Familiarity per `agent_id`, read only when coupling is enabled |
 
 The vision, audition and social cognition modules' stream names are fixed. The interoception, sequence, episodic memory and action selection modules' stream names are configurable (below).
 
@@ -119,16 +119,16 @@ The vision, audition and social cognition modules' stream names are fixed. The i
 
 | Stream | Event type | When | Intensity |
 |---|---|---|---|
-| `thymos.out` | `thymos.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
-| `thymos.out` | `thymos.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
-| `thymos.out` | `thymos.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
-| `thymos.out` | `thymos.goal` | On a goal lifecycle event (`added`, `completed`, `abandoned`) | `baseline_salience` |
+| `affect.out` | `affect.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
+| `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
+| `affect.out` | `affect.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
+| `affect.out` | `affect.goal` | On a goal lifecycle event (`added`, `completed`, `abandoned`) | `baseline_salience` |
 
 The affect module reports at these fixed levels; its events are not graded by surprise.
 
 ## Configuration
 
-The full `[thymos]` reference is in the [modules configuration page](../appendix-a-configuration/modules.md). All time constants run in entity time.
+The full `[affect]` reference is in the [modules configuration page](../appendix-a-configuration/modules.md). All time constants run in entity time.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -136,7 +136,7 @@ The full `[thymos]` reference is in the [modules configuration page](../appendix
 | `baseline_arousal` | float `[0, 1]` | `0.3` | Arousal baseline `a0`; also the point above which the contrast gain rises |
 | `baseline_dominance` | float `[-1, 1]` | `0.0` | Dominance baseline |
 | `drift_rate_per_s` | float `>= 0` | `0.05` | Relaxation rate of arousal and dominance toward baseline |
-| `publish_interval_s` | float `> 0` | `1.0` | Period between `thymos.state` publications |
+| `publish_interval_s` | float `> 0` | `1.0` | Period between `affect.state` publications |
 | `baseline_salience` | float `[0, 1]` | `0.1` | Intensity of routine events |
 | `alert_salience` | float `[0, 1]` | `0.7` | Intensity of emotion changes, drive crossings and the post-reset state |
 | `fast_time_constant_s` | float `> 0` | `10.0` | Fast mean of each perceptual source's error and the fast alert rate |
@@ -146,16 +146,16 @@ The full `[thymos]` reference is in the [modules configuration page](../appendix
 | `intent_rate_weight` | float `(0, 1]` | `0.05` | Per-broadcast weight of the intent-rate average |
 | `valence_time_constant_s` | float `> 0` | `30.0` | Time constant of valence's relaxation toward its target |
 | `valence_progress_gain` | float `>= 0` | `2.0` | Gain on learning progress in the pleasantness check |
-| `volition_stream` | string | `"volition.out"` | Stream the affect module reads intents from |
-| `soma_stream` | string | `"soma.out"` | Stream the affect module reads the interoception module's reports from |
-| `chronos_stream` | string | `"chronos.out"` | Stream the affect module reads the sequence module's reports from |
-| `mnemos_stream` | string | `"mnemos.out"` | Stream the affect module reads the episodic memory module's recalls from |
+| `action_selection_stream` | string | `"action_selection.out"` | Stream the affect module reads intents from |
+| `interoception_stream` | string | `"interoception.out"` | Stream the affect module reads the interoception module's reports from |
+| `sequence_stream` | string | `"sequence.out"` | Stream the affect module reads the sequence module's reports from |
+| `episodic_memory_stream` | string | `"episodic_memory.out"` | Stream the affect module reads the episodic memory module's recalls from |
 
 The retired key `social_drive_time_scale_s` is accepted and ignored with a warning, so older local configs still boot.
 
 The perceptual arousal gain (0.15), its cap (4), the interoceptive step (0.05) and the drive hysteresis (0.9) are constants in `kaine/modules/affect/module.py` and `drives.py`; no config key sets them.
 
-Drive sub-tables `[thymos.drives.<name>]`, for `curiosity`, `boredom`, `social_drive` and `restlessness`. An unknown drive name or key stops boot.
+Drive sub-tables `[affect.drives.<name>]`, for `curiosity`, `boredom`, `social_drive` and `restlessness`. An unknown drive name or key stops boot.
 
 | Key | Type | Defaults (curiosity, boredom, social_drive, restlessness) | Meaning |
 |---|---|---|---|
@@ -164,7 +164,7 @@ Drive sub-tables `[thymos.drives.<name>]`, for `curiosity`, `boredom`, `social_d
 | `threshold` | float `(0, 1]` | `0.7` for all | Crossing threshold |
 | `relief_gain` | float `[0, 1]` | `0.5`, `0.3`, `0.8`, `0.5` | Curiosity and boredom: relief rate per second at full strength. Social drive and restlessness: fraction one relieving event removes |
 
-Coupling sub-table `[thymos.coupling]`:
+Coupling sub-table `[affect.coupling]`:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -178,10 +178,10 @@ The retired key `coupling_max_rate_per_s` is accepted and ignored with a warning
 
 ## Affect coupling
 
-Coupling is off in the default config and in the base-thesis form. When `[thymos.coupling].enabled = true`, the affect module records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
+Coupling is off in the default config and in the base-thesis form. When `[affect.coupling].enabled = true`, the affect module records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
 
 1. It maps the perceived category to a pleasantness and an intensity through the `EMOTION_VAD` table.
-2. It looks up the speaker's familiarity, keyed on the event's `source_label` (the audio channel), in the cache filled from `empatheia.agent_model` events, which carry the `source_label` of the audio event that updated the agent model (0.0 when unknown).
+2. It looks up the speaker's familiarity, keyed on the event's `source_label` (the audio channel), in the cache filled from `social_cognition.agent_model` events, which carry the `source_label` of the audio event that updated the agent model (0.0 when unknown).
 3. It computes `weight = clip(coupling_base + coupling_familiarity_gain × familiarity, 0, coupling_ceiling)`.
 4. It stores `{pleasantness, intensity, weight, ts}`.
 
@@ -190,10 +190,10 @@ When the appraisal runs, the signal is folded in with a linear decay, `decay = m
 ```mermaid
 flowchart TD
     AE[audition.emotion] -->|category, source_label| R[Record perceived signal\npleasantness, intensity, weight, ts]
-    EM[empatheia.agent_model] -->|familiarity| FC[Familiarity cache]
+    EM[social_cognition.agent_model] -->|familiarity| FC[Familiarity cache]
     FC -->|lookup| R
     R -->|decaying| AP[Appraisal checks]
-    AP -->|classify| EMO[thymos.emotion]
+    AP -->|classify| EMO[affect.emotion]
     AP -->|pleasantness + wellness| VT[valence target]
     VT -->|exponential relaxation| S[DimensionalState]
 ```
@@ -206,13 +206,13 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Restoring goals publishes no `thymos.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 
-1. Set `[modules].thymos = true`, or run the `thesis_test` profile.
+1. Set `[modules].affect = true`, or run the `thesis_test` profile.
 2. Enable the vision and audition modules for the perceptual error and alert streams, and the interoception and sequence modules for wellness, interoceptive alarms and the social drive.
-3. For affect coupling, set `[thymos.coupling].enabled = true` and enable the [audition](audition.md) and [social cognition](social-cognition.md) modules.
+3. For affect coupling, set `[affect.coupling].enabled = true` and enable the [audition](audition.md) and [social cognition](social-cognition.md) modules.
 
 ## Key files
 
@@ -227,7 +227,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `kaine/modules/affect/modulator.py` | `StateModulator`: level gain and contrast gain |
 | `kaine/modules/affect/regulation.py` | `RegulationPolicy` protocol and the no-op `PassiveDecay` |
 | `kaine/cycle/affect_state.py` | `AffectStateProvider`: the cycle's copy of the last published state |
-| `kaine/boot/wiring.py` | Builds the workspace's `StateModulator` from `[syneidesis]` and `[thymos]` |
+| `kaine/boot/wiring.py` | Builds the workspace's `StateModulator` from `[workspace]` and `[affect]` |
 
 ## Tests
 
@@ -248,7 +248,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Spec and related pages
 
-- Spec: `openspec/specs/thymos/spec.md`
+- Spec: `openspec/specs/affect/spec.md`
 - Affect coupling spec: `openspec/specs/thymos-affect-coupling/spec.md`
 - [Global workspace](../08-cognitive-cycle/global-workspace.md): scoring, access and the arousal gain
 - [Vision](vision.md), [Audition](audition.md): perceptual alerts and error streams

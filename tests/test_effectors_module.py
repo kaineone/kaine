@@ -21,7 +21,7 @@ from kaine.modules.effectors.whitelist import CommandWhitelist, WhitelistEntry
 from kaine.security.intent_signing import compute_intent_signature
 
 # The per-boot provenance secret the tests share between the signer (here) and
-# the effectors module (via _make_praxis). At a real boot this is generate_intent_secret().
+# the effectors module (via _make_effectors). At a real boot this is generate_intent_secret().
 _TEST_SECRET = b"praxis-provenance-test-secret-32"
 _TEST_RUN_ID = "test-run"
 
@@ -36,7 +36,7 @@ async def _publish_act_intent(
     seq: int = 0,
     sig_override: str | None = None,
 ) -> None:
-    """Publish an act intent onto volition.out, signed by default.
+    """Publish an act intent onto action_selection.out, signed by default.
 
     With ``sign=True`` (the default) the payload carries a valid provenance
     envelope so the effectors module realizes it. ``sign=False`` models a forged/peripheral
@@ -54,7 +54,7 @@ async def _publish_act_intent(
         )
         payload.update({"run_id": run_id, "seq": seq, "sig": signature})
     event = Event(
-        source="volition",
+        source="action_selection",
         type="intent.act",
         payload=payload,
         salience=0.5,
@@ -137,10 +137,10 @@ async def test_unknown_effector_fails(bus: AsyncBus, tmp_path: Path):
 async def test_action_publishes_diagnostics_only_event(bus: AsyncBus, tmp_path: Path):
     p = _make_effectors(bus, tmp_path)
     await p.act("file_write", FileWriteRequest(name="x.txt", content="secret content"))
-    entries = await bus.read("praxis.out", last_id="0")
+    entries = await bus.read("effectors.out", last_id="0")
     assert len(entries) == 1
     _, event = entries[0]
-    assert event.type == "praxis.action"
+    assert event.type == "effectors.action"
     keys = set(event.payload.keys())
     assert keys == {"effector", "success", "elapsed_ms", "error", "blocked", "alert"}
     assert event.payload["alert"] is False
@@ -173,7 +173,7 @@ async def test_shell_rejects_unwhitelisted(bus: AsyncBus, tmp_path: Path):
     p = _make_effectors(bus, tmp_path)  # empty whitelist
     result = await p.act("shell", ShellRequest(command="ls", args=[]))
     assert result.success is False
-    entries = await bus.read("praxis.out", last_id="0")
+    entries = await bus.read("effectors.out", last_id="0")
     _, event = entries[0]
     assert event.payload["success"] is False
 
@@ -182,7 +182,7 @@ async def test_shell_rejects_unwhitelisted(bus: AsyncBus, tmp_path: Path):
 async def test_alert_salience_on_failure(bus: AsyncBus, tmp_path: Path):
     p = _make_effectors(bus, tmp_path)
     await p.act("nope", FileWriteRequest(name="x", content="x"))
-    entries = await bus.read("praxis.out", last_id="0")
+    entries = await bus.read("effectors.out", last_id="0")
     _, event = entries[0]
     assert event.salience == pytest.approx(p._alert_salience)
 
@@ -191,7 +191,7 @@ async def test_alert_salience_on_failure(bus: AsyncBus, tmp_path: Path):
 async def test_baseline_salience_on_success(bus: AsyncBus, tmp_path: Path):
     p = _make_effectors(bus, tmp_path)
     await p.act("file_write", FileWriteRequest(name="x.txt", content="ok"))
-    entries = await bus.read("praxis.out", last_id="0")
+    entries = await bus.read("effectors.out", last_id="0")
     _, event = entries[0]
     assert event.salience == pytest.approx(p._baseline_salience)
 
@@ -203,11 +203,11 @@ async def test_effectors_realizes_act_intent(bus: AsyncBus, tmp_path: Path):
     try:
         await _publish_act_intent(bus, "file_write", {"name": "y.txt", "content": "via intent"})
         # The effector ran (file written) and the action was audited.
-        entries = await _wait_for(bus, "praxis.out")
+        entries = await _wait_for(bus, "effectors.out")
         assert (tmp_path / "sb" / "y.txt").read_text() == "via intent"
         assert len(entries) == 1
         _, event = entries[0]
-        assert event.type == "praxis.action"
+        assert event.type == "effectors.action"
         assert event.payload["effector"] == "file_write"
         assert event.payload["success"] is True
         audit_text = (tmp_path / "audit.log").read_text()
@@ -227,7 +227,7 @@ async def test_effectors_no_action_without_intent(bus: AsyncBus, tmp_path: Path)
         snap = WorkspaceSnapshot(tick_index=0, selected_events=[], inhibited=False)
         await p.on_workspace(snap)
         await asyncio.sleep(0.1)
-        entries = await bus.read("praxis.out", last_id="0")
+        entries = await bus.read("effectors.out", last_id="0")
         assert entries == []
         assert not (tmp_path / "sb").exists() or not any((tmp_path / "sb").iterdir())
     finally:
@@ -241,7 +241,7 @@ async def test_effectors_ignores_non_act_intent(bus: AsyncBus, tmp_path: Path):
     try:
         # A speak intent on the same stream must not trigger any effector.
         event = Event(
-            source="volition",
+            source="action_selection",
             type="intent.speak",
             payload={"kind": "speak", "about": "hi"},
             salience=0.5,
@@ -249,7 +249,7 @@ async def test_effectors_ignores_non_act_intent(bus: AsyncBus, tmp_path: Path):
         )
         await bus.publish(event)
         await asyncio.sleep(0.1)
-        entries = await bus.read("praxis.out", last_id="0")
+        entries = await bus.read("effectors.out", last_id="0")
         assert entries == []
     finally:
         await p.shutdown()
@@ -294,7 +294,7 @@ async def test_notify_denied_when_not_whitelisted(bus: AsyncBus, tmp_path: Path)
     assert result.success is False
     assert "whitelist" in (result.error or "").lower()
     # Published as a blocked action.
-    entries = await bus.read("praxis.out", last_id="0")
+    entries = await bus.read("effectors.out", last_id="0")
     _, event = entries[0]
     assert event.payload["effector"] == "notify"
     assert event.payload["success"] is False
@@ -347,7 +347,7 @@ async def test_signed_intent_is_realized(bus: AsyncBus, tmp_path: Path):
     await p.initialize()
     try:
         await _publish_act_intent(bus, "file_write", {"name": "ok.txt", "content": "hi"})
-        await _wait_for(bus, "praxis.out")
+        await _wait_for(bus, "effectors.out")
         assert (tmp_path / "sb" / "ok.txt").read_text() == "hi"
         records = _read_audit(tmp_path)
         assert records and records[-1]["effector"] == "file_write"
@@ -365,7 +365,7 @@ async def test_missing_signature_rejected(bus: AsyncBus, tmp_path: Path):
         await _publish_act_intent(
             bus, "file_write", {"name": "nope.txt", "content": "x"}, sign=False
         )
-        entries = await _wait_for(bus, "praxis.out")
+        entries = await _wait_for(bus, "effectors.out")
         # No effector ran: no file written.
         assert not (tmp_path / "sb" / "nope.txt").exists()
         # Audited under the distinct provenance_rejected category (NOT blocked).
@@ -392,7 +392,7 @@ async def test_forged_signature_rejected(bus: AsyncBus, tmp_path: Path):
             {"name": "forged.txt", "content": "x"},
             sig_override="deadbeef" * 8,
         )
-        await _wait_for(bus, "praxis.out")
+        await _wait_for(bus, "effectors.out")
         assert not (tmp_path / "sb" / "forged.txt").exists()
         records = _read_audit(tmp_path)
         assert records and records[-1]["provenance_rejected"] is True
@@ -410,7 +410,7 @@ async def test_replayed_intent_rejected(bus: AsyncBus, tmp_path: Path):
         await _publish_act_intent(
             bus, "file_write", {"name": "once.txt", "content": "first"}, seq=7
         )
-        await _wait_for(bus, "praxis.out")
+        await _wait_for(bus, "effectors.out")
         await _publish_act_intent(
             bus, "file_write", {"name": "once.txt", "content": "first"}, seq=7
         )
@@ -438,7 +438,7 @@ async def test_fail_closed_without_secret(bus: AsyncBus, tmp_path: Path):
     await p.initialize()
     try:
         await _publish_act_intent(bus, "file_write", {"name": "x.txt", "content": "x"})
-        await _wait_for(bus, "praxis.out")
+        await _wait_for(bus, "effectors.out")
         assert not (tmp_path / "sb" / "x.txt").exists()
         records = _read_audit(tmp_path)
         assert records and records[-1]["provenance_rejected"] is True
@@ -460,7 +460,7 @@ async def test_replay_guard_survives_light_restart(bus: AsyncBus, tmp_path: Path
     await p.initialize()
     try:
         await _publish_act_intent(bus, "file_write", {"name": "r.txt", "content": "a"}, seq=3)
-        await _wait_for(bus, "praxis.out")
+        await _wait_for(bus, "effectors.out")
         before = _read_audit(tmp_path)
         assert len([r for r in before if r.get("success") and not r.get("provenance_rejected")]) == 1
 

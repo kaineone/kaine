@@ -87,7 +87,7 @@ server** on every target; only the engine that provides it varies by vendor:
 - **No supported GPU** — the operator MAY point the same configuration keys at
   any conforming OpenAI-compatible local server.
 
-The configuration keys (e.g. `[lingua].chat_url`) SHALL be the single point of
+The configuration keys (e.g. `[language].chat_url`) SHALL be the single point of
 variation: the organ and the A/B baseline target whatever server is provisioned
 for the host. KAINE SHALL speak only the OpenAI-compatible surface and SHALL NOT
 require Ollama on any target.
@@ -108,7 +108,7 @@ require Ollama on any target.
   that host
 
 ### Requirement: The organ unloads when idle and reloads on demand
-Every launch path of the organ server SHALL pass llama-server's `--sleep-idle-seconds`: the compose default command, the Quadlet unit and the native launcher. The value SHALL come from `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` in compose and Quadlet, and from `[lingua].model_server_sleep_idle_seconds` for the native launcher. The default SHALL be 600. When no cycle or study has sent an inference request for that long, the organ SHALL unload its model, and the next inference request SHALL reload it without operator action.
+Every launch path of the organ server SHALL pass llama-server's `--sleep-idle-seconds`: the compose default command, the Quadlet unit and the native launcher. The value SHALL come from `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS` in compose and Quadlet, and from `[language].model_server_sleep_idle_seconds` for the native launcher. The default SHALL be 600. When no cycle or study has sent an inference request for that long, the organ SHALL unload its model, and the next inference request SHALL reload it without operator action.
 
 #### Scenario: KAINE stops and the GPU is freed
 - **WHEN** the last cycle or study stops and no inference request arrives for the configured seconds

@@ -4,7 +4,7 @@
 """Tests for sleep fatigue-triggered entry and safety-net interval (tasks 7.1).
 
 Covers:
-- soma.fatigue crossed=true triggers a maintenance cycle (fatigue trigger)
+- interoception.fatigue crossed=true triggers a maintenance cycle (fatigue trigger)
 - interval_seconds fires as a max-interval safety net even without fatigue
 - Non-interruptibility, deferral, and freeze-preemption are retained
 
@@ -85,12 +85,12 @@ def _make_sleep(bus: AsyncBus, tmp_path: Path, **kwargs) -> Sleep:
 
 
 # ---------------------------------------------------------------------------
-# Test 1: soma.fatigue crossed=true triggers maintenance
+# Test 1: interoception.fatigue crossed=true triggers maintenance
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_interoception_fatigue_triggers_maintenance(bus: AsyncBus, tmp_path: Path):
-    """When soma.fatigue with crossed=true is published, the sleep module triggers sleep."""
+    """When interoception.fatigue with crossed=true is published, the sleep module triggers sleep."""
     sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
     # Initialise (seeds the interoception module's cursor and starts consumer loop)
     await sleep.initialize()
@@ -104,14 +104,14 @@ async def test_interoception_fatigue_triggers_maintenance(bus: AsyncBus, tmp_pat
 
     sleep._run_pipeline = _mock_run
 
-    # Publish soma.fatigue with crossed=true
+    # Publish interoception.fatigue with crossed=true
     from datetime import datetime, timezone
 
     from kaine.bus.schema import validate_event
 
     event = validate_event(
-        source="soma",
-        type="soma.fatigue",
+        source="interoception",
+        type="interoception.fatigue",
         payload={"value": 105.0, "threshold": 100.0, "crossed": True},
         salience=0.7,
         timestamp=datetime.now(timezone.utc),
@@ -122,14 +122,14 @@ async def test_interoception_fatigue_triggers_maintenance(bus: AsyncBus, tmp_pat
     try:
         await asyncio.wait_for(sleep_fired.wait(), timeout=2.0)
     except asyncio.TimeoutError:
-        pytest.fail("soma.fatigue trigger did not fire maintenance cycle within 2s")
+        pytest.fail("interoception.fatigue trigger did not fire maintenance cycle within 2s")
 
     await sleep.shutdown()
 
 
 @pytest.mark.asyncio
 async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_path: Path):
-    """soma.regulation with action=request_maintenance triggers a sleep cycle."""
+    """interoception.regulation with action=request_maintenance triggers a sleep cycle."""
     sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
     await sleep.initialize()
 
@@ -147,8 +147,8 @@ async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncB
     from kaine.bus.schema import validate_event
 
     event = validate_event(
-        source="soma",
-        type="soma.regulation",
+        source="interoception",
+        type="interoception.regulation",
         payload={"action": "request_maintenance", "reason": "stress", "severity": 3},
         salience=0.7,
         timestamp=datetime.now(timezone.utc),
@@ -159,7 +159,7 @@ async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncB
         await asyncio.wait_for(sleep_fired.wait(), timeout=2.0)
     except asyncio.TimeoutError:
         pytest.fail(
-            "soma.regulation request_maintenance did not fire maintenance within 2s"
+            "interoception.regulation request_maintenance did not fire maintenance within 2s"
         )
 
     await sleep.shutdown()
@@ -167,7 +167,7 @@ async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncB
 
 @pytest.mark.asyncio
 async def test_interoception_regulation_other_action_does_not_trigger(bus: AsyncBus, tmp_path: Path):
-    """soma.regulation with a non-maintenance action must NOT trigger sleep."""
+    """interoception.regulation with a non-maintenance action must NOT trigger sleep."""
     sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
     await sleep.initialize()
 
@@ -185,8 +185,8 @@ async def test_interoception_regulation_other_action_does_not_trigger(bus: Async
     from kaine.bus.schema import validate_event
 
     event = validate_event(
-        source="soma",
-        type="soma.regulation",
+        source="interoception",
+        type="interoception.regulation",
         payload={"action": "reduce_rate", "reason": "stress", "severity": 1},
         salience=0.3,
         timestamp=datetime.now(timezone.utc),
@@ -200,7 +200,7 @@ async def test_interoception_regulation_other_action_does_not_trigger(bus: Async
 
 @pytest.mark.asyncio
 async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus, tmp_path: Path):
-    """soma.fatigue with crossed=false should NOT trigger maintenance."""
+    """interoception.fatigue with crossed=false should NOT trigger maintenance."""
     sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
     await sleep.initialize()
 
@@ -218,8 +218,8 @@ async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus,
     from kaine.bus.schema import validate_event
 
     event = validate_event(
-        source="soma",
-        type="soma.fatigue",
+        source="interoception",
+        type="interoception.fatigue",
         payload={"value": 50.0, "threshold": 100.0, "crossed": False},
         salience=0.1,
         timestamp=datetime.now(timezone.utc),
@@ -238,7 +238,7 @@ async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus,
 
 @pytest.mark.asyncio
 async def test_safety_net_interval_fires_without_fatigue(bus: AsyncBus, tmp_path: Path):
-    """interval_seconds fires as a safety net even if soma.fatigue never crosses.
+    """interval_seconds fires as a safety net even if interoception.fatigue never crosses.
 
     This test bypasses the fatigue consumer and checks the scheduler directly:
     when is_due() returns True (mocked), enter_sleep can be called and completes.

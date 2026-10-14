@@ -29,7 +29,7 @@ from kaine.setup.footprint import (
     main,
 )
 
-_LANGUAGE = "lingua"
+_LANGUAGE = "language"
 
 
 def _raise_file_not_found(*args: Any, **kwargs: Any) -> Path:
@@ -215,8 +215,8 @@ def test_main_host_class_unknown_returns_one_and_writes_nothing(
     monkeypatch.setattr("kaine.setup.footprint.host_class", _broken)
 
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
@@ -237,7 +237,7 @@ def test_main_host_class_unknown_returns_one_and_writes_nothing(
 
 
 def test_disabled_modules_produce_no_components():
-    config = {"modules": {"lingua": False, "mnemos": False, "topos": False}}
+    config = {"modules": {"language": False, "episodic_memory": False, "vision": False}}
     assert _select_components(config) == []
 
 
@@ -265,13 +265,13 @@ def test_absent_sherpa_stt_has_fetch_command(monkeypatch):
 def test_vision_internvideo_next_empty_dir_is_absent(tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
-    infos = [i for i in _select_components(config) if i.name == "topos.encoder"]
+    infos = [i for i in _select_components(config) if i.name == "vision.encoder"]
     assert len(infos) == 1
     assert infos[0].kind == "absent"
     assert infos[0].fetch_command == "python -m kaine.setup.internvideo_next --yes"
@@ -283,10 +283,10 @@ def test_vision_dinov2_absent_when_hf_cached_false(monkeypatch):
         "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: False
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {"encoder_backend": "dinov2"},
+        "modules": {"vision": True},
+        "vision": {"encoder_backend": "dinov2"},
     }
-    infos = [i for i in _select_components(config) if i.name == "topos.encoder"]
+    infos = [i for i in _select_components(config) if i.name == "vision.encoder"]
     assert infos[0].kind == "absent"
     assert infos[0].model_id == "facebook/dinov2-small"
 
@@ -297,10 +297,10 @@ def test_vision_dinov2_present_when_hf_cached_true(monkeypatch):
         "kaine.setup.footprint._hf_cached", lambda model_id, *, cache_dir=None: True
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {"encoder_backend": "dinov2", "encoder_model_id": "foo/bar"},
+        "modules": {"vision": True},
+        "vision": {"encoder_backend": "dinov2", "encoder_model_id": "foo/bar"},
     }
-    infos = [i for i in _select_components(config) if i.name == "topos.encoder"]
+    infos = [i for i in _select_components(config) if i.name == "vision.encoder"]
     assert infos[0].kind == "in_process"
     assert infos[0].model_id == "foo/bar"
 
@@ -336,8 +336,8 @@ def test_non_terminal_without_yes_returns_two(capsys, tmp_path, monkeypatch):
         raise AssertionError("input should not be called")
 
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
@@ -361,8 +361,8 @@ def test_consent_no_returns_zero(capsys, tmp_path, monkeypatch):
     (tmp_path / "model.safetensors").write_text("x")
     measure, calls = _fake_measure({})
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
@@ -386,8 +386,8 @@ def test_consent_yes_measures(capsys, tmp_path, monkeypatch):
     (tmp_path / "model.safetensors").write_text("x")
     measure, calls = _fake_measure({})
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
@@ -423,20 +423,20 @@ def test_recording_writes_catalogue_entries(capsys, tmp_path, monkeypatch):
         },
     )
     config = {
-        "modules": {"mnemos": True, "topos": True},
+        "modules": {"episodic_memory": True, "vision": True},
         "embedding": {"backend": "sentence_transformers", "model_id": "all-MiniLM"},
-        "topos": {
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     mapping = {
         "embedding": (True, 100 << 20, None, None, False, ""),
-        "topos.encoder": (True, 200 << 20, 1 << 30, "cuda:0", True, ""),
+        "vision.encoder": (True, 200 << 20, 1 << 30, "cuda:0", True, ""),
     }
     measure, calls = _fake_measure(mapping)
     code, out, err, cat = _run(
-        ["--yes", "--only", "embedding", "--only", "topos.encoder"],
+        ["--yes", "--only", "embedding", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -451,26 +451,26 @@ def test_recording_writes_catalogue_entries(capsys, tmp_path, monkeypatch):
     assert by_name["embedding"].backend == "sentence_transformers"
     assert by_name["embedding"].model_id == "all-MiniLM"
     assert by_name["embedding"].host_class == "cpu"
-    assert by_name["topos.encoder"].bytes == 200 << 20
-    assert by_name["topos.encoder"].device == "cuda:0"
-    assert by_name["topos.encoder"].device_bytes == 1 << 30
-    assert by_name["topos.encoder"].mapped is True
+    assert by_name["vision.encoder"].bytes == 200 << 20
+    assert by_name["vision.encoder"].device == "cuda:0"
+    assert by_name["vision.encoder"].device_bytes == 1 << 30
+    assert by_name["vision.encoder"].mapped is True
 
 
 def test_failure_exits_one_and_writes_nothing(capsys, tmp_path):
     (tmp_path / "model.safetensors").write_text("x")
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     measure, _ = _fake_measure(
-        {"topos.encoder": (False, None, None, None, False, "boom")}
+        {"vision.encoder": (False, None, None, None, False, "boom")}
     )
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -485,17 +485,17 @@ def test_failure_exits_one_and_writes_nothing(capsys, tmp_path):
 def test_ok_peak_none_fails_and_writes_nothing(capsys, tmp_path):
     (tmp_path / "model.safetensors").write_text("x")
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     measure, _ = _fake_measure(
-        {"topos.encoder": (True, None, None, None, False, "")}
+        {"vision.encoder": (True, None, None, None, False, "")}
     )
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -510,8 +510,8 @@ def test_ok_peak_none_fails_and_writes_nothing(capsys, tmp_path):
 def test_nothing_measured_writes_no_file(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
@@ -519,7 +519,7 @@ def test_nothing_measured_writes_no_file(capsys, tmp_path, monkeypatch):
     code, out, err, cat = _run(["--yes"], config, tmp_path, capsys)
     assert code == 3
     assert "Uncalibrated components:" in out
-    assert "topos.encoder" in out
+    assert "vision.encoder" in out
     assert "embedding" in out
     assert not cat.exists()
 
@@ -528,15 +528,15 @@ def test_language_external_service_inspected(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     svc, svc_calls = _fake_service({"http://localhost:1234": 100 << 20})
     config = {
-        "modules": {"lingua": True},
-        "lingua": {
+        "modules": {"language": True},
+        "language": {
             "backend": "openai",
             "model_id": "gpt-4o-mini",
             "chat_url": "http://localhost:1234",
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "lingua"],
+        ["--yes", "--only", "language"],
         config,
         tmp_path,
         capsys,
@@ -549,7 +549,7 @@ def test_language_external_service_inspected(capsys, tmp_path, monkeypatch):
     assert "100.0 MiB" in out
     entries = load_catalogue(cat)
     entry = next(
-        e for e in entries if e.component == "lingua" and e.backend == "openai"
+        e for e in entries if e.component == "language" and e.backend == "openai"
     )
     assert entry.bytes == 100 << 20
     assert entry.device is None
@@ -558,11 +558,11 @@ def test_language_external_service_inspected(capsys, tmp_path, monkeypatch):
 
 def test_language_llama_cpp_not_measured(capsys, tmp_path):
     config = {
-        "modules": {"lingua": True},
-        "lingua": {"backend": "llama_cpp", "model_id": "qwen2.5-3b"},
+        "modules": {"language": True},
+        "language": {"backend": "llama_cpp", "model_id": "qwen2.5-3b"},
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "lingua"], config, tmp_path, capsys
+        ["--yes", "--only", "language"], config, tmp_path, capsys
     )
     assert code == 3
     assert (
@@ -599,17 +599,17 @@ def test_sherpa_stt_and_tts_selected(monkeypatch, capsys, tmp_path):
     )
     measure, calls = _fake_measure({})
     config = {
-        "modules": {"audition": True, "vox": True},
+        "modules": {"audition": True, "vocal": True},
         "audition": {
             "transcription_enabled": True,
             "backend": "sherpa_onnx",
             "sherpa_model_id": "custom-stt",
             "emotion_model_id": "",
         },
-        "vox": {"backend": "sherpa_onnx", "sherpa_model_id": "custom-tts"},
+        "vocal": {"backend": "sherpa_onnx", "sherpa_model_id": "custom-tts"},
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "audition.stt", "--only", "vox.tts"],
+        ["--yes", "--only", "audition.stt", "--only", "vocal.tts"],
         config,
         tmp_path,
         capsys,
@@ -618,7 +618,7 @@ def test_sherpa_stt_and_tts_selected(monkeypatch, capsys, tmp_path):
     )
     assert code == 0
     names = [c["info"].name for c in calls]
-    assert names == ["audition.stt", "vox.tts"]
+    assert names == ["audition.stt", "vocal.tts"]
     assert calls[0]["info"].backend == "sherpa_onnx"
     assert calls[0]["info"].model_id == "custom-stt"
     assert calls[1]["info"].backend == "sherpa_onnx"
@@ -629,15 +629,15 @@ def test_service_not_running_message(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     svc, svc_calls = _fake_service({})
     config = {
-        "modules": {"lingua": True},
-        "lingua": {
+        "modules": {"language": True},
+        "language": {
             "backend": "openai",
             "model_id": "m",
             "chat_url": "http://localhost:1234",
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "lingua"],
+        ["--yes", "--only", "language"],
         config,
         tmp_path,
         capsys,
@@ -656,8 +656,8 @@ def test_service_not_running_message(capsys, tmp_path, monkeypatch):
 def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
     _hermetic_selection(monkeypatch)
     config = {
-        "modules": {"lingua": True},
-        "lingua": {
+        "modules": {"language": True},
+        "language": {
             "backend": "openai",
             "model_id": "m",
             "chat_url": "http://127.0.0.1:11435/v1",
@@ -670,7 +670,7 @@ def test_container_port_forwarder_not_measured(capsys, tmp_path, monkeypatch):
         )
 
     code, out, err, cat = _run(
-        ["--yes", "--only", "lingua"],
+        ["--yes", "--only", "language"],
         config,
         tmp_path,
         capsys,
@@ -810,7 +810,7 @@ def test_embedding_import_error_not_measured(monkeypatch):
         raise ImportError("no numpy backend")
 
     monkeypatch.setattr("kaine.setup.footprint.resolve_model_dir", _raise)
-    config = {"modules": {"mnemos": True}}
+    config = {"modules": {"episodic_memory": True}}
     infos = _select_components(config)
     emb = next(i for i in infos if i.name == "embedding")
     assert emb.kind == "not_measured"
@@ -821,7 +821,7 @@ def test_embedding_import_error_not_measured(monkeypatch):
 def test_needs_for_ignores_other_model_ids():
     entries = [
         Entry(
-            component="topos.encoder",
+            component="vision.encoder",
             backend="internvideo_next",
             model_id="old-model",
             bytes=50 << 20,
@@ -831,7 +831,7 @@ def test_needs_for_ignores_other_model_ids():
             host_class="cpu",
         ),
         Entry(
-            component="topos.encoder",
+            component="vision.encoder",
             backend="internvideo_next",
             model_id="current-model",
             bytes=200 << 20,
@@ -841,7 +841,7 @@ def test_needs_for_ignores_other_model_ids():
             host_class="cpu",
         ),
         Entry(
-            component="topos.encoder",
+            component="vision.encoder",
             backend="internvideo_next",
             model_id="current-model",
             bytes=150 << 20,
@@ -852,7 +852,7 @@ def test_needs_for_ignores_other_model_ids():
         ),
     ]
     info = ComponentInfo(
-        name="topos.encoder",
+        name="vision.encoder",
         kind="in_process",
         backend="internvideo_next",
         model_id="current-model",
@@ -905,16 +905,16 @@ def test_fit_report_printed(capsys, tmp_path, monkeypatch):
         },
     )
     config = {
-        "modules": {"mnemos": True, "topos": True},
+        "modules": {"episodic_memory": True, "vision": True},
         "embedding": {"backend": "sentence_transformers", "model_id": "all-MiniLM"},
-        "topos": {
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     mapping = {
         "embedding": (True, 100 << 20, None, None, False, ""),
-        "topos.encoder": (True, 200 << 20, None, None, False, ""),
+        "vision.encoder": (True, 200 << 20, None, None, False, ""),
     }
     measure, _ = _fake_measure(mapping)
     budgets = _fake_budgets()
@@ -937,14 +937,14 @@ def test_fit_report_printed(capsys, tmp_path, monkeypatch):
             rung="sentence_transformers:all-MiniLM",
         ),
         Need(
-            component="topos.encoder",
+            component="vision.encoder",
             domain="system",
             footprint_bytes=200 << 20,
             interactive=False,
             rung="internvideo_next:internvideo_next",
         ),
     ]
-    first_line = fit_report(budgets, expected_needs, pin="lingua").lines()[0]
+    first_line = fit_report(budgets, expected_needs, pin="language").lines()[0]
     assert first_line in out
 
 
@@ -1011,17 +1011,17 @@ def test_main_corrupt_catalogue_is_named_then_replaced(capsys, tmp_path, monkeyp
     (tmp_path / "model.safetensors").write_text("x")
     (tmp_path / "footprints.json").write_text("not json {")
     measure, calls = _fake_measure(
-        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+        {"vision.encoder": (True, 100 << 20, None, None, False, "")}
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -1037,7 +1037,7 @@ def test_main_corrupt_catalogue_is_named_then_replaced(capsys, tmp_path, monkeyp
     entries = load_catalogue(cat)
     assert len(entries) == 1
     entry = entries[0]
-    assert entry.component == "topos.encoder"
+    assert entry.component == "vision.encoder"
 
 
 def test_main_unwritable_catalogue_says_nothing_recorded(
@@ -1051,17 +1051,17 @@ def test_main_unwritable_catalogue_says_nothing_recorded(
 
     monkeypatch.setattr("kaine.setup.footprint.write_catalogue", _raise)
     measure, _ = _fake_measure(
-        {"topos.encoder": (True, 100 << 20, None, None, False, "")}
+        {"vision.encoder": (True, 100 << 20, None, None, False, "")}
     )
     config = {
-        "modules": {"topos": True},
-        "topos": {
+        "modules": {"vision": True},
+        "vision": {
             "encoder_backend": "internvideo_next",
             "encoder_local_dir": str(tmp_path),
         },
     }
     code, out, err, cat = _run(
-        ["--yes", "--only", "topos.encoder"],
+        ["--yes", "--only", "vision.encoder"],
         config,
         tmp_path,
         capsys,
@@ -1229,7 +1229,7 @@ def test_main_default_measure_path_is_wired(capsys, tmp_path, monkeypatch):
     )
     code = main(
         ["--yes", "--only", "embedding", "--catalogue", str(catalogue)],
-        config_loader=lambda: {"modules": {"chronos": True}},
+        config_loader=lambda: {"modules": {"sequence": True}},
         budgets_fn=lambda: (budget,),
         torch_module=_fake_torch(cuda_available=False),
     )

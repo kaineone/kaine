@@ -32,16 +32,16 @@ async def test_interoception_publishes_wellness_event():
         interoception = Interoception(h.bus, reader=FakeReader(), read_interval_s=0.05)
         await h.register(interoception)
         # the interoception module's background loop runs at read_interval_s; wait a beat. The
-        # developmental warm-up (enabled by default) emits a soma.warmup.started
+        # developmental warm-up (enabled by default) emits a interoception.warmup.started
         # marker first, so select the wellness report by its payload.
-        events = await h.collect("soma.out", count=2, timeout=1.0)
+        events = await h.collect("interoception.out", count=2, timeout=1.0)
         reports = [
             ev
             for ev in events
             if "wellness" in ev.payload or "metrics" in ev.payload
         ]
         assert reports, "Soma should have emitted at least one wellness event"
-        assert reports[0].source == "soma"
+        assert reports[0].source == "interoception"
         assert 0.0 <= reports[0].salience <= 1.0
 
 
@@ -60,6 +60,6 @@ async def test_interoception_alerts_when_threshold_crossed():
     async with SubsystemHarness() as h:
         interoception = Interoception(h.bus, reader=HotReader(), read_interval_s=0.05)
         await h.register(interoception)
-        events = await h.collect("soma.out", count=2, timeout=1.0)
+        events = await h.collect("interoception.out", count=2, timeout=1.0)
         # Among the events, at least one should carry elevated salience.
         assert any(ev.salience > 0.4 for ev in events)

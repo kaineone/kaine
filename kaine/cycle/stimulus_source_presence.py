@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from kaine.modules.vision.feed import StimulusSourceClock
 
 PRESENCE_SOURCE = DEVELOPMENT_SOURCE
-PRESENCE_TYPE = "gestation.womb"
+PRESENCE_TYPE = "development.stimulus_source"
 
 log = logging.getLogger(__name__)
 

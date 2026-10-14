@@ -23,17 +23,17 @@ def test_individuation_refusal_disabled_by_default():
 
 def test_individuation_refusal_missing_self_model():
     cfg, reason = _individuation_refusal(
-        {"individuation": {"enabled": True}, "modules": {"lingua": True}}
+        {"individuation": {"enabled": True}, "modules": {"language": True}}
     )
     assert cfg is not None
     assert reason is None
 
     _, reason = _individuation_refusal(
-        {"individuation": {"enabled": True}, "modules": {"eidolon": True}}
+        {"individuation": {"enabled": True}, "modules": {"self_model": True}}
     )
     assert reason is not None
-    assert "[modules].lingua" in reason
-    assert "eidolon" not in reason
+    assert "[modules].language" in reason
+    assert "self_model" not in reason
 
 
 def test_individuation_refusal_unknown_key():
@@ -46,7 +46,7 @@ def test_individuation_refusal_runnable():
     cfg, reason = _individuation_refusal(
         {
             "individuation": {"enabled": True},
-            "modules": {"lingua": True, "eidolon": True},
+            "modules": {"language": True, "self_model": True},
         }
     )
     assert cfg is not None

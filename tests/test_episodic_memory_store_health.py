@@ -20,7 +20,7 @@ from kaine.modules.episodic_memory import FakeEmbedder, InMemoryStorage
 
 
 def test_episodic_memory_store_block_states(tmp_path):
-    """mnemos_store_block maps the health file to the right state and counts."""
+    """episodic_memory_store_block maps the health file to the right state and counts."""
     health_path = tmp_path / "health.json"
 
     disabled = blocks.episodic_memory_store_block(health_path, False)
@@ -116,7 +116,7 @@ async def test_health_prober_episodic_memory_store(tmp_path):
     )
 
     prober = HealthProber(
-        modules_enabled={"mnemos": True},
+        modules_enabled={"episodic_memory": True},
         dependencies=[],
         episodic_memory_store_health_path=health_path,
     )
@@ -198,7 +198,7 @@ def test_recover_cli_clears_pending_and_is_idempotent(monkeypatch, tmp_path):
         config_mod,
         "load_runtime_config",
         lambda path, op_path: {
-            "mnemos": {"backend": "sqlite_vec", "collection_prefix": "mnemos_"}
+            "episodic_memory": {"backend": "sqlite_vec", "collection_prefix": "mnemos_"}
         },
     )
     monkeypatch.setattr(storage_util, "install_data_root", lambda cfg: None)

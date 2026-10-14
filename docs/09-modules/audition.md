@@ -83,7 +83,7 @@ The access rate's phasic input counts only events whose payload has `alert` set 
 | Vocal `SpeakingGate` | `gate.is_speaking()` | Drops windows captured during the entity's own speech |
 | External callers | `process_audio()` | Programmatic input, for example from a virtual-world body through the embodiment module |
 | The affect module's arousal | `set_arousal_provider()` (general audition only) | Sets the attended window |
-| `hypnos.out` | `hypnos.sleep.started` / `hypnos.sleep.completed` | Suspends and resumes adaptation of both forward models |
+| `sleep.out` | `sleep.sleep.started` / `sleep.sleep.completed` | Suspends and resumes adaptation of both forward models |
 
 ## Outputs
 
@@ -105,7 +105,7 @@ All events are published to the `audition.out` stream.
 
 ## Sleep
 
-During sleep the sleep module switches the perceptual locus off and pauses a playlist feed's shared clock, so no windows reach the audition module. Independently, both forward models are marked `suspended` from `hypnos.sleep.started` to `hypnos.sleep.completed`, and no gradient step is taken while the flag is set.
+During sleep the sleep module switches the perceptual locus off and pauses a playlist feed's shared clock, so no windows reach the audition module. Independently, both forward models are marked `suspended` from `sleep.sleep.started` to `sleep.sleep.completed`, and no gradient step is taken while the flag is set.
 
 ## Persistence
 
@@ -217,12 +217,12 @@ Limits:
 
 ## Deterministic auditory feed
 
-For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [the vision module](vision.md#reproducible-perception-feed)) drives the audition module alongside the vision module from one source. When `[perception_feed].mode` is `seeded`, `playlist`, `screen`, or `womb`, boot injects an audio stream factory through the audition module's `stream_factory` seam and forces capture on, so `LiveMicrophone` reads from the feed instead of the real microphone:
+For reproducible research runs, the shared top-level `[perception_feed]` section (documented under [the vision module](vision.md#reproducible-perception-feed)) drives the audition module alongside the vision module from one source. When `[perception_feed].mode` is `seeded`, `playlist`, `screen`, or `stimulus_source`, boot injects an audio stream factory through the audition module's `stream_factory` seam and forces capture on, so `LiveMicrophone` reads from the feed instead of the real microphone:
 
 - `seeded`: `SeededProceduralAudioStream` synthesizes int16 PCM as a pure function of `(seed, block_index)`, a learnable base soundscape of low-frequency sinusoids plus surprise bursts on the shared cross-modal cadence (`[perception_feed.video].surprise_interval`). It is sound, not speech.
 - `playlist`: `PlaylistAudioStream` decodes the audio track of the same checksummed manifest media through PyAV (`av`, in the `[audio]` extra), resamples it, and emits PCM. A digest mismatch fails closed; without PyAV it raises `PerceptionUnavailableError` with an install hint and never substitutes silence. To install both playlist surfaces in one step, use `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 - `screen`: `MonitorAudioStream` (`kaine/modules/audition/monitor.py`) captures the desktop audio monitor through the system ffmpeg binary (`pulse` on Linux, `dshow` on Windows, `avfoundation` on macOS), so the entity hears whatever plays on the shared screen. The device comes from `[perception_feed.screen].monitor_device` (on Linux the current sink's `.monitor` when unset). It is not reproducible and is for demos with an operator present.
-- `womb`: the developmental audio source; see [the developmental phase](../06-operation/development.md).
+- `stimulus_source`: the developmental audio source; see [the developmental phase](../06-operation/development.md).
 
 Raw PCM lives only in memory, never on disk.
 
@@ -325,7 +325,7 @@ Audition holds no raw audio beyond a single `process_audio()` call, except that 
 | `tests/test_audition_live.py` | `LiveMicrophone` voice-activity loop, locus gate |
 | `tests/test_audition_live_logging.py` | Live-microphone summary interval and message format |
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
-| `tests/test_audition_feed.py` | Seeded audio (determinism, seek safety, seed decorrelation), playlist audio (manifest verification failing closed, PyAV absent), and `womb` |
+| `tests/test_audition_feed.py` | Seeded audio (determinism, seek safety, seed decorrelation), playlist audio (manifest verification failing closed, PyAV absent), and `stimulus_source` |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related

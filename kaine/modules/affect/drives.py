@@ -158,7 +158,7 @@ class DriveSet:
 
     @classmethod
     def from_config(cls, section: Mapping[str, Mapping] | None) -> "DriveSet":
-        """Build a DriveSet from the [thymos.drives.*] nested tables.
+        """Build a DriveSet from the [affect.drives.*] nested tables.
 
         Missing keys keep the per-drive defaults; unknown keys raise ValueError.
         """

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the interoception module's _in_hypnos flag and weight-freeze behaviour.
+"""Tests for the interoception module's _in_sleep flag and weight-freeze behaviour.
 
 Spec requirements (spec.md):
-- _in_hypnos is False at start.
-- Becomes True on receipt of hypnos.sleep.started.
-- Forward-model weights are frozen while _in_hypnos is True.
-- Becomes False on receipt of hypnos.sleep.completed.
+- _in_sleep is False at start.
+- Becomes True on receipt of sleep.sleep.started.
+- Forward-model weights are frozen while _in_sleep is True.
+- Becomes False on receipt of sleep.sleep.completed.
 - Adaptation resumes after sleep.completed.
 """
 from __future__ import annotations
@@ -60,7 +60,7 @@ async def bus():
 
 def _make_sleep_event(type_: str) -> Event:
     return Event(
-        source="hypnos",
+        source="sleep",
         type=type_,
         payload={},
         salience=0.5,
@@ -81,7 +81,7 @@ async def test_in_sleep_true_after_sleep_started(bus: AsyncBus):
     interoception = Interoception(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await interoception.initialize()
     try:
-        await bus.publish(_make_sleep_event("hypnos.sleep.started"))
+        await bus.publish(_make_sleep_event("sleep.sleep.started"))
         # Allow the sleep consumer task to drain the event.
         for _ in range(100):
             if interoception._in_sleep:
@@ -94,7 +94,7 @@ async def test_in_sleep_true_after_sleep_started(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_weights_frozen_during_sleep(bus: AsyncBus):
-    """Forward-model weights must not change while _in_hypnos is True."""
+    """Forward-model weights must not change while _in_sleep is True."""
     pytest.importorskip("torch")
     interoception = Interoception(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await interoception.initialize()
@@ -103,7 +103,7 @@ async def test_weights_frozen_during_sleep(bus: AsyncBus):
         await interoception.tick_once()
 
         # Enter the sleep module.
-        await bus.publish(_make_sleep_event("hypnos.sleep.started"))
+        await bus.publish(_make_sleep_event("sleep.sleep.started"))
         for _ in range(100):
             if interoception._in_sleep:
                 break
@@ -130,14 +130,14 @@ async def test_in_sleep_false_after_sleep_completed(bus: AsyncBus):
     interoception = Interoception(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await interoception.initialize()
     try:
-        await bus.publish(_make_sleep_event("hypnos.sleep.started"))
+        await bus.publish(_make_sleep_event("sleep.sleep.started"))
         for _ in range(100):
             if interoception._in_sleep:
                 break
             await asyncio.sleep(0.01)
         assert interoception._in_sleep is True
 
-        await bus.publish(_make_sleep_event("hypnos.sleep.completed"))
+        await bus.publish(_make_sleep_event("sleep.sleep.completed"))
         for _ in range(100):
             if not interoception._in_sleep:
                 break
@@ -149,19 +149,19 @@ async def test_in_sleep_false_after_sleep_completed(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_adaptation_resumes_after_sleep_completed(bus: AsyncBus):
-    """After hypnos.sleep.completed, online adaptation must be re-enabled."""
+    """After sleep.sleep.completed, online adaptation must be re-enabled."""
     pytest.importorskip("torch")
     interoception = Interoception(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await interoception.initialize()
     try:
         # Enter and exit the sleep module.
-        await bus.publish(_make_sleep_event("hypnos.sleep.started"))
+        await bus.publish(_make_sleep_event("sleep.sleep.started"))
         for _ in range(100):
             if interoception._in_sleep:
                 break
             await asyncio.sleep(0.01)
 
-        await bus.publish(_make_sleep_event("hypnos.sleep.completed"))
+        await bus.publish(_make_sleep_event("sleep.sleep.completed"))
         for _ in range(100):
             if not interoception._in_sleep:
                 break
@@ -186,7 +186,7 @@ async def test_adaptation_resumes_after_sleep_completed(bus: AsyncBus):
 
 @pytest.mark.asyncio
 async def test_fatigue_reset_on_sleep_completed(bus: AsyncBus):
-    """Fatigue accumulator is reset to zero when hypnos.sleep.completed fires."""
+    """Fatigue accumulator is reset to zero when sleep.sleep.completed fires."""
     pytest.importorskip("torch")
     interoception = Interoception(bus, reader=FakeMetricsReader(), detector=NeverAlertDetector())
     await interoception.initialize()
@@ -194,7 +194,7 @@ async def test_fatigue_reset_on_sleep_completed(bus: AsyncBus):
         # Seed some fatigue.
         interoception._fatigue._value = 55.0
 
-        await bus.publish(_make_sleep_event("hypnos.sleep.completed"))
+        await bus.publish(_make_sleep_event("sleep.sleep.completed"))
         for _ in range(100):
             if not interoception._in_sleep and interoception._fatigue.value == 0.0:
                 break

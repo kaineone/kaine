@@ -15,8 +15,8 @@ from typing import Any
 ROLES = ("organ", "vision")
 ENV_OF_ROLE = {"organ": "KAINE_ORGAN_GPU", "vision": "KAINE_VISION_GPU"}
 KEY_OF_ROLE = {
-    "organ": "hypnos.voice_alignment.training_device",
-    "vision": "topos.device",
+    "organ": "sleep.voice_alignment.training_device",
+    "vision": "vision.device",
 }
 
 

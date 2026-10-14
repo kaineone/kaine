@@ -83,7 +83,7 @@ async def bus():
 
 async def _emit_switch(bus, locus: str):
     await bus.publish(validate_event(
-        source="volition", type="intent.perception.switch",
+        source="action_selection", type="intent.perceptual_locus.switch",
         payload={"locus": locus}, salience=0.6,
         timestamp=datetime.now(timezone.utc)))
 
@@ -105,7 +105,7 @@ async def test_self_switch_applied_when_policy_allows(bus, tmp_path):
     await m.initialize()
     try:
         await _emit_switch(bus, "virtual")
-        ev = await _wait_type(bus, "perception.out", "perception.locus.changed")
+        ev = await _wait_type(bus, "perceptual_locus.out", "perceptual_locus.changed")
         assert ev is not None and ev.payload["locus"] == "virtual"
         assert read_desired(p).locus == "virtual"
     finally:
@@ -119,7 +119,7 @@ async def test_self_switch_denied_by_default_policy(bus, tmp_path):
     await m.initialize()
     try:
         await _emit_switch(bus, "virtual")
-        ev = await _wait_type(bus, "perception.out", "perception.locus.denied")
+        ev = await _wait_type(bus, "perceptual_locus.out", "perceptual_locus.denied")
         assert ev is not None and ev.payload["reason"] == "self-switch disabled by policy"
         assert read_desired(p).locus == "physical"  # unchanged
     finally:
@@ -134,7 +134,7 @@ async def test_self_switch_denied_when_locked(bus, tmp_path):
     await m.initialize()
     try:
         await _emit_switch(bus, "virtual")
-        ev = await _wait_type(bus, "perception.out", "perception.locus.denied")
+        ev = await _wait_type(bus, "perceptual_locus.out", "perceptual_locus.denied")
         assert ev is not None and ev.payload["reason"] == "locus locked by operator"
         assert read_desired(p).locus == "physical"
     finally:

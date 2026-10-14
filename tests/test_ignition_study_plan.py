@@ -23,23 +23,23 @@ from kaine.research.ignition_study.plan import (
 @pytest.fixture
 def known_modules(monkeypatch):
     names = [
-        "echo",
-        "soma",
-        "chronos",
-        "topos",
-        "nous",
-        "mnemos",
-        "eidolon",
-        "thymos",
-        "praxis",
-        "lingua",
-        "vox",
+        "recorder",
+        "interoception",
+        "sequence",
+        "vision",
+        "planning",
+        "episodic_memory",
+        "self_model",
+        "affect",
+        "effectors",
+        "language",
+        "vocal",
         "audition",
-        "hypnos",
-        "empatheia",
-        "phantasia",
-        "perception",
-        "mundus",
+        "sleep",
+        "social_cognition",
+        "world_model",
+        "perceptual_locus",
+        "embodiment",
     ]
     monkeypatch.setattr("kaine.boot.known_module_names", lambda: names)
     return names
@@ -55,8 +55,8 @@ def base_plan(tmp_path, known_modules):
     return {
         "study_id": "ignite-test",
         "repo_root": str(repo_root),
-        "base_modules": ["soma", "chronos", "topos", "audition", "lingua"],
-        "order": ["thymos", "mnemos"],
+        "base_modules": ["interoception", "sequence", "vision", "audition", "language"],
+        "order": ["affect", "episodic_memory"],
         "programme": {"manifest": str(manifest), "sha256": sha},
         "redis": {
             "base_url": "redis://127.0.0.1:6479",
@@ -114,19 +114,19 @@ def test_validate_unknown_module(base_plan):
 
 
 def test_validate_duplicate_base(base_plan):
-    base_plan["base_modules"] = ["soma", "soma"]
+    base_plan["base_modules"] = ["interoception", "interoception"]
     with pytest.raises(ValueError, match="Duplicate module in base_modules"):
         validate_plan(base_plan)
 
 
 def test_validate_duplicate_order(base_plan):
-    base_plan["order"] = ["thymos", "thymos"]
+    base_plan["order"] = ["affect", "affect"]
     with pytest.raises(ValueError, match="Duplicate module in order"):
         validate_plan(base_plan)
 
 
 def test_validate_base_order_overlap(base_plan):
-    base_plan["order"].append("soma")
+    base_plan["order"].append("interoception")
     with pytest.raises(ValueError, match="disjoint"):
         validate_plan(base_plan)
 
@@ -207,15 +207,15 @@ def test_ensure_line_dir_never_replaces_a_real_file(base_plan, tmp_path):
 def nine_module_plan(base_plan):
     plan = dict(base_plan)
     plan["order"] = [
-        "mnemos",
-        "phantasia",
-        "nous",
-        "eidolon",
-        "empatheia",
-        "vox",
-        "praxis",
-        "perception",
-        "mundus",
+        "episodic_memory",
+        "world_model",
+        "planning",
+        "self_model",
+        "social_cognition",
+        "vocal",
+        "effectors",
+        "perceptual_locus",
+        "embodiment",
     ]
     return plan
 

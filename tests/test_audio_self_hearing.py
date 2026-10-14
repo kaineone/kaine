@@ -161,12 +161,12 @@ async def test_build_registry_shares_one_gate(bus: AsyncBus):
     from kaine.boot import build_registry
 
     config = {
-        "modules": {"audition": True, "vox": True},
+        "modules": {"audition": True, "vocal": True},
         "audition": {},
-        "vox": {"playback_enabled": False},
+        "vocal": {"playback_enabled": False},
     }
     registry = build_registry(bus, config)
     audition = registry.get("audition")
-    vocal = registry.get("vox")
+    vocal = registry.get("vocal")
     assert audition._speaking_gate is not None
     assert audition._speaking_gate is vocal._speaking_gate

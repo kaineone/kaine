@@ -5,7 +5,7 @@
 
 The keystone ``executive-action-intent`` change gave KAINE an inhibition-gated
 action layer (:mod:`kaine.workspace.action_selection`) whose default policy only
-*responds* to a user utterance. The affect module already publishes ``thymos.drive``
+*responds* to a user utterance. The affect module already publishes ``affect.drive``
 threshold-crossing events for its four drives (curiosity, boredom,
 social_drive, restlessness) — but until now nothing consumed them. The entity
 had motivations that could not move it.
@@ -31,9 +31,9 @@ Guards (all inherited from the executive design, never bypassing it):
     social-drive initiative (the single speak answers the user).
   - Separate one-in-flight guards for ``speak`` and ``think`` prevent storms;
     each clears when the entity's corresponding own output
-    (``lingua.external`` / ``lingua.internal``) next is accessed, reusing
+    (``language.external`` / ``language.internal``) next is accessed, reusing
     the keystone's realization-observed pattern.
-  - The entity never responds to its own output (source ``lingua``).
+  - The entity never responds to its own output (source ``language``).
 
 Injectable like the default policy, so a future change can parameterize the
 drive→kind mapping without touching the action selection module's plumbing.
@@ -56,8 +56,8 @@ from kaine.workspace.action_selection import (
 )
 
 # The drive-crossing events the affect module publishes.
-AFFECT_DRIVE_SOURCE = "thymos"
-AFFECT_DRIVE_TYPE = "thymos.drive"
+AFFECT_DRIVE_SOURCE = "affect"
+AFFECT_DRIVE_TYPE = "affect.drive"
 
 # Drive → intent-kind mapping (conservative v1; see module docstring).
 DRIVE_INTENT_KINDS: dict[str, str] = {
@@ -107,7 +107,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
     def _clear_guards_on_own_output(self, snapshot: WorkspaceSnapshot) -> None:
         """Clear each guard when the entity's matching output is now accessed.
 
-        ``lingua.external`` realizes a prior ``speak``; ``lingua.internal``
+        ``language.external`` realizes a prior ``speak``; ``language.internal``
         realizes a prior ``think``. We key on the event *type* (channel) rather
         than just the source so a private monologue does not spuriously clear
         the external-speech guard, and vice versa.
@@ -159,7 +159,7 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
                 self._think_armed_at = None
 
     def _drive_name(self, event) -> Optional[str]:
-        """Return the drive name on a ``thymos.drive`` crossing event, else None."""
+        """Return the drive name on a ``affect.drive`` crossing event, else None."""
         if event.source == AFFECT_DRIVE_SOURCE and event.type == AFFECT_DRIVE_TYPE:
             name = event.payload.get("drive")
             if isinstance(name, str) and name in DRIVE_INTENT_KINDS:

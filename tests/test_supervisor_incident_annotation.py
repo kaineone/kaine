@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.4
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""supervisor ``spot.incident`` bus annotation — freeze-run-annotation change.
+"""supervisor ``supervisor.incident`` bus annotation — freeze-run-annotation change.
 
-Covers the ``spot-supervisor`` ADDED requirements:
+Covers the ``supervisor-supervisor`` ADDED requirements:
 
-* The supervisor publishes a structured ``spot.incident`` event at each lifecycle
+* The supervisor publishes a structured ``supervisor.incident`` event at each lifecycle
   transition (detect, freeze, snapshot, restart) IN ADDITION to the unchanged
-  ephemeral ``spot.status`` / ``spot.log`` events.
+  ephemeral ``supervisor.status`` / ``supervisor.log`` events.
 * Each event carries the shared ``incident_id``, ``module``, ``transition``, the
   fault metadata, and the transition-specific operational fields.
 * The cycle position is present: ``poll_index`` always; ``tick_index`` when a
@@ -82,7 +82,7 @@ async def _finished_task(coro):
 class _LightDeadMod(BaseModule):
     """Pure (light-restart) module that crashed; recovers on first restart."""
 
-    name = "lingua"
+    name = "language"
 
     def __init__(self, bus, *, path_in_exc: str | None = None):
         super().__init__(bus)
@@ -139,7 +139,7 @@ async def _drive_one_incident(bus, tmp_path, *, tick_provider=None, path_in_exc=
     await supervisor._incident_log.start()
     await supervisor._poll_once(asyncio.Event())  # detect->freeze->snapshot->restart
     await supervisor._incident_log.stop()
-    await registry.get("lingua").shutdown()
+    await registry.get("language").shutdown()
     return supervisor
 
 
@@ -150,35 +150,35 @@ async def test_incident_event_published_per_transition(tmp_path):
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path)
 
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     transitions = [p["transition"] for p in incidents]
     for expected in ("detect", "freeze", "snapshot", "restart"):
-        assert expected in transitions, f"missing spot.incident for {expected}"
+        assert expected in transitions, f"missing supervisor.incident for {expected}"
 
     # Every event shares the one incident_id and names the module.
     ids = {p["incident_id"] for p in incidents}
     assert len(ids) == 1 and next(iter(ids))
-    assert all(p["module"] == "lingua" for p in incidents)
+    assert all(p["module"] == "language" for p in incidents)
 
 
 async def test_status_and_log_events_still_published(tmp_path):
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path)
     # The existing ephemeral events must remain (not replaced).
-    assert bus.of_type("spot.status"), "spot.status must still be published"
-    assert bus.of_type("spot.log"), "spot.log must still be published"
-    assert bus.of_type("spot.incident"), "spot.incident must be added"
+    assert bus.of_type("supervisor.status"), "supervisor.status must still be published"
+    assert bus.of_type("supervisor.log"), "spot.log must still be published"
+    assert bus.of_type("supervisor.incident"), "supervisor.incident must be added"
 
 
 async def test_transition_specific_fields_present(tmp_path):
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path)
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     by = {p["transition"]: p for p in incidents}
 
     assert by["detect"]["fault_class"] == "dead"
     assert by["freeze"]["fault_type"] == "dead"
-    assert by["freeze"]["source"] == "spot"
+    assert by["freeze"]["source"] == "supervisor"
     assert "snapshot_id" in by["snapshot"]
     restart = by["restart"]
     assert restart["path"] == "light"
@@ -190,7 +190,7 @@ async def test_transition_specific_fields_present(tmp_path):
 async def test_cycle_position_includes_tick_when_provider_wired(tmp_path):
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path, tick_provider=lambda: 42)
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     assert incidents
     for p in incidents:
         assert p["poll_index"] == 1
@@ -200,7 +200,7 @@ async def test_cycle_position_includes_tick_when_provider_wired(tmp_path):
 async def test_no_fabricated_tick_without_provider(tmp_path):
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path, tick_provider=None)
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     assert incidents
     for p in incidents:
         assert p["poll_index"] == 1
@@ -213,7 +213,7 @@ async def test_provider_exception_is_swallowed(tmp_path):
 
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path, tick_provider=_boom)
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     assert incidents
     for p in incidents:
         assert "tick_index" not in p
@@ -224,7 +224,7 @@ async def test_operator_path_scrubbed_in_incident_event(tmp_path):
     secret = "/home/operator/projects/kaine/state/x.json"
     bus = _CapturingBus()
     await _drive_one_incident(bus, tmp_path, path_in_exc=secret)
-    incidents = bus.of_type("spot.incident")
+    incidents = bus.of_type("supervisor.incident")
     detect = next(p for p in incidents if p["transition"] == "detect")
     assert "FileNotFoundError" in detect["exception_repr"]
     assert "<PATH>" in detect["exception_repr"]

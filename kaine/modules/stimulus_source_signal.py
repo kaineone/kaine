@@ -71,7 +71,7 @@ MATERNAL_HEARTBEAT_GAIN = 0.025
 class StimulusSourceParams:
     """Conservative defaults for the cross-modal maternal channel.
 
-    Values match the design's ``[perception_feed.womb]`` tables.
+    Values match the design's ``[perception_feed.stimulus_source]`` tables.
     """
 
     heartbeat_bpm: float = 70.0
@@ -100,7 +100,7 @@ class StimulusSourceParams:
         video: dict[str, Any] | None,
         audio: dict[str, Any] | None,
     ) -> "StimulusSourceParams":
-        """Load and validate the three ``[perception_feed.womb.*]`` tables."""
+        """Load and validate the three ``[perception_feed.stimulus_source.*]`` tables."""
         stimulus_source_allowed = {
             "heartbeat_bpm",
             "heartbeat_drift",
@@ -111,7 +111,7 @@ class StimulusSourceParams:
             "maternal_distress_max_seconds",
             "external_drive_to_self_rhythm",
             "external_drive_max_amplitude",
-            "birth_transition_seconds",
+            "maturation_transition_seconds",
         }
         video_allowed = {
             "luminance_mean",
@@ -123,14 +123,14 @@ class StimulusSourceParams:
         audio_allowed = {"lowpass_hz"}
 
         if stimulus_source:
-            require_known_keys(stimulus_source, stimulus_source_allowed, "[perception_feed.womb]")
+            require_known_keys(stimulus_source, stimulus_source_allowed, "[perception_feed.stimulus_source]")
         if video:
             require_known_keys(
-                video, video_allowed, "[perception_feed.womb.video]"
+                video, video_allowed, "[perception_feed.stimulus_source.video]"
             )
         if audio:
             require_known_keys(
-                audio, audio_allowed, "[perception_feed.womb.audio]"
+                audio, audio_allowed, "[perception_feed.stimulus_source.audio]"
             )
 
         merged = {}
@@ -185,7 +185,7 @@ class StimulusSourceParams:
         _float_field("maternal_distress_max_magnitude", 0.0, 1.0)
         _float_field("maternal_distress_max_seconds", 0.0, math.inf, open_lo=True)
         _float_field("external_drive_max_amplitude", 0.0, 1.0)
-        # The bounded maturation bloom (StimulusSourceClock.begin_birth enforces the same range).
+        # The bounded maturation bloom (StimulusSourceClock.begin_maturation enforces the same range).
         _float_field("maturation_transition_seconds", 0.0, 30.0, open_lo=True)
 
         for name in (

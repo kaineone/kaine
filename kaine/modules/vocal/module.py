@@ -3,7 +3,7 @@
 
 """The vocal module — the entity's voice.
 
-Consumes `lingua.external` text, synthesizes it via Chatterbox (voice params
+Consumes `language.external` text, synthesizes it via Chatterbox (voice params
 modulated by the affect module's affect), plays it through an output device, and releases it.
 
 Playback (`playback_enabled`, default true) is the primary action: the clip is
@@ -17,7 +17,7 @@ SpeakingGate while a clip plays so an open mic does not transcribe the entity's
 own voice. Operators with an acoustically isolated input (a headset mic) set it
 false to stay full-duplex. See `coordination.py` and `playback.py`.
 
-Prosodic mirroring (`[vox.mirroring].enabled`, default false) blends a bounded
+Prosodic mirroring (`[vocal.mirroring].enabled`, default false) blends a bounded
 residual of the latest `audition.prosody` features into the affect-driven
 ChatterboxParams. The entity's base voice identity (predefined_voice_id) is
 never altered; only expressive dynamics are nudged. When disabled or when no
@@ -75,7 +75,7 @@ CHATTERBOX_PROSODY = ("temperature", "exaggeration", "cfg_weight", "speed_factor
 
 
 class Vocal(BaseModule):
-    name: ClassVar[str] = "vox"
+    name: ClassVar[str] = "vocal"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"social_drive", "restlessness"})
 
     def holds_external_resources(self) -> bool:
@@ -109,8 +109,8 @@ class Vocal(BaseModule):
         request_timeout_s: float = 120.0,
         baseline_salience: float = 0.3,
         alert_salience: float = 0.7,
-        language_external_stream: str = "lingua.external",
-        affect_state_stream: str = "thymos.out",
+        language_external_stream: str = "language.external",
+        affect_state_stream: str = "affect.out",
         # Prosodic mirroring (disabled by default).
         mirroring_enabled: bool = False,
         mirror_strength: float = 0.3,
@@ -218,7 +218,7 @@ class Vocal(BaseModule):
                 from kaine.backend_state import record_backend_failure
 
                 record_backend_failure(
-                    "vox", self._backend, f"{type(exc).__name__}: {exc}"
+                    "vocal", self._backend, f"{type(exc).__name__}: {exc}"
                 )
                 log.warning(
                     "text-to-speech disabled: %s",
@@ -300,7 +300,7 @@ class Vocal(BaseModule):
         except Exception as exc:  # noqa: BLE001
             reason = (
                 f"cannot list the voices of {server} ({type(exc).__name__}: {exc}); "
-                "start the server, or set [vox].predefined_voice_id"
+                "start the server, or set [vocal].predefined_voice_id"
             )
         else:
             self._voice_id = choice.name
@@ -309,7 +309,7 @@ class Vocal(BaseModule):
             return
 
         self._tts_unavailable = f"no voice: {reason}"
-        record_backend_failure("vox", self._backend, reason)
+        record_backend_failure("vocal", self._backend, reason)
         log.warning("vocal module silent: %s", reason)
 
     async def shutdown(self) -> None:
@@ -495,7 +495,7 @@ class Vocal(BaseModule):
             payload["origin"] = origin
         if salience is None:
             salience = self._baseline_salience if success else self._alert_salience
-        await self.publish("vox.synthesized", payload, salience=salience)
+        await self.publish("vocal.synthesized", payload, salience=salience)
 
     async def _consumer_loop(self) -> None:
         try:
@@ -525,7 +525,7 @@ class Vocal(BaseModule):
             raise
 
     async def _handle(self, stream: str, event: Event) -> None:
-        if stream == self._affect_stream and event.type == "thymos.state":
+        if stream == self._affect_stream and event.type == "affect.state":
             state_dict = event.payload.get("state") or {}
             try:
                 self._current_state = DimensionalState(
@@ -534,7 +534,7 @@ class Vocal(BaseModule):
                     dominance=float(state_dict.get("dominance", 0.0)),
                 ).clamped()
             except Exception:
-                log.warning("failed to parse thymos.state payload", exc_info=True)
+                log.warning("failed to parse affect.state payload", exc_info=True)
         elif stream == self._audition_prosody_stream and event.type == "audition.prosody":
             # Cache the latest numeric prosody features; discard raw audio.
             # Only the numeric payload fields are kept — zero raw-sense-data.

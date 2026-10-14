@@ -19,31 +19,31 @@
 # The diverse predictive processors the thesis needs: two internal (interoception,
 # time) and two externally grounded (foveated vision, raw sound). The workspace
 # and the action selection module (action) are always-on scaffolding. The language module is the voice.
-soma = true
-chronos = true
-topos = true
+interoception = true
+sequence = true
+vision = true
 audition = true
-lingua = true
+language = true
 # Affect/arousal — the global gain: arousal sets the gain and contrast of the competition and
 # is itself moved by perceptual surprise. Part of the minimal base-thesis machinery
 # (without it the workspace shows no interest or arousal in stimuli), NOT one of the
 # richer faculties deferred with the rest.
-thymos = true
+affect = true
 # Sleep: fatigue-triggered rest is part of the base thesis (operator decision of
 # 2026-09-08). Consolidation, the affective reset and the stimulus playlist's
-# sleep pause all hang off it. Voice alignment stays off ([hypnos.voice_alignment]).
-hypnos = true
+# sleep pause all hang off it. Voice alignment stays off ([sleep.voice_alignment]).
+sleep = true
 # Richer faculties — gated OFF until a positive base result (never deleted).
-echo = false
-nous = false
-mnemos = false
-eidolon = false
-praxis = false
-vox = false
-empatheia = false
-phantasia = false
-perception = false
-mundus = false
+recorder = false
+planning = false
+episodic_memory = false
+self_model = false
+effectors = false
+vocal = false
+social_cognition = false
+world_model = false
+perceptual_locus = false
+embodiment = false
 
 [perception_feed]
 # Out-of-the-box default: the seeded procedural audio-visual feed, so a fresh
@@ -63,7 +63,7 @@ mundus = false
 mode = "seeded"
 seed = 0
 
-[topos]
+[vision]
 # Attention-driven foveation ON: the arousal-sized fovea IS the precision-weighted
 # attention the thesis names — perception enters as foveated prediction error.
 foveation = true
@@ -77,7 +77,7 @@ transcription_enabled = false
 # forward-model prediction error → audition.perception competes in the workspace.
 general_audition = true
 
-[volition]
+[action_selection]
 # Self-initiated voice: speech comes from the entity's OWN precision-weighted
 # surprise (a report threshold above the access threshold, novelty- and
 # refractory-gated), never from a user utterance. No chatbot trigger.
@@ -91,7 +91,7 @@ drive_initiative = false
 # source report again.
 sig_expiry_s = 300.0
 
-[chronos]
+[sequence]
 # The sequence module predicts the next broadcast and publishes temporal prediction errors.
 # The shipped kaine.toml keeps the forward head off.
 forward_prediction = true

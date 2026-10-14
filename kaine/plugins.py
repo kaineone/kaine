@@ -8,8 +8,8 @@ group, but only entry points whose names appear in ``[plugins].enabled`` are
 loaded. The loader validates declared seams, detects conflicts, and supplies
 constructor injections to module factories.
 
-Recognized injectable seams are ``chronos.network``, ``soma.forward_model``,
-``nous.engine`` (a replacement engine), ``nous.engine_wrapper`` (a callable that
+Recognized injectable seams are ``sequence.network``, ``interoception.forward_model``,
+``planning.engine`` (a replacement engine), ``planning.engine_wrapper`` (a callable that
 receives KAINE's default planning engine and returns the engine to use), and
 ``audition.acoustic_encoder`` (an ``AcousticEncoder`` instance).
 """
@@ -38,14 +38,14 @@ class PluginError(ValueError):
 
 
 INJECTABLE_SEAMS: dict[str, frozenset[str]] = {
-    "chronos": frozenset({"network"}),
-    "soma": frozenset({"forward_model"}),
-    "nous": frozenset({"engine", "engine_wrapper"}),
+    "sequence": frozenset({"network"}),
+    "interoception": frozenset({"forward_model"}),
+    "planning": frozenset({"engine", "engine_wrapper"}),
     "audition": frozenset({"acoustic_encoder"}),
 }
 
 # A replacement and a wrapper for the same model cannot both apply.
-_EXCLUSIVE_SEAMS: tuple[tuple[str, str], ...] = (("nous.engine", "nous.engine_wrapper"),)
+_EXCLUSIVE_SEAMS: tuple[tuple[str, str], ...] = (("planning.engine", "planning.engine_wrapper"),)
 
 
 class _NamedWrapper:

@@ -72,7 +72,7 @@ def test_filter_vision_vectors_removed():
         "predicted_fovea": {"x": 0.4, "y": 0.6, "size": 0.2},
         "encoder_model_id": "m",
     }
-    out = PrivacyFilter().filter_for_diagnostics(_event("topos", "topos.report", payload))
+    out = PrivacyFilter().filter_for_diagnostics(_event("vision", "vision.report", payload))
     for key in ("latent", "peripheral", "foveal"):
         assert key not in out.payload
     assert out.payload["change_score"] == 0.4
@@ -89,7 +89,7 @@ def test_filter_named_vectors_removed_regardless_of_length():
         "feature_vector": [0.0] * 24,
     }
     out = PrivacyFilter().filter_for_diagnostics(
-        _event("chronos", "chronos.report", payload)
+        _event("sequence", "sequence.report", payload)
     )
     assert out.payload == {}
 
@@ -97,13 +97,13 @@ def test_filter_named_vectors_removed_regardless_of_length():
 def test_filter_unnamed_embedding_lists_and_tuples_removed():
     list_payload = {"embedding_x": [0.5] * 64}
     out_list = PrivacyFilter().filter_for_diagnostics(
-        _event("topos", "topos.report", list_payload)
+        _event("vision", "vision.report", list_payload)
     )
     assert "embedding_x" not in out_list.payload
 
     tuple_payload = {"embedding_t": tuple([0.5] * 64)}
     out_tuple = PrivacyFilter().filter_for_diagnostics(
-        _event("topos", "topos.report", tuple_payload)
+        _event("vision", "vision.report", tuple_payload)
     )
     assert "embedding_t" not in out_tuple.payload
 
@@ -114,7 +114,7 @@ def test_filter_drops_lists_of_vectors():
         "grid": [[1, 2], [3, 4]],
     }
     out = PrivacyFilter().filter_for_diagnostics(
-        _event("topos", "topos.report", payload)
+        _event("vision", "vision.report", payload)
     )
     assert out.payload == {"latents": [], "grid": [[1, 2], [3, 4]]}
 
@@ -122,13 +122,13 @@ def test_filter_drops_lists_of_vectors():
 def test_filter_backstop_boundary():
     removed = {"a": [0.1] * 16}
     out_removed = PrivacyFilter().filter_for_diagnostics(
-        _event("topos", "topos.report", removed)
+        _event("vision", "vision.report", removed)
     )
     assert "a" not in out_removed.payload
 
     kept = {"b": [0.1] * 15}
     out_kept = PrivacyFilter().filter_for_diagnostics(
-        _event("topos", "topos.report", kept)
+        _event("vision", "vision.report", kept)
     )
     assert out_kept.payload == kept
 
@@ -144,7 +144,7 @@ def test_filter_exempt_and_non_numeric_lists_survive():
         "short": [0.1] * 15,
     }
     out = PrivacyFilter().filter_for_diagnostics(
-        _event("hypnos", "hypnos.report", payload)
+        _event("sleep", "sleep.report", payload)
     )
     assert out.payload == payload
 
@@ -153,14 +153,14 @@ def test_filter_removes_vectors_at_arbitrary_depth():
     payload = {
         "selected": [
             {
-                "source": "topos",
+                "source": "vision",
                 "payload": {"latent": [0.1] * 768, "change_score": 0.2},
             }
         ],
         "salience_scores": {"e1": 0.7},
     }
     out = PrivacyFilter().filter_for_diagnostics(
-        _event("syneidesis", "workspace.broadcast", payload)
+        _event("workspace", "workspace.broadcast", payload)
     )
     assert "latent" not in json.dumps(out.payload)
     assert out.payload["selected"][0]["payload"]["change_score"] == 0.2
@@ -173,7 +173,7 @@ def test_filter_dev_override_keeps_content_but_still_strips_vectors():
         "latent": [0.1] * 768,
         "temporal_context": [0.1, 0.2, 0.3],
     }
-    event = _event("lingua", "lingua.internal_speech", payload)
+    event = _event("language", "language.internal_speech", payload)
 
     dev = PrivacyFilter(dev_content_override=True)
     dev_out = dev.filter_for_diagnostics(event)
@@ -194,12 +194,12 @@ async def test_trajectory_member_is_graph_only_no_payload():
         "tick_index": 1,
         "is_experiential": True,
         "inhibited": False,
-        "salience_scores": {"topos": 0.9},
+        "salience_scores": {"vision": 0.9},
         "selected": [
             {
                 "entry_id": "1-0",
-                "source": "topos",
-                "type": "topos.report",
+                "source": "vision",
+                "type": "vision.report",
                 "salience": 0.9,
                 "timestamp": "2026-10-03T00:00:00+00:00",
                 "causal_parent": "0-0",
@@ -218,8 +218,8 @@ async def test_trajectory_member_is_graph_only_no_payload():
     assert len(selected) == 1
     assert selected[0] == {
         "entry_id": "1-0",
-        "source": "topos",
-        "type": "topos.report",
+        "source": "vision",
+        "type": "vision.report",
         "salience": 0.9,
         "timestamp": "2026-10-03T00:00:00+00:00",
         "causal_parent": "0-0",

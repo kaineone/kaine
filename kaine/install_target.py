@@ -273,24 +273,24 @@ def plan_for(target: Target) -> Plan:
             "mnemos (with sqlite_vec backend)",
             "memory",
             "edge",
-            "thymos",
-            "lingua",
-            "syneidesis",
+            "affect",
+            "language",
+            "workspace",
             "soma (NumPy CfC)",
             "chronos (NumPy CfC)",
             'audition (with [audition].backend = "sherpa_onnx")',
-            'vox (with [vox].backend = "sherpa_onnx")',
-            'nous (with [nous].backend = "numpy")',
-            'phantasia (with [phantasia].engine = "numpy")',
+            'vox (with [vocal].backend = "sherpa_onnx")',
+            'nous (with [planning].backend = "numpy")',
+            'phantasia (with [world_model].engine = "numpy")',
         ]
         will_not_run = [
-            ("topos", "needs torch for its video encoder; no Termux build"),
-            ("mnemos with qdrant", "no Qdrant build for Android; use [mnemos].backend = \"sqlite_vec\""),
+            ("vision", "needs torch for its video encoder; no Termux build"),
+            ("mnemos with qdrant", "no Qdrant build for Android; use [episodic_memory].backend = \"sqlite_vec\""),
         ]
         system_packages = {"pkg": list(_SYSTEM_PACKAGES["pkg"])}
         notes = [
             "Termux installs the memory and edge extras only.",
-            'Nous needs [nous].backend = "numpy" and Phantasia needs [phantasia].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Nous backend and lists Phantasia as unsupported).',
+            'Nous needs [planning].backend = "numpy" and Phantasia needs [world_model].engine = "numpy" there (the Tier 1 profile sets both; the Tier 0 profile sets the Nous backend and lists Phantasia as unsupported).',
             'Speech needs the speech-edge extra and its models: pkg install python-numpy, then pip install sherpa-onnx, then python -m kaine.setup.speech_models. The sherpa-onnx Termux wheels are new upstream and unproven on a device here.',
             'Audition on Termux: set [audition].vad_backend = "rms" (webrtcvad ships only in the audio extra, which pulls torch).',
         ]

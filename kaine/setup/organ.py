@@ -90,7 +90,7 @@ class OrganDownloadPlan:
 
 
 def _language_enabled(modules: dict[str, Any]) -> bool:
-    return bool((modules or {}).get("lingua"))
+    return bool((modules or {}).get("language"))
 
 
 def _stage2_enabled(config: dict[str, Any]) -> bool:
@@ -98,11 +98,11 @@ def _stage2_enabled(config: dict[str, Any]) -> bool:
 
     Stage-2 needs the safetensors base as the trainer's ``base_model_path``; a
     serve-only host skips it. Gated on BOTH the sleep module toggle and
-    ``[hypnos.voice_alignment].enabled`` (the master gate)."""
+    ``[sleep.voice_alignment].enabled`` (the master gate)."""
     modules = config.get("modules") or {}
-    if not modules.get("hypnos"):
+    if not modules.get("sleep"):
         return False
-    va = (config.get("hypnos") or {}).get("voice_alignment") or {}
+    va = (config.get("sleep") or {}).get("voice_alignment") or {}
     return bool(va.get("enabled"))
 
 

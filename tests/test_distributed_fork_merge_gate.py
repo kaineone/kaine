@@ -46,7 +46,7 @@ class FakeRegistry:
 def _parent_and_fork(tmp_path: Path) -> tuple[ForkManager, str, str]:
     mgr = ForkManager(tmp_path / "forks")
     parent = mgr.snapshot(
-        FakeRegistry([FakeModule("eidolon", {"name": "Kaine Doe"})]), label="parent"
+        FakeRegistry([FakeModule("self_model", {"name": "Kaine Doe"})]), label="parent"
     )
     fork = mgr.fork(parent.id, label="temp-being")
     return mgr, parent.id, fork.id
@@ -165,7 +165,7 @@ def test_build_forked_entity_job_requires_directive():
 def test_forked_entity_gate_accepts_wellformed_snapshot(tmp_path):
     job = build_forked_entity_job("snap-1", "run")
     snap = tmp_path / "post_run.json"
-    snap.write_text(json.dumps({"id": "x", "modules": {"eidolon": {"name": "K"}}}))
+    snap.write_text(json.dumps({"id": "x", "modules": {"self_model": {"name": "K"}}}))
     outcome = forked_entity_gate(job, snap)
     assert outcome.passed is True
 
@@ -189,7 +189,7 @@ def test_verification_gate_routes_forked_entity_through_fork_gate(tmp_path):
 
     job = build_forked_entity_job("snap-1", "run")
     snap = tmp_path / "post_run.json"
-    snap.write_text(json.dumps({"id": "x", "modules": {"eidolon": {}}}))
+    snap.write_text(json.dumps({"id": "x", "modules": {"self_model": {}}}))
     gate = VerificationGate(fork_gate=forked_entity_gate)
     result = gate.verify(job, snap)
     assert result.promotable is True

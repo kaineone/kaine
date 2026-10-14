@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Cold-start warm-up honor (change coldstart-welfare-spot-honor-warmup).
 
-FIX 1 — the welfare distress net does NOT count while the latest soma.report
+FIX 1 — the welfare distress net does NOT count while the latest interoception.report
 carries ``warmup_active: true`` (mirroring the interoception module's own self-gating), bounded by
 ``warmup_ceiling_s`` so a stuck flag cannot blind the net forever.
 
@@ -74,8 +74,8 @@ class _StubFM:
 async def _push_interoception(bus: AsyncBus, prediction_error: float, warmup_active: bool):
     await bus.publish(
         validate_event(
-            source="soma",
-            type="soma.report",
+            source="interoception",
+            type="interoception.report",
             payload={"prediction_error": prediction_error, "warmup_active": warmup_active},
             salience=0.5,
             timestamp=datetime.now(timezone.utc),
@@ -163,7 +163,7 @@ async def test_warmup_ceiling_rearms_on_stuck_flag(bus):
 
 class _CrashedMod(BaseModule):
     """A module whose only task exits immediately while it is not stopping, so
-    it re-reads as dead on assessment (the proven test_spot_freeze pattern)."""
+    it re-reads as dead on assessment (the proven test_supervisor_freeze pattern)."""
 
     name = "crashy"
 
@@ -198,7 +198,7 @@ def _supervisor(registry, fm, bus):
     [
         ("welfare", False),  # FIX 2: a welfare freeze silences modules by design
         ("operator", False),  # unchanged: operator freeze already stood down
-        ("spot", True),  # The supervisor's OWN recovery freeze keeps working
+        ("supervisor", True),  # The supervisor's OWN recovery freeze keeps working
     ],
 )
 async def test_supervisor_stands_down_for_non_supervisor_freeze(bus, tmp_path, source, should_act):

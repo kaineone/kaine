@@ -51,7 +51,7 @@ class Encoder(Protocol):
 
     @property
     def model_id(self) -> str:
-        """Identity string of the underlying model (recorded on topos.report)."""
+        """Identity string of the underlying model (recorded on vision.report)."""
 
     @property
     def latent_dim(self) -> int:
@@ -537,7 +537,7 @@ def make_encoder(
     pooling: str = DEFAULT_POOLING,
     clip_resolution: int = DEFAULT_CLIP_RESOLUTION,
 ) -> Encoder:
-    """Return the encoder for ``backend`` (config ``[topos].encoder_backend``).
+    """Return the encoder for ``backend`` (config ``[vision].encoder_backend``).
 
     ``"internvideo_next"`` → :class:`InternVideoNextEncoder` (the shipped default,
     a temporally-native 768-dim clip encoder); ``"dinov2"`` → :class:`DINOv2Encoder`

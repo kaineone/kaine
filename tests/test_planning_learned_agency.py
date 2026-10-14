@@ -55,7 +55,7 @@ class _Snap:
 
 
 def _snap(salience=0.9):
-    return _Snap([_Ev("soma", {}, salience)])
+    return _Snap([_Ev("interoception", {}, salience)])
 
 
 @pytestmark_real

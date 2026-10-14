@@ -5,10 +5,10 @@
 
 Two routes under /diagnostics:
 
-  GET  /diagnostics/birth.json  — current maturation request/ack state plus developmental progress.
-  POST /diagnostics/birth/ack   — operator acknowledges the maturation
+  GET  /diagnostics/maturation.json  — current maturation request/ack state plus developmental progress.
+  POST /diagnostics/maturation/ack   — operator acknowledges the maturation
 
-The maturation gate writes ``state/lifecycle/birth_request.json``; the dashboard writes
+The maturation gate writes ``state/lifecycle/maturation_request.json``; the dashboard writes
 ONLY the acknowledgement record. Nothing here ever creates or modifies the
 request file or the stage file.
 """

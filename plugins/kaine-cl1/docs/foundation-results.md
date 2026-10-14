@@ -64,7 +64,7 @@ module can depend on it. Pinned as a regression in
 
 The sequence module reference conversion is verified against the **actual** pinned `kaine`
 module (not a stand-in): stock `Sequence(bus, network=WetwareTimingModel(...))` over
-a `fakeredis` bus publishes the same `chronos.out` contract as a silicon network
+a `fakeredis` bus publishes the same `sequence.out` contract as a silicon network
 (`tests/test_sequence_integration.py`). The seam confirmed: `Sequence.__init__`
 takes `network=` and builds its silicon CfC only when that is `None`, so the
 conversion is pure injection, with no upstream edit.

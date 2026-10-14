@@ -234,9 +234,9 @@ async def test_observer_raises_and_clears_a_blind_sensor_advisory():
     }
     for i in range(3):
         await obs.handle(
-            "topos.out",
+            "vision.out",
             f"{i + 1}-0",
-            _event("topos", "topos.report", payload),
+            _event("vision", "vision.report", payload),
         )
 
     assert len(bus.published) == 1
@@ -251,24 +251,24 @@ async def test_observer_raises_and_clears_a_blind_sensor_advisory():
         "blind_sensor_duration_s",
         "blind_sensor_count",
     }
-    assert event.payload["processor"] == "topos"
+    assert event.payload["processor"] == "vision"
     assert event.payload["undefined_samples"] == 3
     assert not any(isinstance(v, list) for v in event.payload.values())
 
     assert len(sink.rows) == 1
     assert sink.rows[0]["advisory"] == "blind_sensor"
     assert obs.blind_sensor_count == 1
-    assert obs.blind_sensors == ("topos",)
+    assert obs.blind_sensors == ("vision",)
 
     await obs.handle(
-        "topos.out",
+        "vision.out",
         "4-0",
-        _event("topos", "topos.report", payload),
+        _event("vision", "vision.report", payload),
     )
     await obs.handle(
-        "topos.out",
+        "vision.out",
         "5-0",
-        _event("topos", "topos.report", {"prediction_error": 0.4}),
+        _event("vision", "vision.report", {"prediction_error": 0.4}),
     )
 
     assert len(bus.published) == 2
@@ -360,11 +360,11 @@ async def test_observer_default_n_spans_one_distress_duration():
     for t in (0.0, 15.0, 29.0):
         u.value = t
         await obs.handle(
-            "soma.out",
+            "interoception.out",
             "1-0",
             _event(
-                "soma",
-                "soma.report",
+                "interoception",
+                "interoception.report",
                 {"prediction_error": None},
                 ts=datetime.fromtimestamp(1_000_000.0 + t, timezone.utc),
             ),
@@ -374,11 +374,11 @@ async def test_observer_default_n_spans_one_distress_duration():
 
     u.value = 30.0
     await obs.handle(
-        "soma.out",
+        "interoception.out",
         "2-0",
         _event(
-            "soma",
-            "soma.report",
+            "interoception",
+            "interoception.report",
             {"prediction_error": None},
             ts=datetime.fromtimestamp(1_000_030.0, timezone.utc),
         ),
@@ -386,7 +386,7 @@ async def test_observer_default_n_spans_one_distress_duration():
 
     blind = [e for e in bus.published if e.type == BLIND_SENSOR_TYPE]
     assert len(blind) == 1
-    assert blind[0].payload["processor"] == "soma"
+    assert blind[0].payload["processor"] == "interoception"
     assert obs.sustained_interoceptive_distress_count == 0
 
 
@@ -403,26 +403,26 @@ async def test_observer_writes_a_reset_line_and_starts_new_streams_at_the_tail()
     )
     for payload in ({"prediction_error": None}, {"prediction_error": None}):
         bus.push(
-            "topos.out",
-            _event("topos", "topos.report", payload),
+            "vision.out",
+            _event("vision", "vision.report", payload),
         )
     bus.push(
-        "soma.out",
-        _event("soma", "soma.report", {"prediction_error": None}),
+        "interoception.out",
+        _event("interoception", "interoception.report", {"prediction_error": None}),
     )
 
     cursors = await obs._initial_cursors()
 
     assert sink.rows
     assert sink.rows[0]["advisory"] == ADVISORY_RESET
-    vision_entries = bus.streams["topos.out"]
-    assert cursors["topos.out"] == vision_entries[-1][0]
-    assert cursors["soma.out"] == "0"
+    vision_entries = bus.streams["vision.out"]
+    assert cursors["vision.out"] == vision_entries[-1][0]
+    assert cursors["interoception.out"] == "0"
 
     obs._cursors = cursors
     await obs._drain()
 
-    assert "topos" not in obs._undefined_runs
+    assert "vision" not in obs._undefined_runs
     assert not any(e.type.startswith("welfare.") for e in bus.published)
 
 
@@ -442,16 +442,16 @@ async def test_observer_ignores_events_from_before_its_start():
 
     hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     await obs.handle(
-        "soma.out",
+        "interoception.out",
         "1-0",
-        _event("soma", "soma.report", {"prediction_error": None}, ts=hour_ago),
+        _event("interoception", "interoception.report", {"prediction_error": None}, ts=hour_ago),
     )
     assert not bus.published
 
     await obs.handle(
-        "soma.out",
+        "interoception.out",
         "2-0",
-        _event("soma", "soma.report", {"prediction_error": None}),
+        _event("interoception", "interoception.report", {"prediction_error": None}),
     )
     assert len(bus.published) == 1
     assert bus.published[0].type == BLIND_SENSOR_TYPE
@@ -477,9 +477,9 @@ async def test_tracking_failure_does_not_skip_distress_handling(monkeypatch):
     monkeypatch.setattr(obs, "_track_blind_sensor", _broken_track)
 
     await obs.handle(
-        "soma.out",
+        "interoception.out",
         "1-0",
-        _event("soma", "soma.report", {"prediction_error": 0.9}),
+        _event("interoception", "interoception.report", {"prediction_error": 0.9}),
     )
 
     assert obs._interoceptive_distress.active_since is not None
@@ -499,9 +499,9 @@ async def test_observer_raises_and_clears_a_silence_advisory():
     )
 
     await obs.handle(
-        "topos.out",
+        "vision.out",
         "1-0",
-        _event("topos", "topos.report", {"prediction_error": 0.1}),
+        _event("vision", "vision.report", {"prediction_error": 0.1}),
     )
 
     u.value = 29.0
@@ -518,8 +518,8 @@ async def test_observer_raises_and_clears_a_silence_advisory():
         "sensor_silent_duration_s",
         "sensor_silent_count",
     }
-    assert silent[0].payload["processor"] == "topos"
-    assert obs.silent_sensors == ("topos",)
+    assert silent[0].payload["processor"] == "vision"
+    assert obs.silent_sensors == ("vision",)
     assert obs.sensor_silent_count == 1
 
     u.value = 35.0
@@ -527,9 +527,9 @@ async def test_observer_raises_and_clears_a_silence_advisory():
     assert len([e for e in bus.published if e.type == SENSOR_SILENT_TYPE]) == 1
 
     await obs.handle(
-        "topos.out",
+        "vision.out",
         "2-0",
-        _event("topos", "topos.report", {"prediction_error": 0.2}),
+        _event("vision", "vision.report", {"prediction_error": 0.2}),
     )
     cleared = [e for e in bus.published if e.type == SENSOR_SILENT_CLEARED_TYPE]
     assert len(cleared) == 1
@@ -584,30 +584,30 @@ async def test_blind_sensor_advisories_never_feed_the_protective_monitor(bus, tm
     for _ in range(5):
         u.value += 1.0
         await obs.handle(
-            "soma.out",
+            "interoception.out",
             "1-0",
-            _event("soma", "soma.report", {"prediction_error": None}),
+            _event("interoception", "interoception.report", {"prediction_error": None}),
         )
         u.value += 1.0
         await obs.handle(
-            "soma.out",
+            "interoception.out",
             "2-0",
-            _event("soma", "soma.report", {"prediction_error": 0.1}),
+            _event("interoception", "interoception.report", {"prediction_error": 0.1}),
         )
 
     for _ in range(2):
         u.value += 1.0
         await obs.handle(
-            "topos.out",
+            "vision.out",
             "3-0",
-            _event("topos", "topos.report", {"prediction_error": 0.1}),
+            _event("vision", "vision.report", {"prediction_error": 0.1}),
         )
         u.value += 35.0
         await obs._tick()
         await obs.handle(
-            "topos.out",
+            "vision.out",
             "4-0",
-            _event("topos", "topos.report", {"prediction_error": 0.2}),
+            _event("vision", "vision.report", {"prediction_error": 0.2}),
         )
 
     entries, _ = await bus.read_entries(

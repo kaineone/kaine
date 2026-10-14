@@ -98,7 +98,7 @@ def test_old_config_key_reaches_renamed_params_field():
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
     params = StimulusSourceParams.from_sections(
-        {"birth_transition_seconds": 7.5}, None, None
+        {"maturation_transition_seconds": 7.5}, None, None
     )
     assert params.maturation_transition_seconds == 7.5
 
