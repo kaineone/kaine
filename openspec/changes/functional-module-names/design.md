@@ -848,10 +848,11 @@ checkpoint load and the dashboard smoke.
   - `--serve-nexus` stays a hidden alias in the headless-host script, warning
     once; `--db-gestation` and `--gestation-budget-seconds` already have
     argparse aliases.
-  - Runtime keys and the health block key in `OPERATOR_EXACT` change on the
-    writer and the reader together, and a reader that can meet a file written
-    before the upgrade (the supervisor fields in `runtime.json`) falls back to
-    the old key.
+  - The template variables, the health block key and the supervisor fields in
+    `runtime.json` (`OPERATOR_EXACT`) change on the writer and the reader
+    together. Nothing in the tree reads the supervisor fields of
+    `runtime.json`, and the cycle rewrites that file at start, so they are
+    renamed outright; the close-out's CHANGELOG entry names them.
 
 ### PR sequence
 
