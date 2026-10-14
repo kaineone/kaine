@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+from kaine import legacy_aliases
 from kaine.lifecycle import decommission
 from kaine.lifecycle.decommission import (
     _qdrant_api_key,
@@ -184,8 +185,9 @@ def test_qdrant_in_use_and_api_key_resolution(tmp_path):
     assert qdrant_in_use({**on, "episodic_memory": {}}) is True
     assert qdrant_in_use({**on}) is True
     assert qdrant_in_use({**on, "episodic_memory": {"backend": "sqlite_vec"}}) is False
-    # The renamed module key counts too.
-    assert qdrant_in_use({"modules": {"episodic_memory": True}}) is True
+    # The module key from before the rename counts too.
+    old_key = next(f for f in legacy_aliases.name_forms("episodic_memory") if f != "episodic_memory")
+    assert qdrant_in_use({"modules": {old_key: True}}) is True
     # A module the tier does not support never counts.
     assert (
         qdrant_in_use(

@@ -10,15 +10,18 @@ import re
 import socket
 import threading
 import time
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 from starlette.testclient import TestClient
 
+from kaine import legacy_aliases
 from kaine.bus.config import load_bus_config, load_bus_endpoint
 from kaine.bus.errors import BusConfigError
 from kaine.config import SHIPPED_CONFIG_PATH
+from kaine.dashboard.config import load_dashboard_config
 from kaine.hardware import describe_host
 from kaine.setup.web import create_setup_app, guard, serve
 from kaine.setup.wizard import ACK_PHRASE, run_wizard
@@ -1789,3 +1792,31 @@ def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
     assert "cl1" not in saved.get("plugins", {})
     assert saved["plugins"]["enabled"] == []
     assert "__kaine_remove__" not in operator_path.read_text(encoding="utf-8")
+
+
+OLD_TABLE = next(form for form in legacy_aliases.name_forms("dashboard") if form != "dashboard")
+
+
+def test_web_save_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    token = "t" * 40
+    secrets_path.write_text(f'[{OLD_TABLE}]\noperator_token = "{token}"\n')
+    before = secrets_path.read_bytes()
+    app = _mk_app(tmp_path)
+    _drive_web(app, {}, save=True)
+    assert secrets_path.read_bytes() == before
+    kaine_toml = tmp_path / "k.toml"
+    kaine_toml.write_text("[dashboard]\n")
+    cfg = load_dashboard_config(kaine_toml, secrets_path=secrets_path)
+    assert cfg.operator_token == token
+
+
+def test_web_save_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    app = _mk_app(tmp_path)
+    _drive_web(app, {}, save=True)
+    data = tomllib.loads(secrets_path.read_text())
+    assert set(data) == {"dashboard"}
+    assert len(data["dashboard"]["operator_token"]) >= 32

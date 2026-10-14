@@ -1116,11 +1116,22 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
             is_stream = present and (await client.type(old)) in ("stream", b"stream")
             length = await client.xlen(old) if is_stream else 0
             memory_bytes = 0
+            last_entry_ms = 0
             if present:
                 try:
                     memory_bytes = await client.memory_usage(old) or 0
                 except Exception:
                     memory_bytes = 0
+                if is_stream:
+                    try:
+                        newest = await client.xrevrange(old, count=1)
+                        if newest:
+                            entry_id = newest[0][0]
+                            if isinstance(entry_id, bytes):
+                                entry_id = entry_id.decode("utf-8", "replace")
+                            last_entry_ms = int(entry_id.split("-", 1)[0])
+                    except Exception:
+                        last_entry_ms = 0
             entries.append(
                 legacy_streams.OldStream(
                     old=old,
@@ -1129,6 +1140,7 @@ async def _probe_old_streams() -> list[legacy_streams.OldStream]:
                     is_stream=is_stream,
                     length=length,
                     memory_bytes=memory_bytes,
+                    last_entry_ms=last_entry_ms,
                 )
             )
         return entries

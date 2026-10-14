@@ -13,7 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from kaine import legacy_aliases
+from kaine.dashboard.config import load_dashboard_config
 from kaine.setup import tomlwriter
+from kaine.setup.__main__ import _ensure_dashboard_token
 from kaine.setup.__main__ import main as setup_main
 from kaine.setup.wizard import (
     ACK_PHRASE,
@@ -925,3 +928,48 @@ def test_compose_messages_go_to_the_output(tmp_path: Path, monkeypatch):
     text = out.getvalue()
     assert "wrote compose GPU variables: KAINE_ORGAN_GPU=0" in text
     assert "volume override written" in text
+
+
+OLD_TABLE = next(form for form in legacy_aliases.name_forms("dashboard") if form != "dashboard")
+
+
+def test_cli_setup_keeps_a_token_under_the_old_table(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    token = "t" * 40
+    secrets_path.write_text(f'[{OLD_TABLE}]\noperator_token = "{token}"\n')
+    before = secrets_path.read_bytes()
+    lines = []
+    status = _ensure_dashboard_token(secrets_path, out=lines.append)
+    output = "".join(lines)
+    assert status == "kept"
+    assert "rename it to [dashboard]" in output
+    assert token not in output
+    assert secrets_path.read_bytes() == before
+    kaine_toml = tmp_path / "k.toml"
+    kaine_toml.write_text("[dashboard]\n")
+    cfg = load_dashboard_config(kaine_toml, secrets_path=secrets_path)
+    assert cfg.operator_token == token
+
+
+def test_cli_setup_writes_a_new_token_under_dashboard(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    secrets_path.write_text("")
+    lines = []
+    status = _ensure_dashboard_token(secrets_path, out=lines.append)
+    assert status == "generated"
+    data = tomllib.loads(secrets_path.read_text())
+    assert set(data) == {"dashboard"}
+    assert len(data["dashboard"]["operator_token"]) >= 32
+
+
+def test_cli_setup_refuses_an_old_table_without_a_token(tmp_path, monkeypatch):
+    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    secrets_path = tmp_path / "secrets.toml"
+    secrets_path.write_text(f"[{OLD_TABLE}]\nother = 1\n")
+    before = secrets_path.read_bytes()
+    lines = []
+    status = _ensure_dashboard_token(secrets_path, out=lines.append)
+    assert status == "conflict"
+    assert secrets_path.read_bytes() == before

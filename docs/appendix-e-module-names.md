@@ -42,5 +42,5 @@ python -m kaine.bus.legacy_streams            # list every old name, its new nam
 python -m kaine.bus.legacy_streams --delete   # delete them after a typed confirmation
 ```
 
-The command never deletes a stream that is written now, and the preboot report warns while old-named streams remain. Run manifests written after the upgrade carry `"config_key_scheme": 2`, so their `config_digest` is not compared with an earlier run's as if the keys were the same. Going back to a release from before the rename is not supported; restore the backup taken before upgrading instead.
+The command never deletes a stream the current release writes, a key that is not a stream, or an old stream whose newest entry is less than ten minutes old (a cycle or a study image from before the upgrade may still be writing it), and the preboot report warns while old-named streams remain. Run manifests written after the upgrade carry `"config_key_scheme": 2`, so their `config_digest` is not compared with an earlier run's as if the keys were the same. Going back to a release from before the rename is not supported; restore the backup taken before upgrading instead.
 

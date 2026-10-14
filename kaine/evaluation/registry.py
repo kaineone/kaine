@@ -13,6 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from kaine import legacy_aliases
 from kaine.evaluation.ab_divergence import (
     ABDivergenceObserver,
     BareInferenceClient,
@@ -204,12 +205,24 @@ class SidecarRegistry:
             api_key=self._config.chat_api_key,
         )
 
-    def _make_sink_at(self, dir_path: str, name: str, retention_days: int) -> AsyncJsonlSink:
+    def _make_sink_at(
+        self,
+        dir_path: str,
+        name: str,
+        retention_days: int,
+        retention_prefixes: tuple[str, ...] = (),
+    ) -> AsyncJsonlSink:
         """Create a sink rooted at an explicit path (used by the research event
         log and the local-only raw archive, which set their own directories
-        rather than living under ``paths.evaluation_logs/<subdir>``)."""
+        rather than living under ``paths.evaluation_logs/<subdir>``).
+
+        ``retention_prefixes`` names extra file prefixes the retention sweep
+        also prunes, so files written under a module's old name age out too."""
         sink = AsyncJsonlSink(
-            Path(dir_path), name=name, retention_days=int(retention_days)
+            Path(dir_path),
+            name=name,
+            retention_days=int(retention_days),
+            retention_prefixes=retention_prefixes,
         )
         self._sinks.append(sink)
         return sink
@@ -250,6 +263,11 @@ class SidecarRegistry:
                 rcfg.dashboard_record.log_dir,
                 "dashboard_record",
                 rcfg.dashboard_record.retention_days,
+                retention_prefixes=tuple(
+                    f"{form}_record"
+                    for form in legacy_aliases.name_forms("dashboard")
+                    if form != "dashboard"
+                ),
             )
             self._observers.append(
                 DashboardRecord(self._bus, sink, rcfg.dashboard_record)
