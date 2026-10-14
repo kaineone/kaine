@@ -43,7 +43,9 @@ def _mountinfo_points() -> set[str]:
                         raw = raw.replace(code, char)
                     points.add(raw)
     except OSError:
-        pass
+        # No mount table (not Linux, or /proc unavailable): os.path.ismount alone
+        # decides, which is the caller's other check.
+        log.debug("rename_state: /proc/self/mountinfo unreadable", exc_info=True)
     return points
 
 
