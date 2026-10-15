@@ -3,7 +3,7 @@
 
 """Tests for the affect goal-significance drive-relevance change.
 
-Covers dominant-drive injection, the signed drive score, ledger fallback,
+Covers dominant-drive injection, the unsigned drive score, ledger fallback,
 method disclosure, and cycle wiring.
 """
 from __future__ import annotations
@@ -19,6 +19,7 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.affect import Affect
+from kaine.modules.affect.appraisal import CategoricalEmotion, classify
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
 from kaine.workspace.strategies import (
@@ -89,8 +90,8 @@ async def test_social_drive_served_by_audition_positive(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_social_drive_ignored_by_interoception_negative(bus: AsyncBus):
-    """Social drive 0.8 + only non-serving interoception events → -0.8."""
+async def test_social_drive_ignored_by_interoception_irrelevant(bus: AsyncBus):
+    """Social drive 0.8 + only non-serving interoception events → 0.0 (irrelevant)."""
     affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await affect.initialize()
     try:
@@ -99,15 +100,15 @@ async def test_social_drive_ignored_by_interoception_negative(bus: AsyncBus):
         scores = affect._score_snapshot(
             _snapshot([_ev(source="interoception", type_="report", salience=0.9, eid="e1")])
         )
-        assert scores.goal_significance == pytest.approx(-0.8)
+        assert scores.goal_significance == pytest.approx(0.0)
         assert affect._goal_method == "drive_relevance_v1"
     finally:
         await affect.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_half_salience_served_yields_zero(bus: AsyncBus):
-    """Equal salience from serving and non-serving sources → 0.0."""
+async def test_half_salience_served_yields_half(bus: AsyncBus):
+    """Half the salience from serving sources → 0.4 (0.8 × 0.5)."""
     affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await affect.initialize()
     try:
@@ -118,6 +119,21 @@ async def test_half_salience_served_yields_zero(bus: AsyncBus):
             _ev(source="interoception", type_="report", salience=0.5, eid="e2"),
         ]
         scores = affect._score_snapshot(_snapshot(events))
+        assert scores.goal_significance == pytest.approx(0.4)
+        assert affect._goal_method == "drive_relevance_v1"
+    finally:
+        await affect.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_empty_coalition_is_irrelevant(bus: AsyncBus):
+    """Curiosity 0.3 with an empty coalition → 0.0."""
+    affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
+    await affect.initialize()
+    try:
+        affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
+        affect.drives.curiosity.value = 0.3
+        scores = affect._score_snapshot(_snapshot([]))
         assert scores.goal_significance == pytest.approx(0.0)
         assert affect._goal_method == "drive_relevance_v1"
     finally:
@@ -136,6 +152,28 @@ async def test_all_drives_zero_with_table_zero_score(bus: AsyncBus):
         )
         assert scores.goal_significance == pytest.approx(0.0)
         assert affect._goal_method == "drive_relevance_v1"
+    finally:
+        await affect.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Fallback / combination behavior
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_idle_coalition_is_not_anger(bus: AsyncBus):
+    """A mild unmet curiosity with no serving content is irrelevant, not anger."""
+    affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
+    await affect.initialize()
+    try:
+        affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
+        affect.drives.curiosity.value = 0.32
+        scores = affect._score_snapshot(
+            _snapshot([_ev(source="interoception", type_="report", salience=0.9, eid="e1")])
+        )
+        assert scores.goal_significance == pytest.approx(0.0)
+        assert classify(scores) != CategoricalEmotion.ANGER
     finally:
         await affect.shutdown()
 
@@ -171,6 +209,22 @@ async def test_no_table_active_goal_token_overlap(bus: AsyncBus):
             _snapshot([_ev(source="interoception", type_="navigate_event", salience=0.9, eid="e1", text="navigate")])
         )
         assert scores.goal_significance > 0.0
+        assert affect._goal_method == "token_overlap_v1"
+    finally:
+        await affect.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_ledger_unrelated_content_is_irrelevant(bus: AsyncBus):
+    """No table with an active goal but unrelated tokens → 0.0 (irrelevant)."""
+    affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
+    await affect.initialize()
+    try:
+        affect.goals.add("navigate", priority=1.0)
+        scores = affect._score_snapshot(
+            _snapshot([_ev(source="interoception", type_="report", salience=0.9, eid="e1", text="unrelated")])
+        )
+        assert scores.goal_significance == pytest.approx(0.0)
         assert affect._goal_method == "token_overlap_v1"
     finally:
         await affect.shutdown()

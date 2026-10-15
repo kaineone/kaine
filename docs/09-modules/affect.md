@@ -74,11 +74,11 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 |---|---|
 | Novelty | `1 - prod(1 - s)` over coalition members that carry a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
 | Intrinsic pleasantness | `pl`, the learning-progress term above |
-| Goal significance | the dominant drive, signed by how much of the coalition comes from sources that relieve it (below) |
+| Goal significance | the dominant drive scaled by how much of the coalition comes from sources that relieve it (below) |
 | Coping potential | `clip(valence + (0.5 - arousal), -1, 1)` |
 | Norm compatibility | fixed at `0.0` until a self-model supplies norms |
 
-The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × (2f - 1)`: `+v` when every member serves the drive and `-v` when none does. With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap score (`2 × relevance - 1`) is also computed and the check takes the larger of the two. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
+The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The result never goes negative. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
 
 `goal_significance_method` in each `affect.emotion` event records how the check was computed:
 
@@ -89,7 +89,7 @@ The cycle injects a drive-to-source table built from each registered module's `r
 | `token_overlap_v1` | No drive-to-source table was injected, and active ledger goals were scored |
 | `unavailable` | Neither exists; the score is `0.0` |
 
-A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust stays unreachable while norm compatibility is fixed at zero (`norm_compatibility_available: false`).
+A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust stays unreachable while norm compatibility is fixed at zero (`norm_compatibility_available: false`). Anger stays unreachable while goal significance cannot be negative.
 
 ## Sleep reset
 
