@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 from collections import deque
 from typing import Any, ClassVar, Iterable, Optional
@@ -296,9 +295,9 @@ class Sequence(BaseModule):
             salience=salience,
         )
 
-    def _time_since_last_interaction_s(self) -> float:
+    def _time_since_last_interaction_s(self) -> float | None:
         if self._last_interaction_at is None:
-            return math.inf
+            return None
         return max(0.0, float(self._clock()) - self._last_interaction_at)
 
     async def _user_input_loop(self) -> None:
@@ -372,11 +371,7 @@ class Sequence(BaseModule):
             "user_input_cursors": dict(self._user_input_cursors),
             "featurizer_layout": self._featurizer.layout,
         }
-        state["time_since_last_interaction_s"] = (
-            None
-            if self._last_interaction_at is None
-            else self._time_since_last_interaction_s()
-        )
+        state["time_since_last_interaction_s"] = self._time_since_last_interaction_s()
         if self._network is not None and hasattr(self._network, "reservoir_seed"):
             state["reservoir_seed"] = self._network.reservoir_seed
         if self._pred_head is not None:

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import asyncio
-import math
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -72,7 +72,8 @@ async def test_on_workspace_publishes_sequence_report(bus: AsyncBus):
     assert payload["anomaly_score"] == 0.0  # no prior history
     assert 0.0 <= payload["habituation_score"] <= 1.0
     assert payload["rumination_detected"] is False
-    assert payload["time_since_last_interaction_s"] == math.inf
+    assert payload["time_since_last_interaction_s"] is None
+    json.dumps(payload, allow_nan=False)
     assert len(payload["feature_vector"]) == 24
 
 
