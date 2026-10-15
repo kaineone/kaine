@@ -329,7 +329,7 @@ def test_unattended_gate_conditions_ordered_by_number():
 def test_every_safety_net_check_maps_to_an_unattended_condition(monkeypatch):
     """A check added to the research net must become an unattended condition."""
     monkeypatch.setattr(
-        "kaine.cycle.research_gate.run_preflight_self_check", lambda: (True, "")
+        "kaine.cycle.research_gate.run_preflight_self_check", lambda **_kw: (True, "")
     )
     net = evaluate_safety_net({})
     assert set(net.checks) == set(SAFETY_NET_CONDITIONS)

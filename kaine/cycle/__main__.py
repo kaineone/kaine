@@ -2860,6 +2860,24 @@ def _research_logging_active(config: dict[str, Any]) -> bool:
     return _logging_active(config)
 
 
+def _install_state_encryption_or_refuse(config: dict[str, Any]) -> int | None:
+    """Install the configured state encryptor; return exit code 1 when it cannot be.
+
+    Idempotent, so the boot's own install later keeps the same encryptor. A
+    missing or malformed key stops the start with an operator-facing message
+    and no traceback (OpenSpec revive-entrypoint-encryption).
+    """
+    from kaine.boot.security import install_state_encryption
+    from kaine.security.crypto import CryptoConfigError
+
+    try:
+        install_state_encryption(config)
+    except CryptoConfigError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: state encryption: {exc}\n")
+        return 1
+    return None
+
+
 def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
     """Run the four-condition research gate over the resolved config.
 
@@ -3085,6 +3103,14 @@ def main(argv: list[str] | None = None) -> int:
     # _boot_and_run for runtime.json — never recomputed inside the loop.
     supervision_mode = "operator"
     gate_checks: dict[str, bool] | None = None
+    if mode in ("unattended", "research"):
+        # The configured state encryptor is installed before the safety net is
+        # evaluated, so its preflight round trip uses the configured encryption
+        # (OpenSpec revive-entrypoint-encryption).
+        refused = _install_state_encryption_or_refuse(config)
+        if refused is not None:
+            return refused
+
     if mode == "unattended":
         # Unattended boot: the nine-condition safety net must be satisfied.
         result = _evaluate_unattended_gate(config)
@@ -3128,6 +3154,12 @@ def main(argv: list[str] | None = None) -> int:
             "and set KAINE_RESEARCH_MODE=1 (or [research].enabled) instead.\n"
         )
         return 2
+
+    # Installed (idempotently) before the revive plan reads the bundle, so a
+    # revive reads an encrypted bundle with the configured key.
+    refused = _install_state_encryption_or_refuse(config)
+    if refused is not None:
+        return refused
 
     revive = None
     if known.revive is not None:

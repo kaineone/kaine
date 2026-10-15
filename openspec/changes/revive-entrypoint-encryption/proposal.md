@@ -12,7 +12,7 @@ The research gate's preflight round trip has the same gap. It runs before the bo
 
 ## What Changes
 
-- **The encryptor is installed first.** The cycle installs the configured state encryptor once, right after the configuration loads and before the supervision gates and the revive plan, and fails closed there when encryption is required and no key resolves, with the existing operator-facing message and exit code and no traceback. `install_state_encryption` becomes idempotent, so the call in the module registry stays for the other entrypoints and does not replace the encryptor already installed.
+- **The encryptor is installed first.** The cycle installs the configured state encryptor before the research and unattended safety-net gates and before the revive plan, after the checks that come before them today (the operator-present refusal, the state rename, the stored stage). When encryption is enabled and no key resolves, the start stops there with exit code 1, a configuration-error message naming the variable, and no traceback; before this change it failed inside the boot. `install_state_encryption` becomes idempotent, so the call in the module registry stays for the other entrypoints and does not replace the encryptor already installed.
 - **The preflight proves the encrypted path.** The research gate's round trip runs with the configured encryptor, so when encryption is required its bundle is encrypted and the revive decrypts it.
 - **Tests.** The entrypoint revives an encrypted bundle with the key set and refuses it with a wrong key (exit code 7, no traceback); the preflight bundle is encrypted when encryption is required.
 
