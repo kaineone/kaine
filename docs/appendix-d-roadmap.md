@@ -17,6 +17,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
+| compose-state-mount-ownership | 0/10 (0%) | Move the trainer-jobs volume out of the state volume, so an existing compose deployment upgrades without a root-owned directory blocking the boot-time state rename, and make the rename refuse up front with an actionable message. Design only. |
+| revive-entrypoint-encryption | 0/7 (0%) | Install the configured state encryptor before the revive plan and the research gate, so `--revive` reads an encrypted bundle and the gate's preflight round trip exercises the encrypted path. Design only. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
@@ -102,6 +104,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 76 active changes, 269 archived changes and 105 capability specs.
+The roadmap contains 78 active changes, 269 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
