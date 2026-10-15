@@ -25,7 +25,7 @@ from kaine.bus.client import AsyncBus
 from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
-from kaine.storage import resolve
+from kaine.storage import resolve, trainer_jobs_dir
 from kaine.text_embedding import (
     Embedder,
 )
@@ -147,10 +147,9 @@ def voice_alignment_config_from_section(
             ),
             trainer_jobs_dir=str(
                 resolve(
-                    str(
-                        voice_cfg_section.get("trainer_jobs_dir", "state/sleep/voice_align_jobs")
-                    ).strip()
-                    or "state/sleep/voice_align_jobs"
+                    # The section is this function's authoritative table; the
+                    # environment override still wins (compose-state-mount-ownership).
+                    trainer_jobs_dir({"sleep": {"voice_alignment": voice_cfg_section}})
                 )
             ),
             trainer_timeout_s=float(voice_cfg_section.get("trainer_timeout_s", 21600.0)),

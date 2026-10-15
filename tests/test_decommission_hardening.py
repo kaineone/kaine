@@ -9,11 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.config import load_runtime_config
 from kaine.lifecycle import decommission
 from kaine.lifecycle.decommission_locations import (
+    attribute_job_dirs,
     cancel_voice_alignment_jobs,
+    delete_roots,
     entity_locations,
 )
 from kaine.lifecycle.divergence import DivergenceAssessment
@@ -1180,3 +1182,96 @@ def test_cancel_only_leaves_other_entities_jobs_alone(tmp_path):
     assert not (other_pending / "CANCELLED").exists()
     assert not (other_claimed / "CANCELLED").exists()
     assert slept == []
+
+
+def test_entity_locations_and_delete_roots_follow_trainer_jobs_env(monkeypatch, tmp_path):
+    """When KAINE_TRAINER_JOBS_DIR points outside /app/state, decommission uses it."""
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    job_dir = jobs_dir / "job-1"
+    job_dir.mkdir()
+    store_dir = tmp_path / "state" / "sleep" / "adapters"
+    store_dir.mkdir(parents=True)
+    (job_dir / "job.json").write_text(json.dumps({"adapter_output_dir": str(store_dir)}))
+
+    monkeypatch.setenv("KAINE_TRAINER_JOBS_DIR", str(jobs_dir))
+
+    config = {"sleep": {"voice_alignment": {"adapter_output_dir": str(store_dir)}}}
+    state_root = tmp_path / "state"
+    state_root.mkdir(exist_ok=True)
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    fork_root = tmp_path / "fork"
+    fork_root.mkdir()
+
+    locations = entity_locations(
+        config,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+        entity_id="entity-1",
+    )
+    assert any(job_dir in loc.paths for loc in locations if loc.key == "sleep.voice_jobs.own")
+
+    roots, refused = delete_roots(
+        config,
+        state_root=state_root,
+        data_root=data_root,
+        fork_root=fork_root,
+    )
+    assert str(jobs_dir) in {str(p) for p in roots}
+    assert refused == ()
+
+
+def test_attribute_job_dirs_maps_recorded_paths(tmp_path):
+    """Adapter output paths from legacy layouts are rebased onto the current jobs dir."""
+    old_key = next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == "sleep")
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+
+    # (i) absolute path under an old module directory
+    store_dir = tmp_path / "state" / "sleep" / "adapters"
+    store_dir.mkdir(parents=True)
+    old_module_dir = tmp_path / "state" / old_key / "adapters"
+    job_dir1 = jobs_dir / "old-module-job"
+    job_dir1.mkdir()
+    (job_dir1 / "job.json").write_text(
+        json.dumps({"adapter_output_dir": str(old_module_dir)})
+    )
+
+    own, shared, _ = attribute_job_dirs(jobs_dir, own=set(), store_dirs=(store_dir,))
+    assert job_dir1 in own
+    assert not shared
+
+    # (ii) relative adapter_output_dir "out" inside its own job directory
+    job_dir2 = jobs_dir / "relative-job"
+    job_dir2.mkdir()
+    out_dir = job_dir2 / "out"
+    out_dir.mkdir()
+    (job_dir2 / "job.json").write_text(json.dumps({"adapter_output_dir": "out"}))
+
+    own, shared, _ = attribute_job_dirs(jobs_dir, own=set(), store_dirs=(out_dir,))
+    assert job_dir2 in own
+
+    # (iii) absolute path under the legacy /app/state/sleep/voice_align_jobs mount
+    job_name = "mounted-job"
+    mounted_job_dir = jobs_dir / job_name
+    mounted_out = mounted_job_dir / "out"
+    mounted_out.mkdir(parents=True)
+    recorded = f"/app/state/sleep/voice_align_jobs/{job_name}/out"
+    (mounted_job_dir / "job.json").write_text(json.dumps({"adapter_output_dir": recorded}))
+
+    own, shared, _ = attribute_job_dirs(jobs_dir, own=set(), store_dirs=(mounted_out,))
+    assert mounted_job_dir in own
+
+    # (iv) a path that maps to no store is not attributed
+    nowhere_dir = tmp_path / "state" / "sleep" / "nowhere"
+    job_dir4 = jobs_dir / "unrelated-job"
+    job_dir4.mkdir()
+    (job_dir4 / "job.json").write_text(
+        json.dumps({"adapter_output_dir": str(nowhere_dir)})
+    )
+
+    own, shared, _ = attribute_job_dirs(jobs_dir, own=set(), store_dirs=(store_dir,))
+    assert job_dir4 not in own
+    assert job_dir4 in shared

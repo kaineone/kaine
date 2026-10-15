@@ -168,7 +168,7 @@ For GGUF conversion use mainline llama.cpp. Ollama's GGUF converter writes a non
 
 ### Job queue backend
 
-For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/sleep/voice_align_jobs`; the module-addition study overlay uses `/trainer-jobs`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but phase 4 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
+For containerized deployments, set `trainer_backend = "job_queue"` and point `trainer_jobs_dir` at the shared jobs volume (default `state/sleep/voice_align_jobs`; the compose cycle and the module-addition study use `/trainer-jobs`, the cycle through `KAINE_TRAINER_JOBS_DIR`). The cycle writes each job spec (DPO pairs, base-model path, LoRA and DPO settings, and the relative output directory `out`), marks it ready, and polls for the service's `DONE` marker. The polling is asynchronous, so the event loop is not blocked, but phase 4 awaits the result, so the sleep pipeline itself waits up to `trainer_timeout_s` (default 21600). A timeout, a non-zero exit or a missing adapter raises an error.
 
 `result.json` is written during the run, so the cycle decides completion by the `DONE` marker.
 
@@ -303,7 +303,7 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 | `trainer_backend` | string | `"in_process"` | `in_process`, `subprocess` or `job_queue` |
 | `trainer_python` | string | `""` | External interpreter; required for `subprocess` |
 | `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Job directories for the `in_process` and `subprocess` backends |
-| `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared jobs volume for `job_queue` |
+| `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared jobs volume for `job_queue`; `KAINE_TRAINER_JOBS_DIR` takes precedence when set |
 | `trainer_timeout_s` | float | `21600.0` | Seconds the `job_queue` backend waits for a result |
 | `consolidation_divergence_rate_threshold` | float | `0.5` | Divergence rate at which the decommission check treats the organ as diverged |
 | `consolidation_divergence_magnitude_threshold` | float | `0.25` | Divergence magnitude at which the decommission check treats the organ as diverged |

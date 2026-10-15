@@ -104,7 +104,7 @@ from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.net import port_listening
 from kaine.organ_probe import verify_organ_generates
 from kaine.security.crypto import CryptoConfigError, install_from_section
-from kaine.storage import configured_data_root, resolve, storage_min_free_gb
+from kaine.storage import configured_data_root, resolve, storage_min_free_gb, trainer_jobs_dir
 from kaine.torch_stack import check_torch_stack, describe_torch_stack
 
 log = logging.getLogger(__name__)
@@ -925,6 +925,10 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
                 str(voice.get("trainer_workdir") or "").strip() or None,
                 "state/sleep/voice_align_jobs",
             )),
+        ),
+        (
+            "[sleep.voice_alignment].trainer_jobs_dir",
+            resolve(_dir_of(trainer_jobs_dir(config), "state/sleep/voice_align_jobs")),
         ),
         ("[ignition_log].directory", resolve(Path(ignition.directory))),
         ("[supervisor.incident_log].path", resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents"))),

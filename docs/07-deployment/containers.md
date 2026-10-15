@@ -160,7 +160,7 @@ Start the trainer service:
 docker compose -f compose/kaine.yml --profile training up -d kaine-trainer
 ```
 
-Jobs pass through the `kaine-trainer-jobs` volume. The cycle mounts it at its default `trainer_jobs_dir`, `state/sleep/voice_align_jobs` (`/app/state/sleep/voice_align_jobs`), and the study runner and the trainer mount it at `/trainer-jobs`; a study step that enables voice alignment sets `trainer_jobs_dir = "/trainer-jobs"` in its overlay.
+Jobs pass through the `kaine-trainer-jobs` volume. The cycle, the study runner and the trainer all mount it at `/trainer-jobs`, outside the state volume, so the container runtime never creates a directory inside the state tree. The cycle finds it through `KAINE_TRAINER_JOBS_DIR`, which takes precedence over `[sleep.voice_alignment].trainer_jobs_dir`; decommission and the pre-boot report resolve the directory the same way; a study step that enables voice alignment sets `trainer_jobs_dir = "/trainer-jobs"` in its overlay.
 
 ## State, secrets and environment
 
@@ -200,6 +200,7 @@ The shipped config enables state encryption (`[security.state_encryption].enable
 | `KAINE_CYCLE_OPERATOR_PRESENT` | operator-present gate | never defaulted |
 | `KAINE_RESEARCH_MODE` | research gate | never defaulted |
 | `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED` | voice-alignment opt-in | never defaulted |
+| `KAINE_TRAINER_JOBS_DIR` | voice-alignment jobs directory, ahead of `[sleep.voice_alignment].trainer_jobs_dir` | `/trainer-jobs` |
 
 No boot-gate variable has a permissive default on `kaine-cycle` or `kaine-study`. The operator sets them explicitly, which keeps the first boot supervised.
 

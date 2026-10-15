@@ -3,6 +3,7 @@
 
 """Tests for rename_state mount-point and vacant-directory handling."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -450,3 +451,184 @@ def test_merge_leaves_old_directory_holding_an_empty_mount_point_and_second_is_n
     result2 = rename_state.migrate(root, no_qdrant=True)
     assert result2.status == "noop"
     assert _snapshot(root) == (files, dirs)
+
+
+def _restore_dirs(path: Path) -> None:
+    path = Path(path)
+    try:
+        path.chmod(0o755)
+    except OSError:
+        # Best-effort cleanup: restore permissions so pytest can delete tmp_path;
+        # a path that cannot be chmodded is left as-is.
+        pass
+    for p in path.rglob("*"):
+        if p.is_dir():
+            try:
+                p.chmod(0o755)
+            except OSError:
+                # Best-effort cleanup: restore permissions so pytest can delete tmp_path;
+                # a path that cannot be chmodded is left as-is.
+                pass
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_non_writable_destination(tmp_path):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"data")
+    sleep_dir = root / "sleep"
+    sleep_dir.mkdir(parents=True)
+    sleep_dir.chmod(0o555)
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match="cannot write sleep") as exc:
+            rename_state.migrate(root, no_qdrant=True)
+        assert "mode 555" in str(exc.value)
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_non_writable_root_is_nearest_ancestor(tmp_path):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"data")
+    root.chmod(0o555)
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match=r"cannot write \.") as exc:
+            rename_state.migrate(root, no_qdrant=True)
+        assert "mode 555" in str(exc.value)
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_writable_check_runs_before_resume(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "a.json", b"a")
+    _write(root / old_sleep / "b.json", b"b")
+    (root / "sleep").mkdir(parents=True)
+
+    restore = _interrupting(monkeypatch, "_run_step", 0, after_work=True)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            rename_state.migrate(root, no_qdrant=True)
+    finally:
+        restore()
+
+    after_interrupt = _snapshot(root)
+    (root / "sleep").chmod(0o555)
+
+    try:
+        with pytest.raises(rename_state.RenameStateError, match="cannot write") as exc:
+            rename_state.migrate(root, no_qdrant=True)
+        assert "sleep" in str(exc.value)
+        assert _snapshot(root) == after_interrupt
+    finally:
+        _restore_dirs(root)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_dry_run_reports_writable_refusal(tmp_path):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"data")
+    sleep_dir = root / "sleep"
+    sleep_dir.mkdir(parents=True)
+    sleep_dir.chmod(0o555)
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match="cannot write sleep") as exc:
+            rename_state.migrate(root, no_qdrant=True, dry_run=True)
+        assert "mode 555" in str(exc.value)
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)
+
+
+def test_mount_point_message_in_merge(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "voice_align_jobs" / "job1.json", b"job")
+    (root / "sleep" / "voice_align_jobs").mkdir(parents=True)
+    mounts = _mount_checker(monkeypatch)
+    mounts.add((root / "sleep" / "voice_align_jobs").resolve())
+
+    before = _snapshot(root)
+    with pytest.raises(rename_state.RenameStateError, match="is a mount point") as exc:
+        rename_state.migrate(root, no_qdrant=True)
+    msg = str(exc.value)
+    assert "hold data" not in msg
+    assert _snapshot(root) == before
+    assert not (root / ".rename_state" / "manifest.json").exists()
+
+
+def test_mount_point_message_at_module_level(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    old_locus = OLD["perceptual_locus"]
+    _write(root / old_locus / "desired.json", b"desired")
+    (root / "perceptual_locus").mkdir(parents=True)
+    mounts = _mount_checker(monkeypatch)
+    mounts.add((root / "perceptual_locus").resolve())
+
+    before = _snapshot(root)
+    with pytest.raises(rename_state.RenameStateError, match="is a mount point") as exc:
+        rename_state.migrate(root, no_qdrant=True)
+    msg = str(exc.value)
+    assert "hold data" not in msg
+    assert _snapshot(root) == before
+    assert not (root / ".rename_state" / "manifest.json").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_mount_message_takes_precedence_over_writable_check(tmp_path, monkeypatch):
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "voice_align_jobs" / "job1.json", b"job")
+    sleep_dir = root / "sleep"
+    (sleep_dir / "voice_align_jobs").mkdir(parents=True)
+    sleep_dir.chmod(0o555)
+    mounts = _mount_checker(monkeypatch)
+    mounts.add((root / "sleep" / "voice_align_jobs").resolve())
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match="is a mount point") as exc:
+            rename_state.migrate(root, no_qdrant=True)
+        msg = str(exc.value)
+        assert "cannot write" not in msg
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)
+
+
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="permission checks do not apply to root")
+def test_non_writable_source_directory(tmp_path):
+    # Moving a child out of the old directory needs write access to it as well.
+    root = tmp_path / "state"
+    old_sleep = OLD["sleep"]
+    _write(root / old_sleep / "organ_window.json", b"data")
+    (root / "sleep").mkdir(parents=True)
+    (root / old_sleep).chmod(0o555)
+
+    before = _snapshot(root)
+    try:
+        with pytest.raises(rename_state.RenameStateError, match=f"cannot write {old_sleep}"):
+            rename_state.migrate(root, no_qdrant=True)
+        assert _snapshot(root) == before
+        assert not (root / ".rename_state" / "manifest.json").exists()
+    finally:
+        _restore_dirs(root)

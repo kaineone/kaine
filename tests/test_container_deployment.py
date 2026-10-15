@@ -1053,3 +1053,18 @@ def test_no_container_target_under_state_uses_an_old_module_name():
         if any(part in old for part in target[len("/app/state/"):].split("/"))
     ]
     assert not bad, bad
+
+
+def test_cycle_trainer_jobs_mount_and_env():
+    services = _load_compose()["services"]
+    cycle = services["kaine-cycle"]
+    assert "kaine-trainer-jobs:/trainer-jobs" in {
+        v for v in cycle["volumes"] if isinstance(v, str)
+    }
+    assert cycle["environment"]["KAINE_TRAINER_JOBS_DIR"] == "/trainer-jobs"
+
+    for v in cycle["volumes"]:
+        target = v.split(":")[1] if isinstance(v, str) else v["target"]
+        if target == "/app/state/perceptual_locus":
+            continue
+        assert target == "/app/state" or not target.startswith("/app/state/")
