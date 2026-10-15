@@ -2,10 +2,10 @@
 
 ## Why
 
-The base thesis says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same entity the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
+The first configuration says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same entity the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
 
 The operator's protocol, 2026-09-28:
-1. **The developmental phase.** Spawn one base-thesis entity and let it develop in the local stimulus source until it matures.
+1. **The developmental phase.** Spawn one first-configuration entity and let it develop in the local stimulus source until it matures.
 2. **The seed.** At the moment it graduates the developmental phase, preserve it. That snapshot is the seed.
 3. **Branch runs.** Revive the seed once per module set, one run at a time, each with one more module in a logical order. Show it the four films after a pleasant transition from the stimulus source, recording everything.
    - Every branch run starts from the same seed and sees the same media, so the runs show how the entity diverges with each new faculty.
@@ -24,7 +24,7 @@ The first version of this change (2026-09-26) forked a main line and a familiari
   4. *Baby Huey: Quack-a-Doodle-Doo* (1950)
 
   One checksummed playlist manifest, about 243 minutes.
-- **Base set.** The operator's base-thesis configuration:
+- **Base set.** The operator's first configuration:
   - the base: the interoception, sequence, vision, audition and language modules, with the workspace and the action selection module;
   - the affect and sleep modules.
 - **Module order.** episodic memory, world model, planning, self-model, social cognition, vocal modules, up to all sixteen modules.

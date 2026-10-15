@@ -1,8 +1,8 @@
 # Affect
 
-The affect module is the affective core. It holds a dimensional state of valence, arousal and dominance, runs an appraisal of every workspace broadcast, and keeps four homeostatic drives. Its arousal is the global gain on the workspace competition. Read this page if you enable the module, run the base-thesis `thesis_test` profile, or need to know what moves arousal and valence and what the sleep module resets.
+The affect module is the affective core. It holds a dimensional state of valence, arousal and dominance, runs an appraisal of every workspace broadcast, and keeps four homeostatic drives. Its arousal is the global gain on the workspace competition. Read this page if you enable the module, run the first-configuration `first_configuration` profile, or need to know what moves arousal and valence and what the sleep module resets.
 
-The affect module ships disabled in the default config (`[modules].affect = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because a global gain that sets how readily content gains access, and that surprise itself moves, belongs to the minimal machinery of the base thesis. It needs nothing beyond the core stack.
+The affect module ships disabled in the default config (`[modules].affect = false` in `config/kaine.toml`). The `first_configuration` profile enables it, because a global gain that sets how readily content gains access, and that surprise itself moves, belongs to the minimal machinery of the first configuration. It needs nothing beyond the core stack.
 
 ## Arousal: the global gain and contrast
 
@@ -28,7 +28,7 @@ The appraisal of a broadcast does not move arousal, so a higher access rate cann
 |---|---|---|
 | `vision.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, r - 1))`, with `r` the report's `normalised_error` (its error over its running mean) |
 | `interoception.report` | non-empty `alerts` list (a host metric past its hard limit) | `+0.05` |
-| `episodic_memory.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the base-thesis form) |
+| `episodic_memory.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the first configuration) |
 
 An alert raised by a change criterion alone, with `r <= 1`, leaves arousal unchanged. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
 
@@ -45,7 +45,7 @@ v_target = clip(pl + (wellness - 0.5), -1, 1)
 valence += (v_target - valence) * (1 - exp(-dt / valence_time_constant_s))
 ```
 
-Falling errors make `g` positive and pull valence up; rising errors make it negative. `pl` is the appraisal's pleasantness check, and `coupling` is the perceived-emotion term described under [Affect coupling](#affect-coupling), zero in the base-thesis form. `wellness` is the value the interoception module last reported, 0.5 before the first report. Early on the fast and slow means are both close to the plain mean of the samples so far, so `g` starts near zero.
+Falling errors make `g` positive and pull valence up; rising errors make it negative. `pl` is the appraisal's pleasantness check, and `coupling` is the perceived-emotion term described under [Affect coupling](#affect-coupling), zero in the first configuration. `wellness` is the value the interoception module last reported, 0.5 before the first report. Early on the fast and slow means are both close to the plain mean of the samples so far, so `g` starts near zero.
 
 ## Drives
 
@@ -178,7 +178,7 @@ The retired key `coupling_max_rate_per_s` is accepted and ignored with a warning
 
 ## Affect coupling
 
-Coupling is off in the default config and in the base-thesis form. When `[affect.coupling].enabled = true`, the affect module records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
+Coupling is off in the default config and in the first configuration. When `[affect.coupling].enabled = true`, the affect module records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
 
 1. It maps the perceived category to a pleasantness and an intensity through the `EMOTION_VAD` table.
 2. It looks up the speaker's familiarity, keyed on the event's `source_label` (the audio channel), in the cache filled from `social_cognition.agent_model` events, which carry the `source_label` of the audio event that updated the agent model (0.0 when unknown).
@@ -210,7 +210,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Enabling and use
 
-1. Set `[modules].affect = true`, or run the `thesis_test` profile.
+1. Set `[modules].affect = true`, or run the `first_configuration` profile.
 2. Enable the vision and audition modules for the perceptual error and alert streams, and the interoception and sequence modules for wellness, interoceptive alarms and the social drive.
 3. For affect coupling, set `[affect.coupling].enabled = true` and enable the [audition](audition.md) and [social cognition](social-cognition.md) modules.
 

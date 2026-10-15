@@ -74,7 +74,7 @@ differ.
 
 ### Flag decisions locked by the lead (2026-10-05)
 
-1. **Encoder:** selectable. `spectral` remains the shipped default and the Tier 0 encoder. The thesis-profile default is the winner of the offline bake-off between `spectral`, `dasheng` and `wavjepa`. The paper keeps naming the encoder class vendor-neutrally.
+1. **Encoder:** selectable. `spectral` remains the shipped default and the Tier 0 encoder. The first-configuration-profile default is the winner of the offline bake-off between `spectral`, `dasheng` and `wavjepa`. The paper keeps naming the encoder class vendor-neutrally.
 2. **Attention granularity:** (a), a single attended window. Stream and source separation, (b), is a separate future change. It needs its own separation model and its own design, and is deferred with that reason.
 3. **Speech gating:** keep the explicit voice-activity detector. Driving the gate from general salience would let a loud non-speech onset trigger the speech path. The detector is cheap and its thresholds are reviewable.
 
@@ -131,4 +131,4 @@ The audition module gains the same `sleep.out` consumer the vision module has. I
 3. CPU and GPU latency per hop;
 4. resident memory.
 
-The GPU runs take the host GPU lock. The record goes under `docs/records/`. The winner becomes the thesis-profile default after salience recalibration on the same feeds.
+The GPU runs take the host GPU lock. The record goes under `docs/records/`. The winner becomes the first-configuration-profile default after salience recalibration on the same feeds.

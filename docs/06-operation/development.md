@@ -16,7 +16,7 @@ Enable the developmental phase in your per-install overlay, `config/kaine.operat
 
 - `[developmental_stage].enabled = true` (off in the shipped config).
 - `[perception_feed].mode = "stimulus_source"`.
-- The [vision](../09-modules/vision.md), [audition](../09-modules/audition.md) and [interoception](../09-modules/interoception.md) modules enabled. The `thesis_test` profile enables all three, but `config/kaine.operator.toml` merges last and wins. The first-run wizard writes a full `[modules]` table there. Both of its presets enable the vision, audition and interoception modules, but a custom module set may not, so check them after the wizard has run.
+- The [vision](../09-modules/vision.md), [audition](../09-modules/audition.md) and [interoception](../09-modules/interoception.md) modules enabled. The `first_configuration` profile enables all three, but `config/kaine.operator.toml` merges last and wins. The first-run wizard writes a full `[modules]` table there. Both of its presets enable the vision, audition and interoception modules, but a custom module set may not, so check them after the wizard has run.
 - `[interoception].self_rhythm_enabled = true`. The shipped config leaves it off because filling the self-rhythm's feature slots changes the input of the interoception module's forward model, and a preserved entity was trained with those slots at zero.
 - The oscillator extra (snnTorch) installed.
 

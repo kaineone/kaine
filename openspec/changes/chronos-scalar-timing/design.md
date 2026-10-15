@@ -4,7 +4,7 @@
 - **Measure.** For each T, the mean and standard deviation of the response peak time.
 - **Pass.** The coefficient of variation (sd/mean) is approximately constant across T: no significant slope against T, at a pre-registered tolerance, following the arXiv 2608.16666 protocol.
 - **Fail.** The CV falls or rises with T.
-- **Conditions.** Offline and seeded, with no entity, on the sequence module as shipped (NumPy CfC, the thesis-profile forward head).
+- **Conditions.** Offline and seeded, with no entity, on the sequence module as shipped (NumPy CfC, the first-configuration-profile forward head).
 
 ## If Sequence fails
 

@@ -37,7 +37,7 @@ KAINE's speech manifest pins one Kokoro archive, `kokoro-int8-en-v0_19.tar.bz2`,
 
 - Voice files in the repository, or any voice name hard-coded in code.
 - Guessing a Chatterbox voice's gender from its name.
-- Turning the vocal module on anywhere. It stays off in `config/kaine.toml` and in the `thesis_test` profile.
+- Turning the vocal module on anywhere. It stays off in `config/kaine.toml` and in the `first_configuration` profile.
 - The entity choosing its own voice (designed below as a follow-up, not built).
 
 ## Decisions

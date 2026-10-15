@@ -25,7 +25,7 @@ date._
       (`kaine/modules/audition/acoustic.py:SpectralAcousticEncoder`) plus an
       `AcousticEncoder` protocol so a stronger frozen SSL encoder plugs in; the
       concrete SSL model remains the lead's/host's choice._
-      **2026-10-05:** the encoder is selectable (task 5.1); the thesis default is
+      **2026-10-05:** the encoder is selectable (task 5.1); the first-configuration default is
       the bake-off winner (task 6.6). Ticked when 6.8 lands.
 - [x] 0.2 Attention granularity: single attended window first, stream/source
       separation later? (Flag 2)
@@ -171,7 +171,7 @@ still-unbuilt foveation Phase 3–4._
       integrator first).
 - [ ] 6.7 Recalibrate acoustic salience (normalisation, alert factor and floor)
       for the winner on the same feeds.
-- [ ] 6.8 The winner becomes the `thesis_test` profile default (integrator
+- [ ] 6.8 The winner becomes the `first_configuration` profile default (integrator
       pinged first). Tier 0 keeps `spectral`. Add `NOTICE` and licence-appendix
       entries (integrator pinged first).
 - [ ] 6.9 WavJEPA mismatch ("MMN") mode in the bake-off harness only, behind a

@@ -1,6 +1,6 @@
 ## Why
 
-Two findings of the mathematics review of 2026-10-08 about the vision module's foveation, which is on in the base-thesis profile.
+Two findings of the mathematics review of 2026-10-08 about the vision module's foveation, which is on in the first-configuration profile.
 
 - **The precision weighting is trivial.** The design selects the fovea by a precision-weighted combination of bottom-up saliency and a top-down bias. The code multiplies the bottom-up map (each tile's absolute grey-level change since the previous clip tick) by a weight of 1, and no top-down map is wired, so the fovea goes to whichever tile changed most. A tile that flickers all the time (a screen, foliage, water) wins as easily as a stable region that suddenly changes. In predictive coding, precision is the inverse variance of a channel's error, and attention weights each error by its precision (Feldman and Friston 2010).
 - **The video encoder sees no motion.** With foveation on, the peripheral gist and the foveal crop are each encoded as a 16-frame clip made of one still view repeated 16 times, so the clip encoder's temporal modelling is wasted and motion enters only through the sequence of clip embeddings.

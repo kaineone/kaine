@@ -4,7 +4,7 @@ The paper (§3.5) states that during sleep the cycle keeps running, the
 perceptual feed pauses, and all four processors suspend forward-model
 adaptation. In the code the sleep module suspends perception (locus `off`, playlist clock
 paused under the `sleep` holder) only inside phase 2, and phase 2 returns
-before the suspend when the episodic memory module is absent. In the base-thesis profile the episodic memory module is
+before the suspend when the episodic memory module is absent. In the first-configuration profile the episodic memory module is
 off, so the seeded feed keeps running through every sleep.
 
 ## What Changes

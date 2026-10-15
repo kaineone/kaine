@@ -4,7 +4,7 @@ The interoception module is KAINE's sense of its own body. The compute host stan
 
 ## Status
 
-Implemented. The shipped `config/kaine.toml` sets `[modules].interoception = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it.
+Implemented. The shipped `config/kaine.toml` sets `[modules].interoception = false`, and the `first_configuration` profile (`config/profiles/first_configuration.toml`) enables it.
 
 The base module needs no optional extras. GPU metrics use `pynvml` on hosts with an NVIDIA GPU and are simply absent when it is unavailable. The forward model's continuous-time reservoir runs on the backend chosen by `[interoception].cfc_backend`: `"numpy"` (default; needs neither `torch` nor `ncps`) or `"torch"` (needs the `core` extra). The self-rhythm needs the `oscillator` extra.
 

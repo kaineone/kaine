@@ -762,7 +762,7 @@ def describe_host() -> HostSnapshot:
 # ---------------------------------------------------------------------------
 # Host-capability probe → recommended deployment tier (openspec host-probe).
 #
-# The portability thesis is that KAINE is the architecture, not the hardware:
+# The portability principle is that KAINE is the architecture, not the hardware:
 # the same mind inhabits hardware from a retired phone to a datacenter, trading
 # capability for reach rather than changing identity. The probe reports what the
 # host can bear and RECOMMENDS a tier; it never applies a profile or starts the
@@ -1169,7 +1169,7 @@ def recommend_tier(
                 2,
                 f"accelerator present ({accel_v}), {budget} GB memory budget; "
                 "module residency is required on this host and is not yet implemented, "
-                "so until it lands the operator should keep the default base-thesis "
+                "so until it lands the operator should keep the default first-configuration "
                 "module set, serve the language organ with a model that fits "
                 "(e.g. the 4B GGUF) and keep vision/voice extras off.",
                 residency=True,

@@ -794,8 +794,8 @@ def _load_kaine_config(
     target = Path(path or "config/kaine.toml")
     if not target.exists():
         raise FileNotFoundError(f"config/kaine.toml not found at {target}")
-    # load_runtime_config applies the module-selection profile, the base-thesis
-    # thesis_test default, and the operator tier layer in one pass, so the cycle
+    # load_runtime_config applies the module-selection profile, the first-configuration
+    # first_configuration default, and the operator tier layer in one pass, so the cycle
     # and the pre-boot check load the same configuration.
     config = load_runtime_config(
         target, OPERATOR_CONFIG_PATH, profile=profile, env=env

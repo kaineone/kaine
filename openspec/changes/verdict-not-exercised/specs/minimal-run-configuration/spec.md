@@ -1,8 +1,8 @@
 ## REMOVED Requirements
 
 ### Requirement: Minimal experiment configuration
-**Reason**: The profile served a retired design of the workspace-mediation ablation (the interoception, sequence and language modules with an output-divergence measure). The planned test runs the base-thesis form in the three arms of paper §6.3, and the paper holds that a system limited to substrate telemetry and event timing offers too little diversity for competition to matter.
-**Migration**: Use the base-thesis default (`thesis_test`) and the study configurations of the planned test; enable a reduced set of modules in `config/kaine.operator.toml` when one is needed.
+**Reason**: The profile served a retired design of the workspace-mediation ablation (the interoception, sequence and language modules with an output-divergence measure). The planned test runs the first configuration in the three arms of paper §6.3, and the paper holds that a system limited to substrate telemetry and event timing offers too little diversity for competition to matter.
+**Migration**: Use the first-configuration default (`first_configuration`) and the study configurations of the planned test; enable a reduced set of modules in `config/kaine.operator.toml` when one is needed.
 
 ### Requirement: Workspace capacity forces competition in the minimal set
 **Reason**: It applied only to the retired minimal profile.

@@ -7,7 +7,7 @@ Runs the workspace-mediation development harness offline. It exercises a
 reduced pair of real processors (the interoception and vision modules) with the workspace on against a
 pooled arm, measuring cross-module broadcast information gain. The modules are
 driven by hand over an in-memory bus. It boots no entity and opens no network
-connection. It is development tooling and does not test the thesis.
+connection. It is development tooling and does not test the hypothesis.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
             "a reduced pair of real processors (Interoception and Vision) with the workspace on "
             "against a pooled arm, measuring cross-module broadcast information gain. "
             "It boots no entity and opens no network connection. It is development "
-            "tooling and does not test the thesis."
+            "tooling and does not test the hypothesis."
         ),
     )
     parser.add_argument(

@@ -13,7 +13,7 @@ the decision rule in ``kaine.experiment.calibration_rules.sign_test_verdict``.
 
 The first test is on the run's difference of fractions, the second on its
 adjusted difference over the tone bins; both are made at alpha_test, outside the
-verdict on the thesis, with no multiplicity adjustment (paper A.8).
+verdict on the hypothesis, with no multiplicity adjustment (paper A.8).
 """
 
 from __future__ import annotations

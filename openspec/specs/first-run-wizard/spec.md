@@ -241,15 +241,15 @@ to a host binary on `PATH`.
 - **THEN** detection probes 127.0.0.1:7000
 
 ### Requirement: The wizard offers module presets with a hardware-aware recommendation
-The wizard's module step SHALL offer three choices: the base thesis (exactly the `[modules]` table of `config/profiles/thesis_test.toml`), the full entity (every cognitive module on, the embodiment modules and the recorder module off), and a custom per-module selection that starts from the recommended preset. It SHALL recommend the full entity when the host's tier recommendation is tier 2 or 3 without required module residency, and the base thesis otherwise or when no recommendation is available, and SHALL state the reason. The non-interactive mode SHALL apply the recommendation.
+The wizard's module step SHALL offer three choices: the first configuration (exactly the `[modules]` table of `config/profiles/first_configuration.toml`), the full entity (every cognitive module on, the embodiment modules and the recorder module off), and a custom per-module selection that starts from the recommended preset. It SHALL recommend the full entity when the host's tier recommendation is tier 2 or 3 without required module residency, and the first configuration otherwise or when no recommendation is available, and SHALL state the reason. The non-interactive mode SHALL apply the recommendation.
 
 #### Scenario: A capable host is recommended the full entity
 - **WHEN** the tier probe recommends tier 3
 - **THEN** the wizard recommends the full entity and, if the operator accepts, writes every cognitive module on
 
-#### Scenario: A constrained host is recommended the base thesis
+#### Scenario: A constrained host is recommended the first configuration
 - **WHEN** the tier probe recommends tier 1, or tier 2 with residency required, or no recommendation is available
-- **THEN** the wizard recommends the base thesis and, if accepted, writes the profile's module set
+- **THEN** the wizard recommends the first configuration and, if accepted, writes the profile's module set
 
 ### Requirement: The wizard inventories the host's usable hardware
 The wizard SHALL list every compute device that the host probe recognises: CUDA, ROCm, XPU, MPS, a unified-memory accelerator, and the CPU. Each device SHALL be listed with its total and free memory, and with the processes currently holding it where they are visible. The wizard SHALL also list the CPU cores and the system memory. It SHALL NOT assume any particular device count, vendor or memory size.

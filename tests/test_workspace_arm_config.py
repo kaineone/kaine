@@ -28,7 +28,7 @@ _REPO = Path(__file__).resolve().parents[1]
 
 
 def test_shipped_arm_is_competitive():
-    cfg = load_kaine_config(profile="thesis_test", operator_path=_MISSING)
+    cfg = load_kaine_config(profile="first_configuration", operator_path=_MISSING)
     assert cfg["workspace"]["arm"] == "competitive"
 
 
@@ -48,7 +48,7 @@ def test_arm_kwargs_default_and_seed():
 
 def test_shipped_config_passes_the_workspace_key_guard():
     make_salience_factors(
-        load_kaine_config(profile="thesis_test", operator_path=_MISSING),
+        load_kaine_config(profile="first_configuration", operator_path=_MISSING),
         AffectStateProvider(),
     )
 
@@ -92,7 +92,7 @@ def test_study_overlay_passes_the_workspace_key_guard(monkeypatch, tmp_path):
     )
     make_salience_factors(
         deep_merge(
-            load_kaine_config(profile="thesis_test", operator_path=_MISSING),
+            load_kaine_config(profile="first_configuration", operator_path=_MISSING),
             overlay,
         ),
         AffectStateProvider(),

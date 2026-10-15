@@ -135,7 +135,7 @@ The runner SHALL classify the outcome as WIN, NULL, or NEGATIVE using the shared
 verdict vocabulary, with real non-zero minimum-effect thresholds and at least one
 non-engineered (neutral) stimulus battery, so that a NULL (workspace mediation makes no
 measurable difference — the system is a prompt-assembler) and a NEGATIVE (mediation
-makes a difference adverse to the thesis) are both genuinely reachable through the real
+makes a difference adverse to the hypothesis) are both genuinely reachable through the real
 pipeline, not a wiring test wired to always win.
 
 #### Scenario: Indistinguishable arms yield NULL

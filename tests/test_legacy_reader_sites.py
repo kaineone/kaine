@@ -64,15 +64,15 @@ def test_setup_cli_merges_onto_mapped_operator_file(tmp_path, monkeypatch):
     assert captured["existing_config"] == {"affect": {"interoception_stream": "interoception.out"}}
 
 
-def test_base_thesis_profile_maps_old_module_names(tmp_path, monkeypatch):
-    """base_thesis_modules maps legacy module keys when keys step is done."""
+def test_first_configuration_profile_maps_old_module_names(tmp_path, monkeypatch):
+    """first_configuration_modules maps legacy module keys when keys step is done."""
     _keys_done(monkeypatch)
     profiles_dir = tmp_path / "profiles"
-    profile = profiles_dir / "thesis_test.toml"
+    profile = profiles_dir / "first_configuration.toml"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text("[modules]\nsoma = true\nthymos = false\n", encoding="utf-8")
     monkeypatch.setattr(wizard_core, "MODULE_ORDER", [legacy_aliases.map_module_key(m) for m in wizard_core.MODULE_ORDER])
-    result = wizard_core.base_thesis_modules(profiles_dir=profiles_dir)
+    result = wizard_core.first_configuration_modules(profiles_dir=profiles_dir)
     assert result[legacy_aliases.map_module_key("soma")] is True
     assert result[legacy_aliases.map_module_key("thymos")] is False
     assert "soma" not in result

@@ -28,14 +28,14 @@ competitive selection today, so neither control can be run.
   workspace record copies it, so each run's records say which arm produced
   them.
 - The matched and pooled arms require the coherence layer to be off, as it is
-  in the base-thesis form; the workspace refuses the combination at construction.
+  in the first configuration; the workspace refuses the combination at construction.
 - The module-addition study's overlay pins `[language].temperature = 0.0` and
   `[workspace].arm = "competitive"`, so an operator override cannot make a
   study run sample stochastically or run a control arm.
 - The `[workspace]` key guard in `kaine/boot/wiring.py` accepts `arm`, and a
   test runs the real boot phase that builds the workspace on the shipped
   configuration and on every study configuration.
-- Greedy decoding moves out of the `thesis_test` profile (operator decision,
+- Greedy decoding moves out of the `first_configuration` profile (operator decision,
   matching paper §6.1): ordinary boots sample at the shipped temperature 0.7.
   A new study layer, `config/studies/<name>.toml` selected by `KAINE_STUDY`,
   is applied after the operator config. Three study configurations,
@@ -76,7 +76,7 @@ competitive selection today, so neither control can be run.
   `kaine/config.py`, `kaine/modules/language/module.py`,
   `kaine/cycle/individuation_runtime.py`, `kaine/experiment/run_context.py`,
   `config/kaine.toml`,
-  `config/profiles/thesis_test.toml`, `config/studies/`, docs, tests.
+  `config/profiles/first_configuration.toml`, `config/studies/`, docs, tests.
 - The individuation probe decodes at its own temperature,
   `[individuation].probe_temperature` (default 0.0), which the language module's probe
   request uses and its probe conditions report under the existing

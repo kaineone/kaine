@@ -49,5 +49,5 @@ A processor's broadcast context SHALL adopt every pooled broadcast with all its 
 - **THEN** its context becomes the featurization of the empty set
 
 #### Scenario: The shipped configuration boots
-- **WHEN** the shipped configuration with the `thesis_test` profile passes through the boot phase that builds the workspace
+- **WHEN** the shipped configuration with the `first_configuration` profile passes through the boot phase that builds the workspace
 - **THEN** the key guard accepts `[workspace].arm` and the workspace runs the competitive arm

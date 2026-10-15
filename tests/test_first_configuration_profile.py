@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The thesis-test profile resolves to the base-thesis form (config level)."""
+"""The first-configuration profile resolves to the first configuration (config level)."""
 from __future__ import annotations
 
 from kaine.config import load_kaine_config
@@ -10,13 +10,13 @@ _MISSING_OPERATOR = "/nonexistent-operator-for-tests.toml"
 
 
 def _cfg():
-    return load_kaine_config(profile="thesis_test", operator_path=_MISSING_OPERATOR)
+    return load_kaine_config(profile="first_configuration", operator_path=_MISSING_OPERATOR)
 
 
-def test_enables_exactly_the_thesis_processors():
+def test_enables_exactly_the_first_configuration_processors():
     cfg = _cfg()
     enabled = sorted(k for k, v in cfg["modules"].items() if v)
-    # The base thesis is the four predictive processors plus language, affect (the
+    # The first configuration is the four predictive processors plus language, affect (the
     # affective precision core whose arousal weights the competition) and sleep
     # (fatigue-triggered sleep; voice alignment stays off).
     assert enabled == sorted(["audition", "sequence", "sleep", "language", "interoception", "affect", "vision"])

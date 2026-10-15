@@ -44,7 +44,7 @@ The cognitive cycle entrypoint SHALL load its merged configuration once per boot
 
 #### Scenario: A command-line profile reaches the booted entity
 - **WHEN** the cycle is started with `--profile tier1` and `KAINE_PROFILE` is unset
-- **THEN** the configuration the cycle boots is the one the gates evaluated, with the `tier1` profile applied, and not the default `thesis_test` profile
+- **THEN** the configuration the cycle boots is the one the gates evaluated, with the `tier1` profile applied, and not the default `first_configuration` profile
 
 #### Scenario: Configuration is loaded once
 - **WHEN** the cycle entrypoint boots

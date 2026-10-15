@@ -4,15 +4,15 @@ The language module is the language organ. It turns accessed workspace content i
 
 ## Status
 
-The language module ships disabled in the default config (`[modules].language = false`). The `thesis_test` profile enables it. In general use the organ samples at the shipped `temperature` (0.7). The study configurations of the planned runs (the module-addition study's overlay and `config/studies/workspace_mediation_*.toml`) set `temperature = 0.0`, so in those runs the organ decodes greedily and what it voices is a deterministic function of its input. The language module needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only the sleep module's voice-alignment phase uses them.
+The language module ships disabled in the default config (`[modules].language = false`). The `first_configuration` profile enables it. In general use the organ samples at the shipped `temperature` (0.7). The study configurations of the planned runs (the module-addition study's overlay and `config/studies/workspace_mediation_*.toml`) set `temperature = 0.0`, so in those runs the organ decodes greedily and what it voices is a deterministic function of its input. The language module needs a running OpenAI-compatible server that serves the published KAINE organ under the alias in `model_id`. The Python `[training]` extras are not needed for inference; only the sleep module's voice-alignment phase uses them.
 
-## Role in the base-thesis form
+## Role in the first configuration
 
-In the base-thesis form the language organ is output-only. The audition module's transcription path is off (`[audition].transcription_enabled = false`), so speech reaches the entity only as sound and tone of voice, and no transcript reaches the language module. Everything it voices comes from the workspace.
+In the first configuration the language organ is output-only. The audition module's transcription path is off (`[audition].transcription_enabled = false`), so speech reaches the entity only as sound and tone of voice, and no transcript reaches the language module. Everything it voices comes from the workspace.
 
-The language module never speaks on its own initiative. Its only triggers are `speak` and `think` intents from the action selection module. The thesis profile selects `[action_selection].policy = "self_initiated_report"`, under which `SelfInitiatedReportPolicy` reads each accessed broadcast and takes the best score in the coalition, leaving the language module's own utterances aside:
+The language module never speaks on its own initiative. Its only triggers are `speak` and `think` intents from the action selection module. The first-configuration profile selects `[action_selection].policy = "self_initiated_report"`, under which `SelfInitiatedReportPolicy` reads each accessed broadcast and takes the best score in the coalition, leaving the language module's own utterances aside:
 
-- a `speak` intent needs that score to reach `report_threshold` (default 0.6), the leading candidate's source and event type to differ from the last spoken report's if that report fell within `sig_expiry_s` (300 s in the thesis profile), and `speak_refractory_s` (8 s) to have passed since the last one;
+- a `speak` intent needs that score to reach `report_threshold` (default 0.6), the leading candidate's source and event type to differ from the last spoken report's if that report fell within `sig_expiry_s` (300 s in the first-configuration profile), and `speak_refractory_s` (8 s) to have passed since the last one;
 - a `think` intent uses the lower `think_threshold` (default 0.45) and `think_refractory_s` (3 s).
 
 The intent's `about` names the leading source and its score, for example `"vision (surprise=0.812)"`, with `about_kind = "event"`. An inhibited broadcast yields no intent. The non-default `DriveBiasedActionSelectionPolicy` instead answers a heard utterance and drive-initiated intents; see [`report_policy.py`](../../kaine/workspace/report_policy.py), [`drive_policy.py`](../../kaine/workspace/drive_policy.py) and the [core configuration reference](../appendix-a-configuration/core.md) for `[action_selection]`.
@@ -150,7 +150,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
 
 ## Enabling and use
 
-1. Set `[modules].language = true`, or run the `thesis_test` profile.
+1. Set `[modules].language = true`, or run the `first_configuration` profile.
 2. Download the published organ GGUF. The first-run wizard offers this, or run `hf download kaineone/Qwen3.5-4B-abliterated-GGUF`.
 3. Start and supervise the model server:
 
@@ -167,7 +167,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
    ```
 
 5. Optionally set `persona_name`, `persona_external` and `persona_internal`.
-6. Enable the self-model module to seed the persona from the self-model, and the vocal module to turn external speech into audio. Both are held in the base-thesis form.
+6. Enable the self-model module to seed the persona from the self-model, and the vocal module to turn external speech into audio. Both are held in the first configuration.
 
 ## Privacy notes
 

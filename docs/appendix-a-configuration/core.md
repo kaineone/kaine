@@ -185,7 +185,7 @@ Each tick the controller computes `drive = max(tonic, phasic)`. `tonic` is the a
 
 ### Workspace
 
-Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `thesis_test` profile keeps the shipped values.
+Workspace scoring and access. A candidate's priority is the product of its reported intensity, a novelty factor and a goal factor, clipped to `[0, 1]`; its score applies the arousal level gain and contrast to that priority. There is no per-source precision weight: each processor scales its own error before it reports. The `first_configuration` profile keeps the shipped values.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -212,7 +212,7 @@ Executive action selection (`kaine/workspace/action_selection.py`). When the sec
 | `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
 | `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
-None of these keys is in the shipped file, so the defaults above apply. The `thesis_test` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
+None of these keys is in the shipped file, so the defaults above apply. The `first_configuration` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
 
 Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `ActionSelection.select()` returns no intents.
 
@@ -307,7 +307,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
 
-With no profile selected, the loader applies the base-thesis `thesis_test` profile, which turns `interoception`, `sequence`, `vision`, `audition`, `language`, `affect` and `sleep` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
+With no profile selected, the loader applies the first-configuration `first_configuration` profile, which turns `interoception`, `sequence`, `vision`, `audition`, `language`, `affect` and `sleep` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
 
 ## Plugins
 

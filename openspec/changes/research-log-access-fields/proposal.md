@@ -5,7 +5,7 @@ processor's alert flag, its information gain from the broadcast
 (`context_gain`) and the context's age, and, per broadcast, the access
 threshold. The curated research log copies only allowlisted fields, and none
 of these are on the list. Audition's acoustic report, `audition.perception`,
-the base-thesis hearing path, is not logged at all, and the prediction-error
+the first-configuration hearing path, is not logged at all, and the prediction-error
 observer does not read it either.
 
 ## What Changes

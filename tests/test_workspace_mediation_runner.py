@@ -163,7 +163,7 @@ def test_classify_outcomes():
     assert "not_exercised" not in unexercised.metrics
 
     for verdict in (win, null, negative, unexercised):
-        assert "does not test the thesis" in verdict.detail
+        assert "does not test the hypothesis" in verdict.detail
 
 
 @pytest.mark.asyncio
@@ -171,7 +171,7 @@ async def test_format_summary_contains_disclaimers():
     """The formatted summary carries the harness disclaimer and the dIG label."""
     result = await run_ablation(MediationConfig(seed=5, ticks=30, warmup_ticks=10))
     text = format_summary(result)
-    assert "does not test the thesis" in text
+    assert "does not test the hypothesis" in text
     assert "dIG" in text
 
 

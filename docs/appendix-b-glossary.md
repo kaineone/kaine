@@ -36,7 +36,7 @@ The affective core's arousal, held by [the affect module](#affect), acts as the 
 
 ### Audition
 
-The hearing module. In the [base-thesis form](#base-thesis-form) sound enters only as prediction error: a spectral encoder turns each window of the raw waveform into an acoustic embedding, a forward model conditioned on the [broadcast context](#broadcast-context) predicts the next one, and Audition reports the error as `audition.perception`. For windows detected as speech, a vocal-emotion classifier labels the tone of voice (`audition.emotion`); tone events carry how something was said, never what. Transcription is off by default (`[audition].transcription_enabled = false`). When enabled, Audition can transcribe through Speaches or the sherpa-onnx Moonshine backend. Raw audio stays in process memory. See [Audition](09-modules/audition.md).
+The hearing module. In the [first configuration](#first-configuration) sound enters only as prediction error: a spectral encoder turns each window of the raw waveform into an acoustic embedding, a forward model conditioned on the [broadcast context](#broadcast-context) predicts the next one, and Audition reports the error as `audition.perception`. For windows detected as speech, a vocal-emotion classifier labels the tone of voice (`audition.emotion`); tone events carry how something was said, never what. Transcription is off by default (`[audition].transcription_enabled = false`). When enabled, Audition can transcribe through Speaches or the sherpa-onnx Moonshine backend. Raw audio stays in process memory. See [Audition](09-modules/audition.md).
 
 ### Awake time
 
@@ -45,12 +45,6 @@ Entity time during which the entity is awake and the cycle is not frozen. The de
 ---
 
 ## B
-
-### Base-thesis form
-
-The smallest configuration in which the competition has something to arbitrate, and the profile the planned test runs: four predictive processors (the interoception module, the sequence module, the vision module, the audition module), the affective core [the affect module](#affect), the sleep analog [the sleep module](#sleep) with voice alignment off, and the output-only language organ [the language module](#language), with [the workspace](#workspace) and [the action selection module](#action selection) as scaffolding. It is defined in `config/profiles/thesis_test.toml`. With no profile selected, the loader applies it on top of the shipped `config/kaine.toml`, in which every module is off; select it explicitly with `KAINE_PROFILE=thesis_test python -m kaine.cycle` or `python -m kaine.cycle --profile thesis_test`.
-
-Besides the module flags, the profile sets the seeded perception feed, the vision module's foveation, the acoustic perception path, the sequence module's forward prediction, transcription off, and the self-initiated report policy. The organ samples at the shipped temperature; greedy decoding is set by study configurations. The held modules (memory, imagination, reasoning, self-model, social cognition, a spoken voice, effectors, a perception feed and a body) are built and gated off. An operator `[modules]` table, which the first-run wizard always writes, replaces the profile's module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)).
 
 ### Broadcast
 
@@ -124,6 +118,12 @@ The quantity [the planning module](#planning) minimizes when it selects a policy
 
 The interoception module's sleep pressure. It grows with substrate prediction error beyond the interoception module's expected-error band and decays slowly. When it crosses `[interoception].fatigue_maintenance_threshold` (100.0), the interoception module publishes `interoception.fatigue` and [the sleep module](#sleep) starts a sleep.
 
+### First configuration
+
+The smallest configuration in which the competition has something to arbitrate, and the profile the planned test runs: four predictive processors (the interoception module, the sequence module, the vision module, the audition module), the affective core [the affect module](#affect), the sleep analog [the sleep module](#sleep) with voice alignment off, and the output-only language organ [the language module](#language), with [the workspace](#workspace) and [the action selection module](#action selection) as scaffolding. It is defined in `config/profiles/first_configuration.toml`. With no profile selected, the loader applies it on top of the shipped `config/kaine.toml`, in which every module is off; select it explicitly with `KAINE_PROFILE=first_configuration python -m kaine.cycle` or `python -m kaine.cycle --profile first_configuration`.
+
+Besides the module flags, the profile sets the seeded perception feed, the vision module's foveation, the acoustic perception path, the sequence module's forward prediction, transcription off, and the self-initiated report policy. The organ samples at the shipped temperature; greedy decoding is set by study configurations. The held modules (memory, imagination, reasoning, self-model, social cognition, a spoken voice, effectors, a perception feed and a body) are built and gated off. An operator `[modules]` table, which the first-run wizard always writes, replaces the profile's module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)).
+
 ### Fork / merge
 
 A fork is a snapshot of every module's numeric state, stored under `state/forks/`. A merge combines two fork snapshots, using TIES or DARE adapter merging for voice-alignment LoRA adapters when the `[training]` extra is installed. A merge refuses to choose between two world models unless `world_model_from` is given. The merge gate reads the fork's own `state/individuation/` tree and the shared divergence verdict, and a fork that has been awake at least `fork_preserve_min_lived_s` (1800 s), or whose awake time is unknown, is preserved for operator review. See [Forks and merges](12-forks-and-merges.md).
@@ -134,7 +134,7 @@ A learned predictor of a module's own next input. The vision and audition module
 
 ### Foveation
 
-The vision module's front-end attention (`kaine/modules/vision/foveation.py`). Each tile of a coarse grid over the raw frames keeps a running mean and variance of its frame change, and its salience is a z-score of the current change against them. The fovea moves to the most salient tile when it beats the held tile by a hysteresis margin, and arousal sets its size (narrower when arousal is high). The peripheral gist and the foveal crop pass through the same clip encoder. Off in `config/kaine.toml` (`[vision].foveation = false`) and on in the base-thesis form.
+The vision module's front-end attention (`kaine/modules/vision/foveation.py`). Each tile of a coarse grid over the raw frames keeps a running mean and variance of its frame change, and its salience is a z-score of the current change against them. The fovea moves to the most salient tile when it beats the held tile by a hysteresis margin, and arousal sets its size (narrower when arousal is high). The peripheral gist and the foveal crop pass through the same clip encoder. Off in `config/kaine.toml` (`[vision].foveation = false`) and on in the first configuration.
 
 ---
 
@@ -166,7 +166,7 @@ Welfare events whose significance is ambiguous or disputed, such as sustained hi
 
 ### Sleep
 
-The sleep analog: a fatigue-triggered offline period. The sleep module begins when the interoception module's fatigue crosses its threshold, when the interoception module requests maintenance, or after one entity hour without sleep (`[sleep].interval_seconds = 3600.0`). During sleep the cycle keeps running, the perceptual feed pauses, and all four processors suspend forward-model adaptation. The sleep module ends with an affective reset that returns affect to baseline and clears the drives, together with the affect module's learning-progress error means, alert-rate averages, intent rate and perceived emotion (wellness and interaction history are kept), and the interoception module's fatigue is reset. The consolidation phases (light and deep consolidation with synaptic downscaling, associative replay behind `[sleep.consolidation].associative_replay`, and voice alignment) act on memory, the world model and preference data, so in the base-thesis form they do no work. See [the sleep module](09-modules/sleep.md) and [Sleep and maintenance](10-sleep/README.md).
+The sleep analog: a fatigue-triggered offline period. The sleep module begins when the interoception module's fatigue crosses its threshold, when the interoception module requests maintenance, or after one entity hour without sleep (`[sleep].interval_seconds = 3600.0`). During sleep the cycle keeps running, the perceptual feed pauses, and all four processors suspend forward-model adaptation. The sleep module ends with an affective reset that returns affect to baseline and clears the drives, together with the affect module's learning-progress error means, alert-rate averages, intent rate and perceived emotion (wellness and interaction history are kept), and the interoception module's fatigue is reset. The consolidation phases (light and deep consolidation with synaptic downscaling, associative replay behind `[sleep.consolidation].associative_replay`, and voice alignment) act on memory, the world model and preference data, so in the first configuration they do no work. See [the sleep module](09-modules/sleep.md) and [Sleep and maintenance](10-sleep/README.md).
 
 ---
 
@@ -194,7 +194,7 @@ The value in `[0, 1]` a module attaches to each event it publishes, carried in t
 
 ### Language
 
-The language organ, output-only in the base-thesis form. It turns accessed content into words on a speak intent (external speech) or a think intent (inner thought). Its context is a first-person persona: accessed content is presented as the entity's own state and perception, it is told not to claim feelings or perceptions that content does not contain, and drive crossings reach it as fixed phrases. It calls `/v1/chat/completions` on a local model server with thinking disabled, and its backing model is an [abliterated](#abliteration) dense 4B Qwen3.5 GGUF. Its utterances re-enter the bus as candidates at a fixed intensity. Because it is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure. See [the language module](09-modules/language.md).
+The language organ, output-only in the first configuration. It turns accessed content into words on a speak intent (external speech) or a think intent (inner thought). Its context is a first-person persona: accessed content is presented as the entity's own state and perception, it is told not to claim feelings or perceptions that content does not contain, and drive crossings reach it as fixed phrases. It calls `/v1/chat/completions` on a local model server with thinking disabled, and its backing model is an [abliterated](#abliteration) dense 4B Qwen3.5 GGUF. Its utterances re-enter the bus as candidates at a fixed intensity. Because it is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure. See [the language module](09-modules/language.md).
 
 ### Local precision
 
@@ -210,7 +210,7 @@ The memory module (held). It keeps episodic, semantic and procedural collections
 
 ### Module-addition study
 
-The study that grows the architecture one module at a time. A developmental phase produces a seed entity, `branch 0` and a repeat run the base-thesis form, `branch k` adds the first k held modules in a fixed order, and an accumulate line carries one entity through every step. The first study adds the episodic memory, world model, planning, self-model, social cognition and vocal modules. Every viewing plays the same film programme, and the report is content-free and descriptive. The code calls it the ignition study. See [The module-addition study](15-experiments/ignition-study.md).
+The study that grows the architecture one module at a time. A developmental phase produces a seed entity, `branch 0` and a repeat run the first configuration, `branch k` adds the first k held modules in a fixed order, and an accumulate line carries one entity through every step. The first study adds the episodic memory, world model, planning, self-model, social cognition and vocal modules. Every viewing plays the same film programme, and the report is content-free and descriptive. The code calls it the ignition study. See [The module-addition study](15-experiments/ignition-study.md).
 
 ### Embodiment
 
@@ -258,7 +258,7 @@ The effector module (held). It executes act intents only through effectors the o
 
 ### Prediction error
 
-The gap between a processor's prediction and what it then sensed, and the only form in which perception enters the workspace. Each processor reports its error scaled by its [local precision](#local-precision), as a [graded intensity](#graded-intensity) or at its alert level. In the base-thesis form the audition module reports error over acoustic embeddings and never a transcript, and the vision module reports error over clip embeddings of its foveated view.
+The gap between a processor's prediction and what it then sensed, and the only form in which perception enters the workspace. Each processor reports its error scaled by its [local precision](#local-precision), as a [graded intensity](#graded-intensity) or at its alert level. In the first configuration the audition module reports error over acoustic embeddings and never a transcript, and the vision module reports error over clip embeddings of its foveated view.
 
 ### Predictive processing
 
@@ -266,7 +266,7 @@ The framework in which each processor maintains a generative model of its domain
 
 ### Priority
 
-A candidate's priority is `clip(intensity x novelty x goal)` to `[0, 1]`. The goal factor is held at one in the base-thesis form (`[workspace].salience_goal_factor = "static"`). [Arousal](#arousal) turns the priority into the [score](#score).
+A candidate's priority is `clip(intensity x novelty x goal)` to `[0, 1]`. The goal factor is held at one in the first configuration (`[workspace].salience_goal_factor = "static"`). [Arousal](#arousal) turns the priority into the [score](#score).
 
 ---
 
@@ -302,7 +302,7 @@ The offline procedural audio-visual feed (`[perception_feed].mode = "seeded"`, a
 
 ### Self-initiated report (policy)
 
-The action selection module's report rule in the base-thesis form (`[action_selection].policy = "self_initiated_report"`). From an accessed broadcast it derives a speak intent only when the best score in the coalition, leaving aside the organ's own utterances, clears the speak bar; when the leading candidate's source and event type differ from those of the last spoken report made within the past five minutes; and when a refractory interval has passed. A lower think bar on the same score governs inner thought. No intent comes from an inhibited broadcast, and no user utterance triggers speech. See `kaine/workspace/report_policy.py`.
+The action selection module's report rule in the first configuration (`[action_selection].policy = "self_initiated_report"`). From an accessed broadcast it derives a speak intent only when the best score in the coalition, leaving aside the organ's own utterances, clears the speak bar; when the leading candidate's source and event type differ from those of the last spoken report made within the past five minutes; and when a refractory interval has passed. A lower think bar on the same score governs inner thought. No intent comes from an inhibited broadcast, and no user utterance triggers speech. See `kaine/workspace/report_policy.py`.
 
 ### Interoception
 
@@ -326,7 +326,7 @@ Merging methods for LoRA adapters (TIES: trim, elect sign, merge; DARE: drop and
 
 ### Vision
 
-The vision module. A frozen temporally native video encoder (InternVideo-Next base, MIT) embeds a 16-frame clip from a RAM-only ring into one 768-dimensional embedding, on a strided window at about 3.33 Hz; DINOv2-small is a selectable per-frame fallback. A forward model conditioned on the [broadcast context](#broadcast-context) predicts the next clip embedding, and the vision module reports the error with [graded intensity](#graded-intensity), alerting on a large error ratio or an unusually large change between clips. [Foveation](#foveation) is on in the base-thesis form. Raw frames never reach disk. See [the vision module](09-modules/vision.md).
+The vision module. A frozen temporally native video encoder (InternVideo-Next base, MIT) embeds a 16-frame clip from a RAM-only ring into one 768-dimensional embedding, on a strided window at about 3.33 Hz; DINOv2-small is a selectable per-frame fallback. A forward model conditioned on the [broadcast context](#broadcast-context) predicts the next clip embedding, and the vision module reports the error with [graded intensity](#graded-intensity), alerting on a large error ratio or an unusually large change between clips. [Foveation](#foveation) is on in the first configuration. Raw frames never reach disk. See [the vision module](09-modules/vision.md).
 
 ### Two-layer gate
 
@@ -354,4 +354,4 @@ Conditions of potential concern that the sidecar welfare observer detects from b
 
 ### Workspace-mediation test
 
-The planned test of whether competition for the workspace does work that pooling the same reports does not, measured by cross-module broadcast [information gain](#information-gain-cross-module-broadcast). Three arms run on the same film programme: competitive selection as built, a matched arm that draws a coalition of the same size without regard to score under the same access rule, and a pooled arm in which every candidate enters the context with no scoring, selection or access gate. A positive control checks that the measure detects injected information. The thesis predicts a higher gain under competitive selection than under both controls. The context, the per-report gain and the three arms (`[workspace].arm`) are built; the positive control is not built yet. The offline package `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling that runs the interoception and sequence modules against a pooled arm and does not test the thesis. See [Running experiments](15-experiments/README.md#the-planned-workspace-mediation-test).
+The planned test of whether competition for the workspace does work that pooling the same reports does not, measured by cross-module broadcast [information gain](#information-gain-cross-module-broadcast). Three arms run on the same film programme: competitive selection as built, a matched arm that draws a coalition of the same size without regard to score under the same access rule, and a pooled arm in which every candidate enters the context with no scoring, selection or access gate. A positive control checks that the measure detects injected information. The hypothesis predicts a higher gain under competitive selection than under both controls. The context, the per-report gain and the three arms (`[workspace].arm`) are built; the positive control is not built yet. The offline package `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling that runs the interoception and sequence modules against a pooled arm and does not test the hypothesis. See [Running experiments](15-experiments/README.md#the-planned-workspace-mediation-test).

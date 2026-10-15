@@ -48,7 +48,7 @@ async def _make_client(
     rate_control_publisher=None,
     token: str | None = "test-token",
 ):
-    # Conversation is deactivated by default in the base-thesis form; these router
+    # Conversation is deactivated by default in the first configuration; these router
     # tests exercise both surfaces, so enable conversation unless a test overrides.
     base = DashboardConfig(
         conversation_enabled=True,

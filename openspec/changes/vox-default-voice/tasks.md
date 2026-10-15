@@ -19,7 +19,7 @@
 - [x] 3.3 An explicit voice wins (`predefined_voice_id` with no server query, `sherpa_speaker_id`, `default_voice`)
 - [x] 3.4 An empty, unreachable or non-matching list degrades with a clear message and no exception, and an utterance then publishes a failure event and plays nothing
 - [x] 3.5 Kokoro mapping through a fake speaker table, and the factory's failure path
-- [x] 3.6 The vocal module stays disabled in the shipped config and the `thesis_test` profile
+- [x] 3.6 The vocal module stays disabled in the shipped config and the `first_configuration` profile
 
 ## 4. Docs and config
 

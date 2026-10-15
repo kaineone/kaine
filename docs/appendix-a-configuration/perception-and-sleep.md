@@ -4,7 +4,7 @@ The `[perception_feed]`, `[perception_preview]`, and `[sleep]` sections in `conf
 
 ## Perception feed
 
-`[perception_feed]` is one source of truth that drives both the vision surface ([the vision module](../09-modules/vision.md)) and the hearing surface ([the audition module](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the base-thesis `thesis_test` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[vision]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
+`[perception_feed]` is one source of truth that drives both the vision surface ([the vision module](../09-modules/vision.md)) and the hearing surface ([the audition module](../09-modules/audition.md)). Picture and sound share the same seed or manifest, so they cannot drift apart. The shipped `config/kaine.toml` sets `mode = "off"`; with no profile selected, the loader applies the first-configuration `first_configuration` profile, so the effective default is `mode = "seeded"`, `seed = 0`. The live camera and microphone paths stay off unless you turn them on in `[vision]` and `[audition]`. In every mode, raw frames and PCM stay in RAM and never touch disk.
 
 ### Feed modes
 

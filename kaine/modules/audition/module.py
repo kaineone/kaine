@@ -110,14 +110,14 @@ class Audition(BaseModule):
         # kaine/modules/audition/acoustic.py and openspec auditory-perception.
         general_audition: bool = False,
         # Speech-to-text gate. Default FALSE: the STT pipeline is built but
-        # deactivated by default so that, in the base-thesis form, no text ever
+        # deactivated by default so that, in the first configuration, no text ever
         # reaches the language organ and every utterance is provably downstream of
         # the workspace competition. When false the STT model is never invoked and
         # no `audition.transcription` event is published; only the acoustic-
         # perception prediction error and the affect signals (emotion/prosody)
         # reach the workspace. The STT code is preserved, only bypassed — audio
         # enters as prediction error, not a transcript. Set true to re-enable the
-        # full pipeline (a configuration beyond the base-thesis form).
+        # full pipeline (a configuration beyond the first configuration).
         transcription_enabled: bool = False,
         acoustic_encoder: Optional[AcousticEncoder] = None,
         arousal_window_range: tuple[float, float] = (0.15, 1.0),

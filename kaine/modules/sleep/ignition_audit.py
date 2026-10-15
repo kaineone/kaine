@@ -40,7 +40,7 @@ DRIVE_TYPE = "affect.drive"
 # Realization markers (a realized ignition). realization_failed is NOT here.
 # NOTE: when the vocal module is enabled an utterance may appear as BOTH external_speech
 # and vocal.synthesized (counted twice in realized_total; acceptable while the vocal module
-# ships disabled in the base thesis — revisit if the vocal module is enabled).
+# ships disabled in the first configuration — revisit if the vocal module is enabled).
 REALIZATION_TYPES = frozenset(
     {"external_speech", "internal_speech", "vocal.synthesized", "effectors.action"}
 )

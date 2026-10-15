@@ -4,7 +4,7 @@ This page covers `PerceptualLocus`, the module registered as `perception`. It ar
 
 ## Status
 
-`PerceptualLocus` is built and tested, and held: `perception` is `false` in the shipped `[modules]` block of `config/kaine.toml` and in the base-thesis `thesis_test` profile. It needs no optional extra. It needs the bus (Redis).
+`PerceptualLocus` is built and tested, and held: `perception` is `false` in the shipped `[modules]` block of `config/kaine.toml` and in the first-configuration `first_configuration` profile. It needs no optional extra. It needs the bus (Redis).
 
 The locus itself does not depend on this module. The locus state in `kaine.perception_state` is always in force: boot selects the virtual locus for the seeded, playlist and developmental feeds, and the operator sets the locus through the dashboard. What the module adds is the path by which the entity may switch its own locus. No module produces the `intent.perceptual_locus.switch` event that path consumes, so the self-switch cannot fire even with `allow_self_switch = true`; the flag is reserved for later virtual-world work, and locus changes are operator-driven.
 
@@ -129,7 +129,7 @@ Writes are atomic (write, then rename). An operator write to `locus` bypasses th
 
 ## Enabling
 
-In the operator file `config/kaine.operator.toml` (the same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected):
+In the operator file `config/kaine.operator.toml` (the same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected):
 
 ```toml
 [modules]

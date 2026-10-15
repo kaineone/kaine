@@ -346,7 +346,7 @@ def _compute_effect(
 
 _HARNESS_SUFFIX = (
     "Development harness: a reduced pair against a pooled arm only; "
-    "it does not test the thesis."
+    "it does not test the hypothesis."
 )
 
 
@@ -494,7 +494,7 @@ def format_summary(result: dict[str, Any]) -> str:
         f"competing_fraction            = {eff['competing_fraction']:.3f}",
         f"accessed_broadcasts           = {eff['accessed_broadcasts']}",
         f"VERDICT: {v['outcome']}: {v['detail']}",
-        "This harness is development tooling and does not test the thesis.",
+        "This harness is development tooling and does not test the hypothesis.",
     ]
     return "\n".join(lines)
 

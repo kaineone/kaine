@@ -6,11 +6,11 @@
 
 ## 2. Profile
 
-- [x] 2.1 `thesis_test.toml`: `[language].temperature = 0.0`; comments say arousal is the global gain.
+- [x] 2.1 `first_configuration.toml`: `[language].temperature = 0.0`; comments say arousal is the global gain.
 
 ## 3. Tests and docs
 
 - [x] 3.1 Remove the `SourcePrecision` and `make_source_precision` tests; keep the contrast tests.
 - [x] 3.2 Test: a constant-intensity heartbeat source does not lower a perceptual alert's score.
-- [x] 3.3 Test: the thesis profile resolves `[language].temperature` to 0.0.
+- [x] 3.3 Test: the first-configuration profile resolves `[language].temperature` to 0.0.
 - [x] 3.4 Docs updated.

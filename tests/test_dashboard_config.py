@@ -26,7 +26,7 @@ def test_defaults():
     cfg = DashboardConfig()
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 8088
-    assert cfg.conversation_enabled is False  # deactivated by default (base-thesis form)
+    assert cfg.conversation_enabled is False  # deactivated by default (first configuration)
     assert cfg.diagnostics_enabled is True
     assert cfg.conversation_history_lookback == 50
     assert cfg.dev_content_override is False
@@ -134,7 +134,7 @@ def test_no_env_leaves_toml_host(tmp_path, monkeypatch):
 
 
 def test_env_conversation_enables_over_toml(tmp_path, monkeypatch):
-    # A container mounts the baked kaine.toml (conversation off in the base-thesis
+    # A container mounts the baked kaine.toml (conversation off in the first-configuration
     # form) and turns the surface on via the environment, so no parallel full-config
     # copy has to be hand-maintained just to flip this one flag.
     config_file = tmp_path / "kaine.toml"

@@ -9,7 +9,7 @@
 
 ## 2. Suite
 
-- [x] 2.1 `suite.py`: collect per-seed `dIG`, apply the two one-sided sign tests with the strict alpha rule, keep the WIN p-value in the Holm family, and say in every verdict that the harness does not test the thesis.
+- [x] 2.1 `suite.py`: collect per-seed `dIG`, apply the two one-sided sign tests with the strict alpha rule, keep the WIN p-value in the Holm family, and say in every verdict that the harness does not test the hypothesis.
 
 ## 3. Tests
 

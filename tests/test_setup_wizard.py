@@ -371,7 +371,7 @@ def test_wizard_tier_recommendation_default_no_writes_nothing():
         if "Record tier" in prompt:
             return ""  # accept the default No
         if "modules:" in prompt:
-            return ""  # accept the recommended base-thesis preset
+            return ""  # accept the recommended first-configuration preset
         if "research" in prompt.lower():
             return "n"
         if "encryption" in prompt.lower():

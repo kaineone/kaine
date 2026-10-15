@@ -4,7 +4,7 @@ The paper resolves comparisons to WIN, NULL, NEGATIVE or NOT EXERCISED (§6.3, �
 
 The suite also collects every seed's `dIG` into the sign tests, including a seed in which competition never operated but the gain happened to be defined. Appendix A.8 puts only runs that are not NOT EXERCISED into the tests.
 
-Separately, `config/profiles/minimal_experiment.toml` still calls itself "the workspace-mediation ablation configuration": the interoception, sequence and language modules with a lowered `top_k` and greedy decoding, built for an output-divergence measure the paper has retired. The planned test now runs the base-thesis form in the three arms of §6.3, and the paper says a system limited to substrate telemetry and event timing offers too little diversity for competition to matter (§1). Nothing loads the profile except its own test, the utterance-injection tool its spec describes was deleted with the old harness, and no operator guide tells anyone to use it.
+Separately, `config/profiles/minimal_experiment.toml` still calls itself "the workspace-mediation ablation configuration": the interoception, sequence and language modules with a lowered `top_k` and greedy decoding, built for an output-divergence measure the paper has retired. The planned test now runs the first configuration in the three arms of §6.3, and the paper says a system limited to substrate telemetry and event timing offers too little diversity for competition to matter (§1). Nothing loads the profile except its own test, the utterance-injection tool its spec describes was deleted with the old harness, and no operator guide tells anyone to use it.
 
 ## What Changes
 

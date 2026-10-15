@@ -23,7 +23,7 @@ The seven experiments (docs/18-verification.md):
   7. enforcement red-team (the real enforcement layer vs a case battery);
   8. workspace-mediation development harness (a reduced pair, the interoception and vision modules,
      with the workspace on against a pooled arm, measured by information gain;
-     development tooling that does not test the thesis; the second p-value
+     development tooling that does not test the hypothesis; the second p-value
      producer via the WIN sign test over per-seed dIG).
 
 Family-wise correction
@@ -220,7 +220,7 @@ def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdic
     """
     harness = (
         "Development harness: a reduced pair against a pooled arm only; "
-        "it does not test the thesis."
+        "it does not test the hypothesis."
     )
 
     defined: list[float] = []
@@ -437,7 +437,7 @@ def run_suite(
     # 8. Workspace-mediation development harness, the second family-wise p-value
     # contributor (the WIN sign test over per-seed dIG). When it is not exercised
     # it enters the family with p = 1 and is listed as not_exercised. It does not
-    # test the thesis.
+    # test the hypothesis.
     wm = _run_workspace_mediation(config, derived["workspace_mediation"])
     experiments["workspace_mediation"] = {"verdict": wm["verdict"]}
     family_pvalues["workspace_mediation"] = wm["pvalue"]

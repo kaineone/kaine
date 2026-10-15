@@ -17,7 +17,7 @@ Both speech engines ship voices of their own. The Chatterbox TTS server ships a 
 - No voice name is hard-coded. If the engine's list is empty, unreachable, or has no voice that matches, the module logs one clear operator line, records a backend failure for the health surface, and stays silent. The cognitive cycle never crashes on it.
 - The speech manifest records the Kokoro speaker table for the pinned `kokoro-en` archive.
 - The setup wizard no longer turns the vocal module off when no Chatterbox voice id is given, and it reads the server's voice list in the format the server returns (a list of objects with `display_name` and `filename`).
-- The vocal module stays off in the shipped configuration and in the `thesis_test` profile.
+- The vocal module stays off in the shipped configuration and in the `first_configuration` profile.
 - Letting the entity choose its voice is designed as a follow-up only (design section "Follow-up: the entity's own choice"); nothing of it ships here.
 
 ## Capabilities

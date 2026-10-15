@@ -86,7 +86,7 @@ The code does not follow it.
 
 ## Impact
 
-- The episodic memory module is held, so the base-thesis form is unaffected: with the episodic memory module absent
+- The episodic memory module is held, so the first configuration is unaffected: with the episodic memory module absent
   phase 2 is skipped as before.
 - Affected code: `kaine/modules/episodic_memory/{storage,memory,module,replay}.py`,
   `kaine/modules/sleep/{phases,module}.py`, `kaine/boot/factories/{episodic_memory,sleep}.py`,

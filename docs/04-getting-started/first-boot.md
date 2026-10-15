@@ -25,21 +25,21 @@ The script checks that Redis answers `PONG` on port 6479, Qdrant answers `/ready
 
 Module toggles belong in the gitignored `config/kaine.operator.toml`. The loader deep-merges that file over the shipped `config/kaine.toml` at boot. The shipped `config/kaine.toml` keeps every module `false` and a guard test enforces that, so leave it unedited.
 
-If you have already run the first-run wizard (`python -m kaine.setup`), it wrote a full `[modules]` table to the operator file; those choices replace any profile defaults. The wizard offers the base thesis (the `thesis_test` module set) or the full entity (all fourteen cognitive modules, embodiment off), and recommends one from the host's hardware tier; see [Browser first-run wizard](README.md#browser-first-run-wizard).
+If you have already run the first-run wizard (`python -m kaine.setup`), it wrote a full `[modules]` table to the operator file; those choices replace any profile defaults. The wizard offers the first configuration (the `first_configuration` module set) or the full entity (all fourteen cognitive modules, embodiment off), and recommends one from the host's hardware tier; see [Browser first-run wizard](README.md#browser-first-run-wizard).
 
-If no profile is selected and `config/kaine.operator.toml` has no `[modules]` table, the loader applies the base-thesis `thesis_test` profile automatically (`kaine/config.py`). That profile is the effective default entity only in that case. To start the cycle with that choice explicit:
+If no profile is selected and `config/kaine.operator.toml` has no `[modules]` table, the loader applies the first-configuration `first_configuration` profile automatically (`kaine/config.py`). That profile is the effective default entity only in that case. To start the cycle with that choice explicit:
 
 ```bash
 export KAINE_CYCLE_OPERATOR_PRESENT=1
 python -m kaine.cycle
 # equivalently:
-KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=thesis_test python -m kaine.cycle
-# or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile thesis_test
+KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=first_configuration python -m kaine.cycle
+# or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile first_configuration
 ```
 
-`thesis_test` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the output-only language organ with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[action_selection].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
+`first_configuration` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the output-only language organ with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[action_selection].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
 
-For the full overlay, see `config/profiles/thesis_test.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
+For the full overlay, see `config/profiles/first_configuration.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
 
 The equivalent hand-written `[modules]` block in `config/kaine.operator.toml`, if you prefer to compose it yourself:
 
@@ -52,7 +52,7 @@ audition   = true   # raw sound as prediction error; [audio] extra required; tra
 affect     = true   # affective core
 language     = true   # output-only language organ; the model server must be serving
 effectors     = false  # no effectors on first boot
-vocal        = false  # TTS not part of the base-thesis voice path
+vocal        = false  # TTS not part of the first-configuration voice path
 self_model    = false  # held module
 episodic_memory     = false  # held module
 planning       = false  # held module
@@ -64,7 +64,7 @@ embodiment     = false  # held module (embodiment)
 recorder       = false  # test infrastructure; off by default
 ```
 
-The project keeps the held modules off until the base-thesis test has a result, and the effectors module has no effector on first boot. An operator who wants to explore a held module can enable it individually (see [Day-to-day operation](../06-operation/README.md)), as a deliberate departure from the project default.
+The project keeps the held modules off until the planned test of the first configuration has a result, and the effectors module has no effector on first boot. An operator who wants to explore a held module can enable it individually (see [Day-to-day operation](../06-operation/README.md)), as a deliberate departure from the project default.
 
 > Your per-install choices, including the profile, live in `config/kaine.operator.toml` and your launch environment, and they are never committed.
 

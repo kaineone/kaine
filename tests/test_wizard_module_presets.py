@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for wizard module presets (base thesis / full entity)."""
+"""Tests for wizard module presets (first configuration / full entity)."""
 from __future__ import annotations
 
 import io
@@ -16,7 +16,7 @@ from kaine.setup.wizard import (
     ACK_PHRASE,
     FULL_ENTITY_MODULES,
     MODULE_ORDER,
-    base_thesis_modules,
+    first_configuration_modules,
     recommend_preset,
     run_wizard,
 )
@@ -84,13 +84,13 @@ def test_full_entity_modules():
             assert FULL_ENTITY_MODULES[m] is True
 
 
-def test_base_thesis_modules_matches_profile():
-    path = kaine_config.profile_path("thesis_test")
+def test_first_configuration_modules_matches_profile():
+    path = kaine_config.profile_path("first_configuration")
     with path.open("rb") as fh:
         table = tomllib.load(fh).get("modules", {})
     expected = {m: bool(table.get(m, False)) for m in MODULE_ORDER}
     expected["recorder"] = False
-    assert base_thesis_modules() == expected
+    assert first_configuration_modules() == expected
 
 
 def test_recommend_preset():
@@ -151,7 +151,7 @@ def test_interactive_default_full_entity():
     assert "Module preset: full entity" in out()
 
 
-def test_interactive_choose_base_thesis():
+def test_interactive_choose_first_configuration():
     answers = [ACK_PHRASE, "", "", "y", "n", "b", "n", "n"]
     a = _Answers(answers)
     out, sink = _collect_out()
@@ -163,21 +163,21 @@ def test_interactive_choose_base_thesis():
         recommend_tier_fn=_tier3_no_residency,
         probe_services=None,
     )
-    assert result.config["modules"] == base_thesis_modules()
+    assert result.config["modules"] == first_configuration_modules()
     assert "Recommended: full entity" in out()
-    assert "Module preset: base thesis" in out()
+    assert "Module preset: first configuration" in out()
 
 
 @pytest.mark.parametrize(
     ("recommend", "expected"),
     [
         (_tier3_no_residency, FULL_ENTITY_MODULES),
-        (None, None),  # no recommendation: the base thesis
+        (None, None),  # no recommendation: the first configuration
     ],
 )
 def test_custom_starts_from_the_recommended_preset(recommend, expected):
     if expected is None:
-        expected = base_thesis_modules()
+        expected = first_configuration_modules()
     a = _Answers([ACK_PHRASE, "", "", "y", "n", "c"])
     out, sink = _collect_out()
     run_wizard(
@@ -234,7 +234,7 @@ def test_full_entity_without_a_voice_keeps_vocal_on():
     assert "no voice id given; the vocal module picks a shipped voice at startup." in out()
 
 
-def test_defaults_without_recommendation_base_thesis():
+def test_defaults_without_recommendation_first_configuration():
     out, sink = _collect_out()
     result = run_wizard(
         input_fn=_Answers([]),
@@ -244,6 +244,6 @@ def test_defaults_without_recommendation_base_thesis():
         defaults=True,
     )
     assert result.acknowledged is True
-    assert result.config["modules"] == base_thesis_modules()
-    assert "[--defaults] module preset: base thesis" in out()
-    assert "Module preset: base thesis" in out()
+    assert result.config["modules"] == first_configuration_modules()
+    assert "[--defaults] module preset: first configuration" in out()
+    assert "Module preset: first configuration" in out()

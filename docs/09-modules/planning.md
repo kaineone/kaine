@@ -4,7 +4,7 @@ The planning module is KAINE's reasoning module. It runs discrete-state active i
 
 ## Status
 
-The planning module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].planning = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it third in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
+The planning module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].planning = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it third in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
 - `[planning].backend` selects the engine. `"pymdp"` needs the `[reasoning]` optional extra (`inferactively-pymdp` and `jax[cpu]`). `"numpy"` needs only NumPy.
 - No GPU is needed; both backends run on the CPU inside the cycle's time budget.
@@ -151,7 +151,7 @@ The payload keeps the shape of the earlier symbolic reasoner:
 ## Enabling
 
 1. Choose a backend. The default, `backend = "pymdp"`, needs the `[reasoning]` extra: `.venv/bin/pip install -e '.[reasoning]'`. `backend = "numpy"` needs nothing more.
-2. In the operator file `config/kaine.operator.toml`, set `[modules].planning = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+2. In the operator file `config/kaine.operator.toml`, set `[modules].planning = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 
 The planning module needs no external service. In tests, inject a `FakeEngine`:
 

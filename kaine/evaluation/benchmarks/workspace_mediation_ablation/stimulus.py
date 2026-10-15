@@ -178,7 +178,7 @@ class MediationStimulus:
             frame = [v + vision_rng.gauss(0.0, self.frame_noise) for v in scenes[scene_idx]]
             vision_frames.append(frame)
 
-            # Background candidates stand in for the other base-thesis candidates.
+            # Background candidates stand in for the other first-configuration candidates.
             # They carry no information about either processor's input.
             tick_bg = [
                 Event(

@@ -201,7 +201,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {"category", "confidence", "scores", "alert", "tone_error_ratio", "tone_rule", "classified", "entity_time_s"}
     ),
     "audition.prosody": frozenset({"f0_mean_hz", "f0_std_hz"}),
-    # Acoustic report (base-thesis hearing path): numeric fields only; the playlist item title is not logged.
+    # Acoustic report (first-configuration hearing path): numeric fields only; the playlist item title is not logged.
     "audition.perception": frozenset(
         {
             "prediction_error",

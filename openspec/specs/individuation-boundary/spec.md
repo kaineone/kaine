@@ -38,7 +38,7 @@ preference battery, captured once at run start before lived experience — and t
 null distribution SHALL be built from the **entity's own** present stochastic
 variation (the live entity re-sampled with seed variation). The reference and the
 null SHALL NOT be the bare/pretrained organ, because conditioned-vs-bare distance
-measures architecture conditioning (the thesis effect, present from the first
+measures architecture conditioning (the architecture effect, present from the first
 tick), which `entity-decommission` already prohibits as the individuation key.
 
 #### Scenario: A sensory-void / unchanged entity is not significant

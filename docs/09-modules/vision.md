@@ -4,7 +4,7 @@ The vision module is KAINE's foveated vision. It encodes short clips of the vide
 
 ## Status and dependencies
 
-Implemented. The shipped `config/kaine.toml` sets `[modules].vision = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it. With no profile selected, the loader applies `thesis_test` automatically, so the default entity has the vision module enabled.
+Implemented. The shipped `config/kaine.toml` sets `[modules].vision = false`, and the `first_configuration` profile (`config/profiles/first_configuration.toml`) enables it. With no profile selected, the loader applies `first_configuration` automatically, so the default entity has the vision module enabled.
 
 - Live camera capture needs the `[vision]` extra: `pip install -e .[vision]`. It installs `opencv-python-headless`, `Pillow`, and `transformers`.
 - `torch` comes from the `[core]` extra, not the base package.
@@ -86,7 +86,7 @@ where the running mean is over the last `prediction_error_window` errors. A posi
 
 ## Intensity and the alert flag
 
-With forward prediction on (the shipped and base-thesis setting), each report's error ratio is `prediction_error / mean`, the mean being over the last `prediction_error_window` errors including the current one. The report is an alert when either criterion holds:
+With forward prediction on (the shipped and first-configuration setting), each report's error ratio is `prediction_error / mean`, the mean being over the last `prediction_error_window` errors including the current one. The report is an alert when either criterion holds:
 
 - the error ratio is at least 2.0 (fixed in code, with no config key);
 - the change score is at least `change_alert_factor` times the mean of the last `prediction_error_window` change scores and at least `change_alert_threshold` (an absolute floor that keeps a large ratio over a nearly static stream from firing on noise).
@@ -171,7 +171,7 @@ Section `[vision]` in `config/kaine.toml`. The full reference is in the [modules
 | `forward_model_units` | integer | `256` shipped; `128` class default | Hidden width of the forward model |
 | `prediction_error_window` | integer | `32` | Reports in the running means of the error and of the change score (at least 2) |
 | `visual_buffer_size` | integer | `16` | Embeddings in the visual buffer whose mean feeds the forward model |
-| `foveation` | boolean | `false` shipped; `true` in `thesis_test` | Enable attention-driven foveation |
+| `foveation` | boolean | `false` shipped; `true` in `first_configuration` | Enable attention-driven foveation |
 | `foveation_grid` | array of 2 integers | `[12, 12]` | Saliency tiling `(rows, cols)` |
 | `foveation_hysteresis` | float | `0.15` | A new tile must exceed the held tile's salience by this fraction to move the fovea |
 | `foveation_arousal_size_min` | float | `0.12` | Fovea half-extent at arousal 1.0 |
@@ -184,7 +184,7 @@ The shared top-level `[perception_feed]` section drives a deterministic audio-vi
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `mode` | string | `"off"` shipped; `"seeded"` in `thesis_test` | `off`, `seeded`, `playlist`, `live`, `screen`, or `stimulus_source` |
+| `mode` | string | `"off"` shipped; `"seeded"` in `first_configuration` | `off`, `seeded`, `playlist`, `live`, `screen`, or `stimulus_source` |
 | `seed` | integer | `0` | Seeded mode: the stream is a pure function of this seed |
 | `playlist_manifest` | string | `""` | Playlist mode: path to the single checksummed manifest |
 | `[perception_feed.video].surprise_interval` | integer | `150` | Seeded mode: shared cross-modal cadence of surprise events |
@@ -233,7 +233,7 @@ Both encoders accept a `PIL.Image`, `bytes`, or a `numpy.ndarray`. The capture p
 
 ### Attention-driven foveation
 
-Foveation is off in the shipped `config/kaine.toml` and on in the `thesis_test` profile. With `[vision].foveation = true`, the vision module spends resolution where frame change is least expected instead of encoding the whole frame uniformly. It works with either encoder: each view is encoded through the encoder's clip interface, so `dinov2` encodes one image per view and `internvideo_next` encodes each view as a real 16-frame clip cut from every buffered frame at the fovea chosen on the latest frame.
+Foveation is off in the shipped `config/kaine.toml` and on in the `first_configuration` profile. With `[vision].foveation = true`, the vision module spends resolution where frame change is least expected instead of encoding the whole frame uniformly. It works with either encoder: each view is encoded through the encoder's clip interface, so `dinov2` encodes one image per view and `internvideo_next` encodes each view as a real 16-frame clip cut from every buffered frame at the fovea chosen on the latest frame.
 
 On each clip report, from the latest frame:
 

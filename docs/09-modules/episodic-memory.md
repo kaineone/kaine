@@ -4,7 +4,7 @@ The episodic memory module stores what KAINE experiences. It stores a text trace
 
 ## Status
 
-The episodic memory module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].episodic_memory = false`) and in the base-thesis `thesis_test` profile that the loader applies when no profile is selected. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it first in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own collections (`[episodic_memory].collection_prefix`).
+The episodic memory module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].episodic_memory = false`) and in the first-configuration `first_configuration` profile that the loader applies when no profile is selected. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it first in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own collections (`[episodic_memory].collection_prefix`).
 
 - The production backend is Qdrant. It needs a running Qdrant container and an API key.
 - The `inmemory` backend is for tests and minimal setups. The `sqlite_vec` backend (alias `sqlite-vec`) is an in-process SQLite vector store for low-resource hosts.
@@ -156,7 +156,7 @@ The downscaling ends the wake, so a sleep never replays an earlier sleep's trace
 
 1. Start the Qdrant container: `docker compose -f compose/qdrant.yml up -d`.
 2. The first time, run `bash scripts/qdrant-bootstrap.sh`. It generates the API key, writes it to `compose/.env` and `config/secrets.toml`, and checks `/readyz`.
-3. In the operator file `config/kaine.operator.toml`, set `[modules].episodic_memory = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+3. In the operator file `config/kaine.operator.toml`, set `[modules].episodic_memory = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 4. To run without Qdrant, set `backend = "inmemory"` or `backend = "sqlite_vec"` and leave out the API key.
 
 In tests, replay can be driven by hand:

@@ -399,7 +399,7 @@ On a host without Tailscale, use any proxy on the private network, for example a
 
 ### Privacy consequence
 
-Serving the dashboard over a tailnet makes it reachable from every device on the tailnet. Keep `[dashboard].dev_content_override` at `false`, because it gates raw message text, beliefs, memory bodies, inner speech and affect reasons. Keep `conversation_enabled` at `false` unless you have deliberately decided otherwise. Both are `false` in the shipped `config/kaine.toml`, and the `thesis_test` profile does not change them.
+Serving the dashboard over a tailnet makes it reachable from every device on the tailnet. Keep `[dashboard].dev_content_override` at `false`, because it gates raw message text, beliefs, memory bodies, inner speech and affect reasons. Keep `conversation_enabled` at `false` unless you have deliberately decided otherwise. Both are `false` in the shipped `config/kaine.toml`, and the `first_configuration` profile does not change them.
 
 Verify the shipped values:
 

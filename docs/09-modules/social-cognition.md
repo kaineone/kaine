@@ -4,9 +4,9 @@ The social cognition module is KAINE's social-cognition module. It builds a mode
 
 ## Status
 
-The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].social_cognition = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[social_cognition].collection`).
+The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].social_cognition = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[social_cognition].collection`).
 
-- It reads Audition's `audition.emotion` events (the tone of voice) and, when speech-to-text is on, `audition.transcription`. In the base-thesis form speech-to-text is off, so tone events are its only input.
+- It reads Audition's `audition.emotion` events (the tone of voice) and, when speech-to-text is on, `audition.transcription`. In the first configuration speech-to-text is off, so tone events are its only input.
 - The production backend is Qdrant, on the same instance as the episodic memory module, in the collection `social_cognition_agents`.
 - The in-memory backend (`backend = "inmemory"`) needs no external service and is used in tests.
 - Agent identity is coarse. Every operator-facing channel maps to one agent, named by `speaker_label`, and every other channel gets its own `media:<channel>` agent. There is no speaker diarization.
@@ -168,7 +168,7 @@ Each `social_cognition.agent_model` carries the `source_label` of the audio even
 ## Enabling
 
 1. Start the Qdrant container that the episodic memory module uses, or set `backend = "inmemory"`.
-2. In the operator file `config/kaine.operator.toml`, set `[modules].social_cognition = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+2. In the operator file `config/kaine.operator.toml`, set `[modules].social_cognition = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 3. Optionally turn on the affect module's coupling with `[affect.coupling].enabled = true`.
 
 To try the agent model by hand:

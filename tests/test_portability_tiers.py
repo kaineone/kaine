@@ -562,8 +562,8 @@ def test_resolve_tier_name_missing_profile_file_raises():
 
 
 def test_resolve_tier_name_rejects_profile_without_tier_table():
-    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
-        resolve_tier_name(env={"KAINE_TIER": "thesis_test"})
+    with pytest.raises(ProfileError, match="first_configuration is not a deployment tier"):
+        resolve_tier_name(env={"KAINE_TIER": "first_configuration"})
 
 
 def test_profile_layers_between_shipped_and_operator(tmp_path: Path):
@@ -640,9 +640,9 @@ def test_load_kaine_config_rejects_tier_file_without_tier_table(tmp_path: Path):
     shipped = tmp_path / "kaine.toml"
     shipped.write_text('[language]\nbackend = "ollama"\nmodel_id = "x"\n')
     op = tmp_path / "kaine.operator.toml"  # absent
-    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
+    with pytest.raises(ProfileError, match="first_configuration is not a deployment tier"):
         load_kaine_config(
-            shipped, op, tier="thesis_test", profiles_dir=REPO_ROOT / "config" / "profiles"
+            shipped, op, tier="first_configuration", profiles_dir=REPO_ROOT / "config" / "profiles"
         )
 
 
