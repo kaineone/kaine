@@ -84,7 +84,7 @@ The sequence module reads the configured user-input streams (default `audition.o
 - The event type must be in `interaction_event_types` (default `audition.transcription` and `audition.emotion`); an `audition.transcription` must also have non-empty `text`.
 - The event's `payload.source_label` must be one of the operator sources (`live_mic`, `microphone`, `remote`).
 
-`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in the sequence module; it does not read `[social_cognition].operator_sources`, which the action selection and social cognition modules use. `time_since_last_interaction_s` is measured on the entity clock and is `inf` until the first interaction. The affect module reads it for the social drive.
+`audition.perception`, `audition.prosody`, and speech from the seeded, playlist, stimulus source, or screen feeds do not count. The operator-source set is a fixed constant in the sequence module; it does not read `[social_cognition].operator_sources`, which the action selection and social cognition modules use. `time_since_last_interaction_s` is measured on the entity clock and is `null` until the first interaction. The affect module reads it for the social drive.
 
 ## Inputs
 
