@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """A built wheel carries every kaine package and every runtime data file.
 
@@ -93,7 +93,7 @@ def test_wheel_declares_licence_expression_and_files(wheel_path: Path) -> None:
         metadata = zf.read(metadata_names[0]).decode("utf-8")
     dist_info = metadata_names[0].removesuffix("/METADATA")
     msg = HeaderParser().parsestr(metadata)
-    assert msg["License-Expression"] == "LicenseRef-CAL-0.4"
+    assert msg["License-Expression"] == "LicenseRef-CAL-0.5"
     assert set(msg.get_all("License-File") or []) == set(LICENCE_FILES)
     assert msg["License"] is None
     assert not any(c.startswith("License ::") for c in (msg.get_all("Classifier") or []))

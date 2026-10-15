@@ -17,7 +17,7 @@ off, so the seeded feed keeps running through every sleep.
   stimulus running (the existing `locked_by = "development"` rule ignores the
   suspend); this change leaves that rule as it is.
 - Two test files that still carried an Apache-2.0 header get the project's
-  CAL 0.4 header.
+  CAL 0.5 header.
 
 ## Capabilities
 

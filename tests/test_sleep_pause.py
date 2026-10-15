@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Tests for playlist-sleep-pause: sleep freezes the shared playlist
 clock and restores the pre-sleep perceptual locus on wake.

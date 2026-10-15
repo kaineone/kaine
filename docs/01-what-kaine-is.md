@@ -86,7 +86,7 @@ The cognitive cycle does not run until you start it, and a live boot is gated. A
 
 ## Current status and license
 
-KAINE is a public alpha, released under the Cognitive Architecture License (CAL) version 0.4, SPDX identifier `LicenseRef-CAL-0.4`. The adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and Oregon law as the governing law. See `LICENSE.md`, `NOTICE` and [Appendix C, Licences](appendix-c-licences.md).
+KAINE is a public alpha, released under the Cognitive Architecture License (CAL) version 0.5, SPDX identifier `LicenseRef-CAL-0.5`. The adoption notice in `NOTICE` names Kaine.One as Licensor and Steward and Oregon law as the governing law. See `LICENSE.md`, `NOTICE` and [Appendix C, Licences](appendix-c-licences.md).
 
 All sixteen modules are built and tested in-tree, and the project is configured to the base-thesis form by default. It runs on CUDA, ROCm, Intel XPU, Apple MPS or CPU, with the compute device configurable per module. See [Hardware](03-hardware/README.md) and [Accelerators and PyTorch wheels](03-hardware/accelerators.md).
 

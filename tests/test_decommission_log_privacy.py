@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Decommission keeps state/logs/ on the promise that it holds no entity content. This test drives a seeded utterance through the language and vocal modules' real emit paths while the cycle's own private log file is installed at DEBUG, and checks the utterance never reaches state/logs/."""

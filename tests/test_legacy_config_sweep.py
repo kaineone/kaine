@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Every config key the keys rename moves has a reader alias: normalizing the pre-rename shipped config gives exactly what the codemod writes."""
 

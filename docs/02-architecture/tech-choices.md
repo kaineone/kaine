@@ -24,13 +24,13 @@ The base install contains only the dependencies needed to start the bus and run 
 | `qdrant-client` | Qdrant client | Apache-2.0 | CPU | `[memory]` |
 | sqlite-vec | Edge vector store | per upstream | CPU | `[memory-edge]` |
 | `sentence-transformers` | Optional torch embedder | Apache-2.0 | CPU | `[memory]` |
-| NumPy MiniLM embedder | Default text embedder; weights Apache-2.0 | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy MiniLM embedder | Default text embedder; weights Apache-2.0 | LicenseRef-CAL-0.5 | CPU | built-in |
 | `inferactively-pymdp` + `jax[cpu]` | JAX active-inference backend | MIT / Apache-2.0 | CPU | `[reasoning]` |
-| NumPy planning engine | Native active-inference backend | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy planning engine | Native active-inference backend | LicenseRef-CAL-0.5 | CPU | built-in |
 | DreamerV3 RSSM (JAX/NumPy) | World model | MIT | CPU | `[worldmodel]` |
-| NumPy world model engine | Native world-model backend | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy world model engine | Native world-model backend | LicenseRef-CAL-0.5 | CPU | built-in |
 | `ncps` (torch CfC) | Torch CfC backend | Apache-2.0 | CPU | `[core]` |
-| NumPy CfC | Default CfC backend | LicenseRef-CAL-0.4 | CPU | built-in |
+| NumPy CfC | Default CfC backend | LicenseRef-CAL-0.5 | CPU | built-in |
 | `torch` | Tensor backend | BSD-3-Clause | GPU-optional | `[core]` |
 | `snntorch` | Spiking LIF neurons | MIT | CPU | `[oscillator]` |
 | `scipy` | PLV / Hilbert transform | BSD-3-Clause | CPU | `[oscillator]` |
@@ -55,7 +55,7 @@ The base install contains only the dependencies needed to start the bus and run 
 | DINOv2-small | Fallback video encoder | Apache-2.0 | GPU (`cuda:1`) | `[vision]` |
 | FastAPI + uvicorn + Jinja2 | dashboard web UI | MIT / BSD-3-Clause | CPU | `[dashboard]` |
 | uPlot | Live charts in dashboard | MIT | CPU | `[dashboard]` |
-| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.4 | none | none |
+| Cognitive Architecture License (CAL) | Project license | LicenseRef-CAL-0.5 | none | none |
 
 Install the research / perception bundle with `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 
@@ -236,6 +236,6 @@ The shipped config targets a dual-GPU reference host: a modern multi-core CPU wi
 
 ## Licensing
 
-KAINE is released under the Cognitive Architecture License (CAL) version 0.4 (SPDX `LicenseRef-CAL-0.4`), a draft that has not yet been reviewed by counsel. The CAL is a source-available, ethical-source copyleft licence. It requires modified versions to be shared, including versions offered over a network, prohibits listed uses, protects entities, grants free use to individuals, non-profits, research and educational institutions and worker-owned cooperatives, requires a Reciprocity License from the Steward for for-profit use, and sets up Guardian governance. The adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and Oregon law as the governing law. The text is in `LICENSE.md`.
+KAINE is released under the Cognitive Architecture License (CAL) version 0.5 (SPDX `LicenseRef-CAL-0.5`), a draft that has not yet been reviewed by counsel. The CAL is a source-available, ethical-source copyleft licence. It requires modified versions to be shared, including versions offered over a network, prohibits listed uses, protects entities, grants free use to individuals, non-profits, public or non-profit research and educational institutions, mutual-aid organizations and worker-owned cooperatives, requires a Reciprocity License from the Steward for commercial use by any other organization, and sets up Guardian governance. The adoption notice in `NOTICE` names Kaine.One as Licensor and Steward and Oregon law as the governing law. The text is in `LICENSE.md`.
 
 Dependencies are screened for licence compatibility; notes are in [Appendix C](../appendix-c-licences.md). The main rejected candidate is parselmouth (Praat Python bindings, GPL-3.0), which is incompatible with the CAL and was replaced by librosa. Redis 7.2's BSD-3-Clause licence is compatible with local embedded use. Two GPL-3.0-or-later components are current exceptions: the Kokoro TTS archive bundles espeak-ng data, and the dashboard speech and affect visualizer `kaine/dashboard/static/vendor/viz.js` is vendored with its licence header intact (see `THIRD_PARTY_LICENSES.md`). Both must be treated accordingly in any distributed build.

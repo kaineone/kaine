@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """Live integration: the real KAINE `Sequence` module running its forward model on
 the substrate, over a real (fake-backed) bus.
 

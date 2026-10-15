@@ -232,7 +232,7 @@ The core tests use a `fakeredis`-backed bus fixture and set `KAINE_EMBODIMENT_OP
 A minimal continuous-capable adapter for a robot base reached over a local TCP socket. It steers with `drive` and `yaw_rate`, and reports proprioception back. Copy it to `kaine/modules/embodiment/adapters/robot.py` and fill in the four `TODO`s.
 
 ```python
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """Example embodiment adapter: a robot base over a local socket."""
 from __future__ import annotations
 

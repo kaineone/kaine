@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Dry boot of the renamed tree: the shipped config, the base-thesis profile, an operator overlay written with the old module names and a study written with the old names all boot, each old-named file gives one deprecation line, and a layer that sets both names is refused."""
 

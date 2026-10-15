@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """The sequence wetware backend against the simulator.
 
 The acceptance criterion from `chronos-on-wetware`: on a temporally *structured*

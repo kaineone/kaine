@@ -19,6 +19,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | compose-state-mount-ownership | 10/10 (100%) | Move the trainer-jobs volume out of the state volume, so an existing compose deployment upgrades without a root-owned directory blocking the boot-time state rename, and make the rename refuse up front with an actionable message. Design only. |
 | revive-entrypoint-encryption | 7/7 (100%) | Install the configured state encryptor before the revive plan and the research gate, so `--revive` reads an encrypted bundle and the gate's preflight round trip exercises the encrypted path. Design only. |
+| relicense-cal-0.5 | 6/6 (100%) | Relicense KAINE to CAL 0.5: the licence text, every SPDX identifier, the adoption notice and the docs. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
 | deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
@@ -34,7 +35,6 @@ This page shows the engineering work in flight, the operator and on-device steps
 | local-precision-global-gain | 8/8 (100%) | Remove the workspace's per-source precision weight; arousal acts as a global gain that never reorders a tick. |
 | nous-benchmark-fair-baseline | 5/5 (100%) | Give the planning benchmark's Q-learning baseline the episode history, so the comparison is fair. |
 | precision-weighted-selection | 9/9 (100%) | Per-source precision weighting in the workspace. Superseded by local-precision-global-gain, which removes the weight. |
-| relicense-cal-0.4 | 4/4 (100%) | Relicense KAINE to CAL 0.4 with an adoption notice. |
 | reservoir-timespan-soma-vram | 8/8 (100%) | Pass real timespans to the CfC reservoir and keep the interoception module's model within its memory budget. |
 | sleep-restart-continuity | 10/10 (100%) | Carry the affect and sequence modules' state correctly across sleep, pauses and restarts. |
 | soma-warmup-fatigue-baseline | 4/4 (100%) | Compare like with like in the interoception module's warm-up fatigue baseline. |
@@ -81,7 +81,6 @@ This page shows the engineering work in flight, the operator and on-device steps
 | rd-bandwidth-cleanroom | 9/9 (100%) | A clean-room implementation, from Calonico, Cattaneo and Titiunik (2014) and its supplement only, of the robust bias-corrected regression discontinuity and its MSE-optimal bandwidths; the contrast at threshold with its band, age bins and minimum effect, so a complete settings record is possible. |
 | mnemos-trace-strength | 10/10 (100%) | Each episodic memory trace carries a strength that sleep downscales by the number of traces the wake stored, replayed traces keep theirs, sleep prunes at a floor and to an operator storage budget, recall ranks by strength times similarity, and replay draws on the whole wake just ended (paper A.10). |
 | paper-retitle | 2/2 (100%) | Cite the research paper by its new title, *KAINE: A Modular Cognitive Architecture with a Predictive Global Workspace*. |
-| pep639-license-fields | 6/6 (100%) | Declare the licence with the PEP 639 fields: the SPDX expression LicenseRef-CAL-0.4 and the three legal files in license-files, replacing the deprecated licence table. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
 | remove-hiatus-notices | 4/4 (100%) | The README, roadmap, records and change notes no longer describe the project as paused or on hiatus. |
 
@@ -104,6 +103,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 78 active changes, 269 archived changes and 105 capability specs.
+The roadmap contains 77 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
