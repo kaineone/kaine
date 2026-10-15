@@ -458,12 +458,16 @@ def _restore_dirs(path: Path) -> None:
     try:
         path.chmod(0o755)
     except OSError:
+        # Best-effort cleanup: restore permissions so pytest can delete tmp_path;
+        # a path that cannot be chmodded is left as-is.
         pass
     for p in path.rglob("*"):
         if p.is_dir():
             try:
                 p.chmod(0o755)
             except OSError:
+                # Best-effort cleanup: restore permissions so pytest can delete tmp_path;
+                # a path that cannot be chmodded is left as-is.
                 pass
 
 
