@@ -27,7 +27,7 @@ Module toggles belong in the gitignored `config/kaine.operator.toml`. The loader
 
 If you have already run the first-run wizard (`python -m kaine.setup`), it wrote a full `[modules]` table to the operator file; those choices replace any profile defaults. The wizard offers the first configuration (the `first_configuration` module set) or the full entity (all fourteen cognitive modules, embodiment off), and recommends one from the host's hardware tier; see [Browser first-run wizard](README.md#browser-first-run-wizard).
 
-If no profile is selected and `config/kaine.operator.toml` has no `[modules]` table, the loader applies the first-configuration `first_configuration` profile automatically (`kaine/config.py`). That profile is the effective default entity only in that case. To start the cycle with that choice explicit:
+If no profile is selected and `config/kaine.operator.toml` has no `[modules]` table, the loader applies the `first_configuration` profile automatically (`kaine/config.py`). That profile is the effective default entity only in that case. To start the cycle with that choice explicit:
 
 ```bash
 export KAINE_CYCLE_OPERATOR_PRESENT=1

@@ -4,7 +4,7 @@ The vocal module is KAINE's voice. It turns the language organ's external speech
 
 ## Status
 
-The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
+The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
 `[vocal].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vocal.mirroring].enabled = false`).
 

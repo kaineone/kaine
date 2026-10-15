@@ -4,6 +4,7 @@
 """The old profile name thesis_test resolves to first_configuration with one deprecation warning."""
 
 import logging
+import re
 
 import pytest
 
@@ -63,6 +64,17 @@ def test_load_alias_equals_canonical_config():
     assert alias_cfg == canonical_cfg
 
 
+def test_load_alias_config_logs_single_warning(caplog):
+    caplog.set_level("WARNING", logger="kaine.config")
+    load_kaine_config(operator_path=_OPERATOR_PATH, profile="thesis_test")
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    msg = warnings[0].message
+    assert "thesis_test" in msg
+    assert "first_configuration" in msg
+    assert legacy_names.ALIAS_LAST_RELEASE in msg
+
+
 def test_runtime_default_uses_first_configuration_modules():
     runtime = load_runtime_config(operator_path=_OPERATOR_PATH, env={})
     explicit = load_kaine_config(
@@ -83,3 +95,10 @@ def test_base_thesis_modules_is_deprecated_alias():
     with pytest.warns(DeprecationWarning):
         deprecated = base_thesis_modules()
     assert deprecated == first_configuration_modules()
+
+
+def test_base_thesis_modules_deprecation_warning_names_last_release():
+    with pytest.warns(
+        DeprecationWarning, match=re.escape(legacy_names.ALIAS_LAST_RELEASE)
+    ):
+        base_thesis_modules()

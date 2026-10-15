@@ -2,7 +2,7 @@
 
 ## Why
 
-The first configuration says the mind is the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same entity the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
+The design hypothesis is that a mind, if one can be built, may be the workspace's competition and broadcast among predictive processors. A direct way to see what each faculty adds is to show the same entity the same material while the faculties differ, and compare what reaches the workspace. That means the ignitions: which coalitions win and are broadcast, how often, and with which members.
 
 The operator's protocol, 2026-09-28:
 1. **The developmental phase.** Spawn one first-configuration entity and let it develop in the local stimulus source until it matures.

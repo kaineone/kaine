@@ -4,7 +4,7 @@ The effectors module is KAINE's action module. It realizes `act` intents from th
 
 ## Status
 
-The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].effectors = false`) and in the first-configuration `first_configuration` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
+The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].effectors = false`) and in the `first_configuration` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
 
 The effectors module is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on the effectors module would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 

@@ -73,7 +73,7 @@ The first-run wizard SHALL show the recommendation with its reason and the memor
 budget, and SHALL record the matching tier as `[deployment].tier` in the
 operator's local configuration only when the operator explicitly confirms. The
 tier SHALL be applied as its own configuration layer after the module-selection
-profile (the first-configuration `first_configuration` profile by default, or `--profile` /
+profile (the `first_configuration` profile by default, or `--profile` /
 `KAINE_PROFILE`) and before the operator configuration; the cycle and the
 pre-boot check SHALL load configuration in this order, with later layers winning:
 shipped `config/kaine.toml`, then the module-selection profile, then the

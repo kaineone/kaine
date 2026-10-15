@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import kaine.config
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
 
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
@@ -87,7 +87,8 @@ def first_configuration_modules(profiles_dir: Path | None = None) -> dict[str, b
 def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
     """Deprecated name for :func:`first_configuration_modules`."""
     warnings.warn(
-        "base_thesis_modules is deprecated, use first_configuration_modules",
+        f"base_thesis_modules is deprecated, use first_configuration_modules; "
+        f"it is read until {legacy_names.ALIAS_LAST_RELEASE}",
         DeprecationWarning,
         stacklevel=2,
     )

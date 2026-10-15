@@ -1,4 +1,4 @@
-# first-configuration-configuration Specification
+# first-configuration Specification
 
 ## Purpose
 The opt-in first configuration: the raw audio-visual predictive processors run with the always-on workspace and action selection module, the language module serves only as the output voice, and the voice speaks on the entity's own initiative rather than in reply to a prompt.

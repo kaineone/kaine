@@ -482,7 +482,7 @@ device = "cuda:1"
 # small noise floor. Background: the 2026-07-10 GPU shakedown (RTX 4070 SUPER, real
 # 91M weights; docs/records/shakedowns/internvideo-next-gpu-shakedown.md) measured, on the
 # seeded feed, routine change <= 0.0004 and genuine scene cuts ~0.008-0.043 — but on
-# the real reference corpus the first first-configuration run stayed FLAT (the vision module never
+# the real reference corpus the first run with the first configuration stayed FLAT (the vision module never
 # alerted on 3830/3830 reports): an absolute threshold mis-scales across content, so
 # the relative criterion replaces it. This floor only stops a large ratio over a
 # near-static stream (tiny mean) from firing on noise; keep it well below the
@@ -516,7 +516,7 @@ capture_width = 640
 capture_height = 480
 capture_warmup_frames = 3
 # Forward-model prediction. ENABLED by default (perception-drives-salience): the
-# first configuration is that perception enters the workspace as forward-model prediction
+# hypothesis is that perception enters the workspace as forward-model prediction
 # error, so this path — not a raw change threshold — is the primary perceptual
 # salience driver. The first containerized run had it off and perception never
 # influenced the workspace (the vision module emitted baseline salience on 3830/3830 reports).

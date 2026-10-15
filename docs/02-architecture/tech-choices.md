@@ -2,7 +2,7 @@
 
 This page lists the runtime technologies and Python dependencies KAINE uses, why each was chosen, and the install extras that switch them on. Read it when you are choosing a deployment, checking a reproducibility claim, or adding a dependency. Exact pins are in `pyproject.toml`; licence screening is in [Licences](../appendix-c-licences.md). The architecture overview is in [Architecture](README.md), and module-by-module details live under [The modules](../09-modules/README.md).
 
-The defaults below are the values in the shipped `config/kaine.toml`. With no profile selected, the loader also applies the first-configuration `first_configuration` profile, which chooses the module set and a few perception and voice settings.
+The defaults below are the values in the shipped `config/kaine.toml`. With no profile selected, the loader also applies the `first_configuration` profile, which chooses the module set and a few perception and voice settings.
 
 
 ## Summary table

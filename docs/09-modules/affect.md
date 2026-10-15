@@ -1,6 +1,6 @@
 # Affect
 
-The affect module is the affective core. It holds a dimensional state of valence, arousal and dominance, runs an appraisal of every workspace broadcast, and keeps four homeostatic drives. Its arousal is the global gain on the workspace competition. Read this page if you enable the module, run the first-configuration `first_configuration` profile, or need to know what moves arousal and valence and what the sleep module resets.
+The affect module is the affective core. It holds a dimensional state of valence, arousal and dominance, runs an appraisal of every workspace broadcast, and keeps four homeostatic drives. Its arousal is the global gain on the workspace competition. Read this page if you enable the module, run the `first_configuration` profile, or need to know what moves arousal and valence and what the sleep module resets.
 
 The affect module ships disabled in the default config (`[modules].affect = false` in `config/kaine.toml`). The `first_configuration` profile enables it, because a global gain that sets how readily content gains access, and that surprise itself moves, belongs to the minimal machinery of the first configuration. It needs nothing beyond the core stack.
 

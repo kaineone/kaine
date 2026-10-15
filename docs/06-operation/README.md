@@ -72,7 +72,7 @@ The dashboard publishes a `cycle.set_rates` event on the `cycle.control` stream,
 
 ## Enabling a module safely
 
-Enable a module as a deliberate, supervised step. The shipped `config/kaine.toml` supplies the module defaults used below. With no profile selected, the loader applies the first-configuration `first_configuration` profile, which sets the module flags and a few perception, language and action settings. `config/kaine.operator.toml` always merges last and wins. The first-run wizard writes a full `[modules]` table there, so after the wizard its module choices replace the profile's.
+Enable a module as a deliberate, supervised step. The shipped `config/kaine.toml` supplies the module defaults used below. With no profile selected, the loader applies the `first_configuration` profile, which sets the module flags and a few perception, language and action settings. `config/kaine.operator.toml` always merges last and wins. The first-run wizard writes a full `[modules]` table there, so after the wizard its module choices replace the profile's.
 
 The general procedure:
 

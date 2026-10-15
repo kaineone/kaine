@@ -307,7 +307,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
 
-With no profile selected, the loader applies the first-configuration `first_configuration` profile, which turns `interoception`, `sequence`, `vision`, `audition`, `language`, `affect` and `sleep` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
+With no profile selected, the loader applies the `first_configuration` profile, which turns `interoception`, `sequence`, `vision`, `audition`, `language`, `affect` and `sleep` on and leaves the rest off. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](README.md#module-defaults)).
 
 ## Plugins
 

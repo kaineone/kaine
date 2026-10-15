@@ -4,7 +4,7 @@ The planning module is KAINE's reasoning module. It runs discrete-state active i
 
 ## Status
 
-The planning module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].planning = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it third in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
+The planning module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].planning = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it third in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
 - `[planning].backend` selects the engine. `"pymdp"` needs the `[reasoning]` optional extra (`inferactively-pymdp` and `jax[cpu]`). `"numpy"` needs only NumPy.
 - No GPU is needed; both backends run on the CPU inside the cycle's time budget.

@@ -4,7 +4,7 @@ The world model module is KAINE's learned model of how its world changes. It is 
 
 ## Status
 
-The world model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].world_model = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
+The world model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].world_model = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
 
 - The default backend is `"dreamerv3"`, the learning world model.
 - The default engine is `"jax"` (`DreamerV3WorldModel`), which needs the `[worldmodel]` optional extra (`jax[cpu]`, `chex`, `einops`).

@@ -1,6 +1,6 @@
 ## Why
 
-The pre-conference audit of 2026-10-10 found that the workspace-level precision weight (`precision-weighted-selection`) stops perception from reaching the workspace. The weight is the inverse variance of the intensities each source publishes. The affect module publishes its state every second at a constant intensity, so its variance goes to zero and its weight to the maximum (1.5); the vision and audition modules vary exactly because they alert, so their weight falls to the minimum (0.5). Reproduced with the real `SourcePrecision`: an alert at 0.7 or 0.8 then scores below the 0.35 access threshold at every arousal. The first configuration requires perceptual surprise to be able to win the workspace.
+The pre-conference audit of 2026-10-10 found that the workspace-level precision weight (`precision-weighted-selection`) stops perception from reaching the workspace. The weight is the inverse variance of the intensities each source publishes. The affect module publishes its state every second at a constant intensity, so its variance goes to zero and its weight to the maximum (1.5); the vision and audition modules vary exactly because they alert, so their weight falls to the minimum (0.5). Reproduced with the real `SourcePrecision`: an alert at 0.7 or 0.8 then scores below the 0.35 access threshold at every arousal. The hypothesis requires perceptual surprise to be able to win the workspace.
 
 The quantity is also the wrong one. In predictive coding, precision is the inverse variance of a channel's prediction errors and acts as the gain on that channel's error units (Feldman and Friston 2010); the variance of a module's published intensity is not that. The revised paper (predictive-workspace-paper, 2026-10-10) settles the design: precision is local to each processor, which already scores its prediction error against its own recent errors (the running ratio, error over its expected magnitude, and the fovea's per-tile z-score); arousal is the single global, neuromodulatory gain and contrast on the competition (adaptive gain, Aston-Jones and Cohen 2005). The workspace applies no per-source weight.
 
@@ -18,7 +18,7 @@ The paper also fixes greedy decoding (temperature 0) for the planned runs of the
 ### Modified Capabilities
 
 - `workspace`: no per-source precision weight in workspace selection.
-- `first-configuration-configuration`: greedy decoding in the first-configuration profile.
+- `first-configuration`: greedy decoding in the first-configuration profile.
 
 ## Impact
 

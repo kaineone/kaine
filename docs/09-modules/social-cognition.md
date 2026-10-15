@@ -4,7 +4,7 @@ The social cognition module is KAINE's social-cognition module. It builds a mode
 
 ## Status
 
-The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].social_cognition = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[social_cognition].collection`).
+The social cognition module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].social_cognition = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fifth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay gives each line of the study its own agent collection (`[social_cognition].collection`).
 
 - It reads Audition's `audition.emotion` events (the tone of voice) and, when speech-to-text is on, `audition.transcription`. In the first configuration speech-to-text is off, so tone events are its only input.
 - The production backend is Qdrant, on the same instance as the episodic memory module, in the collection `social_cognition_agents`.

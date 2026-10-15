@@ -4,7 +4,7 @@ The self-model module holds KAINE's self-model. It keeps a persisted model of th
 
 ## Status
 
-The self-model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].self_model = false`) and in the first-configuration `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fourth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. In the paper's terms it adds a new kind of candidate to the competition, the self-model's drift alerts and self-model updates.
+The self-model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].self_model = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fourth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. In the paper's terms it adds a new kind of candidate to the competition, the self-model's drift alerts and self-model updates.
 
 The self-inference engine is a second, separate switch: `[self_model.self_inference].enabled = false` in the shipped configuration. The study overlay does not turn it on, so unless the operator file enables it, a study branch with the self-model module runs the drift detector and the launch name only.
 
