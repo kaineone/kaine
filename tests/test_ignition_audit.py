@@ -236,10 +236,10 @@ def test_drive_triggered_realized_action():
     assert report.realized_total == 1
 
 
-# --- Scenario: input-triggered count zero under base thesis ---
+# --- Scenario: input-triggered count zero under first configuration ---
 
 
-def test_base_thesis_input_triggered_zero():
+def test_first_configuration_input_triggered_zero():
     # Conversation surface off, transcription off, embodiment module off: no external
     # input types can appear in any coalition, so input_triggered == 0 —
     # the invariant holds every sleep.
@@ -258,7 +258,7 @@ def test_base_thesis_input_triggered_zero():
     assert report.self_initiated == 2
 
 
-def test_base_thesis_no_broadcasts_at_all():
+def test_first_configuration_no_broadcasts_at_all():
     report = classify_realizations([], [_intent("E1")], [_realization(entry_id="E1")])
     assert report.input_triggered == 0
     assert report.self_initiated == 1
@@ -479,7 +479,7 @@ def test_bus_workspace_read_path_exists():
 def test_entry_in_multiple_coalitions_input_wins():
     """F3 — the same entry can win multiple broadcasts; classification scans
     EVERY coalition containing it, and any external-input involvement makes it
-    input-triggered (conservative for the base-thesis zero-input invariant)."""
+    input-triggered (conservative for the first-configuration zero-input invariant)."""
     broadcasts = [
         {"selected": [
             {"entry_id": "E1", "source": "affect", "type": "affect.drive", "salience": 0.7},

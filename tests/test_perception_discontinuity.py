@@ -3,7 +3,7 @@
 
 """Perceptual-discontinuity regression guard (perception-drives-salience task 4).
 
-The first containerized base-thesis run falsified the thesis for its config:
+The first containerized first-configuration run falsified the hypothesis for its config:
 perception NEVER influenced the workspace competition — the vision module emitted its baseline
 salience on all 3,830 reports and Audition on all 3,511 events, so a scene cut and
 a frozen frame produced the identical value. These tests are the standing guard

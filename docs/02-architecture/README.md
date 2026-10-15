@@ -2,13 +2,13 @@
 
 KAINE is a cognitive architecture for synthetic minds made of sixteen replaceable modules, a global workspace (the workspace) and an action layer (the action selection module), which communicate only through an event bus. Its first instantiation is a predictive global workspace grounded in predictive processing (Friston 2010; Clark 2013; Seth 2013) and Global Workspace Theory (Baars 1988; Dehaene and Changeux 2011), following the predictive global neuronal workspace of Whyte and Smith (2021). This chapter maps how the modules, the Redis Streams bus, the workspace, the per-tick cycle and the action gates fit together. Read it first if you are choosing hardware, tracing how a message flows, or reproducing a research claim.
 
-## The base-thesis default
+## The first-configuration default
 
-The default configuration is the **base-thesis form**, defined in `config/profiles/thesis_test.toml`. With no profile selected, the loader applies this profile automatically (`kaine/config.py`); you can also select it with `KAINE_PROFILE=thesis_test` or `--profile thesis_test`. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). The shipped `config/kaine.toml` leaves every module off.
+The default configuration is the **first configuration**, defined in `config/profiles/first_configuration.toml`. With no profile selected, the loader applies this profile automatically (`kaine/config.py`); you can also select it with `KAINE_PROFILE=first_configuration` or `--profile first_configuration`. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). The shipped `config/kaine.toml` leaves every module off.
 
 The profile activates seven modules: four predictive processors in distinct signal domains, the **interoception** module (interoception of the compute substrate), the **sequence** module (temporal prediction of the broadcast sequence), the **vision** module (foveated vision) and the **audition** module (raw hearing), plus the **affect** module (affect, whose arousal is the global gain on the competition), the **sleep** module (fatigue-triggered sleep) and the **language** module (the output-only language organ). The workspace and the action selection module always run.
 
-The base-thesis form observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`.
+The first configuration observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`.
 
 The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal, effectors, perceptual locus and embodiment modules) are built and tested in isolation and held off by configuration. The module-addition study (the `ignition_study` in the code) adds them one at a time to a preserved seed entity. Before that, a planned test asks whether competitive selection gives the processors a more useful prediction context than a score-blind coalition or a pool of every candidate; see [For researchers](../14-for-researchers.md#the-planned-test).
 
@@ -93,14 +93,14 @@ graph TD
 
 ## Module roster
 
-"Base thesis" marks whether the module is active in the `thesis_test` profile or held.
+"First configuration" marks whether the module is active in the `first_configuration` profile or held.
 
-| # | Name | Group | Base thesis | Code | Backing technology |
+| # | Name | Group | First configuration | Code | Backing technology |
 |---|------|-------|-------------|------|--------------------|
 | 1 | **Interoception** | Prediction | Active | `kaine/modules/interoception/` | NumPy CfC reservoir with an online readout by default (`[interoception].cfc_backend = "numpy"`); ncps/torch optional; pynvml and psutil; fatigue and regulation integrate only prediction error beyond the learned expected band |
 | 2 | **Sequence** | Prediction | Active | `kaine/modules/sequence/` | NumPy CfC reservoir (32 units) by default; ncps/torch optional; predicts the next broadcast's features |
 | 3 | **Vision** | Prediction | Active | `kaine/modules/vision/` | Frozen InternVideo-Next clip encoder; DINOv2 fallback; online forward model with foveation |
-| 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the base thesis) |
+| 4 | **Audition** | Prediction | Active | `kaine/modules/audition/` | NumPy log-spectral acoustic encoder by default; emotion2vec+ tone classifier; optional speaches distil-Whisper and sherpa-onnx Moonshine speech-to-text backends (off in the first configuration) |
 | 5 | **Planning** | Cognition | Held | `kaine/modules/planning/` | Active inference (belief updating and expected-free-energy policy selection). The code default in `kaine/boot/factories/planning.py` is `"pymdp"` (JAX) because `config/kaine.toml` leaves `[planning].backend` commented out; only `tier0.toml` and `tier1.toml` select the NumPy engine |
 | 6 | **Episodic memory** | Cognition | Held | `kaine/modules/episodic_memory/` | Qdrant; shared all-MiniLM-L6-v2 embedder (384-dim, CPU); episodic, semantic and procedural stores |
 | 7 | **Self-model** | Cognition | Held | `kaine/modules/self_model/` | JSON-persisted self-model; KL-drift detector; launch-name assignment |
@@ -110,7 +110,7 @@ graph TD
 | 11 | **Language** | Expression | Active | `kaine/modules/language/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `language.internal` and `language.external` as well as `language.out` |
 | 12 | **Vocal** | Expression | Held | `kaine/modules/vocal/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
 | 13 | **Effectors** | Expression | Held | `kaine/modules/effectors/` | File-write, notify and shell effectors (empty whitelist by default) |
-| 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the base thesis |
+| 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the first configuration |
 | 15 | **Perception** | Embodiment | Held | `kaine/modules/perceptual_locus/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
 | 16 | **Embodiment** | Embodiment | Held | `kaine/modules/embodiment/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
 
@@ -194,7 +194,7 @@ The layer ships disabled (`[oscillator].enabled = false`). When disabled the mul
 
 The action selection module is the only path from the workspace to an output. After each successful broadcast the cycle calls `ActionSelection.select(snapshot)`. If `snapshot.inhibited` is true, `select` returns no intents. For an accessed broadcast, the configured policy decides:
 
-- The base-thesis policy, `SelfInitiatedReportPolicy`, emits `speak` when the best score in the coalition (leaving out the language organ's own output) clears the speak bar, and `think` when it clears the lower think bar, with refractory intervals, a novelty check on the leading member's `(source, type)` and a one-in-flight guard per kind.
+- The first-configuration policy, `SelfInitiatedReportPolicy`, emits `speak` when the best score in the coalition (leaving out the language organ's own output) clears the speak bar, and `think` when it clears the lower think bar, with refractory intervals, a novelty check on the leading member's `(source, type)` and a one-in-flight guard per kind.
 - `DefaultActionSelectionPolicy` answers an `audition.transcription` event with non-empty text. It never forms a speak intent about the entity's own external speech, and its one-in-flight guard clears when the entity's own `external_speech` appears in a later coalition or after 48 s of wall time without it.
 - `DriveBiasedActionSelectionPolicy` adds intents from drive crossings in the coalition.
 
@@ -212,7 +212,7 @@ Among the held modules, the planning module maintains a generative model of the 
 
 An accessed broadcast reaches an effector only through the action selection and effectors modules. The action selection module derives no intent from an inhibited broadcast, and the cycle never calls an effector directly.
 
-The effectors module, held in the base-thesis form, applies two checks before it runs an effector. First, the action selection module signs every `act` intent with a per-boot HMAC secret held only in the cycle process, and the effectors module verifies the signature over `canonical(kind, effector, params, run_id, seq)` before it reads any effector name, dropping forged, unsigned or replayed intents and logging them as `provenance_rejected`. Second, it applies the operator's effector-enablement whitelist, which is empty by default, and each effector enforces its own bounds (the shell `CommandWhitelist`, the file sandbox).
+The effectors module, held in the first configuration, applies two checks before it runs an effector. First, the action selection module signs every `act` intent with a per-boot HMAC secret held only in the cycle process, and the effectors module verifies the signature over `canonical(kind, effector, params, run_id, seq)` before it reads any effector name, dropping forged, unsigned or replayed intents and logging them as `provenance_rejected`. Second, it applies the operator's effector-enablement whitelist, which is empty by default, and each effector enforces its own bounds (the shell `CommandWhitelist`, the file sandbox).
 
 Voice alignment, which would change the language organ's weights during sleep, needs a two-layer operator opt-in (`[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`). An abliteration-probe welfare veto rejects any adapter whose response to an adversarial prompt matches a deflection pattern, and a capability-loss veto rejects adapters that degrade general language competence beyond a configurable threshold.
 
@@ -243,7 +243,7 @@ KAINE has no runtime cloud dependencies. Model weights are downloaded at setup. 
 
 ## Boot gate
 
-Every module is disabled in the committed `config/kaine.toml` (`[modules]` section), and a guard test (`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`) asserts that. The effective default still enables the `thesis_test` modules, because the loader applies that profile when none is named.
+Every module is disabled in the committed `config/kaine.toml` (`[modules]` section), and a guard test (`tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`) asserts that. The effective default still enables the `first_configuration` modules, because the loader applies that profile when none is named.
 
 A run is operator-supervised, research-safety-net-verified, or an opt-in unattended start:
 
@@ -279,7 +279,7 @@ Eight sidecar observers run as async tasks alongside the cycle:
 | `welfare_observer` | `interoception.out`, `sleep.out`, `affect.out`, `episodic_memory.out`, `vision.out`, `audition.out` | Gray-zone event counts (also emits `welfare.gray_zone` on `welfare.out`) and the sensor advisories (`welfare.blind_sensor`, `welfare.sensor_silent` and their clears on `welfare.out`) |
 | `planning_policy_observer` | `planning.out` | EFE value, horizon, selected action |
 
-The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each sampled language module external-speech event with a bare inference of the same model (no workspace context, no persona) and logs the cosine similarity and `divergence = 1 − cos`. It records how the workspace context changes the organ's text. It is not a measure of the thesis: the organ is a language model following a persona prompt, and the planned test measures the workspace through the processors' own predictions.
+The A/B divergence observer (`kaine/evaluation/ab_divergence.py`) pairs each sampled language module external-speech event with a bare inference of the same model (no workspace context, no persona) and logs the cosine similarity and `divergence = 1 − cos`. It records how the workspace context changes the organ's text. It is not a measure of the hypothesis: the organ is a language model following a persona prompt, and the planned test measures the workspace through the processors' own predictions.
 
 The individuation producer (`kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, `individuation_runtime.py`) measures whether an entity has changed measurably since its maturation reference. It is enabled by `[individuation].enabled` and requires the `language` module. Its evidence is encrypted welfare evidence under `state/individuation/` and is kept apart from sidecar research data. The shared divergence verdict (`kaine/lifecycle/divergence.py`) is used by the decommission CLI, the dashboard entity-care panel, the fork merge gate and the live divergence monitor.
 

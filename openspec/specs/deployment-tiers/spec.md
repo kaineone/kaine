@@ -73,7 +73,7 @@ The first-run wizard SHALL show the recommendation with its reason and the memor
 budget, and SHALL record the matching tier as `[deployment].tier` in the
 operator's local configuration only when the operator explicitly confirms. The
 tier SHALL be applied as its own configuration layer after the module-selection
-profile (the base-thesis `thesis_test` profile by default, or `--profile` /
+profile (the `first_configuration` profile by default, or `--profile` /
 `KAINE_PROFILE`) and before the operator configuration; the cycle and the
 pre-boot check SHALL load configuration in this order, with later layers winning:
 shipped `config/kaine.toml`, then the module-selection profile, then the
@@ -83,7 +83,7 @@ tier never replaces the selected module set.
 
 A tier file SHALL only bound backends and devices; it SHALL NOT enable or disable
 modules. A tier file SHALL contain a `[tier]` table; naming a file that lacks one
-(for example the module profile `thesis_test`) as the tier via `KAINE_TIER` or
+(for example the module profile `first_configuration`) as the tier via `KAINE_TIER` or
 `[deployment].tier` SHALL be refused with a configuration error, and the cycle
 and the pre-boot check SHALL exit with `configuration error: ...` instead of a
 traceback. A tier file that contains a `[modules]` section or an
@@ -104,9 +104,9 @@ malformed `[tier]` table or malformed `[oscillator]` shape, naming the problem.
 - **WHEN** the wizard proposes a tier and the operator declines
 - **THEN** no tier is written and the existing configuration is unchanged
 
-#### Scenario: Recorded tier keeps the base-thesis modules
+#### Scenario: Recorded tier keeps the first-configuration modules
 - **WHEN** the operator accepts a Tier 2 recommendation and later boots without `--profile` or `KAINE_PROFILE`
-- **THEN** the cycle loads the base-thesis module set with the Tier 2 backend settings layered on top (after the module profile and before the operator config), and the pre-boot check validates the same merged configuration
+- **THEN** the cycle loads the first-configuration module set with the Tier 2 backend settings layered on top (after the module profile and before the operator config), and the pre-boot check validates the same merged configuration
 
 #### Scenario: Tier file with [modules] is refused
 - **WHEN** an operator attempts to use a tier file that contains a `[modules]`
@@ -120,7 +120,7 @@ malformed `[tier]` table or malformed `[oscillator]` shape, naming the problem.
   and advising the operator to disable it or record a larger tier
 
 #### Scenario: Non-tier file named as tier is refused
-- **WHEN** `KAINE_TIER` or `[deployment].tier` names a file that does not contain a `[tier]` table (for example the module profile `thesis_test`)
+- **WHEN** `KAINE_TIER` or `[deployment].tier` names a file that does not contain a `[tier]` table (for example the module profile `first_configuration`)
 - **THEN** the cycle and the pre-boot check exit with `configuration error: ...` naming the problem instead of a traceback
 
 #### Scenario: Tier fit skips when no tier table is present

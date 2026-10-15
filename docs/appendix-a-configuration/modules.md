@@ -81,7 +81,7 @@ The sequence module is the temporal processor. It runs a small CfC network over 
 | `rumination_bucket_resolution` | float | `0.25` | Quantization step applied to each hidden-state dimension before states are compared. |
 | `user_input_streams` | list of strings | `["audition.out"]` | Streams the sequence module watches for interaction timing. |
 | `interaction_event_types` | list of strings | `["audition.transcription", "audition.emotion"]` | Event types on those streams that count as an interaction when they come from an operator channel. Not in the shipped file. |
-| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head and graded intensity. Off in the shipped file; on in the `thesis_test` profile. |
+| `forward_prediction` | boolean | `false` | Enable the forward-model prediction head and graded intensity. Off in the shipped file; on in the `first_configuration` profile. |
 | `prediction_error_window` | integer | `32` | Number of recent errors whose mean scales the current error. |
 
 The sequence module clips each interval between broadcasts to ten times the window mean before it enters its timespan window, and after a restart it measures the time since the last interaction against the new boot's clock. Neither has a config key.
@@ -151,7 +151,7 @@ Section: `[vision]` foveation keys.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `foveation` | boolean | `false` | Master gate for attention-driven foveation. Off in the shipped file; on in the `thesis_test` profile. |
+| `foveation` | boolean | `false` | Master gate for attention-driven foveation. Off in the shipped file; on in the `first_configuration` profile. |
 | `foveation_grid` | list of int | `[12, 12]` | Saliency tiling (rows, cols). |
 | `foveation_hysteresis` | float | `0.15` | A new tile must beat the held tile by more than this fraction to move the fovea. |
 | `foveation_arousal_size_min` | float | `0.12` | Fovea half-extent, as a fraction of the frame's shorter side, at arousal 1 (narrowest). |
@@ -406,7 +406,7 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 |---|---|---|---|
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | Base URL of the model server. The client posts to `/v1/chat/completions`. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. It must match a model the server serves. |
-| `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `thesis_test` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
+| `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `first_configuration` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
 | `max_tokens` | integer | `512` | Maximum tokens per generation. |
 | `request_timeout_s` | float | `60.0` | HTTP request timeout for model server calls. |
 | `model_server_sleep_idle_seconds` | integer | `600` | Seconds of inactivity before the natively launched organ server unloads the model; `-1` keeps it loaded. |
@@ -455,8 +455,8 @@ Audition is the hearing module: live microphone capture, optional speech-to-text
 | `sherpa_model_id` | string | `"moonshine-base-en"` | sherpa-onnx STT model ID. |
 | `sherpa_model_dir` | string | *(unset)* | Directory holding the downloaded sherpa-onnx model files. Default: `<models dir>/sherpa-onnx/<id>`. |
 | `sherpa_num_threads` | integer | `2` | ONNX Runtime threads for sherpa-onnx. |
-| `transcription_enabled` | boolean | `false` | Master gate on the STT path. Speech-to-text is built but off in the shipped file and in the `thesis_test` profile, so no transcript reaches the workspace. |
-| `general_audition` | boolean | `false` | Master gate on general acoustic perception: every audio window is encoded and scored by its forward-model error and a change criterion. Not in the shipped file; the `thesis_test` profile sets it to `true`. |
+| `transcription_enabled` | boolean | `false` | Master gate on the STT path. Speech-to-text is built but off in the shipped file and in the `first_configuration` profile, so no transcript reaches the workspace. |
+| `general_audition` | boolean | `false` | Master gate on general acoustic perception: every audio window is encoded and scored by its forward-model error and a change criterion. Not in the shipped file; the `first_configuration` profile sets it to `true`. |
 | `stt_model` | string | `"Systran/faster-distil-whisper-medium.en"` | STT model ID that Speaches has loaded. Must match a served model. |
 | `emotion_model_id` | string | `"emotion2vec/emotion2vec_plus_base"` | HuggingFace hub ID for the emotion2vec+ vocal emotion model. |
 | `emotion_device` | string | `"cpu"` | Compute device for emotion2vec+. |

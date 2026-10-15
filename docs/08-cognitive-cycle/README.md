@@ -137,7 +137,7 @@ After a successful broadcast, inhibited or not, the cycle calls `ActionSelection
 
 Each returned intent is published to `action_selection.out` with event type `intent.speak`, `intent.think`, `intent.act`, or `intent.rest`. The cycle then publishes any `proposal_outcome` values, including those for inhibited broadcasts, returned by the policy to `action_selection_feedback.out` as `action_selection.proposal_outcome` events.
 
-Proposal outcomes are generated only when the action-selection policy includes the `PlanningProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `thesis_test` profile, and that profile has `planning = false`, so no proposal outcomes are produced by default.
+Proposal outcomes are generated only when the action-selection policy includes the `PlanningProposalSource` wrapper, which requires the [planning module](../09-modules/planning.md) to be enabled. With no profile selected, the loader applies the `first_configuration` profile, and that profile has `planning = false`, so no proposal outcomes are produced by default.
 
 The cycle never invokes effectors directly. The [language module](../09-modules/language.md), [effectors module](../09-modules/effectors.md), [perceptual locus module](../09-modules/perceptual-locus.md), [embodiment module](../09-modules/embodiment.md), and [sleep module](../09-modules/sleep.md) subscribe to `action_selection.out` and realize intents independently. The sleep module accepts `intent.rest` as a request to rest.
 

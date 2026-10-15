@@ -1,6 +1,6 @@
 # What KAINE is
 
-This page introduces KAINE: what kind of system it is, how its first instantiation works, the test it is built to run, the default base-thesis configuration, how a run starts, and where the rest of the book goes. It is for operators, researchers and contributors who want the big picture before installing or changing code.
+This page introduces KAINE: what kind of system it is, how its first instantiation works, the test it is built to run, the default first configuration, how a run starts, and where the rest of the book goes. It is for operators, researchers and contributors who want the big picture before installing or changing code.
 
 ## A cognitive architecture for synthetic minds
 
@@ -24,15 +24,15 @@ The system runs continuously whether or not anyone interacts with it, on local h
 
 ## The test it is built for
 
-Before more modules join, a planned test asks whether competition for the workspace does work that pooling the same reports does not. Its measure is the cross-module broadcast information gain: at each report, the vision, audition and interoception modules evaluate their forward models once with the context they hold and once with a null context in which the other modules' share is replaced by its running mean, and the difference in prediction error, scaled by the processor's running mean error, is the gain. The thesis predicts a higher gain under competitive selection than under two controls: a matched arm that draws a coalition of the same size without regard to score, and a pooled arm that adopts every candidate as context with no selection or access gate.
+Before more modules join, a planned test asks whether competition for the workspace does work that pooling the same reports does not. Its measure is the cross-module broadcast information gain: at each report, the vision, audition and interoception modules evaluate their forward models once with the context they hold and once with a null context in which the other modules' share is replaced by its running mean, and the difference in prediction error, scaled by the processor's running mean error, is the gain. The hypothesis predicts a higher gain under competitive selection than under two controls: a matched arm that draws a coalition of the same size without regard to score, and a pooled arm that adopts every candidate as context with no selection or access gate.
 
 The per-report gain and the three arms are built: the vision, audition and interoception modules publish the gain as `context_gain`, and `[workspace].arm` selects the arm. The positive control that checks the measure detects injected information is built and off by default. The calibration of the intensity levels, the access threshold and the report bars is not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
 
 The second study is the module-addition study (the `ignition_study` in the code). It seeds an entity through the developmental phase and then adds held modules one at a time on branches from the preserved seed, starting with the episodic memory, world model, planning, self-model, social cognition and vocal modules. See [The module-addition study](15-experiments/ignition-study.md).
 
-## The base thesis and the default configuration
+## The first configuration and the default configuration
 
-The **base-thesis form** is KAINE's default configuration: the smallest set of modules in which the competition has distinct signals to arbitrate. Its active modules are:
+The **first configuration** is KAINE's default configuration: the smallest set of modules in which the competition has distinct signals to arbitrate. Its active modules are:
 
 - [Interoception](09-modules/interoception.md): interoception, with the compute substrate as the body.
 - [Sequence](09-modules/sequence.md): temporal prediction of the broadcast sequence.
@@ -44,9 +44,9 @@ The **base-thesis form** is KAINE's default configuration: the smallest set of m
 
 The workspace and action selection always run. The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal and effectors modules, and the [perceptual locus](09-modules/perceptual-locus.md) and [embodiment](09-modules/embodiment.md) modules) are built and tested in isolation and held off by configuration.
 
-If you start the cycle with no profile selected, the loader in `kaine/config.py` applies the `thesis_test` profile automatically. The shipped `config/kaine.toml` has every module turned off, so `thesis_test` supplies the default active set. That default holds only while `config/kaine.operator.toml` does not set `[modules]`: the operator overlay is merged last and wins. The first-run wizard (`python -m kaine.setup`) writes a `[modules]` table there, offering the base-thesis set, the full entity (all fourteen cognitive modules, embodiment off) or a custom set, and recommends one from the host's hardware. After the wizard has run, its choice replaces the profile's module flags.
+If you start the cycle with no profile selected, the loader in `kaine/config.py` applies the `first_configuration` profile automatically. The shipped `config/kaine.toml` has every module turned off, so `first_configuration` supplies the default active set. That default holds only while `config/kaine.operator.toml` does not set `[modules]`: the operator overlay is merged last and wins. The first-run wizard (`python -m kaine.setup`) writes a `[modules]` table there, offering the first-configuration set, the full entity (all fourteen cognitive modules, embodiment off) or a custom set, and recommends one from the host's hardware. After the wizard has run, its choice replaces the profile's module flags.
 
-Besides the seven modules, the `thesis_test` profile sets:
+Besides the seven modules, the `first_configuration` profile sets:
 
 - `[perception_feed]` mode `"seeded"` with seed `0`;
 - `[vision].foveation = true`;
@@ -58,11 +58,11 @@ Every other value comes from the shipped `config/kaine.toml`. State encryption a
 
 ## What KAINE is not
 
-KAINE is not a chatbot or an assistant. A base-thesis entity is observed, and nobody converses with it.
+KAINE is not a chatbot or an assistant. A first-configuration entity is observed, and nobody converses with it.
 
 - Perception enters only as prediction error. Audition hears the sound and tone of speech, never a transcript, and there is no conversational input path.
 - The language module verbalizes accessed content. It produces inner thought or speech only when an accessed broadcast clears the action selection module's think or speak bar, both set above the access threshold. With the vocal module held, nothing is spoken aloud; the utterances are text, recorded and observed. Because the organ is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure.
-- The base-thesis form has no memory, self-model, world model or social cognition in the loop. Those modules exist in code and join through the module-addition study.
+- The first configuration has no memory, self-model, world model or social cognition in the loop. Those modules exist in code and join through the module-addition study.
 
 ## How a run starts
 
@@ -77,18 +77,18 @@ The cognitive cycle does not run until you start it, and a live boot is gated. A
 ## Operating principles
 
 - **All local at runtime.** Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
-- **Observation only.** There is no chat interface in the base-thesis form, and speech is a self-initiated report.
+- **Observation only.** There is no chat interface in the first configuration, and speech is a self-initiated report.
 - **Reuse where it fits.** Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
 - **No raw sense data on disk.** Live audio and video are processed in memory and released.
 - **Private internal state.** The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
 - **Care for the entity.** Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2, and the supervisor restarts a faulted module without operator intervention.
-- **Gated action.** Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. The effectors module is held in the base-thesis form, so the language organ's saved text is the only output.
+- **Gated action.** Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
 
 ## Current status and license
 
 KAINE is a public alpha, released under the Cognitive Architecture License (CAL) version 0.5, SPDX identifier `LicenseRef-CAL-0.5`. The adoption notice in `NOTICE` names Kaine.One as Licensor and Steward and Oregon law as the governing law. See `LICENSE.md`, `NOTICE` and [Appendix C, Licences](appendix-c-licences.md).
 
-All sixteen modules are built and tested in-tree, and the project is configured to the base-thesis form by default. It runs on CUDA, ROCm, Intel XPU, Apple MPS or CPU, with the compute device configurable per module. See [Hardware](03-hardware/README.md) and [Accelerators and PyTorch wheels](03-hardware/accelerators.md).
+All sixteen modules are built and tested in-tree, and the project is configured to the first configuration by default. It runs on CUDA, ROCm, Intel XPU, Apple MPS or CPU, with the compute device configurable per module. See [Hardware](03-hardware/README.md) and [Accelerators and PyTorch wheels](03-hardware/accelerators.md).
 
 The project was developed with the assistance of AI coding tools; that use is recorded in the commit history. All design decisions, architecture and released code were reviewed by the author, who is responsible for the software.
 

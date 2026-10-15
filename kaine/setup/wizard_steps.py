@@ -47,7 +47,7 @@ def _module_preset_default(ctx: StepContext, recommended: str) -> str:
     mods = existing.get("modules")
     if not isinstance(mods, dict):
         return recommended
-    base = _wizard.base_thesis_modules()
+    base = _wizard.first_configuration_modules()
     full = _wizard.FULL_ENTITY_MODULES.copy()
     if all(mods.get(m) == base.get(m) for m in _wizard.MODULE_ORDER) and mods.get("recorder") is False:
         return "b"
@@ -242,7 +242,7 @@ def module_preset_step() -> Step:
 
     def explanation(ctx: StepContext) -> list[str]:
         preset, why = _recommended(ctx)
-        label = "full entity" if preset == "full" else "base thesis"
+        label = "full entity" if preset == "full" else "first configuration"
         return [f"Recommended: {label} — {why}."]
 
     def fields(ctx: StepContext) -> tuple[Field, ...]:
@@ -251,7 +251,7 @@ def module_preset_step() -> Step:
         return (
             Field(
                 "preset",
-                "  modules: [b]ase thesis, [f]ull entity, or [c]ustom?",
+                "  modules: [b]ase: the first configuration, [f]ull entity, or [c]ustom?",
                 "choice",
                 default=default,
                 choices=("b", "f", "c"),
@@ -263,10 +263,10 @@ def module_preset_step() -> Step:
         choice = answers.get("preset", "b")
         preset, why = _wizard.recommend_preset(ctx.extra.get("tier_rec"))
         if choice == "b":
-            modules = _wizard.base_thesis_modules()
+            modules = _wizard.first_configuration_modules()
             modules["recorder"] = False
             ctx.config["modules"] = modules
-            label = "base thesis"
+            label = "first configuration"
         elif choice == "f":
             modules = _wizard.FULL_ENTITY_MODULES.copy()
             modules["recorder"] = False
@@ -277,7 +277,7 @@ def module_preset_step() -> Step:
             seed = (
                 _wizard.FULL_ENTITY_MODULES.copy()
                 if preset == "full"
-                else _wizard.base_thesis_modules()
+                else _wizard.first_configuration_modules()
             )
             ctx.extra["custom_modules_seed"] = seed
         ctx.extra["module_preset"] = label

@@ -4,11 +4,11 @@ The effectors module is KAINE's action module. It realizes `act` intents from th
 
 ## Status
 
-The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].effectors = false`) and in the base-thesis `thesis_test` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
+The effectors module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].effectors = false`) and in the `first_configuration` profile. It needs no dependency beyond the core install. The effector whitelist (`enabled_effectors`) and the shell command whitelist both ship empty, so nothing runs until the operator adds entries.
 
 The effectors module is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on the effectors module would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 
-In the base-thesis form the action selection module derives only speak and think intents, and no shipped action-selection policy emits `act` (the planning module proposes only think, speak and rest). The effectors module therefore runs only when an operator-supplied policy or code emits `act` intents.
+In the first configuration the action selection module derives only speak and think intents, and no shipped action-selection policy emits `act` (the planning module proposes only think, speak and rest). The effectors module therefore runs only when an operator-supplied policy or code emits `act` intents.
 
 ## What it does
 
@@ -105,7 +105,7 @@ The effectors module plays no audio (that is [the vocal module](vocal.md)), make
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].effectors = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].effectors = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 2. List the effectors that may run in `enabled_effectors`, for example `["file_write", "notify"]`.
 3. Add any shell commands under `[effectors.shell_whitelist]`, as narrowly as the use allows.
 4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one the effectors module starts and never runs anything.

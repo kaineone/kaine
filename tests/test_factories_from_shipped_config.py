@@ -5,7 +5,7 @@
 
 A factory that copies config keys into constructor keyword arguments breaks when
 a constructor parameter is renamed but the config key is not. This test loads the
-shipped ``config/kaine.toml`` (alone, with the ``thesis_test`` profile, and with
+shipped ``config/kaine.toml`` (alone, with the ``first_configuration`` profile, and with
 each tier profile), injects a fake Qdrant API key where required, and attempts
 to construct every known module with a mocked bus. A factory returning ``None``
 because a backend is unavailable on the host is accepted; any exception is a
@@ -37,7 +37,7 @@ def _tier_cases():
 
 CONFIG_CASES = [
     pytest.param(None, None, id="shipped"),
-    pytest.param("thesis_test", None, id="thesis_test"),
+    pytest.param("first_configuration", None, id="first_configuration"),
     *_tier_cases(),
 ]
 

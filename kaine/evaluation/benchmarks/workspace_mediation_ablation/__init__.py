@@ -10,7 +10,7 @@ cross-module broadcast information gain, read from each processor's
 ``context_gain`` field on its report payload.
 
 The harness is seeded and deterministic. It boots no entity and opens no
-network connection. It is development tooling and does not test the thesis. The
+network connection. It is development tooling and does not test the hypothesis. The
 language organ is not used, and its rendered output is not a measure.
 """
 from __future__ import annotations

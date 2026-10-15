@@ -1,13 +1,13 @@
 # documentation-consistency Specification
 
 ## Purpose
-This capability keeps the documentation consistent with the base-thesis default: the docs describe the module set an entity runs with when no other profile is selected, and say where a host's own choices replace it.
+This capability keeps the documentation consistent with the first-configuration default: the docs describe the module set an entity runs with when no other profile is selected, and say where a host's own choices replace it.
 
 ## Requirements
 
-### Requirement: Documentation reflects the base-thesis default
+### Requirement: Documentation reflects the first-configuration default
 
-The user-facing documentation SHALL describe the base-thesis form (the five
+The user-facing documentation SHALL describe the first configuration (the five
 predictive-workspace processors, observed-not-conversed, perception as prediction
 error, self-initiated voice, reference stimulus corpus, and the workspace-mediation
 ablation as the falsifier) as the project's default configuration, with the richer
@@ -15,11 +15,11 @@ faculties presented as built-and-gated. Where documentation, code, or the README
 disagree with the specs of record, the specs win; the documentation SHALL be brought
 into line with them, not the reverse.
 
-#### Scenario: Front-door docs lead with the base-thesis form
+#### Scenario: Front-door docs lead with the first configuration
 
 - **WHEN** a reader opens the README or the front-door docs (getting-started,
   for-researchers, architecture, configuration, reproducing-results)
-- **THEN** they describe the base-thesis five-processor default, the observed
+- **THEN** they describe the first-configuration five-processor default, the observed
   (non-chatbot) stance, and the ablation as the primary falsifiable test — not the
   prior "sixteen active modules / conversational" framing
 

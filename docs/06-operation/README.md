@@ -72,7 +72,7 @@ The dashboard publishes a `cycle.set_rates` event on the `cycle.control` stream,
 
 ## Enabling a module safely
 
-Enable a module as a deliberate, supervised step. The shipped `config/kaine.toml` supplies the module defaults used below. With no profile selected, the loader applies the base-thesis `thesis_test` profile, which sets the module flags and a few perception, language and action settings. `config/kaine.operator.toml` always merges last and wins. The first-run wizard writes a full `[modules]` table there, so after the wizard its module choices replace the profile's.
+Enable a module as a deliberate, supervised step. The shipped `config/kaine.toml` supplies the module defaults used below. With no profile selected, the loader applies the `first_configuration` profile, which sets the module flags and a few perception, language and action settings. `config/kaine.operator.toml` always merges last and wins. The first-run wizard writes a full `[modules]` table there, so after the wizard its module choices replace the profile's.
 
 The general procedure:
 
@@ -93,7 +93,7 @@ Module-specific prerequisites:
 | `audition` | `[audio]` extra installed; Speaches up on CPU with `medium.en` |
 | `vocal` | Chatterbox up and listing at least one voice, or `predefined_voice_id` set to a valid filename |
 | `vision` | `[internvideo]` extra installed; the pinned InternVideo-Next weights cached locally (DINOv2-small only when the per-frame fallback `encoder_backend = "dinov2"` is selected) |
-| `sleep` | None. Fatigue-triggered sleep runs in the base-thesis form without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
+| `sleep` | None. Fatigue-triggered sleep runs in the first configuration without the episodic memory module; its consolidation phases do work only once the episodic memory and world model modules are enabled, and the affective reset acts on the affect module | |
 | `social_cognition` | Qdrant container up |
 | `world_model` | `[worldmodel]` extra installed for the DreamerV3 backend; the shipped defaults are `backend = "dreamerv3"`, `engine = "jax"`, `training_enabled = true`, `persist_weights = true` |
 | `effectors` | Shell whitelist is empty by default; fill it deliberately before enabling |

@@ -4,7 +4,7 @@ The vocal module is KAINE's voice. It turns the language organ's external speech
 
 ## Status
 
-The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
+The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
 `[vocal].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vocal.mirroring].enabled = false`).
 
@@ -191,7 +191,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`.
 3. Keep the [language module](language.md) on, since the vocal module speaks its output, and the [affect module](affect.md), since the vocal module's prosody follows its affect.
 4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vocal.mirroring].enabled = true`.

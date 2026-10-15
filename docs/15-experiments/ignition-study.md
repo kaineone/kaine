@@ -13,7 +13,7 @@ The runner follows a seed-and-branch plan:
 - For k = 1 to K, `branch k` starts from the seed with the base modules plus the first k modules of the order.
 - `accumulate k` starts from `branch 0` (k = 1) or from `accumulate k-1` (k > 1), with the same modules as `branch k`. The accumulate line carries one entity forward through every step.
 
-The default base set is the base-thesis form: the interoception, sequence, vision, audition, language, affect and sleep modules. The default order adds six held modules: episodic memory, world model, planning, self-model, social cognition and vocal, so K is 6. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
+The default base set is the first configuration: the interoception, sequence, vision, audition, language, affect and sleep modules. The default order adds six held modules: episodic memory, world model, planning, self-model, social cognition and vocal, so K is 6. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
 
 Every viewing opens with the same transition from the developmental stimulus to the films. The crossfade from the entity's last developmental frame is identical across viewings, and film minute 0 is its end. See [development on one host](../06-operation/development.md) for the transition details.
 

@@ -4,7 +4,7 @@ The sections on this page control the evaluation sidecar, fork/merge lifecycle, 
 
 ## `[evaluation]`
 
-The evaluation sidecar watches the bus read-only and adds no dependencies to the core modules. It is enabled by default so research instrumentation runs out of the box. Disable it for production once the thesis is validated.
+The evaluation sidecar watches the bus read-only and adds no dependencies to the core modules. It is enabled by default so research instrumentation runs out of the box. Disable it for production once the hypothesis has been tested.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

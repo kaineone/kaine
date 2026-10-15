@@ -3,7 +3,7 @@
 Two findings of the mathematics review of 2026-10-08.
 
 - **The continuous-time reservoirs never see time.** The interoception and sequence modules use closed-form continuous-time (CfC) cells (Hasani et al. 2022). In a CfC the gate between the cell's two candidate states is `sigmoid(t_a * ts + t_b)`, with `ts` the elapsed time since the previous observation; that is what lets the cell handle irregularly spaced input. The NumPy port and both modules run with `ts = 1` on every step (`kaine/cfc_numpy.py` "no timespans (ts = 1.0)"), so the gate is one more fixed random function and the reservoirs are discrete-time maps. The interoception module's reads drift with load and the sequence module ticks per broadcast at an access rate that varies from 3.3 to 10 Hz, so elapsed time carries real information the cell discards.
-- **The interoception module's eighth input is always zero.** Slot 7 of the interoception module's interoceptive feature vector is reserved at 0.0, and slots 4 to 6 are filled only when the self-rhythm runs, so in the base-thesis profile half of the interoception module's input is constant. VRAM utilisation, which the interoception module already reads and holds a hard threshold for (92 percent), is not predicted at all.
+- **The interoception module's eighth input is always zero.** Slot 7 of the interoception module's interoceptive feature vector is reserved at 0.0, and slots 4 to 6 are filled only when the self-rhythm runs, so in the first-configuration profile half of the interoception module's input is constant. VRAM utilisation, which the interoception module already reads and holds a hard threshold for (92 percent), is not predicted at all.
 
 ## What Changes
 

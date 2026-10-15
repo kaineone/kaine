@@ -361,7 +361,7 @@ async def test_kokoro_real_table_default_is_speaker_zero(bus, monkeypatch):
 def test_vocal_stays_off_in_research_configs():
     assert (
         load_kaine_config(
-            profile="thesis_test",
+            profile="first_configuration",
             operator_path="/nonexistent-operator-for-tests.toml",
         )["modules"]["vocal"]
         is False

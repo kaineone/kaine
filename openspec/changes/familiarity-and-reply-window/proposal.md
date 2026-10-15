@@ -29,4 +29,4 @@ Two wiring faults found in the documentation sweep.
 
 - `kaine/modules/social_cognition/module.py`, `kaine/modules/affect/module.py`,
   `kaine/boot/factories/language.py`, tests. Both modules involved in the first
-  fix are held in the base-thesis profile.
+  fix are held in the first-configuration profile.

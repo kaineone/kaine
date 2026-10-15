@@ -31,7 +31,7 @@
 ## ADDED Requirements
 
 ### Requirement: Offline development harness of the workspace-mediation test
-The system SHALL provide an offline development harness that exercises the pipeline of the workspace-mediation test on a reduced pair of real context-conditioned processors, the interoception and vision modules, in a workspace-on arm and a pooled arm only. Both arms SHALL use the same seeds, the same scripted stimulus and identically initialized modules. The harness SHALL be seeded and deterministic, SHALL NOT boot an entity or open a network connection, and SHALL state in its documentation and in every verdict that it is development tooling and does not test the thesis.
+The system SHALL provide an offline development harness that exercises the pipeline of the workspace-mediation test on a reduced pair of real context-conditioned processors, the interoception and vision modules, in a workspace-on arm and a pooled arm only. Both arms SHALL use the same seeds, the same scripted stimulus and identically initialized modules. The harness SHALL be seeded and deterministic, SHALL NOT boot an entity or open a network connection, and SHALL state in its documentation and in every verdict that it is development tooling and does not test the hypothesis.
 
 #### Scenario: Same seed reproduces the run
 - **WHEN** the harness runs twice with the same seed and stimulus

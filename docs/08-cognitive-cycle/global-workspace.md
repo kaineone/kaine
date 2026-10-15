@@ -175,7 +175,7 @@ This per-report gain is the measurement the planned workspace-mediation test is 
 - `matched` scores every candidate as usual, then on each broadcast tick draws `min(top_k, n)` of the `n` candidates uniformly without regard to score, from a generator seeded from the run seed (`[experiment].seed`). The drawn members are ordered by score. A drawn member is accessed when its score reaches `θ`, and the broadcast is inhibited when none does. Ticks that are not broadcast ticks draw nothing, so the same seed and the same broadcast ticks give the same coalitions. A matched selection whose context does not say whether the tick is a broadcast tick is refused. The generator's state is not saved: the draws reproduce within one uninterrupted run, and a restart or revive starts the stream again from the seed.
 - `pooled` scores nothing. Every candidate of the tick is a member, the broadcast is never inhibited, the score table carries each candidate's intensity (the action selection module applies its report bars to intensities), and the metadata has no access threshold, so every member enters the context. An empty pooled broadcast replaces the context with the featurization of the empty set.
 
-The two controls need the coherence layer off, as it is in the base-thesis form; the workspace refuses the combination at construction.
+The two controls need the coherence layer off, as it is in the first configuration; the workspace refuses the combination at construction.
 
 A run selects its arm through a study configuration, which also sets greedy decoding: `KAINE_STUDY=workspace_mediation_matched` (or `_competitive`, `_pooled`) applies `config/studies/workspace_mediation_matched.toml` after the operator file. See [How configuration is loaded](../appendix-a-configuration/README.md#how-configuration-is-loaded).
 
@@ -223,11 +223,11 @@ The policy is chosen by `[action_selection].policy` and `[action_selection].driv
 
 | Setting | Policy |
 |---|---|
-| `policy = "self_initiated_report"` | `SelfInitiatedReportPolicy`, the base-thesis policy |
+| `policy = "self_initiated_report"` | `SelfInitiatedReportPolicy`, the first-configuration policy |
 | no `policy`, `drive_initiative = true` (the code default) | `DriveBiasedActionSelectionPolicy` |
 | no `policy`, `drive_initiative = false` | `DefaultActionSelectionPolicy` |
 
-When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `action_selection.proposal_outcome` events on `action_selection_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `thesis_test` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
+When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `action_selection.proposal_outcome` events on `action_selection_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `first_configuration` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
 
 ### The self-initiated report policy
 
@@ -235,7 +235,7 @@ When the planning module is enabled, the composition root wraps whichever policy
 
 1. Clears the speak guard if the coalition contains the language organ's external speech, and the think guard if it contains its internal speech. Either guard is also cleared after 48 seconds of wall time, so a failed realization cannot mute the entity.
 2. Removes the language organ's own events (source `language`) from the coalition. If nothing is left, there is no intent. Otherwise the report signal is the highest score among the remaining members, and the signature is the `(source, type)` of that member.
-3. Emits a `speak` intent when the signal reaches `report_threshold` (0.6), no speak is in flight, `speak_refractory_s` (8 entity seconds) has passed since the last speak, and the signature does not match the last spoken signature. A remembered signature stops blocking once it is older than `sig_expiry_s` (300 entity seconds in `thesis_test`; it never expires when unset).
+3. Emits a `speak` intent when the signal reaches `report_threshold` (0.6), no speak is in flight, `speak_refractory_s` (8 entity seconds) has passed since the last speak, and the signature does not match the last spoken signature. A remembered signature stops blocking once it is older than `sig_expiry_s` (300 entity seconds in `first_configuration`; it never expires when unset).
 4. Otherwise emits a `think` intent when the signal reaches `think_threshold` (0.45), no think is in flight, and `think_refractory_s` (3 entity seconds) has passed. The think path has no signature check.
 
 At most one intent is emitted per broadcast. Both bars should sit above the access threshold, and the policy requires `0 ≤ think_threshold ≤ report_threshold ≤ 1`. An optional `interrupt_threshold`, strictly above `report_threshold`, lets a coalition with a different signature preempt a `speak` that is still in flight; it is unset by default.
@@ -254,7 +254,7 @@ The bars are a heuristic stand-in for the report-or-act decision of the predicti
 
 All modules of a single-process instance share one bus credential, so the bus alone cannot prove which module published an event. For `act` intents, the only kind that can reach an effector, the composition root generates a per-boot secret (`generate_intent_secret()`, 32 random bytes held in process memory, never persisted or logged) and gives it to the action selection module and the effectors module.
 
-The action selection module attaches a provenance envelope to every `act` intent: `run_id`, a per-signer monotonic `seq`, and `sig`, an HMAC-SHA256 over a canonical serialization of `(kind, effector, params, run_id, seq)`. `speak` and `think` intents carry no envelope. The effectors module verifies the signature with `verify_intent_signature` before it runs any effector and drops a forged, unsigned or replayed intent, recording it as `provenance_rejected`. The operator's effector whitelist applies after that check. The effectors module is held in the base-thesis form. See the [effectors module](../09-modules/effectors.md).
+The action selection module attaches a provenance envelope to every `act` intent: `run_id`, a per-signer monotonic `seq`, and `sig`, an HMAC-SHA256 over a canonical serialization of `(kind, effector, params, run_id, seq)`. `speak` and `think` intents carry no envelope. The effectors module verifies the signature with `verify_intent_signature` before it runs any effector and drops a forged, unsigned or replayed intent, recording it as `provenance_rejected`. The operator's effector whitelist applies after that check. The effectors module is held in the first configuration. See the [effectors module](../09-modules/effectors.md).
 
 ## Streams
 
@@ -269,7 +269,7 @@ The action selection module attaches a provenance envelope to every `act` intent
 
 ## Configuration reference
 
-Selection keys live in `config/kaine.toml`; the `[action_selection]` values below are set by `config/profiles/thesis_test.toml` or are code defaults. See the [configuration reference](../appendix-a-configuration/README.md) for the full files.
+Selection keys live in `config/kaine.toml`; the `[action_selection]` values below are set by `config/profiles/first_configuration.toml` or are code defaults. See the [configuration reference](../appendix-a-configuration/README.md) for the full files.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -281,14 +281,14 @@ Selection keys live in `config/kaine.toml`; the `[action_selection]` values belo
 | `[workspace].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
 | `[workspace].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
 | `[affect].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
-| `[action_selection].policy` | string | unset; `"self_initiated_report"` in `thesis_test` | Action-selection policy |
-| `[action_selection].drive_initiative` | bool | true; false in `thesis_test` | Use the drive-biased policy when no policy is named |
+| `[action_selection].policy` | string | unset; `"self_initiated_report"` in `first_configuration` | Action-selection policy |
+| `[action_selection].drive_initiative` | bool | true; false in `first_configuration` | Use the drive-biased policy when no policy is named |
 | `[action_selection].report_threshold` | float | 0.6 | Speak bar |
 | `[action_selection].think_threshold` | float | 0.45 | Think bar |
 | `[action_selection].interrupt_threshold` | float | unset | Optional interrupt bar, above the speak bar |
 | `[action_selection].speak_refractory_s` | float | 8.0 | Minimum entity seconds between speak intents |
 | `[action_selection].think_refractory_s` | float | 3.0 | Minimum entity seconds between think intents |
-| `[action_selection].sig_expiry_s` | float | unset; 300.0 in `thesis_test` | Age at which a spoken signature stops blocking |
+| `[action_selection].sig_expiry_s` | float | unset; 300.0 in `first_configuration` | Age at which a spoken signature stops blocking |
 | `[oscillator].enabled` | bool | false | Coherence layer |
 | `[oscillator].plv_window` | int | 10 | Phase window in ticks (minimum 10) |
 | `[oscillator].coherence_floor` | float | 0.8 | Factor at PLV 0 |

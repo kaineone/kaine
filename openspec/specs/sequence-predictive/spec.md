@@ -27,11 +27,11 @@ maintenance. The legacy `anomaly_score`, `habituation_score`, and
 - **THEN** the payload still contains `anomaly_score`, `habituation_score`, and
   `rumination_detected`
 
-### Requirement: The base-thesis profile runs the temporal forward model
-The base-thesis profile SHALL enable the sequence module's forward-prediction head, so that a base-thesis run publishes a non-zero `temporal_prediction_error` once the head has a previous tick to predict from. The shipped `config/kaine.toml` SHALL keep the head disabled.
+### Requirement: The first-configuration profile runs the temporal forward model
+The first-configuration profile SHALL enable the sequence module's forward-prediction head, so that a first-configuration run publishes a non-zero `temporal_prediction_error` once the head has a previous tick to predict from. The shipped `config/kaine.toml` SHALL keep the head disabled.
 
-#### Scenario: Thesis profile
-- **WHEN** the `thesis_test` profile is loaded
+#### Scenario: First-configuration profile
+- **WHEN** the `first_configuration` profile is loaded
 - **THEN** `[sequence].forward_prediction` is true
 
 #### Scenario: Shipped default

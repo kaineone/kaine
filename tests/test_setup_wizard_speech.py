@@ -142,7 +142,7 @@ def test_vocal_sherpa_onnx_skips_chatterbox_voice_prompt(
 ) -> None:
     monkeypatch.setattr(
         wizard_core,
-        "base_thesis_modules",
+        "first_configuration_modules",
         lambda profiles_dir=None: {m: m == "vocal" for m in wizard.MODULE_ORDER},
     )
     shipped = _shipped()
@@ -166,7 +166,7 @@ def test_audition_sherpa_onnx_skips_speaches_stt_prompt(
 ) -> None:
     monkeypatch.setattr(
         wizard_core,
-        "base_thesis_modules",
+        "first_configuration_modules",
         lambda profiles_dir=None: {m: m == "audition" for m in wizard.MODULE_ORDER},
     )
     shipped = _shipped()

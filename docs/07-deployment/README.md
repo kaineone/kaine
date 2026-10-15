@@ -21,20 +21,20 @@ The rules are checked in this order:
 | An accelerator with an unknown budget, or a budget below the 6 GB floor | Tier 1 |
 | No accelerator | Tier 1 |
 
-Module residency is not implemented yet. On a host that needs it, the probe advises keeping the base-thesis module set, serving a language organ that fits (for example the 4B GGUF) and leaving the vision and voice extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
+Module residency is not implemented yet. On a host that needs it, the probe advises keeping the first-configuration module set, serving a language organ that fits (for example the 4B GGUF) and leaving the vision and voice extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
 
 ## What a tier is
 
 A tier is a TOML overlay (`config/profiles/tierN.toml`) layered after the shipped defaults and the module profile, and before your local `config/kaine.operator.toml`. The cycle and the pre-boot check load configuration in this order:
 
 1. shipped `config/kaine.toml`;
-2. module profile (`--profile` or `KAINE_PROFILE`, and `thesis_test` when neither is set);
+2. module profile (`--profile` or `KAINE_PROFILE`, and `first_configuration` when neither is set);
 3. deployment tier (`KAINE_TIER`, or `[deployment].tier` in `config/kaine.operator.toml`);
 4. operator config `config/kaine.operator.toml`.
 
 A tier file must contain a `[tier]` table with `name`, `unsupported_modules` and `oscillator_supported`. A file named as the tier without that table is refused with `ProfileError`, and the cycle exits with `kaine.cycle: configuration error: ...` instead of a traceback. A tier file that contains a `[modules]` table or an `[oscillator].enabled` key is refused in the same way.
 
-A tier never enables a module and never carries a private voice. It only bounds which backend each module uses and which devices it targets. Which modules are active is a separate choice. The default active set is the base-thesis form, selected by `config/profiles/thesis_test.toml`: the [interoception](../09-modules/interoception.md), [sequence](../09-modules/sequence.md), [vision](../09-modules/vision.md), [audition](../09-modules/audition.md), [affect](../09-modules/affect.md), [sleep](../09-modules/sleep.md) and [language](../09-modules/language.md) modules.
+A tier never enables a module and never carries a private voice. It only bounds which backend each module uses and which devices it targets. Which modules are active is a separate choice. The default active set is the first configuration, selected by `config/profiles/first_configuration.toml`: the [interoception](../09-modules/interoception.md), [sequence](../09-modules/sequence.md), [vision](../09-modules/vision.md), [audition](../09-modules/audition.md), [affect](../09-modules/affect.md), [sleep](../09-modules/sleep.md) and [language](../09-modules/language.md) modules.
 
 ## Applying a tier
 
@@ -194,7 +194,7 @@ These defaults shape the deployment choice:
 
 ## Durable output and unattended-run defaults
 
-- Profiles ship in the image. The `Dockerfile` copies `config/profiles`, so `KAINE_PROFILE` and the automatic `thesis_test` selection resolve without a bind mount.
+- Profiles ship in the image. The `Dockerfile` copies `config/profiles`, so `KAINE_PROFILE` and the automatic `first_configuration` selection resolve without a bind mount.
 - Research output is durable. In Compose, the `kaine-eval-data` volume is mounted at `/app/data/evaluation` on `kaine-dashboard` and `kaine-cycle`, and `kaine-trajectory` at `/app/data/workspace_trajectory` on `kaine-cycle`. `kaine-study` mounts neither and keeps every step under `/app/studies`. `KAINE_DATA_ROOT=/app` is set on the dashboard, cycle and study containers.
 - Quadlet mounts differ. The quadlet `kaine-dashboard` unit mounts only `kaine-state` and has no `kaine-eval-data` mount. Compose mounts are described in [Containers](./containers.md).
 - Redis is capped and strict. `KAINE_REDIS_MAXMEMORY` defaults to `4gb` through the `${KAINE_REDIS_MAXMEMORY:-4gb}` fallback in the Compose file and the equivalent fallback in the quadlet unit; `compose/.env.example` only shows it commented out. Redis runs with `--maxmemory-policy noeviction`, so a full bus fails loudly instead of silently dropping events. A full study needs `12gb` or more on hosts with the RAM.

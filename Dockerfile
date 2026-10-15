@@ -166,7 +166,7 @@ COPY --chown=kaine:kaine kaine /app/kaine
 COPY --chown=kaine:kaine external/internvideo_next /app/external/internvideo_next
 ARG GIT_SHA=""
 COPY --chown=kaine:kaine config/kaine.toml /app/config/kaine.toml
-# Runtime profiles (incl. thesis_test auto-selection) must be in-image or
+# Runtime profiles (incl. first_configuration auto-selection) must be in-image or
 # KAINE_PROFILE resolution fails inside the container.
 COPY --chown=kaine:kaine config/profiles /app/config/profiles
 COPY --chown=kaine:kaine pyproject.toml README.md /app/

@@ -70,8 +70,8 @@ def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path
     )
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    (profiles / "thesis_test.toml").write_text(
-        '[modules]\ninteroception = true\nsequence = true\nlanguage = false\n[language]\nmodel_id = "thesis-model"\n'
+    (profiles / "first_configuration.toml").write_text(
+        '[modules]\ninteroception = true\nsequence = true\nlanguage = false\n[language]\nmodel_id = "profile-model"\n'
     )
     (profiles / "tier0.toml").write_text(
         '[tier]\nname = "tier0"\nunsupported_modules = []\noscillator_supported = true\n'
@@ -89,21 +89,21 @@ def _write_minimal_configs(tmp_path: Path, monkeypatch: Any) -> tuple[Path, Path
     return shipped, profiles
 
 
-def test_load_runtime_config_default_thesis_test_plus_tier(monkeypatch, tmp_path: Path):
-    """No explicit profile/env uses thesis_test, and the operator tier overlays it."""
+def test_load_runtime_config_default_first_configuration_plus_tier(monkeypatch, tmp_path: Path):
+    """No explicit profile/env uses first_configuration, and the operator tier overlays it."""
     shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
     op = tmp_path / "kaine.operator.toml"
     op.write_text('[deployment]\ntier = "tier2"\n')
 
     cfg = load_runtime_config(shipped, op)
 
-    # thesis_test's module set survives...
+    # first_configuration's module set survives...
     assert cfg["modules"]["interoception"] is True
     assert cfg["modules"]["sequence"] is True
     # ...while the tier bounds backends.
     assert cfg["language"]["backend"] == "llama_cpp"
     # Siblings from the module profile survive where the tier is silent.
-    assert cfg["language"]["model_id"] == "thesis-model"
+    assert cfg["language"]["model_id"] == "profile-model"
 
 
 def test_load_runtime_config_env_profile_with_tier_overlay(monkeypatch, tmp_path: Path):
@@ -128,10 +128,10 @@ def test_load_runtime_config_kaine_tier_overrides_overlay(monkeypatch, tmp_path:
 
 
 def test_load_runtime_config_kaine_tier_equal_profile_refused_if_not_tier(monkeypatch, tmp_path: Path):
-    """KAINE_TIER=thesis_test must be refused, not silently skipped because tier==profile."""
+    """KAINE_TIER=first_configuration must be refused, not silently skipped because tier==profile."""
     shipped, _profiles = _write_minimal_configs(tmp_path, monkeypatch)
-    with pytest.raises(ProfileError, match="thesis_test is not a deployment tier"):
-        load_runtime_config(shipped, tmp_path / "no-operator.toml", env={"KAINE_TIER": "thesis_test"})
+    with pytest.raises(ProfileError, match="first_configuration is not a deployment tier"):
+        load_runtime_config(shipped, tmp_path / "no-operator.toml", env={"KAINE_TIER": "first_configuration"})
 
 
 def test_load_runtime_config_kaine_tier_module_profile_refused(monkeypatch, tmp_path: Path):
@@ -151,7 +151,7 @@ def test_load_runtime_config_invalid_tier_slug_raises(monkeypatch, tmp_path: Pat
         load_runtime_config(shipped, op)
 
 
-def test_real_thesis_test_plus_tier0_preserves_module_set(tmp_path: Path):
+def test_real_first_configuration_plus_tier0_preserves_module_set(tmp_path: Path):
     """Recording a tier must never change which modules are enabled."""
     cfg_with_tier = load_runtime_config(
         SHIPPED,
@@ -159,13 +159,13 @@ def test_real_thesis_test_plus_tier0_preserves_module_set(tmp_path: Path):
         env={"KAINE_TIER": "tier0"},
         profiles_dir=REPO_ROOT / "config" / "profiles",
     )
-    cfg_thesis_only = load_runtime_config(
+    cfg_profile_only = load_runtime_config(
         SHIPPED,
         tmp_path / "no-operator-2.toml",
         env={},
         profiles_dir=REPO_ROOT / "config" / "profiles",
     )
-    assert cfg_with_tier["modules"] == cfg_thesis_only["modules"]
+    assert cfg_with_tier["modules"] == cfg_profile_only["modules"]
 
 
 def test_load_runtime_config_tier_with_modules_table_raises(monkeypatch, tmp_path: Path):

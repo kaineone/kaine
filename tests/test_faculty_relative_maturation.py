@@ -3,7 +3,7 @@
 
 """Faculty-relative maturation decisions.
 
-A base-thesis entity without the sleep, world model or embodiment modules must still be able to
+A first-configuration entity without the sleep, world model or embodiment modules must still be able to
 maturation once developmental readiness (C1, C3) is met. The gate skips the checks
 and embodiment guards that depend on absent faculties.
 """
@@ -141,7 +141,7 @@ def _make_bus(
 
 
 def _make_base_registry() -> Any:
-    """A registry with no sleep, world model or embodiment modules — base-thesis-like."""
+    """A registry with no sleep, world model or embodiment modules — first-configuration-like."""
     registry = MagicMock()
     registry.__contains__.return_value = False
     registry.get.return_value = None
@@ -378,7 +378,7 @@ def test_default_faculties_preserves_existing_c2_and_decision() -> None:
 
 
 @pytest.mark.asyncio
-async def test_base_thesis_maturations_into_perceptual_world(
+async def test_first_configuration_maturations_into_perceptual_world(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -481,10 +481,10 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
 
 
 @pytest.mark.asyncio
-async def test_status_reports_not_applicable_for_base_thesis(
+async def test_status_reports_not_applicable_for_first_configuration(
     tmp_path: Path,
 ) -> None:
-    """After evaluating a base-thesis registry, status exposes the perceptual
+    """After evaluating a first-configuration registry, status exposes the perceptual
     world, the faculty-relative conditions, and C2 as not applicable."""
     readout = {
         "endogenous_self_sustain": True,

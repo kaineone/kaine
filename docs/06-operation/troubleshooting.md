@@ -4,7 +4,7 @@ This page is for operators who have installed KAINE and need to recover from a f
 
 ## Speaches returns HTTP 404 or crashes
 
-Speaches is the default speech-to-text backend (`[audition].backend = "speaches"`), and Audition calls it only when `[audition].transcription_enabled = true`, which is off in the shipped config and in the `thesis_test` profile. The shipped image is the CPU build (`speaches:latest-cpu`), and it must serve the model named in `[audition].stt_model` (`Systran/faster-distil-whisper-medium.en`). A GPU build can crash in cuDNN, and a model the server does not have returns 404.
+Speaches is the default speech-to-text backend (`[audition].backend = "speaches"`), and Audition calls it only when `[audition].transcription_enabled = true`, which is off in the shipped config and in the `first_configuration` profile. The shipped image is the CPU build (`speaches:latest-cpu`), and it must serve the model named in `[audition].stt_model` (`Systran/faster-distil-whisper-medium.en`). A GPU build can crash in cuDNN, and a model the server does not have returns 404.
 
 On a Quadlet install, restart Speaches:
 

@@ -4,11 +4,11 @@ The sequence module is KAINE's temporal prediction. Its input is the workspace i
 
 ## Status
 
-Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `thesis_test` profile, which enables the sequence module (`sequence = true`).
+Implemented. The bare `config/kaine.toml` has every module off; with no profile selected the loader applies the `first_configuration` profile, which enables the sequence module (`sequence = true`).
 
 - The reservoir backend is `[sequence].cfc_backend`: `"numpy"` (shipped default; needs neither `torch` nor `ncps`) or `"torch"` (uses `ncps.torch.CfC` and needs the `core` extra).
 - The network runs on the CPU by policy, whatever the host. It is small enough that a GPU adds nothing, and the CPU keeps the cycle's timing predictable. A warning is logged if the selected device is not `cpu`.
-- Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in `thesis_test`. With it off, the sequence module reports only at its baseline or alert level.
+- Forward prediction is off in the shipped `config/kaine.toml` (`forward_prediction = false`) and on in `first_configuration`. With it off, the sequence module reports only at its baseline or alert level.
 
 ## What Sequence does
 
@@ -145,7 +145,7 @@ Section `[sequence]` in `config/kaine.toml`. For the full reference see the [mod
 | `rumination_bucket_resolution` | float | `0.25` | Quantization step of the hidden-state fingerprint |
 | `user_input_streams` | array of strings | `["audition.out"]` | Streams read for interactions |
 | `interaction_event_types` | array of strings | `["audition.transcription", "audition.emotion"]` | Event types that count as an interaction when they come from an operator channel |
-| `forward_prediction` | boolean | `false` shipped; `true` in `thesis_test` | Enable the online readout, the temporal error, and the graded intensity |
+| `forward_prediction` | boolean | `false` shipped; `true` in `first_configuration` | Enable the online readout, the temporal error, and the graded intensity |
 | `prediction_error_window` | integer | `32` | Broadcasts in the running mean of the temporal error (at least 2) |
 
 ## How it works

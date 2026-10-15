@@ -4,7 +4,7 @@ The self-model module holds KAINE's self-model. It keeps a persisted model of th
 
 ## Status
 
-The self-model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].self_model = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fourth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. In the paper's terms it adds a new kind of candidate to the competition, the self-model's drift alerts and self-model updates.
+The self-model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].self_model = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it fourth in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. In the paper's terms it adds a new kind of candidate to the competition, the self-model's drift alerts and self-model updates.
 
 The self-inference engine is a second, separate switch: `[self_model.self_inference].enabled = false` in the shipped configuration. The study overlay does not turn it on, so unless the operator file enables it, a study branch with the self-model module runs the drift detector and the launch name only.
 
@@ -122,7 +122,7 @@ If `seed_path` is set, the engine reads the JSONL file once at first boot throug
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].self_model = true`. The operator file merges last. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].self_model = true`. The operator file merges last. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 2. Make sure `state/self_model/` is writable.
 3. To turn on self-inference, also set `[self_model.self_inference].enabled = true`.
 4. To seed fields at first boot, set `seed_path` to a JSONL file with one object per line, for example:

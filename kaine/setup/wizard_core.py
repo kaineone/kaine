@@ -10,12 +10,13 @@ imports the other at call time.
 from __future__ import annotations
 
 import tomllib
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 import kaine.config
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.setup.accel_mismatch import MismatchVerdict, evaluate_mismatch
 
 # The required CAL welfare acknowledgement phrase (mirrors kaine.lifecycle).
@@ -67,20 +68,31 @@ FULL_ENTITY_MODULES: dict[str, bool] = {
 }
 
 
-def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
-    """The [modules] table of the base-thesis profile (config/profiles/thesis_test.toml)."""
-    path = kaine.config.profile_path("thesis_test", profiles_dir=profiles_dir)
+def first_configuration_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
+    """The [modules] table of the first-configuration profile (config/profiles/first_configuration.toml)."""
+    path = kaine.config.profile_path(kaine.config.DEFAULT_PROFILE, profiles_dir=profiles_dir)
     if not path.is_file():
-        raise FileNotFoundError(f"base-thesis profile not found: {path}")
+        raise FileNotFoundError(f"first-configuration profile not found: {path}")
     with path.open("rb") as fh:
         data = tomllib.load(fh)
         data = legacy_aliases.normalize_config_layer(data, str(path))
     table = data.get("modules")
     if not isinstance(table, dict):
-        raise FileNotFoundError(f"base-thesis profile has no [modules] table: {path}")
+        raise FileNotFoundError(f"first-configuration profile has no [modules] table: {path}")
     modules = {m: bool(table.get(m, False)) for m in MODULE_ORDER}
     modules["recorder"] = False
     return modules
+
+
+def base_thesis_modules(profiles_dir: Path | None = None) -> dict[str, bool]:
+    """Deprecated name for :func:`first_configuration_modules`."""
+    warnings.warn(
+        f"base_thesis_modules is deprecated, use first_configuration_modules; "
+        f"it is read until {legacy_names.ALIAS_LAST_RELEASE}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return first_configuration_modules(profiles_dir=profiles_dir)
 
 
 def recommend_preset(rec: Any | None) -> tuple[str, str]:

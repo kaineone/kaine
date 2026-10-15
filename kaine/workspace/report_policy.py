@@ -5,7 +5,7 @@
 
 The default policy answers a *user utterance*; the drive-biased policy adds
 *drive*-initiated intents. Both need something external (a transcript) or the affect module
-to move the entity. The base-thesis configuration has neither — no chatbot input
+to move the entity. The first configuration has neither — no chatbot input
 path, the affect module gated off - so nothing would make the entity speak.
 
 This policy closes that without any input trigger: the entity reports **its own

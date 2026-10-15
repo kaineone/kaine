@@ -550,10 +550,10 @@ def test_h4_sig_expiry_is_wired_from_action_selection_config():
     assert "sig_expiry_s=(" in src
 
 
-def test_thesis_test_profile_sets_sig_expiry():
+def test_first_configuration_profile_sets_sig_expiry():
     import tomllib
 
-    profile = Path(__file__).parent.parent / "config" / "profiles" / "thesis_test.toml"
+    profile = Path(__file__).parent.parent / "config" / "profiles" / "first_configuration.toml"
     raw = tomllib.loads(profile.read_text())
     assert float(raw["action_selection"]["sig_expiry_s"]) > 0
 

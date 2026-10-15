@@ -7,7 +7,7 @@ with synaptic downscaling. In the code, phase 1 moves every short-term entry
 into the episodic store, and phase 2's `replay_now()` then builds its
 candidates from the short-term buffer alone. By the time phase 2 runs the
 buffer is empty, so a sleep replays nothing. The episodic memory module page records
-this as a known gap. The episodic memory module is held, so the base-thesis form is unaffected.
+this as a known gap. The episodic memory module is held, so the first configuration is unaffected.
 
 ## What Changes
 

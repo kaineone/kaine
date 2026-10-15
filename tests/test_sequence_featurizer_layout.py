@@ -172,12 +172,12 @@ def test_factory_rejects_bare_string_interaction_event_types(bus: AsyncBus):
         make_sequence(bus, {"interaction_event_types": "audition.emotion"})
 
 
-def test_thesis_profile_runs_forward_head_and_shipped_config_does_not():
+def test_first_configuration_profile_runs_forward_head_and_shipped_config_does_not():
     import tomllib
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    profile = tomllib.loads((root / "config/profiles/thesis_test.toml").read_text())
+    profile = tomllib.loads((root / "config/profiles/first_configuration.toml").read_text())
     shipped = tomllib.loads((root / "config/kaine.toml").read_text())
     assert profile["sequence"]["forward_prediction"] is True
     assert shipped["sequence"]["forward_prediction"] is False

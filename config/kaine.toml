@@ -482,7 +482,7 @@ device = "cuda:1"
 # small noise floor. Background: the 2026-07-10 GPU shakedown (RTX 4070 SUPER, real
 # 91M weights; docs/records/shakedowns/internvideo-next-gpu-shakedown.md) measured, on the
 # seeded feed, routine change <= 0.0004 and genuine scene cuts ~0.008-0.043 — but on
-# the real reference corpus the first base-thesis run stayed FLAT (the vision module never
+# the real reference corpus the first run with the first configuration stayed FLAT (the vision module never
 # alerted on 3830/3830 reports): an absolute threshold mis-scales across content, so
 # the relative criterion replaces it. This floor only stops a large ratio over a
 # near-static stream (tiny mean) from firing on noise; keep it well below the
@@ -516,7 +516,7 @@ capture_width = 640
 capture_height = 480
 capture_warmup_frames = 3
 # Forward-model prediction. ENABLED by default (perception-drives-salience): the
-# base thesis is that perception enters the workspace as forward-model prediction
+# hypothesis is that perception enters the workspace as forward-model prediction
 # error, so this path — not a raw change threshold — is the primary perceptual
 # salience driver. The first containerized run had it off and perception never
 # influenced the workspace (the vision module emitted baseline salience on 3830/3830 reports).
@@ -828,9 +828,9 @@ backend = "speaches"
 # sherpa_model_id = "moonshine-base-en"   # or "moonshine-tiny-en"
 # sherpa_model_dir = ""                   # default: <models dir>/sherpa-onnx/<id>
 # sherpa_num_threads = 2
-# Speech-to-text is built but DEACTIVATED BY DEFAULT: in the base-thesis form the
+# Speech-to-text is built but DEACTIVATED BY DEFAULT: in the first configuration the
 # entity hears sound as prediction error, never as a transcript, so no text reaches
-# the language organ. Set true (in an override, beyond the base thesis) to re-enable
+# the language organ. Set true (in an override, beyond the first configuration) to re-enable
 # the full STT pipeline configured below.
 transcription_enabled = false
 # The STT model id Speaches has loaded (or is configured to download
@@ -1428,8 +1428,8 @@ stimulus_source_prediction_error_ceiling = 0.3  # generative-model-seeded ceilin
 return_to_baseline_seconds_ceiling = 30
 
 [evaluation]
-# Architecture-thesis instrumentation. Disable for production once the
-# thesis is validated. Adds NO core-module dependencies; observes the
+# Architecture-hypothesis instrumentation. Disable for production once the
+# hypothesis has been tested. Adds NO core-module dependencies; observes the
 # bus only.
 enabled = true
 # Persistent workspace trajectory is OPT-IN. When false, no per-tick
@@ -1720,8 +1720,8 @@ host = "127.0.0.1"
 port = 8088
 # Surface toggles. A single-surface deployment is supported. The conversation
 # surface is a user-facing input channel; it is deactivated by default so the
-# base-thesis form is observed, not conversed with (no external input reaches the
-# language organ). Enable it for interactive configurations beyond the base thesis.
+# first configuration is observed, not conversed with (no external input reaches the
+# language organ). Enable it for interactive configurations beyond the first configuration.
 conversation_enabled = false
 diagnostics_enabled = true
 # Cap on history backfilled on initial conversation load. Older messages

@@ -19,7 +19,7 @@ A design for computing valence and arousal from the entity's own inference, intr
 
 **Open items recorded here, not decided:**
 - **Social drive from isolation since spawn.** Today `time_since_last_interaction_s` is `inf` until the first operator speech, and the affect module ignores `inf`, so the social drive never builds in a run with no operator speech. Whether isolation since spawn should raise it is a new affect rule with welfare weight, because studies never have operator speech. It belongs to this design, not to a code fix. It was deferred from `chronos-forward-model-on`, where D3 kept the behaviour unchanged.
-- **The generative model.** The readouts need a generative model with preferences `C`, which naturally means the planning module. The planning module is off in base-thesis. Either the affect module keeps a minimal interoceptive generative model of its own, or the readouts exist only when the planning module is on.
+- **The generative model.** The readouts need a generative model with preferences `C`, which naturally means the planning module. The planning module is off in first-configuration. Either the affect module keeps a minimal interoceptive generative model of its own, or the readouts exist only when the planning module is on.
 
 ## Impact
 

@@ -155,9 +155,9 @@ Phase 1 shipped with a download-free spectral encoder behind the `AcousticEncode
 - They load with `local_files_only` and `HF_HUB_OFFLINE=1`, never `trust_remote_code`, from weights fetched at setup time.
 - ONNX and int8 exports serve the torch-free tiers.
 - A separate energy channel carries loudness for salience, because WavJEPA normalises loudness away and Dasheng's embedding is not a loudness measure.
-- An offline bake-off on the seeded, playlist and stimulus source feeds picks the thesis-profile default and is recorded under `docs/records/`. Tier 0 keeps `spectral`.
+- An offline bake-off on the seeded, playlist and stimulus source feeds picks the first-configuration-profile default and is recorded under `docs/records/`. Tier 0 keeps `spectral`.
 - WavJEPA's predictor-based mismatch ("MMN mode") is an offline experiment inside the bake-off harness only. It is not wired into the runtime module.
 
 ### Research impact
 
-The thesis-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived entity keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.
+The first-configuration-profile default encoder changes the embedding space that acoustic salience is computed over, so the next study is re-baselined on it. Persisting the acoustic forward model means a revived entity keeps its auditory expectations. No study is running, and no entity is booted for the bake-off.

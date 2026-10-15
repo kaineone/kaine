@@ -77,8 +77,8 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 - **WHEN** an `intent.speak` on `action_selection.out` with `entry_id` E and no `origin` is realized (`external_speech` or a successful `vocal.synthesized`), and the coalition member resolved via E has source/type `SelfInitiatedReportPolicy`-reported surprise (no external-input type, no `affect.drive`)
 - **THEN** the audit classifies it as self-initiated, and its entry_id appears in the self-initiated list for that sleep
 
-#### Scenario: input-triggered count zero under base thesis
-- **WHEN** a sleep completes under the base thesis (conversation surface off, transcription off, embodiment module off)
+#### Scenario: input-triggered count zero under first configuration
+- **WHEN** a sleep completes under the first configuration (conversation surface off, transcription off, embodiment module off)
 - **THEN** the audit reports `input_triggered_count == 0` for the window, proving the invariant every sleep
 
 #### Scenario: drive-triggered classification

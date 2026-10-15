@@ -1,10 +1,10 @@
 # Sleep
 
-The sleep module is the sleep analog: a fatigue-triggered offline period during which the four predictive processors stop adapting their forward models, and at whose end affect and drives return to baseline. This page is the module reference. It covers what starts a sleep, what a sleep does in the base-thesis form and with the held modules, the events the sleep module publishes, and its configuration. The full pipeline is described in [Sleep and maintenance](../10-sleep/README.md), and the gated training phase in [Voice alignment](../10-sleep/voice-alignment.md).
+The sleep module is the sleep analog: a fatigue-triggered offline period during which the four predictive processors stop adapting their forward models, and at whose end affect and drives return to baseline. This page is the module reference. It covers what starts a sleep, what a sleep does in the first configuration and with the held modules, the events the sleep module publishes, and its configuration. The full pipeline is described in [Sleep and maintenance](../10-sleep/README.md), and the gated training phase in [Voice alignment](../10-sleep/voice-alignment.md).
 
 ## Status
 
-The sleep module ships disabled in the default config (`[modules].sleep = false` in `config/kaine.toml`). The `thesis_test` profile enables it, because fatigue-triggered rest and the affective reset are part of the base-thesis form.
+The sleep module ships disabled in the default config (`[modules].sleep = false` in `config/kaine.toml`). The `first_configuration` profile enables it, because fatigue-triggered rest and the affective reset are part of the first configuration.
 
 Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[sleep.consolidation].associative_replay = true` and the world model module. Voice alignment needs `[sleep.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need the episodic memory module.
 
@@ -16,7 +16,7 @@ The predictive processors read `sleep.out` and suspend forward-model adaptation 
 
 Every sleep ends with phase 5, the affective reset. It calls the affect module's `affective_reset()`, which returns valence, arousal and dominance to baseline, clears the drives and the learning-progress and alert-rate trackers, and publishes `affect.state` with `reset: true` (see [the affect module](affect.md#sleep-reset)). When `sleep.sleep.completed` arrives, the interoception module resets its fatigue accumulator and its regulation state. Because every sleep ends this way, arousal cannot drift across a whole run.
 
-### In the base-thesis form
+### In the first configuration
 
 With the episodic memory module, the world model module and voice alignment off, the consolidation phases do no work:
 
@@ -155,7 +155,7 @@ The metric is computed whether or not training runs and is persisted to `state/s
 
 ## Enabling and use
 
-1. Set `[modules].sleep = true`, or run the `thesis_test` profile.
+1. Set `[modules].sleep = true`, or run the `first_configuration` profile.
 2. Enable the interoception module for the fatigue and maintenance triggers and the affect module for the affective reset.
 3. For memory consolidation and replay, enable the episodic memory module. For associative replay, also set `[sleep.consolidation].associative_replay = true` and enable the world model module.
 

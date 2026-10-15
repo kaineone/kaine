@@ -33,7 +33,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, legacy_names
 from kaine.storage import normalize_storage_paths
 
 # Canonical paths (relative to the working directory, as the rest of the
@@ -87,6 +87,28 @@ _PROFILE_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 log = logging.getLogger(__name__)
 
+# The module profile applied when none is selected.
+DEFAULT_PROFILE = "first_configuration"
+
+# Old profile names are read until legacy_names.ALIAS_LAST_RELEASE.
+PROFILE_ALIASES: dict[str, str] = {"thesis_test": "first_configuration"}
+
+_profile_alias_warned: set[str] = set()
+
+
+def canonical_profile_name(name: str) -> str:
+    """Return the canonical profile name, mapping deprecated aliases to their new names."""
+    new = PROFILE_ALIASES.get(name, name)
+    if new != name and name not in _profile_alias_warned:
+        _profile_alias_warned.add(name)
+        log.warning(
+            "profile %s is deprecated, use %s; it is read until %s",
+            name,
+            new,
+            legacy_names.ALIAS_LAST_RELEASE,
+        )
+    return new
+
 
 class ProfileError(ValueError):
     """Raised when a selected tier profile name is invalid or its file is absent.
@@ -118,7 +140,8 @@ def resolve_profile_name(
     2. ``KAINE_PROFILE`` environment variable (or the supplied ``env`` mapping).
 
     Returns ``None`` when neither is set. Validates the slug and raises
-    :class:`ProfileError` on a malformed name.
+    :class:`ProfileError` on a malformed name. An old profile name in
+    PROFILE_ALIASES resolves to its new name with a deprecation warning.
     """
     source = os.environ if env is None else env
     name = (explicit if explicit is not None else source.get(PROFILE_ENV_VAR)) or ""
@@ -129,7 +152,7 @@ def resolve_profile_name(
         raise ProfileError(
             f"invalid profile name {name!r}: expected a slug of [a-z0-9_]"
         )
-    return name
+    return canonical_profile_name(name)
 
 
 def resolve_study_name(
@@ -563,6 +586,7 @@ def _load_merged_config(
 
     # Layer 2: the selected module profile.
     if profile:
+        profile = canonical_profile_name(profile)
         prof_path = profile_path(profile, profiles_dir=profiles_dir)
         if not prof_path.exists():
             raise ProfileError(
@@ -660,8 +684,7 @@ def load_kaine_config(
 
     1. the shipped ``config/kaine.toml`` (every module disabled by default);
     2. an optional selected module profile
-       ``config/profiles/<profile>.toml`` (e.g. the base-thesis
-       ``thesis_test`` profile);
+       ``config/profiles/<profile>.toml`` (e.g. the first_configuration profile);
     3. an optional deployment-tier profile
        ``config/profiles/<tier>.toml`` (bounds backends and devices; never
        changes which modules are enabled);
@@ -737,13 +760,15 @@ def load_runtime_config(
     Resolution:
 
     * ``profile`` (e.g. ``--profile``) wins, then ``KAINE_PROFILE`` in ``env``.
-    * When neither profile argument is set and ``config/profiles/thesis_test.toml``
-      exists, the base-thesis ``thesis_test`` profile is applied. This is the
+    * When neither profile argument is set and ``config/profiles/first_configuration.toml``
+      exists, the ``first_configuration`` profile is applied. This is the
       project's default entity configuration: a fresh install that boots the cycle
-      with no explicit profile gets the base-thesis module set (the interoception, sequence,
+      with no explicit profile gets the first-configuration module set (the interoception, sequence,
       vision, audition, language, affect and sleep modules), STT off, and the self-initiated
       voice. The profile is the single definition of that set; the operator
-      overlay carries host-local values and deliberate deviations only.
+      overlay carries host-local values and deliberate deviations only. The old
+      name ``thesis_test`` still resolves to the first configuration with a
+      warning.
     * The deployment tier is resolved by :func:`resolve_tier_name` (``KAINE_TIER``
       env, then ``[deployment].tier`` from the operator overlay) and layered on
       top of the module profile.
@@ -760,9 +785,9 @@ def load_runtime_config(
     """
     resolved_profile = resolve_profile_name(profile, env=env)
     if resolved_profile is None:
-        thesis_path = profile_path("thesis_test", profiles_dir=profiles_dir)
-        if thesis_path.exists():
-            resolved_profile = "thesis_test"
+        default_path = profile_path(DEFAULT_PROFILE, profiles_dir=profiles_dir)
+        if default_path.exists():
+            resolved_profile = DEFAULT_PROFILE
     resolved_tier = resolve_tier_name(
         env=env, operator_path=operator_path, profiles_dir=profiles_dir
     )

@@ -12,7 +12,7 @@ The dashboard web console is described in [the dashboard](../05-dashboard.md). T
 |---|---|---|---|
 | `host` | string | `"127.0.0.1"` | Bind address. Loopback-only by default. |
 | `port` | integer | `8088` | HTTP port. |
-| `conversation_enabled` | boolean | `false` | Enable the conversation surface at `/`. The shipped config disables it; leave it disabled for base-thesis runs so no external input reaches the language organ, and enable it only for interactive configurations. |
+| `conversation_enabled` | boolean | `false` | Enable the conversation surface at `/`. The shipped config disables it; leave it disabled for first-configuration runs so no external input reaches the language organ, and enable it only for interactive configurations. |
 | `diagnostics_enabled` | boolean | `true` | Enable the diagnostics surface. |
 | `conversation_history_lookback` | integer | `50` | Maximum number of older conversation entries returned on initial conversation load. Older entries are reachable with `?since=<id>`. |
 | `dev_content_override` | boolean | `false` | When `true`, the diagnostics surface shows raw cognitive content (message text, beliefs, memory bodies, internal speech, affect reasons) and displays a "dev mode" banner. **Keep this `false` in production.** |

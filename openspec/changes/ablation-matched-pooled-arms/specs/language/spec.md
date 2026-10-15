@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Greedy decoding only in study configurations
-The language organ SHALL sample with the shipped `[language].temperature` (0.7) in general use, including the `thesis_test` profile. Greedy decoding (temperature 0) SHALL be set only by study configurations: the module-addition study's overlay and the workspace-mediation study configurations.
+The language organ SHALL sample with the shipped `[language].temperature` (0.7) in general use, including the `first_configuration` profile. Greedy decoding (temperature 0) SHALL be set only by study configurations: the module-addition study's overlay and the workspace-mediation study configurations.
 
 #### Scenario: An ordinary boot samples
-- **WHEN** the configuration is loaded with the `thesis_test` profile and no study
+- **WHEN** the configuration is loaded with the `first_configuration` profile and no study
 - **THEN** `[language].temperature` is 0.7
 
 ### Requirement: An empty broadcast never replaces the organ's cached coalition

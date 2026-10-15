@@ -4,7 +4,7 @@ The world model module is KAINE's learned model of how its world changes. It is 
 
 ## Status
 
-The world model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].world_model = false`) and in the base-thesis `thesis_test` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
+The world model module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].world_model = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it second in its default order of six: the episodic memory, world model, planning, self-model, social cognition, vocal modules. The study overlay sets `training_enabled = true` and `persist_weights = true`, and the runner checks that each step's preservation bundle captured the world model.
 
 - The default backend is `"dreamerv3"`, the learning world model.
 - The default engine is `"jax"` (`DreamerV3WorldModel`), which needs the `[worldmodel]` optional extra (`jax[cpu]`, `chex`, `einops`).
@@ -17,7 +17,7 @@ The world model module is a world model only. It has no actor, critic, reward he
 
 ## What it does
 
-1. Waking prediction error. On every broadcast while the entity is awake, accessed or inhibited, the world model module encodes the snapshot, folds it into the world model's recurrent state, and publishes `world_model.world_error`. The event enters the workspace competition as a candidate whose intensity grows with the error, so world-model surprise competes with the other modules' reports. The world model module reports at fixed baseline and alert levels and does not use the graded intensity of the four base-thesis processors.
+1. Waking prediction error. On every broadcast while the entity is awake, accessed or inhibited, the world model module encodes the snapshot, folds it into the world model's recurrent state, and publishes `world_model.world_error`. The event enters the workspace competition as a candidate whose intensity grows with the error, so world-model surprise competes with the other modules' reports. The world model module reports at fixed baseline and alert levels and does not use the graded intensity of the four first-configuration processors.
 2. Sleep-time imagination. During a [sleep](sleep.md), each `episodic_memory.replay` cue makes the world model module reseed the world model from its recent waking observations and roll out imagined future states, published as `world_model.scenario`. These events enter the workspace competition like any other module event.
 
 The waking trajectory buffer lives only in memory and is never serialized.
@@ -149,7 +149,7 @@ The sleep module opens the scenario window before phase 2, whose replay publishe
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].world_model = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `thesis_test` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].world_model = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
 2. Choose an engine. For the JAX engine (the default), install the extra with `.venv/bin/pip install -e '.[worldmodel]'`. For the NumPy engine, set `engine = "numpy"` under `[world_model]`. The shipped training and persistence settings apply to both.
 3. For the development fallback, set `backend = "fake"` and `persist_weights = false`; `persist_weights = true` with this backend raises a `ValueError` at construction.
 

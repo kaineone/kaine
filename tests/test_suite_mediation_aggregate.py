@@ -32,7 +32,7 @@ def test_win_when_pvalue_below_alpha():
     config = SuiteConfig(alpha=0.04, mediation_min_effect=0.15)
     verdict = _mediation_aggregate_verdict(digs, config)
     assert verdict.outcome is Outcome.WIN
-    assert "does not test the thesis" in verdict.detail
+    assert "does not test the hypothesis" in verdict.detail
 
 
 def test_negative_dig_is_negative_verdict():

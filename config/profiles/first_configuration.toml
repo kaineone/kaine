@@ -1,22 +1,22 @@
-# Thesis-test configuration — the base-thesis form of the entity.
+# The first configuration: the module set the first runs of the entity use.
 #
-# Apply deliberately:  KAINE_PROFILE=thesis_test python -m kaine.cycle
-#               or:    python -m kaine.cycle --profile thesis_test
+# Apply deliberately:  KAINE_PROFILE=first_configuration python -m kaine.cycle
+#               or:    python -m kaine.cycle --profile first_configuration
 #
-# NOT A DEPLOYMENT TIER. This is the honest, falsifiable base-thesis form of the
-# system (Baars global workspace + predictive processing): several DIVERSE
+# NOT A DEPLOYMENT TIER. This is the first configuration of the system, the
+# smallest one that can test the design hypothesis (Baars global workspace + predictive processing): several DIVERSE
 # predictive processors compete for a shared workspace; the winning coalition is
 # broadcast back and becomes the context they predict against next; the language
 # organ is demoted to an OUTPUT-ONLY voice; and no input path lets a transcript
 # reach the model (so it is not a chatbot). Everything is by GATING — every other
-# module and the STT code remain built, just switched off, until the base thesis
-# is proven or disproven.
+# module and the STT code remain built, just switched off, until the hypothesis
+# has been tested.
 #
 # Enabling modules here does NOT mature an entity: the cycle still refuses to boot
 # without KAINE_CYCLE_OPERATOR_PRESENT=1 (or the research safety net).
 
 [modules]
-# The diverse predictive processors the thesis needs: two internal (interoception,
+# The diverse predictive processors the hypothesis needs: two internal (interoception,
 # time) and two externally grounded (foveated vision, raw sound). The workspace
 # and the action selection module (action) are always-on scaffolding. The language module is the voice.
 interoception = true
@@ -25,11 +25,11 @@ vision = true
 audition = true
 language = true
 # Affect/arousal — the global gain: arousal sets the gain and contrast of the competition and
-# is itself moved by perceptual surprise. Part of the minimal base-thesis machinery
+# is itself moved by perceptual surprise. Part of the minimal first-configuration machinery
 # (without it the workspace shows no interest or arousal in stimuli), NOT one of the
 # richer faculties deferred with the rest.
 affect = true
-# Sleep: fatigue-triggered rest is part of the base thesis (operator decision of
+# Sleep: fatigue-triggered rest is part of the first configuration (operator decision of
 # 2026-09-08). Consolidation, the affective reset and the stimulus playlist's
 # sleep pause all hang off it. Voice alignment stays off ([sleep.voice_alignment]).
 sleep = true
@@ -65,7 +65,7 @@ seed = 0
 
 [vision]
 # Attention-driven foveation ON: the arousal-sized fovea IS the precision-weighted
-# attention the thesis names — perception enters as foveated prediction error.
+# attention the hypothesis names — perception enters as foveated prediction error.
 foveation = true
 
 [audition]

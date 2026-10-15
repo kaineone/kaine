@@ -1,12 +1,12 @@
 # Supporting services
 
-Before the KAINE cycle starts, bring up the services its default entity relies on. The shipped `config/kaine.toml` alone turns every module off, and with no profile selected the loader applies the `thesis_test` profile, so that profile defines the default entity. `config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's. `thesis_test` turns on the interoception, sequence, vision, audition, language, affect and sleep modules and turns everything else off, including the world model, planning, episodic memory, perceptual locus and embodiment modules.
+Before the KAINE cycle starts, bring up the services its default entity relies on. The shipped `config/kaine.toml` alone turns every module off, and with no profile selected the loader applies the `first_configuration` profile, so that profile defines the default entity. `config/kaine.operator.toml` merges last and wins, and the first-run wizard (`python -m kaine.setup`) always writes a full `[modules]` table there, so after the wizard has run its module choices replace the profile's. `first_configuration` turns on the interoception, sequence, vision, audition, language, affect and sleep modules and turns everything else off, including the world model, planning, episodic memory, perceptual locus and embodiment modules.
 
 This page is for the operator installing and starting those services. The supervised first boot is covered in [First boot](first-boot.md).
 
 ## What the default entity needs
 
-Besides the `[modules]` flags, `thesis_test` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[action_selection]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
+Besides the `[modules]` flags, `first_configuration` sets `[perception_feed]` mode `"seeded"` and seed `0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false` and `general_audition = true`, and `[action_selection]` `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`. Everything else comes from the shipped `config/kaine.toml`. For a default run, start:
 
 - Redis, the cycle's event bus.
 - Qdrant, which `scripts/first-boot.sh` requires even though the episodic memory module is off in the default profile.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Dry boot of the renamed tree: the shipped config, the base-thesis profile, an operator overlay written with the old module names and a study written with the old names all boot, each old-named file gives one deprecation line, and a layer that sets both names is refused."""
+"""Dry boot of the renamed tree: the shipped config, the first-configuration profile, an operator overlay written with the old module names and a study written with the old names all boot, each old-named file gives one deprecation line, and a layer that sets both names is refused."""
 
 import asyncio
 import base64
@@ -142,9 +142,9 @@ def boot(cfg, all_on=False):
     [
         ("shipped", "empty.operator.toml", None, None, False, False, None),
         ("shipped with all modules", "empty.operator.toml", None, None, False, True, None),
-        ("thesis_test", "empty.operator.toml", "thesis_test", None, False, False, None),
-        ("thesis_test with all modules", "empty.operator.toml", "thesis_test", None, False, True, None),
-        ("old-named-operator-overlay", "old.operator.toml", "thesis_test", None, False, False, "old.operator.toml"),
+        ("first_configuration", "empty.operator.toml", "first_configuration", None, False, False, None),
+        ("first_configuration with all modules", "empty.operator.toml", "first_configuration", None, False, True, None),
+        ("old-named-operator-overlay", "old.operator.toml", "first_configuration", None, False, False, "old.operator.toml"),
         ("old-named-study", "empty.operator.toml", None, "oldstudy", True, False, "oldstudy.toml"),
     ],
 )
@@ -176,7 +176,7 @@ def test_dry_boot(
 
 def test_old_overlay_reads_as_new_names(files):
     """The old-named operator overlay maps to new table names."""
-    cfg = load(files["overlays"] / "old.operator.toml", profile="thesis_test")
+    cfg = load(files["overlays"] / "old.operator.toml", profile="first_configuration")
     assert (cfg.get("affect") or {}).get("interoception_stream") == "interoception.out"
     assert (cfg.get("perception_feed") or {}).get("mode") == "stimulus_source"
     assert (

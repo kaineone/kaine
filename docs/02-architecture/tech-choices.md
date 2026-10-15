@@ -2,7 +2,7 @@
 
 This page lists the runtime technologies and Python dependencies KAINE uses, why each was chosen, and the install extras that switch them on. Read it when you are choosing a deployment, checking a reproducibility claim, or adding a dependency. Exact pins are in `pyproject.toml`; licence screening is in [Licences](../appendix-c-licences.md). The architecture overview is in [Architecture](README.md), and module-by-module details live under [The modules](../09-modules/README.md).
 
-The defaults below are the values in the shipped `config/kaine.toml`. With no profile selected, the loader also applies the base-thesis `thesis_test` profile, which chooses the module set and a few perception and voice settings.
+The defaults below are the values in the shipped `config/kaine.toml`. With no profile selected, the loader also applies the `first_configuration` profile, which chooses the module set and a few perception and voice settings.
 
 
 ## Summary table
@@ -101,7 +101,7 @@ Four components have two implementations each: one ships, and the other is the r
 | Active inference (planning) | pymdp on JAX | NumPy engine | `[planning].backend` | `tests/test_numpy_aif_parity.py`, `tests/test_numpy_planning_engine.py` |
 | World model | JAX RSSM | NumPy RSSM | `[world_model].engine` | `tests/test_rssm_numpy_parity.py` |
 
-The base-thesis run uses the NumPy side for the CfC reservoirs and the embedder. The planning and world model modules are off in the base thesis. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
+The first-configuration run uses the NumPy side for the CfC reservoirs and the embedder. The planning and world model modules are off in the first configuration. For them the JAX side is the default, and the NumPy side exists for hosts without JAX, such as Termux.
 
 CI installs every extra that both sides need. On a pull request it runs every test not marked `slow`, which includes the parity tests, so they run whenever either side changes. The embedder parity tests skip when the MiniLM weights are not cached, and the CI workflow does not download them. Changing which side ships changes the entity's computation, so it is a change of its own, never part of a refactor.
 
@@ -195,7 +195,7 @@ The default eager path needs no CUDA. The optional `[internvideo-flash]` extra a
 
 The dashboard is the operator-facing web UI. It is built with FastAPI, served by uvicorn, and renders HTML with Jinja2. Server-Sent Events stream real-time updates to the browser without WebSockets. uPlot draws the live charts.
 
-The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a base-thesis entity. When conversation is off, `/` redirects to `/diagnostics/`.
+The diagnostics surface structurally excludes cognitive content such as message text, beliefs, memory bodies, internal speech, and affect reasons. That boundary is enforced at the bus-bridge layer. Content is only exposed when `dev_content_override = true`. The conversation surface is off by default (`conversation_enabled = false`) because nobody converses with a first-configuration entity. When conversation is off, `/` redirects to `/diagnostics/`.
 
 The shipped `[dashboard].access` is `"open"`: no token or sign-in is required, and viewing and control are both open. Setting it to `"token"` restores the operator token and session sign-in. `KAINE_DASHBOARD_ACCESS` overrides the config value. `[dashboard].read_only` and `KAINE_DASHBOARD_READ_ONLY` refuse every request except `GET`, `HEAD`, and `OPTIONS` with `403`. Host and Origin checks always apply. `KAINE_DASHBOARD_EXTRA_HOSTS` adds tailnet names.
 

@@ -85,7 +85,7 @@ differs in three ways that #460 left for this change.
   (`[episodic_memory.replay].cross_period_candidates`), `kaine/modules/episodic_memory/replay.py`
   (docstrings), tests, and the sleep module, episodic memory module and sleep pages of the book.
 - Behaviour with the episodic memory module enabled: phase 2 no longer fails when phase 1 is
-  quick. The base-thesis form has no episodic memory module, so there the change is the phase
+  quick. The first configuration has no episodic memory module, so there the change is the phase
   order only: voice alignment is gated off and takes no time, so the reset
   still comes at the end of a sleep that otherwise does no work.
 - `enter_sleep()`'s perception suspension (a `try`/`finally` under the sleep

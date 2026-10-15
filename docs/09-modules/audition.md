@@ -4,10 +4,10 @@ Audition is KAINE's raw hearing. It encodes each captured window of sound, predi
 
 ## Status
 
-Implemented. The shipped `config/kaine.toml` sets `[modules].audition = false`, and the `thesis_test` profile (`config/profiles/thesis_test.toml`) enables it.
+Implemented. The shipped `config/kaine.toml` sets `[modules].audition = false`, and the `first_configuration` profile (`config/profiles/first_configuration.toml`) enables it.
 
-- The general acoustic path (`general_audition`) is off in the shipped `config/kaine.toml` and on in `thesis_test`. It makes Audition a sense for any sound, not only speech. Its default encoder, `SpectralAcousticEncoder`, needs only numpy and no download. The optional `dasheng` and `wavjepa` encoders need `torch`, `torchaudio`, and `einops` from the `[audio]` and `[internvideo]` extras; their weights load at the first `embed()` call, so a missing fetch fails at runtime, not at boot.
-- Speech-to-text is off (`transcription_enabled = false`) in both the shipped `config/kaine.toml` and `thesis_test`. The client, model, and pipeline are built and bypassed unless an operator sets `transcription_enabled = true` in a local override. With it off, speech reaches the entity only as sound and tone of voice.
+- The general acoustic path (`general_audition`) is off in the shipped `config/kaine.toml` and on in `first_configuration`. It makes Audition a sense for any sound, not only speech. Its default encoder, `SpectralAcousticEncoder`, needs only numpy and no download. The optional `dasheng` and `wavjepa` encoders need `torch`, `torchaudio`, and `einops` from the `[audio]` and `[internvideo]` extras; their weights load at the first `embed()` call, so a missing fetch fails at runtime, not at boot.
+- Speech-to-text is off (`transcription_enabled = false`) in both the shipped `config/kaine.toml` and `first_configuration`. The client, model, and pipeline are built and bypassed unless an operator sets `transcription_enabled = true` in a local override. With it off, speech reaches the entity only as sound and tone of voice.
 - The speech-to-text backend is `[audition].backend`: `"speaches"` (default; a Speaches faster-whisper service) or `"sherpa_onnx"` (Moonshine through sherpa-onnx, in-process, with no torch and no service). See [Backends](#backends).
 - Vocal-emotion classification (`emotion2vec+`) and live microphone capture need the `[audio]` extras: `pip install -e .[audio]`. Without `funasr`, emotion degrades to neutral with a one-time warning. An empty `emotion_model_id` disables the classifier.
 - Prosody extraction (`audition.prosody`) needs `librosa`, also in the `[audio]` extras.
@@ -159,7 +159,7 @@ Section `[audition]` in `config/kaine.toml`. For the full reference see [Module 
 | `auditory_buffer_size` | integer | `16` | Inputs in each forward model's buffer |
 | `prosody_enabled` | boolean | `false` | Publish `audition.prosody` through librosa |
 | `tone_rule` | string | `"categorical"` | `"categorical"`: a non-neutral tone is an alert (paper A.2). `"error_ratio"`: every tone event is graded by the tone error ratio alone, the tone variant of the planned test (paper A.8). The only `[audition]` key a study may set |
-| `general_audition` | boolean | `false` shipped; `true` in `thesis_test` | Encode every window and publish `audition.perception`; speech becomes a gated specialization. Boot also switches the live microphone to fixed-window continuous capture, so non-speech is heard (there is no separate `continuous_capture` key) |
+| `general_audition` | boolean | `false` shipped; `true` in `first_configuration` | Encode every window and publish `audition.perception`; speech becomes a gated specialization. Boot also switches the live microphone to fixed-window continuous capture, so non-speech is heard (there is no separate `continuous_capture` key) |
 | `arousal_window_min` | float | `0.15` | Attended fraction of the window at arousal 1.0 |
 | `arousal_window_max` | float | `1.0` | Attended fraction of the window at arousal 0.0 (swap the two to widen under arousal) |
 | `acoustic_change_alert_factor` | float | `2.0` | A change alert needs the change to be at least this multiple of its running mean |
@@ -286,7 +286,7 @@ To enable prosody extraction:
 prosody_enabled = true    # requires librosa (in the [audio] extras)
 ```
 
-The `thesis_test` profile turns `general_audition` on and leaves `transcription_enabled` off, so audio enters only as prediction error and tone, and no text reaches the language module. To re-enable speech-to-text, which takes the configuration beyond the base-thesis form:
+The `first_configuration` profile turns `general_audition` on and leaves `transcription_enabled` off, so audio enters only as prediction error and tone, and no text reaches the language module. To re-enable speech-to-text, which takes the configuration beyond the first configuration:
 
 ```toml
 [audition]
