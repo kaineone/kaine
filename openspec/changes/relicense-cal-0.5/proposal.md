@@ -6,7 +6,7 @@ Version 0.5 of the Cognitive Architecture License is released in kaineone/cognit
 
 - `LICENSE.md` becomes the CAL 0.5 text from kaineone/cognitive-architecture-license.
 - Every `LicenseRef-CAL-0.4` identifier becomes `LicenseRef-CAL-0.5`: source headers, the header-application and header-check scripts, both `pyproject.toml` files, container and quadlet files, and docs.
-- `NOTICE` records version 0.5. Its adoption notice keeps Kaine.One as Licensor and Steward under Oregon law, citing CAL Articles 1 and 10.4 instead of the 0.4 interim-Steward reference, and its summary of the free-use terms and the Intrinsic Values follows the 0.5 text.
+- `NOTICE` records version 0.5. Its adoption notice keeps Kaine.One as Licensor and Steward under Oregon law, citing CAL Article 1 instead of the 0.4 interim-Steward reference, and its summary of the free-use terms and the Intrinsic Values follows the 0.5 text.
 - Docs that name the version say 0.5.
 - The completed changes `relicense-cal-0.4` and `pep639-license-fields` are archived first, so the main specs carry 0.4 before this change moves them to 0.5.
 
