@@ -25,10 +25,9 @@ def install_state_encryption(kaine_config: dict[str, Any]) -> None:
     is a transparent no-op.
     """
     import kaine.security.crypto as _crypto
-    from kaine.security.crypto import CryptoConfig, install_from_section
 
     section = (kaine_config.get("security") or {}).get("state_encryption") or {}
-    desired = CryptoConfig.from_section(section)
+    desired = _crypto.CryptoConfig.from_section(section)
 
     active = getattr(_crypto, "_active", None)
     if (
@@ -38,4 +37,4 @@ def install_state_encryption(kaine_config: dict[str, Any]) -> None:
     ):
         return
 
-    install_from_section(section)
+    _crypto.install_from_section(section)
