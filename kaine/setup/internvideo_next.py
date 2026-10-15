@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Consented, setup-time fetch of the InternVideo-Next encoder weights.

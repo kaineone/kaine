@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """End-to-end decommission with a hand-written path inventory and a real password-protected Redis."""

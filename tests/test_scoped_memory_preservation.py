@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Scoped memory preservation — bundle contains only the preserved entity.

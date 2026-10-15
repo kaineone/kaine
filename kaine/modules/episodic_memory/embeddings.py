@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Text embedders for the episodic memory module — re-export of the single, boundary-neutral wrapper.

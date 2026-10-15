@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """The stream cleanup never offers a stream that a producer still writes after the keys rename."""

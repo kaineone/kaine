@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """Pins for stored names: each matches the rename table, under the old name until the
 persisted step and under the new name after it. The helpers accept either spelling,

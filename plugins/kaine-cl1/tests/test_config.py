@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """Tests for kaine_cl1.config.load_overlay."""
 
 from pathlib import Path

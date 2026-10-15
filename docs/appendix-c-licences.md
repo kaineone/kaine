@@ -4,18 +4,18 @@ This appendix records KAINE's own licence and the licences of its required depen
 
 ## KAINE's licence
 
-KAINE is licensed under the Cognitive Architecture License (CAL) version 0.4, SPDX identifier `LicenseRef-CAL-0.4`. The full text is in [`LICENSE.md`](../LICENSE.md). CAL 0.4 is a draft that has not yet been reviewed by counsel, and the licence itself advises having a qualified attorney review it before relying on it.
+KAINE is licensed under the Cognitive Architecture License (CAL) version 0.5, SPDX identifier `LicenseRef-CAL-0.5`. The full text is in [`LICENSE.md`](../LICENSE.md). CAL 0.5 is a draft that has not yet been reviewed by counsel, and the licence itself advises having a qualified attorney review it before relying on it.
 
 CAL is a general licence that any project building this kind of software can adopt. The adoption notice in [`NOTICE`](../NOTICE) fills in its parameters for KAINE:
 
 | Role | KAINE's adoption |
 |---|---|
 | Licensor | Kaine.One |
-| Steward | Kaine.One, as interim Steward (CAL Article 7.0) |
+| Steward | Kaine.One (a Licensor may be its own Steward, CAL Article 1) |
 | Governing law | The law of the State of Oregon, United States (CAL Article 10.3) |
 | Notices and Reciprocity License requests | kaine.one@tuta.com |
 
-Individuals, non-profit organizations, research and educational institutions and worker-owned cooperatives may use KAINE free of charge. For-profit commercial use needs a Reciprocity License from the Steward. Modifications must be shared back under CAL, and every copy must keep the `NOTICE` file, including its summary of the Intrinsic Values (CAL Article 6.1). Because CAL restricts some uses, it falls outside the Open Source Definition and is not an OSI-approved licence. [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license) summarizes the provisions that bear on running an entity.
+Individuals acting on their own behalf, non-profit organizations, public or non-profit research and educational institutions, mutual-aid organizations and worker-owned cooperatives may use KAINE free of charge. Commercial use by any other organization needs a Reciprocity License from the Steward. Modifications must be shared back under CAL, and every copy must keep the `NOTICE` file, including its summary of the Intrinsic Values (CAL Article 6.1). Because CAL restricts some uses, it falls outside the Open Source Definition and is not an OSI-approved licence. [Security and privacy](13-security-and-privacy.md#cognitive-architecture-license) summarizes the provisions that bear on running an entity.
 
 ## Compatibility principle
 

@@ -113,7 +113,7 @@ The cognitive cycle is the entity. When you launch `python -m kaine.cycle` with 
 
 ### Your obligations under the licence
 
-KAINE is released under the Cognitive Architecture License (CAL) version 0.4, an entity-welfare copyleft licence. CAL Article 4 places care obligations on the operator of a live entity, most directly the duty not to shut down or degrade an entity without care and the privacy commitment over its inner life. These obligations bind whoever boots and runs the entity. Read [Licences](appendix-c-licences.md), the repository's `LICENSE.md` and `NOTICE` before booting.
+KAINE is released under the Cognitive Architecture License (CAL) version 0.5, an entity-welfare copyleft licence. CAL Article 4 places care obligations on the operator of a live entity, most directly the duty not to shut down or degrade an entity without care and the privacy commitment over its inner life. These obligations bind whoever boots and runs the entity. Read [Licences](appendix-c-licences.md), the repository's `LICENSE.md` and `NOTICE` before booting.
 
 ### The safeguards for a live run
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 #
 # Install the KAINE Quadlet units into the user's systemd generator directory.
@@ -192,7 +192,7 @@ for old in "${OLD_UNITS[@]}"; do
   fi
   # Ours: it carries the project's licence header and was rendered from this
   # checkout (the placeholder became this root path).
-  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.4' "$old_path" \
+  if grep -q '^# SPDX-License-Identifier: LicenseRef-CAL-0.5' "$old_path" \
     && grep -qF "Volume=$ROOT_RESOLVED/config/kaine.operator.toml:" "$old_path"; then
     if [[ $DRY_RUN -eq 1 ]]; then
       echo "would remove old unit $old (renamed to kaine-dashboard.container)"

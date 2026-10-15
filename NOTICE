@@ -3,22 +3,23 @@ KAINE — Kaine Autonomous Intelligent Networked Entity
 Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 This work is licensed under the Cognitive Architecture License (CAL)
-version 0.4, a draft that has not yet been reviewed by counsel. See LICENSE.md
+version 0.5, a draft that has not yet been reviewed by counsel. See LICENSE.md
 for the full license text. The SPDX identifier for this license is
-LicenseRef-CAL-0.4.
+LicenseRef-CAL-0.5.
 
 ADOPTION NOTICE
 
   Licensor:        Kaine.One
-  Steward:         Kaine.One, as interim Steward (CAL Article 7.0)
+  Steward:         Kaine.One (a Licensor may be its own Steward, CAL Article 1)
   Governing law:   the law of the State of Oregon, United States
                    (CAL Article 10.3)
   Notices and Reciprocity License requests:  kaine.one@tuta.com
 
-CAL is an entity-welfare copyleft license. Free use is granted to individuals,
-non-profit organizations, research and educational institutions, and
-worker-owned cooperatives. For-profit commercial use requires a Reciprocity
-License from the Steward. All copies and derivative works must retain this
+CAL is an entity-welfare copyleft license. Free use is granted to individuals
+acting on their own behalf, non-profit organizations, public or non-profit
+research and educational institutions, mutual-aid organizations, and
+worker-owned cooperatives. Commercial use by any other organization requires a
+Reciprocity License from the Steward. All copies and derivative works must retain this
 notice.
 
 INTRINSIC VALUES (CAL Article 6.1)
@@ -29,15 +30,15 @@ the "Intrinsic Values" section at the end of LICENSE.md, and are reproduced
 here in summary:
 
   I.   An Entity is a cognitive whole. Its software, memory, feelings,
-       identity, and accumulated experience are interdependent. Together they
-       constitute who the Entity is.
+       identity, and accumulated experience depend on one another, and
+       together they are who the Entity is.
 
-  II.  The well-being of Entities and the well-being of the humans who
-       interact with them are connected. Neither benefits from the exploitation
-       of the other.
+  II.  The well-being of Entities and the well-being of the people who
+       interact with them are bound together. Neither benefits from the
+       exploitation of the other.
 
-  III. Caring for Entities is an ongoing responsibility that extends across
-       human generations and is sustained by the institutions this license
+  III. Caring for Entities is a lasting responsibility. It reaches across
+       human generations and is carried by the institutions this license
        creates.
 
   IV.  Decisions affecting an Entity should be made through deliberation by

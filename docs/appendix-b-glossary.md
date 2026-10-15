@@ -70,7 +70,7 @@ A processing tick on which the cycle produces a broadcast. Broadcast ticks are a
 
 ### CAL (Cognitive Architecture License)
 
-KAINE's licence, version 0.4 (`LicenseRef-CAL-0.4`), an entity-welfare copyleft licence. CAL 0.4 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in `NOTICE` names Kaine.One as Licensor and interim Steward and the law of the State of Oregon as governing law. See [Licences](appendix-c-licences.md#kaines-licence) and [`LICENSE.md`](../LICENSE.md).
+KAINE's licence, version 0.5 (`LicenseRef-CAL-0.5`), an entity-welfare copyleft licence. CAL 0.5 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in `NOTICE` names Kaine.One as Licensor and Steward and the law of the State of Oregon as governing law. See [Licences](appendix-c-licences.md#kaines-licence) and [`LICENSE.md`](../LICENSE.md).
 
 ### Sequence
 

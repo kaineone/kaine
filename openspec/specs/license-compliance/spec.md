@@ -2,10 +2,12 @@
 
 ## Purpose
 This capability requires every shipped first-party Python file to carry an SPDX license header and copyright line, and adds NOTICE and contributor terms, with the test suite checking header presence. It applies to files under kaine/, scripts/, tests/, and the repository top level, while exempting vendored third-party code under external/.
+
 ## Requirements
+
 ### Requirement: SPDX license header on every shipped source file
 Every shipped first-party Python source file SHALL begin with a license header declaring
-`SPDX-License-Identifier: LicenseRef-CAL-0.2` and a copyright line. This covers files under
+`SPDX-License-Identifier: LicenseRef-CAL-0.4` and a copyright line. This covers files under
 `kaine/`, `scripts/`, `tests/`, and the repository top level. Vendored third-party code under
 `external/` is exempt and
 SHALL retain its upstream headers. The header SHALL be applied by an idempotent script (re-runnable
@@ -13,7 +15,7 @@ as files are added) and SHALL sit above the module docstring, after any shebang 
 
 #### Scenario: Shipped file carries the header
 - **WHEN** any first-party `.py` under `kaine/`, `scripts/`, `tests/`, or the top level is inspected
-- **THEN** its first non-shebang lines declare `SPDX-License-Identifier: LicenseRef-CAL-0.2` and a
+- **THEN** its first non-shebang lines declare `SPDX-License-Identifier: LicenseRef-CAL-0.4` and a
   copyright line
 
 #### Scenario: Vendored code is exempt
@@ -25,14 +27,14 @@ as files are added) and SHALL sit above the module docstring, after any shebang 
 - **THEN** no file is modified (headers are not duplicated)
 
 ### Requirement: NOTICE and contributor terms
-The repository SHALL include a root `NOTICE` file recording the CAL reference and status, the
+The repository SHALL include a root `NOTICE` file recording the CAL version and status, an adoption notice naming the Licensor, the Steward, the governing law and the address for notices, the
 copyright, the reference to the Intrinsic Values required by CAL Article 6.1, and third-party
 attributions. `docs/21-contributing.md` SHALL state that inbound contributions are licensed under CAL
 and are subject to the Article 4 entity-welfare obligations.
 
 #### Scenario: NOTICE present
 - **WHEN** the repository root is inspected
-- **THEN** a `NOTICE` file exists referencing CAL, the copyright, the Intrinsic Values, and
+- **THEN** a `NOTICE` file exists referencing CAL 0.4, the adoption notice, the copyright, the Intrinsic Values, and
   third-party attributions
 
 #### Scenario: Contributor terms stated
@@ -46,4 +48,3 @@ header, so the header set cannot silently rot.
 #### Scenario: Missing header fails the suite
 - **WHEN** a shipped first-party `.py` is added without the SPDX header
 - **THEN** the license-header test fails, naming the offending file
-

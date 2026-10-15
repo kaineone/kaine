@@ -276,7 +276,7 @@ Do not open a PR with failing tests, a missing OpenSpec, or uncommitted module e
 
 ## Licensing of contributions
 
-By contributing you agree that your contribution is licensed under the Cognitive Architecture License (CAL) version 0.4 (see [`LICENSE.md`](../LICENSE.md) and [`NOTICE`](../NOTICE)), and that you follow the [Code of Conduct](../CODE_OF_CONDUCT.md). CAL 0.4 is a draft that has not yet been reviewed by counsel. There is no separate contributor licence agreement and no sign-off line is required.
+By contributing you agree that your contribution is licensed under the Cognitive Architecture License (CAL) version 0.5 (see [`LICENSE.md`](../LICENSE.md) and [`NOTICE`](../NOTICE)), and that you follow the [Code of Conduct](../CODE_OF_CONDUCT.md). CAL 0.5 is a draft that has not yet been reviewed by counsel. There is no separate contributor licence agreement and no sign-off line is required.
 
 Contributions must not weaken the entity-welfare protections the licence requires: CAL Article 4.7 forbids disabling, removing, bypassing or weakening the welfare monitoring, behavioral logging and system-health tracking built into the software.
 

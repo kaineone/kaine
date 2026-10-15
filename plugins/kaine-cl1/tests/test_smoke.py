@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """Smoke tests. The real conversion tests are enumerated in the openspec plan
 (each change's tasks.md ends with a simulator-backed acceptance test)."""
 

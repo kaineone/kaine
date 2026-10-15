@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Tests for scripts/install-quadlet.sh.
@@ -406,7 +406,7 @@ OLD_SERVICE = f"kaine-{OLD}.service"
 
 def _old_unit_content(checkout: Path) -> str:
     return (
-        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.5\n[Container]\n"
         f"Volume={checkout.resolve()}/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n"
     )
 
@@ -591,7 +591,7 @@ def test_install_leaves_an_old_unit_rendered_from_another_checkout(tmp_path: Pat
     dest = tmp_path / "dest"
     old_path = _make_dest_with_old_unit(
         dest,
-        "# SPDX-License-Identifier: LicenseRef-CAL-0.4\n[Container]\n"
+        "# SPDX-License-Identifier: LicenseRef-CAL-0.5\n[Container]\n"
         "Volume=/elsewhere/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z\n",
     )
     state_file = tmp_path / "systemctl.state"

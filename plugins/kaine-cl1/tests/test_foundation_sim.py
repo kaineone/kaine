@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 """Foundation integration tests against the vendored CL simulator.
 
 These use the deterministic, stim-responsive ReferenceCulture source so the whole

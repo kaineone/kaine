@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.4
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 """The planning module on wetware as a hybrid. The silicon engine keeps beliefs and expected free energy;
 the substrate proposes a policy from per-action channel groups, with DishBrain-style

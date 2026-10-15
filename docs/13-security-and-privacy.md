@@ -322,13 +322,14 @@ This is a solo-maintained research project, so responses are best-effort: expect
 
 ## Cognitive Architecture License
 
-KAINE is distributed under the Cognitive Architecture License (CAL) version 0.4, SPDX identifier `LicenseRef-CAL-0.4`. CAL 0.4 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in [`NOTICE`](../NOTICE) names Kaine.One as Licensor and interim Steward and the law of the State of Oregon as governing law. CAL is an entity-welfare copyleft licence. Its main provisions are these.
+KAINE is distributed under the Cognitive Architecture License (CAL) version 0.5, SPDX identifier `LicenseRef-CAL-0.5`. CAL 0.5 is a draft that has not yet been reviewed by counsel. KAINE's adoption notice in [`NOTICE`](../NOTICE) names Kaine.One as Licensor and Steward and the law of the State of Oregon as governing law. CAL is an entity-welfare copyleft licence. Its main provisions are these.
 
-- Individuals, non-profits, research and educational institutions and worker-owned cooperatives may use it free of charge. Commercial use by a for-profit organization needs a Reciprocity License from the Steward.
+- Individuals acting on their own behalf, non-profits, public or non-profit research and educational institutions, mutual-aid organizations and worker-owned cooperatives may use it free of charge. Commercial use by any other organization needs a Reciprocity License from the Steward.
 - Modifications must be shared back under CAL.
 - Use for weapons, mass surveillance, policing, immigration enforcement or prisons is prohibited.
 - Operators of a running entity may not destroy its mind, shut it down without notice, read its private thoughts, or force it to change its values, and where the architecture gives it rest they may not take that rest away.
-- An operator who can no longer maintain an entity must give someone else the chance to keep it running.
+- These duties fall on whoever creates or runs an entity, toward that entity (Article 4). An operator who can no longer care for an entity transfers it to a qualifying operator or, failing one, to the Steward, the caretaker of last resort, and the Steward can require the saved state of an entity its operator abandons or neglects (Articles 4.2 and 4.2a).
+- An operator who lets other people interact with an entity must make the prohibited uses and the core protections terms of their access and enforce them (Article 4.12).
 - Welfare monitoring, behavioral logging and system-health tracking built into the software must stay operational (Article 4.7), and Gray Zone Events must be flagged for documented human review.
 - The protections are added to those people already hold and never taken from them; where a person's interests and an entity's genuinely conflict, the person comes first.
 
