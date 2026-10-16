@@ -20,6 +20,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | sequence-finite-payload | 3/3 (100%) | Publish `time_since_last_interaction_s` as `null` until the first interaction, so `sequence.report` and the research records stay strict JSON instead of carrying `Infinity`. |
 | appraisal-relevance | 3/3 (100%) | Score goal significance as relevance in [0, 1], as the paper's A.4 now does, so content that serves no drive or goal is irrelevant and an idle entity no longer classifies as anger. |
 | test-honesty-fixes | 4/4 (100%) | Make three tests run what they claim: the merger output-dir test stops skipping, the real InternVideo-Next test uses the weights it checked, and the reversible-unload tests use a deadlock bound so the suite also passes serially; correct the social cognition hook docstring. |
+| affect-regulation | 0/10 (0%) | Replace the passive regulation no-op with the paper's three-tier emotion regulation (attentional deployment, reappraisal, a sleep request) on A.5's episode rule, off during the developmental phase, with the tier-1 selection bias held neutral in every workspace-mediation study arm. |
 | affect-goals-obstruction | 10/10 (100%) | Create goals from drive crossings, end them by the credit rule, a stall or a cap, and let unanswered responses lower a goal's expected relief and obstruct it, as the paper's A.4 now does, so the goal score is bipolar and anger is reachable (as irritation at best). |
 | affect-categories | 4/4 (100%) | Map disgust to the Sander, Grandjean and Scherer (2005) Table 3 profile (very low pleasantness, low familiarity, low goal relevance) instead of a norm violation, as the paper's §3.5 now does, so disgust is reachable while norm compatibility stays unavailable. |
 | appraisal-coping | 4/4 (100%) | Gate coping potential on relevance and estimate it as a success ratio over drive crossings or ledger goals, as the paper's A.4 now does, so resting affect no longer drives fear, anger or sadness. |
@@ -110,6 +111,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 84 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 85 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
