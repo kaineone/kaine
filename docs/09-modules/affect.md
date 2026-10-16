@@ -80,7 +80,7 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 
 The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The result never goes negative. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
 
-Coping potential is checked only for relevant content. With goal significance at 0 it is unavailable, `coping_available` is false in the `affect.emotion` event, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`: when the drive term sets goal significance (also on a tie), `s` and `f` count the dominant drive's crossings that ended (fell below the re-arm band) by relief and by decay alone; when the ledger sets it, the completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it (paper A.4; Scherer 2009; Moerland, Broekens and Jonker 2018). A sleep reset counts as neither.
+Coping potential is checked only for relevant content; with goal significance at 0 it is unavailable, `coping_available` is false in `affect.emotion`, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`. When the drive term sets goal significance (also on a tie), `s` counts the dominant drive's crossings that the entity's own response ended (fell below the re-arm band): learning progress for curiosity and intents for restlessness, by relief or by holding the build input down, the latter only when a counterfactual step at the no-response input would not have fallen back. `f` counts every other end: decay alone, novelty for boredom, another's voice for the social drive. When the ledger sets it, `s` and `f` are completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it. A sleep reset counts as neither. (Paper A.4; Sander, Grandjean and Scherer 2005; Maier and Seligman 2016; Williams et al. 2015).
 
 `goal_significance_method` in each `affect.emotion` event records how the check was computed:
 
@@ -208,7 +208,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's relief and decay counts persist as `drive_outcomes`. Restoring goals publishes no `affect.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 

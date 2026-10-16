@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 from datetime import datetime, timezone
 
 import pytest
@@ -66,7 +67,7 @@ DRIVE_SOURCES = {
 # ---------------------------------------------------------------------------
 
 
-def test_drive_relief_end_counts_as_relief():
+def test_own_relief_counts_as_own():
     d = Drive(
         name="x",
         build_rate=0.1,
@@ -76,12 +77,27 @@ def test_drive_relief_end_counts_as_relief():
     )
     d.value = 0.9
     assert d.consume_crossing() is True
-    d.relieve(1.0)
-    assert d.relief_ends == 1
-    assert d.decay_ends == 0
+    d.relieve(1.0, own=True)
+    assert d.own_ends == 1
+    assert d.other_ends == 0
 
 
-def test_drive_decay_end_counts_as_decay():
+def test_external_relief_counts_as_other():
+    d = Drive(
+        name="x",
+        build_rate=0.1,
+        decay_rate=0.0,
+        threshold=0.5,
+        relief_gain=1.0,
+    )
+    d.value = 0.9
+    assert d.consume_crossing() is True
+    d.relieve(1.0, own=False)
+    assert d.other_ends == 1
+    assert d.own_ends == 0
+
+
+def test_decay_alone_counts_as_other():
     d = Drive(
         name="x",
         build_rate=0.0,
@@ -92,8 +108,39 @@ def test_drive_decay_end_counts_as_decay():
     d.value = 0.9
     assert d.consume_crossing() is True
     d.tick(100.0, 0.0)
-    assert d.decay_ends == 1
-    assert d.relief_ends == 0
+    assert d.other_ends == 1
+    assert d.own_ends == 0
+
+
+def test_held_down_build_counts_as_own():
+    d = Drive(
+        name="x",
+        build_rate=1.0,
+        decay_rate=1.0,
+        threshold=0.5,
+        relief_gain=0.5,
+    )
+    d.value = 0.9
+    d.consume_crossing()
+    d.tick(1.0, 0.0, no_response_signal=1.0)
+    assert d.own_ends == 1
+    assert d.other_ends == 0
+    assert d.value == pytest.approx(0.9 * math.exp(-1.0), rel=1e-6)
+
+
+def test_fall_that_would_happen_anyway_counts_as_other():
+    d = Drive(
+        name="x",
+        build_rate=0.1,
+        decay_rate=1.0,
+        threshold=0.5,
+        relief_gain=0.5,
+    )
+    d.value = 0.9
+    d.consume_crossing()
+    d.tick(10.0, 0.0, no_response_signal=1.0)
+    assert d.other_ends == 1
+    assert d.own_ends == 0
 
 
 def test_reset_counts_as_neither():
@@ -107,19 +154,53 @@ def test_reset_counts_as_neither():
     d.value = 0.9
     assert d.consume_crossing() is True
     d.reset()
-    assert d.relief_ends == 0
-    assert d.decay_ends == 0
+    assert d.own_ends == 0
+    assert d.other_ends == 0
 
 
 def test_power_laplace():
     d = Drive(name="x", threshold=0.5)
     assert d.power() == pytest.approx(0.5)
-    d.relief_ends = 2
-    d.decay_ends = 0
+    d.own_ends = 2
+    d.other_ends = 0
     assert d.power() == pytest.approx(0.75)
-    d.relief_ends = 0
-    d.decay_ends = 2
+    d.own_ends = 0
+    d.other_ends = 2
     assert d.power() == pytest.approx(0.25)
+
+
+def test_driveset_attribution():
+    ds = DriveSet()
+    for d in ds.all():
+        d.value = 0.95
+        d.consume_crossing()
+    ds.relieve_rate("curiosity", 1.0, 100.0, own=True)
+    ds.relieve_rate("boredom", 1.0, 100.0, own=False)
+    ds.relieve("social_drive", 1.0, own=False)
+    ds.relieve("restlessness", 1.0, own=True)
+    assert ds.curiosity.own_ends == 1
+    assert ds.restlessness.own_ends == 1
+    assert ds.boredom.other_ends == 1
+    assert ds.social_drive.other_ends == 1
+
+
+def test_driveset_tick_credits_only_own_inputs():
+    # Full learning progress and a full alert rate hold both build inputs at 0.
+    # Without learning progress curiosity would have kept building, so its fall
+    # is the entity's; boredom's input comes from perception, so its fall is not.
+    ds = DriveSet()
+    for d in (ds.curiosity, ds.boredom):
+        d.value = d.threshold
+        assert d.consume_crossing() is True
+    ds.tick(60.0, novelty_signal=0.0, activity_signal=0.0)
+    assert (ds.curiosity.own_ends, ds.curiosity.other_ends) == (1, 0)
+    assert (ds.boredom.own_ends, ds.boredom.other_ends) == (0, 1)
+
+
+def test_relieve_requires_own():
+    d = Drive(name="x", threshold=0.5)
+    with pytest.raises(TypeError):
+        d.relieve(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -192,13 +273,13 @@ async def test_no_history_gives_zero_coping(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_decay_ends_lower_coping(bus: AsyncBus):
+async def test_other_ends_lower_coping(bus: AsyncBus):
     affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await affect.initialize()
     try:
         affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
         affect.drives.social_drive.value = 0.8
-        affect.drives.social_drive.decay_ends = 2
+        affect.drives.social_drive.other_ends = 2
         scores = affect._score_snapshot(
             _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1")])
         )
@@ -208,13 +289,13 @@ async def test_decay_ends_lower_coping(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_relief_ends_raise_coping(bus: AsyncBus):
+async def test_own_ends_raise_coping(bus: AsyncBus):
     affect = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await affect.initialize()
     try:
         affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
         affect.drives.social_drive.value = 0.8
-        affect.drives.social_drive.relief_ends = 2
+        affect.drives.social_drive.own_ends = 2
         scores = affect._score_snapshot(
             _snapshot([_ev(source="audition", type_="perception", salience=0.9, eid="e1")])
         )
@@ -265,7 +346,7 @@ async def test_arousal_does_not_move_coping(bus: AsyncBus):
     try:
         affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
         affect.drives.social_drive.value = 0.8
-        affect.drives.social_drive.relief_ends = 1
+        affect.drives.social_drive.own_ends = 1
 
         affect._state = DimensionalState(valence=0.0, arousal=0.1, dominance=0.0)
         low_arousal = affect._score_snapshot(
@@ -288,16 +369,16 @@ async def test_drive_outcomes_survive_serialize(bus: AsyncBus):
     affect1 = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
     await affect1.initialize()
     try:
-        affect1.drives.social_drive.relief_ends = 3
-        affect1.drives.social_drive.decay_ends = 1
+        affect1.drives.social_drive.own_ends = 3
+        affect1.drives.social_drive.other_ends = 1
 
         state = affect1.serialize()
         affect2 = Affect(bus, publish_interval_s=5.0, clock=lambda: 0.0)
         await affect2.initialize()
         try:
             affect2.deserialize(state)
-            assert affect2.drives.social_drive.relief_ends == 3
-            assert affect2.drives.social_drive.decay_ends == 1
+            assert affect2.drives.social_drive.own_ends == 3
+            assert affect2.drives.social_drive.other_ends == 1
         finally:
             await affect2.shutdown()
     finally:
@@ -308,16 +389,16 @@ def test_load_outcomes_ignores_bad_values():
     ds = DriveSet()
     ds.load_outcomes(
         {
-            "social_drive": {"relief": -1, "decay": True},
-            "nope": {"relief": 2},
+            "social_drive": {"own": -1, "other": True},
+            "nope": {"own": 2},
             "curiosity": "x",
         }
     )
     for d in ds.all():
-        assert d.relief_ends == 0
-        assert d.decay_ends == 0
+        assert d.own_ends == 0
+        assert d.other_ends == 0
 
     ds.load_outcomes("junk")
     for d in ds.all():
-        assert d.relief_ends == 0
-        assert d.decay_ends == 0
+        assert d.own_ends == 0
+        assert d.other_ends == 0

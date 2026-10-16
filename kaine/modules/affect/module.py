@@ -361,8 +361,10 @@ class Affect(BaseModule):
         # Continuous drive relief: curiosity at full strength = learning progress,
         # boredom at full strength = alert-stream novelty excess. Rate-based relief
         # is independent of the report rate, so drives can still build under noise.
-        self._drives.relieve_rate("curiosity", lp, dt)
-        self._drives.relieve_rate("boredom", nb, dt)
+        # own marks relief produced by the entity's own response, which coping
+        # counts as success (paper A.4).
+        self._drives.relieve_rate("curiosity", lp, dt, own=True)
+        self._drives.relieve_rate("boredom", nb, dt, own=False)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
@@ -504,7 +506,7 @@ class Affect(BaseModule):
         # Coping potential (paper A.4): checked only when the goal score is above
         # 0; otherwise it is undefined. When the drive term sets the score (also
         # on a tie), power is the dominant drive's Laplace-smoothed success ratio
-        # of relief ends to total ended crossings. When the ledger sets it,
+        # of own-response ends to total ended crossings. When the ledger sets it,
         # completed and abandoned goals supply the ratio. Arousal and valence do
         # not enter it.
         if goal_score <= 0.0:
@@ -724,7 +726,7 @@ class Affect(BaseModule):
                 if not self._interaction_seen:
                     self._interaction_seen = True
                 elif self._last_tsli is not None and tsli < self._last_tsli:
-                    self._drives.relieve("social_drive", 1.0)
+                    self._drives.relieve("social_drive", 1.0, own=False)
                 self._last_tsli = float(tsli)
         elif stream == self._episodic_memory_stream and event.type == "episodic_memory.recall":
             intensity = float(event.payload.get("max_affect_intensity", 0.0))
@@ -758,7 +760,7 @@ class Affect(BaseModule):
             and event.type != "intent.rest"
         ):
             self._intents_since_broadcast += 1
-            self._drives.relieve("restlessness", 1.0)
+            self._drives.relieve("restlessness", 1.0, own=True)
 
     def _record_perceived_emotion(self, event: Event) -> None:
         """Record a transient perceived-emotion signal for appraisal.
