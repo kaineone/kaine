@@ -186,6 +186,26 @@ class MemoryStorage(Protocol):
         Used by sleep's cross-period selection, which must not pull every vector.
         """
 
+    async def get_points(
+        self,
+        collection: str,
+        ids: Sequence[str],
+        *,
+        with_vectors: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Protocol member: get points by id.
+
+        Returns the points of ``collection`` whose id matches one of ``ids``,
+        in no particular order, each point at most once. Each point dict has
+        keys ``id`` (str), ``text`` (str), ``payload`` (dict), ``affect`` (dict
+        or None) and, ONLY when ``with_vectors`` is true, ``vector`` (list of
+        float). An id matches a stored point when the two are equal strings or
+        when both parse as the same UUID. Ids that match nothing are skipped
+        silently. A collection that does not exist gives ``[]``. Empty ``ids``
+        gives ``[]`` without touching the backend. A backend failure raises
+        ``StorageError``.
+        """
+
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Protocol member: replace collection."""
 
@@ -259,6 +279,17 @@ def _payload_timestamp(payload: Any) -> float:
         return 0.0
     return ts if math.isfinite(ts) else 0.0
 
+
+def _id_forms(point_id: Any) -> set[str]:
+    s = str(point_id)
+    forms: set[str] = {s}
+    try:
+        u = uuid.UUID(s)
+        forms.add(u.hex)
+        forms.add(str(u))
+    except ValueError:
+        pass
+    return forms
 
 class InMemoryStorage:
     """Pure-Python backend. Useful for tests and minimal deployments.
@@ -399,6 +430,36 @@ class InMemoryStorage:
             }
             for p in newest
         ]
+
+    async def get_points(
+        self,
+        collection: str,
+        ids: Sequence[str],
+        *,
+        with_vectors: bool = False,
+    ) -> list[dict[str, Any]]:
+        if not ids:
+            return []
+        points = self._collections.get(collection, [])
+        forms: set[str] = set()
+        for pid in ids:
+            forms.update(_id_forms(pid))
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for p in points:
+            key = str(p["id"])
+            if key in forms and key not in seen:
+                seen.add(key)
+                point: dict[str, Any] = {
+                    "id": key,
+                    "text": p["text"],
+                    "payload": dict(p["payload"]),
+                    "affect": dict(p["affect"]) if p["affect"] else None,
+                }
+                if with_vectors:
+                    point["vector"] = list(p["vector"])
+                out.append(point)
+        return out
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Replace one collection with the given points. Returns point count.
@@ -1125,6 +1186,71 @@ class SqliteVecStorage:
             return out
 
         return await self._run(_recent)
+
+    async def get_points(
+        self,
+        collection: str,
+        ids: Sequence[str],
+        *,
+        with_vectors: bool = False,
+    ) -> list[dict[str, Any]]:
+        if not ids:
+            return []
+
+        import struct
+
+        forms: set[str] = set()
+        for pid in ids:
+            forms.update(_id_forms(pid))
+
+        def _get(db: Any) -> list[dict[str, Any]]:
+            if db is None:
+                raise StorageError("sqlite-vec get_points before initialize()")
+            out: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            try:
+                all_forms = list(forms)
+                for start in range(0, len(all_forms), 500):
+                    chunk = all_forms[start : start + 500]
+                    placeholders = ",".join("?" * len(chunk))
+                    if with_vectors:
+                        sql = (
+                            "SELECT m.point_id, m.text, m.payload, m.affect, v.embedding "
+                            "FROM memories m JOIN vec_memories v ON v.rowid = m.rowid "
+                            f"WHERE m.collection = ? AND m.point_id IN ({placeholders})"
+                        )
+                    else:
+                        sql = (
+                            "SELECT m.point_id, m.text, m.payload, m.affect "
+                            "FROM memories m "
+                            f"WHERE m.collection = ? AND m.point_id IN ({placeholders})"
+                        )
+                    cur = db.execute(sql, [collection] + chunk)
+                    for row in cur.fetchall():
+                        if with_vectors:
+                            pid, text, payload_json, affect_json, emb = row
+                            vector = list(struct.unpack(f"{self._latent_dim}f", emb))
+                        else:
+                            pid, text, payload_json, affect_json = row
+                            vector = None
+                        key = str(pid)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        point: dict[str, Any] = {
+                            "id": key,
+                            "text": str(text or ""),
+                            "payload": json.loads(payload_json) if payload_json else {},
+                            "affect": json.loads(affect_json) if affect_json else None,
+                        }
+                        if with_vectors and vector is not None:
+                            point["vector"] = vector
+                        out.append(point)
+            except Exception as exc:
+                raise StorageError(f"sqlite-vec get_points failed: {exc}") from exc
+            return out
+
+        return await self._run(_get)
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
 
@@ -1934,6 +2060,62 @@ class QdrantStorage:
                 f"qdrant recent_points failed scrolling collection {collection!r}: {exc}"
             ) from exc
         return [point for _, _, point in sorted(heap, reverse=True)]
+
+    async def get_points(
+        self,
+        collection: str,
+        ids: Sequence[str],
+        *,
+        with_vectors: bool = False,
+    ) -> list[dict[str, Any]]:
+        if not ids:
+            return []
+        assert self._client is not None
+        try:
+            existing_names = await self._collection_names()
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant get_points failed: could not list collections ({exc})"
+            ) from exc
+        if collection not in existing_names:
+            return []
+
+        # A Qdrant server reports UUIDs hyphenated while the local mode keeps the
+        # form it was given, so every form of each id is asked for.
+        unique_ids = list(dict.fromkeys(f for i in ids for f in sorted(_id_forms(i))))
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        try:
+            for start in range(0, len(unique_ids), 256):
+                chunk = unique_ids[start : start + 256]
+                points = await self._client.retrieve(
+                    collection_name=collection,
+                    ids=chunk,
+                    with_payload=True,
+                    with_vectors=with_vectors,
+                )
+                for p in points:
+                    key = str(p.id)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    payload = dict(p.payload or {})
+                    text = str(payload.pop("text", ""))
+                    affect = payload.pop("affect", None)
+                    point: dict[str, Any] = {
+                        "id": key,
+                        "text": text,
+                        "payload": payload,
+                        "affect": dict(affect) if affect else None,
+                    }
+                    if with_vectors:
+                        point["vector"] = list(p.vector)
+                    out.append(point)
+        except Exception as exc:
+            raise StorageError(
+                f"qdrant get_points failed retrieving collection {collection!r}: {exc}"
+            ) from exc
+        return out
 
     async def replace_collection(self, name: str, points: Sequence[dict[str, Any]]) -> int:
         """Replace one collection with the given validated points.
