@@ -79,8 +79,9 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     if pleas < 0 and coping <= -0.3:
         return CategoricalEmotion.FEAR
 
-    # Anger: blocked goal (negative goal_significance interpreted as
-    # an obstacle) with strong coping.
+    # Anger: blocked goal with strong coping. The goal score is never negative
+    # (relevance in [0, 1], paper A.4), so this branch is unreachable until an
+    # obstruction check exists, the way disgust waits on norm signals.
     if goal <= -0.3 and coping >= 0.3:
         return CategoricalEmotion.ANGER
 

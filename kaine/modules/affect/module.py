@@ -470,7 +470,7 @@ class Affect(BaseModule):
                         )
                         / total_salience
                     )
-                drive_score = v * (2.0 * f - 1.0)
+                drive_score = v * f
 
         active_goals = self._goals.active()
         ledger_score = 0.0
@@ -479,7 +479,7 @@ class Affect(BaseModule):
                 f"{ev.source} {ev.type} {' '.join(str(v) for v in ev.payload.values())}"
                 for _, ev in selected
             )
-            ledger_score = self._goals.relevance(event_text) * 2.0 - 1.0
+            ledger_score = self._goals.relevance(event_text)
 
         if has_table and active_goals:
             goal_score = max(drive_score, ledger_score)
