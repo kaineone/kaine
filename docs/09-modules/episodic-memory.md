@@ -204,6 +204,7 @@ The stored `text` is a content view of the snapshot. It starts with `active` or 
 | `tests/test_episodic_memory_trace_strength.py` | Trace strength on all three backends: persist keys, downscaling factor and protection, recall by strength times similarity against brute force, sqlite-vec paging past 4096 rows, migration, preservation, numerics over many sleeps |
 | `tests/test_episodic_memory_associations.py` | Associative replay on all three backends: the similarity band, the wake rule, `n_pair`, weight updates and downscaling, `n_link`, schema nodes, recall of partners and nodes, pruning with links and nodes, budget, revive, and the unchanged store without links |
 | `tests/test_episodic_memory_association_rules.py` | The pure rules of `associations.py` |
+| `tests/test_episodic_memory_association_accounting.py` | Links in the store size and the budget after a later sleep; only surviving pairs reported |
 | `tests/test_episodic_memory_association_wiring.py` | `[episodic_memory.association]` keys, the retired `cross_period_candidates`, module forwarding, decommission names |
 | `tests/test_episodic_memory_get_points.py` | `get_points` on all three backends |
 | `tests/systems/test_episodic_memory_subsystem.py` | End-to-end subsystem test |

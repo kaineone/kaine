@@ -621,7 +621,7 @@ class EpisodicMemoryCore:
 
             names = self.persisted_collection_names()
             scan = await self._storage.scan_store(names)
-            s_now = scan["bytes"]
+            s_now = scan["bytes"] + (await self._storage.scan_store(self.association_collection_names()))["bytes"]
             n_new = 0
             for name in names:
                 n_new += await self._storage.count_filtered(
@@ -985,7 +985,7 @@ class EpisodicMemoryCore:
             old_refs = [old_ref for (_, old_ref, _) in pairs]
             old_vectors = await self._vectors(old_refs)
             touched: set[str] = set()
-            reported: list[dict[str, Any]] = []
+            reported: list[tuple[str, dict[str, Any]]] = []
             for q_ref, old_ref, sim in pairs:
                 if old_ref not in old_vectors:
                     continue
@@ -1035,13 +1035,14 @@ class EpisodicMemoryCore:
                 )
                 touched.add(a)
                 touched.add(b)
-                reported.append(
+                reported.append((
+                    lid,
                     {
                         "a": split_ref(q_ref)[1],
                         "b": split_ref(old_ref)[1],
                         "weight": w_new,
-                    }
-                )
+                    },
+                ))
 
             # 5. Cap per-trace link counts.
             dropped = cap_links(self._assoc, touched, params.n_link)
@@ -1059,7 +1060,7 @@ class EpisodicMemoryCore:
             self._write_health()
 
             return {
-                "pairs": reported,
+                "pairs": [pair for lid, pair in reported if lid in self._assoc.links],
                 "links_dropped": len(dropped),
                 "nodes_formed": formed,
                 "nodes_removed": removed,
