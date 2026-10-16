@@ -76,7 +76,7 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 | Intrinsic pleasantness | `pl`, the learning-progress term above |
 | Goal significance | the dominant drive scaled by how much of the coalition comes from sources that relieve it (below) |
 | Coping potential | `2p - 1`, only when goal significance is above 0 (below) |
-| Norm compatibility | fixed at `0.0` until a self-model supplies norms |
+| Norm compatibility | fixed at `0.0` and unavailable, since KAINE has no standards until an operator writes a list; no categorical rule reads it |
 
 The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The result never goes negative. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
 
@@ -91,7 +91,7 @@ Coping potential is checked only for relevant content; with goal significance at
 | `token_overlap_v1` | No drive-to-source table was injected, and active ledger goals were scored |
 | `unavailable` | Neither exists; the score is `0.0` |
 
-A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust stays unreachable while norm compatibility is fixed at zero (`norm_compatibility_available: false`). Anger stays unreachable while goal significance cannot be negative.
+A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. The rules are modeled on the predicted appraisal profiles of Sander, Grandjean and Scherer (2005, Table 3). KAINE has a single novelty check that covers suddenness, familiarity and predictability together, so Table 3's low familiarity maps to high novelty here: a report the processor did not expect is unfamiliar to it. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust is returned when pleasantness is at or below -0.5, novelty is above 0.3 and the absolute goal score is below 0.3; it is checked after fear and anger (which require coping potential) and before sadness. Table 3 leaves the standards check open for disgust, and very low standards would mark contempt, which KAINE does not classify. Anger matches at best Table 3's irritation profile, because Table 3's rage profile needs the obstruction attributed to another agent, which KAINE does not do, and the irritation profile's standards check is also missing. Anger needs a negative goal score, and the goal score cannot yet go negative (the obstruction term of the paper's A.4 is not built yet), so anger stays unreachable for now.
 
 ## Sleep reset
 
@@ -258,5 +258,5 @@ Every dimension is clipped to its range after each update. The perceived emotion
 - [Interoception](interoception.md), [Sequence](sequence.md), [Episodic memory](episodic-memory.md): peer inputs
 - [Sleep](sleep.md): calls `affective_reset()`
 - [Social cognition](social-cognition.md): familiarity for coupling
-- [Self-model](self-model.md): future source of norms for the norm check
+- [Self-model](self-model.md): norm check stays undefined until an operator writes a standards list
 - [Configuration reference](../appendix-a-configuration/modules.md)
