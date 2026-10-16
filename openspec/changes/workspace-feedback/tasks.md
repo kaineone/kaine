@@ -13,4 +13,4 @@
 
 - [x] 2.1 Bit-for-bit tests: feedback absent equals `arm = "off"` for the workspace and each processor
 - [x] 2.2 Mutation checks on the blend weights, gain bounds, refractory interval and inhibited gate
-- [ ] 2.3 Worker first-pass review and fixes
+- [x] 2.3 Worker first-pass review and fixes
