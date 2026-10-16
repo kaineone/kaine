@@ -79,7 +79,7 @@ _CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "sequence", "episodi
 
 # Modules whose section receives the reserved [workspace.feedback] table (paper §3.2);
 # each such factory pops it.
-_FEEDBACK_MODULES: frozenset[str] = frozenset({"sequence"})
+_FEEDBACK_MODULES: frozenset[str] = frozenset({"vision", "audition", "interoception", "sequence"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:

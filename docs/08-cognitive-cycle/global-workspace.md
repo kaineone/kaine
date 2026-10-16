@@ -1,6 +1,6 @@
 # The global workspace
 
-The workspace module implements KAINE's global workspace. On every processing tick it scores the candidate events the active modules have published, ranks them, and forms a coalition. On a broadcast tick the cycle publishes that coalition, and the members whose scores reach the access threshold are the accessed content: they can drive report and action, and the perceptual and interoceptive processors adopt a summary of them as the context for their next predictions. This page documents the scoring formula and the access rule exactly as the code computes them, the broadcast payload, the prediction context built from it, the optional coherence layer, and how the action selection module turns an accessed broadcast into intents. Read it if you are tuning selection parameters, wiring a new module, or tracing why an event did or did not lead to speech.
+The workspace module implements KAINE's global workspace. On every processing tick it scores the candidate events the active modules have published, ranks them, and forms a coalition. On a broadcast tick the cycle publishes that coalition, and the members whose scores reach the access threshold are the accessed content: they can drive report and action, and the perceptual and interoceptive processors adopt a summary of them as the context for their next predictions. This page documents the scoring formula and the access rule exactly as the code computes them, the broadcast payload, the prediction context built from it, the optional coherence layer, the held workspace-feedback extension, and how the action selection module turns an accessed broadcast into intents. Read it if you are tuning selection parameters, wiring a new module, or tracing why an event did or did not lead to speech.
 
 Related: [The cognitive cycle](README.md) · [Architecture](../02-architecture/README.md) · [Configuration reference](../appendix-a-configuration/README.md)
 
@@ -116,7 +116,7 @@ On a broadcast tick the cycle publishes the snapshot to `workspace.broadcast` wh
 | `is_experiential` | True on a broadcast tick |
 | `time_scale` | The entity clock's current multiple of wall-clock time |
 | `salience_scores` | The score of every candidate of the tick, keyed by the candidate's id `<stream>:<entry_id>` |
-| `metadata` | `access_threshold` (absent from an empty snapshot), and `coherence` when the coherence layer is on |
+| `metadata` | `access_threshold` (absent from an empty snapshot), `coherence` when the coherence layer is on, and `workspace_feedback` on an accessed broadcast when workspace feedback is on |
 | `selected` | The coalition members in rank order, each with `entry_id` (the same `<stream>:<entry_id>` id that keys its score), `source`, `type`, `salience` (the reported intensity), `payload`, `timestamp` and `causal_parent` |
 
 Only `source="workspace"` may publish to `workspace.broadcast`; any other source raises `ReservedStreamError`. Modules read the stream with `AsyncBus.subscribe_workspace_block`, advancing their own cursor.
@@ -213,6 +213,38 @@ The defaults are `coherence_floor = 0.8` and `coherence_ceiling = 1.25`, so the 
 
 Two tests keep the toggle honest. With the layer disabled, an instance driven through many cycles with the same seed, events and phases as a baseline instance without a layer selects the same events in the same order, with the same scores and inhibition flag, and neither writes `metadata["coherence"]`. With the layer enabled at an extreme ceiling and floor, a phase-locked event with a lower raw score overtakes a desynchronized event with a higher one, which shows the layer is connected to selection.
 
+## Workspace feedback (held extension)
+
+`kaine/workspace/feedback.py`
+
+Workspace feedback is a held extension (paper §3.2 "Workspace feedback (held extension)", §6.4). In the first configuration the workspace sends no error signal or directive back to any module. The extension adds two signals after the predictive global neuronal workspace (Whyte and Smith 2021; Whyte, Hohwy and Smith 2022) and the neuronal workspace model (Dehaene, Kerszberg and Changeux 1998). It ships off: `[workspace.feedback].enabled = false`; disabled, or with `arm = "off"`, no feedback object is built and every module and the workspace run the current code path unchanged.
+
+### Top-down head and blend
+
+`kaine/modules/feedback.py` · `TopDownBlend` · `TopDownHead`
+
+Vision, audition's acoustic path (`audition.perception`; the tone path is unchanged) and interoception each wrap their forward model in a `TopDownBlend`. Its `TopDownHead` is a linear readout of the regressor (b, s, 1): the 24-component context b, the sequence module's predicted next broadcast featurization s (24 components, zeros before one is adopted) and a constant. It starts at zero and takes one stochastic-gradient step on the mean squared error per input at `head_learning_rate` (the forward models' eta_fm, 0.001), skipped while the forward model is suspended (sleep). The processor predicts with the blend of its own and the top-down prediction, each weighted by the inverse square of its running mean error over the last W_P = 32 scored errors (the module's prediction-error window); before the head has a scored error the blend is the own prediction. The reported error, error ratio, intensity, and for interoception the per-channel residuals that drive the unexpected error, are the blend's. The information-gain null error (paper A.8) is that of the blend formed with the null context b0 in both predictions and the same weights. A skipped non-finite input clears the blend. The heads are not preserved across boots.
+
+With feedback on, the sequence module adds `predicted_next_feature_vector` (its forward-prediction head's prediction of the next broadcast featurization, 24 floats) to `sequence.report`. The workspace keeps the latest valid one it sees among the candidates of any tick.
+
+### Gain
+
+`kaine/workspace/feedback.py` · `FeedbackController`
+
+Each processor's graded intensity uses `pi_j * ratio` in place of its error ratio, with `pi_j` the processor's gain carried by the latest accessed broadcast (1 before any). The categorical alert tests and the published `normalised_error` stay on the ungained ratio. The workspace keeps `pi_j` in `[pi_min, pi_max] = [0.8, 1.25]` (paper Table A1) with the mean over the three processors at one: gain moves only in equal and opposite steps of at most `gain_step`, clipped so both processors stay in bounds, and every gain relaxes toward one with time constant `gain_relax_s` in entity time, which keeps the mean at one.
+
+### Conflict and the ablation arms
+
+`kaine/boot/feedback.py`
+
+The arms are `off` (the current build), `head_only`, `head_gain`, `full` and `matched_random`. A processor is in conflict when its highest-scoring accessed report carries a disagreement (the distance between its own and top-down predictions over its mean error) of at least `disagreement_threshold` and an error ratio of at least `conflict_error_ratio`, and it is not refractory. Resolution moves `gain_step` toward the other accessed processor with the lowest precision-weighted error (its gain times its error ratio) and away from the conflicting one; with no other accessed processor no gain moves. Each episode makes the conflicting processor refractory for `refractory_s`, so one episode per processor is in flight. In `matched_random` the same episodes move the same step between two distinct processors drawn by a generator seeded from the run seed, among the processors that have reported (all three until two have). The `head_gain` arm moves gain without the conflict test: on each accessed broadcast with at least two accessed processors, `gain_step` moves toward the lowest and away from the highest precision-weighted error, and the loser becomes refractory. This rule is a design choice; the paper names the arm but defines gain moves only through conflict resolution. The ablation runs on the harness of §6.3; its fail state is a full arm no better than the `matched_random` control. `KAINE_STUDY=workspace_feedback_<arm>` applies `config/studies/workspace_feedback_<arm>.toml`, which sets greedy decoding, `[workspace].arm = "competitive"` and `[workspace.feedback]` with `enabled = true` and the arm. The workspace-mediation study files are unchanged.
+
+### What reaches the modules
+
+Feedback never acts on an inhibited broadcast: the workspace attaches nothing and moves no gain (gains still relax with time), and the processors adopt nothing from one. On each accessed broadcast the workspace attaches `metadata["workspace_feedback"] = {"arm", "gains", "sequence_prediction", "episodes"}`; each episode is `{"kind": "conflict" | "precision" | "random", "conflicting", "toward", "away", "delta"}`. Each processor's report then carries `payload["workspace_feedback"] = {"disagreement", "error_ratio", "gain", "top_down_weight", "own_error", "top_down_error"}`. Feedback never changes the scores, ranking or access of a tick.
+
+`make_workspace_feedback` refuses feedback with `[oscillator].enabled = true`, with `[workspace].arm` other than `"competitive"`, with `[positive_control].enabled = true`, and for `matched_random` without a run seed. The `Workspace` constructor refuses it with the coherence layer or a non-competitive arm, and the processors refuse it when their positive control is enabled.
+
 ## Action selection and the report rule
 
 `kaine/workspace/action_selection.py` · `kaine/workspace/report_policy.py`
@@ -280,6 +312,16 @@ Selection keys live in `config/kaine.toml`; the `[action_selection]` values belo
 | `[workspace].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"drive_relevance"` enables the drive-relevance scorer |
 | `[workspace].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
 | `[workspace].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
+| `[workspace.feedback].enabled` | bool | `false` | Switch for workspace feedback |
+| `[workspace.feedback].arm` | string | `"full"` | Ablation arm: `"off"`, `"head_only"`, `"head_gain"`, `"full"` or `"matched_random"` |
+| `[workspace.feedback].pi_min` | float | `0.8` | Gain floor; paper Table A1, design value |
+| `[workspace.feedback].pi_max` | float | `1.25` | Gain ceiling; paper Table A1, design value |
+| `[workspace.feedback].disagreement_threshold` | float | `2.0` | Conflict disagreement threshold; design value, not fixed by the paper |
+| `[workspace.feedback].conflict_error_ratio` | float | `2.0` | Error ratio at which a processor's error counts as high, by default the ratio at which intensity reaches the alert level; design value |
+| `[workspace.feedback].gain_step` | float | `0.1` | Maximum equal-and-opposite gain move; design value |
+| `[workspace.feedback].gain_relax_s` | float | `10.0` | Fast time constant for gain relaxation toward one, in entity seconds; design value |
+| `[workspace.feedback].refractory_s` | float | `10.0` | Refractory period after an episode, in entity seconds; design value |
+| `[workspace.feedback].head_learning_rate` | float | `0.001` | Top-down head stochastic-gradient step size, eta_fm; design value |
 | `[affect].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
 | `[action_selection].policy` | string | unset; `"self_initiated_report"` in `first_configuration` | Action-selection policy |
 | `[action_selection].drive_initiative` | bool | true; false in `first_configuration` | Use the drive-biased policy when no policy is named |
@@ -316,6 +358,10 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/modules/intensity.py` | `graded_intensity`, shared by the predictive processors |
 | `kaine/modules/context.py` | `BroadcastContext`, the context featurization and null context |
 | `kaine/workspace/coherence.py` | `CoherenceScorer`, `phase_locking_value`, `mean_pairwise_plv` |
+| `kaine/workspace/feedback.py` | `FeedbackController`, settings |
+| `kaine/modules/feedback.py` | `TopDownHead`, `TopDownBlend`, `FeedbackChannel` |
+| `kaine/boot/feedback.py` | Workspace feedback boot helpers |
+| `tests/test_workspace_feedback_*.py` | Workspace feedback tests |
 | `kaine/workspace/action_selection.py` | `ActionSelection`, `DefaultActionSelectionPolicy`, `Intent` |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy` |
 | `kaine/workspace/drive_policy.py` | `DriveBiasedActionSelectionPolicy` |
