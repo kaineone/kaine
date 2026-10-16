@@ -34,6 +34,7 @@ from kaine.boot.perception_feed import (
 )
 from kaine.boot.security import install_state_encryption
 from kaine.boot.wiring import (
+    _wire_affect_development,
     _wire_affect_drive_relevance,
     _wire_language_organ_adapter,
     _wire_language_self_model,
@@ -375,3 +376,4 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
     _wire_language_organ_adapter(registry, kaine_config)
     _wire_self_model_capabilities(registry)
     _wire_affect_drive_relevance(registry)
+    _wire_affect_development(registry)

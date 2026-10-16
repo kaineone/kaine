@@ -10,6 +10,7 @@ from typing import Any
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.coherence import CoherenceScorer
+from kaine.workspace.regulation_bias import RegulationBias
 from kaine.workspace.strategies import SalienceStrategy
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class Workspace:
         coherence: CoherenceScorer | None = None,
         arm: str = "competitive",
         arm_seed: int | None = None,
+        regulation_bias: RegulationBias | None = None,
     ) -> None:
         if top_k <= 0:
             raise ValueError("top_k must be positive")
@@ -76,6 +78,9 @@ class Workspace:
         # A string seed keeps the matched-arm draw independent of the global
         # random stream that the run seed also pins.
         self._rng = random.Random(f"matched-coalition:{int(arm_seed)}") if arm == "matched" else None
+        # Tier-1 emotion regulation bias gate. None means the layer is off and
+        # selection is bit-for-bit the previous behavior.
+        self._regulation_bias = regulation_bias
 
     @property
     def top_k(self) -> int:
@@ -165,6 +170,8 @@ class Workspace:
             # snapshot metadata so the sidecar coherence_observer can read it.
             metadata["coherence"] = self._coherence.plv(cohort)
 
+        scored = self._apply_regulation_bias(scored, scores, metadata)
+
         return self._compose(
             tick_index,
             scored,
@@ -172,6 +179,37 @@ class Workspace:
             metadata,
             draw=bool(context.get("is_experiential", False)),
         )
+
+    def _apply_regulation_bias(
+        self,
+        scored: list[tuple[float, str, Event]],
+        scores: dict[str, float],
+        metadata: dict[str, Any],
+    ) -> list[tuple[float, str, Event]]:
+        """Apply the tier-1 emotion regulation bias to the held source.
+
+        If the gate is off or inactive, the scored list and score table are
+        returned unchanged and ``metadata`` is untouched.
+        """
+        if self._regulation_bias is None:
+            return scored
+        description = self._regulation_bias.describe()
+        if description is None:
+            return scored
+        source = description["source"]
+        factor = description["factor"]
+        adjusted: list[tuple[float, str, Event]] = []
+        for value, entry_id, event in scored:
+            # One factor per tick: the clock is read once, in describe().
+            if event.source != source:
+                adjusted.append((value, entry_id, event))
+                continue
+            applied = value * factor
+            adjusted.append((applied, entry_id, event))
+            scores[entry_id] = applied
+        metadata["regulation_bias"] = description
+        log.debug("regulation bias applied to source %r with factor %s", source, factor)
+        return adjusted
 
     def _compose(
         self,
@@ -293,10 +331,14 @@ class Workspace:
             scored_on.append((new_value, entry_id, event))
             scores_on[entry_id] = new_value
 
-        primary = self._compose(
-            tick_index, scored_on, scores_on, {"coherence": self._coherence.plv(cohort)}
-        )
-        counterfactual = self._compose(tick_index, scored_raw, scores_off, {})
+        primary_metadata: dict[str, Any] = {"coherence": self._coherence.plv(cohort)}
+        scored_on = self._apply_regulation_bias(scored_on, scores_on, primary_metadata)
+
+        counterfactual_metadata: dict[str, Any] = {}
+        scored_off = self._apply_regulation_bias(scored_raw, scores_off, counterfactual_metadata)
+
+        primary = self._compose(tick_index, scored_on, scores_on, primary_metadata)
+        counterfactual = self._compose(tick_index, scored_off, scores_off, counterfactual_metadata)
         return primary, counterfactual
 
     def _pooled(

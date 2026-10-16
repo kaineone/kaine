@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from kaine.boot.common import _effective_hot_swap_mode
 from kaine.boot.errors import ConfigurationError, _require_keys
 from kaine.defaults import language_section_api_key
 from kaine.modules.registry import ModuleRegistry
 from kaine.storage import resolve
+from kaine.workspace.regulation_bias import RegulationBias
 from kaine.workspace.strategies import build_drive_sources, dominant_drive
 
 #: Label of the affect salience factor in downgrade reports.
@@ -81,6 +82,7 @@ _WORKSPACE_ALLOWED_KEYS: set[str] = {
     "salience_goal_factor",
     "arousal_contrast_gain",
     "arm",  # the arm of the planned test, read by the cycle
+    "regulation_bias",  # emotion regulation's tier-1 selection bias gate (paper §3.5); false in every study arm
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED
@@ -182,6 +184,25 @@ def make_salience_factors(
         )
 
     return affect_modulator, goal_scorer, downgraded_factors
+
+
+def make_regulation_bias(
+    kaine_config: Mapping[str, Any],
+    clock: Callable[[], float],
+) -> Optional[RegulationBias]:
+    """Build the tier-1 emotion regulation bias gate, or ``None`` when disabled.
+
+    The default is enabled (``True``) so a normal boot gets the gate; study
+    arms explicitly set it ``False`` to keep the ranking invariant of paper A.1.
+    """
+    section = dict(kaine_config.get("workspace") or {})
+    enabled = section.get("regulation_bias", True)
+    if not isinstance(enabled, bool):
+        raise ConfigurationError("[workspace].regulation_bias must be true or false")
+    if not enabled:
+        return None
+    return RegulationBias(clock)
+
 
 def _wire_oscillators(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
     """Attach a live `ModuleOscillator` to every registered module when the
@@ -353,6 +374,28 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
     affect = registry.get("affect")
     affect.set_drive_relevance(drive_sources_for(registry), dominant_drive)
     log.info("wired affect goal significance to the drive-to-source table")
+
+
+def _wire_affect_development(
+    registry: ModuleRegistry,
+    probe: Optional[Callable[[], bool]] = None,
+) -> None:
+    """Store and wire the affect module's developmental-phase probe.
+
+    The affect module's emotion regulation is off during the developmental
+    phase (paper §3.5); the probe returns True while the entity is developing.
+    A supervisor rebuild re-runs this helper without a probe and reuses the
+    stored one.
+    """
+    if probe is not None:
+        setattr(registry, "affect_development_probe", probe)
+    stored = getattr(registry, "affect_development_probe", None)
+    if "affect" in registry and stored is not None:
+        affect = registry.get("affect")
+        setter = getattr(affect, "set_development_probe", None)
+        if callable(setter):
+            setter(stored)
+            log.info("wired affect development probe")
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
