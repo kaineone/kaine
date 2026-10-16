@@ -297,6 +297,46 @@ async def test_fall_within_window_keeps_likelihood(bus):
 
 
 @pytest.mark.asyncio
+async def test_fall_within_window_keeps_active_goal_likelihood(bus):
+    t = [0.0]
+    affect = Affect(
+        bus,
+        clock=lambda: t[0],
+        goal_response_window_s=10.0,
+        goal_likelihood_fall=0.5,
+    )
+    affect.drives.curiosity.value = 0.80
+    await affect._tick()
+    goal = affect.goals.active_for_drive("curiosity")
+    assert goal is not None
+    assert goal.likelihood == pytest.approx(0.5)
+
+    t[0] += 1.0
+    intent = Event(
+        source="action_selection",
+        type="intent.speak",
+        payload={},
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await affect._handle_peer_event("action_selection.out", intent)
+
+    t[0] += 1.0
+    affect.drives.curiosity.value = 0.68
+    await affect._tick()
+
+    while t[0] < 13.0:
+        t[0] += 1.0
+        affect.drives.curiosity.value = 0.68
+        await affect._tick()
+
+    final = affect.goals.get(goal.id)
+    assert final.state == GoalState.ACTIVE
+    assert final.likelihood == pytest.approx(0.5)
+    assert affect._held_obstruction == {}
+
+
+@pytest.mark.asyncio
 async def test_non_dominant_goal_does_not_obstruct(bus):
     t = [0.0]
     affect = Affect(
@@ -438,6 +478,86 @@ async def test_persistence_keeps_likelihood_and_id(bus):
 
 
 @pytest.mark.asyncio
+async def test_restore_with_outcome_counts_publishes_no_end(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0])
+    affect.drives.curiosity.own_ends = 3
+    affect.drives.curiosity.other_ends = 2
+    affect.drives.curiosity.value = 0.80
+    await affect._tick()
+    goal = affect.goals.active_for_drive("curiosity")
+    assert goal is not None
+    gid = goal.id
+
+    state = affect.serialize()
+    t2 = [100.0]
+    affect2 = Affect(bus, clock=lambda: t2[0])
+    affect2.deserialize(state)
+    affect2.drives.curiosity._has_fired = True
+    affect2.drives.curiosity.value = 0.80
+    await affect2._tick()
+
+    restored = affect2.goals.get(gid)
+    assert restored.state == GoalState.ACTIVE
+    events = await _goal_events(bus)
+    lifecycle = [
+        e for e in events
+        if e.payload.get("action") in ("completed", "abandoned")
+        and e.payload.get("id") == gid
+    ]
+    assert len(lifecycle) == 0
+
+
+@pytest.mark.asyncio
+async def test_manual_goal_cleanup_and_cap(bus):
+    # (i) Manual complete_goal cleans up per-goal state.
+    t = [0.0]
+    affect = Affect(
+        bus,
+        clock=lambda: t[0],
+        goal_response_window_s=10.0,
+        goal_likelihood_fall=0.5,
+    )
+    affect.drives.curiosity.value = 0.80
+    await affect._tick()
+    goal = affect.goals.active_for_drive("curiosity")
+    assert goal is not None
+
+    t[0] += 1.0
+    intent = Event(
+        source="action_selection",
+        type="intent.speak",
+        payload={},
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await affect._handle_peer_event("action_selection.out", intent)
+    assert any(w["goal_id"] == goal.id for w in affect._response_windows)
+
+    await affect.complete_goal(goal.id)
+    assert goal.id not in affect._goal_above_since
+    assert not any(w["goal_id"] == goal.id for w in affect._response_windows)
+    assert affect.goals.get(goal.id).state == GoalState.COMPLETED
+
+    # (ii) add_goal enforces the active-goal cap.
+    affect2 = Affect(bus, clock=lambda: t[0], goal_cap=3)
+    ids = []
+    for priority in (0.5, 0.6, 0.7, 0.4):
+        gid = await affect2.add_goal(f"goal {priority}", priority=priority)
+        ids.append(gid)
+
+    assert len(affect2.goals.active()) == 3
+    assert affect2.goals.get(ids[3]).state == GoalState.ABANDONED
+    events = await _goal_events(bus)
+    caps = [e for e in events if e.payload.get("reason") == "cap"]
+    assert len(caps) >= 1
+    assert any(
+        e.payload.get("id") == ids[3] and e.payload.get("action") == "abandoned"
+        for e in caps
+    )
+
+
+@pytest.mark.asyncio
 async def test_inactive_goal_leaves_scores_unchanged(bus):
     fresh = Affect(bus, clock=lambda: 0.0)
     fresh.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
@@ -463,6 +583,8 @@ async def test_inactive_goal_leaves_scores_unchanged(bus):
     assert s1.as_tuple() == s2.as_tuple()
     assert s1.coping_available == s2.coping_available
     assert fresh._goal_method == used._goal_method
+    assert fresh._last_obstruction == 0.0
+    assert used._last_obstruction == 0.0
 
     quiet = Affect(bus, clock=lambda: 0.0)
     before = len(await _goal_events(bus))
