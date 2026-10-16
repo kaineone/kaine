@@ -27,6 +27,7 @@ from kaine.boot.factories.social_cognition import make_social_cognition
 from kaine.boot.factories.vision import make_vision
 from kaine.boot.factories.vocal import make_vocal
 from kaine.boot.factories.world_model import make_world_model
+from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_section
 from kaine.boot.metrics import _log_device_assignments
 from kaine.boot.perception_feed import (
     _install_shared_stimulus_source_clock,
@@ -74,6 +75,11 @@ SIMPLE_FACTORIES: dict[str, ModuleFactory] = {
 # pacing. Every other module is purely event-driven (paces off the subjective
 # cycle already) or times only infrastructure, so it gets no clock.
 _CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "sequence", "episodic_memory", "perceptual_locus", "interoception", "affect", "vision", "vocal"})
+
+
+# Modules whose section receives the reserved [workspace.feedback] table (paper §3.2);
+# each such factory pops it.
+_FEEDBACK_MODULES: frozenset[str] = frozenset({"sequence"})
 
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
@@ -322,6 +328,9 @@ def construct_module(
     if name in ("vision", "audition", "interoception"):
         section["perception_feed"] = dict(kaine_config.get("perception_feed") or {})
         section["positive_control"] = dict(kaine_config.get("positive_control") or {})
+
+    if name in _FEEDBACK_MODULES:
+        section[FEEDBACK_SECTION_KEY] = feedback_section(kaine_config)
 
     if name in ("episodic_memory", "social_cognition"):
         section["_embedder"] = shared_embedder(registry, kaine_config)
