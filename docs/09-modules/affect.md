@@ -75,10 +75,12 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 | Novelty | `1 - prod(1 - s)` over coalition members that carry a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
 | Intrinsic pleasantness | `pl`, the learning-progress term above |
 | Goal significance | the dominant drive scaled by how much of the coalition comes from sources that relieve it (below) |
-| Coping potential | `clip(valence + (0.5 - arousal), -1, 1)` |
+| Coping potential | `2p - 1`, only when goal significance is above 0 (below) |
 | Norm compatibility | fixed at `0.0` until a self-model supplies norms |
 
 The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The result never goes negative. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
+
+Coping potential is checked only for relevant content; with goal significance at 0 it is unavailable, `coping_available` is false in `affect.emotion`, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`. When the drive term sets goal significance (also on a tie), `s` counts the dominant drive's crossings that the entity's own response ended (fell below the re-arm band): learning progress for curiosity and intents for restlessness, by relief or by holding the build input down, the latter only when a counterfactual step at the no-response input would not have fallen back. `f` counts every other end: decay alone, novelty for boredom, another's voice for the social drive. When the ledger sets it, `s` and `f` are completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it. A sleep reset counts as neither. (Paper A.4; Sander, Grandjean and Scherer 2005; Maier and Seligman 2016; Williams et al. 2015).
 
 `goal_significance_method` in each `affect.emotion` event records how the check was computed:
 
@@ -93,7 +95,7 @@ A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fe
 
 ## Sleep reset
 
-At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice, the familiarity cache and the goal ledger are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
+At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice, the familiarity cache and the goal ledger are kept. The relief and decay outcome counts on each drive are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
 
 ## Peer streams
 
@@ -120,7 +122,7 @@ The vision, audition and social cognition modules' stream names are fixed. The i
 | Stream | Event type | When | Intensity |
 |---|---|---|---|
 | `affect.out` | `affect.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
-| `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
+| `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `coping_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
 | `affect.out` | `affect.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
 | `affect.out` | `affect.goal` | On a goal lifecycle event (`added`, `completed`, `abandoned`) | `baseline_salience` |
 
@@ -206,7 +208,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Restoring goals publishes no `affect.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 
@@ -245,6 +247,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_coupling_drift.py` | Perceived-signal decay and boundedness |
 | `tests/test_affect_coupling_persistence.py` | Familiarity cache round trip |
 | `tests/test_affect_module.py` | Module lifecycle and event publishing |
+| `tests/test_affect_coping.py` | Coping potential: relevance gate and success ratio |
 
 ## Spec and related pages
 

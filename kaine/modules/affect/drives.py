@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 
 def _clamp01(x: float) -> float:
@@ -66,6 +66,11 @@ class Drive:
     relief_gain: float = 0.5  # rate/s at full strength for curiosity/boredom; fraction per event for social/restlessness
     hysteresis_fraction: float = 0.9  # must drop below threshold * this to re-fire
     _has_fired: bool = field(default=False, init=False, repr=False)
+    # How this drive's crossings ended, re-armed below the hysteresis band by
+    # the entity's own response (own_ends) or any other way (other_ends), the
+    # success and failure counts for coping potential (paper A.4).
+    own_ends: int = field(default=0, init=False)
+    other_ends: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.relief_gain) or not (0.0 <= self.relief_gain <= 1.0):
@@ -77,43 +82,69 @@ class Drive:
         if not math.isfinite(self.threshold) or not (0.0 < self.threshold <= 1.0):
             raise ValueError("threshold must be finite and in (0, 1]")
 
-    def tick(self, dt: float, signal: float = 0.0) -> None:
+    def _step(self, value: float, u: float, dt: float) -> float:
+        r = self.build_rate * u + self.decay_rate
+        if r > 0.0:
+            eq = self.build_rate * u / r
+            return _clamp01(eq + (value - eq) * math.exp(-r * dt))
+        return value
+
+    def tick(self, dt: float, signal: float = 0.0, *, no_response_signal: Optional[float] = None) -> None:
         """Advance the drive by `dt` seconds with the given activity signal.
 
         `signal` ∈ [0, 1] modulates the build rate. The step is the exact
         solution of dD/dt = beta u (1 - D) - delta D, bounded to [0, 1] and
         independent of the update rate.
+
+        `no_response_signal` is the build input the drive would have had without
+        the entity's own response; when given and the actual signal is lower, a
+        fall back below the band on this step is credited to the response only if
+        the counterfactual step would not have fallen back.
         """
         if dt <= 0:
             return
+        prev = self.value
         u = _clamp01(signal)
-        r = self.build_rate * u + self.decay_rate
-        if r > 0.0:
-            eq = self.build_rate * u / r
-            self.value = _clamp01(eq + (self.value - eq) * math.exp(-r * dt))
-        self._check_hysteresis()
+        self.value = self._step(prev, u, dt)
+        own = False
+        if no_response_signal is not None:
+            no_response_u = _clamp01(no_response_signal)
+            if u < no_response_u and self._has_fired and self.value < self.threshold * self.hysteresis_fraction:
+                cf = self._step(prev, no_response_u, dt)
+                if cf >= self.threshold * self.hysteresis_fraction:
+                    own = True
+        self._check_hysteresis(own=own)
 
-    def relieve(self, strength: float) -> None:
-        """Apply a consummatory event of strength `strength` ∈ [0, 1]."""
+    def relieve(self, strength: float, *, own: bool) -> None:
+        """Apply a consummatory event of strength `strength` ∈ [0, 1].
+
+        `own` says whether the entity's own response is the source of the relief.
+        """
         c = _clamp01(strength)
         self.value = _clamp01(self.value * (1.0 - self.relief_gain * c))
-        self._check_hysteresis()
+        self._check_hysteresis(own=own)
 
-    def relieve_rate(self, strength: float, dt: float) -> None:
+    def relieve_rate(self, strength: float, dt: float, *, own: bool) -> None:
         """Apply continuous relief at rate ``relief_gain * strength`` per second.
 
         The exact solution of dD/dt = -relief_gain * strength * D is used,
         so the amount relieved is independent of the update rate.
+
+        `own` says whether the entity's own response is the source of the relief.
         """
         c = _clamp01(strength)
         if dt > 0.0:
             self.value = _clamp01(self.value * math.exp(-self.relief_gain * c * dt))
-        self._check_hysteresis()
+        self._check_hysteresis(own=own)
 
-    def _check_hysteresis(self) -> None:
+    def _check_hysteresis(self, *, own: bool) -> None:
         # Reset hysteresis once below the re-fire band.
         if self._has_fired and self.value < self.threshold * self.hysteresis_fraction:
             self._has_fired = False
+            if own:
+                self.own_ends += 1
+            else:
+                self.other_ends += 1
 
     def consume_crossing(self) -> bool:
         """Return True at most once per crossing of `threshold`.
@@ -126,6 +157,10 @@ class Drive:
             self._has_fired = True
             return True
         return False
+
+    def power(self) -> float:
+        """The Laplace-smoothed share of ended crossings that the entity's own response ended (paper A.4); 0.5 with no history."""
+        return (self.own_ends + 1) / (self.own_ends + self.other_ends + 2)
 
     def reset(self) -> None:
         self.value = 0.0
@@ -201,25 +236,28 @@ class DriveSet:
         - `activity_signal`: 1.0 means LOW alert rate, which raises boredom.
         - `social_signal`: 1.0 once an operator interaction has been seen.
         - `action_signal`: 1.0 means LOW intent rate, which raises restlessness.
+        - ``curiosity`` and ``restlessness`` receive ``no_response_signal=1.0``
+          because their absence-of-relief build inputs are 1.0 when the entity
+          has not learned or acted on its own.
         """
-        self.curiosity.tick(dt, novelty_signal)
+        self.curiosity.tick(dt, novelty_signal, no_response_signal=1.0)
         self.boredom.tick(dt, activity_signal)
         self.social_drive.tick(dt, social_signal)
-        self.restlessness.tick(dt, action_signal)
+        self.restlessness.tick(dt, action_signal, no_response_signal=1.0)
         crossings: list[DriveCrossing] = []
         for d in self.all():
             if d.consume_crossing():
                 crossings.append(DriveCrossing(name=d.name, value=d.value))
         return crossings
 
-    def relieve(self, name: str, strength: float) -> None:
+    def relieve(self, name: str, strength: float, *, own: bool) -> None:
         """Relieve a named drive. Unknown names raise KeyError."""
         drive = getattr(self, name, None)
         if drive is None or not isinstance(drive, Drive):
             raise KeyError(name)
-        drive.relieve(strength)
+        drive.relieve(strength, own=own)
 
-    def relieve_rate(self, name: str, strength: float, dt: float) -> None:
+    def relieve_rate(self, name: str, strength: float, dt: float, *, own: bool) -> None:
         """Continuously relieve a named drive over ``dt`` seconds.
 
         Unknown names raise KeyError.
@@ -227,11 +265,33 @@ class DriveSet:
         drive = getattr(self, name, None)
         if drive is None or not isinstance(drive, Drive):
             raise KeyError(name)
-        drive.relieve_rate(strength, dt)
+        drive.relieve_rate(strength, dt, own=own)
 
     def reset_all(self) -> None:
         for d in self.all():
             d.reset()
+
+    def outcomes_to_dict(self) -> dict[str, dict[str, int]]:
+        return {d.name: {"own": d.own_ends, "other": d.other_ends} for d in self.all()}
+
+    def load_outcomes(self, data: Any) -> None:
+        """Restore each drive's own and other end counters.
+
+        Unknown drive names, non-dict entries, non-integer values, booleans
+        and negative integers are ignored.
+        """
+        if not isinstance(data, dict):
+            return
+        for name, entry in data.items():
+            if not isinstance(entry, dict):
+                continue
+            drive = getattr(self, name, None)
+            if drive is None or not isinstance(drive, Drive):
+                continue
+            for key, target in (("own", "own_ends"), ("other", "other_ends")):
+                value = entry.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    setattr(drive, target, value)
 
     def to_dict(self) -> dict[str, float]:
         return {d.name: d.value for d in self.all()}

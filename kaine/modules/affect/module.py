@@ -361,8 +361,10 @@ class Affect(BaseModule):
         # Continuous drive relief: curiosity at full strength = learning progress,
         # boredom at full strength = alert-stream novelty excess. Rate-based relief
         # is independent of the report rate, so drives can still build under noise.
-        self._drives.relieve_rate("curiosity", lp, dt)
-        self._drives.relieve_rate("boredom", nb, dt)
+        # own marks relief produced by the entity's own response, which coping
+        # counts as success (paper A.4).
+        self._drives.relieve_rate("curiosity", lp, dt, own=True)
+        self._drives.relieve_rate("boredom", nb, dt, own=False)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
@@ -409,6 +411,10 @@ class Affect(BaseModule):
                     # (requires norm <= -0.4) is therefore unreachable by
                     # design until that integration lands.
                     "norm_compatibility_available": False,
+                    # False when the coalition is irrelevant (goal score 0):
+                    # coping is undefined, so fear, anger and sadness are
+                    # not eligible.
+                    "coping_available": scores.coping_available,
                     "goal_significance_method": self._goal_method,
                 },
                 salience=self._alert_salience
@@ -451,6 +457,7 @@ class Affect(BaseModule):
         has_table = (
             self._drive_sources is not None and self._dominant_drive is not None
         )
+        top = None
         if has_table:
             top = self._dominant_drive(self._drives.to_dict())
             if top is None or top[1] <= 0.0:
@@ -495,11 +502,25 @@ class Affect(BaseModule):
             self._goal_method = "unavailable"
 
         goal_score = max(-1.0, min(1.0, goal_score))
-        # Coping potential: high arousal but low valence → low coping.
-        coping = max(
-            -1.0,
-            min(1.0, self._state.valence + (0.5 - self._state.arousal)),
-        )
+
+        # Coping potential (paper A.4): checked only when the goal score is above
+        # 0; otherwise it is undefined. When the drive term sets the score (also
+        # on a tie), power is the dominant drive's Laplace-smoothed success ratio
+        # of own-response ends to total ended crossings. When the ledger sets it,
+        # completed and abandoned goals supply the ratio. Arousal and valence do
+        # not enter it.
+        if goal_score <= 0.0:
+            coping = 0.0
+            coping_available = False
+        else:
+            coping_available = True
+            if has_table and top is not None and drive_score >= ledger_score:
+                p = getattr(self._drives, top[0]).power()
+            else:
+                completed, abandoned = self._goals.outcome_counts()
+                p = (completed + 1) / (completed + abandoned + 2)
+            coping = 2.0 * p - 1.0
+
         # Norm compatibility: fixed 0.0 — not a real measurement.
         # The self-model module's norm signals are not yet wired; until they are, the DISGUST
         # classification branch (norm <= -0.4) is unreachable by design.
@@ -520,6 +541,7 @@ class Affect(BaseModule):
             goal_significance=goal_score,
             coping_potential=coping,
             norm_compatibility=norm,
+            coping_available=coping_available,
         )
 
     #: Scale of the perceived-emotion intensity contribution to ``novelty``,
@@ -704,7 +726,7 @@ class Affect(BaseModule):
                 if not self._interaction_seen:
                     self._interaction_seen = True
                 elif self._last_tsli is not None and tsli < self._last_tsli:
-                    self._drives.relieve("social_drive", 1.0)
+                    self._drives.relieve("social_drive", 1.0, own=False)
                 self._last_tsli = float(tsli)
         elif stream == self._episodic_memory_stream and event.type == "episodic_memory.recall":
             intensity = float(event.payload.get("max_affect_intensity", 0.0))
@@ -738,7 +760,7 @@ class Affect(BaseModule):
             and event.type != "intent.rest"
         ):
             self._intents_since_broadcast += 1
-            self._drives.relieve("restlessness", 1.0)
+            self._drives.relieve("restlessness", 1.0, own=True)
 
     def _record_perceived_emotion(self, event: Event) -> None:
         """Record a transient perceived-emotion signal for appraisal.
@@ -858,6 +880,7 @@ class Affect(BaseModule):
             "state": self._state.to_dict(),
             "baseline": self._baseline.to_dict(),
             "drives": self._drives.to_dict(),
+            "drive_outcomes": self._drives.outcomes_to_dict(),
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
@@ -887,6 +910,8 @@ class Affect(BaseModule):
                 drive = getattr(self._drives, name, None)
                 if drive is not None:
                     drive.value = max(0.0, min(1.0, float(value)))
+        if "drive_outcomes" in state:
+            self._drives.load_outcomes(state["drive_outcomes"])
         if "last_emotion" in state:
             try:
                 self._last_emotion = CategoricalEmotion(state["last_emotion"])

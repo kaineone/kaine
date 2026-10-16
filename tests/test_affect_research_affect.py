@@ -75,7 +75,7 @@ def test_drive_tick_exact_solution():
 
 def test_drive_relieve_and_from_config_and_defaults():
     d = Drive(name="x", value=0.8, relief_gain=0.5)
-    d.relieve(1.0)
+    d.relieve(1.0, own=True)
     assert d.value == pytest.approx(0.4)
 
     with pytest.raises(ValueError):

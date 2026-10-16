@@ -80,6 +80,12 @@ class GoalLedger:
     def abandon(self, goal_id: str) -> Goal:
         return self._transition(goal_id, GoalState.ABANDONED)
 
+    def outcome_counts(self) -> tuple[int, int]:
+        """The completed and abandoned counts that supply the ledger term's power for coping potential (paper A.4)."""
+        completed = sum(1 for g in self._goals.values() if g.state == GoalState.COMPLETED)
+        abandoned = sum(1 for g in self._goals.values() if g.state == GoalState.ABANDONED)
+        return completed, abandoned
+
     def _transition(self, goal_id: str, new_state: GoalState) -> Goal:
         if goal_id not in self._goals:
             raise KeyError(f"unknown goal id {goal_id!r}")
