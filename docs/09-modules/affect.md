@@ -78,7 +78,7 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 | Coping potential | `2p - 1`, only when goal significance is nonzero (below) |
 | Norm compatibility | fixed at `0.0` and unavailable, since KAINE has no standards until an operator writes a list; no categorical rule reads it |
 
-The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The conducive part `r` is in `[0, 1]` and the obstruction below can make the goal score negative, and drive crossings fill the ledger. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
+The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The conducive part `r` is in `[0, 1]` and the obstruction below can make the goal score negative, and drive crossings fill the ledger. The goal score feeds the categorical emotion and does not enter selection directly, where the goal factor is held constant; it reaches selection only through emotion regulation's tier-1 attentional deployment.
 
 Coping potential is checked whenever goal significance is nonzero, negative included. At exactly 0 the content is irrelevant and coping is unavailable: `coping_available` is false in `affect.emotion`, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`. When the drive term sets goal significance (also on a tie), `s` counts the dominant drive's crossings that the entity's own response ended (fell below the re-arm band): learning progress for curiosity and intents for restlessness, by relief or by holding the build input down, the latter only when a counterfactual step at the no-response input would not have fallen back. `f` counts every other end: decay alone, novelty for boredom, another's voice for the social drive. When the ledger sets it, `s` and `f` are completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it. A sleep reset counts as neither. (Paper A.4; Sander, Grandjean and Scherer 2005; Maier and Seligman 2016; Williams et al. 2015).
 
@@ -116,9 +116,33 @@ Anger: `classify()` returns anger for a goal score at or below -0.3 with coping 
 
 A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. The rules are modeled on the predicted appraisal profiles of Sander, Grandjean and Scherer (2005, Table 3). KAINE has a single novelty check that covers suddenness, familiarity and predictability together, so Table 3's low familiarity maps to high novelty here: a report the processor did not expect is unfamiliar to it. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust is returned when pleasantness is at or below -0.5, novelty is above 0.3 and the absolute goal score is below 0.3; it is checked after fear and anger (which require coping potential) and before sadness. Table 3 leaves the standards check open for disgust, and very low standards would mark contempt, which KAINE does not classify. Anger needs a goal score at or below -0.3 and coping at least 0.3, which obstruction of a goal with a strong own-response history supplies; it matches at best Table 3's irritation profile, because Table 3's rage profile needs the obstruction attributed to another agent, which KAINE does not do, and the irritation profile's standards check is also missing.
 
+## Emotion regulation
+
+Emotion regulation follows the process model of Gross (1998) and is configured under `[affect.regulation]` (paper §3.5).
+
+`policy = "three_tier"` runs a monitor that escalates through three tiers while a negative affective episode lasts. `policy = "passive"` keeps the previous no-op `PassiveDecay` and is the off arm; it emits no `affect.regulation` events and behaves as before regulation was added.
+
+At every affect update the monitor computes episode intensity `max(|v|, a - a0)`, where `v` is valence and `a0` is `[affect].baseline_arousal`. The last appraisal counts as negative when its pleasantness or goal score is below 0. An episode begins at the first update whose intensity is at or above `set_point` (0.5) and whose appraisal is negative, and ends at the first update that lacks both. After `Δst` entity seconds inside an episode, each increase of `floor(Δst / sustain_window_s)` that is at least 1 fires one activation of tier `min(floor(Δst / sustain_window_s), 3)`. This implements A.5's rule; `sustain_window_s` (30 s) serves as the regulation `Δ_R` because Table A1 gives emotion regulation no window of its own. With the defaults, tier 1 fires at 30 s, tier 2 at 60 s, tier 3 at 90 s, and tier 3 fires again every 30 s while the episode lasts.
+
+The three tiers are:
+
+| Tier | Action | What it does |
+|---|---|---|
+| 1 | `attentional_deployment` | During the episode the monitor sums, per source, the intensity of the members of each negatively appraised coalition. It names the source with the largest mass (ties to the alphabetically first source), with `bias` `selection_bias` (0.2) and `decay_s` `bias_decay_s` (20 s). |
+| 2 | `reappraisal` | Once per episode the module re-runs the appraisal of the last broadcast against the current coping and goal state and moves valence toward the re-run valence target `clip(pl + w - 1/2, -1, 1)` by `reappraisal_fraction` (0.5) of the difference. Arousal and dominance are unchanged. |
+| 3 | `request_maintenance` | The module publishes `action: "request_maintenance"`. The sleep module's maintenance consumer starts a sleep on it under the same guards as the interoception module's maintenance request (only when `[sleep.consolidation].fatigue_triggered = true`). The sleep's affective reset is the backstop, and the reset ends any regulation episode. |
+
+For tier 1, the workspace is what applies the bias. When `[workspace].regulation_bias` is true (the default) and the affect module has named a source, the workspace multiplies every score `S'` of that source by `1 - b`, where `b = b_E exp(-(t - t1) / tau_E)` from the cycle tick that collects the event, `b_E` is `selection_bias` and `tau_E` is `bias_decay_s`. It records `regulation_bias` (source, factor) in the broadcast metadata. If there is no negatively appraised coalition member the tier-1 activation names no source and the bias is 0. Every workspace-mediation study arm sets `[workspace].regulation_bias` to false, so the score ranking there is unaffected.
+
+For tier 2, because pleasantness follows learning progress and not coping or goals, the reappraisal step amounts to closing part of the gap to the current valence target at once.
+
+Every tier activation publishes one `affect.regulation` event on `affect.out` at `baseline_salience`, carrying `tier`, `action` (`attentional_deployment`, `reappraisal` or `request_maintenance`), `intensity`, `episode_s` and `size`: for tier 1 the bias value, for tier 2 the valence change with `valence_before` and `valence_after`, and for tier 3 the intensity. The event is logged at info level.
+
+Emotion regulation is off during the developmental phase. The cycle injects a probe (`stage.is_developing` when staging is enabled); while it returns true no activation fires and any episode ends. Maturation starts the escalation at tier 1. With staging disabled the entity counts as matured.
+
 ## Sleep reset
 
-At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice and the familiarity cache are kept. The goal ledger keeps its finished goals and its running completed and abandoned counts, but active goals are removed without counting as completed or abandoned; response windows and held obstruction clear. The relief and decay outcome counts on each drive are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
+At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, ends any active emotion-regulation episode, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice and the familiarity cache are kept. The goal ledger keeps its finished goals and its running completed and abandoned counts, but active goals are removed without counting as completed or abandoned; response windows and held obstruction clear. The relief and decay outcome counts on each drive are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
 
 ## Peer streams
 
@@ -148,6 +172,7 @@ The vision, audition and social cognition modules' stream names are fixed. The i
 | `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `coping_available`, `goal_significance_method`, `obstruction` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
 | `affect.out` | `affect.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
 | `affect.out` | `affect.goal` | On a goal's creation from a crossing and on each end; carries `drive`, `likelihood` (added) and `reason` (completed, abandoned) | `baseline_salience` |
+| `affect.out` | `affect.regulation` | On activation of an emotion-regulation tier; carries `tier`, `action`, `intensity`, `episode_s` and `size` | `baseline_salience` |
 
 The affect module reports at these fixed levels; its events are not graded by surprise.
 
@@ -205,6 +230,17 @@ Coupling sub-table `[affect.coupling]`:
 
 The retired key `coupling_max_rate_per_s` is accepted and ignored with a warning, so older local configs still boot.
 
+Regulation sub-table `[affect.regulation]`:
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `policy` | string | `"three_tier"` | Regulation policy: `"three_tier"` runs the monitor, `"passive"` disables it |
+| `set_point` | float `>= 0` | `0.5` | Intensity threshold that can start a regulation episode |
+| `reappraisal_fraction` | float `[0, 1]` | `0.5` | Fraction of the way valence moves toward the reappraisal target |
+| `selection_bias` | float `[0, 1]` | `0.2` | Initial tier-1 per-source score multiplier `b_E` |
+| `bias_decay_s` | float `> 0` | `20.0` | Time constant `tau_E` for the tier-1 bias decay |
+| `sustain_window_s` | float `> 0` | `30.0` | Window `Δ_R` that sets the escalation interval |
+
 ## Affect coupling
 
 Coupling is off in the default config and in the first configuration. When `[affect.coupling].enabled = true`, the affect module records each `audition.emotion` event as a transient signal and never writes it to the dimensional state:
@@ -254,7 +290,8 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `kaine/modules/affect/coupling.py` | `CouplingConfig`, `EMOTION_VAD`, `compute_coupling` |
 | `kaine/modules/affect/goals.py` | `GoalLedger` |
 | `kaine/modules/affect/modulator.py` | `StateModulator`: level gain and contrast gain |
-| `kaine/modules/affect/regulation.py` | `RegulationPolicy` protocol and the no-op `PassiveDecay` |
+| `kaine/modules/affect/regulation.py` | `RegulationPolicy`, the passive `PassiveDecay` off arm and `ThreeTierRegulation` |
+| `kaine/workspace/regulation_bias.py` | `RegulationBias`: the tier-1 source score multiplier and broadcast metadata |
 | `kaine/cycle/affect_state.py` | `AffectStateProvider`: the cycle's copy of the last published state |
 | `kaine/boot/wiring.py` | Builds the workspace's `StateModulator` from `[workspace]` and `[affect]` |
 
@@ -276,6 +313,9 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_coupling_persistence.py` | Familiarity cache round trip |
 | `tests/test_affect_module.py` | Module lifecycle and event publishing |
 | `tests/test_affect_coping.py` | Coping potential: relevance gate and success ratio |
+| `tests/test_affect_regulation.py` | Monitor, episode detection and three-tier activation |
+| `tests/test_affect_regulation_module.py` | Tiers in the module, developmental phase, passive arm and factory |
+| `tests/test_workspace_regulation_bias.py` | Bias factor, decay and neutral behavior in study arms |
 
 ## Spec and related pages
 

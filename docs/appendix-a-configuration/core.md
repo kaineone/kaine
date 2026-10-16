@@ -196,6 +196,7 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 | `salience_goal_factor` | string | `"static"` | `"static"` holds the goal factor at one (the shipped value, logged at INFO). `"drive_relevance"` scores each candidate's relevance to the affect module's drives; it is built but off, because it changes what reaches access. |
 | `arousal_contrast_gain` | float | `8.0` | Maximum contrast gain, reached at arousal 1. The gain is 0 at or below baseline arousal, and `0` disables the contrast. Read only with `salience_affect_factor = "state_modulator"`. |
 | `arm` | string | `"competitive"` | Arm of the planned workspace-mediation test. `"competitive"` is selection and access as built. `"matched"` draws each broadcast's coalition of the competitive size without regard to score, seeded from the run seed, with access by the same threshold. `"pooled"` broadcasts every candidate with no scoring, selection or access gate. The two controls need `[oscillator].enabled = false`. |
+| `regulation_bias` | bool | `true` | Applies the affect module's emotion-regulation tier 1 in selection: the scores of the source named in a tier-1 `affect.regulation` event are multiplied by `1 - b`, with `b` decaying from `[affect.regulation].selection_bias` over `bias_decay_s`. The one place affect enters selection (paper §3.5). Every `config/studies/workspace_mediation_*.toml` sets it `false`, so the study arms rank candidates by intensity and novelty alone. |
 
 ### Action selection
 

@@ -125,6 +125,11 @@ arousal_contrast_gain = 8.0
 # scoring, selection or access gate. The two controls need the coherence layer
 # off. Every broadcast records its arm in the research log.
 arm = "competitive"
+# Emotion regulation's tier 1 (paper 3.5): when true, the workspace multiplies the
+# scores of the source the affect module names in a tier-1 affect.regulation event
+# by 1 - b, with b decaying from [affect.regulation].selection_bias. It is the one
+# place affect enters selection. Every workspace-mediation study arm sets it false.
+regulation_bias = true
 
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
@@ -735,6 +740,25 @@ coupling_ceiling = 0.15
 decay_s = 10.0
 # coupling_max_rate_per_s is legacy (the DriftSafeguard it fed was removed when
 # coupling became appraisal-routed); if present it is ignored, not an error.
+
+[affect.regulation]
+# Emotion regulation (paper 3.5; Gross 1998). "three_tier" escalates while the
+# affective intensity max(|v|, a - a0) stays at or above set_point (theta_E) and
+# the last appraisal is negative (pleasantness or goal score below 0), one tier per
+# sustain_window_s (A.5's Delta_R): tier 1 lowers the workspace scores of the
+# source dominating the negatively appraised content by selection_bias (b_E),
+# decaying with bias_decay_s (tau_E); tier 2 reappraises once per episode, moving
+# valence toward the re-run target by reappraisal_fraction (kappa_R); tier 3
+# requests sleep through the maintenance path. Off during the developmental
+# phase. "passive" is the off arm (no regulation, the earlier behaviour).
+# [workspace].regulation_bias gates tier 1 in selection; every workspace-mediation
+# study arm sets it false.
+policy = "three_tier"
+set_point = 0.5
+reappraisal_fraction = 0.5
+selection_bias = 0.2
+bias_decay_s = 20.0
+sustain_window_s = 30.0
 
 # relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
 # learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
