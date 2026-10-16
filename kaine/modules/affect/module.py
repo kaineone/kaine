@@ -364,6 +364,14 @@ class Affect(BaseModule):
                 "affect.goal", payload, salience=self._baseline_salience
             )
 
+    def _drop_goal_state(self, goal_id: str) -> None:
+        """Remove per-goal transient state for ``goal_id``."""
+        self._goal_above_since.pop(goal_id, None)
+        self._held_obstruction.pop(goal_id, None)
+        self._response_windows = [
+            w for w in self._response_windows if w.get("goal_id") != goal_id
+        ]
+
     def _end_goal(
         self, goal_id: str, outcome: str, reason: str
     ) -> Optional[dict[str, Any]]:
@@ -379,11 +387,7 @@ class Affect(BaseModule):
             goal = self._goals.abandon(goal_id)
         if before != GoalState.ACTIVE or goal.state != target:
             return None
-        self._goal_above_since.pop(goal.id, None)
-        self._held_obstruction.pop(goal.id, None)
-        self._response_windows = [
-            w for w in self._response_windows if w.get("goal_id") != goal.id
-        ]
+        self._drop_goal_state(goal.id)
         return {
             "action": outcome,
             "id": goal.id,
@@ -412,6 +416,17 @@ class Affect(BaseModule):
                     payloads.append(payload)
         return payloads
 
+    def _enforce_goal_cap(self) -> list[dict[str, Any]]:
+        """Abandon the lowest-priority active goals while over the cap."""
+        payloads: list[dict[str, Any]] = []
+        while len(self._goals.active()) > self._goal_cap:
+            active = self._goals.active()
+            victim = min(active, key=lambda g: (g.priority, g.created_at, g.id))
+            payload = self._end_goal(victim.id, "abandoned", "cap")
+            if payload is not None:
+                payloads.append(payload)
+        return payloads
+
     def _create_goals(self, crossings: list[Any], now: float) -> list[dict[str, Any]]:
         """Create goals for drives that just crossed theta_D, then enforce cap."""
         payloads: list[dict[str, Any]] = []
@@ -436,12 +451,7 @@ class Affect(BaseModule):
                     "likelihood": goal.likelihood,
                 }
             )
-        while len(self._goals.active()) > self._goal_cap:
-            active = self._goals.active()
-            victim = min(active, key=lambda g: (g.priority, g.created_at, g.id))
-            payload = self._end_goal(victim.id, "abandoned", "cap")
-            if payload is not None:
-                payloads.append(payload)
+        payloads += self._enforce_goal_cap()
         return payloads
 
     def _check_stalls(self, now: float) -> list[dict[str, Any]]:
@@ -1070,10 +1080,13 @@ class Affect(BaseModule):
             },
             salience=self._baseline_salience,
         )
+        cap_payloads = self._enforce_goal_cap()
+        await self._publish_goal_events(cap_payloads)
         return goal.id
 
     async def complete_goal(self, goal_id: str) -> None:
         goal = self._goals.complete(goal_id)
+        self._drop_goal_state(goal.id)
         await self.publish(
             "affect.goal",
             {
@@ -1086,6 +1099,7 @@ class Affect(BaseModule):
 
     async def abandon_goal(self, goal_id: str) -> None:
         goal = self._goals.abandon(goal_id)
+        self._drop_goal_state(goal.id)
         await self.publish(
             "affect.goal",
             {

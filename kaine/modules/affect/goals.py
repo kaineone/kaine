@@ -235,7 +235,8 @@ class GoalLedger:
         """Replace this ledger's goals from a serialized dictionary.
 
         The ledger is left unchanged unless ``data`` is a dict with a
-        list-valued ``goals`` key and every entry is parsed successfully.
+        list-valued ``goals`` key; otherwise invalid entries are dropped with
+        a warning and the valid ones replace the ledger's goals.
         """
         if not isinstance(data, dict):
             log.warning("goal ledger: refusing to load from non-dict data: %r", data)
