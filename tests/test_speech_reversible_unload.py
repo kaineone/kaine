@@ -20,6 +20,10 @@ from kaine.modules.audition.sherpa_stt import SherpaMoonshineSTT as _SherpaMoons
 from kaine.modules.vocal.client import TTSRequest
 from kaine.modules.vocal.sherpa_tts import SherpaKokoroTTS as _SherpaKokoroTTS
 
+# A deadlock guard, not a speed bound: unload and close run a full gc.collect(),
+# which takes seconds once JAX-heavy tests have filled this process's heap.
+CLOSE_DEADLOCK_TIMEOUT_S = 30.0
+
 
 class SherpaMoonshineSTT(_SherpaMoonshineSTT):
     """Test wrapper: skip on-disk verification."""
@@ -294,14 +298,14 @@ async def test_stt_aclose_is_terminal(tmp_path: Path) -> None:
     await client.ensure_loaded()
     assert client.loaded
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     assert not client.loaded
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.ensure_loaded()
 
     await client.unload()  # no-op, must not raise
-    await asyncio.wait_for(client.aclose(), timeout=2.0)  # idempotent close
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)  # idempotent close
 
 
 # ---- STT close race coverage -----------------------------------------------
@@ -320,7 +324,7 @@ async def test_stt_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
     load_task = asyncio.create_task(client.ensure_loaded())
     await started.wait()
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     block_was_set_on_close = block.is_set()
     block.set()
 
@@ -361,7 +365,7 @@ async def test_stt_admitted_inference_survives_timed_out_close(tmp_path: Path) -
         await asyncio.sleep(0)
     assert client._gate.inflight == 2
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     block_was_set_on_close = block.is_set()
     assert not block_was_set_on_close
 
@@ -378,7 +382,7 @@ async def test_stt_warm_up_after_close_raises(tmp_path: Path) -> None:
     d = _stt_dir(tmp_path)
     fake_mod = _fake_stt_module()
     client = SherpaMoonshineSTT(d, sherpa_module=fake_mod)
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.warm_up()
@@ -507,14 +511,14 @@ async def test_tts_aclose_is_terminal(tmp_path: Path) -> None:
     await client.ensure_loaded()
     assert client.loaded
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     assert not client.loaded
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.ensure_loaded()
 
     await client.unload()  # no-op
-    await asyncio.wait_for(client.aclose(), timeout=2.0)  # idempotent
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)  # idempotent
 
 
 # ---- TTS close race coverage -----------------------------------------------
@@ -533,7 +537,7 @@ async def test_tts_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
     load_task = asyncio.create_task(client.ensure_loaded())
     await started.wait()
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     block_was_set_on_close = block.is_set()
     block.set()
 
@@ -570,7 +574,7 @@ async def test_tts_admitted_inference_survives_timed_out_close(tmp_path: Path) -
         await asyncio.sleep(0)
     assert client._gate.inflight == 2
 
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     block_was_set_on_close = block.is_set()
     assert not block_was_set_on_close
 
@@ -587,7 +591,7 @@ async def test_tts_warm_up_after_close_raises(tmp_path: Path) -> None:
     d = _tts_dir(tmp_path)
     fake_mod = _fake_tts_module()
     client = SherpaKokoroTTS(d, sherpa_module=fake_mod)
-    await asyncio.wait_for(client.aclose(), timeout=2.0)
+    await asyncio.wait_for(client.aclose(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
 
     with pytest.raises(RuntimeError, match="closed"):
         await client.warm_up()
@@ -624,13 +628,13 @@ async def test_stt_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
         assert client._gate.inflight == 1
 
         block.set()
-        await asyncio.wait_for(unload_task, timeout=5.0)
+        await asyncio.wait_for(unload_task, timeout=CLOSE_DEADLOCK_TIMEOUT_S)
         assert not client.loaded
     finally:
         block.set()
         if unload_task is not None and not unload_task.done():
             try:
-                await asyncio.wait_for(unload_task, timeout=2.0)
+                await asyncio.wait_for(unload_task, timeout=CLOSE_DEADLOCK_TIMEOUT_S)
             except Exception:
                 # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
@@ -662,13 +666,13 @@ async def test_tts_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
         assert client._gate.inflight == 1
 
         block.set()
-        await asyncio.wait_for(unload_task, timeout=5.0)
+        await asyncio.wait_for(unload_task, timeout=CLOSE_DEADLOCK_TIMEOUT_S)
         assert not client.loaded
     finally:
         block.set()
         if unload_task is not None and not unload_task.done():
             try:
-                await asyncio.wait_for(unload_task, timeout=2.0)
+                await asyncio.wait_for(unload_task, timeout=CLOSE_DEADLOCK_TIMEOUT_S)
             except Exception:
                 # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
@@ -698,7 +702,7 @@ async def test_stt_double_cancelled_inference_releases_inflight(tmp_path: Path) 
     finally:
         block.set()
 
-    await asyncio.wait_for(client.unload(), timeout=2.0)
+    await asyncio.wait_for(client.unload(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     assert client._gate.inflight == 0
 
     try:
@@ -727,7 +731,7 @@ async def test_tts_double_cancelled_inference_releases_inflight(tmp_path: Path) 
     finally:
         block.set()
 
-    await asyncio.wait_for(client.unload(), timeout=2.0)
+    await asyncio.wait_for(client.unload(), timeout=CLOSE_DEADLOCK_TIMEOUT_S)
     assert client._gate.inflight == 0
 
     try:

@@ -11,6 +11,7 @@ import os
 import pytest
 
 from kaine.lifecycle.__main__ import main
+from kaine.lifecycle.adapter_merge import TiesDareAdapterMerger
 from kaine.lifecycle.manager import merger_from_name
 from kaine.modules.self_model import SelfModel
 from kaine.storage import set_data_root
@@ -106,14 +107,12 @@ def test_decommission_dry_run_backup_under_data_root(tmp_path, monkeypatch):
 
 
 def test_merger_from_name_output_dir_under_data_root(tmp_path):
-    """merger_from_name('auto') resolves its default output_dir under the root."""
+    """The real TiesDareAdapterMerger's default output_dir resolves under the root."""
     root = tmp_path / "root"
     set_data_root(root)
-    merger = merger_from_name("auto")
-    output_dir = getattr(getattr(merger, "cfg", None), "output_dir", None)
-    if output_dir is None:
-        pytest.skip("auto merger selected the no-op fake (PEFT unavailable); cannot inspect output_dir")
-    assert output_dir == root / "state" / "forks" / "merged_adapters"
+    merger = merger_from_name("ties_dare")
+    assert isinstance(merger, TiesDareAdapterMerger)
+    assert merger._config.output_dir == root / "state" / "forks" / "merged_adapters"
 
 
 def test_self_model_default_persistence_path_under_data_root(tmp_path):

@@ -109,6 +109,7 @@ class _RecordingClass:
         self.name = name
         self.calls = []
 
+
     def from_pretrained(self, path, **kwargs):
         self.calls.append({"path": path, "kwargs": kwargs})
         return _FakeModel() if self.name == "model" else {"config": True}
@@ -683,10 +684,13 @@ class FakeSmall:
 async def test_real_internvideo_next_produces_768_from_16_frame_clip():
     from PIL import Image
 
-    if not (DEFAULT_WEIGHTS_DIR / WEIGHTS_FILENAME).exists():
+    # The per-test data root redirects a relative models dir, so the guard and
+    # the encoder share one absolute path: the checkout's fetched weights.
+    weights_dir = DEFAULT_WEIGHTS_DIR.resolve()
+    if not (weights_dir / WEIGHTS_FILENAME).exists():
         pytest.skip("InternVideo-Next weights not fetched; run kaine.setup.internvideo_next")
 
-    enc = InternVideoNextEncoder()
+    enc = InternVideoNextEncoder(weights_dir=weights_dir)
     await enc.load()
     try:
         assert enc.clip_len == 16
