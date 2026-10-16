@@ -294,7 +294,7 @@ Privacy note: internal-speech text is never written to disk; only counts and der
 
 Section: `[affect]`.
 
-The affect module maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When the sleep module runs its affective reset, the affect module returns the VAD state and drives to baseline and clears its learning-progress error averages, alert-rate averages, intent rate and perceived emotion; wellness and interaction history are kept. See [the affect module](../09-modules/affect.md).
+The affect module maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When the sleep module runs its affective reset, the affect module returns the VAD state and drives to baseline and clears its learning-progress error averages, alert-rate averages, intent rate, perceived emotion and active goals; wellness and interaction history are kept. See [the affect module](../09-modules/affect.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -316,6 +316,10 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `intent_rate_weight` | float | `0.05` | Per-broadcast weight of the intent-rate average that holds off restlessness. |
 | `valence_time_constant_s` | float | `30.0` | Time constant of valence's relaxation toward its target. |
 | `valence_progress_gain` | float | `2.0` | Gain on learning progress in the valence target and the pleasantness check. |
+| `goal_stall_s` | float | `600.0` | Entity seconds a drive goal's drive may stay at or above its threshold before the goal is abandoned (Delta_stall, paper A.4). |
+| `goal_cap` | int | `3` | Most active goals; beyond it the lowest-priority goal is abandoned (n_goal). |
+| `goal_response_window_s` | float | `10.0` | Entity seconds within which a non-rest intent must be followed by a fall of an active goal's drive (Delta_resp). |
+| `goal_likelihood_fall` | float | `0.5` | Fraction of a goal's expected-relief likelihood lost when an intent brings no fall within the window (eta_L). |
 
 The retired key `social_drive_time_scale_s` is ignored with a warning if present. The social drive has no time scale of its own: it builds at its build rate once the entity has heard a voice.
 
