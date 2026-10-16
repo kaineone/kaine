@@ -91,9 +91,8 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
 
     # Anger: blocked goal with strong coping. This matches at best Table 3's
     # irritation profile, because KAINE attributes no obstruction to another
-    # agent and has no standards check. It needs a negative goal score, which
-    # only the obstruction term of paper A.4 can supply; until that term is
-    # built the goal score is never negative. Coping is undefined for
+    # agent and has no standards check. The obstruction term of paper A.4
+    # supplies the negative goal score. Coping is undefined for
     # irrelevant content, so this branch needs relevant content.
     if scores.coping_available and goal <= -0.3 and coping >= 0.3:
         return CategoricalEmotion.ANGER

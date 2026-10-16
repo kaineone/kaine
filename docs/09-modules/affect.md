@@ -74,13 +74,13 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 |---|---|
 | Novelty | `1 - prod(1 - s)` over coalition members that carry a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
 | Intrinsic pleasantness | `pl`, the learning-progress term above |
-| Goal significance | the dominant drive scaled by how much of the coalition comes from sources that relieve it (below) |
-| Coping potential | `2p - 1`, only when goal significance is above 0 (below) |
+| Goal significance | the conducive part `r` minus the obstruction `o`, clipped to `[-1, 1]` |
+| Coping potential | `2p - 1`, only when goal significance is nonzero (below) |
 | Norm compatibility | fixed at `0.0` and unavailable, since KAINE has no standards until an operator writes a list; no categorical rule reads it |
 
-The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The result never goes negative. Nothing in the running system adds goals outside tests. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
+The cycle injects a drive-to-source table built from each registered module's `relieves_drives` declaration. With dominant drive value `v > 0` and `f` the intensity-weighted share of coalition members whose source relieves that drive, the drive score is `v × f`: `v` when every member serves the drive and `0` when none does (irrelevant, per Scherer's relevance check). With no drive above zero the score is `0.0`. When the `GoalLedger` holds active goals, their token-overlap `relevance` in `[0, 1]` is also computed and the check takes the larger of the two. The conducive part `r` is in `[0, 1]` and the obstruction below can make the goal score negative, and drive crossings fill the ledger. The goal score feeds the categorical emotion and does not enter selection, where the goal factor is held constant.
 
-Coping potential is checked only for relevant content; with goal significance at 0 it is unavailable, `coping_available` is false in `affect.emotion`, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`. When the drive term sets goal significance (also on a tie), `s` counts the dominant drive's crossings that the entity's own response ended (fell below the re-arm band): learning progress for curiosity and intents for restlessness, by relief or by holding the build input down, the latter only when a counterfactual step at the no-response input would not have fallen back. `f` counts every other end: decay alone, novelty for boredom, another's voice for the social drive. When the ledger sets it, `s` and `f` are completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it. A sleep reset counts as neither. (Paper A.4; Sander, Grandjean and Scherer 2005; Maier and Seligman 2016; Williams et al. 2015).
+Coping potential is checked whenever goal significance is nonzero, negative included. At exactly 0 the content is irrelevant and coping is unavailable: `coping_available` is false in `affect.emotion`, and fear, anger and sadness are not eligible. Otherwise `p = (s + 1) / (s + f + 2)`. When the drive term sets goal significance (also on a tie), `s` counts the dominant drive's crossings that the entity's own response ended (fell below the re-arm band): learning progress for curiosity and intents for restlessness, by relief or by holding the build input down, the latter only when a counterfactual step at the no-response input would not have fallen back. `f` counts every other end: decay alone, novelty for boredom, another's voice for the social drive. When the ledger sets it, `s` and `f` are completed and abandoned goals. Coping is `2p - 1`, so `0.0` before any history. Arousal and valence do not enter it. A sleep reset counts as neither. (Paper A.4; Sander, Grandjean and Scherer 2005; Maier and Seligman 2016; Williams et al. 2015).
 
 `goal_significance_method` in each `affect.emotion` event records how the check was computed:
 
@@ -91,11 +91,34 @@ Coping potential is checked only for relevant content; with goal significance at
 | `token_overlap_v1` | No drive-to-source table was injected, and active ledger goals were scored |
 | `unavailable` | Neither exists; the score is `0.0` |
 
-A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. The rules are modeled on the predicted appraisal profiles of Sander, Grandjean and Scherer (2005, Table 3). KAINE has a single novelty check that covers suddenness, familiarity and predictability together, so Table 3's low familiarity maps to high novelty here: a report the processor did not expect is unfamiliar to it. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust is returned when pleasantness is at or below -0.5, novelty is above 0.3 and the absolute goal score is below 0.3; it is checked after fear and anger (which require coping potential) and before sadness. Table 3 leaves the standards check open for disgust, and very low standards would mark contempt, which KAINE does not classify. Anger matches at best Table 3's irritation profile, because Table 3's rage profile needs the obstruction attributed to another agent, which KAINE does not do, and the irritation profile's standards check is also missing. Anger needs a negative goal score, and the goal score cannot yet go negative (the obstruction term of the paper's A.4 is not built yet), so anger stays unreachable for now.
+## Goals and obstruction
+
+(Paper A.4, "Goals." and "Obstruction.") A crossing of a drive threshold creates the goal of relieving that drive. The goal description is `relieve <drive>` and its priority is the drive value at the crossing, unless that drive already has an active goal. Intents are responses to goals, not sources of goals; only a drive crossing or an explicit `add_goal` call creates a goal. Each drive goal carries an expected-relief likelihood `L` in `[0, 1]`, set at creation to the drive's success ratio `p = (s + 1) / (s + f + 2)`. The same own-response and other-response counts that set coping potential also set `p`; `s` counts crossings ended by the entity's own response and `f` counts crossings ended otherwise.
+
+A goal ends in one of four ways:
+
+| End | Condition | Outcome |
+|---|---|---|
+| Completed | The drive falls below 0.9 of its threshold and the credit rule counts the fall as the entity's own response | The goal ends as completed and the completed count rises |
+| Abandoned (another's response) | The drive falls below the re-arm band but the credit rule counts the fall as another's response | The goal ends as abandoned and the abandoned count rises |
+| Abandoned (stalled) | The drive stays at or above its threshold for `goal_stall_s` (600 entity s) without a dip below the threshold restarting the timer | The goal ends as abandoned and the abandoned count rises |
+| Abandoned (cap) | Active goals exceed `goal_cap` (3) and this goal has the lowest priority, with ties broken by earliest creation | The goal ends as abandoned and the abandoned count rises |
+
+Goals added through `add_goal` count toward the cap. When a drive goal is active, the ledger is active and the token-overlap term is computed alongside the drive term; the appraisal method is then `drive_relevance_v1+token_overlap_v1`. With no goal active the appraisal is as before.
+
+While a drive goal is active, every non-rest intent opens a response window of `goal_response_window_s` (10 entity s) against the drive's value just before the intent. The window checks whether the drive has dropped below that value by the first update at or after the window ends. If it has not, the expected-relief likelihood falls by `ΔL = goal_likelihood_fall × L` (default 0.5) and `ΔL` is held for the next appraisal. If several windows close before the next appraisal, their held `ΔL` values are summed. The next appraisal takes the obstruction `o = v* × ΔL` from the dominant drive's active goal, where `v*` is the dominant drive's value at appraisal time and `ΔL` is the held likelihood fall; if there is no held `ΔL` then `o = 0`. After the appraisal every held `ΔL` is cleared. The goal score is `clip(r - o, -1, 1)`, where `r` is the conducive part (the larger of the drive score and the ledger relevance). With no injected drive table there is no dominant drive and `o = 0`.
+
+Coping is checked whenever the goal score is nonzero, negative included, and is unavailable only at exactly 0. The term that supplies `r` also supplies `p` for coping; on a tie between the drive term and ledger relevance the drive term supplies `p`.
+
+Every lifecycle change publishes `affect.goal`: `added` carries `drive` and `likelihood`; `completed` and `abandoned` carry `drive` and `reason`, with reasons `own_response`, `without_response`, `stalled` and `cap`.
+
+Anger: `classify()` returns anger for a goal score at or below -0.3 with coping at least 0.3, so it is reachable now (a strong own-response history plus an unanswered response). It matches at best Sander, Grandjean and Scherer's (2005, Table 3) irritation profile: KAINE attributes no obstruction to another agent, which their rage profile requires, and it has no standards check, which the irritation profile also has.
+
+A rule-based `classify()` maps the five scores to `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust` or `neutral`, and the affect module publishes `affect.emotion` when the category changes. The rules are modeled on the predicted appraisal profiles of Sander, Grandjean and Scherer (2005, Table 3). KAINE has a single novelty check that covers suddenness, familiarity and predictability together, so Table 3's low familiarity maps to high novelty here: a report the processor did not expect is unfamiliar to it. Surprise is reachable when the coalition carries a strongly surprising report and pleasantness and goal significance are near zero. Disgust is returned when pleasantness is at or below -0.5, novelty is above 0.3 and the absolute goal score is below 0.3; it is checked after fear and anger (which require coping potential) and before sadness. Table 3 leaves the standards check open for disgust, and very low standards would mark contempt, which KAINE does not classify. Anger needs a goal score at or below -0.3 and coping at least 0.3, which obstruction of a goal with a strong own-response history supplies; it matches at best Table 3's irritation profile, because Table 3's rage profile needs the obstruction attributed to another agent, which KAINE does not do, and the irritation profile's standards check is also missing.
 
 ## Sleep reset
 
-At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice, the familiarity cache and the goal ledger are kept. The relief and decay outcome counts on each drive are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
+At the end of every sleep [the sleep module](sleep.md) calls `affective_reset()`. It returns valence, arousal and dominance to their baselines, resets every drive to 0 and re-arms its crossing, and sets the categorical emotion to neutral. It also clears the learning-progress error means, the fast and slow alert rates, the intent rate and the recorded perceived emotion, so valence starts the waking period from baseline instead of relaxing back toward the pre-sleep target. The last reported wellness, the record of whether and when the entity last heard a voice and the familiarity cache are kept. The goal ledger keeps its finished goals and its running completed and abandoned counts, but active goals are removed without counting as completed or abandoned; response windows and held obstruction clear. The relief and decay outcome counts on each drive are kept. The affect module then publishes a `affect.state` event with `reset: true` at its alert intensity.
 
 ## Peer streams
 
@@ -122,9 +145,9 @@ The vision, audition and social cognition modules' stream names are fixed. The i
 | Stream | Event type | When | Intensity |
 |---|---|---|---|
 | `affect.out` | `affect.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
-| `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `coping_available`, `goal_significance_method` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
+| `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `coping_available`, `goal_significance_method`, `obstruction` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
 | `affect.out` | `affect.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
-| `affect.out` | `affect.goal` | On a goal lifecycle event (`added`, `completed`, `abandoned`) | `baseline_salience` |
+| `affect.out` | `affect.goal` | On a goal's creation from a crossing and on each end; carries `drive`, `likelihood` (added) and `reason` (completed, abandoned) | `baseline_salience` |
 
 The affect module reports at these fixed levels; its events are not graded by surprise.
 
@@ -148,6 +171,10 @@ The full `[affect]` reference is in the [modules configuration page](../appendix
 | `intent_rate_weight` | float `(0, 1]` | `0.05` | Per-broadcast weight of the intent-rate average |
 | `valence_time_constant_s` | float `> 0` | `30.0` | Time constant of valence's relaxation toward its target |
 | `valence_progress_gain` | float `>= 0` | `2.0` | Gain on learning progress in the pleasantness check |
+| `goal_stall_s` | float `> 0` | `600.0` | Seconds a drive may stay at or above its threshold before its active goal is abandoned |
+| `goal_cap` | int `>= 1` | `3` | Maximum number of active goals |
+| `goal_response_window_s` | float `> 0` | `10.0` | Seconds a response window stays open after a non-rest intent |
+| `goal_likelihood_fall` | float `[0, 1]` | `0.5` | Fraction by which expected-relief likelihood falls when a response window closes without relief |
 | `action_selection_stream` | string | `"action_selection.out"` | Stream the affect module reads intents from |
 | `interoception_stream` | string | `"interoception.out"` | Stream the affect module reads the interoception module's reports from |
 | `sequence_stream` | string | `"sequence.out"` | Stream the affect module reads the sequence module's reports from |
@@ -208,7 +235,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`. Restoring goals publishes no `affect.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`. Active goals persist with their `drive` and `likelihood`; the ledger stores the running completed and abandoned counts and keeps at most the 256 most recent finished goals (the counts include pruned goals). Response windows and stall timers are transient and restart after a restore. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 
@@ -241,6 +268,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_rate_invariant.py` | Appraisal independent of the broadcast rate; the state timer |
 | `tests/test_affect_goal_check.py` | Goal-significance check against the dominant drive |
 | `tests/test_affect_goals.py` | Goal lifecycle and relevance scoring |
+| `tests/test_affect_goal_lifecycle.py` | Creation, completion, abandonment, stall, cap, likelihood fall, obstruction, anger, sleep reset, persistence |
 | `tests/test_affect_modulator.py` | Level gain: range, floor, ceiling and monotonicity |
 | `tests/test_affect_research_affect.py` | Drives, learning progress, valence, the appraisal leaving arousal unchanged, the sleep reset and the peer-consumer guard |
 | `tests/test_affect_coupling.py` | Perceived emotion entering the appraisal, familiarity scaling, no direct write |
