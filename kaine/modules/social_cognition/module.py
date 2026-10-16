@@ -142,12 +142,13 @@ class SocialCognition(BaseModule):
     # ------------------------------------------------------------------
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
-        """React to workspace ticks — currently a no-op placeholder.
+        """Take nothing from the broadcast.
 
-        The social cognition module's actual work is event-driven, not tick-driven: it runs in
-        `_audition_consumer_loop`, reacting to `audition.out` emotion and
-        transcription events. This hook is reserved for future coalition-aware
-        behaviour (e.g. speaker diarization cues) and intentionally does nothing.
+        The paper gives the social cognition module per-agent tone-of-voice
+        models with familiarity and a social prediction error, all built from
+        heard speech, so its work runs in `_audition_consumer_loop` on
+        `audition.out` events. The broadcast reaches every module; this one
+        has no use for it.
         """
         return
 

@@ -19,6 +19,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | sequence-finite-payload | 3/3 (100%) | Publish `time_since_last_interaction_s` as `null` until the first interaction, so `sequence.report` and the research records stay strict JSON instead of carrying `Infinity`. |
 | appraisal-relevance | 3/3 (100%) | Score goal significance as relevance in [0, 1], as the paper's A.4 now does, so content that serves no drive or goal is irrelevant and an idle entity no longer classifies as anger. |
+| test-honesty-fixes | 4/4 (100%) | Make three tests run what they claim: the merger output-dir test stops skipping, the real InternVideo-Next test uses the weights it checked, and the reversible-unload tests use a deadlock bound so the suite also passes serially; correct the social cognition hook docstring. |
 | first-configuration-names | 9/9 (100%) | Rename the `thesis_test` profile to `first_configuration`, keep the old name as a deprecated alias until the module-rename alias window closes, and say "first configuration" and "hypothesis" in the wizard, the dashboard, messages and docs, as the paper now does. |
 | compose-state-mount-ownership | 10/10 (100%) | Move the trainer-jobs volume out of the state volume, so an existing compose deployment upgrades without a root-owned directory blocking the boot-time state rename, and make the rename refuse up front with an actionable message. Design only. |
 | revive-entrypoint-encryption | 7/7 (100%) | Install the configured state encryptor before the revive plan and the research gate, so `--revive` reads an encrypted bundle and the gate's preflight round trip exercises the encrypted path. Design only. |
@@ -106,6 +107,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 80 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 81 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

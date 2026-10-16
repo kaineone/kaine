@@ -26,6 +26,10 @@ from kaine.text_embedding_numpy import (
 )
 from tests.test_text_embedding_numpy import _make_tiny_bert_dir, _write_safetensors
 
+# A deadlock guard, not a speed bound: unload and close run a full gc.collect(),
+# which takes seconds once JAX-heavy tests have filled this process's heap.
+CLOSE_DEADLOCK_TIMEOUT_S = 30.0
+
 
 @pytest.fixture
 def bert_dir(tmp_path: Path) -> Path:
@@ -84,7 +88,7 @@ def test_embedder_unload_and_reload(bert_dir: Path) -> None:
         residency1 = embedder.weights_residency
         assert residency1["mapped_bytes"] > 0
 
-        await asyncio.wait_for(embedder.unload(), 5)
+        await asyncio.wait_for(embedder.unload(), CLOSE_DEADLOCK_TIMEOUT_S)
         assert not embedder.loaded
         assert embedder.weights_residency == {}
 
@@ -140,7 +144,7 @@ def test_embedder_unload_waits_for_inflight(
 
         release_thread.set()
         result = await asyncio.wait_for(encode_task, 5)
-        await asyncio.wait_for(unload_task, 5)
+        await asyncio.wait_for(unload_task, CLOSE_DEADLOCK_TIMEOUT_S)
 
         assert len(result) == 1
         assert len(result[0]) == embedder.latent_dim
@@ -175,7 +179,7 @@ def test_shared_embedder_unload_and_reload(bert_dir: Path) -> None:
         vec1 = await asyncio.wait_for(shared.encode("hello world"), 5)
         assert shared.loaded
 
-        await asyncio.wait_for(shared.unload(), 5)
+        await asyncio.wait_for(shared.unload(), CLOSE_DEADLOCK_TIMEOUT_S)
         assert not inner.loaded
         assert not shared.loaded
 
@@ -195,7 +199,7 @@ def test_unload_collects_weight_refs(bert_dir: Path) -> None:
         ref = weakref.ref(weight)
         del weight
 
-        await asyncio.wait_for(embedder.unload(), 5)
+        await asyncio.wait_for(embedder.unload(), CLOSE_DEADLOCK_TIMEOUT_S)
         gc.collect()
 
         assert ref() is None
@@ -325,7 +329,7 @@ def test_numpy_double_cancel_does_not_leak_inflight(
             except asyncio.CancelledError:
                 # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
-            await asyncio.wait_for(embedder.unload(), 2)
+            await asyncio.wait_for(embedder.unload(), CLOSE_DEADLOCK_TIMEOUT_S)
             assert embedder._gate.inflight == 0
         finally:
             release_thread.set()
@@ -392,7 +396,7 @@ def test_sentence_double_cancel_does_not_leak_inflight(
             except asyncio.CancelledError:
                 # Expected or irrelevant here: the test asserts on state, not on this outcome.
                 pass
-            await asyncio.wait_for(embedder.unload(), 2)
+            await asyncio.wait_for(embedder.unload(), CLOSE_DEADLOCK_TIMEOUT_S)
             assert embedder._gate.inflight == 0
         finally:
             if release_thread is not None:
@@ -443,7 +447,7 @@ def test_numpy_cancelled_encode_unload_waits_for_worker_thread(
             assert embedder._gate.inflight == 1
 
             release_thread.set()
-            await asyncio.wait_for(unload_task, 5)
+            await asyncio.wait_for(unload_task, CLOSE_DEADLOCK_TIMEOUT_S)
             assert not embedder.loaded
         finally:
             release_thread.set()
@@ -511,7 +515,7 @@ def test_sentence_cancelled_encode_unload_waits_for_worker_thread(
             assert embedder._gate.inflight == 1
 
             release_thread.set()
-            await asyncio.wait_for(unload_task, 5)
+            await asyncio.wait_for(unload_task, CLOSE_DEADLOCK_TIMEOUT_S)
             assert not embedder.loaded
         finally:
             if release_thread is not None:
