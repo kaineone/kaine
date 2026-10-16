@@ -14,3 +14,9 @@
 - [x] 2.1 Bit-for-bit tests: feedback absent equals `arm = "off"` for the workspace and each processor
 - [x] 2.2 Mutation checks on the blend weights, gain bounds, refractory interval and inhibited gate
 - [x] 2.3 Worker first-pass review and fixes
+
+## 3. Before the feedback ablation runs
+
+- [ ] 3.1 Record the gains and conflict episodes in the research log, so the §6.4 stability measures (gain variance, runaway events, time to resolve) can be computed from the log
+- [ ] 3.2 Preserve the top-down heads and gains through preservation and revive, as the forward models are
+- [ ] 3.3 A synthetic-conflict positive control: two processors fed inconsistent but learnable inputs; the detector flags it at 0.95 and a clean control at 0.05 before any live ablation run

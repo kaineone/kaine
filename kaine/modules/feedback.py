@@ -286,7 +286,6 @@ class TopDownBlend:
             return 0.0
 
         defined = self._inner.last_error_defined
-        error = 0.0
 
         if own_prev is not None and self._blend is not None:
             error = _l2(feature, self._blend)

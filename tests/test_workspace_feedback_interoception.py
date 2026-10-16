@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from kaine.boot.factories.interoception import make_interoception
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
@@ -463,11 +464,6 @@ async def test_feedback_deserialize_keeps_wrap() -> None:
 @pytest.mark.asyncio
 async def test_factory_feedback_section() -> None:
     """The factory parses the reserved workspace_feedback section."""
-    try:
-        from kaine.boot.factories.interoception import make_interoception
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"factory import unavailable: {exc}")
-
     bus = _bus()
     try:
         section_full = {
