@@ -66,8 +66,9 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     pleasantness, low coping and low novelty); joy (positive
     pleasantness, positive goal relevance and non-negative coping); and
     finally neutral. Norm compatibility is undefined because KAINE has
-    no authored standards list until an operator writes one, so no rule
-    reads norm_compatibility.
+    no authored standards list until an operator writes one, so no
+    category rule reads norm_compatibility; only the neutral band, which
+    spans all five scores, sees its fixed 0.0.
     """
     if _all_near_zero(scores):
         return CategoricalEmotion.NEUTRAL
@@ -91,7 +92,8 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     # Anger: blocked goal with strong coping. This matches at best Table 3's
     # irritation profile, because KAINE attributes no obstruction to another
     # agent and has no standards check. It needs a negative goal score, which
-    # the obstruction term of paper A.4 supplies. Coping is undefined for
+    # only the obstruction term of paper A.4 can supply; until that term is
+    # built the goal score is never negative. Coping is undefined for
     # irrelevant content, so this branch needs relevant content.
     if scores.coping_available and goal <= -0.3 and coping >= 0.3:
         return CategoricalEmotion.ANGER
