@@ -32,6 +32,7 @@ class AppraisalScores:
     goal_significance: float
     coping_potential: float
     norm_compatibility: float
+    coping_available: bool = True
 
     def as_tuple(self) -> tuple[float, float, float, float, float]:
         return (
@@ -76,18 +77,23 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
         return CategoricalEmotion.DISGUST
 
     # Fear: negative pleasantness + low coping (especially with novelty).
-    if pleas < 0 and coping <= -0.3:
+    # Coping is undefined for irrelevant content (paper A.4), so this branch
+    # needs relevant content.
+    if scores.coping_available and pleas < 0 and coping <= -0.3:
         return CategoricalEmotion.FEAR
 
     # Anger: blocked goal with strong coping. The goal score is never negative
     # (relevance in [0, 1], paper A.4), so this branch is unreachable until an
-    # obstruction check exists, the way disgust waits on norm signals.
-    if goal <= -0.3 and coping >= 0.3:
+    # obstruction check exists, the way disgust waits on norm signals. Coping is
+    # undefined for irrelevant content, so this branch needs relevant content.
+    if scores.coping_available and goal <= -0.3 and coping >= 0.3:
         return CategoricalEmotion.ANGER
 
     # Sadness: low pleasantness + low coping + low arousal-ish proxy
     # (here approximated by low novelty too).
-    if pleas <= -0.3 and coping <= 0 and nov <= 0.3:
+    # Coping is undefined for irrelevant content (paper A.4), so this branch
+    # needs relevant content.
+    if scores.coping_available and pleas <= -0.3 and coping <= 0 and nov <= 0.3:
         return CategoricalEmotion.SADNESS
 
     # Joy: positive pleasantness + positive goal_significance + non-negative

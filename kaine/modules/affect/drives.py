@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 
 def _clamp01(x: float) -> float:
@@ -66,6 +66,11 @@ class Drive:
     relief_gain: float = 0.5  # rate/s at full strength for curiosity/boredom; fraction per event for social/restlessness
     hysteresis_fraction: float = 0.9  # must drop below threshold * this to re-fire
     _has_fired: bool = field(default=False, init=False, repr=False)
+    # How this drive's crossings ended (re-armed below the hysteresis band by
+    # relief or by decay alone), the success counts for coping potential
+    # (paper A.4).
+    relief_ends: int = field(default=0, init=False)
+    decay_ends: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.relief_gain) or not (0.0 <= self.relief_gain <= 1.0):
@@ -91,13 +96,13 @@ class Drive:
         if r > 0.0:
             eq = self.build_rate * u / r
             self.value = _clamp01(eq + (self.value - eq) * math.exp(-r * dt))
-        self._check_hysteresis()
+        self._check_hysteresis(cause="decay")
 
     def relieve(self, strength: float) -> None:
         """Apply a consummatory event of strength `strength` ∈ [0, 1]."""
         c = _clamp01(strength)
         self.value = _clamp01(self.value * (1.0 - self.relief_gain * c))
-        self._check_hysteresis()
+        self._check_hysteresis(cause="relief")
 
     def relieve_rate(self, strength: float, dt: float) -> None:
         """Apply continuous relief at rate ``relief_gain * strength`` per second.
@@ -108,12 +113,16 @@ class Drive:
         c = _clamp01(strength)
         if dt > 0.0:
             self.value = _clamp01(self.value * math.exp(-self.relief_gain * c * dt))
-        self._check_hysteresis()
+        self._check_hysteresis(cause="relief")
 
-    def _check_hysteresis(self) -> None:
+    def _check_hysteresis(self, *, cause: str) -> None:
         # Reset hysteresis once below the re-fire band.
         if self._has_fired and self.value < self.threshold * self.hysteresis_fraction:
             self._has_fired = False
+            if cause == "relief":
+                self.relief_ends += 1
+            else:
+                self.decay_ends += 1
 
     def consume_crossing(self) -> bool:
         """Return True at most once per crossing of `threshold`.
@@ -126,6 +135,10 @@ class Drive:
             self._has_fired = True
             return True
         return False
+
+    def power(self) -> float:
+        """The Laplace-smoothed share of ended crossings that relief ended (paper A.4); 0.5 with no history."""
+        return (self.relief_ends + 1) / (self.relief_ends + self.decay_ends + 2)
 
     def reset(self) -> None:
         self.value = 0.0
@@ -232,6 +245,28 @@ class DriveSet:
     def reset_all(self) -> None:
         for d in self.all():
             d.reset()
+
+    def outcomes_to_dict(self) -> dict[str, dict[str, int]]:
+        return {d.name: {"relief": d.relief_ends, "decay": d.decay_ends} for d in self.all()}
+
+    def load_outcomes(self, data: Any) -> None:
+        """Restore each drive's relief and decay end counters.
+
+        Unknown drive names, non-dict entries, non-integer values, booleans
+        and negative integers are ignored.
+        """
+        if not isinstance(data, dict):
+            return
+        for name, entry in data.items():
+            if not isinstance(entry, dict):
+                continue
+            drive = getattr(self, name, None)
+            if drive is None or not isinstance(drive, Drive):
+                continue
+            for key, target in (("relief", "relief_ends"), ("decay", "decay_ends")):
+                value = entry.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    setattr(drive, target, value)
 
     def to_dict(self) -> dict[str, float]:
         return {d.name: d.value for d in self.all()}
