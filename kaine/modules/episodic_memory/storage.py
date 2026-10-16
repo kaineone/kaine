@@ -183,7 +183,8 @@ class MemoryStorage(Protocol):
         0.0), newest first. Each point dict has keys ``id`` (str), ``text``
         (str), ``payload`` (dict), ``affect`` (dict or None) and NO vector. A
         collection that does not exist gives ``[]``. ``limit <= 0`` gives ``[]``.
-        Used by sleep's cross-period selection, which must not pull every vector.
+        Used to load the associative-replay links and schema nodes, which
+        must not pull every vector.
         """
 
     async def get_points(

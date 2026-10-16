@@ -164,7 +164,7 @@ The retired key `planning_step_burst` is ignored with a warning if present, so o
 |---|---|---|---|
 | `fatigue_triggered` | boolean | `true` | When `true`, the sleep module subscribes to `interoception.fatigue` and triggers on threshold crossing. `interval_seconds` remains the upper bound on the interval either way. |
 | `replay_window_s` | float | `5.0` | Replay window recorded with each sleep's metadata. It is informational, since replay completes synchronously. |
-| `associative_replay` | boolean | `false` | Phase-3 associative cross-period replay. When `true`, the sleep module selects traces spanning at least two memory periods, cues the world model module for scenario extensions, and re-injects the associations into the workspace. Degrades to a no-op if the world model module is disabled or absent. |
+| `associative_replay` | boolean | `false` | Phase-3 associative replay (paper A.10). When `true`, phase 2 downscales without pruning, then phase 3 has the episodic memory module co-replay related trace pairs of different periods as weighted links (parameters in `[episodic_memory.association]`) and prune, and publishes one content-free `sleep.association` event per pair. |
 
 The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[episodic_memory.strength]`.
 

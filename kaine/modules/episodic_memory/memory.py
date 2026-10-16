@@ -24,7 +24,30 @@ from typing import Any, Awaitable, Callable, Iterable, Optional
 from kaine import legacy_aliases, legacy_names
 from kaine.embedding_defaults import LEGACY_EMBEDDING_SPACE
 from kaine.entity_clock import EntityClock
-from kaine.memory_kinds import EPISODIC_MEMORY_COLLECTION_KINDS, stamp_key, strength_key
+from kaine.memory_kinds import (
+    EPISODIC_MEMORY_ASSOCIATION_KINDS,
+    EPISODIC_MEMORY_COLLECTION_KINDS,
+    stamp_key,
+    strength_key,
+)
+from kaine.modules.episodic_memory.associations import (
+    AssociationIndex,
+    AssociationParams,
+    Link,
+    Node,
+    cap_links,
+    co_replayed_weight,
+    link_id,
+    log_base_for,
+    mean_vector,
+    node_id,
+    node_log_base,
+    point_key,
+    select_pairs,
+    split_ref,
+    trace_ref,
+    weight,
+)
 from kaine.modules.episodic_memory.embeddings import Embedder
 from kaine.modules.episodic_memory.storage import (
     MemoryStorage,
@@ -49,6 +72,17 @@ DEFAULT_COLLECTIONS: tuple[str, str, str, str] = EPISODIC_MEMORY_COLLECTION_KIND
 
 # Search cap for exact recall ranking (paper A.10).
 _RECALL_SEARCH_CAP: int = 4096
+
+#: Limit that reads an entire persisted collection (associative replay load).
+_ALL_POINTS: int = 2**62
+
+
+@dataclass(frozen=True)
+class _PendingPrune:
+    """Traces protected by a downscaling that deferred pruning to associative replay."""
+    protected: tuple[tuple[str, str, float], ...]
+    protected_keys: frozenset[tuple[str, str]]
+    wake_sleep: int
 
 
 def _write_health_file(path: Path, data: dict[str, Any]) -> None:
@@ -117,6 +151,7 @@ class EpisodicMemoryCore:
         traces_per_day: float = 288000.0,
         health_path: Path | None = None,
         entity_clock: Callable[[], float] | None = None,
+        association: AssociationParams | None = None,
     ) -> None:
         if short_term_capacity <= 0:
             raise ValueError("short_term_capacity must be positive")
@@ -159,6 +194,11 @@ class EpisodicMemoryCore:
         self._wake_count = 0
         # entity_time stamps are offset + entity_clock(), so they continue across restarts.
         self._entity_offset = 0.0
+        # Associative replay state (paper A.10).
+        self._association = association or AssociationParams()
+        self._assoc = AssociationIndex()
+        self._assoc_ready = False
+        self._pending_prune: _PendingPrune | None = None
         # Held by persist, downscale, export and import so a downscaling never interleaves with a write.
         self._strength_lock = asyncio.Lock()
 
@@ -169,6 +209,10 @@ class EpisodicMemoryCore:
 
     def persisted_collection_names(self) -> list[str]:
         return [self.collection_name(k) for k in DEFAULT_COLLECTIONS if k != "short_term"]
+
+    def association_collection_names(self) -> list[str]:
+        """Return the persisted collection names for links and schema nodes."""
+        return [f"{self._prefix}{k}" for k in EPISODIC_MEMORY_ASSOCIATION_KINDS]
 
     @property
     def short_term_size(self) -> int:
@@ -193,6 +237,65 @@ class EpisodicMemoryCore:
     @property
     def strength_key(self) -> str:
         return strength_key(self._prefix)
+
+    @property
+    def association_index(self) -> AssociationIndex:
+        """In-process index of links and schema nodes (read-only for tests)."""
+        return self._assoc
+
+    @property
+    def association_params(self) -> AssociationParams:
+        """Hyper-parameters for associative replay."""
+        return self._association
+
+    def link_weight(self, link: Link) -> float:
+        """Current weight of an associative link."""
+        return weight(link.log_base, self._log_gain)
+
+    def node_strength(self, node: Node) -> float:
+        """Current strength of a schema node."""
+        return weight(node.log_base, self._log_gain)
+
+    def _kind_of(self, collection: str) -> str | None:
+        """Collection kind for a persisted trace collection name, if any."""
+        names = self.persisted_collection_names()
+        if collection not in names:
+            return None
+        return collection[len(self._prefix) :]
+
+    async def _ensure_association_collections(self) -> None:
+        """Create the links and schemas collections on first co-replay."""
+        if self._assoc_ready:
+            return
+        for name in self.association_collection_names():
+            await self._storage.ensure_collection(name)
+        self._assoc_ready = True
+
+    async def _load_associations(self) -> None:
+        """Load links and schema nodes from persisted storage into memory."""
+        links_name, schemas_name = self.association_collection_names()
+        link_points = await self._storage.recent_points(links_name, limit=_ALL_POINTS)
+        node_points = await self._storage.recent_points(schemas_name, limit=_ALL_POINTS)
+        try:
+            self._assoc = AssociationIndex.from_points(link_points, node_points)
+        except ValueError as exc:
+            raise StorageError(f"episodic memory: malformed association record: {exc}") from exc
+        self._assoc_ready = False
+
+    async def _vectors(self, refs: Iterable[str]) -> dict[str, list[float]]:
+        """Fetch vectors for trace refs, grouped by collection kind."""
+        by_kind: dict[str, list[str]] = {}
+        for ref in refs:
+            kind, key = split_ref(ref)
+            by_kind.setdefault(kind, []).append(key)
+        out: dict[str, list[float]] = {}
+        for kind, keys in by_kind.items():
+            points = await self._storage.get_points(
+                self.collection_name(kind), keys, with_vectors=True
+            )
+            for p in points:
+                out[trace_ref(kind, p["id"])] = list(p["vector"])
+        return out
 
     def _legacy_meta_keys(self, key: str) -> list[str]:
         """Return legacy meta/stamp keys that may still hold this entity's records."""
@@ -308,9 +411,11 @@ class EpisodicMemoryCore:
                 "re-run the revive from its bundle before the next sleep"
             )
         await self._resume_entity_time()
+        await self._load_associations()
         names = self.persisted_collection_names()
         scan = await self._storage.scan_store(names)
-        new_bytes = scan["bytes"] - self._wake_bytes
+        assoc_bytes = (await self._storage.scan_store(self.association_collection_names()))["bytes"]
+        new_bytes = scan["bytes"] + assoc_bytes - self._wake_bytes
         new_total = self._total_from_scan(scan) - self._wake_count
         if new_bytes != self._bytes or not math.isclose(new_total, self._total, rel_tol=1e-12):
             self._bytes = new_bytes
@@ -487,14 +592,14 @@ class EpisodicMemoryCore:
         )
 
     async def downscale(
-        self, protect: Iterable[tuple[str, str, float]] = ()
+        self, protect: Iterable[tuple[str, str, float]] = (), *, prune: bool = True
     ) -> dict[str, Any]:
-        """Downscale trace strengths for one sleep, then prune (paper A.10).
+        """Downscale trace strengths for one sleep (paper A.10).
 
-        Replay happens before this method is called. Every trace below the
-        floor outside the replayed set is deleted, then the weakest traces
-        outside it are removed until the store fits the budget. A trace
-        replayed in this sleep is never pruned in it (paper A.10).
+        When ``prune`` is true, pruning follows immediately. When it is false,
+        pruning is deferred so associative replay can run first; call
+        :meth:`associate` and then :meth:`prune`. A trace replayed in this
+        sleep is never pruned in it.
         """
         async with self._strength_lock:
             if self._import_pending:
@@ -567,21 +672,99 @@ class EpisodicMemoryCore:
                 await self._storage.set_log_base(coll, updates)
 
             protected_keys = {(coll, str(pid)) for coll, pid, _ in protected}
-            deleted: set[tuple[str, str]] = set()
-            thr = self._prune_threshold
-            pruned_floor = pruned_budget = 0
+            if not prune:
+                self._pending_prune = _PendingPrune(
+                    protected=tuple(protected),
+                    protected_keys=frozenset(protected_keys),
+                    wake_sleep=self._sleeps - 1,
+                )
+                await self._storage.write_meta(self.strength_key, self._strength_meta())
+                self._write_health()
+                return {
+                    "n_new": n_new,
+                    "factor": factor,
+                    "protected": len(protected),
+                    "total_before": total_before,
+                    "total_after": total_after,
+                    "pruned_floor": 0,
+                    "pruned_budget": 0,
+                    "prune_deferred": True,
+                    "store_bytes": self._bytes,
+                    "blocked": None,
+                    "blocked_sleeps": 0,
+                    "persist_refusals": self._persist_refusals,
+                }
+
+            self._pending_prune = None
+            has_assoc = bool(self._assoc)
+            counts = await self._prune_locked(protected_keys)
+            pruned_floor = counts["pruned_floor"]
+            pruned_budget = counts["pruned_budget"]
+
+        log.info(
+            "episodic memory: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
+            pruned_floor,
+            pruned_budget,
+            self._bytes,
+        )
+        result: dict[str, Any] = {
+            "n_new": n_new,
+            "factor": factor,
+            "protected": len(protected),
+            "total_before": total_before,
+            "total_after": total_after,
+            "pruned_floor": pruned_floor,
+            "pruned_budget": pruned_budget,
+            "store_bytes": self._bytes,
+            "blocked": None,
+            "blocked_sleeps": 0,
+            "persist_refusals": self._persist_refusals,
+        }
+        if has_assoc:
+            result["links_pruned"] = counts["links_pruned"]
+            result["nodes_pruned"] = counts["nodes_pruned"]
+        return result
+
+    async def _prune_locked(self, protected_keys) -> dict[str, int]:
+        """Prune records below the floor and then to the budget (paper A.10).
+
+        Association links and nodes are included in the weakest-first pruning.
+        Deleting a trace cascades to its links; schema nodes are rebuilt or
+        removed afterwards so the store stays consistent.
+        """
+        names = self.persisted_collection_names()
+        has_assoc = bool(self._assoc)
+        links_name, schemas_name = self.association_collection_names()
+        scan_names = names + ([links_name, schemas_name] if has_assoc else [])
+        trace_set = set(names)
+
+        protected = {(c, point_key(i)) for c, i in protected_keys}
+        deleted: set[tuple[str, str]] = set()
+        cascaded: set[tuple[str, str]] = set()
+        touched: set[str] = set()
+        gone: set[str] = set()
+
+        thr = self._prune_threshold
+        pruned_floor = pruned_budget = links_pruned = nodes_pruned = 0
+
+        while True:
             done = False
+            pass_deleted = 0
             while not done:
-                batch = await self._storage.weakest(names, limit=1024)
+                batch = await self._storage.weakest(scan_names, limit=1024)
                 if not batch:
                     break
                 projected = self._bytes
                 by_coll_doomed: dict[str, list[tuple[str, float, int, str]]] = {}
                 for p in batch:
-                    key = (str(p["collection"]), str(p["id"]))
-                    if key in protected_keys:
+                    coll = str(p["collection"])
+                    pid = str(p["id"])
+                    key = (coll, point_key(pid))
+                    if key in protected:
                         continue
                     if key in deleted:
+                        if key in cascaded:
+                            continue
                         raise StorageError(
                             f"episodic memory: pruning found point {p['id']!r} of {p['collection']!r} again after deleting it"
                         )
@@ -595,47 +778,362 @@ class EpisodicMemoryCore:
                     deleted.add(key)
                     size = int(p["size_bytes"])
                     projected -= size
-                    by_coll_doomed.setdefault(p["collection"], []).append(
-                        (str(p["id"]), float(p["log_base"]), size, reason)
+                    by_coll_doomed.setdefault(coll, []).append(
+                        (pid, float(p["log_base"]), size, reason)
                     )
+                    pass_deleted += 1
+
+                    if has_assoc and coll in trace_set:
+                        ref = trace_ref(self._kind_of(coll), pid)
+                        gone.add(ref)
+                        for link in self._assoc.links_of(ref):
+                            lk = (links_name, link.id)
+                            if lk in deleted:
+                                continue
+                            deleted.add(lk)
+                            cascaded.add(lk)
+                            projected -= link.size_bytes
+                            by_coll_doomed.setdefault(links_name, []).append(
+                                (link.raw_id, 0.0, link.size_bytes, "cascade")
+                            )
+                            touched.add(link.other(ref))
+                    elif has_assoc and coll == links_name:
+                        link = self._assoc.links.get(point_key(pid))
+                        if link is not None:
+                            touched.add(link.a)
+                            touched.add(link.b)
+
                 if not by_coll_doomed:
                     break
                 for coll, items in by_coll_doomed.items():
                     ids = [i[0] for i in items]
                     await self._storage.delete_points(coll, ids)
-                    for _, lb, size, reason in items:
-                        self._bytes -= size
-                        self._total -= _strength(lb, self._log_gain)
-                        if reason == "floor":
-                            pruned_floor += 1
-                        else:
-                            pruned_budget += 1
+                    if coll in trace_set:
+                        for _, lb, size, reason in items:
+                            self._bytes -= size
+                            self._total -= _strength(lb, self._log_gain)
+                            if reason == "floor":
+                                pruned_floor += 1
+                            else:
+                                pruned_budget += 1
+                    elif coll == links_name:
+                        for item_id, _, size, _ in items:
+                            self._bytes -= size
+                            self._assoc.remove_link(point_key(item_id))
+                            links_pruned += 1
+                    elif coll == schemas_name:
+                        for item_id, _, size, _ in items:
+                            self._bytes -= size
+                            nodes_pruned += 1
+                            node = self._assoc.node_by_id(item_id)
+                            if node is not None:
+                                self._assoc.remove_node(node.center)
                     await self._storage.write_meta(self.strength_key, self._strength_meta())
                     self._write_health()
-            self._bytes = max(0, self._bytes)
-            self._total = max(0.0, self._total)
+
+            if not has_assoc:
+                break
+
+            _, removed = await self._sync_nodes(touched | gone, gone)
+            nodes_pruned += removed
+            if self._bytes > self._budget_bytes and pass_deleted > 0:
+                touched = set()
+                gone = set()
+                continue
+            break
+
+        self._bytes = max(0, self._bytes)
+        self._total = max(0.0, self._total)
+        await self._storage.write_meta(self.strength_key, self._strength_meta())
+        self._write_health()
+
+        return {
+            "pruned_floor": pruned_floor,
+            "pruned_budget": pruned_budget,
+            "links_pruned": links_pruned,
+            "nodes_pruned": nodes_pruned,
+        }
+
+    async def _sync_nodes(self, refs: Iterable[str], gone: set[str]) -> tuple[int, int]:
+        """Rebuild or remove schema nodes for the given trace references.
+
+        A node is removed when its center is gone or has too few links.
+        Otherwise it is rebuilt from the current links and partner vectors.
+        """
+        schemas_name = self.association_collection_names()[1]
+        formed = 0
+        removed = 0
+        for ref in sorted(set(refs)):
+            node = self._assoc.node_of(ref)
+            if ref in gone or self._assoc.degree(ref) < self._association.n_sch:
+                if node is not None:
+                    await self._storage.delete_points(schemas_name, [node.raw_id])
+                    self._bytes -= node.size_bytes
+                    self._assoc.remove_node(ref)
+                    removed += 1
+                continue
+
+            links = self._assoc.links_of(ref)
+            members = [ref] + self._assoc.partners(ref)
+            vecs = await self._vectors(members)
+            missing = [m for m in members if m not in vecs]
+            if missing:
+                log.warning(
+                    "episodic memory: schema member(s) %s missing during sync; removing node %s",
+                    missing,
+                    node.raw_id if node else node_id(ref),
+                )
+                if node is not None:
+                    await self._storage.delete_points(schemas_name, [node.raw_id])
+                    self._bytes -= node.size_bytes
+                    self._assoc.remove_node(ref)
+                    removed += 1
+                continue
+
+            centroid = mean_vector([vecs[m] for m in members])
+            lb = node_log_base([link.log_base for link in links], self._log_gain)
+            payload = {
+                "center": ref,
+                "log_base": lb,
+                "entity_time": self.entity_now(),
+            }
+            payload["size_bytes"] = record_size(
+                self._storage.latent_dim,
+                "",
+                payload,
+                None,
+            )
+            nid = node_id(ref)
+            await self._ensure_association_collections()
+            if node is not None:
+                await self._storage.delete_points(schemas_name, [node.raw_id])
+                self._bytes -= node.size_bytes
+            await self._storage.upsert(
+                schemas_name,
+                vector=centroid,
+                text="",
+                payload=payload,
+                affect=None,
+                point_id=nid,
+            )
+            self._bytes += payload["size_bytes"]
+            self._assoc.set_node(
+                Node(
+                    id=nid,
+                    raw_id=nid,
+                    center=ref,
+                    log_base=lb,
+                    entity_time=payload["entity_time"],
+                    size_bytes=payload["size_bytes"],
+                )
+            )
+            formed += 1
+        return formed, removed
+
+    async def associate(self) -> dict[str, Any]:
+        """Run associative replay for a deferred downscaling (paper A.10).
+
+        Co-replays at most ``n_pair`` pairs between the protected wake traces
+        and older traces, creates or strengthens links, caps per-trace link
+        counts, and rebuilds schema nodes. Returns a summary dict.
+        """
+        async with self._strength_lock:
+            if self._pending_prune is None:
+                return {"skipped": "no downscaling awaits pruning"}
+
+            params = self._association
+            pending = self._pending_prune
+            names = self.persisted_collection_names()
+
+            # 1. Fetch the protected (Q) traces that were replayed.
+            q_map: dict[str, list[float]] = {}
+            q_ids_by_coll: dict[str, list[str]] = {}
+            for coll, pid, _ in pending.protected:
+                if coll not in names:
+                    continue
+                q_ids_by_coll.setdefault(coll, []).append(pid)
+            for coll, ids in q_ids_by_coll.items():
+                for p in await self._storage.get_points(coll, ids, with_vectors=True):
+                    q_map[trace_ref(self._kind_of(coll), p["id"])] = list(p["vector"])
+
+            # 2. Find candidate neighbours in every trace collection.
+            candidates: list[tuple[str, str, float]] = []
+            for q_ref in sorted(q_map):
+                q_vector = q_map[q_ref]
+                for name in names:
+                    for old_ref, sim in await self._band_neighbours(
+                        name, q_vector, pending.wake_sleep, params
+                    ):
+                        candidates.append((q_ref, old_ref, sim))
+
+            # 3. Select the best pairs.
+            pairs = select_pairs(candidates, params.n_pair)
+            if not pairs:
+                return {
+                    "pairs": [],
+                    "links_dropped": 0,
+                    "nodes_formed": 0,
+                    "nodes_removed": 0,
+                    "links": len(self._assoc.links),
+                    "nodes": len(self._assoc.nodes),
+                    "store_bytes": self._bytes,
+                }
+
+            # 4. Upsert the chosen links.
+            await self._ensure_association_collections()
+            links_name = self.association_collection_names()[0]
+            old_refs = [old_ref for (_, old_ref, _) in pairs]
+            old_vectors = await self._vectors(old_refs)
+            touched: set[str] = set()
+            reported: list[dict[str, Any]] = []
+            for q_ref, old_ref, sim in pairs:
+                if old_ref not in old_vectors:
+                    continue
+                q_vec = q_map[q_ref]
+                old_vec = old_vectors[old_ref]
+                lid = link_id(q_ref, old_ref)
+                existing = self._assoc.links.get(lid)
+                w_old = self.link_weight(existing) if existing else 0.0
+                w_new = co_replayed_weight(w_old)
+                a, b = sorted((q_ref, old_ref))
+                lb = log_base_for(w_new, self._log_gain)
+                et = self.entity_now()
+                payload = {
+                    "a": a,
+                    "b": b,
+                    "log_base": lb,
+                    "entity_time": et,
+                }
+                payload["size_bytes"] = record_size(
+                    self._storage.latent_dim,
+                    "",
+                    payload,
+                    None,
+                )
+                if existing is not None:
+                    await self._storage.delete_points(links_name, [existing.raw_id])
+                    self._bytes -= existing.size_bytes
+                await self._storage.upsert(
+                    links_name,
+                    vector=mean_vector([q_vec, old_vec]),
+                    text="",
+                    payload=payload,
+                    affect=None,
+                    point_id=lid,
+                )
+                self._bytes += payload["size_bytes"]
+                self._assoc.add_link(
+                    Link(
+                        id=lid,
+                        raw_id=lid,
+                        a=a,
+                        b=b,
+                        log_base=lb,
+                        entity_time=et,
+                        size_bytes=payload["size_bytes"],
+                    )
+                )
+                touched.add(a)
+                touched.add(b)
+                reported.append(
+                    {
+                        "a": split_ref(q_ref)[1],
+                        "b": split_ref(old_ref)[1],
+                        "weight": w_new,
+                    }
+                )
+
+            # 5. Cap per-trace link counts.
+            dropped = cap_links(self._assoc, touched, params.n_link)
+            for link in dropped:
+                await self._storage.delete_points(links_name, [link.raw_id])
+                self._bytes -= link.size_bytes
+                touched.add(link.a)
+                touched.add(link.b)
+
+            # 6. Rebuild schema nodes.
+            formed, removed = await self._sync_nodes(touched, set())
+
+            # 7. Persist state.
             await self._storage.write_meta(self.strength_key, self._strength_meta())
             self._write_health()
 
-        log.info(
-            "episodic memory: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
-            pruned_floor,
-            pruned_budget,
-            self._bytes,
-        )
-        return {
-            "n_new": n_new,
-            "factor": factor,
-            "protected": len(protected),
-            "total_before": total_before,
-            "total_after": total_after,
-            "pruned_floor": pruned_floor,
-            "pruned_budget": pruned_budget,
-            "store_bytes": self._bytes,
-            "blocked": None,
-            "blocked_sleeps": 0,
-            "persist_refusals": self._persist_refusals,
-        }
+            return {
+                "pairs": reported,
+                "links_dropped": len(dropped),
+                "nodes_formed": formed,
+                "nodes_removed": removed,
+                "links": len(self._assoc.links),
+                "nodes": len(self._assoc.nodes),
+                "store_bytes": self._bytes,
+            }
+
+    async def _band_neighbours(
+        self,
+        name: str,
+        vector: list[float],
+        wake_sleep: int,
+        params: AssociationParams,
+    ) -> list[tuple[str, float]]:
+        """Return up to ``n_pair`` older trace neighbours in a band of similarity.
+
+        Candidates must satisfy ``sim_min <= sim < sim_dup`` and have been
+        born before the current wake window.
+        """
+        kind = self._kind_of(name)
+        if kind is None:
+            return []
+        n_all = await self._storage.count(name, strict=True)
+        if n_all == 0:
+            return []
+        m = min(max(4 * params.n_pair, 32), n_all, _RECALL_SEARCH_CAP)
+        logged_cap = False
+        while True:
+            hits = await self._storage.search(name, query_vector=vector, limit=m)
+            results: list[tuple[str, float]] = []
+            for hit in hits:
+                if hit.score < params.sim_min:
+                    return results
+                if hit.score >= params.sim_dup:
+                    continue
+                born = hit.payload.get("born_sleep")
+                if not isinstance(born, int) or isinstance(born, bool) or born >= wake_sleep:
+                    continue
+                results.append((trace_ref(kind, hit.point_id), hit.score))
+                if len(results) >= params.n_pair:
+                    return results
+            if len(hits) < m or m >= n_all:
+                return results
+            if m >= _RECALL_SEARCH_CAP:
+                if not logged_cap:
+                    log.info(
+                        "episodic memory: associative replay searched the nearest %d of %d traces",
+                        m,
+                        n_all,
+                    )
+                    logged_cap = True
+                return results
+            m = min(m * 8, n_all, _RECALL_SEARCH_CAP)
+
+    async def prune(self) -> dict[str, Any]:
+        """Apply pruning that was deferred by :meth:`downscale`.
+
+        This is called after :meth:`associate` so associative replay can run
+        before the final weakest-first pruning pass (paper A.10).
+        """
+        async with self._strength_lock:
+            if self._pending_prune is None:
+                return {"skipped": "no downscaling awaits pruning"}
+            pending = self._pending_prune
+            self._pending_prune = None
+            counts = await self._prune_locked(set(pending.protected_keys))
+            log.info(
+                "episodic memory: sleep pruned %d traces at the floor and %d for the budget; store is %d bytes",
+                counts["pruned_floor"],
+                counts["pruned_budget"],
+                self._bytes,
+            )
+            return {**counts, "store_bytes": self._bytes}
 
     async def shutdown(self) -> None:
         try:
@@ -776,10 +1274,129 @@ class EpisodicMemoryCore:
                 replace(hit, score=product, similarity=sim, strength=strength)
                 for product, sim, _, hit, strength in scored[:k]
             ]
+            if bool(self._assoc) and k > 0:
+                results = await self._recall_associations(vec, results, k, collection)
 
         summary = _summarize(results, collection)
         await self._invoke_hook(summary)
         return results, summary
+
+    async def _recall_associations(
+        self,
+        vec: list[float],
+        ranked: list[RecalledMemory],
+        k: int,
+        kind: str,
+    ) -> list[RecalledMemory]:
+        """Augment recall results with matching schema nodes and linked partners."""
+        schemas_name = self.association_collection_names()[1]
+
+        # 1. Merge in schema nodes that match the query.
+        nodes = [n for n in self._assoc.nodes.values() if split_ref(n.center)[0] == kind]
+        node_entries: list[tuple[float, float, Node, float]] = []
+        if nodes:
+            hits = await self._storage.search(
+                schemas_name, query_vector=vec, limit=len(self._assoc.nodes)
+            )
+            for hit in hits:
+                if hit.score <= 0.0:
+                    continue
+                node = self._assoc.node_by_id(hit.point_id)
+                if node is None or split_ref(node.center)[0] != kind:
+                    continue
+                strength = self.node_strength(node)
+                node_entries.append((strength * hit.score, hit.score, node, strength))
+
+        trace_entries = [
+            (r.score, r.similarity, 0, r) for r in ranked
+        ]
+        node_sort_entries = [
+            (product, sim, 1, (node, strength))
+            for product, sim, node, strength in node_entries
+        ]
+        merged = sorted(
+            trace_entries + node_sort_entries,
+            key=lambda t: (-t[0], -t[1], t[2]),
+        )
+        kept: list[RecalledMemory] = []
+        node_results: set[int] = set()
+        for product, sim, kind_order, item in merged[:k]:
+            if kind_order == 0:
+                kept.append(item)
+            else:
+                node_results.add(len(kept))
+                node, strength = item
+                _center_kind, center_key = split_ref(node.center)
+                center_text = ""
+                for p in await self._storage.get_points(
+                    self.collection_name(kind), [center_key]
+                ):
+                    center_text = str(p.get("text") or "")
+                    break
+                kept.append(
+                    RecalledMemory(
+                        point_id=node.id,
+                        score=product,
+                        text=center_text,
+                        payload={
+                            "schema_node": True,
+                            "center": center_key,
+                            "members": [
+                                split_ref(p)[1] for p in self._assoc.partners(node.center)
+                            ],
+                        },
+                        affect=None,
+                        similarity=sim,
+                        strength=strength,
+                    )
+                )
+
+        # 2. Append partners of kept traces.
+        kept_keys = {point_key(r.point_id) for r in kept}
+        partner_queue: list[tuple[str, str]] = []
+        queued_keys: set[str] = set()
+        for index, r in enumerate(kept):
+            if index in node_results:
+                continue
+            ref = trace_ref(kind, r.point_id)
+            for partner in self._assoc.partners(ref):
+                pkey = split_ref(partner)[1]
+                if pkey in kept_keys or pkey in queued_keys:
+                    continue
+                partner_queue.append((kind, partner))
+                queued_keys.add(pkey)
+
+        if partner_queue:
+            by_kind: dict[str, list[str]] = {}
+            for _, partner in partner_queue:
+                pkind, pkey = split_ref(partner)
+                by_kind.setdefault(pkind, []).append(pkey)
+            fetched: dict[str, dict[str, Any]] = {}
+            for pkind, keys in by_kind.items():
+                for p in await self._storage.get_points(
+                    self.collection_name(pkind), keys, with_vectors=True
+                ):
+                    fetched[trace_ref(pkind, p["id"])] = p
+            for _, partner in partner_queue:
+                p = fetched.get(partner)
+                if p is None:
+                    continue
+                pvec = list(p["vector"])
+                sim = _cosine_similarity(vec, pvec)
+                strength = self.strength_of(p["payload"])
+                kept.append(
+                    RecalledMemory(
+                        point_id=str(p["id"]),
+                        score=strength * sim,
+                        text=str(p.get("text") or ""),
+                        payload=dict(p["payload"]),
+                        affect=dict(p["affect"]) if p.get("affect") else None,
+                        similarity=sim,
+                        strength=strength,
+                    )
+                )
+
+        return kept
 
     async def _recall_short_term(
         self, query_text: str, k: int
@@ -900,7 +1517,9 @@ class EpisodicMemoryCore:
                 }
                 for m in self._short_term
             ]
-            persisted = await self._storage.export(self.persisted_collection_names())
+            persisted = await self._storage.export(
+                self.persisted_collection_names() + self.association_collection_names()
+            )
             return {
                 "collection_prefix": self._prefix,
                 "short_term": short_term,
@@ -941,6 +1560,14 @@ class EpisodicMemoryCore:
             for kind in persisted_kinds:
                 src_name = f"{src_prefix}{kind}"
                 mapping[src_name] = self.collection_name(kind)
+
+            assoc_targets: list[str] = []
+            for kind in EPISODIC_MEMORY_ASSOCIATION_KINDS:
+                src_name = f"{src_prefix}{kind}"
+                target_name = f"{self._prefix}{kind}"
+                if src_name in persisted or await self._storage.count(target_name) > 0:
+                    mapping[src_name] = target_name
+                    assoc_targets.append(target_name)
 
             strength = state.get("strength")
             if strength is not None:
@@ -986,6 +1613,8 @@ class EpisodicMemoryCore:
             self._write_health()
 
             total = 0
+            trace_total = 0
+            trace_names = {self.collection_name(k) for k in persisted_kinds}
             replaced_kinds: list[str] = []
             try:
                 for src_name, target_name in mapping.items():
@@ -993,6 +1622,8 @@ class EpisodicMemoryCore:
                         target_name, persisted.get(src_name, [])
                     )
                     total += n
+                    if target_name in trace_names:
+                        trace_total += n
                     replaced_kinds.append(target_name)
             except Exception:
                 if replaced_kinds:
@@ -1013,7 +1644,7 @@ class EpisodicMemoryCore:
                 meta = {
                     "log_gain": 0.0,
                     "sleeps": 0,
-                    "total": float(total),
+                    "total": float(trace_total),
                     "entity_time": 0.0,
                     "bytes": await self._storage.total_size(list(mapping.values())),
                     "import_pending": True,
@@ -1053,6 +1684,9 @@ class EpisodicMemoryCore:
                     )
                 )
                 self._short_term_embeddings.append(None)
+
+            self._pending_prune = None
+            await self._load_associations()
 
             for name, points in persisted.items():
                 if name not in mapping:
@@ -1197,7 +1831,9 @@ async def recover_interrupted_import(
         return {"cleared": False}
 
     names = [f"{collection_prefix}{kind}" for kind in ("episodic", "semantic", "procedural")]
+    assoc_names = [f"{collection_prefix}{kind}" for kind in EPISODIC_MEMORY_ASSOCIATION_KINDS]
     scan = await storage.scan_store(names)
+    assoc_scan = await storage.scan_store(assoc_names)
     log_gain = float(meta.get("log_gain", 0.0))
     total = 0.0
     for lb, count in scan.get("log_base_counts", {}).items():
@@ -1206,7 +1842,7 @@ async def recover_interrupted_import(
 
     new_meta = {
         **meta,
-        "bytes": scan["bytes"],
+        "bytes": scan["bytes"] + assoc_scan["bytes"],
         "total": total,
         "import_pending": False,
     }
@@ -1221,7 +1857,7 @@ async def recover_interrupted_import(
                 "import_pending": False,
                 "blocked_sleeps": 0,
                 "persist_refusals": 0,
-                "store_bytes": scan["bytes"],
+                "store_bytes": scan["bytes"] + assoc_scan["bytes"],
                 "budget_bytes": budget_bytes or 0,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
@@ -1231,4 +1867,4 @@ async def recover_interrupted_import(
         "episodic memory: operator cleared an interrupted import; the store is kept as it stands. "
         "Imported traces' strengths are relative to the pre-import log gain."
     )
-    return {"cleared": True, "store_bytes": scan["bytes"], "total": total}
+    return {"cleared": True, "store_bytes": scan["bytes"] + assoc_scan["bytes"], "total": total}

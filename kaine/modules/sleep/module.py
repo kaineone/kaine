@@ -981,6 +981,21 @@ class Sleep(BaseModule):
         summary["memory_persist_refusals"] = (
             downscale_meta.get("persist_refusals") if downscale_meta else None
         )
+
+        # With associative replay on, pruning follows the co-replays in phase 3
+        # (paper A.10), so its counts replace phase 2's.
+        prune_meta = None
+        for r in phase_results:
+            if getattr(r, "phase", None) == "associative_replay":
+                found = (getattr(r, "metadata", None) or {}).get("prune")
+                prune_meta = found if isinstance(found, dict) else None
+                break
+        if prune_meta is not None and "skipped" not in prune_meta:
+            summary["memory_pruned_floor"] = prune_meta.get("pruned_floor")
+            summary["memory_pruned_budget"] = prune_meta.get("pruned_budget")
+            summary["memory_store_bytes"] = prune_meta.get("store_bytes")
+            summary["memory_links_pruned"] = prune_meta.get("links_pruned")
+            summary["memory_nodes_pruned"] = prune_meta.get("nodes_pruned")
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)

@@ -10,10 +10,11 @@ if TYPE_CHECKING:
     pass
 import math
 
-from kaine.boot.errors import ConfigurationError, _require_keys
+from kaine.boot.errors import ConfigurationError, _require_keys, _warn_retired_keys
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.episodic_memory.associations import AssociationParams
 
 
 def make_episodic_memory(
@@ -38,7 +39,8 @@ def make_episodic_memory(
         "recall_cooldown_s",
         "storage_budget_bytes",  # operator's persisted memory budget in bytes
         "qdrant",
-        "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content, cross_period_candidates
+        "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content
+        "association",  # nested sub-table: n_pair, sim_min, sim_dup, n_sch, n_link (paper A.10)
         "strength",  # nested sub-table: retention_per_day, prune_floor
     }
     if "embedder_model_id" in section:
@@ -53,7 +55,7 @@ def make_episodic_memory(
     strength = section.get("strength") or {}
     kwargs: dict[str, Any] = {
         k: section[k]
-        for k in allowed - {"qdrant", "replay", "strength"}
+        for k in allowed - {"qdrant", "replay", "strength", "association"}
         if k in section
     }
     if "storage_budget_bytes" in kwargs:
@@ -78,8 +80,35 @@ def make_episodic_memory(
         kwargs["replay_recency_weight"] = float(replay["recency_weight"])
     if "redact_content" in replay:
         kwargs["replay_redact_content"] = bool(replay["redact_content"])
-    if "cross_period_candidates" in replay:
-        kwargs["cross_period_candidates"] = int(replay["cross_period_candidates"])
+    _warn_retired_keys(replay, {"cross_period_candidates"}, "[episodic_memory.replay]")
+    # Association sub-table (paper A.10)
+    association = dict(section.get("association") or {})
+    if association:
+        _require_keys(association, {"n_pair", "sim_min", "sim_dup", "n_sch", "n_link"})
+        for key in ("n_pair", "n_sch", "n_link"):
+            if key not in association:
+                continue
+            value = association[key]
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ConfigurationError(
+                    f"[episodic_memory.association].{key} must be an integer"
+                )
+            association[key] = int(value)
+        for key in ("sim_min", "sim_dup"):
+            if key not in association:
+                continue
+            value = association[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigurationError(
+                    f"[episodic_memory.association].{key} must be a number"
+                )
+            association[key] = float(value)
+        try:
+            AssociationParams(**association)
+        except ValueError as exc:
+            raise ConfigurationError(f"[episodic_memory.association]: {exc}") from exc
+        for key in association:
+            kwargs[f"association_{key}"] = association[key]
     # Strength sub-table (paper A.10)
     _require_keys(strength, {"retention_per_day", "prune_floor", "traces_per_day"})
     if "retention_per_day" in strength:

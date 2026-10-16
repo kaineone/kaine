@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import uuid
 from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus
@@ -15,6 +14,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
+from kaine.modules.episodic_memory.associations import AssociationParams
 from kaine.modules.episodic_memory.memory import (
     EmotionalRetriggerHook,
     EpisodicMemoryCore,
@@ -70,15 +70,18 @@ class EpisodicMemory(BaseModule):
         replay_affect_weight: float = 0.7,
         replay_recency_weight: float = 0.3,
         replay_redact_content: bool = True,
-        # Newest episodic traces sleep's cross-period selection reads; 128
-        # matches short_term_capacity, the most one consolidation pass hands to replay.
-        cross_period_candidates: int = 128,
         # Strength-downscaling parameters for sleep phase 2 (paper A.10).
         strength_retention_per_day: float = 0.82,
         strength_prune_floor: float = 0.01,
         traces_per_day: float = 288000.0,
         # Persisted-store budget in bytes (paper A.10, Table A1 row B).
         storage_budget_bytes: int = 10 * 1024**3,
+        # Associative replay (paper A.10, Table A1).
+        association_n_pair: int = 5,
+        association_sim_min: float = 0.5,
+        association_sim_dup: float = 0.95,
+        association_n_sch: int = 3,
+        association_n_link: int = 8,
         # Peer stream names for the affect module + the sleep module window tracking
         affect_stream: str = "affect.out",
         sleep_stream: str = "sleep.out",
@@ -97,14 +100,18 @@ class EpisodicMemory(BaseModule):
             raise ValueError("recall_top_k must be positive")
         if recall_cooldown_s < 0:
             raise ValueError("recall_cooldown_s must be >= 0")
-        if cross_period_candidates <= 0:
-            raise ValueError("cross_period_candidates must be positive")
+        association = AssociationParams(
+            n_pair=association_n_pair,
+            sim_min=association_sim_min,
+            sim_dup=association_sim_dup,
+            n_sch=association_n_sch,
+            n_link=association_n_link,
+        )
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._recall_top_k = int(recall_top_k)
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
-        self._cross_period_candidates = int(cross_period_candidates)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -177,6 +184,7 @@ class EpisodicMemory(BaseModule):
                 traces_per_day=traces_per_day,
                 health_path=resolve(EPISODIC_MEMORY_STORE_HEALTH_PATH),
                 entity_clock=self._clock.now,
+                association=association,
             )
 
     @property
@@ -420,8 +428,8 @@ class EpisodicMemory(BaseModule):
     async def consolidate_now(self) -> int:
         return await self._core.consolidate_now()
 
-    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
-        """Sleep phase 2 calls this after replay; downscale then prune.
+    async def downscale(self, protect: Sequence[Any] = (), *, prune: bool = True) -> dict[str, Any]:
+        """Sleep phase 2 calls this after replay; downscale, then prune by default.
 
         Every persisted trace except the replayed ones is scaled by
         retention_per_day ** (N_new / N_day), and the replayed ones keep
@@ -429,12 +437,19 @@ class EpisodicMemory(BaseModule):
         are deleted until the store fits the budget (paper A.10). Vectors
         are never touched.
 
+        With *prune* False, pruning is deferred until :meth:`prune`, which
+        sleep phase 3 calls after associative replay (paper A.10 orders
+        pruning after associative replay).
+
         Args:
             protect: ReplayEvent objects produced by replay_now. Each event
                      whose collection is a non-empty str and whose log_base
                      is numeric contributes a protected (collection, id,
                      log_base) triple; short-term entries have no collection
                      and nothing to protect.
+            prune: When True (default), prune immediately after downscaling.
+                   When False, defer pruning so associative replay can run
+                   first.
 
         Returns:
             Downscale metadata from EpisodicMemoryCore.
@@ -448,128 +463,17 @@ class EpisodicMemory(BaseModule):
             if isinstance(log_base, bool) or not isinstance(log_base, (int, float)):
                 continue
             triples.append((collection, str(event.point_id), float(log_base)))
-        return await self._core.downscale(triples)
+        if prune:
+            return await self._core.downscale(triples)
+        return await self._core.downscale(triples, prune=False)
 
-    async def select_cross_period_traces(
-        self,
-        *,
-        periods: int = 2,
-        per_period: int = 3,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Select traces spanning *periods* contiguous time windows.
+    async def associate(self) -> dict[str, Any]:
+        """Sleep phase 3: co-replay related trace pairs as weighted links (paper A.10)."""
+        return await self._core.associate()
 
-        "Memory period" is defined as a contiguous time bucket: all available
-        traces (short-term buffer, the traces the latest consolidation pass
-        moved during phase 1 of this sleep, and the newest
-        ``cross_period_candidates`` persisted episodic points, read without
-        vectors) are gathered once each, sorted by timestamp, and divided
-        into *periods* equal-width windows (oldest to newest). Up to
-        *per_period* traces are sampled from each non-empty bucket. This works
-        on every storage backend.
-
-        Returns a mapping ``{period_label: [trace_dict, ...]}`` where each
-        trace dict carries ``point_id`` (str) and ``text`` (str) — the shape
-        phase 3's ``_trace_id`` and scenario-cue helpers already consume.
-        Affect fields (intensity/valence/dominance) are included as plain
-        numerics when present; no raw sense-data is carried through.
-
-        When there are fewer traces than *periods* the available traces are
-        distributed across as many buckets as possible — phase 3 handles the
-        degenerate case (< 2 populated periods) cleanly.
-
-        Args:
-            periods:    Number of contiguous time windows to bucket traces into.
-            per_period: Maximum number of traces sampled from each bucket.
-        """
-        periods = max(1, int(periods))
-        per_period = max(1, int(per_period))
-
-        # ---- Collect all candidates (numeric/affect only; no raw sense data) ----
-        all_traces: list[dict[str, Any]] = []
-
-        # Short-term buffer — in-process, already parsed StoredMemory objects.
-        for idx, memory in enumerate(self._core._short_term):
-            affect = dict(memory.affect) if memory.affect else {}
-            all_traces.append(
-                {
-                    "point_id": f"short_term:{idx}",
-                    "text": memory.text,
-                    "timestamp": memory.timestamp,
-                    "affect_intensity": float(affect.get("intensity", 0.0)),
-                    "valence": float(affect.get("valence", 0.0)),
-                    "dominance": float(affect.get("dominance", 0.0)),
-                }
-            )
-
-        # Traces phase 1 consolidated into episodic storage this sleep.
-        seen: set[str] = set()
-        for point_id, memory in self._core.last_consolidated:
-            seen.add(_point_key(point_id))
-            affect = dict(memory.affect) if memory.affect else {}
-            all_traces.append(
-                {
-                    "point_id": str(point_id),
-                    "text": memory.text,
-                    "timestamp": memory.timestamp,
-                    "affect_intensity": float(affect.get("intensity", 0.0)),
-                    "valence": float(affect.get("valence", 0.0)),
-                    "dominance": float(affect.get("dominance", 0.0)),
-                }
-            )
-
-        # The newest persisted episodic traces, without vectors, bounded by
-        # cross_period_candidates. Let StorageError propagate so phase 3 records a
-        # failure instead of combining from a partial pool.
-        episodic_key = self._core.collection_name("episodic")
-        recent = await self._core.storage.recent_points(
-            episodic_key, limit=self._cross_period_candidates
-        )
-        for point in recent:
-            key = _point_key(point.get("id", ""))
-            if key in seen:
-                continue
-            seen.add(key)
-            payload = dict(point.get("payload", {}))
-            affect_raw = point.get("affect") or {}
-            ts = float(payload.get("timestamp", 0.0))
-            all_traces.append(
-                {
-                    "point_id": str(point.get("id", "")),
-                    "text": str(point.get("text", "")),
-                    "timestamp": ts,
-                    "affect_intensity": float(affect_raw.get("intensity", 0.0)),
-                    "valence": float(affect_raw.get("valence", 0.0)),
-                    "dominance": float(affect_raw.get("dominance", 0.0)),
-                }
-            )
-
-        if not all_traces:
-            return {}
-
-        # ---- Bucket by timestamp into *periods* contiguous windows ------------
-        all_traces.sort(key=lambda t: t["timestamp"])
-        ts_min = all_traces[0]["timestamp"]
-        ts_max = all_traces[-1]["timestamp"]
-        ts_span = ts_max - ts_min
-
-        result: dict[str, list[dict[str, Any]]] = {}
-        for i in range(periods):
-            label = f"period_{i}"
-            if ts_span == 0.0:
-                # All traces share the same timestamp — put all in period_0.
-                bucket = all_traces if i == 0 else []
-            else:
-                low = ts_min + (ts_span / periods) * i
-                # Last bucket is inclusive of ts_max.
-                high = ts_min + (ts_span / periods) * (i + 1)
-                if i < periods - 1:
-                    bucket = [t for t in all_traces if low <= t["timestamp"] < high]
-                else:
-                    bucket = [t for t in all_traces if low <= t["timestamp"] <= high]
-            if bucket:
-                result[label] = bucket[:per_period]
-
-        return result
+    async def prune(self) -> dict[str, Any]:
+        """Sleep phase 3: prune after associative replay (paper A.10)."""
+        return await self._core.prune()
 
     def serialize(self) -> dict[str, Any]:
         """Synchronous metadata view (fork/merge snapshots, the dashboard).
@@ -705,19 +609,6 @@ def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
         affect=dict(affect) if affect else None,
         collection=None,
     )
-
-
-def _point_key(point_id: Any) -> str:
-    """Comparable form of a storage point id.
-
-    Qdrant stores the hex UUID that upsert returns and gives it back in
-    hyphenated form, so ids that parse as UUIDs compare by their hex.
-    """
-    text = str(point_id)
-    try:
-        return uuid.UUID(text).hex
-    except ValueError:
-        return text
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
