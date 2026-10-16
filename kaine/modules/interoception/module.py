@@ -15,6 +15,8 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.feedback import FeedbackChannel, TopDownBlend
+from kaine.modules.intensity import graded_intensity
 from kaine.modules.interoception.detector import (
     AnomalyDetector,
     ThresholdAnomalyDetector,
@@ -35,6 +37,7 @@ from kaine.modules.positive_control import (
     PositiveControlSettings,
     publish_result,
 )
+from kaine.workspace.feedback import FEEDBACK_KEY, WorkspaceFeedbackSettings
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +121,7 @@ class Interoception(BaseModule):
         self_rhythm: Any | None = None,
         self_rhythm_step_hz: float = 20.0,
         maternal_drive: Callable[[], float] | None = None,
+        workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
         positive_control: Optional[PositiveControlSettings] = None,
     ) -> None:
         super().__init__(bus)
@@ -143,6 +147,9 @@ class Interoception(BaseModule):
         self._context = BroadcastContext(self._clock.now)
         # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
+        # Workspace feedback and the positive control path are mutually exclusive.
+        if workspace_feedback is not None and positive_control is not None and positive_control.enabled:
+            raise ValueError("workspace feedback runs with the positive control off")
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
             PositiveControl("interoception", positive_control)
@@ -150,6 +157,11 @@ class Interoception(BaseModule):
             else None
         )
         self._pc_queue = ControlQueue()  # Run control steps off the report path.
+        # Workspace feedback channel (None when the feature is off).
+        self._feedback_settings: Optional[WorkspaceFeedbackSettings] = workspace_feedback
+        self._feedback_channel: Optional[FeedbackChannel] = (
+            FeedbackChannel("interoception") if workspace_feedback is not None else None
+        )
         self._feature_layout: int = 2
         self._last_read_time: float | None = None
         self._weights = dict(weights) if weights is not None else dict(DEFAULT_WEIGHTS)
@@ -237,6 +249,27 @@ class Interoception(BaseModule):
         self._self_rhythm_step_hz = float(self_rhythm_step_hz)
         self._maternal_drive = maternal_drive
         self._self_rhythm_own_drive = 0.0
+
+        # Wrap the forward model once if workspace feedback is enabled.
+        self._ensure_feedback_wrap()
+
+    def _ensure_feedback_wrap(self) -> None:
+        """Wrap the forward model in a top-down blend when workspace feedback is on.
+
+        Safe to call repeatedly; does nothing when feedback is off or the model
+        is already wrapped.
+        """
+        if self._feedback_settings is None:
+            return
+        if self._forward_model is None:
+            return
+        if isinstance(self._forward_model, TopDownBlend):
+            return
+        self._forward_model = TopDownBlend(
+            self._forward_model,
+            window=self._prediction_error_window.maxlen,
+            lr=self._feedback_settings.head_learning_rate,
+        )
 
     # ------------------------------------------------------------------
     # Developmental warm-up (soma-coldstart-regulation-warmup)
@@ -485,6 +518,8 @@ class Interoception(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
         self._context.observe(snapshot)
+        if self._feedback_channel is not None:
+            self._feedback_channel.observe(snapshot)
 
     async def tick_once(self) -> dict[str, Any]:
         """Read metrics, evaluate, update forward model / fatigue / regulation, publish."""
@@ -532,23 +567,30 @@ class Interoception(BaseModule):
             ts = min(10.0, max(0.0, (now_read - self._last_read_time) / self._read_interval_s))
         self._last_read_time = now_read
 
+        # Workspace feedback: ensure the forward model is wrapped and read the
+        # adopted sequence prediction before any await.
+        feedback_kw: dict[str, Any] = {}
+        if self._feedback_channel is not None:
+            self._ensure_feedback_wrap()
+            feedback_kw["sequence_prediction"] = self._feedback_channel.sequence_prediction
+
         ctx = null = None
         scored_stamp = self._prediction_stamp
         if getattr(self._forward_model, "context_dim", 0) > 0:
             ctx, null = self._context.context_and_null(("interoception", "language"))
             if getattr(self._forward_model, "accepts_timespan", False):
                 prediction_error = self._forward_model.step(
-                    feature_vec, timespan=ts, context=ctx, null_context=null
+                    feature_vec, timespan=ts, context=ctx, null_context=null, **feedback_kw
                 )
             else:
                 prediction_error = self._forward_model.step(
-                    feature_vec, context=ctx, null_context=null
+                    feature_vec, context=ctx, null_context=null, **feedback_kw
                 )
         else:
             if getattr(self._forward_model, "accepts_timespan", False):
-                prediction_error = self._forward_model.step(feature_vec, timespan=ts)
+                prediction_error = self._forward_model.step(feature_vec, timespan=ts, **feedback_kw)
             else:
-                prediction_error = self._forward_model.step(feature_vec)
+                prediction_error = self._forward_model.step(feature_vec, **feedback_kw)
         self._last_prediction_error = prediction_error
         if (
             getattr(self._forward_model, "context_dim", 0) > 0
@@ -735,13 +777,56 @@ class Interoception(BaseModule):
             "warmup_active": warmup_active,
         }
 
+        # Normalised error ratio used for intensity and the feedback payload.
+        error_defined = getattr(self._forward_model, "last_error_defined", True)
+        error_ratio: Optional[float] = None
+        if error_defined:
+            if self._prediction_error_window:
+                mean_err = sum(self._prediction_error_window) / len(self._prediction_error_window)
+                if mean_err > 0.0:
+                    error_ratio = prediction_error / mean_err
+                else:
+                    error_ratio = 0.0
+            else:
+                error_ratio = 0.0
+
+        if self._feedback_channel is not None:
+            payload[FEEDBACK_KEY] = {
+                "disagreement": getattr(self._forward_model, "last_disagreement", None),
+                "error_ratio": error_ratio,
+                "gain": (
+                    self._feedback_channel.gain
+                    if self._feedback_settings.gain_active
+                    else 1.0
+                ),
+                "top_down_weight": getattr(self._forward_model, "last_top_weight", None),
+                "own_error": getattr(self._forward_model, "last_own_error", None),
+                "top_down_error": getattr(self._forward_model, "last_top_error", None),
+            }
+
         # Salience: driven by prediction error (blended with alert).
-        error_salience = self._forward_model.prediction_error_to_salience(
-            prediction_error,
-            self._baseline_salience,
-            self._alert_salience,
-            error_window=list(self._prediction_error_window),
-        )
+        if (
+            self._feedback_channel is not None
+            and self._feedback_settings.gain_active
+            and error_ratio is not None
+            and self._prediction_error_window
+            and sum(self._prediction_error_window) / len(self._prediction_error_window) > 0.0
+            and math.isfinite(prediction_error)
+            and prediction_error >= 0.0
+        ):
+            gain = self._feedback_channel.gain
+            error_salience = graded_intensity(
+                self._baseline_salience,
+                self._alert_salience,
+                gain * error_ratio,
+            )
+        else:
+            error_salience = self._forward_model.prediction_error_to_salience(
+                prediction_error,
+                self._baseline_salience,
+                self._alert_salience,
+                error_window=list(self._prediction_error_window),
+            )
         salience = self._alert_salience if alert.is_alert else error_salience
         await self.publish("interoception.report", payload, salience=salience)
         self._self_rhythm_own_drive = float(salience)
@@ -1025,3 +1110,6 @@ class Interoception(BaseModule):
                 self._self_rhythm.deserialize(state["self_rhythm"])
             except Exception:
                 log.warning("failed to restore self-rhythm state", exc_info=True)
+
+        # Re-wrap the forward model if workspace feedback is enabled.
+        self._ensure_feedback_wrap()

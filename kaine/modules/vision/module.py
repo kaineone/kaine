@@ -14,6 +14,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.feedback import FeedbackChannel, TopDownBlend
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.positive_control import (
     ControlQueue,
@@ -47,6 +48,7 @@ from kaine.modules.vision.live import (
     LiveCameraConfig,
     PerceptionUnavailableError,
 )
+from kaine.workspace.feedback import FEEDBACK_KEY, WorkspaceFeedbackSettings
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +145,7 @@ class Vision(BaseModule):
         peripheral_size: tuple[int, int] = (320, 180),
         foveal_size: tuple[int, int] = (224, 224),
         positive_control: Optional[PositiveControlSettings] = None,
+        workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -157,6 +160,8 @@ class Vision(BaseModule):
             raise ValueError("prediction_error_window must be >= 2")
         if int(clip_stride) < 1:
             raise ValueError("clip_stride must be >= 1")
+        if workspace_feedback is not None and positive_control is not None and positive_control.enabled:
+            raise ValueError("workspace feedback runs with the positive control off")
         # Encoder selection (topos-temporal-video-encoder). An explicitly injected
         # encoder wins (tests, custom wiring); otherwise the encoder_backend
         # selector builds one (default: the temporally-native InternVideo-Next
@@ -196,6 +201,14 @@ class Vision(BaseModule):
         self._live_camera: Optional[LiveCamera] = None
         if self._capture_enabled or live_camera is not None:
             self._live_camera = live_camera or self._build_default_live_camera(live_camera_config)
+
+        # Workspace feedback (paper §3.2). When None the module is bit-for-bit
+        # identical to the pre-feedback behavior; every new line is gated on
+        # this object being non-None.
+        self._feedback_settings: Optional[WorkspaceFeedbackSettings] = workspace_feedback
+        self._feedback_channel: Optional[FeedbackChannel] = (
+            FeedbackChannel("vision") if workspace_feedback is not None else None
+        )
 
         # Forward prediction — disabled by default; behaviour is unchanged
         # when forward_prediction=False (the legacy change_score/habituation
@@ -289,6 +302,25 @@ class Vision(BaseModule):
         # kaine/perception_preview.py for the zero-persistence contract.
         self._preview_jpeg: Optional[bytes] = None
 
+    def _ensure_feedback_wrap(self) -> None:
+        """Wrap the forward model in a top-down blend when workspace feedback is on.
+
+        The wrap is idempotent: it is applied when the forward model exists and
+        is not already a blend. This keeps the module safe when tests assign the
+        forward model directly after initialize.
+        """
+        if self._feedback_settings is None:
+            return
+        if self._forward_model is None:
+            return
+        if isinstance(self._forward_model, TopDownBlend):
+            return
+        self._forward_model = TopDownBlend(
+            self._forward_model,
+            window=self._prediction_error_window,
+            lr=self._feedback_settings.head_learning_rate,
+        )
+
     async def initialize(self) -> None:
         await self._encoder.load()
 
@@ -301,6 +333,7 @@ class Vision(BaseModule):
                 visual_buffer_size=self._visual_buffer_size,
                 context_dim=CONTEXT_DIM,
             )
+            self._ensure_feedback_wrap()
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
@@ -583,9 +616,17 @@ class Vision(BaseModule):
         normalised_error: float = 0.0  # exposed on the report for the affect coupling
         scored_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         if self._forward_prediction and self._forward_model is not None:
+            self._ensure_feedback_wrap()
             self._forward_model.suspended = self._in_sleep
             ctx = null = None
             scored_stamp = self._prediction_stamp
+            # Read the workspace feedback channel synchronously, before any await,
+            # so a broadcast received during the step cannot change the inputs.
+            seq = (
+                self._feedback_channel.sequence_prediction
+                if self._feedback_channel is not None
+                else None
+            )
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
             formed_stamp: tuple[Optional[int], Optional[float]] = (None, None)
@@ -594,8 +635,17 @@ class Vision(BaseModule):
                 # Read before the step yields to the event loop, so a broadcast
                 # received during the step cannot change the stamp.
                 formed_stamp = self._context.last_reading
+                if self._feedback_channel is not None:
+                    prediction_error = await asyncio.to_thread(
+                        self._forward_model.step, embedding, ctx, null, sequence_prediction=seq
+                    )
+                else:
+                    prediction_error = await asyncio.to_thread(
+                        self._forward_model.step, embedding, ctx, null
+                    )
+            elif self._feedback_channel is not None:
                 prediction_error = await asyncio.to_thread(
-                    self._forward_model.step, embedding, ctx, null
+                    self._forward_model.step, embedding, sequence_prediction=seq
                 )
             else:
                 prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)
@@ -651,7 +701,17 @@ class Vision(BaseModule):
             # prediction-error threshold stays fixed at the proven 2.0; the tunable
             # change_alert_factor governs the change-detector path.
             alert = normalised >= 2.0 or change_alert
-            graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+            if (
+                self._feedback_channel is not None
+                and self._feedback_settings is not None
+                and self._feedback_settings.gain_active
+            ):
+                gain = self._feedback_channel.gain
+                graded = graded_intensity(
+                    self._baseline_salience, self._alert_salience, gain * normalised
+                )
+            else:
+                graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
             salience = self._alert_salience if alert else graded
         else:
             alert = change_alert
@@ -735,6 +795,28 @@ class Vision(BaseModule):
             if position is not None:
                 report["item"] = position.title
                 report["item_order"] = position.order
+        # Workspace feedback diagnostic payload (paper §3.2). Only emitted when
+        # the feature is armed, so the off configuration stays bit-for-bit.
+        if self._feedback_settings is not None:
+            applied_gain = 1.0
+            if self._feedback_settings.gain_active:
+                applied_gain = (
+                    self._feedback_channel.gain if self._feedback_channel is not None else 1.0
+                )
+            report[FEEDBACK_KEY] = {
+                "disagreement": getattr(self._forward_model, "last_disagreement", None),
+                "error_ratio": (
+                    normalised_error
+                    if self._forward_prediction
+                    and self._forward_model is not None
+                    and published_error is not None
+                    else None
+                ),
+                "gain": applied_gain,
+                "top_down_weight": getattr(self._forward_model, "last_top_weight", 0.0),
+                "own_error": getattr(self._forward_model, "last_own_error", None),
+                "top_down_error": getattr(self._forward_model, "last_top_error", None),
+            }
         event_id = await self.publish(
             "vision.report",
             report,
@@ -858,6 +940,8 @@ class Vision(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
         self._context.observe(snapshot)
+        if self._feedback_channel is not None:
+            self._feedback_channel.observe(snapshot)
 
     async def _sleep_loop(self) -> None:
         """Subscribe to sleep.out to gate adaptation during sleep."""

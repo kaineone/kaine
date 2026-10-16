@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from kaine.boot.common import _check_injections
 from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import ConfigurationError, _require_keys
+from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_settings
 from kaine.boot.perception_feed import _build_perception_feed_audio_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -106,6 +107,8 @@ def make_audition(
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
     pc_section = section.pop("positive_control", None)
+    feedback_section = section.pop(FEEDBACK_SECTION_KEY, None)
+    feedback_cfg = feedback_settings(feedback_section)
     _require_keys(section, allowed - {"perception_feed"})
     base_keys = {
         "speaches_url",
@@ -118,6 +121,8 @@ def make_audition(
     }
     kwargs = config_kwargs(section, base_keys, Audition)
     kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
+    if feedback_cfg is not None:
+        kwargs["workspace_feedback"] = feedback_cfg
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
     kwargs["capture_enabled"] = bool(section.get("capture_enabled", False))

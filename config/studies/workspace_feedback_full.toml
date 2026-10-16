@@ -1,0 +1,17 @@
+# Study configuration: the full arm of the workspace-feedback ablation (paper
+# §6.4). Select it for a run with KAINE_STUDY=workspace_feedback_full. It is
+# applied after the operator config, so these settings hold for the run. The
+# run's seed comes from [experiment].seed; run r of every arm uses the same seed.
+
+[language]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[workspace]
+arm = "competitive"
+
+[workspace.feedback]
+enabled = true
+# full: gain moves only on conflicts that meet the disagreement and error-ratio
+# thresholds.
+arm = "full"
