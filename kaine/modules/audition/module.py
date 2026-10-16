@@ -295,7 +295,8 @@ class Audition(BaseModule):
 
     def _ensure_feedback_wrap(self) -> None:
         """Wrap the acoustic forward model in a top-down blend when feedback is on."""
-        if self._feedback_settings is None:
+        # getattr: a module restored without __init__ (object.__new__) has no feedback.
+        if getattr(self, "_feedback_settings", None) is None:
             return
         if self._acoustic_forward_model is None:
             return

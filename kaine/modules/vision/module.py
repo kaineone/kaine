@@ -309,7 +309,8 @@ class Vision(BaseModule):
         is not already a blend. This keeps the module safe when tests assign the
         forward model directly after initialize.
         """
-        if self._feedback_settings is None:
+        # getattr: a module restored without __init__ (object.__new__) has no feedback.
+        if getattr(self, "_feedback_settings", None) is None:
             return
         if self._forward_model is None:
             return

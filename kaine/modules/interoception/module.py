@@ -259,7 +259,8 @@ class Interoception(BaseModule):
         Safe to call repeatedly; does nothing when feedback is off or the model
         is already wrapped.
         """
-        if self._feedback_settings is None:
+        # getattr: a module restored without __init__ (object.__new__) has no feedback.
+        if getattr(self, "_feedback_settings", None) is None:
             return
         if self._forward_model is None:
             return
