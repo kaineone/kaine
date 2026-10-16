@@ -139,3 +139,8 @@ def test_decommission_includes_association_collections():
     assert "episodic_memory_links" in names
     assert "episodic_memory_schemas" in names
     assert "episodic_memory_episodic" in names
+
+
+async def test_partial_association_table_keeps_defaults(bus):
+    module = make_episodic_memory(bus, _base_config(association={"n_pair": 3}))
+    assert module.core.association_params == AssociationParams(n_pair=3)
