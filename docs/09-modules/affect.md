@@ -26,11 +26,11 @@ The appraisal of a broadcast does not move arousal, so a higher access rate cann
 
 | Source | Condition | Change in arousal |
 |---|---|---|
-| `vision.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, r - 1))`, with `r` the report's `normalised_error` (its error over its running mean) |
+| `vision.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, max(r, c) - 1))`, with `r` the report's `normalised_error` (its error over its running mean) and `c` its `normalised_change` (its change score over its running mean) |
 | `interoception.report` | non-empty `alerts` list (a host metric past its hard limit) | `+0.05` |
 | `episodic_memory.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the first configuration) |
 
-An alert raised by a change criterion alone, with `r <= 1`, leaves arousal unchanged. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
+A missing, non-numeric or non-finite ratio counts as 0, so a report without `normalised_change` raises arousal by its error ratio alone, and an alert whose ratios are both at most 1 leaves arousal unchanged. The change ratio follows paper A.5: the locus coeruleus responds phasically to salient abrupt change as well as to unexpected outcomes (Bouret and Richmond 2009), and most vision alerts are change alerts whose error ratio sits near 1. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
 
 ## Valence from learning progress
 

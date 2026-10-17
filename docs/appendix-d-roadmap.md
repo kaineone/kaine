@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| arousal-change-excess | 5/5 (100%) | Perceptual alerts raise arousal by the larger excess of the error and change ratios over 1, and vision and audition reports carry the change ratio (paper A.5). |
 | research-log-affect-fields | 7/7 (100%) | Log the affect goal, emotion and regulation fields, the regulation bias and feedback gains on each broadcast, and the link pruning counts in the curated research log. |
 | restart-keeps-development | 9/9 (100%) | Store the self-rhythm identity in the state tree so a plain restart keeps the developmental progress. |
 | sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
@@ -116,6 +117,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 90 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 91 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

@@ -466,6 +466,10 @@ class Audition(BaseModule):
             # exposed so the affect layer can scale arousal by acoustic surprise
             # (perception→arousal coupling).
             "normalised_error": normalised,
+            # Acoustic change score over the running mean of acoustic change scores,
+            # the ratio the change alert uses, published so the affect layer can raise
+            # arousal on change alerts (paper A.2, A.5).
+            "normalised_change": normalised_change,
             # Cross-module broadcast information gain and context age (Appendix A.8).
             # Paired evaluations behind the information-gain measure.
             "context_gain": context_gain,
