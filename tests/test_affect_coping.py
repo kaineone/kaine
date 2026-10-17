@@ -226,7 +226,7 @@ def test_classify_skips_fear_anger_sadness_without_coping():
     fear = AppraisalScores(
         novelty=0.7,
         intrinsic_pleasantness=-0.6,
-        goal_significance=0.0,
+        goal_significance=-0.5,
         coping_potential=-0.5,
         norm_compatibility=0.0,
         coping_available=False,

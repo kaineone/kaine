@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| affect-testboot-fixes | 4/4 (100%) | Fix three affect defects from the 2026-10-16 test boot: the sleep reset reports the goals it clears, the drive crossing latch survives a revive, and fear follows the Sander, Grandjean and Scherer (2005) Table 3 profile instead of firing on near-neutral input. |
 | arousal-change-excess | 5/5 (100%) | Perceptual alerts raise arousal by the larger excess of the error and change ratios over 1, and vision and audition reports carry the change ratio (paper A.5). |
 | research-log-affect-fields | 7/7 (100%) | Log the affect goal, emotion and regulation fields, the regulation bias and feedback gains on each broadcast, and the link pruning counts in the curated research log. |
 | restart-keeps-development | 9/9 (100%) | Store the self-rhythm identity in the state tree so a plain restart keeps the developmental progress. |
@@ -117,6 +118,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 91 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 92 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

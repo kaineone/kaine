@@ -241,13 +241,22 @@ async def test_reappraisal_turns_fear_into_non_fear_when_coping_improves(monkeyp
     affect.drives.social_drive.other_ends = 8
     affect._state = DimensionalState(valence=-0.6, arousal=0.6, dominance=0.0)
 
-    snap = _snapshot([_ev("audition", salience=0.9, eid="a")])
+    goal = affect._goals.add(
+        "relieve social_drive",
+        priority=0.8,
+        drive="social_drive",
+        likelihood=0.8,
+    )
+    affect._held_obstruction[goal.id] = 0.5
+
+    snap = _snapshot([_ev("vision", salience=0.9, eid="v", normalised_error=2.0)])
     await affect._appraise_snapshot(snap)
     assert affect.last_emotion == CategoricalEmotion.FEAR
 
     affect.drives.social_drive.own_ends = 8
     affect.drives.social_drive.other_ends = 0
 
+    affect._held_obstruction[goal.id] = 0.5
     affect._regulation.update(now=0.0, intensity=0.8, negative=True)
     before_valence = affect.state.valence
     await affect._run_regulation(60.0)
@@ -296,10 +305,19 @@ async def test_reappraisal_without_change_publishes_no_emotion(monkeypatch):
     affect.drives.social_drive.other_ends = 8
     affect._state = DimensionalState(valence=-0.6, arousal=0.6, dominance=0.0)
 
-    snap = _snapshot([_ev("audition", salience=0.9, eid="a")])
+    goal = affect._goals.add(
+        "relieve social_drive",
+        priority=0.8,
+        drive="social_drive",
+        likelihood=0.8,
+    )
+    affect._held_obstruction[goal.id] = 0.5
+
+    snap = _snapshot([_ev("vision", salience=0.9, eid="v", normalised_error=2.0)])
     await affect._appraise_snapshot(snap)
     assert affect.last_emotion == CategoricalEmotion.FEAR
 
+    affect._held_obstruction[goal.id] = 0.5
     affect._regulation.update(now=0.0, intensity=0.8, negative=True)
     await affect._run_regulation(60.0)
     assert affect.last_emotion == CategoricalEmotion.FEAR
