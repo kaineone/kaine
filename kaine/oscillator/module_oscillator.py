@@ -516,6 +516,7 @@ class SelfRhythmOscillator(ModuleOscillator):
         import uuid
 
         self.identity = uuid.uuid4().hex
+        self.identity_restored = False  # it becomes True once deserialize() applies a stored identity.
 
     @staticmethod
     def _sigmoid(x: float, k: float) -> float:
@@ -813,6 +814,7 @@ class SelfRhythmOscillator(ModuleOscillator):
             stored_identity = state.get("identity")
             if isinstance(stored_identity, str):
                 self.identity = stored_identity
+                self.identity_restored = True
 
         except Exception as exc:
             logger.info("Ignoring invalid v2 SelfRhythmOscillator state: %s", exc)
