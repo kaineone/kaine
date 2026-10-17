@@ -1764,7 +1764,7 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
 
 
 async def _phase_registry(ctx: BootContext) -> int | None:
-    """Build and initialize the modules, hold effectors while developing, and apply a revive."""
+    """Build and initialize the modules, hold effectors while developing, apply a revive, and wire the resume checkpoint."""
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
@@ -1804,6 +1804,11 @@ async def _phase_registry(ctx: BootContext) -> int | None:
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()
             return refused
+        # A landed revive wins over any resume checkpoint: replace it immediately.
+        await _replace_checkpoint_after_revive(ctx.registry, ctx.identity)
+    else:
+        # Plain start: restore any persisted module state from the rolling checkpoint.
+        _resume_from_checkpoint(ctx.registry, ctx.identity)
     return None
 
 
@@ -2606,6 +2611,64 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
     await _start_utterance_outcome(ctx)
 
 
+def _resume_from_checkpoint(registry: Any, identity: Any) -> None:
+    """Plain start: restore module state from the resume checkpoint (paper A.7)."""
+    try:
+        from kaine.lifecycle.resume_checkpoint import restore_checkpoint
+        restore_checkpoint(registry, identity)
+    except Exception:
+        log.warning("resume checkpoint: restore failed", exc_info=True)
+
+
+async def _replace_checkpoint_after_revive(registry: Any, identity: Any) -> None:
+    """A landed revive wins over any resume checkpoint: replace it with the revived state."""
+    from kaine.lifecycle.resume_checkpoint import discard_checkpoint, save_checkpoint
+    success = await save_checkpoint(registry, identity, reason="revive")
+    if not success:
+        removed = discard_checkpoint()
+        if not removed:
+            log.error(
+                "resume checkpoint: could not replace or remove the checkpoint after a revive; "
+                "a plain start could restore state from before the revive"
+            )
+
+
+async def _phase_checkpoint(ctx: BootContext) -> int | None:
+    """Start the rolling resume checkpoint (paper A.7)."""
+    from kaine.lifecycle.resume_checkpoint import ResumeCheckpointer
+
+    def _awake_seconds() -> float | None:
+        try:
+            return ctx.cycle.entity_clock.now() - ctx.cycle.unawake_subjective_seconds()
+        except Exception:
+            return None
+
+    def _can_write() -> bool:
+        try:
+            return not ctx.cycle.is_paused and not ctx.cycle.is_asleep
+        except Exception:
+            return False
+
+    ctx.checkpointer = ResumeCheckpointer(
+        ctx.registry,
+        ctx.identity,
+        awake_seconds=_awake_seconds,
+        can_write=_can_write,
+    )
+    ctx.checkpoint_task = ctx.checkpointer.start()
+    return None
+
+
+async def _final_checkpoint(checkpointer: Any, registry: Any) -> None:
+    """Write the resume checkpoint once at a clean shutdown, unless asleep."""
+    if checkpointer is None:
+        return
+    try:
+        await checkpointer.write_final(asleep=_sleep_is_sleeping(registry))
+    except Exception:
+        log.warning("resume checkpoint: shutdown write failed", exc_info=True)
+
+
 _BOOT_PHASES = (
     _phase_stage,
     _phase_preconditions,
@@ -2633,6 +2696,7 @@ _BOOT_PHASES = (
     _phase_caretaker,
     _phase_development,
     _phase_watchers,
+    _phase_checkpoint,
 )
 
 
@@ -2817,6 +2881,8 @@ async def _shutdown(ctx: BootContext) -> None:
         await ctx.cycle_task
     except (asyncio.CancelledError, Exception):
         log.debug("cycle task ended", exc_info=True)
+    # Write one final resume checkpoint while the modules are still intact.
+    await _final_checkpoint(ctx.checkpointer, ctx.registry)
     await _shutdown_modules(ctx.registry.all_modules())
     await ctx.bus.close()
     _clear_runtime_state()

@@ -82,3 +82,5 @@ class BootContext:
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
     utterance_outcome: Any = None  # set by _phase_watchers
+    checkpointer: Any = None  # set by _phase_checkpoint
+    checkpoint_task: Any = None  # set by _phase_checkpoint
