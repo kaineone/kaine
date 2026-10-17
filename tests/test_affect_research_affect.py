@@ -822,7 +822,7 @@ def test_drive_rejects_nan_rates():
 
 
 @pytest.mark.asyncio
-async def test_affective_reset_clears_progress_trackers(bus: AsyncBus):
+async def test_affective_reset_keeps_progress_trackers(bus: AsyncBus):
     fake_now = [0.0]
     affect = Affect(
         bus,
@@ -848,12 +848,20 @@ async def test_affective_reset_clears_progress_trackers(bus: AsyncBus):
             )
             if i % 3 == 0:
                 await affect._tick()
+        before_progress = affect._progress()
+        before_fast_sum = dict(affect._err_fast_sum)
+        before_fast_count = dict(affect._err_fast_count)
+        before_slow_sum = dict(affect._err_slow_sum)
+        before_slow_count = dict(affect._err_slow_count)
         await affect.affective_reset()
-        base = affect.state.valence
-        for j in range(1, 101):
-            fake_now[0] = 120.0 + 0.3 * j
-            await affect._tick()
-        assert abs(affect.state.valence - base) < 0.1
+        assert affect._progress() == pytest.approx(before_progress)
+        assert dict(affect._err_fast_sum) == before_fast_sum
+        assert dict(affect._err_fast_count) == before_fast_count
+        assert dict(affect._err_slow_sum) == before_slow_sum
+        assert dict(affect._err_slow_count) == before_slow_count
+        assert affect.state.arousal == affect.baseline.arousal
+        for d in affect.drives.all():
+            assert d.value == 0.0
     finally:
         await affect.shutdown()
 

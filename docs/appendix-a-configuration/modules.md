@@ -308,7 +308,7 @@ Privacy note: internal-speech text is never written to disk; only counts and der
 
 Section: `[affect]`.
 
-The affect module maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When the sleep module runs its affective reset, the affect module returns the VAD state and drives to baseline and clears its learning-progress error averages, alert-rate averages, intent rate, perceived emotion and active goals; wellness and interaction history are kept. See [the affect module](../09-modules/affect.md).
+The affect module maintains a dimensional VAD (valence, arousal, dominance) state, a categorical emotion and four drives. Its arousal is the global gain on the workspace score and sizes the sensory apertures. When the sleep module runs its affective reset, the affect module returns the VAD state and drives to baseline and clears its perceived emotion and active goals; wellness, interaction history, the learning-progress error averages, the alert-rate averages and the intent rate are kept and change only by their own decay. See [the affect module](../09-modules/affect.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|

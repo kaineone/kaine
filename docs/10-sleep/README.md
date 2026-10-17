@@ -79,7 +79,7 @@ Phase 4 first builds preference pairs from the intent-expression log and publish
 
 ### Phase 5: affective reset
 
-The sleep module ends with the affective reset (paper §3.5). Phase 5 calls `affect.affective_reset()`. It returns valence, arousal and dominance to baseline, resets every drive, sets the emotion to neutral, clears the learning-progress and alert-rate trackers, the intent rate and any perceived emotion, and publishes `affect.state` with `reset: true`. Wellness and the record of the last heard voice are kept. See the [affect module](../09-modules/affect.md#sleep-reset).
+The sleep module ends with the affective reset (paper §3.5). Phase 5 calls `affect.affective_reset()`. It returns valence, arousal and dominance to baseline, resets every drive, sets the emotion to neutral, clears any perceived emotion, and publishes `affect.state` with `reset: true`. Wellness, the record of the last heard voice, the learning-progress and alert-rate trackers and the intent rate are kept; the trackers change through the sleep only by their own decay (paper A.4 item 4). See the [affect module](../09-modules/affect.md#sleep-reset).
 
 ### After the phases
 

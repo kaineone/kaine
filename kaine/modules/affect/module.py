@@ -1261,16 +1261,10 @@ class Affect(BaseModule):
         }
         self._last_emotion = CategoricalEmotion.NEUTRAL
 
-        # Reset learning-progress trackers so post-sleep affect starts afresh.
-        self._err_fast_sum.clear()
-        self._err_fast_count.clear()
-        self._err_slow_sum.clear()
-        self._err_slow_count.clear()
-        self._err_last_at.clear()
-        self._alert_fast = 0.0
-        self._alert_slow = 0.0
-        self._intent_rate = 0.0
-        self._intents_since_broadcast = 0
+        # The alert rates, error means and intent rate carry on through the sleep,
+        # decaying by their own rules (paper A.4 item 4): habituation recovers with
+        # time away from the stimulus and can outlast breaks (Thompson and Spencer
+        # 1966; Rankin et al. 2009).
         self._perceived_emotion = None
 
         # A goal cleared by sleep counts as neither completed nor abandoned (paper A.4),
