@@ -181,18 +181,18 @@ class DefaultActionSelectionPolicy:
       speech (no self-response feedback loop).
     - One-in-flight guard: does not emit a new ``speak`` intent while a prior one
       is still being realized. The guard is armed when a ``speak`` intent is
-      emitted and persists across subsequent decision ticks; it is cleared by
-      :meth:`mark_realized` once the prior utterance's realization is observed
-      (the entity's own ``language.external`` output appears in a later coalition).
+      emitted and persists across subsequent decision ticks; it is released by
+      :meth:`mark_realized` when the organ publishes the entity's own external
+      speech (paper A.6 step 1), when that output appears in a later coalition,
+      or after the guard timeout.
 
     Injectable so `drives-to-behavior` can supply a drive-biased policy without
     touching the action selection module's plumbing.
     """
 
     # C3: refractory-scaled guard timeout (6x the report speak refractory of
-    # 8s ~= 48s) - a speak guard armed this long without the entity's own
-    # output being accessed is cleared, so a failed realization cannot
-    # permanently mute the entity.
+    # 8s ~= 48s) - a speak guard armed this long without the organ's matching
+    # output is cleared, so a failed realization cannot permanently mute the entity.
     _GUARD_TIMEOUT_S = 48.0
 
     def __init__(
@@ -217,8 +217,10 @@ class DefaultActionSelectionPolicy:
         return self._speak_in_flight
 
     def mark_realized(self) -> None:
-        """Clear the one-in-flight guard (a prior speak intent has completed)."""
+        """Clear the one-in-flight guard: the organ published the entity's own
+        external speech, accessed or not (paper A.6 step 1)."""
         self._speak_in_flight = False
+        self._speak_armed_at = float("-inf")
 
     def note_external_intent(self, kind: str, when: float | None = None) -> None:
         """Arm this policy's own in-flight guard for ``kind`` as if it emitted it.
@@ -286,7 +288,7 @@ class DefaultActionSelectionPolicy:
                 self._speak_armed_at = float("-inf")
                 break
         # C3 belt-and-suspenders: a guard armed longer than the timeout window
-        # without the entity's own output being accessed is cleared, so a
+        # without the organ's matching output is cleared, so a
         # failed realization (LLM error, dead organ) can never permanently
         # mute the entity. Uses the injected clock (subjective time in tests).
         if (
@@ -347,6 +349,32 @@ class ActionSelection:
     @property
     def signer(self) -> Optional[IntentSigner]:
         return self._signer
+
+    def observe_own_output(self, event: Any) -> None:
+        """Release the in-flight guard that the organ's published output realizes.
+
+        Paper A.6 step 1: the release holds whether or not the output is
+        selected or accessed.
+
+        A corollary discharge tells a producer its command has run; it does not
+        have to perceive the output.
+        """
+        if getattr(event, "source", None) != OWN_EXTERNAL_SPEECH_SOURCE:
+            return
+        type_ = getattr(event, "type", None)
+        if type_ == OWN_EXTERNAL_SPEECH_TYPE:
+            hook_name = "mark_realized"
+        elif type_ == OWN_INTERNAL_SPEECH_TYPE:
+            hook_name = "mark_think_realized"
+        else:
+            return
+        hook = getattr(self._policy, hook_name, None)
+        if not callable(hook):
+            return
+        try:
+            hook()
+        except Exception:
+            log.warning("guard release on own output failed", exc_info=True)
 
     def select(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         # Core safeguard (§37/§147): inhibited → silence, for every effector.
