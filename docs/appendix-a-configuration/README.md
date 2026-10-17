@@ -66,7 +66,7 @@ Most module factories validate their section against an allowlist and raise `Val
 chmod 600 config/secrets.toml
 ```
 
-Real secret values are never printed in documentation or committed to the repository. `config/secrets.toml` is read by individual subsystems rather than being merged into the main config stack.
+Real secret values are never printed in documentation or committed to the repository. `config/secrets.toml` is read by individual subsystems rather than being merged into the main config stack, all through one loader (`kaine.secrets_file.load_secrets_doc`). A missing file is empty. A file that exists but cannot be read is treated as absent with one warning, so containers, which get every secret from the environment and do not mount the file, run without it. A malformed file is an error.
 
 ### Environment overrides
 
@@ -123,7 +123,7 @@ Put the dashboard operator token under `[dashboard]` in `config/secrets.toml`, n
 
 ### Caretaker tokens
 
-Store caretaker authentication tokens under `[caretaker.tokens]` in `config/secrets.toml`.
+Store caretaker authentication tokens under `[caretaker.tokens]` in `config/secrets.toml`, or in the environment as `KAINE_CARETAKER_TOKEN_<NAME>` (the channel's `token_name`, upper-cased), which wins over the file. The containers read only the environment: put the lines in `compose/caretaker.env`.
 
 ## Section guide
 

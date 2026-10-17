@@ -24,7 +24,7 @@ The dashboard web console is described in [the dashboard](../05-dashboard.md). T
 - `"open"` (shipped default): no sign-in. Anyone who can reach the address can view and control the entity. The dashboard listens only on loopback by default, so "anyone" means programs and people on this computer, plus the operator's tailnet if they choose to serve it there. The Host allowlist and Origin checks still apply.
 - `"token"`: an operator token is required. Use it whenever the dashboard is reachable by anyone you do not fully trust. Override per launch with `KAINE_DASHBOARD_ACCESS=token`.
 
-In token mode, the operator token must be at least 32 characters and must live only in `KAINE_DASHBOARD_TOKEN` or in `config/secrets.toml` under `[dashboard] operator_token`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, privileged endpoints return 401.
+In token mode, the operator token must be at least 32 characters and must live only in `KAINE_DASHBOARD_TOKEN` or in `config/secrets.toml` under `[dashboard] operator_token`. The containers do not mount the secrets file, so there the token comes only from `KAINE_DASHBOARD_TOKEN` in `compose/.env`. The dashboard refuses to start if a non-empty token appears in `config/kaine.toml` or `config/kaine.operator.toml` ([`kaine/dashboard/config.py`](../../kaine/dashboard/config.py)). If no token is configured in token mode, `python -m kaine.dashboard` refuses to start, on any bind, and says where to set one.
 
 A browser signs in once at `/login`. The session cookie authorizes page loads and reads, and every state-changing request also carries the per-session `X-Dashboard-Session-Key` header that the login page stores. Scripts can send `Authorization: Bearer <token>` instead.
 
@@ -77,7 +77,7 @@ These environment variables override the matching TOML keys. Boolean overrides a
 
 ### Loading scope
 
-Dashboard loads only `config/kaine.toml`, `config/kaine.operator.toml` and `config/secrets.toml`. The profile, tier and `KAINE_DATA_ROOT` path normalisation used by the rest of KAINE do not apply to the dashboard configuration.
+Dashboard loads only `config/kaine.toml`, `config/kaine.operator.toml` and `config/secrets.toml`; a secrets file it cannot read counts as absent. The profile, tier and `KAINE_DATA_ROOT` path normalisation used by the rest of KAINE do not apply to the dashboard configuration.
 
 ### Related security settings
 

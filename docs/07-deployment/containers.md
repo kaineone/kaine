@@ -25,6 +25,8 @@ Every published port is bound to `127.0.0.1`. Inside the Compose network, servic
 
 `kaine-chatterbox` defaults to the image `kaine-chatterbox:local`, which has no upstream source. A plain `docker compose -f compose/kaine.yml up` fails until you build that image or set `KAINE_CHATTERBOX_IMAGE` to one that exists.
 
+`compose/kaine.yml` needs Docker Compose 2.24 or later (check with `docker compose version`): the cycle and study services load the optional `compose/caretaker.env` with `env_file` and `required: false`, which older releases reject.
+
 `kaine-dashboard`, `kaine-cycle`, `kaine-study` and `kaine-provision` use the same runtime image with different commands. `kaine-trainer` uses the separate `kaine:trainer-<flavor>` image.
 
 ## Opening Dashboard
@@ -183,7 +185,16 @@ Jobs pass through the `kaine-trainer-jobs` volume. The cycle, the study runner a
 
 `KAINE_DATA_ROOT=/app` is set on `kaine-dashboard`, `kaine-cycle` and `kaine-study`, so growing data lands on these volumes even if the shared operator config sets a host `[storage].data_root`. Files in `kaine-state` keep owner-only permissions inside the container and survive `down` and `up`. The study runner mounts no `kaine-state`, perception tmpfs, `kaine-eval-data` or `kaine-trajectory`, because every step runs inside `/app/studies/<id>` and never touches a live entity's volumes.
 
-`config/profiles/` is part of the image, so `KAINE_PROFILE=first_configuration` resolves without a bind mount. The image also sets `ENV KAINE_GIT_SHA` from the `GIT_SHA` build argument, and the run manifest's `git_sha` falls back to it because containers carry no `.git`. The operator config and secrets are bind-mounted read-only and never copied into the image.
+`config/profiles/` is part of the image, so `KAINE_PROFILE=first_configuration` resolves without a bind mount. The image also sets `ENV KAINE_GIT_SHA` from the `GIT_SHA` build argument, and the run manifest's `git_sha` falls back to it because containers carry no `.git`. The operator config is bind-mounted read-only and never copied into the image.
+
+### Secrets
+
+No container mounts `config/secrets.toml`. The bootstrap scripts write it mode 0600 and owned by your user, and the image user (uid 10001) cannot read it. Every secret reaches the containers through the environment:
+
+- `compose/.env`: `KAINE_REDIS_PASSWORD`, `KAINE_QDRANT_API_KEY`, `KAINE_STATE_KEY`, `KAINE_MODEL_SERVER_API_KEY` and `KAINE_DASHBOARD_TOKEN`. The bootstrap scripts and `python -m kaine.setup` write these.
+- `compose/caretaker.env` (optional, mode 0600): one `KAINE_CARETAKER_TOKEN_<NAME>=...` line per caretaker channel `token_name`, upper-cased. `kaine-cycle` and `kaine-study` load it with `env_file` (`required: false`, which needs Docker Compose 2.24 or later). Start from `compose/caretaker.env.example`.
+
+A process that finds `config/secrets.toml` present but unreadable treats it as absent and logs one warning; native runs read it as before. Never loosen the file's mode to make it readable.
 
 Redis runs with a `--maxmemory` ceiling from `KAINE_REDIS_MAXMEMORY` in `compose/.env` (default `4gb`) and `--maxmemory-policy noeviction`, so a full Redis halts the entity instead of silently dropping events. Size it to the bus: `python -m kaine.preboot` reports a "Bus budget" row that fails when measured stream sizes would not fit and warns when estimated sizes would not fit or the total passes 70% of the cap. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM. The quadlet unit reads the same variable from `compose/.env` and falls back to `4gb` when it is unset or empty. Restart Redis after changing it.
 
@@ -234,7 +245,7 @@ docker compose -f compose/kaine.yml --profile study run --rm kaine-study \
 bash scripts/install-quadlet.sh
 ```
 
-The script writes the checkout's path into the units, and the units read their secrets from `compose/.env`. `kaine-cycle.container` has no `[Install]` section, so the entity never starts automatically, and the script never installs `kaine-cycle-unattended.container`. Quadlet has no trainer or study units, and its model-server unit does not use the launcher or the adapter volume, so `hot_swap_mode = "organ_adapter"` works only in Compose. See [A dedicated headless host](headless-host.md).
+The script writes the checkout's path into the units, and the units read their secrets from `compose/.env`. It also creates an empty `compose/caretaker.env` (mode 0600) when none exists, because the cycle units load it into the container for caretaker tokens. `kaine-cycle.container` has no `[Install]` section, so the entity never starts automatically, and the script never installs `kaine-cycle-unattended.container`. Quadlet has no trainer or study units, and its model-server unit does not use the launcher or the adapter volume, so `hot_swap_mode = "organ_adapter"` works only in Compose. See [A dedicated headless host](headless-host.md).
 
 ## Raw perception data is not persisted
 

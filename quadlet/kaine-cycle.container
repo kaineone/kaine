@@ -27,7 +27,6 @@ Exec=python -m kaine.cycle
 AddDevice=nvidia.com/gpu=1
 SecurityLabelDisable=true
 Volume=@KAINE_ROOT@/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
-Volume=@KAINE_ROOT@/config/secrets.toml:/app/config/secrets.toml:ro,Z
 # Durable entity state mounts at /app/state — the app writes state CWD-relative
 # under WORKDIR /app, so /state would not persist anything the entity writes.
 Volume=kaine-state.volume:/app/state
@@ -61,6 +60,9 @@ Environment=KAINE_MODELS_DIR=/models
 Environment=KAINE_CYCLE_OPERATOR_PRESENT=${KAINE_CYCLE_OPERATOR_PRESENT}
 # Growing data stays under /app, where the volumes are mounted.
 Environment=KAINE_DATA_ROOT=/app
+# Caretaker bearer tokens (KAINE_CARETAKER_TOKEN_<NAME>=...) passed into the
+# container. scripts/install-quadlet.sh creates the file (empty, mode 0600).
+EnvironmentFile=@KAINE_ROOT@/compose/caretaker.env
 
 [Service]
 # Secrets for ${...} expansion; maintained by the bootstrap scripts (mode 0600).

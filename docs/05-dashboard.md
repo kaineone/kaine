@@ -69,9 +69,9 @@ or `tailscale serve reset`.
 
 ## Operator token
 
-In token mode, the dashboard reads the operator token from the environment variable `KAINE_DASHBOARD_TOKEN` first, then from `[dashboard].operator_token` in `config/secrets.toml`. Compose passes `KAINE_DASHBOARD_TOKEN` from `compose/.env` into the container, and both container setups mount `config/secrets.toml` read-only. The token must be at least 32 characters, and the dashboard refuses to start if a config file other than `config/secrets.toml` holds one.
+In token mode, the dashboard reads the operator token from the environment variable `KAINE_DASHBOARD_TOKEN` first, then from `[dashboard].operator_token` in `config/secrets.toml`. In both container setups the token comes only from `KAINE_DASHBOARD_TOKEN` in `compose/.env`: no container mounts `config/secrets.toml`, which the image user cannot read. Setup writes the token to both files. The token must be at least 32 characters, and the dashboard refuses to start if a config file other than `config/secrets.toml` holds one.
 
-`python -m kaine.setup` writes the secrets file. Print the current token with:
+`python -m kaine.setup` writes the secrets file and, when `compose/.env` sets no dashboard token yet, adds `KAINE_DASHBOARD_TOKEN` there. Print the current token with:
 
 ```bash
 # Compose, when the token is set in compose/.env

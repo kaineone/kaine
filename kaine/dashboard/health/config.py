@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from kaine import model_paths
+from kaine import model_paths, secrets_file
 from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.storage import resolve
 
@@ -266,7 +266,6 @@ def load_health_prober(
 ) -> HealthProber:
     """Build a :class:`HealthProber` from ``config/kaine.toml`` and
     ``config/secrets.toml`` (+ env overrides for secrets)."""
-    import tomllib
 
     from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
 
@@ -283,11 +282,10 @@ def load_health_prober(
             log.warning("could not parse %s for health prober", toml_path, exc_info=True)
 
     secrets: dict[str, Any] = {}
-    if secrets_path.exists():
-        try:
-            secrets = tomllib.loads(secrets_path.read_text())
-        except Exception:
-            log.warning("could not parse secrets for health prober", exc_info=True)
+    try:
+        secrets = secrets_file.load_secrets_doc(secrets_path)
+    except Exception:
+        log.warning("could not parse secrets for health prober", exc_info=True)
 
     modules_enabled = {
         str(k): bool(v) for k, v in (cfg.get("modules") or {}).items()

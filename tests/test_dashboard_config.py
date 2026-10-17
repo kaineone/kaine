@@ -567,7 +567,10 @@ def test_main_refuses_when_no_console_enabled(monkeypatch, caplog):
 def test_main_serves_with_diagnostics_only(monkeypatch):
     from kaine.dashboard import __main__ as dashboard_main
 
-    config = DashboardConfig(conversation_enabled=False, diagnostics_enabled=True)
+    # Token mode is the dataclass default and needs a token to start.
+    config = DashboardConfig(
+        conversation_enabled=False, diagnostics_enabled=True, operator_token="t" * 40
+    )
     fake_app = object()
 
     class UvicornRecorder:
