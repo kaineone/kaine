@@ -144,12 +144,42 @@ def test_target_source_ties_go_alphabetically_first():
     assert reg.target_source() == "a"
 
 
-def test_mass_observed_before_episode_is_ignored():
+def test_pre_episode_negative_coalition_seeds_mass():
+    # (a) A negative coalition observed just before the episode starts counts.
+    reg = ThreeTierRegulation()
+    reg.observe_coalition([("audition", 1.0)], negative=True)
+    assert reg.update(now=0.0, intensity=0.8, negative=True) is None
+    reg.observe_coalition([("vision", 0.4)], negative=True)
+    reg.observe_coalition([("vision", 0.4)], negative=True)
+    activation = reg.update(now=30.0, intensity=0.8, negative=True)
+    assert activation is not None
+    assert activation.tier == 1
+    assert activation.target_source == "audition"
+
+    # (b) A negative coalition followed by a non-negative one before the
+    # episode starts is not seeded.
     reg = ThreeTierRegulation()
     reg.observe_coalition([("vision", 10.0)], negative=True)
+    reg.observe_coalition([("audition", 5.0)], negative=False)
     assert reg.update(now=0.0, intensity=0.8, negative=True) is None
-    assert reg.target_source() is None
+    activation = reg.update(now=30.0, intensity=0.8, negative=True)
+    assert activation is not None
+    assert activation.target_source is None
 
+    # (c) Only the most recent pre-episode negative coalition is seeded.
+    reg = ThreeTierRegulation()
+    reg.observe_coalition([("vision", 2.0)], negative=True)
+    reg.observe_coalition([("audition", 0.5)], negative=True)
+    assert reg.update(now=0.0, intensity=0.8, negative=True) is None
+    activation = reg.update(now=30.0, intensity=0.8, negative=True)
+    assert activation is not None
+    assert activation.target_source == "audition"
+
+    # (d) reset() clears pending mass.
+    reg = ThreeTierRegulation()
+    reg.observe_coalition([("vision", 10.0)], negative=True)
+    reg.reset()
+    assert reg.update(now=0.0, intensity=0.8, negative=True) is None
     activation = reg.update(now=30.0, intensity=0.8, negative=True)
     assert activation is not None
     assert activation.target_source is None

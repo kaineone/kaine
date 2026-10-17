@@ -23,7 +23,9 @@ class RegulationBias:
 
     Holds the most recently observed tier-1 regulation target and decays its
     applied bias with exponential time constant ``decay_s``. Tier-2 and tier-3
-    events, malformed payloads, and no-target events are ignored.
+    events, malformed payloads, and no-target events are ignored.  An
+    ``affect.state`` event whose payload contains ``"reset": True`` ends the
+    held bias, matching the affect module's reset of the regulation episode.
     """
 
     def __init__(self, clock: Callable[[], float]) -> None:
@@ -34,9 +36,23 @@ class RegulationBias:
         self._t1 = 0.0
 
     def observe(self, events: Iterable[tuple[str, Event]]) -> None:
-        """Adopt the last qualifying tier-1 regulation event, if any."""
+        """Adopt the last qualifying tier-1 regulation event, if any.
+
+        Events are processed in order.  An ``affect.state`` event with
+        ``reset`` exactly ``True`` clears the held bias; a tier-1
+        ``affect.regulation`` event later in the same call can then set
+        a new target.
+        """
         for _entry_id, event in events:
             if event.source != "affect":
+                continue
+            if event.type == "affect.state":
+                payload = event.payload if isinstance(event.payload, dict) else {}
+                if payload.get("reset") is True:
+                    self._source = None
+                    self._bias = 0.0
+                    self._decay_s = 1.0
+                    self._t1 = 0.0
                 continue
             if event.type != "affect.regulation":
                 continue

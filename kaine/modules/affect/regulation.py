@@ -110,6 +110,7 @@ class ThreeTierRegulation:
         self._episode_start: Optional[float] = None
         self._last_window: int = 0
         self._mass: dict[str, float] = {}
+        self._pending: dict[str, float] = {}
         self._reappraised: bool = False
 
     @property
@@ -132,7 +133,12 @@ class ThreeTierRegulation:
     def update(
         self, *, now: float, intensity: float, negative: bool
     ) -> Optional[RegulationActivation]:
-        """Evaluate the episode rule and emit at most one activation per call."""
+        """Evaluate the episode rule and emit at most one activation per call.
+
+        When a new episode starts, the running intensity mass is seeded
+        with a copy of the most recent pre-episode negative coalition
+        stored in ``_pending``; that pending buffer is then cleared.
+        """
         if not (math.isfinite(now) and math.isfinite(intensity)):
             return None
 
@@ -140,7 +146,8 @@ class ThreeTierRegulation:
             if self._episode_start is None:
                 self._episode_start = now
                 self._last_window = 0
-                self._mass.clear()
+                self._mass = self._pending.copy()
+                self._pending.clear()
                 self._reappraised = False
 
             elapsed = now - self._episode_start
@@ -163,12 +170,30 @@ class ThreeTierRegulation:
     def observe_coalition(
         self, contributions: Iterable[tuple[str, float]], *, negative: bool
     ) -> None:
-        """Accumulate intensity mass from negatively appraised coalitions."""
-        if not self.in_episode or not negative:
+        """Accumulate intensity mass from negatively appraised coalitions.
+
+        During an episode, negative coalitions add to ``_mass`` so that
+        ``target_source`` can pick the dominant contributor.  When no
+        episode is running, the most recent negative coalition is kept
+        in ``_pending``; a non-negative coalition clears the pending seed.
+        """
+        if self.in_episode:
+            if not negative:
+                return
+            for source, value in contributions:
+                if math.isfinite(value) and value >= 0:
+                    self._mass[source] = self._mass.get(source, 0.0) + value
             return
-        for source, value in contributions:
-            if math.isfinite(value) and value >= 0:
-                self._mass[source] = self._mass.get(source, 0.0) + value
+
+        # No episode running.
+        if negative:
+            pending: dict[str, float] = {}
+            for source, value in contributions:
+                if math.isfinite(value) and value >= 0:
+                    pending[source] = pending.get(source, 0.0) + value
+            self._pending = pending
+        else:
+            self._pending.clear()
 
     def target_source(self) -> Optional[str]:
         """Source with the largest accumulated intensity mass."""
@@ -189,11 +214,16 @@ class ThreeTierRegulation:
         return True
 
     def reset(self) -> None:
-        """End any running episode and clear its transient state."""
+        """End any running episode and clear its transient state.
+
+        This also clears any pending pre-episode coalition mass that
+        has not yet been seeded into an episode.
+        """
         self._end_episode()
 
     def _end_episode(self) -> None:
         self._episode_start = None
         self._last_window = 0
         self._mass.clear()
+        self._pending.clear()
         self._reappraised = False

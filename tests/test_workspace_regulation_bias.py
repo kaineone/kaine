@@ -94,6 +94,71 @@ def test_regulation_bias_later_event_replaces():
     assert bias.factor_for_source("vision") == 1.0
 
 
+def test_regulation_bias_affect_state_reset_clears():
+    _t, clock = _clock()
+    bias = RegulationBias(clock)
+    reg = _event(
+        "affect",
+        "affect.regulation",
+        {"tier": 1, "source": "vision", "bias": 0.2, "decay_s": 20},
+    )
+    bias.observe([("r:1", reg)])
+    assert bias.describe() == {"source": "vision", "factor": pytest.approx(0.8)}
+
+    reset = _event("affect", "affect.state", {"reset": True})
+    bias.observe([("r:2", reset)])
+    assert bias.describe() is None
+    assert bias.factor_for_source("vision") == 1.0
+    assert bias.factor_for_source("audition") == 1.0
+
+
+def test_regulation_bias_affect_state_without_reset_does_not_clear():
+    _t, clock = _clock()
+    bias = RegulationBias(clock)
+    reg = _event(
+        "affect",
+        "affect.regulation",
+        {"tier": 1, "source": "vision", "bias": 0.2, "decay_s": 20},
+    )
+    bias.observe([("r:1", reg)])
+    assert bias.describe() == {"source": "vision", "factor": pytest.approx(0.8)}
+
+    non_resets = [
+        _event("affect", "affect.state", {}),
+        _event("affect", "affect.state", {"reset": False}),
+        _event("affect", "affect.state", {"reset": None}),
+        _event("affect", "affect.state", {"reset": "true"}),
+    ]
+    bias.observe([("r:x", e) for e in non_resets])
+    assert bias.describe() == {"source": "vision", "factor": pytest.approx(0.8)}
+    assert bias.factor_for_source("vision") == pytest.approx(0.8)
+
+
+def test_regulation_bias_reset_then_tier1_sets_new_target():
+    _t, clock = _clock()
+    bias = RegulationBias(clock)
+    vision = _event(
+        "affect",
+        "affect.regulation",
+        {"tier": 1, "source": "vision", "bias": 0.2, "decay_s": 20},
+    )
+    reset = _event("affect", "affect.state", {"reset": True})
+    audition = _event(
+        "affect",
+        "affect.regulation",
+        {"tier": 1, "source": "audition", "bias": 0.2, "decay_s": 20},
+    )
+    bias.observe([("r:1", vision), ("r:2", reset), ("r:3", audition)])
+    assert bias.describe() == {"source": "audition", "factor": pytest.approx(0.8)}
+    assert bias.factor_for_source("audition") == pytest.approx(0.8)
+    assert bias.factor_for_source("vision") == 1.0
+
+    # Order matters: a reset after a tier-1 event clears the new bias.
+    bias.observe([("r:4", audition), ("r:5", reset)])
+    assert bias.describe() is None
+    assert bias.factor_for_source("audition") == 1.0
+
+
 def test_regulation_bias_ignores_invalid():
     _t, clock = _clock()
     bias = RegulationBias(clock)
