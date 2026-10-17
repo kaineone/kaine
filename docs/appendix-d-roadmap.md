@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| felt-awareness-phrasing | 0/4 (0%) | The organ gets accessed content and each intent's cause as graded words, not instrument values, while the log keeps the values (paper 3.5). |
 | sleep-keeps-alert-rates | 3/3 (100%) | The sleep reset keeps the alert rates, error means and intent rate, so a familiar scene stays habituated after sleep and the post-sleep access burst is gone (paper A.4). |
 | tonic-drive-arousal | 4/4 (100%) | Arousal relaxes toward a target the dominant drive raises, so a deprived entity rests where its non-audition alerts can reach access (paper A.4). |
 | arousal-habituation | 4/4 (100%) | Perceptual arousal habituates to the base alert rate, and the appraisal's novelty reads the change ratio and the same habituation (paper A.4). |
@@ -125,6 +126,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 99 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 100 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
