@@ -406,10 +406,9 @@ class Affect(BaseModule):
                     "alert": emotion != CategoricalEmotion.NEUTRAL,
                     "scores": scores.as_tuple(),
                     "state": self._state.to_dict(),
-                    # norm_compatibility is hardcoded 0.0 until the self-model module's norm
-                    # signals are wired (see _score_snapshot).  DISGUST
-                    # (requires norm <= -0.4) is therefore unreachable by
-                    # design until that integration lands.
+                    # norm_compatibility is fixed at 0.0 and undefined: KAINE
+                    # has no standards until an operator writes a list (see
+                    # _score_snapshot). No categorical rule reads it.
                     "norm_compatibility_available": False,
                     # False when the coalition is irrelevant (goal score 0):
                     # coping is undefined, so fear, anger and sadness are
@@ -521,11 +520,13 @@ class Affect(BaseModule):
                 p = (completed + 1) / (completed + abandoned + 2)
             coping = 2.0 * p - 1.0
 
-        # Norm compatibility: fixed 0.0 — not a real measurement.
-        # The self-model module's norm signals are not yet wired; until they are, the DISGUST
-        # classification branch (norm <= -0.4) is unreachable by design.
-        # The published affect.emotion event carries norm_compatibility_available=False
-        # so consumers know this dimension is unavailable, not zero.
+        # Norm compatibility: fixed 0.0, not a real measurement. The models the
+        # paper reviews take standards as authored input, and KAINE has none
+        # until an operator writes a list, so the check stays undefined and no
+        # categorical rule reads it (disgust follows Sander, Grandjean and
+        # Scherer 2005, Table 3, with standards left open). The published
+        # affect.emotion event carries norm_compatibility_available=False so
+        # consumers know this dimension is unavailable, not zero.
         norm = 0.0
         # Perceived-emotion appraisal contribution (thymos-emergent-affect-coupling).
         # A perceived speaker emotion is an INPUT to the entity's own appraisal,

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Scherer Component Process Model — five-check appraisal sequence.
+"""Scherer Component Process Model: five-check appraisal sequence.
 
 Each check returns a float in [-1, 1]. The 5-tuple maps to a
 categorical emotion via a pure `classify` function. The check
@@ -54,9 +54,21 @@ def _all_near_zero(scores: AppraisalScores) -> bool:
 def classify(scores: AppraisalScores) -> CategoricalEmotion:
     """Map five appraisal scores to one of seven emotions.
 
-    Rules are documented in `docs/kaine-paper.md` references and the
-    Scherer 2009 paper. The mapping is intentionally simple: future
-    learned classifiers can replace it.
+    Rules are modeled on the predicted appraisal profiles of Sander,
+    Grandjean and Scherer (2005, Table 3). KAINE uses a single novelty
+    check for suddenness, familiarity and predictability, so low
+    familiarity in Table 3 maps to high novelty here. The classifier
+    checks, in order: a neutral band; surprise (very high novelty with
+    otherwise ambivalent scores); fear (negative pleasantness and low
+    coping); anger (blocked goal with strong coping, matching at best
+    Table 3's irritation profile); disgust (very low pleasantness, low
+    familiarity as high novelty, and low goal relevance); sadness (low
+    pleasantness, low coping and low novelty); joy (positive
+    pleasantness, positive goal relevance and non-negative coping); and
+    finally neutral. Norm compatibility is undefined because KAINE has
+    no authored standards list until an operator writes one, so no
+    category rule reads norm_compatibility; only the neutral band, which
+    spans all five scores, sees its fixed 0.0.
     """
     if _all_near_zero(scores):
         return CategoricalEmotion.NEUTRAL
@@ -65,16 +77,11 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     goal = scores.goal_significance
     coping = scores.coping_potential
     nov = scores.novelty
-    norm = scores.norm_compatibility
 
     # Surprise dominates when novelty is very high and other dims are
     # ambivalent.
     if nov >= 0.6 and abs(pleas) < 0.3 and abs(goal) < 0.3:
         return CategoricalEmotion.SURPRISE
-
-    # Disgust: strongly negative pleasantness + strong norm violation.
-    if pleas <= -0.5 and norm <= -0.4:
-        return CategoricalEmotion.DISGUST
 
     # Fear: negative pleasantness + low coping (especially with novelty).
     # Coping is undefined for irrelevant content (paper A.4), so this branch
@@ -82,12 +89,21 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     if scores.coping_available and pleas < 0 and coping <= -0.3:
         return CategoricalEmotion.FEAR
 
-    # Anger: blocked goal with strong coping. The goal score is never negative
-    # (relevance in [0, 1], paper A.4), so this branch is unreachable until an
-    # obstruction check exists, the way disgust waits on norm signals. Coping is
-    # undefined for irrelevant content, so this branch needs relevant content.
+    # Anger: blocked goal with strong coping. This matches at best Table 3's
+    # irritation profile, because KAINE attributes no obstruction to another
+    # agent and has no standards check. It needs a negative goal score, which
+    # only the obstruction term of paper A.4 can supply; until that term is
+    # built the goal score is never negative. Coping is undefined for
+    # irrelevant content, so this branch needs relevant content.
     if scores.coping_available and goal <= -0.3 and coping >= 0.3:
         return CategoricalEmotion.ANGER
+
+    # Disgust: modeled on Table 3's disgust profile. Very low pleasantness,
+    # low familiarity (KAINE's single novelty check, so high novelty) and low
+    # goal relevance; the standards check is left open because KAINE has no
+    # authored standards list.
+    if pleas <= -0.5 and nov > 0.3 and abs(goal) < 0.3:
+        return CategoricalEmotion.DISGUST
 
     # Sadness: low pleasantness + low coping + low arousal-ish proxy
     # (here approximated by low novelty too).

@@ -21,6 +21,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | workspace-feedback | 11/14 (79%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
 | appraisal-relevance | 3/3 (100%) | Score goal significance as relevance in [0, 1], as the paper's A.4 now does, so content that serves no drive or goal is irrelevant and an idle entity no longer classifies as anger. |
 | test-honesty-fixes | 4/4 (100%) | Make three tests run what they claim: the merger output-dir test stops skipping, the real InternVideo-Next test uses the weights it checked, and the reversible-unload tests use a deadlock bound so the suite also passes serially; correct the social cognition hook docstring. |
+| affect-categories | 4/4 (100%) | Map disgust to the Sander, Grandjean and Scherer (2005) Table 3 profile (very low pleasantness, low familiarity, low goal relevance) instead of a norm violation, as the paper's §3.5 now does, so disgust is reachable while norm compatibility stays unavailable. |
 | appraisal-coping | 4/4 (100%) | Gate coping potential on relevance and estimate it as a success ratio over drive crossings or ledger goals, as the paper's A.4 now does, so resting affect no longer drives fear, anger or sadness. |
 | first-configuration-names | 9/9 (100%) | Rename the `thesis_test` profile to `first_configuration`, keep the old name as a deprecated alias until the module-rename alias window closes, and say "first configuration" and "hypothesis" in the wizard, the dashboard, messages and docs, as the paper now does. |
 | compose-state-mount-ownership | 10/10 (100%) | Move the trainer-jobs volume out of the state volume, so an existing compose deployment upgrades without a root-owned directory blocking the boot-time state rename, and make the rename refuse up front with an actionable message. Design only. |
@@ -109,6 +110,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 82 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 83 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
