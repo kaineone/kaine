@@ -26,11 +26,11 @@ The appraisal of a broadcast does not move arousal, so a higher access rate cann
 
 | Source | Condition | Change in arousal |
 |---|---|---|
-| `vision.report`, `audition.perception` | `alert: true` | `+0.15 × min(4, max(0, max(r, c) - 1))`, with `r` the report's `normalised_error` (its error over its running mean) and `c` its `normalised_change` (its change score over its running mean) |
+| `vision.report`, `audition.perception` | `alert: true` | `+0.15 × h × min(4, max(0, max(r, c) - 1))`, with `r` the report's `normalised_error` (its error over its running mean), `c` its `normalised_change` (its change score over its running mean) and `h` the habituation factor below |
 | `interoception.report` | non-empty `alerts` list (a host metric past its hard limit) | `+0.05` |
 | `episodic_memory.recall` | `max_affect_intensity > 0` | `+0.05 × max_affect_intensity` (the episodic memory module is held in the first configuration) |
 
-A missing, non-numeric or non-finite ratio counts as 0, so a report without `normalised_change` raises arousal by its error ratio alone, and an alert whose ratios are both at most 1 leaves arousal unchanged. The change ratio follows paper A.5: the locus coeruleus responds phasically to salient abrupt change as well as to unexpected outcomes (Bouret and Richmond 2009), and most vision alerts are change alerts whose error ratio sits near 1. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
+A missing, non-numeric or non-finite ratio counts as 0, so a report without `normalised_change` raises arousal by its error ratio alone, and an alert whose ratios are both at most 1 leaves arousal unchanged. The habituation factor is `h = clip(r_fast / max(r_slow, 0.05) - 1, 0, 1)`, the alert-rate excess of the boredom drive without its margin, read from the alert rates before this alert adds to them (paper A.4 item 1). Phasic locus coeruleus responses to a repeated stimulus habituate within a few presentations (Hervé-Minvielle and Sara 1995), and the self-calibrating alert criteria make even a still scene alert at a steady base rate, so alerts at the habituated rate leave arousal near baseline, while alerts arriving faster than it raise arousal. The first alert after a quiet spell or a sleep reset adds nothing (no rate excess yet); a second within a few seconds does. In the 2026-10-17 test boot, whose stimulus produced a pair of change alerts about every 15 s, a replay of the recorded alerts put arousal at a median of 0.87 without the factor and 0.35 with it once the rates had settled. The change ratio follows paper A.5: the locus coeruleus responds phasically to salient abrupt change as well as to unexpected outcomes (Bouret and Richmond 2009), and most vision alerts are change alerts whose error ratio sits near 1. Between these nudges arousal and dominance relax toward their baselines: at each update `a <- a + (a0 - a) × min(1, drift_rate_per_s × dt)`, a time constant of 20 entity seconds at the default rate. Arousal is clipped to `[0, 1]`.
 
 ## Valence from learning progress
 
@@ -72,7 +72,7 @@ On every broadcast, accessed or inhibited, the affect module first updates its s
 
 | Check | Computation |
 |---|---|
-| Novelty | `1 - prod(1 - s)` over coalition members that carry a `normalised_error` ratio `r`, with `s = clip(ln r / ln 3, 0, 1)`; a ratio of 2.2 gives 0.72 |
+| Novelty | `1 - prod(1 - s)` over coalition members that carry a positive `normalised_error` or `normalised_change`, with `s = clip(ln ρ / ln 3, 0, 1)` for the larger ratio `ρ` (a ratio of 2.2 gives 0.72), multiplied by the habituation factor `h` at the appraisal for `vision.report` and `audition.perception` members; 0 when no member carries a ratio. The change ratio covers suddenness, the error ratio predictability and `h` familiarity (Sander, Grandjean and Scherer 2005; paper A.4) |
 | Intrinsic pleasantness | `pl`, the learning-progress term above |
 | Goal significance | the conducive part `r` minus the obstruction `o`, clipped to `[-1, 1]` |
 | Coping potential | `2p - 1`, only when goal significance is nonzero (below) |
@@ -314,6 +314,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_drive_latch_persistence.py` | The drive crossing latch survives serialize and deserialize; older state infers it from value and threshold |
 | `tests/test_affect_regulation.py` | Monitor, episode detection and three-tier activation |
 | `tests/test_affect_regulation_module.py` | Tiers in the module, developmental phase, passive arm and factory |
+| `tests/test_affect_habituation.py` | The habituation factor: base-rate alerts leave arousal at baseline, a burst raises it, the first alert adds nothing; novelty from the change ratio, discounted for vision and audition only |
 | `tests/test_workspace_regulation_bias.py` | Bias factor, decay and neutral behavior in study arms |
 
 ## Spec and related pages

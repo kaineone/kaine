@@ -234,7 +234,8 @@ class Affect(BaseModule):
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
         # Gain on the normalised-surprise → arousal nudge (per alert event). The
         # per-event contribution is capped so arousal BUILDS over sustained surprise
-        # rather than saturating on one frame.
+        # rather than saturating on one frame, and each step is scaled by the
+        # habituation factor read before the alert's own increment.
         self._perception_arousal_gain = 0.15
         self._perception_arousal_cap = 4.0
 
@@ -318,10 +319,22 @@ class Affect(BaseModule):
 
     _ALERT_RATE_FLOOR_PER_S: ClassVar[float] = 0.05
 
+    def _alert_rate_ratio(self) -> float:
+        return self._alert_fast / max(self._alert_slow, self._ALERT_RATE_FLOOR_PER_S)
+
     def _alert_excess(self) -> float:
         """Return alert-stream novelty relative to its own habituated rate."""
-        ratio = self._alert_fast / max(self._alert_slow, self._ALERT_RATE_FLOOR_PER_S)
-        return _clip(ratio - 1.0 - self._alert_excess_margin, 0.0, 1.0)
+        return _clip(self._alert_rate_ratio() - 1.0 - self._alert_excess_margin, 0.0, 1.0)
+
+    def _habituation(self) -> float:
+        """Return the habituation factor h = clip(r_f / max(r_s, r_0) - 1, 0, 1).
+
+        It is the alert-rate excess of paper A.4 without the boredom margin; it
+        is 0 while alerts arrive at the habituated base rate and rises when they
+        come faster, as phasic locus coeruleus responses to a repeated stimulus
+        habituate within a few presentations (Herve-Minvielle and Sara 1995).
+        """
+        return _clip(self._alert_rate_ratio() - 1.0, 0.0, 1.0)
 
     def set_drive_relevance(
         self,
@@ -764,22 +777,36 @@ class Affect(BaseModule):
     def _score_snapshot(self, snapshot: WorkspaceSnapshot) -> AppraisalScores:
         selected = snapshot.selected_events
 
-        # Novelty (suddenness / unexpectedness) from normalised_error ratios.
+        # Novelty: suddenness from the change ratio, predictability from the error
+        # ratio, and familiarity from the habituation factor (Sander, Grandjean and
+        # Scherer 2005; paper A.4). For each selected event with a positive finite
+        # normalised_error or normalised_change, combine the two as 1 - prod(1 - s_e),
+        # where s_e = clip(ln(max ratio) / ln 3, 0, 1). Vision and audition reports
+        # are additionally scaled by the current habituation factor.
+        h = self._habituation()
+        log3 = math.log(3.0)
         prod_factor = 1.0
         has_novel = False
         for _, ev in selected:
             payload = ev.payload or {}
-            raw = payload.get("normalised_error")
-            if raw is None:
+            ratios: list[float] = []
+            for key in ("normalised_error", "normalised_change"):
+                raw = payload.get(key)
+                if raw is None:
+                    continue
+                try:
+                    r = float(raw)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(r) or r <= 0.0:
+                    continue
+                ratios.append(r)
+            if not ratios:
                 continue
-            try:
-                r = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if not math.isfinite(r) or r <= 0.0:
-                continue
-            s = math.log(r) / math.log(3.0)
-            s = max(0.0, min(1.0, s))
+            s = math.log(max(ratios)) / log3
+            s = _clip(s, 0.0, 1.0)
+            if ev.type in ("vision.report", "audition.perception"):
+                s *= h
             prod_factor *= 1.0 - s
             has_novel = True
         novelty = 1.0 - prod_factor if has_novel else 0.0
@@ -1056,6 +1083,10 @@ class Affect(BaseModule):
                     self._err_last_at[source] = now
             alert = bool(payload.get("alert"))
             if alert:
+                # Habituation is read before the alert's own increment so a burst
+                # above the habituated base rate arouses, while the base rate itself
+                # does not.
+                h = self._habituation()
                 self._alert_fast += 1.0 / self._fast_time_constant_s
                 self._alert_slow += 1.0 / self._slow_time_constant_s
                 err_ratio = _to_ratio(payload.get("normalised_error"))
@@ -1063,7 +1094,7 @@ class Affect(BaseModule):
                 surprise = min(self._perception_arousal_cap, max(0.0, max(err_ratio, chg_ratio) - 1.0))
                 if surprise > 0.0:
                     self._state = self._state.nudged(
-                        arousal=self._perception_arousal_gain * surprise,
+                        arousal=self._perception_arousal_gain * h * surprise,
                     )
             return
         if stream == self._interoception_stream and event.type == "interoception.report":

@@ -5,7 +5,7 @@ On each `vision.report` or `audition.perception` event whose `alert` is true, th
 
 #### Scenario: Alerts at a steady base rate leave arousal at baseline
 - **WHEN** change alerts arrive every 5 s for 600 s with the module ticking every second
-- **THEN** after the first 200 s every alert's habituation factor is 0 and arousal stays within 0.01 of baseline
+- **THEN** after the first 300 s every alert's habituation factor is 0, and from 450 s arousal stays within 0.01 of baseline
 
 #### Scenario: A burst above the habituated rate raises arousal
 - **WHEN** after that habituated stream five change alerts with change ratio 4.0 arrive 0.5 s apart

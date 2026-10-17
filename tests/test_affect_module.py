@@ -86,6 +86,9 @@ async def test_workspace_publishes_emotion_when_changes(bus: AsyncBus):
     # prediction-error ratios; a ratio of 3.0 yields maximal novelty and SURPRISE.
     fake_now = [0.0]
     affect = Affect(bus, publish_interval_s=5.0, clock=lambda: fake_now[0])
+    # Burst state (habituation factor 1), so the alert's full step applies (paper A.4).
+    affect._alert_fast = 0.2
+    affect._alert_slow = 0.05
     await affect.initialize()
     try:
         fake_now[0] = 1.0
@@ -372,8 +375,12 @@ async def test_disabled_coupling_no_emotion_stream_consumption(bus: AsyncBus):
 async def test_perceptual_surprise_arouses_scaled_by_normalised_error(bus: AsyncBus):
     """Perception→arousal coupling: a perceptual ALERT raises arousal, scaled by the
     normalised prediction error (surprise above the expected level); a well-predicted
-    event does not arouse. Mirrors the interoception module's alert→arousal path."""
+    event does not arouse. Mirrors the interoception module's alert→arousal path.
+    The burst state makes the habituation factor 1."""
     affect = Affect(bus, publish_interval_s=999.0)
+    # Burst state (habituation factor 1), so the alert's full step applies (paper A.4).
+    affect._alert_fast = 0.2
+    affect._alert_slow = 0.05
     for stream, typ in (("vision.out", "vision.report"),
                         ("audition.out", "audition.perception")):
         base = affect._state.arousal

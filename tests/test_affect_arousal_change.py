@@ -30,6 +30,9 @@ PERCEPTUAL_SOURCES = [
 
 async def _arousal_delta(bus, stream, source, event_type, payload):
     affect = Affect(bus, publish_interval_s=999.0)
+    # Burst state (habituation factor 1), so the alert's full step applies (paper A.4).
+    affect._alert_fast = 0.2
+    affect._alert_slow = 0.05
     base = affect._state.arousal
     event = Event(
         source=source,
