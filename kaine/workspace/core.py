@@ -11,8 +11,8 @@ from typing import Any
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.coherence import CoherenceScorer
-from kaine.workspace.regulation_bias import RegulationBias
 from kaine.workspace.feedback import FEEDBACK_KEY, FeedbackController
+from kaine.workspace.regulation_bias import RegulationBias
 from kaine.workspace.strategies import SalienceStrategy
 
 log = logging.getLogger(__name__)
