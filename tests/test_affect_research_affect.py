@@ -289,6 +289,9 @@ async def test_valence_follows_learning_progress(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_score_snapshot_novelty_and_surprise(bus: AsyncBus):
     affect = Affect(bus)
+    # Burst state (habituation factor 1), so the alert's full step applies (paper A.4).
+    affect._alert_fast = 0.2
+    affect._alert_slow = 0.05
     snap = _snapshot(
         [
             _event(
