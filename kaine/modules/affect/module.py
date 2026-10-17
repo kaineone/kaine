@@ -346,7 +346,7 @@ class Affect(BaseModule):
         alert-rate excess of paper A.4 without the boredom margin; it is 0 while
         alerts arrive at the habituated base rate and rises when they come faster.
         The presentation term h_n = exp(-r_s * tau_s) treats r_s * tau_s as the
-        expected number of recent alerts, so it is 1 after quiet or a reset, about
+        expected number of recent alerts, so it is 1 after a long quiet, about
         0.37 after one presentation, and near 0 at a steady base rate, then recovers
         as r_s decays. Together the factor is full for a first presentation and
         decrements with repeats, consistent with locus coeruleus cells responding
