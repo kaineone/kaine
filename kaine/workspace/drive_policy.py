@@ -30,9 +30,9 @@ Guards (all inherited from the executive design, never bypassing it):
   - At most ONE ``speak`` intent per call. A present user utterance OUTRANKS a
     social-drive initiative (the single speak answers the user).
   - Separate one-in-flight guards for ``speak`` and ``think`` prevent storms;
-    each clears when the entity's corresponding own output
-    (``language.external`` / ``language.internal``) next is accessed, reusing
-    the keystone's realization-observed pattern.
+    each is released when the organ publishes the entity's matching own output
+    (``external_speech`` / ``internal_speech``), accessed or not (paper A.6
+    step 1), when that output is accessed, or after the guard timeout.
   - The entity never responds to its own output (source ``language``).
 
 Injectable like the default policy, so a future change can parameterize the
@@ -90,9 +90,15 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
     def think_in_flight(self) -> bool:
         return self._think_in_flight
 
+    def mark_realized(self) -> None:
+        """Clear the speak one-in-flight guard because the organ published external speech."""
+        self._speak_in_flight = False
+        self._speak_armed_at = None
+
     def mark_think_realized(self) -> None:
-        """Clear the think one-in-flight guard (a prior think has completed)."""
+        """Clear the think one-in-flight guard because the organ published internal speech."""
         self._think_in_flight = False
+        self._think_armed_at = None
 
     def note_external_intent(self, kind: str, when: float | None = None) -> None:
         """Arm the corresponding in-flight guard as if the policy emitted it."""
@@ -113,9 +119,9 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
         the external-speech guard, and vice versa.
         """
         # C3 belt-and-suspenders: refractory-scaled guard timeouts - a guard
-        # armed longer than the window without the entity's matching output
-        # being accessed is cleared, so a failed realization cannot
-        # permanently mute the entity through the drive policy.
+        # armed longer than the window without the organ's matching output
+        # is cleared, so a failed realization cannot permanently mute the entity
+        # through the drive policy.
         self._apply_guard_timeouts()
         for _, event in snapshot.selected_events:
             if event.source != OWN_EXTERNAL_SPEECH_SOURCE:

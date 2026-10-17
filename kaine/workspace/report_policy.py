@@ -65,8 +65,8 @@ class SelfInitiatedReportPolicy:
     """
 
     # C3: the same guard timeout as the default and drive policies. A guard
-    # armed this long without the entity's matching output being accessed
-    # is cleared, so a failed realization cannot permanently mute the entity.
+    # armed this long without the organ's matching output is cleared, so a failed
+    # realization cannot permanently mute the entity.
     _GUARD_TIMEOUT_S = 48.0
 
     def __init__(
@@ -143,12 +143,14 @@ class SelfInitiatedReportPolicy:
         return self._think_in_flight
 
     def mark_realized(self) -> None:
-        """Clear the speak one-in-flight guard (a prior utterance completed)."""
+        """Clear the speak one-in-flight guard: the organ published external
+        speech, accessed or not (paper A.6 step 1)."""
         self._speak_in_flight = False
         self._speak_armed_at = float("-inf")
 
     def mark_think_realized(self) -> None:
-        """Clear the think one-in-flight guard (a prior think completed)."""
+        """Clear the think one-in-flight guard: the organ published internal
+        speech, accessed or not (paper A.6 step 1)."""
         self._think_in_flight = False
         self._think_armed_at = float("-inf")
 
@@ -189,10 +191,10 @@ class SelfInitiatedReportPolicy:
                 self._think_armed_at = float("-inf")
 
         # C3 belt-and-suspenders: a guard armed longer than the timeout window
-        # without the entity's own output being accessed is cleared, so a
-        # failed realization (LLM error, dead organ) can never permanently
-        # mute the entity. Uses the wall-time guard_clock so a failed
-        # realization recovers after real seconds.
+        # without the organ's own output is cleared, so a failed realization
+        # (LLM error, dead organ) can never permanently mute the entity. Uses
+        # the wall-time guard_clock so a failed realization recovers after real
+        # seconds.
         guard_now = float(self._guard_clock())
         if (
             self._speak_in_flight

@@ -265,7 +265,7 @@ When the planning module is enabled, the composition root wraps whichever policy
 
 `SelfInitiatedReportPolicy` derives intents from the workspace's own state and never from a user utterance. On an accessed broadcast it:
 
-1. Clears the speak guard if the coalition contains the language organ's external speech, and the think guard if it contains its internal speech. Either guard is also cleared after 48 seconds of wall time, so a failed realization cannot mute the entity.
+1. Clears the speak guard once the language organ has published external speech, and the think guard once it has published internal speech, whether or not that output is accessed (paper A.6 step 1). The cycle hands every organ speech event it reads from the bus to `ActionSelection.observe_own_output` on the tick it reads it, before selection, because at priority 0.4 the organ's utterances never reach access in the first configuration. A coalition that contains the organ's output also clears the matching guard. Either guard is also cleared after 48 seconds of wall time, so a failed realization cannot mute the entity.
 2. Removes the language organ's own events (source `language`) from the coalition. If nothing is left, there is no intent. Otherwise the report signal is the highest score among the remaining members, and the signature is the `(source, type)` of that member.
 3. Emits a `speak` intent when the signal reaches `report_threshold` (0.6), no speak is in flight, `speak_refractory_s` (8 entity seconds) has passed since the last speak, and the signature does not match the last spoken signature. A remembered signature stops blocking once it is older than `sig_expiry_s` (300 entity seconds in `first_configuration`; it never expires when unset).
 4. Otherwise emits a `think` intent when the signal reaches `think_threshold` (0.45), no think is in flight, and `think_refractory_s` (3 entity seconds) has passed. The think path has no signature check.
@@ -276,9 +276,9 @@ The bars are a heuristic stand-in for the report-or-act decision of the predicti
 
 ### The other policies
 
-`DefaultActionSelectionPolicy` answers a user utterance: it emits one `speak` intent when the coalition holds an `audition.transcription` event with non-empty text. It never forms a `speak` about the entity's own external speech, and it keeps a one-in-flight guard that clears when the entity's own `external_speech` appears in a later coalition or after 48 seconds of wall time.
+`DefaultActionSelectionPolicy` answers a user utterance: it emits one `speak` intent when the coalition holds an `audition.transcription` event with non-empty text. It never forms a `speak` about the entity's own external speech, and it keeps a one-in-flight guard that clears when the organ publishes the entity's own `external_speech`, accessed or not, or after 48 seconds of wall time.
 
-`DriveBiasedActionSelectionPolicy` extends it: a `affect.drive` crossing in an accessed coalition becomes an intent. `social_drive` becomes `speak`, and a present user utterance always outranks it; `curiosity`, `boredom` and `restlessness` become `think`. `speak` and `think` have independent guards.
+`DriveBiasedActionSelectionPolicy` extends it: a `affect.drive` crossing in an accessed coalition becomes an intent. `social_drive` becomes `speak`, and a present user utterance always outranks it; `curiosity`, `boredom` and `restlessness` become `think`. `speak` and `think` have independent guards, each cleared by the organ's matching published output. When the planning module is enabled, `PlanningProposalSource` clears its own guard of that kind and passes the release on to the wrapped policy.
 
 ## Act intents and provenance
 
