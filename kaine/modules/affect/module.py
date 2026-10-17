@@ -346,7 +346,7 @@ class Affect(BaseModule):
         alert-rate excess of paper A.4 without the boredom margin; it is 0 while
         alerts arrive at the habituated base rate and rises when they come faster.
         The presentation term h_n = exp(-r_s * tau_s) treats r_s * tau_s as the
-        expected number of recent alerts, so it is 1 after quiet or a reset, about
+        expected number of recent alerts, so it is 1 after a long quiet, about
         0.37 after one presentation, and near 0 at a steady base rate, then recovers
         as r_s decays. Together the factor is full for a first presentation and
         decrements with repeats, consistent with locus coeruleus cells responding
@@ -1261,16 +1261,10 @@ class Affect(BaseModule):
         }
         self._last_emotion = CategoricalEmotion.NEUTRAL
 
-        # Reset learning-progress trackers so post-sleep affect starts afresh.
-        self._err_fast_sum.clear()
-        self._err_fast_count.clear()
-        self._err_slow_sum.clear()
-        self._err_slow_count.clear()
-        self._err_last_at.clear()
-        self._alert_fast = 0.0
-        self._alert_slow = 0.0
-        self._intent_rate = 0.0
-        self._intents_since_broadcast = 0
+        # The alert rates, error means and intent rate carry on through the sleep,
+        # decaying by their own rules (paper A.4 item 4): habituation recovers with
+        # time away from the stimulus and can outlast breaks (Thompson and Spencer
+        # 1966; Rankin et al. 2009).
         self._perceived_emotion = None
 
         # A goal cleared by sleep counts as neither completed nor abandoned (paper A.4),

@@ -156,12 +156,16 @@ async def test_isolated_alert_after_long_quiet(bus):
     assert affect.state.arousal - before > 0.25
 
 
-async def test_first_alert_after_sleep_reset(bus):
+async def test_habituation_survives_sleep_reset(bus):
     affect, t = await _build_habituated(bus)
+    for second in range(1, 5):
+        t[0] = 600.0 + float(second)
+        await affect._tick()
     await affect.affective_reset()
+    assert affect._habituation() < 1e-6
     before = affect.state.arousal
     await affect._handle_peer_event("vision.out", _alert(change=3.0))
-    assert affect.state.arousal == pytest.approx(before + 0.3)
+    assert affect.state.arousal - before < 0.001
 
 
 async def test_alert_uses_habituation_before_own_increment(bus):
