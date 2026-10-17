@@ -315,7 +315,7 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `baseline_valence` | float | `0.0` | Resting valence. |
 | `baseline_arousal` | float | `0.3` | Resting arousal. |
 | `baseline_dominance` | float | `0.0` | Resting dominance. |
-| `drift_rate_per_s` | float | `0.05` | Rate at which the dimensional state drifts back toward baseline per second. |
+| `drift_rate_per_s` | float | `0.05` | Rate at which dominance drifts back toward baseline, and arousal toward its drive-raised target (`drive_arousal_gain`), per second. |
 | `publish_interval_s` | float | `1.0` | Seconds between affect-state publications to the bus. |
 | `baseline_salience` | float | `0.1` | Intensity of routine affective state publications. |
 | `alert_salience` | float | `0.7` | Intensity on significant affective change or drive threshold crossing. |
@@ -334,6 +334,7 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `goal_cap` | int | `3` | Most active goals; beyond it the lowest-priority goal is abandoned (n_goal). |
 | `goal_response_window_s` | float | `10.0` | Entity seconds within which a non-rest intent must be followed by a fall of an active goal's drive (Delta_resp). |
 | `goal_likelihood_fall` | float | `0.5` | Fraction of a goal's expected-relief likelihood lost when an intent brings no fall within the window (eta_L). |
+| `drive_arousal_gain` | float | `0.2` | Tonic drive gain (gamma_D): arousal relaxes toward `baseline_arousal + gain × (1 - baseline_arousal) × v*`, `v*` the largest drive value; 0 restores relaxation toward `baseline_arousal`. In `[0, 1]`. |
 
 The retired key `social_drive_time_scale_s` is ignored with a warning if present. The social drive has no time scale of its own: it builds at its build rate once the entity has heard a voice.
 

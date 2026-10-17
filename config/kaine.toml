@@ -779,6 +779,13 @@ goal_stall_s = 600.0
 goal_cap = 3
 goal_response_window_s = 10.0
 goal_likelihood_fall = 0.5
+# Tonic drive gain gamma_D (paper A.4 item 3): arousal relaxes toward
+# a_0 + drive_arousal_gain * (1 - a_0) * v*, v* the largest drive value, instead of
+# toward baseline_arousal. Deprivation keeps arousal raised (the exploratory tonic
+# mode of Aston-Jones and Cohen 2005). 0.2 puts a deprived entity (v* 0.7 to 0.9) at
+# 0.40 to 0.43, where non-audition alerts reach access but the report bars still need
+# a phasic step. 0 restores relaxation toward baseline_arousal.
+drive_arousal_gain = 0.2
 baseline_salience = 0.1
 alert_salience = 0.7
 interoception_stream = "interoception.out"
