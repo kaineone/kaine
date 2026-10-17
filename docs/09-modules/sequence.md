@@ -56,6 +56,8 @@ When `forward_prediction = true`, `ForwardPredictionHead` maps the previous broa
 2. `temporal_prediction_error` is the mean absolute error over the 24 components.
 3. The head takes one stochastic-gradient step (learning rate 1e-3) toward the actual vector, skipped during sleep and whenever the loss or a gradient is not finite.
 
+With workspace feedback on, `sequence.report` also carries `predicted_next_feature_vector`, the head's prediction of the next broadcast featurization (see [Workspace feedback](../08-cognitive-cycle/global-workspace.md#workspace-feedback-held-extension)). The workspace keeps the latest valid one it sees and attaches it to accessed broadcasts, where the vision, audition, and interoception modules read it as their top-down context. With feedback off, the report is unchanged.
+
 ## Intensity and the alert flag
 
 With forward prediction on and at least one temporal error recorded, the error ratio is `temporal_prediction_error` over the mean of the last `prediction_error_window` errors (the current one included). The report is an alert when either holds:
@@ -100,7 +102,7 @@ All events are published to the `sequence.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `sequence.report` | `alert`, `temporal_context`, `anomaly_score`, `habituation_score`, `rumination_detected`, `time_since_last_interaction_s`, `feature_vector`, `temporal_prediction_error` | `alert_salience` on an alert; otherwise graded by the error ratio, or `baseline_salience` without a temporal error |
+| `sequence.report` | `alert`, `temporal_context`, `anomaly_score`, `habituation_score`, `rumination_detected`, `time_since_last_interaction_s`, `feature_vector`, `temporal_prediction_error`; with workspace feedback on also `predicted_next_feature_vector` | `alert_salience` on an alert; otherwise graded by the error ratio, or `baseline_salience` without a temporal error |
 
 `temporal_context` is the reservoir's hidden state (`cfc_units` components). `rumination_detected` is the recurrence flag. `temporal_prediction_error` is 0.0 when forward prediction is off and on the first broadcast.
 

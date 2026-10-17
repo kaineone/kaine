@@ -6,7 +6,7 @@ The sleep module is the sleep analog: a fatigue-triggered offline period during 
 
 The sleep module ships disabled in the default config (`[modules].sleep = false` in `config/kaine.toml`). The `first_configuration` profile enables it, because fatigue-triggered rest and the affective reset are part of the first configuration.
 
-Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[sleep.consolidation].associative_replay = true` and the world model module. Voice alignment needs `[sleep.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need the episodic memory module.
+Three parts of the pipeline stay off unless an operator turns them on. Associative replay needs `[sleep.consolidation].associative_replay = true` and the episodic memory module. Voice alignment needs `[sleep.voice_alignment].enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`, and even then it trains nothing, because no validated preference source exists yet (see [Voice alignment](../10-sleep/voice-alignment.md)). Memory consolidation and replay need the episodic memory module.
 
 ## What a sleep is
 
@@ -49,9 +49,9 @@ flowchart TD
     ST --> P1
     P1["Phase 1: light consolidation\n• set_frequency(0.5) on active modules\n• episodic_memory.consolidate_now()"]
     P1 --> P2
-    P2["Phase 2: deep consolidation (needs EpisodicMemory)\n• open the replay window; episodic_memory.replay_now(); close it\n• episodic_memory.downscale(protect=replayed traces): downscale, then prune"]
+    P2["Phase 2: deep consolidation (needs EpisodicMemory)\n• open the replay window; episodic_memory.replay_now(); close it\n• episodic_memory.downscale(protect=replayed traces): downscale, then prune\n  (with phase 3 on: downscale only)"]
     P2 --> P3
-    P3["Phase 3: associative replay (flag)\n• cross-period traces\n• cue WorldModel\n• publish sleep.association"]
+    P3["Phase 3: associative replay (flag)\n• episodic_memory.associate(): link related pairs\n• episodic_memory.prune()\n• publish sleep.association per pair"]
     P3 --> P4
     P4["Phase 4: voice alignment\n• consolidation divergence\n• gates; training skipped\n• intent-log rotation, voice measures"]
     P4 --> P5
@@ -60,7 +60,7 @@ flowchart TD
     R --> E([sleep.sleep.completed])
 ```
 
-Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `sleep.sleep.completed` is published on any exception, including a cancel. Phase 3 re-injects the world model module's scenarios as `sleep.association` events, which compete in the workspace like any other event. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens the episodic memory module's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on the episodic memory module having seen `sleep.sleep.started` on the bus. When the world model module is present, the sleep module also opens its scenario window before phase 2, whose replay cues the world model module through `episodic_memory.replay`, and closes it in a `finally` after phase 3, which cues the world model module directly. On shutdown, the sleep module stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `sleep.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Supervisor's halt shut the sleep module down before the other modules, so the sleep ends while the episodic memory, affect and world model modules are still up. The phase functions are in `kaine/modules/sleep/phases.py`; phase 4 is driven from `kaine/modules/sleep/module.py`.
+Each phase catches its own errors, and the later phases still run after one fails. The affective reset runs in a `finally` after phases 1 to 4, shielded from a second cancel, so even a sleep that raises or is cancelled ends with it, and an aborted `sleep.sleep.completed` is published on any exception, including a cancel. Phase 3 follows the paper's associative replay (A.10): the episodic memory module co-replays at most five pairs, most similar first, of a trace replayed in phase 2 and one stored in an earlier wake, records each pair as a weighted link, and then prunes. With phase 3 on, phase 2 therefore downscales without pruning, so that pruning follows the co-replays as A.10 orders it; with phase 3 off, phase 2 downscales and prunes as before. Phase 3 publishes one `sleep.association` event per pair, carrying the two point ids and the link weight and no memory content, and prunes even when the co-replay fails. It does not cue the world model module. The order follows the paper (§3.5): replay, then synaptic downscaling, then associative replay, then the voice, and sleep ends with the affective reset. Phase 2 opens the episodic memory module's replay window itself, immediately before it replays, and closes it afterwards, so replay never depends on the episodic memory module having seen `sleep.sleep.started` on the bus. When the world model module is present, the sleep module also opens its scenario window before phase 2, whose replay cues the world model module through `episodic_memory.replay`, and closes it in a `finally` after phase 3. On shutdown, the sleep module stops its loops, cancels a sleep still in flight and waits for it, so the sleep ends with the affective reset and an aborted `sleep.sleep.completed`, then waits for the reset and publish tasks it holds; each wait is bounded at 5 s. The cycle's shutdown and Supervisor's halt shut the sleep module down before the other modules, so the sleep ends while the episodic memory, affect and world model modules are still up. The phase functions are in `kaine/modules/sleep/phases.py`; phase 4 is driven from `kaine/modules/sleep/module.py`.
 
 ## Outputs
 
@@ -68,7 +68,7 @@ Each phase catches its own errors, and the later phases still run after one fail
 |---|---|---|---|
 | `sleep.out` | `sleep.sleep.started` | Start of the pipeline; carries `started_at`, and `trigger: "requested"` for a requested rest | `baseline_salience` |
 | `sleep.out` | `sleep.sleep.completed` | Summary: `phases`, `voice_alignment`, `total_elapsed_ms`, `fatigue_triggered`, `pairs_processed`, `dpo_loss`, the capability scores, `corpus`, `voice_measures` and `ignition_audit`. If the pipeline itself aborts, the payload is `{"aborted": true, "reason": <exception class name>}` | `baseline_salience` when every phase succeeded, else `alert_salience` |
-| `sleep.out` | `sleep.association` | A phase-3 scenario re-injected into the workspace | `baseline_salience` |
+| `sleep.out` | `sleep.association` | One phase-3 co-replayed pair: `a` and `b` (point ids) and `weight`, no content | `baseline_salience` |
 | `sleep.out` | `sleep.rest_request` | Answer to a rest request: `accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted` | `0.0` |
 | `sleep.out` | `sleep.consolidation_divergence` | Content-free divergence metric, every sleep | `baseline_salience` |
 | `sleep.out` | `sleep.ignition_audit` | Content-free intent audit, every sleep | `baseline_salience` |
@@ -98,7 +98,7 @@ The retired key `planning_step_burst` is accepted and ignored with a warning, so
 |---|---|---|---|
 | `fatigue_triggered` | bool | `true` | Run the `interoception.out` consumer; `false` disables both the fatigue and the maintenance-request triggers |
 | `replay_window_s` | float | `5.0` | Recorded in phase-2 metadata; replay runs to completion regardless |
-| `associative_replay` | bool | `false` | Enable phase 3 |
+| `associative_replay` | bool | `false` | Enable phase 3, associative replay; its parameters are `[episodic_memory.association]` |
 
 `downscale_factor` is refused at boot: phase 2 downscales trace strengths by `[episodic_memory.strength].retention_per_day` instead (paper A.10).
 
@@ -157,7 +157,7 @@ The metric is computed whether or not training runs and is persisted to `state/s
 
 1. Set `[modules].sleep = true`, or run the `first_configuration` profile.
 2. Enable the interoception module for the fatigue and maintenance triggers and the affect module for the affective reset.
-3. For memory consolidation and replay, enable the episodic memory module. For associative replay, also set `[sleep.consolidation].associative_replay = true` and enable the world model module.
+3. For memory consolidation and replay, enable the episodic memory module. For associative replay, also set `[sleep.consolidation].associative_replay = true`.
 
 ## Tests
 
@@ -169,7 +169,7 @@ The metric is computed whether or not training runs and is persisted to `state/s
 | `tests/test_sleep_scheduler.py` | Interval and deferral |
 | `tests/test_sleep_rest_requests.py` | `intent.rest` handling |
 | `tests/test_sleep_sleep_pause.py` | The perceptual locus module and playlist pause and restore |
-| `tests/test_sleep_associative_replay.py` | Phase 3 |
+| `tests/test_sleep_associative_replay.py` | Phase 3: `associate()` then `prune()`, the content-free `sleep.association` events, and phase 2 unchanged with the flag off |
 | `tests/test_sleep_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_sleep_nar_removal.py` | Replay reaching the workspace through the normal cycle |
 | `tests/test_sleep_replay_handoff.py` | Phase 2 replaying the traces phase 1 consolidated, with the episodic memory module |

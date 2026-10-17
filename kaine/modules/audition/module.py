@@ -14,6 +14,7 @@ from kaine.bus.client import AsyncBus
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
+from kaine.modules.feedback import FeedbackChannel, TopDownBlend
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.positive_control import (
     ControlQueue,
@@ -21,6 +22,7 @@ from kaine.modules.positive_control import (
     PositiveControlSettings,
     publish_result,
 )
+from kaine.workspace.feedback import FEEDBACK_KEY, WorkspaceFeedbackSettings
 
 if TYPE_CHECKING:
     from kaine.modules.vocal.coordination import SpeakingGate
@@ -137,6 +139,7 @@ class Audition(BaseModule):
         tone_rule: str = "categorical",
         entity_clock: Optional[EntityClock] = None,
         positive_control: Optional[PositiveControlSettings] = None,
+        workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -240,6 +243,17 @@ class Audition(BaseModule):
         )
         self._pc_queue = ControlQueue()  # Run control steps off the report path.
 
+        # Workspace feedback state. The channel adopts sequence predictions and
+        # gains from accessed broadcasts; the acoustic forward model is wrapped in a
+        # top-down blend when feedback is enabled.
+        self._feedback_settings = workspace_feedback
+        self._feedback_channel: Optional[FeedbackChannel] = (
+            FeedbackChannel("audition") if workspace_feedback is not None else None
+        )
+        if self._feedback_settings is not None and self._positive_control is not None:
+            raise ValueError("workspace feedback runs with the positive control off")
+        self._ensure_feedback_wrap()
+
         # Carried-forward acoustic forward-model snapshots for encoders that are
         # not currently running. They are keyed by encoder model_id and never
         # contain raw audio or embeddings.
@@ -279,6 +293,21 @@ class Audition(BaseModule):
             log.debug("audition arousal provider failed (non-fatal)", exc_info=True)
             return 0.0
 
+    def _ensure_feedback_wrap(self) -> None:
+        """Wrap the acoustic forward model in a top-down blend when feedback is on."""
+        # getattr: a module restored without __init__ (object.__new__) has no feedback.
+        if getattr(self, "_feedback_settings", None) is None:
+            return
+        if self._acoustic_forward_model is None:
+            return
+        if isinstance(self._acoustic_forward_model, TopDownBlend):
+            return
+        self._acoustic_forward_model = TopDownBlend(
+            self._acoustic_forward_model,
+            window=self._prediction_error_window_size,
+            lr=self._feedback_settings.head_learning_rate,
+        )
+
     async def _perceive_acoustic(
         self,
         audio_bytes: bytes,
@@ -292,6 +321,7 @@ class Audition(BaseModule):
         reaches the workspace. Memory-only; never writes audio."""
         assert self._acoustic_encoder is not None
         assert self._acoustic_forward_model is not None
+        self._ensure_feedback_wrap()
         # Easterbrook narrowing: arousal selects how much of the recent acoustic
         # window reaches the encoder and energy estimator.
         window = arousal_to_window(self._read_arousal(), window_range=self._arousal_window_range)
@@ -319,9 +349,23 @@ class Audition(BaseModule):
         self._acoustic_forward_model.suspended = self._in_sleep
         ctx = null = None
         scored_stamp = self._prediction_stamp
+        seq = (
+            self._feedback_channel.sequence_prediction
+            if self._feedback_channel is not None
+            else None
+        )
         if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
             ctx, null = self._context.context_and_null(("audition",))
-            prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
+            if self._feedback_channel is not None:
+                prediction_error = self._acoustic_forward_model.step(
+                    embedding, ctx, null, sequence_prediction=seq
+                )
+            else:
+                prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
+        elif self._feedback_channel is not None:
+            prediction_error = self._acoustic_forward_model.step(
+                embedding, sequence_prediction=seq
+            )
         else:
             prediction_error = self._acoustic_forward_model.step(embedding)
         if (
@@ -386,7 +430,19 @@ class Audition(BaseModule):
             and change >= self._acoustic_change_alert_threshold
         )
         alert = normalised >= 2.0 or change_alert
-        graded = graded_intensity(self._baseline_salience, self._alert_salience, normalised)
+        # Workspace feedback gain is applied only to graded intensity, never to the
+        # alert threshold or the published normalised error.
+        gain = 1.0
+        if (
+            self._feedback_channel is not None
+            and self._feedback_settings is not None
+            and self._feedback_settings.gain_active
+        ):
+            gain = self._feedback_channel.gain
+        intensity_ratio = normalised
+        if self._feedback_settings is not None and self._feedback_settings.gain_active:
+            intensity_ratio = gain * normalised
+        graded = graded_intensity(self._baseline_salience, self._alert_salience, intensity_ratio)
         salience = self._alert_salience if alert else graded
         self._acoustic_report_count += 1
         if alert:
@@ -439,6 +495,16 @@ class Audition(BaseModule):
         if item is not None:
             payload["item"] = item.title
             payload["item_order"] = item.order
+        # Workspace feedback diagnostics (paper §3.2), added only when the arm is on.
+        if self._feedback_channel is not None:
+            payload[FEEDBACK_KEY] = {
+                "disagreement": getattr(self._acoustic_forward_model, "last_disagreement", None),
+                "error_ratio": normalised if published_error is not None else None,
+                "gain": gain,
+                "top_down_weight": getattr(self._acoustic_forward_model, "last_top_weight", None),
+                "own_error": getattr(self._acoustic_forward_model, "last_own_error", None),
+                "top_down_error": getattr(self._acoustic_forward_model, "last_top_error", None),
+            }
         await self.publish(
             "audition.perception",
             payload,
@@ -613,6 +679,8 @@ class Audition(BaseModule):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         # Adopt an accessed broadcast as prediction context (inhibited ones are ignored).
         self._context.observe(snapshot)
+        if self._feedback_channel is not None:
+            self._feedback_channel.observe(snapshot)
 
     async def initialize(self) -> None:
         await super().initialize()

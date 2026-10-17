@@ -4,15 +4,19 @@
 """The sequence module factory."""
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
 from kaine.boot.errors import ConfigurationError, _require_keys
+from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_settings
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+
+log = logging.getLogger(__name__)
 
 
 def make_sequence(
@@ -23,6 +27,9 @@ def make_sequence(
     injections: Optional[Mapping[str, Any]] = None,
 ) -> BaseModule:
     from kaine.modules.sequence.module import Sequence
+
+    section = dict(section)
+    feedback_table = section.pop(FEEDBACK_SECTION_KEY, None)
 
     allowed = {
         "cfc_units",
@@ -66,5 +73,14 @@ def make_sequence(
                 "[sequence].interaction_event_types must be a list of event types"
             )
         kwargs["interaction_event_types"] = tuple(str(t) for t in types)
+
+    if feedback_settings(feedback_table) is not None:
+        kwargs["publish_next_prediction"] = True
+        if not section.get("forward_prediction"):
+            log.warning(
+                "workspace feedback is on but [sequence].forward_prediction is off; "
+                "the top-down heads receive no sequence prediction"
+            )
+
     kwargs.update(_check_injections("sequence", injections, {"network"}))
     return Sequence(bus, entity_clock=entity_clock, **kwargs)

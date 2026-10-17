@@ -9,8 +9,7 @@ Phase ordering (non-negotiable; paper-canonical):
   2. deep_consolidation: replay of the consolidated traces inside a replay
      window that the sleep module opens through the episodic memory module, then the downscaling of trace
      strengths that protects the replayed traces (paper A.10).
-  3. associative_replay: cross-period trace selection + world-model-cued
-     re-injection (hypnos-consolidation).
+  3. associative_replay: co-replay of related trace pairs of different periods, recorded as weighted links, then pruning (paper A.10).
   4. voice_alignment: orchestrated by the sleep module directly.
   5. affective_reset: the affect module reset; sleep ends with it. The interoception module's fatigue
      resets on the sleep.sleep.completed event that follows.
@@ -20,14 +19,16 @@ Each phase is async, takes its specific collaborator(s), and returns a
 failure cannot stop the pipeline: the orchestrator in `module.py` runs
 them in order regardless.
 
-Phase 3 (associative_replay) is fully implemented but gated by the
+Phase 3 (associative_replay) is gated by the
 `[sleep.consolidation].associative_replay` config flag and ships disabled
-by default; it runs as a safe no-op until an operator opts in. Voice
+by default; when it is on, phase 2 leaves pruning to phase 3 so that
+pruning follows the co-replays, as A.10 orders it.  Voice
 alignment (phase 4) is likewise gated by `[sleep.voice_alignment].enabled`
 plus the operator-approval env var.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -63,8 +64,8 @@ class _SupportsEpisodicMemory(Protocol):
 
     async def consolidate_now(self) -> int: ...
 
-    async def downscale(self, protect: Sequence[Any] = ()) -> dict[str, Any]:
-        """Downscale trace strengths, protecting the replayed traces (paper A.10)."""
+    async def downscale(self, protect: Sequence[Any] = (), *, prune: bool = True) -> dict[str, Any]:
+        """Downscale trace strengths, protecting the replayed traces, then prune unless prune is false (paper A.10)."""
 
     async def replay_now(self) -> list[Any]: ...
 
@@ -160,6 +161,7 @@ async def deep_consolidation(
     suspend_perception: Any = None,
     restore_perception: Any = None,
     replay_window_s: float = 5.0,
+    defer_prune: bool = False,
 ) -> PhaseResult:
     """Phase 2: replay first, then downscaling of trace strengths.
 
@@ -177,16 +179,15 @@ async def deep_consolidation(
     can be replayed on the next sleep.
 
     Args:
-        episodic_memory:              the episodic memory module, or None (phase is no-op).
-        suspend_perception:  Callable (sync or no-arg async) to suspend external
-                             perception; None = skip.
-        restore_perception:  Callable (sync or no-arg async) to restore perception;
-                             None = skip.
-        replay_window_s:     Replay window duration in seconds (informational;
-                             actual replay completes synchronously).
+        episodic_memory:      the episodic memory module, or None (phase is no-op).
+        suspend_perception:   Callable (sync or no-arg async) to suspend external
+                              perception; None = skip.
+        restore_perception:   Callable (sync or no-arg async) to restore perception;
+                              None = skip.
+        replay_window_s:      Replay window duration in seconds (informational;
+                              actual replay completes synchronously).
+        defer_prune:          Leave pruning to phase 3 (true when associative replay is on).
     """
-    import asyncio
-
     start = _now_ms()
     metadata: dict[str, Any] = {}
 
@@ -273,7 +274,10 @@ async def deep_consolidation(
         metadata["downscale_skipped"] = "replay failed"
     else:
         try:
-            summary = dict(await episodic_memory.downscale(protect=replay_events))
+            if defer_prune:
+                summary = dict(await episodic_memory.downscale(protect=replay_events, prune=False))
+            else:
+                summary = dict(await episodic_memory.downscale(protect=replay_events))
             metadata["downscale"] = summary
             if summary.get("blocked"):
                 errors.append(f"downscale blocked: {summary['blocked']}")
@@ -292,79 +296,39 @@ async def deep_consolidation(
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 — Associative Replay (stub; behind feature flag)
+# Phase 3: Associative Replay (behind feature flag)
 # ---------------------------------------------------------------------------
 
-class _SupportsCrossPeriod(Protocol):
-    """An episodic-memory-shaped object that can yield traces grouped by memory period.
+class _SupportsAssociation(Protocol):
+    """The episodic memory module's associative replay and pruning (paper A.10)."""
 
-    Returns a mapping ``{period_name: [trace, ...]}`` where each trace is
-    any object carrying at least ``point_id`` and ``text`` attributes (or a
-    dict with those keys).  Implementations select from distinct memory
-    periods (short-term / episodic / semantic) so a single replay batch can
-    span more than one period for novel cross-period association.
-    """
+    async def associate(self) -> dict[str, Any]:
+        """Co-replay related trace pairs and record their links."""
 
-    async def select_cross_period_traces(
-        self, *, periods: int, per_period: int
-    ) -> dict[str, list[Any]]: ...
-
-
-class _SupportsScenarioCue(Protocol):
-    """A world-model-shaped collaborator that imagines a scenario from a seed."""
-
-    async def generate_scenario(
-        self, *, seed_memory_id: str = ""
-    ) -> list[dict[str, Any]]: ...
-
-
-def _trace_id(trace: Any) -> str:
-    if isinstance(trace, dict):
-        return str(trace.get("point_id") or trace.get("memory_id") or "")
-    return str(getattr(trace, "point_id", "") or getattr(trace, "memory_id", ""))
+    async def prune(self) -> dict[str, Any]:
+        """Prune traces, links and schema nodes weakest first."""
 
 
 async def associative_replay(
     *,
     enabled: bool = False,
-    episodic_memory: Optional[_SupportsCrossPeriod] = None,
-    world_model: Optional[_SupportsScenarioCue] = None,
-    reinject: Any = None,
-    periods: int = 2,
-    per_period: int = 3,
+    episodic_memory: Optional[_SupportsAssociation] = None,
+    publish: Any = None,
 ) -> PhaseResult:
-    """Phase 3: associative cross-period replay (hypnos-consolidation).
+    """Phase 3: associative replay (paper A.10).
 
-    Gated by the ``associative_replay`` feature flag in
-    ``[sleep.consolidation]``.  When disabled it returns a successful
-    no-op so the pipeline ordering is preserved.
-
-    When enabled it:
-
-    1. Selects traces from at least two DISTINCT memory periods (short-term,
-       episodic, semantic) via ``episodic_memory.select_cross_period_traces`` so a
-       single replay batch spans more than one period — the substrate for
-       novel cross-period association.
-    2. Cues the world model module (``generate_scenario``) for each cross-period seed and
-       consumes the resulting ``world_model.scenario`` payloads.  When
-       the world model module is disabled/absent the cue degrades to a no-op (no scenarios
-       produced) — the phase still succeeds.
-    3. Re-injects the novel associations (the consumed scenarios) into the
-       workspace via the ``reinject`` callable so the planning module (pymdp) and the affect module
-       process them through the normal cognitive cycle — there is NO special
-       belief-revision burst.
+    After downscaling, the episodic memory module co-replays at most n_pair pairs
+    of a replayed trace and one stored before the wake, most similar first,
+    and records each pair as a weighted link; then it prunes. This phase calls
+    ``associate()`` then ``prune()``; pruning runs even if association fails.
+    Each ``sleep.association`` event carries only the pair's two point ids and
+    its weight. It does not cue the world model module.
 
     Args:
-        enabled:     associative_replay feature flag.
-        episodic_memory:      cross-period trace source (or None → cross-period skipped).
-        world_model:   scenario cue collaborator (or None → cue no-op).
-        reinject:    async/sync callable taking one scenario payload dict;
-                     publishes it into the workspace.  None → skip re-injection.
-        periods:     number of distinct memory periods to span (>= 2).
-        per_period:  traces to pull from each period.
+        enabled:         associative_replay feature flag.
+        episodic_memory: the episodic memory module (or None -> phase is skipped).
+        publish:         callable taking one payload dict; may be sync or async.
     """
-    import asyncio
-
     start = _now_ms()
     if not enabled:
         return PhaseResult(
@@ -374,69 +338,57 @@ async def associative_replay(
             metadata={"skipped": "associative_replay feature flag not enabled"},
         )
 
+    if episodic_memory is None:
+        return PhaseResult(
+            phase="associative_replay",
+            success=True,
+            elapsed_ms=_now_ms() - start,
+            metadata={"skipped": "no Episodic memory available"},
+        )
+
     metadata: dict[str, Any] = {}
     errors: list[str] = []
+    pairs: list[dict[str, Any]] = []
 
-    # --- Step 1: cross-period trace selection -------------------------------
-    by_period: dict[str, list[Any]] = {}
-    if episodic_memory is None or not hasattr(episodic_memory, "select_cross_period_traces"):
-        metadata["cross_period_skipped"] = (
-            "no Episodic memory cross-period surface available"
-        )
-    else:
-        try:
-            by_period = await episodic_memory.select_cross_period_traces(
-                periods=max(2, int(periods)), per_period=max(1, int(per_period))
-            )
-        except Exception as exc:
-            log.exception("associative_replay: cross-period selection failed")
-            errors.append(f"cross_period: {type(exc).__name__}: {exc}")
-            by_period = {}
+    associate = getattr(episodic_memory, "associate", None)
+    prune = getattr(episodic_memory, "prune", None)
 
-    populated_periods = [p for p, traces in by_period.items() if traces]
-    metadata["periods_selected"] = sorted(populated_periods)
-    metadata["distinct_periods"] = len(populated_periods)
-    seeds: list[str] = []
-    for traces in by_period.values():
-        for trace in traces:
-            tid = _trace_id(trace)
-            if tid:
-                seeds.append(tid)
-    metadata["cross_period_traces"] = len(seeds)
-
-    # --- Step 2 + 3: cue the world model module, consume scenarios, re-inject ------------
-    scenarios_consumed = 0
-    reinjected = 0
-    if world_model is None:
-        metadata["world_model_cue"] = "no-op (World model disabled/absent)"
-    else:
-        # Cue once per cross-period seed; if no seeds were selected, still
-        # issue a single unseeded cue so an enabled world model module can extend the
-        # accumulated trajectory.
-        cue_seeds = seeds or [""]
-        for seed in cue_seeds:
+    try:
+        if associate is None:
+            metadata["associate_skipped"] = "episodic memory has no associate()"
+        else:
+            summary = dict(await associate())
+            metadata["associate"] = {k: v for k, v in summary.items() if k != "pairs"}
+            pairs = list(summary.get("pairs") or [])
+            metadata["pairs"] = len(pairs)
+    except Exception as exc:
+        log.exception("associative_replay: associate() failed")
+        errors.append(f"associate: {type(exc).__name__}: {exc}")
+    finally:
+        if prune is not None:
             try:
-                scenarios = await world_model.generate_scenario(seed_memory_id=seed)
+                metadata["prune"] = dict(await prune())
             except Exception as exc:
-                log.exception("associative_replay: World model cue failed")
-                errors.append(f"world_model_cue: {type(exc).__name__}: {exc}")
-                continue
-            for scenario in scenarios or []:
-                scenarios_consumed += 1
-                if reinject is None:
-                    continue
-                try:
-                    result = reinject(scenario)
-                    if asyncio.iscoroutine(result):
-                        await result
-                    reinjected += 1
-                except Exception as exc:
-                    log.exception("associative_replay: re-injection failed")
-                    errors.append(f"reinject: {type(exc).__name__}: {exc}")
-        metadata["world_model_cue"] = "cued"
+                log.exception("associative_replay: prune() failed")
+                errors.append(f"prune: {type(exc).__name__}: {exc}")
 
-    metadata["scenarios_consumed"] = scenarios_consumed
-    metadata["associations_reinjected"] = reinjected
+    if publish is not None:
+        published = 0
+        for pair in pairs:
+            try:
+                payload = {
+                    "a": str(pair["a"]),
+                    "b": str(pair["b"]),
+                    "weight": float(pair["weight"]),
+                }
+                result = publish(payload)
+                if asyncio.iscoroutine(result):
+                    await result
+                published += 1
+            except Exception as exc:
+                log.exception("associative_replay: publish failed for pair %r", pair)
+                errors.append(f"publish: {type(exc).__name__}: {exc}")
+        metadata["associations_published"] = published
 
     return PhaseResult(
         phase="associative_replay",

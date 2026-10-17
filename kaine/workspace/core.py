@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import random
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.coherence import CoherenceScorer
+from kaine.workspace.feedback import FEEDBACK_KEY, FeedbackController
 from kaine.workspace.strategies import SalienceStrategy
 
 log = logging.getLogger(__name__)
@@ -43,6 +45,9 @@ class Workspace:
 
     The constructor selects an experimental arm: "competitive" (default),
     "matched", or "pooled". They are described in paper A.8.
+
+    An optional `FeedbackController` can be attached to send broadcast
+    feedback to the processors (paper §3.2, §6.4).
     """
 
     def __init__(
@@ -54,6 +59,7 @@ class Workspace:
         coherence: CoherenceScorer | None = None,
         arm: str = "competitive",
         arm_seed: int | None = None,
+        feedback: FeedbackController | None = None,
     ) -> None:
         if top_k <= 0:
             raise ValueError("top_k must be positive")
@@ -65,6 +71,10 @@ class Workspace:
             raise ValueError("the matched and pooled arms run with the coherence layer off")
         if arm == "matched" and arm_seed is None:
             raise ValueError("the matched arm needs a seed")
+        if feedback is not None and arm != "competitive":
+            raise ValueError("workspace feedback runs on the competitive arm")
+        if feedback is not None and coherence is not None:
+            raise ValueError("workspace feedback runs with the coherence layer off")
         self._strategy = strategy
         self._top_k = top_k
         self._threshold = publication_threshold
@@ -76,6 +86,9 @@ class Workspace:
         # A string seed keeps the matched-arm draw independent of the global
         # random stream that the run seed also pins.
         self._rng = random.Random(f"matched-coalition:{int(arm_seed)}") if arm == "matched" else None
+        # Broadcast feedback controller. None means the extension is disabled
+        # and the workspace behaves as before.
+        self._feedback = feedback
 
     @property
     def top_k(self) -> int:
@@ -88,6 +101,10 @@ class Workspace:
     @property
     def arm(self) -> str:
         return self._arm
+
+    @property
+    def feedback(self) -> FeedbackController | None:
+        return self._feedback
 
     def set_top_k(self, k: int) -> None:
         if k <= 0:
@@ -113,6 +130,10 @@ class Workspace:
                 "the matched arm draws only on broadcast ticks, so the context "
                 "must say whether this is one (is_experiential)"
             )
+        # When feedback is disabled, this branch is skipped and selection is
+        # the pre-change behaviour.
+        if self._feedback is not None:
+            self._feedback.observe_candidates(events)
         if not events:
             # Observe phases even with no events so windows stay aligned, then
             # return the empty inhibited snapshot (no coherence to report).
@@ -165,13 +186,21 @@ class Workspace:
             # snapshot metadata so the sidecar coherence_observer can read it.
             metadata["coherence"] = self._coherence.plv(cohort)
 
-        return self._compose(
+        snapshot = self._compose(
             tick_index,
             scored,
             scores,
             metadata,
             draw=bool(context.get("is_experiential", False)),
         )
+        if self._feedback is not None and bool(context.get("is_experiential", False)):
+            fb = self._feedback.on_broadcast(snapshot)
+            if fb is not None:
+                snapshot = dataclasses.replace(
+                    snapshot,
+                    metadata={**snapshot.metadata, FEEDBACK_KEY: fb},
+                )
+        return snapshot
 
     def _compose(
         self,

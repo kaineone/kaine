@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     pass
 from kaine.boot.common import _check_injections
 from kaine.boot.errors import _pop
+from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_settings
 from kaine.boot.perception_feed import _shared_stimulus_source_objects, _stimulus_source_params
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -61,8 +62,12 @@ def make_interoception(
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
     pc_section = section.pop("positive_control", None)
+    feedback_table = section.pop(FEEDBACK_SECTION_KEY, None)
+    feedback = feedback_settings(feedback_table)
     kw = _pop(section, allowed)
     kw["positive_control"] = PositiveControlSettings.from_config(pc_section)
+    if feedback is not None:
+        kw["workspace_feedback"] = feedback
     kw.update(_check_injections("interoception", injections, {"forward_model"}))
 
     if kw.get("self_rhythm_enabled"):

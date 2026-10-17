@@ -256,6 +256,20 @@ Section: `[episodic_memory.strength]`. Paper Appendix A.10 and Table A1.
 | `traces_per_day` | float | `288000` | `N_day`, the traces one entity day at the resting broadcast rate stores: 86400 x f0 with the paper's design value f0 = 10/3 (A.10, Table A1). It does not follow `[cycle].experiential_rate_hz`. |
 | `prune_floor` | float `(0, 1)` | `0.01` | A trace whose strength falls below this floor is deleted in the sleep that weakened it. |
 
+`cross_period_candidates` in `[episodic_memory.replay]` is retired: an old file that sets it still boots and logs a warning naming it.
+
+### Associative replay
+
+Section: `[episodic_memory.association]`. Paper Appendix A.10 and Table A1. Used only when `[sleep.consolidation].associative_replay = true`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `n_pair` | integer | `5` | Pairs co-replayed per sleep, most similar first, each of a trace replayed in that sleep and a trace stored in an earlier wake. |
+| `sim_min` | float | `0.5` | Lowest cosine similarity of a co-replayed pair (inclusive). |
+| `sim_dup` | float | `0.95` | Cosine similarity from which a pair counts as a near-duplicate and is not co-replayed (exclusive upper bound). |
+| `n_sch` | integer | `3` | Links at which a trace forms a schema node, matched by recall like a trace. |
+| `n_link` | integer | `8` | Most links a trace keeps; the weakest go first. Links and schema nodes count in `storage_budget_bytes` and are pruned as traces are. |
+
 ## Self-model
 
 Section: `[self_model]`.

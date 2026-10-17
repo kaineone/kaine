@@ -81,6 +81,7 @@ _WORKSPACE_ALLOWED_KEYS: set[str] = {
     "salience_goal_factor",
     "arousal_contrast_gain",
     "arm",  # the arm of the planned test, read by the cycle
+    "feedback",  # the [workspace.feedback] table (paper §3.2), read by kaine.boot.feedback
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED

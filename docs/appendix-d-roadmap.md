@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
 | entity-key-custody | 1/12 (8%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. Design only: awaiting the integrator's review (task 0.1) and the operator's key ceremony (task 0.3); nothing is implemented. |
@@ -18,6 +19,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | sequence-finite-payload | 3/3 (100%) | Publish `time_since_last_interaction_s` as `null` until the first interaction, so `sequence.report` and the research records stay strict JSON instead of carrying `Infinity`. |
+| workspace-feedback | 11/14 (79%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
 | appraisal-relevance | 3/3 (100%) | Score goal significance as relevance in [0, 1], as the paper's A.4 now does, so content that serves no drive or goal is irrelevant and an idle entity no longer classifies as anger. |
 | test-honesty-fixes | 4/4 (100%) | Make three tests run what they claim: the merger output-dir test stops skipping, the real InternVideo-Next test uses the weights it checked, and the reversible-unload tests use a deadlock bound so the suite also passes serially; correct the social cognition hook docstring. |
 | affect-goals-obstruction | 10/10 (100%) | Create goals from drive crossings, end them by the credit rule, a stall or a cap, and let unanswered responses lower a goal's expected relief and obstruct it, as the paper's A.4 now does, so the goal score is bipolar and anger is reachable (as irritation at best). |
@@ -110,6 +112,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 84 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 86 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
