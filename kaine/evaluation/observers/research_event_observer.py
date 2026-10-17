@@ -33,6 +33,9 @@ Plus per-type redactions:
 - ``effectors.action``: ``_sanitize`` strips content/body/stdout.
 - ``embodiment.proprio``: raw coordinates are NEVER logged; only an opaque
   position hash + region label.
+- ``affect.goal``: the free-text ``description`` is never copied;
+- ``affect.regulation``: the payload ``source`` is recorded as ``target_source``.
+- ``workspace.broadcast``: ``regulation_bias`` and ``workspace_feedback`` gains and episodes only, never the sequence prediction.
 
 Every record carries ``ts`` (ISO-8601 UTC), ``event_type``, ``source``, and
 ``tick_index`` / ``incident_id`` when present. ``audition.emotion`` records also
@@ -148,6 +151,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {
             "prediction_error",
             "normalised_error",
+            "normalised_change",
             "change_score",
             "habituation_score",
             "alert",
@@ -189,11 +193,18 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # --- Affect / motivation ---
     "affect.state": frozenset(
-        {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance"}
+        {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance", "reset", "alert"}
     ),
-    "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert"}),
+    "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert", "state", "coping_available", "obstruction", "goal_significance_method", "reappraised"}),
     "affect.drive": frozenset({"drive", "value", "alert"}),
-    "affect.goal": frozenset({"action", "goal_id"}),
+    # The goal's `description` is free text (an operator-added goal carries
+    # arbitrary text) and is deliberately excluded; it is also in CONTENT_FIELDS.
+    "affect.goal": frozenset({"action", "id", "drive", "reason", "priority", "likelihood"}),
+    # Emotion regulation activations (paper §3.5); the payload's `source`
+    # (the module whose scores tier 1 biases) is recorded as `target_source`
+    # by `_apply_taxonomy_fields`, so it never overwrites the record's own
+    # `source`.
+    "affect.regulation": frozenset({"tier", "action", "intensity", "episode_s", "size", "bias", "decay_s", "emotion_before", "emotion_after"}),
     # --- Perception (derived only) ---
     # The tone error ratio, the tone rule and whether the tone was classified,
     # for the tone analysis (paper A.8).
@@ -206,6 +217,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {
             "prediction_error",
             "normalised_error",
+            "normalised_change",
             "change_score",
             "energy_dbfs",
             "attended_window",
@@ -268,6 +280,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "memory_downscale_blocked",
             "memory_blocked_sleeps",
             "memory_persist_refusals",
+            "memory_links_pruned",
+            "memory_nodes_pruned",
         }
     ),
     # Organ-level consolidation divergence (content-free aggregates only):
@@ -673,6 +687,16 @@ def _apply_taxonomy_fields(
     allowed = _allowed_fields(event_type)
     if allowed is None:
         return record
+    if event_type == "affect.regulation":
+        # Generic allowlist copy first, then preserve the payload's `source`
+        # (the biased module) under a different key so it does not overwrite
+        # the record's own `source` (the affect module).
+        for key in allowed:
+            if key in payload:
+                record[key] = payload[key]
+        if "source" in payload:
+            record["target_source"] = payload["source"]
+        return record
     if event_type == "welfare.gray_zone":
         if "gray_zone_event" in payload:
             record["gray_zone_event"] = payload.get("gray_zone_event")
@@ -714,7 +738,8 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
     entry `payload`/content field.
 
     Also copies `access_threshold`, `arm` and `coalition_capacity` from
-    `metadata` and `published_at` from the snapshot when present.
+    `metadata` and `published_at` from the snapshot when present. It also
+    copies `regulation_bias` and the content-free part of `workspace_feedback`.
     """
     record: dict[str, Any] = {
         "ts": _iso_now(),
@@ -735,6 +760,49 @@ def _workspace_metadata_record(snapshot: dict[str, Any]) -> dict[str, Any]:
         record["arm"] = metadata["arm"]
     if isinstance(metadata, dict) and "coalition_capacity" in metadata:
         record["coalition_capacity"] = metadata["coalition_capacity"]
+    if isinstance(metadata, dict):
+        rb = metadata.get("regulation_bias")
+        if isinstance(rb, dict):
+            bias_record: dict[str, Any] = {}
+            if "source" in rb:
+                bias_record["source"] = rb["source"]
+            if "factor" in rb:
+                bias_record["factor"] = rb["factor"]
+            if bias_record:
+                record["regulation_bias"] = bias_record
+
+        fb = metadata.get("workspace_feedback")
+        if isinstance(fb, dict):
+            fb_record: dict[str, Any] = {}
+            if "arm" in fb:
+                fb_record["arm"] = fb["arm"]
+            gains = fb.get("gains")
+            if isinstance(gains, dict):
+                fb_record["gains"] = {
+                    str(k): v
+                    for k, v in gains.items()
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)
+                }
+            episodes = fb.get("episodes")
+            if isinstance(episodes, list):
+                clean_episodes: list[dict[str, Any]] = []
+                for ep in episodes:
+                    if not isinstance(ep, dict):
+                        continue
+                    clean: dict[str, Any] = {}
+                    for k in ("kind", "conflicting", "toward", "away", "delta"):
+                        if k in ep:
+                            clean[k] = ep[k]
+                    if clean:
+                        clean_episodes.append(clean)
+                if clean_episodes:
+                    fb_record["episodes"] = clean_episodes
+            if fb_record:
+                # The sequence prediction is the sequence module's predicted
+                # 24-dimensional feature vector, latent content the log also
+                # excludes from `sequence.report`; gains and episodes feed the
+                # feedback stability measures (paper §6.4).
+                record["workspace_feedback"] = fb_record
     if "published_at" in snapshot:
         record["published_at"] = snapshot.get("published_at")
 
