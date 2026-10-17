@@ -548,6 +548,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                 {
                     "monitor": "divergence",
                     "transition": "crossing_rate_limited",
+                    "reason": "+".join(sorted(new_arms)),
                     "run_id": self._run_id(),
                     "poll_index": self.poll_index,
                     "signals": dict(assessment.signals or {}),

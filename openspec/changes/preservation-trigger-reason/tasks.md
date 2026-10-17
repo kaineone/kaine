@@ -7,4 +7,4 @@
 ## 2. Verification
 
 - [x] 2.1 Mutation check: reverting to the fixed reason fails the new tests
-- [ ] 2.2 Worker first-pass review and fixes
+- [x] 2.2 Worker first-pass review and fixes

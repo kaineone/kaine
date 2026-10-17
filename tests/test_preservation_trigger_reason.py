@@ -173,6 +173,31 @@ async def test_edge_on_second_arm_preserves_only_new_reason(bus, tmp_path, monke
 
 
 @pytest.mark.asyncio
+async def test_rate_limited_skip_record_carries_reason(bus, tmp_path, monkeypatch):
+    fm = _StubFM()
+    reg, eid = await _entity(bus, tmp_path)
+    mon = _div_monitor(
+        bus,
+        reg,
+        fm,
+        DivergenceMonitorConfig(enabled=True, min_interval_s=3600.0),
+        monkeypatch,
+        assessments=[_armed("voice"), _armed("voice", "consolidation")],
+        tmp_state_root=tmp_path / "state",
+    )
+    records = _capture_records(mon)
+    await mon._poll_once(asyncio.Event())
+    await mon._poll_once(asyncio.Event())
+    assert len(fm.calls) == 1
+    assert fm.calls[0]["reason"] == "voice"
+    skipped = [payload for et, payload in records if et == "preservation.skipped"]
+    assert len(skipped) == 1
+    assert skipped[0]["reason"] == "consolidation"
+    assert skipped[0]["new_arms"] == ["consolidation"]
+    await eid.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_fallback_reason_when_diverged_without_arms(bus, tmp_path, monkeypatch):
     fm = _StubFM()
     reg, eid = await _entity(bus, tmp_path)
