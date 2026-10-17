@@ -1797,14 +1797,23 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # Module background loops run briefly on fresh state before the revive lands,
     # which is safe because the cognitive cycle (and so the workspace) has not started.
     if ctx.revive is not None:
-        refused = await _apply_revive(
-            ctx.revive, ctx.registry, resolve(Path("state"))
-        )
-        # A landed revive wins over any resume checkpoint: replace it immediately.
-        if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
+        from kaine.lifecycle.resume_checkpoint import set_aside_for_revive
+        if not set_aside_for_revive(revived_from=getattr(ctx.revive, "revived_from", None)):
+            # A revive that is refused part way must never leave a checkpoint that a later
+            # plain start would lay over partly revived stores; the set-aside file is renamed,
+            # never deleted.
             from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
             await _shutdown_modules(ctx.registry.all_modules())
             refused = REVIVE_REFUSED_EXIT
+        else:
+            refused = await _apply_revive(
+                ctx.revive, ctx.registry, resolve(Path("state"))
+            )
+            # A landed revive wins over any resume checkpoint: replace it immediately.
+            if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
+                from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
+                await _shutdown_modules(ctx.registry.all_modules())
+                refused = REVIVE_REFUSED_EXIT
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()
@@ -2665,12 +2674,27 @@ async def _phase_checkpoint(ctx: BootContext) -> int | None:
     return None
 
 
-async def _final_checkpoint(checkpointer: Any, registry: Any) -> None:
+def _cycle_crashed(task: Any) -> bool:
+    """Whether the cycle task ended with an exception (not a cancellation)."""
+    try:
+        return task is not None and task.done() and not task.cancelled() and task.exception() is not None
+    except Exception:
+        return False
+
+
+async def _final_checkpoint(checkpointer: Any, registry: Any, cycle: Any, *, cycle_crashed: bool) -> None:
     """Write the resume checkpoint once at a clean shutdown, unless asleep."""
     if checkpointer is None:
         return
+    if cycle_crashed:
+        try:
+            await checkpointer.stop()
+        except Exception:
+            log.warning("resume checkpoint: failed to stop periodic checkpoint task after cycle crash", exc_info=True)
+        log.warning("resume checkpoint: the cognitive cycle ended with an error; keeping the last periodic checkpoint")
+        return
     try:
-        await checkpointer.write_final(asleep=_sleep_is_sleeping(registry))
+        await checkpointer.write_final(can_write=lambda: not _sleep_is_sleeping(registry) and not bool(getattr(cycle, "is_paused", False)))
     except Exception:
         log.warning("resume checkpoint: shutdown write failed", exc_info=True)
 
@@ -2888,7 +2912,7 @@ async def _shutdown(ctx: BootContext) -> None:
     except (asyncio.CancelledError, Exception):
         log.debug("cycle task ended", exc_info=True)
     # Write one final resume checkpoint while the modules are still intact.
-    await _final_checkpoint(ctx.checkpointer, ctx.registry)
+    await _final_checkpoint(ctx.checkpointer, ctx.registry, ctx.cycle, cycle_crashed=_cycle_crashed(ctx.cycle_task))
     await _shutdown_modules(ctx.registry.all_modules())
     await ctx.bus.close()
     _clear_runtime_state()

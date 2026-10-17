@@ -204,7 +204,53 @@ async def test_revive_refuses_when_checkpoint_cannot_be_replaced_or_removed(monk
 
 
 @pytest.mark.asyncio
-async def test_refused_revive_leaves_checkpoint_alone(monkeypatch) -> None:
+async def test_revive_refused_when_set_aside_fails(monkeypatch) -> None:
+    ident = mint_identity()
+
+    reg_old = ModuleRegistry()
+    reg_old.register(FakeModule("vocal", {"v": 1}))
+    await rc.save_checkpoint(reg_old, ident, reason="periodic")
+
+    apply_called = [False]
+    async def fake_apply(revive, registry, state_root):
+        apply_called[0] = True
+        return None
+
+    monkeypatch.setattr(cyc, "_apply_revive", fake_apply)
+    monkeypatch.setattr(rc, "set_aside_for_revive", lambda *args, **kwargs: False)
+
+    stopped = []
+    async def noop_welfare(w):
+        stopped.append(w)
+
+    monkeypatch.setattr(cyc, "_stop_welfare_producer", noop_welfare)
+
+    reg = ModuleRegistry()
+    mod = FakeModule("vocal", {})
+    reg.register(mod)
+
+    ctx = _make_ctx(ident, reg, monkeypatch, revive=object())
+    ctx.welfare_producer = object()
+
+    class FakeBus:
+        def __init__(self):
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+    ctx.bus = FakeBus()
+
+    result = await cyc._phase_registry(ctx)
+    assert result == REVIVE_REFUSED_EXIT
+    assert apply_called[0] is False
+    assert mod.shutdown_called is True
+    assert ctx.bus.closed is True
+    assert stopped == [ctx.welfare_producer]
+
+
+@pytest.mark.asyncio
+async def test_refused_revive_sets_the_checkpoint_aside(monkeypatch) -> None:
     ident = mint_identity()
 
     reg_old = ModuleRegistry()
@@ -212,13 +258,14 @@ async def test_refused_revive_leaves_checkpoint_alone(monkeypatch) -> None:
     await rc.save_checkpoint(reg_old, ident, reason="periodic")
     before = rc.checkpoint_file().read_bytes()
 
-    async def refuse(revive, registry, state_root):
+    async def partial_then_refuse(revive, registry, state_root):
+        registry.get("vocal").state = {"v": 2}
         return 7
 
     async def noop_welfare(w):
         return None
 
-    monkeypatch.setattr(cyc, "_apply_revive", refuse)
+    monkeypatch.setattr(cyc, "_apply_revive", partial_then_refuse)
     monkeypatch.setattr(cyc, "_stop_welfare_producer", noop_welfare)
 
     reg = ModuleRegistry()
@@ -233,7 +280,53 @@ async def test_refused_revive_leaves_checkpoint_alone(monkeypatch) -> None:
 
     result = await cyc._phase_registry(ctx)
     assert result == 7
-    assert rc.checkpoint_file().read_bytes() == before
+    assert not rc.checkpoint_file().exists()
+    aside = rc.checkpoint_file().with_name(rc.ASIDE_FILENAME)
+    assert aside.exists()
+    assert aside.read_bytes() == before
+
+    # A later plain start must not lay the set-aside stale checkpoint over fresh modules.
+    reg2 = ModuleRegistry()
+    mod2 = FakeModule("vocal", {})
+    reg2.register(mod2)
+    ctx2 = _make_ctx(ident, reg2, monkeypatch, revive=None)
+    assert await cyc._phase_registry(ctx2) is None
+    assert mod2.state == {}
+    assert mod2.deserialized == []
+
+
+@pytest.mark.asyncio
+async def test_revive_record_guards_a_stale_checkpoint(monkeypatch) -> None:
+    ident = mint_identity()
+
+    reg_old = ModuleRegistry()
+    reg_old.register(FakeModule("vocal", {"v": 1}))
+    await rc.save_checkpoint(reg_old, ident, reason="periodic")
+
+    async def fake_apply(revive, registry, state_root):
+        registry.get("vocal").state = {"v": 2}
+        return None
+
+    monkeypatch.setattr(cyc, "_apply_revive", fake_apply)
+
+    reg = ModuleRegistry()
+    mod = FakeModule("vocal", {})
+    reg.register(mod)
+
+    ctx = _make_ctx(ident, reg, monkeypatch, revive=object())
+    assert await cyc._phase_registry(ctx) is None
+    assert mod.state == {"v": 2}
+
+    stale_bytes = rc.checkpoint_file().with_name(rc.ASIDE_FILENAME).read_bytes()
+    rc.checkpoint_file().write_bytes(stale_bytes)
+
+    reg2 = ModuleRegistry()
+    mod2 = FakeModule("vocal", {})
+    reg2.register(mod2)
+    ctx2 = _make_ctx(ident, reg2, monkeypatch, revive=None)
+    assert await cyc._phase_registry(ctx2) is None
+    assert mod2.state == {}
+    assert mod2.deserialized == []
 
 
 @pytest.mark.asyncio
@@ -265,18 +358,27 @@ async def test_phase_checkpoint_starts_rolling_task() -> None:
 
 
 @pytest.mark.asyncio
-async def test_final_checkpoint_writes_once_when_awake() -> None:
+async def test_final_checkpoint_writes_once_when_awake(caplog) -> None:
     ident = mint_identity()
     reg = ModuleRegistry()
     reg.register(FakeModule("vocal", {"x": 1}))
+    cycle = types.SimpleNamespace(is_paused=False)
 
     cp = rc.ResumeCheckpointer(reg, ident, awake_seconds=lambda: 5.0, can_write=lambda: True)
     cp.start()
-    await cyc._final_checkpoint(cp, reg)
+    await cyc._final_checkpoint(cp, reg, cycle, cycle_crashed=False)
 
     snap = rc.read_checkpoint()
     assert snap is not None
     assert snap.metadata["reason"] == "shutdown"
+
+    # When paused nothing is written.
+    rc.discard_checkpoint()
+    cp2 = rc.ResumeCheckpointer(reg, ident, awake_seconds=lambda: 5.0, can_write=lambda: True)
+    cp2.start()
+    paused_cycle = types.SimpleNamespace(is_paused=True)
+    await cyc._final_checkpoint(cp2, reg, paused_cycle, cycle_crashed=False)
+    assert not rc.checkpoint_file().exists()
 
     # When asleep the final checkpoint is skipped.
     rc.discard_checkpoint()
@@ -286,15 +388,57 @@ async def test_final_checkpoint_writes_once_when_awake() -> None:
 
     reg_sleep = ModuleRegistry()
     reg_sleep.register(SleepyModule("sleep"))
-    cp2 = rc.ResumeCheckpointer(
+    cp3 = rc.ResumeCheckpointer(
         reg_sleep, ident, awake_seconds=lambda: 5.0, can_write=lambda: True
     )
-    cp2.start()
-    await cyc._final_checkpoint(cp2, reg_sleep)
+    cp3.start()
+    await cyc._final_checkpoint(cp3, reg_sleep, cycle, cycle_crashed=False)
     assert not rc.checkpoint_file().exists()
 
+    # When the cycle crashed nothing is written; a warning is logged and the periodic task is stopped.
+    rc.discard_checkpoint()
+    cp4 = rc.ResumeCheckpointer(reg, ident, awake_seconds=lambda: 5.0, can_write=lambda: True)
+    cp4.start()
+    with caplog.at_level("WARNING"):
+        await cyc._final_checkpoint(cp4, reg, cycle, cycle_crashed=True)
+    assert not rc.checkpoint_file().exists()
+    task = getattr(cp4, "task", getattr(cp4, "_task", None))
+    assert task is not None
+    assert task.done()
+    assert "ended with an error" in caplog.text
+
     # No checkpointer is a no-op.
-    await cyc._final_checkpoint(None, reg)
+    await cyc._final_checkpoint(None, reg, cycle, cycle_crashed=False)
+
+
+@pytest.mark.asyncio
+async def test_cycle_crashed() -> None:
+    async def boom():
+        raise RuntimeError("cycle error")
+
+    t_err = asyncio.create_task(boom())
+    try:
+        await t_err
+    except Exception:
+        pass
+    assert cyc._cycle_crashed(t_err) is True
+
+    async def ok():
+        return 42
+
+    t_ok = asyncio.create_task(ok())
+    await t_ok
+    assert cyc._cycle_crashed(t_ok) is False
+
+    t_cancel = asyncio.create_task(ok())
+    t_cancel.cancel()
+    try:
+        await t_cancel
+    except asyncio.CancelledError:
+        pass
+    assert cyc._cycle_crashed(t_cancel) is False
+
+    assert cyc._cycle_crashed(None) is False
 
 
 def test_shutdown_order_and_failed_boot_no_checkpoint() -> None:
@@ -303,11 +447,64 @@ def test_shutdown_order_and_failed_boot_no_checkpoint() -> None:
     assert idx_final > shutdown_src.index("ctx.cycle.shutdown()")
     assert idx_final > shutdown_src.index("await ctx.cycle_task")
     assert idx_final < shutdown_src.index("_shutdown_modules(")
+    assert "_cycle_crashed(ctx.cycle_task)" in shutdown_src
     assert "checkpoint_task" not in shutdown_src
 
     failed_src = inspect.getsource(cyc._release_after_failed_boot)
     assert "_final_checkpoint" not in failed_src
     assert "save_checkpoint" not in failed_src
+
+
+@pytest.mark.asyncio
+async def test_real_modules_boot_initialize_then_restore(monkeypatch, tmp_path, fake_async_bus) -> None:
+    from kaine.modules.affect.module import Affect
+    from kaine.modules.self_model import SelfModel
+
+    ident = mint_identity()
+
+    affect1 = Affect(fake_async_bus, publish_interval_s=999.0)
+    self_model1 = SelfModel(fake_async_bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+
+    reg1 = ModuleRegistry()
+    reg1.register(affect1)
+    reg1.register(self_model1)
+
+    ctx = _make_ctx(ident, reg1, monkeypatch, revive=None)
+    ctx.bus = fake_async_bus
+
+    # The real initialize() of both modules runs on the fakeredis bus.
+    result = await cyc._phase_registry(ctx)
+    assert result is None
+    assert self_model1._drift_count == 0
+
+    affect1._drives.curiosity.value = 0.77
+    affect1._goals.add("explore", drive="curiosity")
+    self_model1._drift_count = 3
+
+    await rc.save_checkpoint(reg1, ident, reason="shutdown")
+
+    await affect1.shutdown()
+    await self_model1.shutdown()
+
+    affect2 = Affect(fake_async_bus, publish_interval_s=999.0)
+    self_model2 = SelfModel(fake_async_bus, persistence_path=tmp_path / "sm.json", save_interval_s=60)
+
+    reg2 = ModuleRegistry()
+    reg2.register(affect2)
+    reg2.register(self_model2)
+
+    ctx2 = _make_ctx(ident, reg2, monkeypatch, revive=None)
+    ctx2.bus = fake_async_bus
+
+    result = await cyc._phase_registry(ctx2)
+    assert result is None
+
+    assert affect2._drives.curiosity.value == 0.77
+    assert affect2._goals.to_dict() == affect1._goals.to_dict()
+    assert self_model2._drift_count == 3
+
+    await affect2.shutdown()
+    await self_model2.shutdown()
 
 
 @pytest.mark.asyncio

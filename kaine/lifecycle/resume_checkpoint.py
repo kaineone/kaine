@@ -13,6 +13,12 @@ Self-persisting modules (self_model, episodic_memory, social_cognition, world_mo
 because they keep their own store or file that they reload on start; capturing them would risk rolling
 that store back. Transient bus stream cursors are excluded because restoring an old cursor would make
 a module replay events it already handled.
+Some fields of a self-persisting module are not held in its own file, so the checkpoint carries
+them instead; for example, it carries the self_model drift_count.
+A module whose serialize() raises or returns a non-dict is omitted from that checkpoint and
+starts fresh on a plain restart; the omission is recorded in metadata.
+After a revive, any checkpoint written before the revive is ignored so old pre-revive state is
+not restored; this guard uses a small revive record file.
 """
 
 from __future__ import annotations
@@ -21,7 +27,9 @@ import asyncio
 import copy
 import json
 import logging
+import math
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -40,8 +48,14 @@ CHECKPOINT_KIND = "resume_checkpoint"
 CHECKPOINT_VERSION = 1
 CHECKPOINT_INTERVAL_SECONDS = 60.0
 
+ASIDE_FILENAME = CHECKPOINT_FILENAME + ".pre-revive"
+REVIVE_RECORD_FILENAME = "revive.json"
+
 # Modules that manage their own persistent store. Capturing them would roll their store back.
 SELF_PERSISTING_MODULES = frozenset({"self_model", "episodic_memory", "social_cognition", "world_model"})
+
+# Fields of a self-persisting module that its own file does not hold, so the checkpoint carries them.
+CARRIED_FIELDS = {"self_model": ("drift_count",)}
 
 # Bus stream cursors. Restoring old values would cause duplicate replays.
 TRANSIENT_KEYS = {
@@ -103,28 +117,43 @@ def capture_checkpoint(
 ) -> ForkSnapshot:
     """Capture the serialized state of every non-self-persisting module."""
     modules: dict[str, dict[str, Any]] = {}
+    omitted: list[str] = []
 
     for module in registry.all_modules():
-        if module.name in SELF_PERSISTING_MODULES:
+        name = module.name
+        if name in SELF_PERSISTING_MODULES and name not in CARRIED_FIELDS:
             continue
 
         try:
             raw_state = module.serialize()
         except Exception as exc:
-            raise CheckpointError(
-                f"could not capture module {module.name}: {type(exc).__name__}"
-            ) from exc
+            type_name = type(exc).__name__
+            log.warning(
+                "resume checkpoint: module %s omitted from this checkpoint (%s); it starts fresh on a plain restart",
+                name,
+                type_name,
+            )
+            omitted.append(name)
+            continue
 
         if not isinstance(raw_state, dict):
-            raise CheckpointError(
-                f"could not capture module {module.name}: serialize returned {type(raw_state).__name__}, not dict"
+            type_name = type(raw_state).__name__
+            log.warning(
+                "resume checkpoint: module %s omitted from this checkpoint (%s); it starts fresh on a plain restart",
+                name,
+                type_name,
             )
+            omitted.append(name)
+            continue
 
         state = copy.deepcopy(raw_state)
-        for key in TRANSIENT_KEYS.get(module.name, ()):
+        for key in TRANSIENT_KEYS.get(name, ()):
             state.pop(key, None)
 
-        modules[module.name] = state
+        if name in CARRIED_FIELDS:
+            state = {k: state[k] for k in CARRIED_FIELDS[name] if k in state}
+
+        modules[name] = state
 
     metadata = {
         "kind": CHECKPOINT_KIND,
@@ -133,6 +162,7 @@ def capture_checkpoint(
         "identity": identity.to_dict(),
         "awake_seconds": awake_seconds,
         "excluded_modules": sorted(SELF_PERSISTING_MODULES),
+        "omitted_modules": sorted(omitted),
     }
 
     return ForkSnapshot(label="resume-checkpoint", modules=modules, adapters=[], metadata=metadata)
@@ -208,6 +238,95 @@ def read_checkpoint(directory: Path | None = None) -> ForkSnapshot | None:
         ) from exc
 
 
+def set_aside_for_revive(directory: Path | None = None, *, revived_from: str | None = None) -> bool:
+    """Record that a revive has started and move the current checkpoint out of the way."""
+    target = checkpoint_file(directory)
+    directory = target.parent
+    record = directory / REVIVE_RECORD_FILENAME
+    aside = target.with_name(ASIDE_FILENAME)
+
+    try:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _chmod_best_effort(directory, 0o700)
+
+        payload = json.dumps(
+            {"started_at": time.time(), "revived_from": revived_from},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        tmp = directory / (REVIVE_RECORD_FILENAME + ".tmp")
+        fd: int | None = None
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, payload)
+                os.fsync(fd)
+            finally:
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+            _chmod_best_effort(tmp, 0o600)
+            os.replace(tmp, record)
+            _fsync_dir(directory)
+        except Exception:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+        if target.is_file():
+            os.replace(target, aside)
+            log.info(
+                "resume checkpoint: set checkpoint aside at %s for revive (from %s)",
+                aside,
+                revived_from,
+            )
+        else:
+            log.info(
+                "resume checkpoint: no checkpoint to set aside for revive (from %s)",
+                revived_from,
+            )
+
+        leftover_tmp = target.with_name(CHECKPOINT_FILENAME + ".tmp")
+        if leftover_tmp.is_file():
+            leftover_tmp.unlink()
+
+        return True
+    except Exception as exc:
+        log.error(
+            "resume checkpoint: could not set the checkpoint aside before a revive: %s",
+            type(exc).__name__,
+        )
+        return False
+
+
+def read_revive_started_at(directory: Path | None = None) -> float | None:
+    """Return the started_at timestamp from the revive record, or None."""
+    record = checkpoint_file(directory).parent / REVIVE_RECORD_FILENAME
+    if not record.is_file():
+        return None
+
+    try:
+        data = json.loads(record.read_text(encoding="utf-8"))
+        started = data.get("started_at")
+
+        if isinstance(started, bool) or not isinstance(started, (int, float)):
+            return None
+
+        started = float(started)
+        if not math.isfinite(started):
+            return None
+
+        return started
+    except Exception as exc:
+        log.debug("resume checkpoint: revive record not readable: %s", type(exc).__name__)
+        return None
+
+
 @dataclass(frozen=True)
 class RestoreResult:
     """Outcome of a plain-start restore."""
@@ -264,13 +383,21 @@ def restore_checkpoint(
         )
         return None
 
+    started = read_revive_started_at(directory)
+    if started is not None and snap.timestamp < started:
+        log.warning(
+            "resume checkpoint: ignoring checkpoint %s written before the latest revive; modules start fresh",
+            path,
+        )
+        return None
+
     by_name = {module.name: module for module in registry.all_modules()}
     restored: list[str] = []
     skipped: list[str] = []
     failed: list[str] = []
 
     for name in sorted(snap.modules):
-        if name in SELF_PERSISTING_MODULES:
+        if name in SELF_PERSISTING_MODULES and name not in CARRIED_FIELDS:
             continue
 
         if name not in by_name:
@@ -289,6 +416,9 @@ def restore_checkpoint(
                 "state not a dict",
             )
             continue
+
+        if name in CARRIED_FIELDS:
+            state = {k: state[k] for k in CARRIED_FIELDS[name] if k in state}
 
         state_copy = copy.deepcopy(state)
         for key in TRANSIENT_KEYS.get(name, ()):
@@ -485,23 +615,28 @@ class ResumeCheckpointer:
                     exc_info=True,
                 )
 
-    async def write_final(self, *, asleep: bool) -> bool:
-        """Write a final checkpoint on shutdown, or keep the last one if asleep."""
+    async def write_final(self, *, can_write: Callable[[], bool]) -> bool:
+        """Write a final checkpoint on shutdown, or keep the last one if not allowed."""
         await self.stop()
 
-        if asleep:
+        try:
+            ok = bool(can_write())
+        except Exception:
+            ok = False
+
+        if not ok:
             log.info(
-                "resume checkpoint: shutdown while asleep; keeping the last awake checkpoint"
+                "resume checkpoint: asleep or frozen at shutdown; keeping the last awake checkpoint"
             )
             return False
 
-        ok = await save_checkpoint(
+        success = await save_checkpoint(
             self._registry,
             self._identity,
             reason="shutdown",
             directory=self._directory,
             awake_seconds=self._read_awake(),
         )
-        if ok:
+        if success:
             self.writes += 1
-        return ok
+        return success

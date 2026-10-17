@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: A rolling resume checkpoint holds module state across plain restarts
-The cycle SHALL keep exactly one resume checkpoint per state tree, at `checkpoint/checkpoint.json` beside the stage file. The checkpoint SHALL hold each enabled module's `serialize()` state and the entity identity, SHALL be written through the process-wide state encryptor, and SHALL replace the previous checkpoint atomically. It SHALL leave out the self-model, episodic memory, social cognition and world model modules, whose own stores persist them, and the bus cursors of the interoception, embodiment and sequence modules. The cycle SHALL write it after every 60 s of awake entity time and once at a clean shutdown, and SHALL NOT write it periodically while the cycle is frozen or asleep, nor at shutdown while the sleep module is asleep. A module whose `serialize()` fails SHALL cancel that write and leave the previous checkpoint in place.
+The cycle SHALL keep exactly one resume checkpoint per state tree, at `checkpoint/checkpoint.json` beside the stage file. The checkpoint SHALL hold each enabled module's `serialize()` state and the entity identity, SHALL be written through the process-wide state encryptor, and SHALL replace the previous checkpoint atomically. It SHALL leave out the self-model, episodic memory, social cognition and world model modules, whose own stores persist them, and the bus cursors of the interoception, embodiment and sequence modules. The cycle SHALL write it after every 60 s of awake entity time and once at a clean shutdown, and SHALL NOT write it periodically while the cycle is frozen or asleep, nor at shutdown while the sleep module is asleep. The checkpoint SHALL carry the self-model module's drift count, which its own file does not hold. A module whose `serialize()` fails SHALL be left out of that write with a warning naming it, and SHALL start fresh after a restart. The cycle SHALL NOT write the shutdown checkpoint when the cognitive cycle ended with an error.
 
 #### Scenario: Many writes leave one checkpoint
 - **WHEN** the checkpoint has been written many times
@@ -35,7 +35,11 @@ On a start without `--revive`, after the modules initialise and before the cogni
 - **THEN** one warning is logged and every module keeps its fresh state
 
 ### Requirement: A revive wins over any checkpoint
-A start with `--revive` SHALL NOT read the resume checkpoint. Once the revive has landed, the cycle SHALL replace any checkpoint in the state tree with the revived state, and SHALL remove the old checkpoint when that write fails, so a later plain start can never restore state from before the revive.
+A start with `--revive` SHALL NOT read the resume checkpoint. Before the revive starts, the cycle SHALL write a revive record and rename any checkpoint aside, and SHALL stop the start when it cannot. Once the revive has landed, the cycle SHALL write a fresh checkpoint of the revived state. A plain start SHALL ignore a checkpoint older than the revive record.
+
+#### Scenario: A revive refused part way leaves no checkpoint to restore
+- **WHEN** a revive changes some modules and is then refused
+- **THEN** the old checkpoint is renamed aside and the next plain start restores nothing from it
 
 #### Scenario: A stale checkpoint never overrides a revive
 - **WHEN** a state tree holds a checkpoint and the entity is revived from a bundle, and the process then stops before its first periodic write

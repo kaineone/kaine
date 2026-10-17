@@ -12,6 +12,7 @@ import os
 import stat
 import time
 import types
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,7 @@ from kaine.lifecycle.resume_checkpoint import (
     save_checkpoint,
     write_checkpoint,
 )
+from kaine.modules.self_model import SelfModel
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,
@@ -152,7 +154,7 @@ async def test_self_persisting_modules_not_written_nor_restored(tmp_path):
     ident = mint_identity()
     d = tmp_path / "ckpt"
 
-    self_model = FakeModule("self_model", {"x": 1})
+    self_model = FakeModule("self_model", {"x": 1, "drift_count": 4})
     episodic = FakeModule("episodic_memory", {"e": 2})
     social = FakeModule("social_cognition", {"s": 3})
     world = FakeModule("world_model", {"w": 4})
@@ -161,10 +163,15 @@ async def test_self_persisting_modules_not_written_nor_restored(tmp_path):
     snap = capture_checkpoint(FakeRegistry(self_model, episodic, social, world, vocal), ident, reason="test")
     write_checkpoint(snap, d)
 
-    assert set(read_checkpoint(d).modules.keys()) == {"vocal"}
+    stored = read_checkpoint(d).modules
+    assert set(stored.keys()) == {"self_model", "vocal"}
+    assert stored["self_model"] == {"drift_count": 4}
+    assert "episodic_memory" not in stored
+    assert "social_cognition" not in stored
+    assert "world_model" not in stored
 
     modified = dataclasses.replace(
-        snap, modules={**snap.modules, "self_model": {"hand": True}}
+        snap, modules={**snap.modules, "self_model": {"hand": True, "drift_count": 9}}
     )
     write_checkpoint(modified, d)
 
@@ -172,8 +179,33 @@ async def test_self_persisting_modules_not_written_nor_restored(tmp_path):
     vocal2 = FakeModule("vocal", {})
     result = restore_checkpoint(FakeRegistry(self_model2, vocal2), ident, directory=d)
 
-    assert result.restored == ("vocal",)
-    assert self_model2.deserialized == []
+    assert "self_model" in result.restored
+    assert "vocal" in result.restored
+    assert self_model2.deserialized == [{"drift_count": 9}]
+    assert vocal2.deserialized == [{"v": 5}]
+
+
+@pytest.mark.asyncio
+async def test_self_model_drift_count_survives_restart(tmp_path):
+    ident = mint_identity()
+    d = tmp_path / "ckpt"
+
+    sm = SelfModel(types.SimpleNamespace(), persistence_path=tmp_path / "sm.json", save_interval_s=60)
+    sm._drift_count = 5
+    # The document is frozen and lives in the module's own file, never in the checkpoint.
+    sm._model = dataclasses.replace(sm._model, name="kept-in-own-file")
+
+    assert await save_checkpoint(FakeRegistry(sm), ident, reason="periodic", directory=d)
+
+    sm2 = SelfModel(types.SimpleNamespace(), persistence_path=tmp_path / "sm2.json", save_interval_s=60)
+    pre_restore_model = sm2.serialize()["model"]
+    result = restore_checkpoint(FakeRegistry(sm2), ident, directory=d)
+
+    assert result is not None
+    assert "self_model" in result.restored
+    assert sm2._drift_count == 5
+    assert sm2.serialize()["model"] == pre_restore_model
+    assert "kept-in-own-file" not in str(read_checkpoint(d).modules["self_model"])
 
 
 @pytest.mark.asyncio
@@ -328,18 +360,45 @@ async def test_failing_deserialize_is_reported(tmp_path, caplog):
 
 
 @pytest.mark.asyncio
-async def test_failing_serialize_keeps_previous_checkpoint(tmp_path):
+async def test_failing_serialize_omits_only_that_module(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="kaine.lifecycle.resume_checkpoint")
     ident = mint_identity()
     d = tmp_path / "ckpt"
 
-    module = FakeModule("m", {"v": 1})
-    assert await save_checkpoint(FakeRegistry(module), ident, reason="periodic", directory=d)
-    assert read_checkpoint(d).modules["m"]["v"] == 1
+    good = FakeModule("good", {"v": 1})
+    bad = FakeModule("bad", {}, fail_serialize=True)
+    ok = await save_checkpoint(FakeRegistry(good, bad), ident, reason="periodic", directory=d)
+    assert ok is True
 
-    bad_module = FakeModule("m", {"v": 2}, fail_serialize=True)
-    ok = await save_checkpoint(FakeRegistry(bad_module), ident, reason="periodic", directory=d)
-    assert ok is False
-    assert read_checkpoint(d).modules["m"]["v"] == 1
+    stored = read_checkpoint(d).modules
+    assert set(stored.keys()) == {"good"}
+    assert stored["good"] == {"v": 1}
+    assert read_checkpoint(d).metadata["omitted_modules"] == ["bad"]
+
+    warnings = _resume_warnings(caplog)
+    assert len(warnings) == 1
+    assert "bad" in warnings[0].message
+
+    good2 = FakeModule("good", {})
+    bad2 = FakeModule("bad", {})
+    result = restore_checkpoint(FakeRegistry(good2, bad2), ident, directory=d)
+    assert result.restored == ("good",)
+    assert result.fresh == ("bad",)
+    assert bad2.deserialized == []
+
+    non_dict = types.SimpleNamespace(name="non_dict")
+    non_dict.serialize = lambda: [1]
+    non_dict.deserialize = lambda state: None
+    d2 = tmp_path / "ckpt2"
+    ok2 = await save_checkpoint(
+        FakeRegistry(FakeModule("ok2", {"v": 2}), non_dict),
+        ident,
+        reason="periodic",
+        directory=d2,
+    )
+    assert ok2 is True
+    assert "non_dict" not in read_checkpoint(d2).modules
+    assert "non_dict" in read_checkpoint(d2).metadata["omitted_modules"]
 
 
 @pytest.mark.asyncio
@@ -359,6 +418,100 @@ async def test_discard_checkpoint(tmp_path):
     assert discard_checkpoint(d) is True
     assert not checkpoint_file(d).exists()
     assert discard_checkpoint(d) is True
+
+
+@pytest.mark.asyncio
+async def test_set_aside_for_revive_renames_and_records(tmp_path):
+    ident = mint_identity()
+    d = tmp_path / "ckpt"
+
+    module = FakeModule("m", {"v": 1})
+    assert await save_checkpoint(FakeRegistry(module), ident, reason="periodic", directory=d)
+
+    aside = d / rc_module.ASIDE_FILENAME
+    record = d / rc_module.REVIVE_RECORD_FILENAME
+    old_bytes = checkpoint_file(d).read_bytes()
+
+    assert rc_module.set_aside_for_revive(d, revived_from="p1") is True
+    assert not checkpoint_file(d).exists()
+    assert aside.exists()
+    assert aside.read_bytes() == old_bytes
+    assert record.exists()
+    assert stat.S_IMODE(os.stat(record).st_mode) == 0o600
+
+    data = json.loads(record.read_text())
+    assert data["revived_from"] == "p1"
+    started = rc_module.read_revive_started_at(d)
+    assert isinstance(started, float) and started > 0
+
+    module.state["v"] = 2
+    assert await save_checkpoint(FakeRegistry(module), ident, reason="periodic", directory=d)
+    new_bytes = checkpoint_file(d).read_bytes()
+    assert len(list(d.glob("*.pre-revive"))) == 1
+
+    assert rc_module.set_aside_for_revive(d, revived_from="p2") is True
+    assert len(list(d.glob("*.pre-revive"))) == 1
+    assert aside.read_bytes() == new_bytes
+
+    checkpoint_file(d).unlink(missing_ok=True)
+    assert rc_module.set_aside_for_revive(d, revived_from="p3") is True
+    assert record.exists()
+    assert not checkpoint_file(d).exists()
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_checkpoint_older_than_revive(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="kaine.lifecycle.resume_checkpoint")
+    ident = mint_identity()
+    d = tmp_path / "ckpt"
+
+    module = FakeModule("m", {"v": 1})
+    assert await save_checkpoint(FakeRegistry(module), ident, reason="periodic", directory=d)
+    snap_timestamp = rc_module.read_checkpoint(d).timestamp
+
+    record = d / rc_module.REVIVE_RECORD_FILENAME
+    record.write_text(json.dumps({"started_at": snap_timestamp + 10}))
+    caplog.clear()
+    assert restore_checkpoint(FakeRegistry(FakeModule("m")), ident, directory=d) is None
+    assert len(_resume_warnings(caplog)) == 1
+
+    record.write_text(json.dumps({"started_at": snap_timestamp - 10}))
+    caplog.clear()
+    result = restore_checkpoint(FakeRegistry(FakeModule("m")), ident, directory=d)
+    assert result is not None
+    assert result.restored == ("m",)
+
+    record.write_bytes(b"{nope")
+    caplog.clear()
+    result = restore_checkpoint(FakeRegistry(FakeModule("m")), ident, directory=d)
+    assert result is not None
+    assert result.restored == ("m",)
+
+
+@pytest.mark.asyncio
+async def test_set_aside_failure_returns_false(tmp_path, monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="kaine.lifecycle.resume_checkpoint")
+    ident = mint_identity()
+    d = tmp_path / "ckpt"
+
+    assert await save_checkpoint(FakeRegistry(FakeModule("m")), ident, reason="periodic", directory=d)
+
+    real_replace = rc_module.os.replace
+
+    def fake_replace(src, dst):
+        if Path(dst).name == rc_module.ASIDE_FILENAME:
+            raise OSError("ro")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(rc_module.os, "replace", fake_replace)
+
+    assert rc_module.set_aside_for_revive(d) is False
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == "kaine.lifecycle.resume_checkpoint" and r.levelno == logging.ERROR
+    ]
+    assert len(errors) == 1
 
 
 @pytest.mark.asyncio
@@ -422,7 +575,7 @@ async def test_write_final_shutdown_and_asleep(tmp_path):
         poll_seconds=0.01,
     )
     cp.start()
-    assert await cp.write_final(asleep=False) is True
+    assert await cp.write_final(can_write=lambda: True) is True
     snap = read_checkpoint(d)
     assert snap.metadata["reason"] == "shutdown"
     assert cp._task.done()
@@ -438,9 +591,34 @@ async def test_write_final_shutdown_and_asleep(tmp_path):
         poll_seconds=0.01,
     )
     cp2.start()
-    assert await cp2.write_final(asleep=True) is False
+    assert await cp2.write_final(can_write=lambda: False) is False
     assert not checkpoint_file(d2).exists()
     assert cp2._task.done()
+
+
+@pytest.mark.asyncio
+async def test_write_final_checks_after_stop(tmp_path):
+    ident = mint_identity()
+    d = tmp_path / "ckpt"
+
+    cp = ResumeCheckpointer(
+        FakeRegistry(FakeModule("m", {"v": 1})),
+        ident,
+        awake_seconds=lambda: 0.0,
+        can_write=lambda: True,
+        directory=d,
+        interval_seconds=60.0,
+        poll_seconds=0.01,
+    )
+    cp.start()
+
+    def can_write_after_stop():
+        # False only once stop() has run, so a True result would mean it ran too early.
+        return not cp._stopping.is_set()
+
+    assert await cp.write_final(can_write=can_write_after_stop) is False
+    assert not checkpoint_file(d).exists()
+    assert cp._task.done()
 
 
 @pytest.mark.asyncio

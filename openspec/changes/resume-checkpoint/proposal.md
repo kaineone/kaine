@@ -8,7 +8,8 @@ Paper Appendix A.7 states that awake time, $f_{w0}$, the consecutive-pass count,
 - It is written after every 60 s of awake entity time (entity time with the cycle neither frozen nor asleep), and once at a clean shutdown (SIGTERM, SIGINT, `control preserve --stop`, the end of the cycle) unless the sleep module is mid-sleep then. No periodic write happens while the cycle is frozen or asleep, so a checkpoint never holds a sleep phase in progress.
 - A module whose own store or file is authoritative on a plain start (the self-model module's file, the episodic memory and social cognition stores, the world model's weight checkpoint) is not part of the checkpoint, so a checkpoint up to a minute old can never roll that store back. Bus cursors (interoception, embodiment, sequence) are left out, so a resumed module never replays bus events it already read.
 - On a plain start (no `--revive`), after the modules initialise and before the cognitive cycle starts, the cycle restores each checkpointed module through its `deserialize()`, the same call a revive makes for module state. It does so only when the checkpoint's entity id matches the state tree's identity. None of the revive-only side effects happen: no `revived_from`, no developmental files set aside, no identity change. A missing checkpoint is logged at info level; an unreadable, undecryptable, malformed or other-entity checkpoint is ignored with one warning. In both cases the start proceeds with fresh modules, as today. A module absent from the checkpoint starts fresh; a checkpointed module not enabled now is skipped.
-- A revive keeps today's behaviour exactly and never reads the checkpoint. Once the revive lands, the cycle immediately replaces any checkpoint in the tree with the revived state (or removes it if that write fails), so a stale checkpoint can never override a revive.
+- A revive never reads the checkpoint. Before it starts, the cycle writes a revive record and renames the checkpoint aside (stopping the start with exit code 7 when it cannot); once the revive lands, it writes a fresh checkpoint of the revived state. A plain start ignores a checkpoint older than the revive record, so a stale checkpoint can never override a revive, even one refused part way.
+- The self-model module's drift count, which its own file does not hold, is carried. A module whose state cannot be serialized is left out of that write with a warning and starts fresh. No shutdown checkpoint is written when the cognitive cycle ended with an error.
 - Decommission backs up and deletes the checkpoint directory with the other entity state.
 
 ## Capabilities
@@ -16,6 +17,12 @@ Paper Appendix A.7 states that awake time, $f_{w0}$, the consecutive-pass count,
 ### Modified Capabilities
 
 - `entity-preservation`: module state persists across a plain restart through a rolling, encrypted resume checkpoint, and a revive always wins over it.
+
+## Known limitations
+
+- The checkpoint is not lived-history evidence: the identity and boot-stage lineage scans (`own_lived_artifacts`, `has_prior_lived_history_in_lineage`) do not read it, so with developmental staging off it does not change how the stage or a lost identity is resolved.
+- Modules on in-memory store backends (episodic memory, social cognition) lose their stores on any restart: they are self-persisting, so the checkpoint does not carry them.
+- A module whose `deserialize()` raises part way can be left half restored; the restore logs a warning naming the module and goes on with the others.
 
 ## Impact
 
