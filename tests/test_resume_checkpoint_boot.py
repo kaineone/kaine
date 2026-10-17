@@ -420,6 +420,7 @@ async def test_cycle_crashed() -> None:
     try:
         await t_err
     except Exception:
+        # The task's error is what this case inspects.
         pass
     assert cyc._cycle_crashed(t_err) is True
 
@@ -427,7 +428,7 @@ async def test_cycle_crashed() -> None:
         return 42
 
     t_ok = asyncio.create_task(ok())
-    await t_ok
+    assert await t_ok == 42
     assert cyc._cycle_crashed(t_ok) is False
 
     t_cancel = asyncio.create_task(ok())
@@ -435,6 +436,7 @@ async def test_cycle_crashed() -> None:
     try:
         await t_cancel
     except asyncio.CancelledError:
+        # The cancellation is the point of this case.
         pass
     assert cyc._cycle_crashed(t_cancel) is False
 

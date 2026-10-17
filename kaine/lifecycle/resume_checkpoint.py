@@ -88,6 +88,7 @@ def _chmod_best_effort(path: Path, mode: int) -> None:
     try:
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
+        # chmod is best effort on filesystems without POSIX modes.
         pass
 
 
@@ -99,12 +100,14 @@ def _fsync_dir(path: Path) -> None:
         fd = os.open(path, flags)
         os.fsync(fd)
     except OSError:
+        # Directory fsync is best effort; not every platform supports it.
         pass
     finally:
         if fd is not None:
             try:
                 os.close(fd)
             except OSError:
+                # The descriptor is unusable either way; there is nothing left to release.
                 pass
 
 
@@ -191,6 +194,7 @@ def write_checkpoint(snap: ForkSnapshot, directory: Path | None = None) -> Path:
                 try:
                     os.close(fd)
                 except OSError:
+                    # The descriptor is unusable either way; there is nothing left to release.
                     pass
         _chmod_best_effort(tmp, 0o600)
         os.replace(tmp, target)
@@ -199,6 +203,7 @@ def write_checkpoint(snap: ForkSnapshot, directory: Path | None = None) -> Path:
         try:
             tmp.unlink(missing_ok=True)
         except OSError:
+            # Removing the temp file is best effort; the original error is re-raised below.
             pass
         raise
 
@@ -267,6 +272,7 @@ def set_aside_for_revive(directory: Path | None = None, *, revived_from: str | N
                     try:
                         os.close(fd)
                     except OSError:
+                        # The descriptor is unusable either way; there is nothing left to release.
                         pass
             _chmod_best_effort(tmp, 0o600)
             os.replace(tmp, record)
@@ -275,6 +281,7 @@ def set_aside_for_revive(directory: Path | None = None, *, revived_from: str | N
             try:
                 tmp.unlink(missing_ok=True)
             except OSError:
+                # Removing the temp file is best effort; the original error is re-raised below.
                 pass
             raise
 
@@ -572,6 +579,7 @@ class ResumeCheckpointer:
                 await asyncio.wait_for(self._stopping.wait(), timeout=self._poll)
                 break
             except asyncio.TimeoutError:
+                # The poll interval elapsed; check below whether a write is due.
                 pass
 
             awake = self._read_awake()
@@ -607,6 +615,7 @@ class ResumeCheckpointer:
             try:
                 await self._task
             except asyncio.CancelledError:
+                # Cancellation is how this task is expected to stop.
                 pass
             except Exception as exc:
                 log.warning(

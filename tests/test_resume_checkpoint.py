@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-import kaine.lifecycle.resume_checkpoint as rc_module
+from kaine.lifecycle import resume_checkpoint as rc_module
 from kaine.lifecycle.identity import mint_identity
 from kaine.lifecycle.resume_checkpoint import (
     ResumeCheckpointer,
@@ -623,7 +623,7 @@ async def test_write_final_checks_after_stop(tmp_path):
 
 @pytest.mark.asyncio
 async def test_stop_waits_for_in_flight_write(tmp_path, monkeypatch):
-    import kaine.lifecycle.resume_checkpoint as rc
+    rc = rc_module
 
     real_write = rc.write_checkpoint
 
