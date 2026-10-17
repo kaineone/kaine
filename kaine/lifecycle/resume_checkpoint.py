@@ -77,6 +77,23 @@ def _chmod_best_effort(path: Path, mode: int) -> None:
         pass
 
 
+def _fsync_dir(path: Path) -> None:
+    """Best-effort fsync of a directory so a rename on top of it is durable."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    fd: int | None = None
+    try:
+        fd = os.open(path, flags)
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
 def capture_checkpoint(
     registry: Any,
     identity: EntityIdentity,
@@ -147,6 +164,7 @@ def write_checkpoint(snap: ForkSnapshot, directory: Path | None = None) -> Path:
                     pass
         _chmod_best_effort(tmp, 0o600)
         os.replace(tmp, target)
+        _fsync_dir(target.parent)
     except Exception:
         try:
             tmp.unlink(missing_ok=True)

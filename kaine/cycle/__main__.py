@@ -1800,12 +1800,15 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         refused = await _apply_revive(
             ctx.revive, ctx.registry, resolve(Path("state"))
         )
+        # A landed revive wins over any resume checkpoint: replace it immediately.
+        if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
+            from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
+            await _shutdown_modules(ctx.registry.all_modules())
+            refused = REVIVE_REFUSED_EXIT
         if refused is not None:
             await _stop_welfare_producer(ctx.welfare_producer)
             await ctx.bus.close()
             return refused
-        # A landed revive wins over any resume checkpoint: replace it immediately.
-        await _replace_checkpoint_after_revive(ctx.registry, ctx.identity)
     else:
         # Plain start: restore any persisted module state from the rolling checkpoint.
         _resume_from_checkpoint(ctx.registry, ctx.identity)
@@ -2620,17 +2623,20 @@ def _resume_from_checkpoint(registry: Any, identity: Any) -> None:
         log.warning("resume checkpoint: restore failed", exc_info=True)
 
 
-async def _replace_checkpoint_after_revive(registry: Any, identity: Any) -> None:
+async def _replace_checkpoint_after_revive(registry: Any, identity: Any) -> bool:
     """A landed revive wins over any resume checkpoint: replace it with the revived state."""
     from kaine.lifecycle.resume_checkpoint import discard_checkpoint, save_checkpoint
     success = await save_checkpoint(registry, identity, reason="revive")
-    if not success:
-        removed = discard_checkpoint()
-        if not removed:
-            log.error(
-                "resume checkpoint: could not replace or remove the checkpoint after a revive; "
-                "a plain start could restore state from before the revive"
-            )
+    if success:
+        return True
+    removed = discard_checkpoint()
+    if removed:
+        return True
+    log.error(
+        "resume checkpoint: could not replace or remove the checkpoint after a revive; "
+        "a plain start could restore state from before the revive; refusing to start"
+    )
+    return False
 
 
 async def _phase_checkpoint(ctx: BootContext) -> int | None:

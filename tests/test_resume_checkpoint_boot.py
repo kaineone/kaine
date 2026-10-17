@@ -11,6 +11,7 @@ import pytest
 
 import kaine.cycle.__main__ as cyc
 from kaine.cycle.boot_context import BootContext
+from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
 from kaine.lifecycle import resume_checkpoint as rc
 from kaine.lifecycle.identity import mint_identity
 from kaine.modules.registry import ModuleRegistry
@@ -22,12 +23,13 @@ class FakeModule:
         self.state = dict(state or {})
         self.deserialized = []
         self.initialized = False
+        self.shutdown_called = False
 
     async def initialize(self):
         self.initialized = True
 
     async def shutdown(self):
-        pass
+        self.shutdown_called = True
 
     def serialize(self):
         return dict(self.state)
@@ -150,6 +152,55 @@ async def test_revive_wins_even_when_replace_fails(monkeypatch) -> None:
     ctx = _make_ctx(ident, reg, monkeypatch, revive=object())
     assert await cyc._phase_registry(ctx) is None
     assert not rc.checkpoint_file().exists()
+
+
+@pytest.mark.asyncio
+async def test_revive_refuses_when_checkpoint_cannot_be_replaced_or_removed(monkeypatch) -> None:
+    ident = mint_identity()
+
+    reg_old = ModuleRegistry()
+    reg_old.register(FakeModule("vocal", {"v": 1}))
+    await rc.save_checkpoint(reg_old, ident, reason="periodic")
+
+    def boom(snap, directory=None):
+        raise OSError("disk")
+
+    monkeypatch.setattr(rc, "write_checkpoint", boom)
+    monkeypatch.setattr(rc, "discard_checkpoint", lambda directory=None: False)
+
+    reg = ModuleRegistry()
+    mod = FakeModule("vocal", {})
+    reg.register(mod)
+
+    async def fake_apply(revive, registry, state_root):
+        registry.get("vocal").state = {"v": 2}
+        return None
+
+    monkeypatch.setattr(cyc, "_apply_revive", fake_apply)
+
+    stopped = []
+    async def noop_welfare(w):
+        stopped.append(w)
+
+    monkeypatch.setattr(cyc, "_stop_welfare_producer", noop_welfare)
+
+    ctx = _make_ctx(ident, reg, monkeypatch, revive=object())
+    ctx.welfare_producer = object()
+
+    class FakeBus:
+        def __init__(self):
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+    ctx.bus = FakeBus()
+
+    result = await cyc._phase_registry(ctx)
+    assert result == REVIVE_REFUSED_EXIT
+    assert mod.shutdown_called is True
+    assert ctx.bus.closed is True
+    assert stopped == [ctx.welfare_producer]
 
 
 @pytest.mark.asyncio

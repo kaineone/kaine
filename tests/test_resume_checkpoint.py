@@ -15,6 +15,7 @@ import types
 
 import pytest
 
+import kaine.lifecycle.resume_checkpoint as rc_module
 from kaine.lifecycle.identity import mint_identity
 from kaine.lifecycle.resume_checkpoint import (
     ResumeCheckpointer,
@@ -490,3 +491,26 @@ def test_checkpointer_rejects_non_positive_interval(tmp_path):
             interval_seconds=0.0,
             poll_seconds=0.01,
         )
+
+
+def test_write_checkpoint_fsyncs_the_directory(tmp_path, monkeypatch):
+    real_fsync = rc_module.os.fsync
+    recorded = []
+
+    def wrapper(fd):
+        recorded.append(os.fstat(fd).st_mode)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(rc_module.os, "fsync", wrapper)
+
+    write_checkpoint(
+        capture_checkpoint(
+            FakeRegistry(FakeModule("m", {"v": 1})),
+            mint_identity(),
+            reason="test",
+        ),
+        tmp_path / "ckpt",
+    )
+
+    assert any(stat.S_ISDIR(m) for m in recorded)
+    assert any(stat.S_ISREG(m) for m in recorded)
