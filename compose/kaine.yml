@@ -347,6 +347,7 @@ services:
       # Two-layer opt-in for the sleep module's voice alignment.
       KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     # Caretaker bearer tokens (KAINE_CARETAKER_TOKEN_<NAME>=...), optional, mode 0600.
+    # The long env_file syntax with required: false needs Docker Compose 2.24 or later.
     env_file:
       - path: ./caretaker.env
         required: false
@@ -456,6 +457,7 @@ services:
       # Two-layer opt-in for the sleep module's voice alignment.
       KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED: ${KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED:-}
     # Caretaker bearer tokens (KAINE_CARETAKER_TOKEN_<NAME>=...), optional, mode 0600.
+    # The long env_file syntax with required: false needs Docker Compose 2.24 or later.
     env_file:
       - path: ./caretaker.env
         required: false

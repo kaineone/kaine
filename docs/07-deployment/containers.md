@@ -25,6 +25,8 @@ Every published port is bound to `127.0.0.1`. Inside the Compose network, servic
 
 `kaine-chatterbox` defaults to the image `kaine-chatterbox:local`, which has no upstream source. A plain `docker compose -f compose/kaine.yml up` fails until you build that image or set `KAINE_CHATTERBOX_IMAGE` to one that exists.
 
+`compose/kaine.yml` needs Docker Compose 2.24 or later (check with `docker compose version`): the cycle and study services load the optional `compose/caretaker.env` with `env_file` and `required: false`, which older releases reject.
+
 `kaine-dashboard`, `kaine-cycle`, `kaine-study` and `kaine-provision` use the same runtime image with different commands. `kaine-trainer` uses the separate `kaine:trainer-<flavor>` image.
 
 ## Opening Dashboard
@@ -190,7 +192,7 @@ Jobs pass through the `kaine-trainer-jobs` volume. The cycle, the study runner a
 No container mounts `config/secrets.toml`. The bootstrap scripts write it mode 0600 and owned by your user, and the image user (uid 10001) cannot read it. Every secret reaches the containers through the environment:
 
 - `compose/.env`: `KAINE_REDIS_PASSWORD`, `KAINE_QDRANT_API_KEY`, `KAINE_STATE_KEY`, `KAINE_MODEL_SERVER_API_KEY` and `KAINE_DASHBOARD_TOKEN`. The bootstrap scripts and `python -m kaine.setup` write these.
-- `compose/caretaker.env` (optional, mode 0600): one `KAINE_CARETAKER_TOKEN_<NAME>=...` line per caretaker channel `token_name`, upper-cased. `kaine-cycle` and `kaine-study` load it with `env_file` (`required: false`, which needs Docker Compose 2.24 or newer). Start from `compose/caretaker.env.example`.
+- `compose/caretaker.env` (optional, mode 0600): one `KAINE_CARETAKER_TOKEN_<NAME>=...` line per caretaker channel `token_name`, upper-cased. `kaine-cycle` and `kaine-study` load it with `env_file` (`required: false`, which needs Docker Compose 2.24 or later). Start from `compose/caretaker.env.example`.
 
 A process that finds `config/secrets.toml` present but unreadable treats it as absent and logs one warning; native runs read it as before. Never loosen the file's mode to make it readable.
 

@@ -396,14 +396,15 @@ def main() -> int:
                 config.host,
             )
             return 1
-        if config.access == "token" and not config.operator_token:
-            log.error(
-                "dashboard: refusing to bind non-loopback host %s without a "
-                "configured operator_token (KAINE_DASHBOARD_TOKEN or "
-                "config/secrets.toml [dashboard] operator_token)",
-                config.host,
-            )
-            return 1
+
+    if config.access == "token" and not config.operator_token:
+        log.error(
+            "dashboard: [dashboard].access is \"token\" but no operator token is "
+            "configured; set KAINE_DASHBOARD_TOKEN (in compose/.env for the "
+            "containers) or [dashboard] operator_token in config/secrets.toml, "
+            "or set [dashboard].access = \"open\""
+        )
+        return 1
 
     if config.access == "open":
         log.info(
