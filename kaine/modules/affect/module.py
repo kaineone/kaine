@@ -327,14 +327,23 @@ class Affect(BaseModule):
         return _clip(self._alert_rate_ratio() - 1.0 - self._alert_excess_margin, 0.0, 1.0)
 
     def _habituation(self) -> float:
-        """Return the habituation factor h = clip(r_f / max(r_s, r_0) - 1, 0, 1).
+        """Return the habituation factor h = max(h_burst, h_n).
 
-        It is the alert-rate excess of paper A.4 without the boredom margin; it
-        is 0 while alerts arrive at the habituated base rate and rises when they
-        come faster, as phasic locus coeruleus responses to a repeated stimulus
-        habituate within a few presentations (Herve-Minvielle and Sara 1995).
+        The burst term h_burst = clip(r_f / max(r_s, r_0) - 1, 0, 1) is the
+        alert-rate excess of paper A.4 without the boredom margin; it is 0 while
+        alerts arrive at the habituated base rate and rises when they come faster.
+        The presentation term h_n = exp(-r_s * tau_s) treats r_s * tau_s as the
+        expected number of recent alerts, so it is 1 after quiet or a reset, about
+        0.37 after one presentation, and near 0 at a steady base rate, then recovers
+        as r_s decays. Together the factor is full for a first presentation and
+        decrements with repeats, consistent with locus coeruleus cells responding
+        fully to first presentations and then habituating (Herve-Minvielle and
+        Sara 1995; Vankov, Herve-Minvielle and Sara 1995).
         """
-        return _clip(self._alert_rate_ratio() - 1.0, 0.0, 1.0)
+        return max(
+            _clip(self._alert_rate_ratio() - 1.0, 0.0, 1.0),
+            math.exp(-self._alert_slow * self._slow_time_constant_s),
+        )
 
     def set_drive_relevance(
         self,
@@ -782,7 +791,9 @@ class Affect(BaseModule):
         # Scherer 2005; paper A.4). For each selected event with a positive finite
         # normalised_error or normalised_change, combine the two as 1 - prod(1 - s_e),
         # where s_e = clip(ln(max ratio) / ln 3, 0, 1). Vision and audition reports
-        # are additionally scaled by the current habituation factor.
+        # are additionally scaled by the current habituation factor, which is full
+        # for a first presentation and decrements with repeats unless alerts arrive
+        # faster than the habituated rate.
         h = self._habituation()
         log3 = math.log(3.0)
         prod_factor = 1.0
@@ -1083,9 +1094,9 @@ class Affect(BaseModule):
                     self._err_last_at[source] = now
             alert = bool(payload.get("alert"))
             if alert:
-                # Habituation is read before the alert's own increment so a burst
-                # above the habituated base rate arouses, while the base rate itself
-                # does not.
+                # Habituation is read before the alert's own increment so the step
+                # is full for a first presentation and decrements with repeats,
+                # unless alerts arrive faster than the habituated rate.
                 h = self._habituation()
                 self._alert_fast += 1.0 / self._fast_time_constant_s
                 self._alert_slow += 1.0 / self._slow_time_constant_s
