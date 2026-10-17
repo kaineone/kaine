@@ -4,8 +4,13 @@
 import stat
 from pathlib import Path
 
-from kaine import secrets_file
+from kaine import legacy_names, secrets_file
 from kaine.setup.dashboard_token import COMPOSE_ENV_KEY, ensure_dashboard_token
+
+# The deprecated name of KAINE_DASHBOARD_TOKEN, read from the rename table.
+_OLD_TOKEN_VAR = next(
+    entry["old"] for entry in legacy_names.ENV_VARS if entry["new"] == "KAINE_DASHBOARD_TOKEN"
+)
 
 
 def _checkout(tmp_path: Path, *, create_compose: bool = False) -> Path:
@@ -60,7 +65,7 @@ def test_existing_legacy_token_left_unchanged(tmp_path: Path) -> None:
     secrets = root / "config" / "secrets.toml"
     token = "n" * 40
     env_path = root / "compose" / ".env"
-    original = f"KAINE_NEXUS_TOKEN={token}\n"
+    original = f"{_OLD_TOKEN_VAR}={token}\n"
     env_path.write_text(original, encoding="utf-8")
     buf: list[str] = []
 

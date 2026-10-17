@@ -6,9 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from kaine import secrets_file
+from kaine import legacy_names, secrets_file
 from kaine.dashboard.config import DashboardConfigError, load_dashboard_config
 from kaine.dashboard.health.config import load_health_prober
+
+# The deprecated name of KAINE_DASHBOARD_TOKEN, read from the rename table.
+_OLD_TOKEN_VAR = next(
+    entry["old"] for entry in legacy_names.ENV_VARS if entry["new"] == "KAINE_DASHBOARD_TOKEN"
+)
 
 pytestmark = pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses mode 000 files")
 
@@ -30,11 +35,11 @@ def _write_secrets(path: Path, content: str, mode: int = 0o600) -> None:
 def _reset_secrets_warnings(monkeypatch):
     secrets_file._reset_unreadable_warnings()
     monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv(_OLD_TOKEN_VAR, raising=False)
     yield
     secrets_file._reset_unreadable_warnings()
     monkeypatch.delenv("KAINE_DASHBOARD_TOKEN", raising=False)
-    monkeypatch.delenv("KAINE_NEXUS_TOKEN", raising=False)
+    monkeypatch.delenv(_OLD_TOKEN_VAR, raising=False)
 
 
 def test_unreadable_secrets_env_token(tmp_path, monkeypatch):

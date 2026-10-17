@@ -7,8 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from kaine import secrets_file
+from kaine import legacy_names, secrets_file
 from kaine.bus import config as bus_config
+
+# The deprecated name of KAINE_DASHBOARD_TOKEN, read from the rename table.
+_OLD_TOKEN_VAR = next(
+    entry["old"] for entry in legacy_names.ENV_VARS if entry["new"] == "KAINE_DASHBOARD_TOKEN"
+)
 
 
 class _Spy:
@@ -40,7 +45,7 @@ def _clear_secrets_env(monkeypatch):
         "KAINE_REDIS_URL",
         "KAINE_QDRANT_API_KEY",
         "KAINE_DASHBOARD_TOKEN",
-        "KAINE_NEXUS_TOKEN",
+        _OLD_TOKEN_VAR,
         "KAINE_CARETAKER_TOKEN_NTFY",
     ):
         monkeypatch.delenv(name, raising=False)
