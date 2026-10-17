@@ -108,9 +108,15 @@ class Intent:
     when set, so non-language consumers (the effectors module) simply never see an unknown field.
 
     ``about_kind`` classifies the ``about`` field for the language module's redaction logic:
-    ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase,
-    or ``"event"`` for another coalition event summary. ``None`` is treated as
-    ``"heard"`` (fail-closed), so unmarked intents are redacted in the log.
+    ``"heard"`` for heard speech, ``"felt"`` for a number-free felt phrase
+    (a drive's felt state, or, with the felt awareness rendering, the event that
+    prompted the intent), or ``"event"`` for another coalition event summary.
+    ``None`` is treated as ``"heard"`` (fail-closed), so unmarked intents are
+    redacted in the log.
+
+    ``about_values`` carries the numbers behind a felt ``about`` (for example the
+    source, type and surprise of the event) so the language module can log them
+    for audits; it is emitted on the wire only when set.
     """
 
     kind: str
@@ -125,6 +131,7 @@ class Intent:
     origin: Optional[str] = None
     proposal_id: Optional[str] = None
     about_kind: Optional[str] = None
+    about_values: Optional[dict[str, Any]] = None
 
     def to_event_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"kind": self.kind, "about": self.about}
@@ -132,6 +139,8 @@ class Intent:
             payload["origin"] = self.origin
         if self.about_kind is not None:
             payload["about_kind"] = self.about_kind
+        if self.about_values is not None:
+            payload["about_values"] = dict(self.about_values)
         if self.proposal_id is not None:
             payload["proposal_id"] = self.proposal_id
         if self.entry_id is not None:

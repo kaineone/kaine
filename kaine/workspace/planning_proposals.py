@@ -18,6 +18,7 @@ import time
 from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.felt import felt_event_phrase
 from kaine.faithful.templates import felt_drive_phrase
 from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_SOURCE,
@@ -67,7 +68,12 @@ class PlanningProposalSource:
         think_refractory_s: float = 3.0,
         speak_refractory_s: float = 8.0,
         rest_min_interval_s: float = 1800.0,
+        about_style: str = "numeric",
     ) -> None:
+        if about_style not in ("numeric", "felt"):
+            raise ValueError(
+                f"about_style must be 'numeric' or 'felt', got {about_style!r}"
+            )
         self._inner = inner
         self._drive_actions = bool(drive_actions)
         # Prefer an explicit clock, then the wrapped policy's clock, then wall
@@ -79,6 +85,7 @@ class PlanningProposalSource:
         self._think_refractory_s = float(think_refractory_s)
         self._speak_refractory_s = float(speak_refractory_s)
         self._rest_min_interval_s = float(rest_min_interval_s)
+        self._about_style = about_style
 
         can_note = hasattr(inner, "note_external_intent")
         self._inner_guards = {
@@ -251,6 +258,8 @@ class PlanningProposalSource:
             name = event.payload.get("drive")
             if isinstance(name, str):
                 return felt_drive_phrase(name, event.payload.get("value")), "felt"
+        if self._about_style == "felt":
+            return felt_event_phrase(event.source), "felt"
         return f"{event.source}:{event.type}", "event"
 
     def _record_outcome(self, event: object, reason: str, realized: bool) -> None:

@@ -122,27 +122,35 @@ def _redact_fields(value, fields_to_redact):
     return walk(value), replaced
 
 
-def redact_heard_speech(event) -> Optional[str]:
+def redact_heard_speech(event, *, templates=None, fallback=None) -> Optional[str]:
     """Return a rendering of an event with any heard-speech payload field
     replaced by the placeholder, or None when the event carries no heard speech.
+
+    `templates` and `fallback` select the template set (default: the numeric set).
     """
     if event.type == "audition.transcription":
         return f'Speech heard: "{HEARD_SPEECH_PLACEHOLDER}".'
+
+    table = TEMPLATES if templates is None else templates
+    fall = fallback_template if fallback is None else fallback
 
     payload = event.payload if isinstance(event.payload, dict) else {}
 
     if event.type in EXTERNAL_INPUT_TYPES:
         redacted_payload = _replace_text_leaves(payload)
-        return fallback_template(event.source, event.type, redacted_payload)
+        template_fn = table.get((event.source, event.type))
+        if template_fn is not None:
+            return template_fn(redacted_payload)
+        return fall(event.source, event.type, redacted_payload)
 
     heard_fields = HEARD_TEXT_FIELDS - {"text"}
     redacted_payload, has_heard = _redact_fields(payload, heard_fields)
     if not has_heard:
         return None
 
-    template_fn = TEMPLATES.get((event.source, event.type))
+    template_fn = table.get((event.source, event.type))
     if template_fn is None:
-        return fallback_template(event.source, event.type, redacted_payload)
+        return fall(event.source, event.type, redacted_payload)
     return template_fn(redacted_payload)
 
 

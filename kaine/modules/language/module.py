@@ -73,6 +73,10 @@ class Language(BaseModule):
     stream through `self.publish`. Consumers that need to distinguish
     external from internal speech subscribe to the split streams; generic
     observers and the dashboard diagnostics tail can follow `language.out`.
+
+    With `awareness_rendering = "felt"` the organ sees graded words without
+    numbers, and the intent log keeps the values in `numeric_rendering` and
+    `about_values`.
     """
 
     name: ClassVar[str] = "language"
@@ -114,6 +118,7 @@ class Language(BaseModule):
         persona_name: Optional[str] = None,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
+        awareness_rendering: str = "numeric",
         baseline_salience: float = 0.4,
         alert_salience: float = 0.7,
         intent_stream: str = ACTION_SELECTION_STREAM,
@@ -147,6 +152,7 @@ class Language(BaseModule):
             persona_name=persona_name,
             persona_external=persona_external,
             persona_internal=persona_internal,
+            awareness_rendering=awareness_rendering,
         )
         self._self_model_provider = self_model_provider
         self._persona_digest = hashlib.sha256(
@@ -502,6 +508,7 @@ class Language(BaseModule):
         origin: Optional[Any] = None,
         intent_entry_id: Optional[str] = None,
         about_kind: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
     ) -> str:
         # `about` is the triggering input (a user utterance for external speech);
         # the LLM prompt is assembled from it plus workspace access.
@@ -513,6 +520,7 @@ class Language(BaseModule):
             origin=origin,
             intent_entry_id=intent_entry_id,
             about_kind=about_kind,
+            about_values=about_values,
         )
 
     async def think(
@@ -523,6 +531,7 @@ class Language(BaseModule):
         origin: Optional[Any] = None,
         intent_entry_id: Optional[str] = None,
         about_kind: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
     ) -> str:
         return await self._produce(
             about=about,
@@ -532,6 +541,7 @@ class Language(BaseModule):
             origin=origin,
             intent_entry_id=intent_entry_id,
             about_kind=about_kind,
+            about_values=about_values,
         )
 
     async def _intent_loop(self) -> None:
@@ -579,6 +589,9 @@ class Language(BaseModule):
         origin = event.payload.get("origin")
         entry_id = event.payload.get("entry_id")
         about_kind = event.payload.get("about_kind")
+        about_values = event.payload.get("about_values")
+        if not isinstance(about_values, dict):
+            about_values = None
         if kind == "rest":
             log.debug("ignoring rest intent")
             return
@@ -600,7 +613,12 @@ class Language(BaseModule):
         self._gen_mode = "external" if kind == SPEAK else "internal"
         self._gen_task = asyncio.create_task(
             self._realize_intent(
-                kind, about, origin, intent_entry_id=entry_id, about_kind=about_kind
+                kind,
+                about,
+                origin,
+                intent_entry_id=entry_id,
+                about_kind=about_kind,
+                about_values=about_values,
             ),
             name=f"{self.name}-gen",
         )
@@ -613,6 +631,7 @@ class Language(BaseModule):
         *,
         intent_entry_id: Optional[str] = None,
         about_kind: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
     ) -> None:
         """Produce one utterance. Runs as the held ``_gen_task``; a preempting
         interrupt cancels it, which propagates ``CancelledError`` out of the
@@ -625,6 +644,8 @@ class Language(BaseModule):
                 kwargs["intent_entry_id"] = intent_entry_id
             if about_kind is not None:
                 kwargs["about_kind"] = about_kind
+            if about_values is not None:
+                kwargs["about_values"] = about_values
             if kind == SPEAK:
                 await self.speak(about, **kwargs)
             elif kind == THINK:
@@ -728,6 +749,7 @@ class Language(BaseModule):
         origin: Optional[Any] = None,
         intent_entry_id: Optional[str] = None,
         about_kind: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
     ) -> str:
         """Wrap _produce_inner with in-flight bookkeeping."""
         self._produce_in_flight += 1
@@ -740,6 +762,7 @@ class Language(BaseModule):
                 origin=origin,
                 intent_entry_id=intent_entry_id,
                 about_kind=about_kind,
+                about_values=about_values,
             )
         finally:
             self._produce_in_flight -= 1
@@ -755,6 +778,7 @@ class Language(BaseModule):
         origin: Optional[Any] = None,
         intent_entry_id: Optional[str] = None,
         about_kind: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
     ) -> str:
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest accessed coalition.
@@ -835,6 +859,12 @@ class Language(BaseModule):
                     logged_faithful = logged_faithful.replace(
                         heard, HEARD_SPEECH_PLACEHOLDER
                     )
+        logged_numeric = ctx.numeric_working_memory if snap is not None else None
+        if logged_numeric is not None:
+            for heard in redact_texts:
+                if len(heard) >= 3:
+                    logged_numeric = logged_numeric.replace(heard, HEARD_SPEECH_PLACEHOLDER)
+        logged_about_values = _clean_about_values(about_values, heard_texts | foreign_field_texts)
         if logged_prompt != ctx.logged_prompt or (
             logged_faithful is not None and logged_faithful != ctx.logged_working_memory
         ):
@@ -866,6 +896,8 @@ class Language(BaseModule):
                 sleep_index=self._sleep_index,
                 system_digest=system_digest,
                 seed=request.seed,
+                numeric_rendering=logged_numeric,
+                about_values=logged_about_values,
             )
         except Exception:
             log.exception("intent log append failed")
@@ -928,3 +960,29 @@ def _now_iso() -> str:
 
 def _json(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"))
+
+
+def _clean_about_values(raw: Any, heard: set[str]) -> Optional[dict[str, Any]]:
+    """The intent's values for the log: string keys with number, bool or short
+    string values only; heard text in a string value is replaced by the
+    placeholder. None when nothing is left."""
+    if not isinstance(raw, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        if isinstance(value, bool):
+            cleaned[key] = value
+        elif isinstance(value, int) and not isinstance(value, bool):
+            cleaned[key] = value
+        elif isinstance(value, float) and math.isfinite(value):
+            cleaned[key] = value
+        elif isinstance(value, str) and len(value) <= 64:
+            for h in heard:
+                if len(h) >= 3:
+                    value = value.replace(h, HEARD_SPEECH_PLACEHOLDER)
+            cleaned[key] = value
+        else:
+            continue
+    return cleaned if cleaned else None
