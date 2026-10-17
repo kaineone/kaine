@@ -216,7 +216,7 @@ def test_compose_dashboard_has_privacy_hardening_environment():
     # Non-loopback binding is explicitly enabled inside the container (publishing
     # stays loopback-only).
     assert env["KAINE_DASHBOARD_NON_LOOPBACK_ALLOWED"] in ("1", "true", "yes")
-    # The env token entry exists (empty falls through to the mounted secrets.toml).
+    # The env token entry exists; no secrets file is mounted into the container.
     assert "KAINE_DASHBOARD_TOKEN" in env
     # Allowed Origins must reflect the host-published port, not the in-container 8088.
     assert "KAINE_DASHBOARD_ALLOWED_ORIGINS" in env
@@ -866,12 +866,12 @@ def test_study_service_mirrors_cycle_environment_and_mounts():
     services = _load_compose()["services"]
     cycle, study = services["kaine-cycle"], services["kaine-study"]
     assert study["environment"] == cycle["environment"]
+    assert study["env_file"] == cycle["env_file"]
     for gate in ("KAINE_CYCLE_OPERATOR_PRESENT", "KAINE_RESEARCH_MODE"):
         assert study["environment"][gate].endswith(":-}")
 
     shared = {
         "../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro",
-        "../config/secrets.toml:/app/config/secrets.toml:ro",
         "kaine-models:/models:ro",
     }
     assert shared <= {v for v in cycle["volumes"] if isinstance(v, str)}

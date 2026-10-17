@@ -17,6 +17,7 @@ research_out/
 config/*.operator.toml
 config/secrets.toml
 compose/.env
+compose/*.env
 .env
 
 # --- Private voices + adapters ---

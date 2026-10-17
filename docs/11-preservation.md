@@ -141,7 +141,7 @@ Each evaluation is logged to the journal and recorded in `state/cycle/incidents/
 Caretaker channels are configured under `[caretaker]` (the shipped `config/kaine.toml` lists them commented out):
 
 - `kind = "desktop"` sends a `gdbus` notification on the session bus of the user running KAINE. It only reaches someone logged in at that machine; after a power cut there is no session until login, so a desktop-only setup refuses at that boot.
-- `kind = "http"` sends a JSON POST (`title`, `message` and notice fields) to a server you run, such as ntfy or Gotify. The address must resolve to loopback, a private range, or `100.64.0.0/10`; public addresses are refused. Put the bearer token in `config/secrets.toml` under `[caretaker.tokens]` and reference it with `token_name`; never put credentials in the URL. A channel that survives a power cut is needed for restarts.
+- `kind = "http"` sends a JSON POST (`title`, `message` and notice fields) to a server you run, such as ntfy or Gotify. The address must resolve to loopback, a private range, or `100.64.0.0/10`; public addresses are refused. Put the bearer token in `config/secrets.toml` under `[caretaker.tokens]`, or set `KAINE_CARETAKER_TOKEN_<NAME>` (the `token_name`, upper-cased), and reference it with `token_name`; never put credentials in the URL. Containers read only the environment, so for Compose and quadlet put the line in `compose/caretaker.env` (mode 0600). A channel that survives a power cut is needed for restarts.
 
 Notices carry only the install label, the time, the event, and which conditions passed; nothing from the entity. A refused start also sends a refusal notice.
 

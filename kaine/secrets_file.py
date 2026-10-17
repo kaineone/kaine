@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Section-aware writer for KAINE local secret files."""
+"""Section-aware writer and shared reader for KAINE local secret files."""
 
 from __future__ import annotations
 
 import contextlib
 import fcntl
+import logging
 import os
 import re
 import sys
@@ -20,6 +21,11 @@ _TOML_TABLE_RE = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*")
 _TOML_FIELD_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 _FILE_LOCK = threading.Lock()
+
+#: Paths for which the unreadable-file warning has already been emitted.
+#: Guarded by _WARN_LOCK.
+_UNREADABLE_WARNED: set[str] = set()
+_WARN_LOCK = threading.Lock()
 
 
 def validate_value(value: str) -> None:
@@ -323,20 +329,71 @@ def upsert_toml_field(path: Path | str, table: str, field: str, value: str) -> N
         _write_private(path, new_text)
 
 
-def read_toml_field(path: Path | str, table: str, field: str) -> str | None:
-    """Return a non-empty string value from a TOML file, or None.
+def load_secrets_doc(
+    path: Path | str, *, tolerate_unreadable: bool = True
+) -> dict:
+    """Load a TOML secrets file, returning an empty dict if missing or unreadable.
 
-    Missing files are treated as empty. A malformed file raises
-    tomllib.TOMLDecodeError.
+    A file that exists but is group/world-readable emits a stderr warning.
+    Unreadable files return an empty dict when ``tolerate_unreadable`` is true
+    and log a warning once per process for that path. Malformed TOML raises
+    ``tomllib.TOMLDecodeError``.
     """
     import tomllib
 
     path = Path(path)
     if not path.exists():
-        return None
+        return {}
 
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    mode = path.stat().st_mode
+    if mode & 0o077:
+        print(
+            f"warning: {path} mode 0o{mode & 0o777:o} is world/group-readable; "
+            "recommend chmod 600",
+            file=sys.stderr,
+        )
+
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except OSError as exc:
+        if not tolerate_unreadable:
+            raise
+        key = str(path)
+        already_warned = False
+        with _WARN_LOCK:
+            already_warned = key in _UNREADABLE_WARNED
+            if not already_warned:
+                _UNREADABLE_WARNED.add(key)
+        if not already_warned:
+            logging.getLogger("kaine.secrets_file").warning(
+                "the secrets file %s cannot be read (%s); secrets must come from the environment",
+                path,
+                type(exc).__name__,
+            )
+        return {}
+
+
+def _reset_unreadable_warnings() -> None:
+    """Clear the set of paths already warned about. Intended for tests."""
+    with _WARN_LOCK:
+        _UNREADABLE_WARNED.clear()
+
+
+def read_toml_field(
+    path: Path | str,
+    table: str,
+    field: str,
+    *,
+    tolerate_unreadable: bool = False,
+) -> str | None:
+    """Return a non-empty string value from a TOML file, or None.
+
+    Missing files are treated as empty. A malformed file raises
+    ``tomllib.TOMLDecodeError``. An unreadable file raises ``OSError`` unless
+    ``tolerate_unreadable`` is true, in which case it is treated as empty.
+    """
+    data = load_secrets_doc(path, tolerate_unreadable=tolerate_unreadable)
 
     current: object = data
     for part in table.split("."):

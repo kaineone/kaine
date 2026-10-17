@@ -4,14 +4,13 @@
 from __future__ import annotations
 
 import os
-import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, secrets_file
 from kaine.bus.errors import BusConfigError
 from kaine.config import OPERATOR_CONFIG_PATH, deep_merge
 
@@ -60,22 +59,16 @@ def _project_root() -> Path:
 
 
 def load_secrets_doc(secrets_toml: Optional[Path] = None) -> dict:
-    """Read ``config/secrets.toml``, warning if it is group/world-readable.
+    """Read ``config/secrets.toml`` through the shared secrets loader.
 
-    Returns an empty dict when the file is absent. Shared by the bus config
-    loader and the cycle config loader so secrets parsing and the file-mode
-    warning behave identically across both boot paths.
+    Absent or unreadable files give an empty dict, so containers that get
+    every secret from the environment run without a readable file. A
+    malformed file raises ``tomllib.TOMLDecodeError``.
     """
-    secrets_toml = secrets_toml or _project_root() / DEFAULT_SECRETS_TOML
-    if secrets_toml.exists():
-        mode = secrets_toml.stat().st_mode & 0o777
-        if mode & 0o077:
-            print(
-                f"warning: {secrets_toml} mode 0o{mode:o} is world/group-readable; "
-                "recommend chmod 600",
-                file=sys.stderr,
-            )
-    return _read_toml(secrets_toml)
+    return secrets_file.load_secrets_doc(
+        secrets_toml or _project_root() / DEFAULT_SECRETS_TOML,
+        tolerate_unreadable=True,
+    )
 
 
 def resolve_redis_auth(

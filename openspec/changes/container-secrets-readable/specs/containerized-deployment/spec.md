@@ -17,3 +17,14 @@ The caretaker token loader SHALL read `KAINE_CARETAKER_TOKEN_<NAME>`, with `<NAM
 #### Scenario: Token from the environment
 - **WHEN** an HTTP channel names `token_name = "ntfy"` and `KAINE_CARETAKER_TOKEN_NTFY` is set
 - **THEN** the notice is sent with that bearer token without reading the secrets file
+
+### Requirement: Setup writes the dashboard token where the container reads it
+When setup generates or keeps a dashboard token in `config/secrets.toml`, it SHALL also write it to `compose/.env` as `KAINE_DASHBOARD_TOKEN`, unless that file already sets `KAINE_DASHBOARD_TOKEN` or its deprecated name to a non-empty value, which it SHALL leave unchanged. It SHALL never print the token.
+
+#### Scenario: A new token reaches compose/.env
+- **WHEN** setup generates a token and `compose/.env` sets no dashboard token
+- **THEN** `compose/.env` holds `KAINE_DASHBOARD_TOKEN` with that token, mode 0600
+
+#### Scenario: An existing env token is kept
+- **WHEN** `compose/.env` already sets the deprecated name of `KAINE_DASHBOARD_TOKEN`
+- **THEN** setup leaves the file byte-for-byte unchanged

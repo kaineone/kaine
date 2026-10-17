@@ -16,6 +16,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import os
 import re
 import shutil
 import socket
@@ -469,16 +470,32 @@ def send_http(
         )
 
 
+CARETAKER_TOKEN_ENV_PREFIX = "KAINE_CARETAKER_TOKEN_"
+
+
 def load_token(
     token_name: str | None,
     *,
     secrets_path: Path = Path("config/secrets.toml"),
+    env=None,
 ) -> str | None:
-    """Read a bearer token name from config/secrets.toml."""
+    """Read a bearer token for a caretaker channel.
+
+    Environment variable ``KAINE_CARETAKER_TOKEN_<NAME>`` is checked first,
+    then ``[caretaker.tokens]`` in the secrets file. An unreadable secrets
+    file counts as absent. Token values are never logged.
+    """
+    if env is None:
+        env = os.environ
     if token_name is None:
         return None
+    env_value = env.get(f"{CARETAKER_TOKEN_ENV_PREFIX}{token_name.upper()}")
+    if env_value is not None and env_value.strip():
+        return env_value.strip()
     try:
-        return read_toml_field(secrets_path, "caretaker.tokens", token_name)
+        return read_toml_field(
+            secrets_path, "caretaker.tokens", token_name, tolerate_unreadable=True
+        )
     except Exception:
         log.warning("malformed secrets file, cannot load caretaker token")
         return None
@@ -625,6 +642,7 @@ __all__ = [
     "ChannelResult",
     "send_desktop",
     "send_http",
+    "CARETAKER_TOKEN_ENV_PREFIX",
     "load_token",
     "notify",
     "check_caretaker_condition",

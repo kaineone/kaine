@@ -184,7 +184,6 @@ def test_unsafe_root_path_with_colon_refused(tmp_path: Path):
     "missing",
     [
         "config/kaine.operator.toml",
-        "config/secrets.toml",
         "compose/.env",
     ],
 )

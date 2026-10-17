@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| container-secrets-readable | 0/8 (0%) | Let the containers run without reading config/secrets.toml, with every secret from the environment. Design only: awaiting the lead's decision (task 0.1); nothing is implemented. |
+| container-secrets-readable | 8/8 (100%) | Let the containers run without reading config/secrets.toml, with every secret from the environment. |
 | sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |

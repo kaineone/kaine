@@ -256,7 +256,7 @@ If this shows `Linger=no`, stop and fix it, because nothing after this point sur
 
 ### Install the units
 
-The units need the bus and vector-store credentials, the operator config and the checkout's location. `install-quadlet.sh` refuses to run while `config/kaine.operator.toml`, `config/secrets.toml` or `compose/.env` is missing. Create the operator config, empty if you have no overrides yet, then create the credentials. The bootstrap scripts write them to `compose/.env` (mode 0600), which the units read at every start, and to `config/secrets.toml`. The bootstraps also start Redis and Qdrant themselves, which can occupy ports 6479 and 6533; stop whatever they started before you start the quadlet units.
+The units need the bus and vector-store credentials, the operator config and the checkout's location. `install-quadlet.sh` refuses to run while `config/kaine.operator.toml` or `compose/.env` is missing, and creates an empty `compose/caretaker.env` (mode 0600) for caretaker tokens when none exists. Create the operator config, empty if you have no overrides yet, then create the credentials. The bootstrap scripts write them to `compose/.env` (mode 0600), which the units read at every start, and to `config/secrets.toml` for native runs. No unit mounts `config/secrets.toml`: the image user cannot read it. The bootstraps also start Redis and Qdrant themselves, which can occupy ports 6479 and 6533; stop whatever they started before you start the quadlet units.
 
 ```bash
 touch config/kaine.operator.toml
@@ -350,7 +350,7 @@ Do not widen the bind to `0.0.0.0`, which would expose the port on every interfa
 
 The reference host runs Tailscale, so `tailscale serve` puts a tailnet HTTPS address in front of the loopback port, and Tailscale provisions the certificate for the node's MagicDNS name.
 
-The dashboard refuses a request whose `Host` header is not in `[dashboard].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` and `config/secrets.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_DASHBOARD_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
+The dashboard refuses a request whose `Host` header is not in `[dashboard].host_allowlist` or whose `Origin` is not allowed, so the tailnet name must be added to both. The image contains `config/kaine.toml`, and the quadlet unit mounts only `config/kaine.operator.toml` from the checkout, so configuration changes go in `config/kaine.operator.toml`. The unit sets `KAINE_DASHBOARD_ALLOWED_ORIGINS` itself, which overrides any `allowed_origins` in TOML, so the origin goes in the unit.
 
 In `config/kaine.operator.toml`, add the tailnet hostname to `host_allowlist` and keep the loopback names:
 
@@ -373,7 +373,7 @@ systemctl --user daemon-reload
 systemctl --user restart kaine-dashboard
 ```
 
-If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[dashboard].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, under `[dashboard]` as `operator_token` in `config/secrets.toml`; both files are mounted into the container. A token set only in `compose/.env` does not reach the quadlet container, because the unit passes only the variables named on its `Environment=` lines. Restart the dashboard afterwards.
+If the tailnet includes devices or people you do not fully trust, switch to token access. Set `[dashboard].access = "token"` in `config/kaine.operator.toml` and put the token, at least 32 characters, in `compose/.env` as `KAINE_DASHBOARD_TOKEN` (setup writes it there). The unit passes it into the container on its `Environment=KAINE_DASHBOARD_TOKEN=` line; it does not read the variable's deprecated name. Restart the dashboard afterwards.
 
 Then start the proxy:
 
