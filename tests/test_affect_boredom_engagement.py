@@ -255,3 +255,71 @@ async def test_config_wiring(bus):
 
     affect_default = make_affect(bus, {})
     assert affect_default._boredom_engagement_relief == 0.5
+
+
+async def test_intent_led_by_drive_crossing_does_not_relieve_boredom(bus):
+    for bare in (False, True):
+        t = [0.0]
+        affect = Affect(bus, clock=lambda: t[0])
+        affect.drives.boredom.value = 0.75
+        await affect._tick()
+        entries = await bus.read("affect.out", last_id="0", count=200)
+        drive_entries = [eid for eid, e in entries if e.type == "affect.drive"]
+        assert drive_entries
+        eid = drive_entries[-1]
+
+        before = affect.drives.boredom.value
+        affect.drives.restlessness.value = 0.8
+        entry_id = eid if bare else f"affect.out:{eid}"
+        event = Event(
+            source="action_selection",
+            type="intent.think",
+            payload={
+                "kind": "think",
+                "about": "affect (surprise=0.6)",
+                "about_kind": "event",
+                "entry_id": entry_id,
+            },
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+        await affect._handle_peer_event("action_selection.out", event)
+        assert affect.drives.boredom.value == before
+        assert affect.drives.boredom.own_ends == 0
+        assert affect.drives.restlessness.value == pytest.approx(0.4)
+        t[0] += 0.1
+
+
+async def test_drive_entry_id_on_other_stream_still_engages(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0])
+    affect.drives.boredom.value = 0.75
+    await affect._tick()
+    entries = await bus.read("affect.out", last_id="0", count=200)
+    eid = [eid for eid, e in entries if e.type == "affect.drive"][-1]
+
+    before = affect.drives.boredom.value
+    event = Event(
+        source="action_selection",
+        type="intent.think",
+        payload={
+            "kind": "think",
+            "about": "affect (surprise=0.6)",
+            "about_kind": "event",
+            "entry_id": f"vision.out:{eid}",
+        },
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await affect._handle_peer_event("action_selection.out", event)
+    assert affect.drives.boredom.value == pytest.approx(before * 0.5)
+
+
+async def test_drive_entry_ids_are_recorded(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0])
+    affect.drives.boredom.value = 0.75
+    await affect._tick()
+    entries = await bus.read("affect.out", last_id="0", count=200)
+    eid = [eid for eid, e in entries if e.type == "affect.drive"][-1]
+    assert eid in affect._drive_entry_ids

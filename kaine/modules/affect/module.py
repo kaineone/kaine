@@ -6,10 +6,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections import deque
 from typing import Any, Callable, ClassVar, Mapping, Optional
 
 from kaine.bus.client import AsyncBus
-from kaine.bus.schema import Event
+from kaine.bus.schema import Event, module_stream, split_stream_entry_key
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.affect.appraisal import (
@@ -190,6 +191,10 @@ class Affect(BaseModule):
         self._alert_slow = 0.0
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
+        # Bus entry ids of this module's recent affect.drive crossing events, so an
+        # intent about a drive crossing does not count as engagement (paper A.4).
+        # Transient and bounded; crossings are rare.
+        self._drive_entry_ids: deque[str] = deque(maxlen=64)
         self._wellness = 0.5  # neutral prior: no interoception module wellness information yet
         self._interaction_seen = False
         self._last_tsli: Optional[float] = None
@@ -645,10 +650,13 @@ class Affect(BaseModule):
             action_signal=max(0.0, 1.0 - self._intent_rate),
         )
         for crossing in crossings:
-            await self.publish(
+            entry_id = await self.publish(
                 "affect.drive",
                 {"drive": crossing.name, "value": crossing.value, "alert": True},
                 salience=self._alert_salience,
+            )
+            self._drive_entry_ids.append(
+                entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
             )
         # Goal lifecycle (paper A.4): settle credit ends first so a drive that
         # ended and re-crossed in the same tick is handled correctly, then create
@@ -1071,6 +1079,19 @@ class Affect(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    def _about_drive(self, payload: Mapping[str, Any]) -> bool:
+        """True when an intent is about a drive (paper A.4): its about_kind is
+        "felt", or its entry_id names one of this module's affect.drive events."""
+        if payload.get("about_kind") == "felt":
+            return True
+        key = payload.get("entry_id")
+        if not isinstance(key, str) or not key:
+            return False
+        stream, eid = split_stream_entry_key(key)
+        if stream not in (None, module_stream(self.name)):
+            return False
+        return eid in self._drive_entry_ids
+
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
         # Perception→arousal coupling: ALL perceptual reports update the
         # pooled prediction-error trackers and relieve curiosity by learning
@@ -1199,12 +1220,13 @@ class Affect(BaseModule):
             self._drives.relieve("restlessness", 1.0, own=True)
 
             # Engagement meets boredom (paper A.4): an intent not about a drive relieves
-            # it by rho_eng as the entity's own response. An intent about a drive's felt
-            # state is not engagement, since noticing one's failure to engage is part of
-            # boredom (Eastwood et al. 2012). Skipped entirely when rho_eng is 0.
+            # it by rho_eng as the entity's own response. An intent about a drive (a
+            # felt-state phrase or a coalition led by an affect.drive crossing) is not
+            # engagement, since noticing one's failure to engage is part of boredom
+            # (Eastwood et al. 2012). Skipped entirely when rho_eng is 0.
             if self._boredom_engagement_relief > 0.0:
                 payload = event.payload if isinstance(event.payload, dict) else {}
-                if payload.get("about_kind") != "felt":
+                if not self._about_drive(payload):
                     self._drives.relieve_fraction(
                         "boredom", self._boredom_engagement_relief, own=True
                     )

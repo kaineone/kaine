@@ -788,8 +788,8 @@ goal_likelihood_fall = 0.5
 drive_arousal_gain = 0.2
 # Boredom engagement relief rho_eng (paper A.4, Table A1): each action-selection
 # intent other than rest removes this fraction of boredom, as the entity's own
-# response, unless the intent is about a drive's felt state (about_kind "felt"),
-# since noticing one's failure to engage is part of boredom (Eastwood et al. 2012).
+# response, unless the intent is about a drive (about_kind "felt", or a coalition
+# led by one of this module's affect.drive crossing events), since noticing one's failure to engage is part of boredom (Eastwood et al. 2012).
 # Perceptual novelty still relieves boredom continuously, counted as not own.
 # 0 turns the channel off and restores novelty-only relief.
 boredom_engagement_relief = 0.5
