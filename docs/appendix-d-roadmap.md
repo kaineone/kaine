@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| arousal-habituation | 0/4 (0%) | Perceptual arousal habituates to the base alert rate, and the appraisal's novelty reads the change ratio and the same habituation (paper A.4). |
 | resume-checkpoint | 9/9 (100%) | A plain restart resumes every module's state from one rolling, encrypted checkpoint written each awake entity minute and at shutdown; a revive always wins over it (paper A.7). |
 | container-secrets-readable | 8/8 (100%) | Let the containers run without reading config/secrets.toml, with every secret from the environment. |
 | affect-testboot-fixes | 4/4 (100%) | Fix three affect defects from the 2026-10-16 test boot: the sleep reset reports the goals it clears, the drive crossing latch survives a revive, and fear follows the Sander, Grandjean and Scherer (2005) Table 3 profile instead of firing on near-neutral input. |
@@ -120,6 +121,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 94 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 95 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
