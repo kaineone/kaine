@@ -7,6 +7,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | research-log-affect-fields | 7/7 (100%) | Log the affect goal, emotion and regulation fields, the regulation bias and feedback gains on each broadcast, and the link pruning counts in the curated research log. |
+| restart-keeps-development | 9/9 (100%) | Store the self-rhythm identity in the state tree so a plain restart keeps the developmental progress. |
 | sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
@@ -94,6 +95,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | paper-retitle | 2/2 (100%) | Cite the research paper by its new title, *KAINE: A Modular Cognitive Architecture with a Predictive Global Workspace*. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
 | remove-hiatus-notices | 4/4 (100%) | The README, roadmap, records and change notes no longer describe the project as paused or on hiatus. |
+| preservation-trigger-reason | 5/5 (100%) | Name the divergence arm that fired in the reason of a divergence-triggered preservation, in place of a fixed "individuation". |
 
 ## Open operator and device steps
 
@@ -114,6 +116,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 88 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 90 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

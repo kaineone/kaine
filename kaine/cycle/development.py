@@ -36,6 +36,7 @@ import json
 import logging
 import math
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -60,6 +61,9 @@ PERTURBATION_MAX_SECONDS = 10.0
 
 _JITTER_SALT_WITHDRAWAL = 0xB710
 _JITTER_SALT_PERTURBATION = 0xB720
+
+SELF_RHYTHM_IDENTITY_FILE = "self_rhythm_identity.json"
+_IDENTITY_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 @dataclass(frozen=True)
@@ -623,7 +627,8 @@ class DevelopmentOwner:
         self._self_rhythm_baseline_hz: float | None = None
         self._self_rhythm_baseline_count: int = 0
 
-        identity = getattr(getattr(interoception, "_self_rhythm", None), "identity", None)
+        self._identity_path: Path = self._state_path.parent / SELF_RHYTHM_IDENTITY_FILE
+        identity = self._resolve_self_rhythm_identity(interoception)
         self._baseline_key = f"{self._seed}:{identity or 'none'}"
 
         self._load_baseline()
@@ -647,6 +652,74 @@ class DevelopmentOwner:
             counter = self._jitter_counter_perturbation
             self._jitter_counter_perturbation = counter + 1
         return unit_float(keyed_u64(self._seed, counter, salt))
+
+    def _read_stored_identity(self) -> str | None:
+        if not self._identity_path.exists():
+            return None
+        try:
+            text = self._identity_path.read_text(encoding="utf-8")
+            data = json.loads(text)
+        except Exception:
+            log.warning(
+                "development: ignoring an invalid stored self-rhythm identity",
+                exc_info=True,
+            )
+            return None
+        if not isinstance(data, dict):
+            log.warning("development: ignoring an invalid stored self-rhythm identity")
+            return None
+        value = data.get("identity")
+        if not isinstance(value, str) or not _IDENTITY_RE.match(value):
+            log.warning("development: ignoring an invalid stored self-rhythm identity")
+            return None
+        return value
+
+    def _resolve_self_rhythm_identity(self, interoception) -> str | None:
+        """Return the self-rhythm identity to use, adopting or persisting as needed.
+
+        The self-rhythm oscillator draws a new identity each time it is built,
+        and only a revive restores the saved one. Developmental progress and
+        baselines are keyed by that identity, so the readout keeps its own copy
+        in the state tree: on a plain start the stored identity is adopted, and
+        on a revive the restored identity wins.
+        """
+        osc = getattr(interoception, "_self_rhythm", None)
+        if osc is None:
+            return None
+
+        current = getattr(osc, "identity", None)
+        restored = bool(getattr(osc, "identity_restored", False))
+        stored = self._read_stored_identity()
+
+        if not restored and stored is not None and stored != current:
+            try:
+                osc.identity = stored
+                log.info(
+                    "development: kept the stored self-rhythm identity across a restart"
+                )
+                current = stored
+            except Exception:
+                log.warning(
+                    "development: could not adopt the stored self-rhythm identity",
+                    exc_info=True,
+                )
+
+        elif restored and stored is not None and stored != current:
+            log.info(
+                "development: the revived self-rhythm identity replaces the stored one"
+            )
+
+        if isinstance(current, str) and current:
+            try:
+                from kaine.state_io import write_json_atomic
+                write_json_atomic(self._identity_path, {"identity": current})
+            except Exception:
+                log.warning(
+                    "development: could not persist self-rhythm identity",
+                    exc_info=True,
+                )
+
+        return current
 
     def _load_baseline(self) -> None:
         if not self._state_path.exists():
