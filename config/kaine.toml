@@ -764,6 +764,16 @@ alert_excess_margin = 0.5
 intent_rate_weight = 0.05
 valence_time_constant_s = 30.0
 valence_progress_gain = 2.0
+# Goals (paper A.4): each drive crossing creates the goal of relieving that drive.
+# A goal is abandoned when its drive stays at or above threshold for goal_stall_s
+# entity seconds (Delta_stall), or as the lowest priority once more than goal_cap
+# goals are active (n_goal). An intent followed by no fall of the goal's drive
+# within goal_response_window_s (Delta_resp) lowers the goal's expected-relief
+# likelihood L by goal_likelihood_fall * L (eta_L) and obstructs the next appraisal.
+goal_stall_s = 600.0
+goal_cap = 3
+goal_response_window_s = 10.0
+goal_likelihood_fall = 0.5
 baseline_salience = 0.1
 alert_salience = 0.7
 interoception_stream = "interoception.out"

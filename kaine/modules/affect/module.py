@@ -23,7 +23,7 @@ from kaine.modules.affect.coupling import (
     compute_coupling,
 )
 from kaine.modules.affect.drives import DriveSet
-from kaine.modules.affect.goals import GoalLedger
+from kaine.modules.affect.goals import GoalLedger, GoalState
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.affect.regulation import PassiveDecay, RegulationPolicy
 from kaine.modules.affect.state import DimensionalState
@@ -74,6 +74,10 @@ class Affect(BaseModule):
         intent_rate_weight: float = 0.05,
         valence_time_constant_s: float = 30.0,
         valence_progress_gain: float = 2.0,
+        goal_stall_s: float = 600.0,
+        goal_cap: int = 3,
+        goal_response_window_s: float = 10.0,
+        goal_likelihood_fall: float = 0.5,
         clock: Optional[Callable[[], float]] = None,
         # Shared subjective clock (injected at boot). Affect drift and the
         # publish interval are cognitive time constants, so they run in subjective
@@ -112,6 +116,14 @@ class Affect(BaseModule):
             raise ValueError("valence_time_constant_s must be finite and > 0")
         if not math.isfinite(valence_progress_gain) or valence_progress_gain < 0:
             raise ValueError("valence_progress_gain must be finite and >= 0")
+        if not math.isfinite(goal_stall_s) or goal_stall_s <= 0:
+            raise ValueError("goal_stall_s must be finite and > 0")
+        if not isinstance(goal_cap, int) or isinstance(goal_cap, bool) or goal_cap < 1:
+            raise ValueError("goal_cap must be an int >= 1")
+        if not math.isfinite(goal_response_window_s) or goal_response_window_s <= 0:
+            raise ValueError("goal_response_window_s must be finite and > 0")
+        if not math.isfinite(goal_likelihood_fall) or not (0.0 <= goal_likelihood_fall <= 1.0):
+            raise ValueError("goal_likelihood_fall must be finite and in [0, 1]")
 
         self._baseline = (baseline or DimensionalState()).clamped()
         self._state = DimensionalState(
@@ -124,7 +136,6 @@ class Affect(BaseModule):
 
         self._regulation: RegulationPolicy = regulation or PassiveDecay()
         self._drives = drives or DriveSet()
-        self._goals = goals or GoalLedger()
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
         self._interoception_stream = interoception_stream
@@ -138,6 +149,10 @@ class Affect(BaseModule):
         self._intent_rate_weight = float(intent_rate_weight)
         self._valence_time_constant_s = float(valence_time_constant_s)
         self._valence_progress_gain = float(valence_progress_gain)
+        self._goal_stall_s = float(goal_stall_s)
+        self._goal_cap = int(goal_cap)
+        self._goal_response_window_s = float(goal_response_window_s)
+        self._goal_likelihood_fall = float(goal_likelihood_fall)
 
         # Perceptual learning-progress state.
         # Time-decayed mean trackers per source: sum and count for each tau.
@@ -165,6 +180,22 @@ class Affect(BaseModule):
             self._clock = (entity_clock or EntityClock()).now
         self._last_tick_at = self._clock()
         self._last_publish_at = 0.0
+        # Goal ledger: injected ledgers, even empty ones, must be preserved.
+        self._goals = goals if goals is not None else GoalLedger(clock=self._clock)
+        # Snapshot of drive credit counters so completed/abandoned crossings can
+        # be detected synchronously during ticks and peer events.
+        self._drive_end_counts = {
+            d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
+        }
+        # Goal id -> entity time at which its drive has been continuously at or
+        # above threshold.
+        self._goal_above_since: dict[str, float] = {}
+        # Active response windows: {"goal_id", "drive", "ref", "deadline"}.
+        self._response_windows: list[dict[str, Any]] = []
+        # Goal id -> accumulated Delta L to apply to the next appraisal.
+        self._held_obstruction: dict[str, float] = {}
+        self._last_obstruction = 0.0
+
         self._last_emotion: CategoricalEmotion = CategoricalEmotion.NEUTRAL
         self._cursors: dict[str, str] = {}
         self.modulator = StateModulator(lambda: self._state)
@@ -326,6 +357,167 @@ class Affect(BaseModule):
         await self._appraise_snapshot(snapshot)
         await self._maybe_publish_state()
 
+    async def _publish_goal_events(self, payloads: list[dict[str, Any]]) -> None:
+        """Publish goal lifecycle events after all synchronous state changes."""
+        for payload in payloads:
+            await self.publish(
+                "affect.goal", payload, salience=self._baseline_salience
+            )
+
+    def _drop_goal_state(self, goal_id: str) -> None:
+        """Remove per-goal transient state for ``goal_id``."""
+        self._goal_above_since.pop(goal_id, None)
+        self._held_obstruction.pop(goal_id, None)
+        self._response_windows = [
+            w for w in self._response_windows if w.get("goal_id") != goal_id
+        ]
+
+    def _end_goal(
+        self, goal_id: str, outcome: str, reason: str
+    ) -> Optional[dict[str, Any]]:
+        """Complete or abandon a goal, cleaning up its per-goal state.
+
+        Returns a payload dict if and only if the goal was active and transitioned.
+        """
+        target = GoalState.COMPLETED if outcome == "completed" else GoalState.ABANDONED
+        before = self._goals.get(goal_id).state
+        if outcome == "completed":
+            goal = self._goals.complete(goal_id)
+        else:
+            goal = self._goals.abandon(goal_id)
+        if before != GoalState.ACTIVE or goal.state != target:
+            return None
+        self._drop_goal_state(goal.id)
+        return {
+            "action": outcome,
+            "id": goal.id,
+            "description": goal.description,
+            "drive": goal.drive,
+            "reason": reason,
+        }
+
+    def _settle_goal_ends(self) -> list[dict[str, Any]]:
+        """Detect credit-rule ends for active goals and end them."""
+        payloads: list[dict[str, Any]] = []
+        for drive in self._drives.all():
+            name = drive.name
+            old_own, old_other = self._drive_end_counts.get(name, (0, 0))
+            self._drive_end_counts[name] = (drive.own_ends, drive.other_ends)
+            goal = self._goals.active_for_drive(name)
+            if goal is None:
+                continue
+            if drive.own_ends > old_own:
+                payload = self._end_goal(goal.id, "completed", "own_response")
+                if payload is not None:
+                    payloads.append(payload)
+            elif drive.other_ends > old_other:
+                payload = self._end_goal(goal.id, "abandoned", "without_response")
+                if payload is not None:
+                    payloads.append(payload)
+        return payloads
+
+    def _enforce_goal_cap(self) -> list[dict[str, Any]]:
+        """Abandon the lowest-priority active goals while over the cap."""
+        payloads: list[dict[str, Any]] = []
+        while len(self._goals.active()) > self._goal_cap:
+            active = self._goals.active()
+            victim = min(active, key=lambda g: (g.priority, g.created_at, g.id))
+            payload = self._end_goal(victim.id, "abandoned", "cap")
+            if payload is not None:
+                payloads.append(payload)
+        return payloads
+
+    def _create_goals(self, crossings: list[Any], now: float) -> list[dict[str, Any]]:
+        """Create goals for drives that just crossed theta_D, then enforce cap."""
+        payloads: list[dict[str, Any]] = []
+        for crossing in crossings:
+            if self._goals.active_for_drive(crossing.name) is not None:
+                continue
+            drive = getattr(self._drives, crossing.name)
+            goal = self._goals.add(
+                f"relieve {crossing.name}",
+                priority=_clip01(crossing.value),
+                drive=crossing.name,
+                likelihood=drive.power(),
+            )
+            self._goal_above_since[goal.id] = now
+            payloads.append(
+                {
+                    "action": "added",
+                    "id": goal.id,
+                    "description": goal.description,
+                    "priority": goal.priority,
+                    "drive": goal.drive,
+                    "likelihood": goal.likelihood,
+                }
+            )
+        payloads += self._enforce_goal_cap()
+        return payloads
+
+    def _check_stalls(self, now: float) -> list[dict[str, Any]]:
+        """Abandon goals whose drive has stayed above threshold too long."""
+        payloads: list[dict[str, Any]] = []
+        for goal in list(self._goals.active()):
+            if not goal.drive:
+                continue
+            drive = getattr(self._drives, goal.drive, None)
+            if drive is None:
+                continue
+            if drive.value >= drive.threshold:
+                since = self._goal_above_since.setdefault(goal.id, now)
+                if now - since >= self._goal_stall_s:
+                    payload = self._end_goal(goal.id, "abandoned", "stalled")
+                    if payload is not None:
+                        payloads.append(payload)
+            else:
+                self._goal_above_since.pop(goal.id, None)
+        return payloads
+
+    def _check_response_windows(self, now: float) -> None:
+        """Expire windows; when a drive did not fall, reduce L and hold Delta L."""
+        kept: list[dict[str, Any]] = []
+        for window in list(self._response_windows):
+            try:
+                goal = self._goals.get(window["goal_id"])
+            except KeyError:
+                continue
+            if goal.state != GoalState.ACTIVE:
+                continue
+            drive = getattr(self._drives, window["drive"], None)
+            if drive is not None and drive.value < window["ref"]:
+                continue
+            if now >= window["deadline"]:
+                L = goal.likelihood if goal.likelihood is not None else 0.0
+                dL = self._goal_likelihood_fall * L
+                self._goals.set_likelihood(goal.id, _clip01(L - dL))
+                self._held_obstruction[goal.id] = (
+                    self._held_obstruction.get(goal.id, 0.0) + dL
+                )
+                log.debug(
+                    "goal %s likelihood fell by %.3f (response window expired)",
+                    goal.id, dL,
+                )
+                continue
+            kept.append(window)
+        self._response_windows = kept
+
+    def _open_response_windows(self, now: float) -> None:
+        """Open a response window for every active goal with a drive."""
+        for goal in self._goals.active():
+            if not goal.drive:
+                continue
+            drive = getattr(self._drives, goal.drive, None)
+            if drive is None:
+                continue
+            self._response_windows.append(
+                {
+                    "goal_id": goal.id,
+                    "drive": goal.drive,
+                    "ref": drive.value,
+                    "deadline": now + self._goal_response_window_s,
+                }
+            )
+
     async def _tick(self) -> None:
         now = self._clock()
         dt = max(0.0, now - self._last_tick_at)
@@ -380,6 +572,15 @@ class Affect(BaseModule):
                 {"drive": crossing.name, "value": crossing.value, "alert": True},
                 salience=self._alert_salience,
             )
+        # Goal lifecycle (paper A.4): settle credit ends first so a drive that
+        # ended and re-crossed in the same tick is handled correctly, then create
+        # goals for new crossings, check stall timers, and expire response windows.
+        # All state changes are synchronous; events are published afterwards.
+        payloads = self._settle_goal_ends()
+        payloads += self._create_goals(crossings, now)
+        payloads += self._check_stalls(now)
+        self._check_response_windows(now)
+        await self._publish_goal_events(payloads)
         adj = await self._regulation.suggest(self._state)
         self._state = self._state.nudged(
             valence=adj.valence,
@@ -395,6 +596,8 @@ class Affect(BaseModule):
         self._intents_since_broadcast = 0
 
         scores = self._score_snapshot(snapshot)
+        # Held obstruction applies to one appraisal only.
+        self._held_obstruction.clear()
         emotion = classify(scores)
         # Surprise reaches arousal through the perceptual-alert path;
         # valence follows learning progress.
@@ -411,9 +614,11 @@ class Affect(BaseModule):
                     # _score_snapshot). No categorical rule reads it.
                     "norm_compatibility_available": False,
                     # False when the coalition is irrelevant (goal score 0):
-                    # coping is undefined, so fear, anger and sadness are
-                    # not eligible.
+                    # coping is undefined. When the goal score is nonzero,
+                    # including negative values from obstruction, coping is
+                    # defined and fear, anger or sadness may be eligible.
                     "coping_available": scores.coping_available,
+                    "obstruction": self._last_obstruction,
                     "goal_significance_method": self._goal_method,
                 },
                 salience=self._alert_salience
@@ -457,11 +662,10 @@ class Affect(BaseModule):
             self._drive_sources is not None and self._dominant_drive is not None
         )
         top = None
+        drive_score = 0.0
         if has_table:
             top = self._dominant_drive(self._drives.to_dict())
-            if top is None or top[1] <= 0.0:
-                drive_score = 0.0
-            else:
+            if top is not None and top[1] > 0.0:
                 v = top[1]
                 serving = self._drive_sources.get(top[0], frozenset())
                 total_salience = sum(float(ev.salience) for _, ev in selected)
@@ -488,27 +692,36 @@ class Affect(BaseModule):
             ledger_score = self._goals.relevance(event_text)
 
         if has_table and active_goals:
-            goal_score = max(drive_score, ledger_score)
+            r = max(drive_score, ledger_score)
             self._goal_method = "drive_relevance_v1+token_overlap_v1"
         elif has_table:
-            goal_score = drive_score
+            r = drive_score
             self._goal_method = "drive_relevance_v1"
         elif active_goals:
-            goal_score = ledger_score
+            r = ledger_score
             self._goal_method = "token_overlap_v1"
         else:
-            goal_score = 0.0
+            r = 0.0
             self._goal_method = "unavailable"
 
-        goal_score = max(-1.0, min(1.0, goal_score))
+        # Obstruction (paper A.4): held Delta L for the dominant drive's active
+        # goal scales the drive value and is subtracted before clipping.
+        o = 0.0
+        if has_table and top is not None and top[1] > 0.0:
+            g = self._goals.active_for_drive(top[0])
+            if g is not None:
+                o = top[1] * self._held_obstruction.get(g.id, 0.0)
+        self._last_obstruction = o
+        goal_score = max(-1.0, min(1.0, r - o))
 
-        # Coping potential (paper A.4): checked only when the goal score is above
-        # 0; otherwise it is undefined. When the drive term sets the score (also
-        # on a tie), power is the dominant drive's Laplace-smoothed success ratio
-        # of own-response ends to total ended crossings. When the ledger sets it,
-        # completed and abandoned goals supply the ratio. Arousal and valence do
-        # not enter it.
-        if goal_score <= 0.0:
+        # Coping potential (paper A.4): checked only when the goal score is
+        # nonzero; otherwise it is undefined. Obstruction can make the score
+        # negative, and coping is still checked then. When the drive term sets
+        # the score (also on a tie), power is the dominant drive's
+        # Laplace-smoothed success ratio of own-response ends to total ended
+        # crossings. When the ledger sets it, completed and abandoned goals
+        # supply the ratio. Arousal and valence do not enter it.
+        if goal_score == 0.0:
             coping = 0.0
             coping_available = False
         else:
@@ -728,6 +941,9 @@ class Affect(BaseModule):
                     self._interaction_seen = True
                 elif self._last_tsli is not None and tsli < self._last_tsli:
                     self._drives.relieve("social_drive", 1.0, own=False)
+                    payloads = self._settle_goal_ends()
+                    self._check_response_windows(self._clock())
+                    await self._publish_goal_events(payloads)
                 self._last_tsli = float(tsli)
         elif stream == self._episodic_memory_stream and event.type == "episodic_memory.recall":
             intensity = float(event.payload.get("max_affect_intensity", 0.0))
@@ -760,8 +976,12 @@ class Affect(BaseModule):
             and event.type.startswith("intent.")
             and event.type != "intent.rest"
         ):
+            self._open_response_windows(self._clock())
             self._intents_since_broadcast += 1
             self._drives.relieve("restlessness", 1.0, own=True)
+            payloads = self._settle_goal_ends()
+            self._check_response_windows(self._clock())
+            await self._publish_goal_events(payloads)
 
     def _record_perceived_emotion(self, event: Event) -> None:
         """Record a transient perceived-emotion signal for appraisal.
@@ -812,6 +1032,14 @@ class Affect(BaseModule):
             dominance=self._baseline.dominance,
         )
         self._drives.reset_all()
+        self._goals.clear_active()
+        self._goal_above_since.clear()
+        self._response_windows.clear()
+        self._held_obstruction.clear()
+        self._last_obstruction = 0.0
+        self._drive_end_counts = {
+            d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
+        }
         self._last_emotion = CategoricalEmotion.NEUTRAL
 
         # Reset learning-progress trackers so post-sleep affect starts afresh.
@@ -850,10 +1078,13 @@ class Affect(BaseModule):
             },
             salience=self._baseline_salience,
         )
+        cap_payloads = self._enforce_goal_cap()
+        await self._publish_goal_events(cap_payloads)
         return goal.id
 
     async def complete_goal(self, goal_id: str) -> None:
         goal = self._goals.complete(goal_id)
+        self._drop_goal_state(goal.id)
         await self.publish(
             "affect.goal",
             {
@@ -866,6 +1097,7 @@ class Affect(BaseModule):
 
     async def abandon_goal(self, goal_id: str) -> None:
         goal = self._goals.abandon(goal_id)
+        self._drop_goal_state(goal.id)
         await self.publish(
             "affect.goal",
             {
@@ -929,3 +1161,11 @@ class Affect(BaseModule):
         if "goals" in state:
             # A restore is not a lifecycle change: no affect.goal events.
             self._goals.load_dict(state["goals"])
+        # Transient state is not restored: resync end counters so restored
+        # outcomes do not look like new ones, and restart stall/response timers.
+        self._drive_end_counts = {
+            d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
+        }
+        self._goal_above_since.clear()
+        self._response_windows.clear()
+        self._held_obstruction.clear()

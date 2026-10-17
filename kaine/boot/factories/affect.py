@@ -45,6 +45,10 @@ def make_affect(
         "intent_rate_weight",
         "valence_time_constant_s",
         "valence_progress_gain",
+        "goal_stall_s",
+        "goal_cap",
+        "goal_response_window_s",
+        "goal_likelihood_fall",
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
         "coupling",  # nested [affect.coupling] sub-table
     }
@@ -77,6 +81,10 @@ def make_affect(
                 "intent_rate_weight",
                 "valence_time_constant_s",
                 "valence_progress_gain",
+                "goal_stall_s",
+                "goal_cap",
+                "goal_response_window_s",
+                "goal_likelihood_fall",
             ),
             Affect,
         )
