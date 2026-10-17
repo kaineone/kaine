@@ -1,0 +1,17 @@
+# Study configuration: the head_only arm of the workspace-feedback ablation
+# (paper §6.4). Select it for a run with KAINE_STUDY=workspace_feedback_head_only.
+# It is applied after the operator config, so these settings hold for the run.
+# The run's seed comes from [experiment].seed; run r of every arm uses the same
+# seed.
+
+[language]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[workspace]
+arm = "competitive"
+
+[workspace.feedback]
+enabled = true
+# head_only: top-down prediction head and blend only; gains stay at one.
+arm = "head_only"

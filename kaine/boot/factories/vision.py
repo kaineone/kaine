@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     pass
 from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
+from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_settings
 from kaine.boot.perception_feed import _build_perception_feed_video_factory
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
@@ -86,9 +87,15 @@ def make_vision(
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
     pc_section = section.pop("positive_control", None)
+    # Workspace feedback is injected under its reserved section key. Pop it before
+    # the strict key check so the operator never has to list it in allowed.
+    feedback_table = section.pop(FEEDBACK_SECTION_KEY, None)
+    feedback_obj = feedback_settings(feedback_table)
     _require_keys(section, allowed - {"perception_feed"})
     kwargs: dict[str, Any] = {}
     kwargs["positive_control"] = PositiveControlSettings.from_config(pc_section)
+    if feedback_obj is not None:
+        kwargs["workspace_feedback"] = feedback_obj
     if "encoder_backend" in section:
         kwargs["encoder_backend"] = section["encoder_backend"]
     if "encoder_model_id" in section:

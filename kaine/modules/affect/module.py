@@ -798,9 +798,7 @@ class Affect(BaseModule):
         drive_score = 0.0
         if has_table:
             top = self._dominant_drive(self._drives.to_dict())
-            if top is None or top[1] <= 0.0:
-                drive_score = 0.0
-            else:
+            if top is not None and top[1] > 0.0:
                 v = top[1]
                 serving = self._drive_sources.get(top[0], frozenset())
                 total_salience = sum(float(ev.salience) for _, ev in selected)

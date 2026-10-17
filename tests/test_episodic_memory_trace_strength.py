@@ -1230,33 +1230,6 @@ async def test_replay_recency_uses_entity_time(bus):
     assert events[0].point_id == next(_key(p["id"]) for p in (_flat(await m.core.storage.export(m.core.persisted_collection_names()))) if p["text"] == "second")
 
 
-def _all_bucket_texts(buckets):
-    """Flatten texts from select_cross_period_traces output."""
-    return [str(trace.get("text", "")) for traces in buckets.values() for trace in traces]
-
-
-async def test_cross_period_selection_sees_no_pruned_trace(bus):
-    """Cross-period selection does not include traces pruned below the floor."""
-    core = EpisodicMemoryCore(
-        FakeEmbedder(latent_dim=DIM),
-        InMemoryStorage(latent_dim=DIM),
-        traces_per_day=1.0,
-        prune_floor=0.7,
-        entity_clock=_Clock(),
-    )
-    await core.initialize()
-    m = EpisodicMemory(bus, core=core)
-    await m.core.store("old", collection="episodic")
-    for i in range(3):
-        await m.core.store(f"filler-{i}", collection="episodic")
-        await m.core.downscale()
-    buckets = await m.select_cross_period_traces(periods=1, per_period=50)
-    texts = _all_bucket_texts(buckets)
-    assert "old" not in texts
-    # The newest filler survived pruning and is selected, so the check is not vacuous.
-    assert "filler-2" in texts
-
-
 async def test_deep_consolidation_protects_replayed_traces():
     """deep_consolidation passes replay events to downscale as protected traces."""
     sentinel_a = ReplayEvent(point_id="a", loop_payload={}, observer_payload={}, collection="episodic_memory_episodic", log_base=-0.1)

@@ -5,7 +5,7 @@
 
 These run a real sleep against real episodic memory and world model module instances on
 the bus so the explicit open/close window path is exercised like a running
-system.
+system. Phase 3 no longer cues the world model module.
 """
 
 import asyncio
@@ -130,18 +130,17 @@ class RecordingEpisodicMemory:
             await asyncio.Event().wait()
         return []
 
-    async def downscale(self, protect=()):
+    async def downscale(self, protect=(), *, prune=True):
         self.calls.append("downscale")
         return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
-    async def select_cross_period_traces(
-        self,
-        *,
-        periods: int,
-        per_period: int,
-    ) -> dict:
+    async def associate(self) -> dict:
         self.calls.append("associative")
-        return {"episodic": [{"point_id": "p1", "text": "t"}]}
+        return {"pairs": []}
+
+    async def prune(self) -> dict:
+        self.calls.append("prune")
+        return {}
 
 
 class RecordingWorldModel:
@@ -238,7 +237,7 @@ async def test_window_is_open_during_phases_two_and_three(bus: AsyncBus, tmp_pat
         "close",
         "downscale",
         "associative",
-        "scenario",
+        "prune",
         "ph_close",
     ]
 
@@ -268,8 +267,8 @@ async def test_cancel_in_phase_two_closes_the_window(bus: AsyncBus, tmp_path: Pa
     assert calls.index("ph_close") > calls.index("ph_open")
 
 
-async def test_world_model_without_window_methods_is_still_cued(bus: AsyncBus, tmp_path: Path):
-    """A world model module collaborator that only implements generate_scenario still works."""
+async def test_phase_three_does_not_cue_the_world_model(bus: AsyncBus, tmp_path: Path):
+    """Phase 3 succeeds without calling generate_scenario on the world model module."""
     class CueOnlyWorldModel:
         def __init__(self) -> None:
             self.calls: list[str] = []
@@ -290,6 +289,6 @@ async def test_world_model_without_window_methods_is_still_cued(bus: AsyncBus, t
     )
 
     summary = await sleep.enter_sleep()
-    assert len(world_model.calls) == 1
+    assert world_model.calls == []
     phase = next(p for p in summary["phases"] if p.get("phase") == "associative_replay")
     assert phase["success"] is True

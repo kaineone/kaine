@@ -5,10 +5,7 @@ import types
 
 import pytest
 
-from kaine.boot.factories.episodic_memory import make_episodic_memory
-from kaine.bus.client import AsyncBus
-from kaine.bus.config import BusConfig
-from kaine.modules.episodic_memory import FakeEmbedder, InMemoryStorage
+from kaine.modules.episodic_memory import InMemoryStorage
 from kaine.modules.episodic_memory.storage import (
     QdrantStorage,
     SqliteVecStorage,
@@ -126,22 +123,6 @@ async def test_qdrant_recent_points_scrolls_without_vectors():
         assert "vector" not in p
         assert "text" not in p["payload"]
     assert await store.recent_points("other", limit=3) == []
-
-
-@pytest.mark.asyncio
-async def test_factory_reads_cross_period_candidates():
-    fakeredis = pytest.importorskip("fakeredis.aioredis")
-    bus = AsyncBus(
-        BusConfig(password="x", audit_required=False),
-        client=fakeredis.FakeRedis(decode_responses=True),
-    )
-    emb = FakeEmbedder(latent_dim=8)
-    module = make_episodic_memory(
-        bus,
-        {"backend": "inmemory", "_embedder": emb, "replay": {"cross_period_candidates": 7}},
-    )
-    assert module._cross_period_candidates == 7
-    await bus.close()
 
 
 _NON_FINITE_CASES = [

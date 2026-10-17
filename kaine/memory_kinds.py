@@ -16,6 +16,7 @@ from __future__ import annotations
 import uuid
 
 __all__ = [
+    "EPISODIC_MEMORY_ASSOCIATION_KINDS",
     "EPISODIC_MEMORY_COLLECTION_KINDS",
     "EPISODIC_MEMORY_STAMP_COLLECTION",
     "EPISODIC_MEMORY_STORE_HEALTH_PATH",
@@ -31,6 +32,10 @@ EPISODIC_MEMORY_COLLECTION_KINDS: tuple[str, str, str, str] = (
     "semantic",
     "procedural",
 )
+
+#: Persisted collections that hold associative-replay links and schema nodes
+#: (paper A.10), created on the first co-replay.
+EPISODIC_MEMORY_ASSOCIATION_KINDS: tuple[str, str] = ("links", "schemas")
 
 #: Shared Qdrant collection used for embedding-space stamps.
 EPISODIC_MEMORY_STAMP_COLLECTION: str = "kaine_meta"

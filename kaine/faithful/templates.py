@@ -446,14 +446,11 @@ def _t_sleep_sleep_completed(payload: dict[str, Any]) -> str:
 
 
 def _t_sleep_association(payload: dict[str, Any]) -> str:
-    # Payload is a compact scenario descriptor; zero raw sense data.
-    horizon = payload.get("horizon", 0)
-    seed_id = payload.get("seed_memory_id") or "unseeded"
-    drift = payload.get("trajectory_drift")
-    parts = [f"Sleep associative scenario from {_fmt(seed_id)}: {_fmt(horizon)}-step"]
-    if drift is not None:
-        parts.append(f"drift {_fmt(drift)}")
-    return ", ".join(parts) + "."
+    # Payload carries two point ids and a weight; zero memory content.
+    a = payload.get("a", "unknown")
+    b = payload.get("b", "unknown")
+    weight = payload.get("weight", 0.0)
+    return f"Sleep linked memories {_fmt(a)} and {_fmt(b)}, weight {_fmt(weight)}."
 
 
 def _t_planning_proposal(payload: dict[str, Any]) -> str:

@@ -131,6 +131,55 @@ arm = "competitive"
 # place affect enters selection. Every workspace-mediation study arm sets it false.
 regulation_bias = true
 
+[workspace.feedback]
+# Workspace feedback is a held extension (paper §3.2, §6.4). When enabled, the
+# workspace sends two top-down signals back to the context-conditioned processors:
+# a learned linear head predicts each processor's next input from the broadcast
+# context and the sequence module's next featurization, and blends with the
+# processor's own prediction by inverse squared mean errors; and a per-processor
+# gain on standardized error before intensity, bounded in [pi_min, pi_max] with
+# mean one. Conflict resolution shifts gain toward the accessed processor with the
+# lowest precision-weighted error and away from the conflicting one. It ships off;
+# enabled = false builds nothing and runs the current build. Select an arm with
+# KAINE_STUDY=workspace_feedback_<arm> for off, head_only, head_gain, full, or
+# matched_random. The boot refuses to start this extension when
+# [oscillator].enabled is true, when [workspace].arm is not "competitive", or
+# when [positive_control].enabled is true.
+
+# Switch. False builds nothing and the current build runs.
+enabled = false
+
+# Arm selector: "off", "head_only", "head_gain", "full", "matched_random".
+arm = "full"
+
+# Gain floor and ceiling (paper Table A1).
+pi_min = 0.8
+pi_max = 1.25
+
+# Distance over mean error at which own and top-down predictions disagree
+# (design value; the paper does not fix it).
+disagreement_threshold = 2.0
+
+# Error ratio at which a processor's error counts as high, the ratio at which
+# intensity reaches the alert level (design value).
+conflict_error_ratio = 2.0
+
+# Gain moved per episode, clipped to keep both processors inside bounds
+# (design value).
+gain_step = 0.1
+
+# Relaxation time constant, entity seconds, for gains returning to one
+# (design value, the fast time constant tau_f).
+gain_relax_s = 10.0
+
+# Refractory period, entity seconds, before a processor can start another
+# episode (design value).
+refractory_s = 10.0
+
+# Learning rate for the top-down linear head, the forward models' eta_fm
+# (design value).
+head_learning_rate = 0.001
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and
@@ -630,9 +679,6 @@ recency_weight = 0.3
 # When true (default), sidecar/observer payloads carry only memory IDs,
 # not trace text, so memory content stays out of operational logs.
 redact_content = true
-# Newest episodic traces sleep's cross-period selection (associative
-# replay) reads, without vectors. Matches short_term_capacity.
-cross_period_candidates = 128
 
 [episodic_memory.strength]
 # Strength a trace that is never replayed keeps over one entity day of storage
@@ -646,6 +692,24 @@ traces_per_day = 288000
 # A trace whose strength falls below this floor is deleted in the sleep that
 # weakened it (paper A.10).
 prune_floor = 0.01
+
+[episodic_memory.association]
+# Associative replay (paper A.10, Table A1), run by sleep phase 3 when
+# [sleep.consolidation].associative_replay is true. After downscaling, each
+# sleep co-replays at most n_pair pairs, most similar first, of a replayed
+# trace and a trace stored before the wake whose cosine similarity lies in
+# [sim_min, sim_dup), and records each pair as a link whose weight w halves
+# its distance from 1 and then decays with downscaling like a trace strength.
+n_pair = 5
+sim_min = 0.5
+sim_dup = 0.95
+# A trace with at least n_sch links forms a schema node (the centroid of its
+# and its partners' embeddings, strength the mean link weight) that recall
+# matches like a trace.
+n_sch = 3
+# Most links a trace keeps; the weakest go first. Links and nodes count in
+# storage_budget_bytes and are pruned as traces are.
+n_link = 8
 
 [self_model]
 persistence_path = "state/self_model/self_model.json"
@@ -1149,11 +1213,11 @@ requested_rest_min_interval_s = 1800.0
 fatigue_triggered = true
 # Replay window duration in seconds (informational; replay completes synchronously).
 replay_window_s = 5.0
-# Phase-3 associative cross-period replay. When true, the sleep module selects traces
-# spanning >= 2 memory periods, cues WorldModel for scenario extensions, and
-# re-injects the resulting novel associations into the workspace for the planning module
-# (pymdp) / the affect module via the normal cognitive cycle. Ships off; degrades to a
-# no-op when the world model module is disabled/absent.
+# Phase-3 associative replay (paper A.10). When true, phase 2 downscales without
+# pruning, then phase 3 asks the episodic memory module to co-replay related
+# trace pairs of different periods as weighted links ([episodic_memory.association])
+# and to prune, and publishes one content-free sleep.association event per pair.
+# Ships off; the first configuration idles the consolidation phases.
 associative_replay = false
 
 [sleep.voice_alignment]

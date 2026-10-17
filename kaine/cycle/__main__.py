@@ -45,6 +45,7 @@ from kaine.boot import (
     make_salience_factors,
     plugin_injections,
 )
+from kaine.boot.feedback import make_workspace_feedback
 from kaine.boot.perception_feed import bind_stimulus_source_unawake_source
 from kaine.boot.wiring import _wire_affect_development, make_regulation_bias
 from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
@@ -1911,8 +1912,22 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
         regulation_bias=regulation_bias,
+        feedback=make_workspace_feedback(
+            ctx.kaine_config,
+            seed=_workspace_arm_kwargs(syn_cfg, ctx.run_ctx)["arm_seed"],
+            clock=(
+                ctx.registry.entity_clock.now
+                if getattr(ctx.registry, "entity_clock", None) is not None
+                else None
+            ),
+        ),
         **_workspace_arm_kwargs(syn_cfg, ctx.run_ctx),
     )
+    if ctx.workspace.feedback is not None:
+        log.warning(
+            "workspace feedback runs the %s arm of the held extension (paper §6.4)",
+            ctx.workspace.feedback.arm,
+        )
     if ctx.workspace.arm != "competitive":
         log.warning(
             "workspace runs the %s control arm of the planned ablation", ctx.workspace.arm

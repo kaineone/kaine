@@ -1,0 +1,16 @@
+# Study configuration: the off arm of the workspace-feedback ablation (paper
+# §6.4). Select it for a run with KAINE_STUDY=workspace_feedback_off. It is
+# applied after the operator config, so these settings hold for the run. The run's
+# seed comes from [experiment].seed; run r of every arm uses the same seed.
+
+[language]
+# Greedy decoding in the planned runs (paper §6.1).
+temperature = 0.0
+
+[workspace]
+arm = "competitive"
+
+[workspace.feedback]
+enabled = true
+# The arm selector "off" makes this the current build; the switch is still on.
+arm = "off"

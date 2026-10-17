@@ -158,9 +158,9 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "fatigue_triggered": False,
     },
     ("sleep", "sleep.association"): {
-        "seed_memory_id": "m-42",
-        "horizon": 5,
-        "trajectory_drift": 0.03,
+        "a": "m-42",
+        "b": "m-7",
+        "weight": 0.5,
     },
     ("self_model", "self_model.document"): {
         "values": ["autonomy", "honesty"],

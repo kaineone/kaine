@@ -56,6 +56,7 @@ from kaine.lifecycle.decommission_locations import (
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
 from kaine.memory_kinds import (
+    EPISODIC_MEMORY_ASSOCIATION_KINDS,
     EPISODIC_MEMORY_COLLECTION_KINDS,
     EPISODIC_MEMORY_STAMP_COLLECTION,
     stamp_key,
@@ -264,7 +265,7 @@ def _episodic_memory_collection_names(qdrant_cfg: dict[str, Any] | None) -> list
     names: list[str] = []
     seen: set[str] = set()
     for prefix in _episodic_memory_prefix_forms(cfg):
-        for kind in EPISODIC_MEMORY_COLLECTION_KINDS:
+        for kind in EPISODIC_MEMORY_COLLECTION_KINDS + EPISODIC_MEMORY_ASSOCIATION_KINDS:
             coll = f"{prefix}{kind}"
             if coll not in seen:
                 seen.add(coll)

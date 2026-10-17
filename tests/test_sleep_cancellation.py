@@ -78,17 +78,16 @@ class RecordingEpisodicMemory:
             await asyncio.Event().wait()
         return []
 
-    async def downscale(self, protect=()):
+    async def downscale(self, protect=(), *, prune=True):
         self.calls.append("downscale")
         return {"n_new": 0, "factor": 1.0, "protected": len(protect), "total_before": 0.0, "total_after": 0.0, "silent": 0}
 
-    async def select_cross_period_traces(
-        self,
-        *,
-        periods: int,
-        per_period: int,
-    ) -> dict:
+    async def associate(self) -> dict:
         self.calls.append("associative")
+        return {"pairs": []}
+
+    async def prune(self) -> dict:
+        self.calls.append("prune")
         return {}
 
 
@@ -149,6 +148,7 @@ async def test_sleep_runs_the_phases_in_the_paper_order(bus, tmp_path):
         "close",
         "downscale",
         "associative",
+        "prune",
         "voice",
         "reset",
     ]

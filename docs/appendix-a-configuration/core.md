@@ -198,6 +198,23 @@ Workspace scoring and access. A candidate's priority is the product of its repor
 | `arm` | string | `"competitive"` | Arm of the planned workspace-mediation test. `"competitive"` is selection and access as built. `"matched"` draws each broadcast's coalition of the competitive size without regard to score, seeded from the run seed, with access by the same threshold. `"pooled"` broadcasts every candidate with no scoring, selection or access gate. The two controls need `[oscillator].enabled = false`. |
 | `regulation_bias` | bool | `true` | Applies the affect module's emotion-regulation tier 1 in selection: the scores of the source named in a tier-1 `affect.regulation` event are multiplied by `1 - b`, with `b` decaying from `[affect.regulation].selection_bias` over `bias_decay_s`. The one place affect enters selection (paper §3.5). Every `config/studies/workspace_mediation_*.toml` sets it `false`, so the study arms rank candidates by intensity and novelty alone. |
 
+### Workspace feedback
+
+Workspace feedback is a held extension (paper §3.2 "Workspace feedback (held extension)", §6.4). In the first configuration it ships off: `[workspace.feedback].enabled = false`. Disabled, or with `arm = "off"`, no feedback object is built and the code path is unchanged. The boot refuses the extension when `[oscillator].enabled` is true, when `[workspace].arm` is not `"competitive"`, when `[positive_control].enabled` is true, and for `matched_random` without a run seed. The `Workspace` constructor also refuses it with the coherence layer or a non-competitive arm, and the processors refuse it when their positive control is enabled. `KAINE_STUDY=workspace_feedback_<arm>` applies `config/studies/workspace_feedback_<arm>.toml`; the workspace-mediation study files are unchanged. See [Workspace feedback](../08-cognitive-cycle/global-workspace.md#workspace-feedback-held-extension) for the mechanism.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Switch. |
+| `arm` | string | `"full"` | Ablation arm: `"off"`, `"head_only"`, `"head_gain"`, `"full"` or `"matched_random"`. |
+| `pi_min` | float | `0.8` | Gain floor; paper Table A1, design value. |
+| `pi_max` | float | `1.25` | Gain ceiling; paper Table A1, design value. |
+| `disagreement_threshold` | float | `2.0` | Conflict disagreement threshold; design value, not fixed by the paper. |
+| `conflict_error_ratio` | float | `2.0` | Error ratio at which a processor's error counts as high, by default the ratio at which intensity reaches the alert level; design value. |
+| `gain_step` | float | `0.1` | Maximum equal-and-opposite gain move; design value. |
+| `gain_relax_s` | float | `10.0` | Fast time constant for gain relaxation toward one, in entity seconds; design value. |
+| `refractory_s` | float | `10.0` | Refractory period after an episode, in entity seconds; design value. |
+| `head_learning_rate` | float | `0.001` | Top-down head stochastic-gradient step size; design value. |
+
 ### Action selection
 
 Executive action selection (`kaine/workspace/action_selection.py`). When the section is absent, the action selection module falls back to `DriveBiasedActionSelectionPolicy`.
