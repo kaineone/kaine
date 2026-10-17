@@ -267,7 +267,7 @@ def load_health_prober(
     """Build a :class:`HealthProber` from ``config/kaine.toml`` and
     ``config/secrets.toml`` (+ env overrides for secrets)."""
 
-    from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+    from kaine.config import OPERATOR_CONFIG_PATH, load_runtime_config
 
     toml_path = Path(kaine_toml or "config/kaine.toml")
     secrets_path = Path(secrets_toml or "config/secrets.toml")
@@ -275,9 +275,13 @@ def load_health_prober(
     cfg: dict[str, Any] = {}
     if toml_path.exists():
         try:
-            # Deep-merge the gitignored operator override so the health board
-            # reflects the operator's enabled modules / model ids.
-            cfg = load_kaine_config(toml_path, OPERATOR_CONFIG_PATH)
+            # Reuse the cycle's runtime loader so the health board matches the
+            # cycle's enabled modules.
+            cfg = load_runtime_config(
+                toml_path,
+                OPERATOR_CONFIG_PATH,
+                profiles_dir=toml_path.parent / "profiles",
+            )
         except Exception:
             log.warning("could not parse %s for health prober", toml_path, exc_info=True)
 

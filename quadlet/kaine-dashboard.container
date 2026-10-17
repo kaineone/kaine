@@ -14,6 +14,8 @@ Exec=python -m kaine.dashboard
 Volume=@KAINE_ROOT@/config/kaine.operator.toml:/app/config/kaine.operator.toml:ro,Z
 # Durable entity state mounts at /app/state (the app writes state CWD-relative).
 Volume=kaine-state.volume:/app/state
+# The image declares VOLUME /models; mount it read-only so no anonymous volume is created.
+Volume=kaine-models.volume:/models:ro
 Environment=KAINE_REDIS_PASSWORD=${KAINE_REDIS_PASSWORD}
 Environment=KAINE_REDIS_URL=redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
 Environment=KAINE_QDRANT_API_KEY=${KAINE_QDRANT_API_KEY}

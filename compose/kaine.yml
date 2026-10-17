@@ -287,6 +287,9 @@ services:
       # the durable state volume mounts at /app/state — NOT /state — or nothing
       # the entity writes would survive down/up.
       - kaine-state:/app/state
+      # The image declares VOLUME /models; mounting the shared models volume read-only
+      # keeps Docker from creating an empty anonymous volume per dashboard container.
+      - kaine-models:/models:ro
       # Shared evaluation-data volume (see kaine-cycle) — the dashboard reads the
       # admissibility manifest under runs/ and the evaluation tab's observer
       # output beside it.

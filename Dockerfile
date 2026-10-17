@@ -150,8 +150,11 @@ RUN if ! command -v python3.12 >/dev/null 2>&1; then \
 # under WORKDIR /app, below), so that dir must exist kaine-owned in the image for
 # a freshly created named volume to inherit owner-only perms. /app/studies is
 # the module-ignition study volume's mountpoint, kaine-owned for the same reason.
+# /app/state is created EMPTY on purpose: the runtime copies an image directory's
+# content into a new named volume when a container is created, and two containers
+# doing that at once on a fresh volume fail with "mkdir ... file exists".
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin kaine \
- && mkdir -p /app/state /app/studies /models /organ-adapters /trainer-jobs /app/state/sleep/voice_align_jobs \
+ && mkdir -p /app/state /app/studies /models /organ-adapters /trainer-jobs \
  && chown -R kaine:kaine /app /models /organ-adapters /trainer-jobs
 
 COPY --from=build /opt/venv /opt/venv

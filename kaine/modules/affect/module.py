@@ -52,6 +52,15 @@ def _clip(x: float, lo: float, hi: float) -> float:
     return x
 
 
+def _finite_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    v = float(value)
+    if not math.isfinite(v):
+        return None
+    return v
+
+
 class Affect(BaseModule):
     name: ClassVar[str] = "affect"
 
@@ -1330,6 +1339,24 @@ class Affect(BaseModule):
             # Goals: the entity's own intentions, not sense data, so they also
             # satisfy the zero raw-sense-data persistence rule.
             "goals": self._goals.to_dict(),
+            # Perceptual alert rates r_f and r_s (alerts per entity second; paper A.4 boredom alert excess).
+            "alert_rates": {"fast": self._alert_fast, "slow": self._alert_slow},
+            # Scalar error statistics, not sense data, so they satisfy the zero raw-sense-data persistence rule.
+            "error_means": {
+                source: {
+                    "fast_sum": self._err_fast_sum.get(source, 0.0),
+                    "fast_count": self._err_fast_count.get(source, 0.0),
+                    "slow_sum": self._err_slow_sum[source],
+                    "slow_count": self._err_slow_count[source],
+                }
+                for source in self._err_slow_count
+            },
+            # Intent rate r_int, the restlessness build input (paper A.4).
+            "intent_rate": self._intent_rate,
+            # Last wellness w from interoception (paper A.4 valence).
+            "wellness": self._wellness,
+            # Whether the sequence module has reported an interaction (social drive input).
+            "interaction_seen": self._interaction_seen,
         }
 
     def deserialize(self, state: dict[str, Any]) -> None:
@@ -1374,8 +1401,62 @@ class Affect(BaseModule):
         if "goals" in state:
             # A restore is not a lifecycle change: no affect.goal events.
             self._goals.load_dict(state["goals"])
+
+        raw_alert_rates = state.get("alert_rates")
+        if isinstance(raw_alert_rates, dict):
+            fast = _finite_number(raw_alert_rates.get("fast"))
+            if fast is not None and fast >= 0.0:
+                self._alert_fast = fast
+            slow = _finite_number(raw_alert_rates.get("slow"))
+            if slow is not None and slow >= 0.0:
+                self._alert_slow = slow
+
+        raw_error_means = state.get("error_means")
+        if isinstance(raw_error_means, dict):
+            self._err_fast_sum.clear()
+            self._err_fast_count.clear()
+            self._err_slow_sum.clear()
+            self._err_slow_count.clear()
+            self._err_last_at.clear()
+            for source, entry in raw_error_means.items():
+                if not isinstance(source, str) or not isinstance(entry, dict):
+                    continue
+                fast_sum = _finite_number(entry.get("fast_sum"))
+                fast_count = _finite_number(entry.get("fast_count"))
+                slow_sum = _finite_number(entry.get("slow_sum"))
+                slow_count = _finite_number(entry.get("slow_count"))
+                if (
+                    fast_sum is None
+                    or fast_sum < 0.0
+                    or fast_count is None
+                    or fast_count <= 0.0
+                    or slow_sum is None
+                    or slow_sum < 0.0
+                    or slow_count is None
+                    or slow_count <= 0.0
+                ):
+                    continue
+                self._err_fast_sum[source] = fast_sum
+                self._err_fast_count[source] = fast_count
+                self._err_slow_sum[source] = slow_sum
+                self._err_slow_count[source] = slow_count
+                self._err_last_at[source] = self._clock()
+
+        v = _finite_number(state.get("intent_rate"))
+        if v is not None and 0.0 <= v <= 1.0:
+            self._intent_rate = v
+        v = _finite_number(state.get("wellness"))
+        if v is not None and 0.0 <= v <= 1.0:
+            self._wellness = v
+        raw_seen = state.get("interaction_seen")
+        if isinstance(raw_seen, bool):
+            self._interaction_seen = raw_seen
+
         # Transient state is not restored: resync end counters so restored
         # outcomes do not look like new ones, and restart stall/response timers.
+        # Running estimates above are restored from saved numbers; the
+        # sequence-reported interaction gap is read fresh after a boot, so
+        # _last_tsli is intentionally left None.
         self._drive_end_counts = {
             d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
         }
