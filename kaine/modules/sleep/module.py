@@ -667,18 +667,14 @@ class Sleep(BaseModule):
             except Exception:
                 log.warning("sleep: playlist clock resume failed", exc_info=True)
 
-    async def _reinject_association(self, scenario: dict[str, Any]) -> None:
-        """Re-inject a phase-3 cross-period association into the workspace.
+    async def _publish_association(self, pair: dict[str, Any]) -> None:
+        """Publish one phase-3 co-replayed pair as ``sleep.association`` on the sleep module's out-stream.
 
-        Published as ``sleep.association`` on the sleep module's out-stream; the
-        workspace broadcast then surfaces it to the planning module (pymdp belief update)
-        and the affect module (re-appraisal) through the NORMAL cognitive cycle — there
-        is no separate belief-revision burst.  Carries only compact scenario
-        descriptors (no raw sense data); zero-persistence invariant holds.
+        Carries only the two point ids and the link weight (no memory content).
         """
         await self.publish(
             "sleep.association",
-            dict(scenario),
+            dict(pair),
             salience=self._baseline_salience,
         )
 
@@ -751,9 +747,9 @@ class Sleep(BaseModule):
                 )
             )
 
-            # --- Phases 2 and 3 cue the world model module ---
-            # Phase 2's replay cues it through episodic_memory.replay events on the bus
-            # and phase 3 calls it directly. The sleep module opens the world model module's scenario
+            # --- Phases 2 and 3 keep the world model module's scenario window open ---
+            # Phase 2's replay cues the world model module through episodic_memory.replay events on the bus
+            # and phase 3 no longer cues it directly. The sleep module opens the world model module's scenario
             # window around both, so the window never depends on the world model module
             # having seen sleep.sleep.started, and closes it on any exit.
             self._open_world_model_window()
@@ -764,19 +760,17 @@ class Sleep(BaseModule):
                     await deep_consolidation(
                         self._episodic_memory,
                         replay_window_s=self._replay_window_s,
+                        defer_prune=self._associative_replay_enabled,
                     )
                 )
 
-                # --- Phase 3: Associative Replay (cross-period; behind feature flag) ---
-                # Selects cross-period traces, cues the world model module, and re-injects the
-                # resulting novel associations into the workspace so the planning module (pymdp) and
-                # the affect module process them via the NORMAL cognitive cycle: no NAR burst.
+                # --- Phase 3: Associative Replay (behind feature flag) ---
+                # Co-replays related trace pairs of different periods as weighted links, then prunes (paper A.10).
                 phase_results.append(
                     await associative_replay(
                         enabled=self._associative_replay_enabled,
                         episodic_memory=self._episodic_memory,
-                        world_model=self._world_model,
-                        reinject=self._reinject_association,
+                        publish=self._publish_association,
                     )
                 )
             finally:
@@ -987,6 +981,21 @@ class Sleep(BaseModule):
         summary["memory_persist_refusals"] = (
             downscale_meta.get("persist_refusals") if downscale_meta else None
         )
+
+        # With associative replay on, pruning follows the co-replays in phase 3
+        # (paper A.10), so its counts replace phase 2's.
+        prune_meta = None
+        for r in phase_results:
+            if getattr(r, "phase", None) == "associative_replay":
+                found = (getattr(r, "metadata", None) or {}).get("prune")
+                prune_meta = found if isinstance(found, dict) else None
+                break
+        if prune_meta is not None and "skipped" not in prune_meta:
+            summary["memory_pruned_floor"] = prune_meta.get("pruned_floor")
+            summary["memory_pruned_budget"] = prune_meta.get("pruned_budget")
+            summary["memory_store_bytes"] = prune_meta.get("store_bytes")
+            summary["memory_links_pruned"] = prune_meta.get("links_pruned")
+            summary["memory_nodes_pruned"] = prune_meta.get("nodes_pruned")
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
         all_succeeded = all(r.success for r in phase_results)

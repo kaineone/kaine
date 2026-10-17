@@ -86,7 +86,7 @@ def test_new_templates_return_non_empty_string(source, type_):
             "phases": [{"name": "p1", "success": True, "elapsed_ms": 1000.0}],
             "fatigue_triggered": False,
         },
-        ("sleep", "sleep.association"): {"seed_memory_id": "m-1", "horizon": 4},
+        ("sleep", "sleep.association"): {"a": "m-1", "b": "m-2", "weight": 0.5},
         ("self_model", "self_model.document"): {
             "values": ["honesty"],
             "behavioral_norms": [],
