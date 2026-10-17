@@ -87,9 +87,10 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     # Fear: modeled on Table 3's fear profile. Low intrinsic pleasantness,
     # low familiarity (mapped to high novelty here), an obstructed goal from
     # the obstruction term of the paper's A.4, and very low power as coping
-    # at or below -0.3. The -0.3 cut-offs match the anger and disgust rules;
-    # coping is undefined for irrelevant content (paper A.4), so the branch
-    # needs relevant content.
+    # at or below -0.3. The cut-offs are the ones the anger rule (goal at or
+    # below -0.3) and the disgust rule (novelty above 0.3) use; coping is
+    # undefined for irrelevant content (paper A.4), so the branch needs
+    # relevant content.
     if scores.coping_available and pleas <= -0.3 and nov > 0.3 and goal <= -0.3 and coping <= -0.3:
         return CategoricalEmotion.FEAR
 
