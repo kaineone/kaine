@@ -556,6 +556,17 @@ def entity_locations(
         )
     )
 
+    # 11c. the resume checkpoint
+    locations.append(
+        Location(
+            "lifecycle.resume_checkpoint",
+            BACKUP_DELETE,
+            resolve("state/lifecycle/checkpoint"),
+            "the resume checkpoint of the entity's module state, which a later entity would inherit",
+            bundle_dir="locations/lifecycle.resume_checkpoint",
+        )
+    )
+
     # 12. identity
     locations.append(
         Location(
