@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| tonic-drive-arousal | 0/4 (0%) | Arousal relaxes toward a target the dominant drive raises, so a deprived entity rests where its non-audition alerts can reach access (paper A.4). |
 | arousal-habituation | 4/4 (100%) | Perceptual arousal habituates to the base alert rate, and the appraisal's novelty reads the change ratio and the same habituation (paper A.4). |
 | affect-alert-rates-persist | 3/3 (100%) | Save the affect alert rates, error means, intent rate, wellness and interaction flag, so a restart or revive does not relieve boredom or reset learning progress (paper A.7). |
 | boot-and-health-fixes | 4/4 (100%) | Fix three first-boot defects from the 2026-10-17 test boot: the health page follows the cycle's module profile, a first `compose up` on an empty state volume no longer races, and the dashboard leaves no anonymous models volume. |
@@ -123,6 +124,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 97 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 98 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
