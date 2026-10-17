@@ -33,7 +33,7 @@ norm_compatibility), each returning a score in `[-1, 1]`. The
 resulting 5-tuple SHALL be mapped to one of seven categorical
 emotions via a pure function `classify(scores) -> CategoricalEmotion`:
 `joy`, `sadness`, `anger`, `fear`, `surprise`, `disgust`, `neutral`.
-Fear SHALL follow the fear profile of Sander, Grandjean and Scherer (2005, Table 3): `classify()` SHALL return `fear` only when coping is available, pleasantness is at or below -0.3, novelty is above 0.3, the goal score is at or below -0.3 and coping is at or below -0.3, provided the near-neutral and surprise rules did not match first.
+Fear SHALL follow the fear profile of Sander, Grandjean and Scherer (2005, Table 3): `classify()` SHALL return `fear` only when coping is available, pleasantness is at or below -0.3, novelty is above 0.3 and coping is at or below -0.3, provided the near-neutral and surprise rules did not match first. The goal score SHALL NOT gate fear beyond the coping availability that needs a nonzero goal score, because Table 3's fear obstruction is anticipated and KAINE's obstruction term is retrospective.
 
 #### Scenario: Positive pleasantness + positive goal yields joy
 - **WHEN** `classify((novelty=0.2, pleasantness=0.7, goal=0.6,
@@ -48,9 +48,13 @@ Fear SHALL follow the fear profile of Sander, Grandjean and Scherer (2005, Table
 - **WHEN** `classify()` gets novelty 0.7, pleasantness -0.001, goal score -0.5 and coping -0.5 with coping available
 - **THEN** the returned emotion is not `CategoricalEmotion.FEAR`
 
-#### Scenario: Fear needs an obstructed goal and novel content
-- **WHEN** `classify()` gets pleasantness -0.6 and coping -0.5 with coping available, and either a goal score of 0.2 with novelty 0.7 or a goal score of -0.5 with novelty 0.1
+#### Scenario: Fear needs novel content
+- **WHEN** `classify()` gets pleasantness -0.6, goal score -0.5 and coping -0.5 with coping available, and novelty 0.1
 - **THEN** the returned emotion is not `CategoricalEmotion.FEAR`
+
+#### Scenario: Fear is reachable at a positive goal score
+- **WHEN** `classify()` gets novelty 0.7, pleasantness -0.6, goal score 0.5 and coping -0.5 with coping available
+- **THEN** the returned emotion is `CategoricalEmotion.FEAR`
 
 #### Scenario: Near-zero across the board yields neutral
 - **WHEN** every score is within `±0.1` of zero

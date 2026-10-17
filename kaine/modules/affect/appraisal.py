@@ -59,16 +59,16 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     check for suddenness, familiarity and predictability, so low
     familiarity in Table 3 maps to high novelty here. The classifier
     checks, in order: a neutral band; surprise (very high novelty with
-    otherwise ambivalent scores); fear (low pleasantness at or below -0.3,
-    low familiarity as novelty above 0.3, an obstructed goal at or below
-    -0.3, and very low coping at or below -0.3); anger (blocked goal with
-    strong coping, matching at best Table 3's irritation profile); disgust
-    (very low pleasantness, low familiarity as high novelty, and low goal
-    relevance); sadness (low pleasantness, low coping and low novelty); joy
-    (positive pleasantness, positive goal relevance and non-negative
-    coping); and finally neutral. Norm compatibility is undefined because
-    KAINE has no authored standards list until an operator writes one, so
-    no category rule reads norm_compatibility; only the neutral band, which
+    otherwise ambivalent scores); fear (relevant content, low pleasantness
+    at or below -0.3, low familiarity as novelty above 0.3, and very low
+    coping at or below -0.3); anger (blocked goal with strong coping,
+    matching at best Table 3's irritation profile); disgust (very low
+    pleasantness, low familiarity as high novelty, and low goal relevance);
+    sadness (low pleasantness, low coping and low novelty); joy (positive
+    pleasantness, positive goal relevance and non-negative coping); and
+    finally neutral. Norm compatibility is undefined because KAINE has
+    no authored standards list until an operator writes one, so no
+    category rule reads norm_compatibility; only the neutral band, which
     spans all five scores, sees its fixed 0.0.
     """
     if _all_near_zero(scores):
@@ -84,14 +84,16 @@ def classify(scores: AppraisalScores) -> CategoricalEmotion:
     if nov >= 0.6 and abs(pleas) < 0.3 and abs(goal) < 0.3:
         return CategoricalEmotion.SURPRISE
 
-    # Fear: modeled on Table 3's fear profile. Low intrinsic pleasantness,
-    # low familiarity (mapped to high novelty here), an obstructed goal from
-    # the obstruction term of the paper's A.4, and very low power as coping
-    # at or below -0.3. The cut-offs are the ones the anger rule (goal at or
-    # below -0.3) and the disgust rule (novelty above 0.3) use; coping is
-    # undefined for irrelevant content (paper A.4), so the branch needs
-    # relevant content.
-    if scores.coping_available and pleas <= -0.3 and nov > 0.3 and goal <= -0.3 and coping <= -0.3:
+    # Fear: modeled on Table 3's fear profile. Table 3 pairs Obstruct with
+    # high outcome probability and very high urgency, an anticipated
+    # obstruction. KAINE's goal score measures present conduciveness and its
+    # obstruction term (paper A.4) is retrospective, so it cannot represent
+    # an anticipated obstruction and does not gate fear. Fear still needs
+    # relevant content (coping is undefined for irrelevant content, paper
+    # A.4), low pleasantness, low familiarity as novelty above 0.3 (the
+    # disgust rule's cut-off) and very low power as coping at or below -0.3.
+    # The pleasantness cut-off removes the flicker at pleasantness -0.001.
+    if scores.coping_available and pleas <= -0.3 and nov > 0.3 and coping <= -0.3:
         return CategoricalEmotion.FEAR
 
     # Anger: blocked goal with strong coping. This matches at best Table 3's

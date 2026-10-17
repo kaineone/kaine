@@ -84,8 +84,8 @@ def test_mildly_unpleasant_content_is_not_disgust():
     assert classify(_scores(novelty=0.7, pleasantness=-0.4)) != CategoricalEmotion.DISGUST
 
 
-def test_unobstructed_unpleasant_novel_content_is_disgust_not_fear():
-    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.2, coping=-0.5)) == CategoricalEmotion.DISGUST
+def test_fear_keeps_precedence_over_disgust():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.2, coping=-0.5)) == CategoricalEmotion.FEAR
 
 
 def test_fear_at_the_boundary():
@@ -97,9 +97,9 @@ def test_fear_not_at_near_neutral_pleasantness():
     assert classify(_scores(novelty=0.7, pleasantness=-0.29, goal=-0.5, coping=-0.5)) != CategoricalEmotion.FEAR
 
 
-def test_fear_requires_obstruction():
-    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=-0.29, coping=-0.5)) != CategoricalEmotion.FEAR
-    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+def test_fear_reachable_at_positive_goal_score():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.5, coping=-0.5)) == CategoricalEmotion.FEAR
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=-0.5, coping=-0.5)) == CategoricalEmotion.FEAR
 
 
 def test_fear_requires_novelty():
