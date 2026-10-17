@@ -1088,7 +1088,6 @@ class EpisodicMemoryCore:
         if n_all == 0:
             return []
         m = min(max(4 * params.n_pair, 32), n_all, _RECALL_SEARCH_CAP)
-        logged_cap = False
         while True:
             hits = await self._storage.search(name, query_vector=vector, limit=m)
             results: list[tuple[str, float]] = []
@@ -1106,13 +1105,11 @@ class EpisodicMemoryCore:
             if len(hits) < m or m >= n_all:
                 return results
             if m >= _RECALL_SEARCH_CAP:
-                if not logged_cap:
-                    log.info(
-                        "episodic memory: associative replay searched the nearest %d of %d traces",
-                        m,
-                        n_all,
-                    )
-                    logged_cap = True
+                log.info(
+                    "episodic memory: associative replay searched the nearest %d of %d traces",
+                    m,
+                    n_all,
+                )
                 return results
             m = min(m * 8, n_all, _RECALL_SEARCH_CAP)
 

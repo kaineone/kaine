@@ -289,6 +289,7 @@ def _id_forms(point_id: Any) -> set[str]:
         forms.add(u.hex)
         forms.add(str(u))
     except ValueError:
+        # Not a UUID: the string itself is the only form of the id.
         pass
     return forms
 

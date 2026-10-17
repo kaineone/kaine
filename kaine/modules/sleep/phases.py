@@ -302,9 +302,11 @@ async def deep_consolidation(
 class _SupportsAssociation(Protocol):
     """The episodic memory module's associative replay and pruning (paper A.10)."""
 
-    async def associate(self) -> dict[str, Any]: ...
+    async def associate(self) -> dict[str, Any]:
+        """Co-replay related trace pairs and record their links."""
 
-    async def prune(self) -> dict[str, Any]: ...
+    async def prune(self) -> dict[str, Any]:
+        """Prune traces, links and schema nodes weakest first."""
 
 
 async def associative_replay(
