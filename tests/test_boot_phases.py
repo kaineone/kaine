@@ -41,6 +41,7 @@ EXPECTED_PHASE_ORDER = [
     "_phase_caretaker",
     "_phase_development",
     "_phase_watchers",
+    "_phase_checkpoint",
 ]
 
 # Must change only together with the exit-code table in docs/14-for-researchers.md.
