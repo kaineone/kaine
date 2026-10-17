@@ -129,14 +129,14 @@ The three tiers are:
 | Tier | Action | What it does |
 |---|---|---|
 | 1 | `attentional_deployment` | During the episode the monitor sums, per source, the intensity of the members of each negatively appraised coalition, starting with the coalition whose appraisal began the episode. It names the source with the largest mass (ties to the alphabetically first source), with `bias` `selection_bias` (0.2) and `decay_s` `bias_decay_s` (20 s). |
-| 2 | `reappraisal` | Once per episode the module re-runs the appraisal of the last broadcast against the current coping and goal state and moves valence toward the re-run valence target `clip(pl + w - 1/2, -1, 1)` by `reappraisal_fraction` (0.5) of the difference. Arousal and dominance are unchanged. |
+| 2 | `reappraisal` | Once per episode the module re-runs the appraisal of the last broadcast against the current coping and goal state, classifies the result and replaces the categorical emotion with it, publishing `affect.emotion` with `reappraised: true` when the emotion changes. Valence, arousal and dominance are unchanged: the emotion is what appraisal sets. |
 | 3 | `request_maintenance` | The module publishes `action: "request_maintenance"`. The sleep module's maintenance consumer starts a sleep on it under the same guards as the interoception module's maintenance request (only when `[sleep.consolidation].fatigue_triggered = true`). The sleep's affective reset is the backstop, and the reset ends any regulation episode. |
 
 For tier 1, the workspace is what applies the bias. When `[workspace].regulation_bias` is true (the default) and the affect module has named a source, the workspace multiplies every score `S'` of that source by `1 - b`, where `b = b_E exp(-(t - t1) / tau_E)` from the cycle tick that collects the event, `b_E` is `selection_bias` and `tau_E` is `bias_decay_s`. It records `regulation_bias` (source, factor) in the broadcast metadata. If there is no negatively appraised coalition member the tier-1 activation names no source and the bias is 0. Every workspace-mediation study arm sets `[workspace].regulation_bias` to false, so the score ranking there is unaffected. The affective reset's `affect.state` event (`reset: true`) clears the bias.
 
-For tier 2, because pleasantness follows learning progress and not coping or goals, the reappraisal step amounts to closing part of the gap to the current valence target at once.
+For tier 2, coping and the goal score can have changed since the broadcast was first appraised (a goal ended, its likelihood fell, a drive's success record grew), so the re-run can turn, for example, fear into another emotion once coping has improved.
 
-Every tier activation publishes one `affect.regulation` event on `affect.out` at `baseline_salience`, carrying `tier`, `action` (`attentional_deployment`, `reappraisal` or `request_maintenance`), `intensity`, `episode_s` and `size`: for tier 1 the bias value, for tier 2 the valence change with `valence_before` and `valence_after`, and for tier 3 the intensity. The event is logged at info level.
+Every tier activation publishes one `affect.regulation` event on `affect.out` at `baseline_salience`, carrying `tier`, `action` (`attentional_deployment`, `reappraisal` or `request_maintenance`), `intensity`, `episode_s` and `size`: for tier 1 the bias value, for tier 2 `1` if the emotion changed and `0` otherwise, with `emotion_before` and `emotion_after`, and for tier 3 the intensity. The event is logged at info level.
 
 Emotion regulation is off during the developmental phase. The cycle injects a probe (`stage.is_developing` when staging is enabled); while it returns true no activation fires and any episode ends. Maturation starts the escalation at tier 1. With staging disabled the entity counts as matured.
 
@@ -236,7 +236,6 @@ Regulation sub-table `[affect.regulation]`:
 |---|---|---|---|
 | `policy` | string | `"three_tier"` | Regulation policy: `"three_tier"` runs the monitor, `"passive"` disables it |
 | `set_point` | float `>= 0` | `0.5` | Intensity threshold that can start a regulation episode |
-| `reappraisal_fraction` | float `[0, 1]` | `0.5` | Fraction of the way valence moves toward the reappraisal target |
 | `selection_bias` | float `[0, 1]` | `0.2` | Initial tier-1 per-source score multiplier `b_E` |
 | `bias_decay_s` | float `> 0` | `20.0` | Time constant `tau_E` for the tier-1 bias decay |
 | `sustain_window_s` | float `> 0` | `30.0` | Window `Δ_R` that sets the escalation interval |

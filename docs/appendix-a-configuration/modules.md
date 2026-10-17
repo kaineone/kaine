@@ -327,13 +327,12 @@ The retired key `social_drive_time_scale_s` is ignored with a warning if present
 
 Section: `[affect.regulation]`.
 
-A monitor escalates through three tiers while the affective intensity `max(|v|, a - a0)` stays at or above `set_point` and the last appraisal is negative (pleasantness or goal score below 0), one tier per `sustain_window_s` of the episode: tier 1 lowers the workspace scores of the source dominating the negatively appraised content, tier 2 reappraises once per episode, tier 3 requests sleep. Off during the developmental phase. See [the affect module](../09-modules/affect.md#emotion-regulation).
+A monitor escalates through three tiers while the affective intensity `max(|v|, a - a0)` stays at or above `set_point` and the last appraisal is negative (pleasantness or goal score below 0), one tier per `sustain_window_s` of the episode: tier 1 lowers the workspace scores of the source dominating the negatively appraised content, tier 2 reappraises once per episode, replacing the categorical emotion with the re-run appraisal's result, tier 3 requests sleep. Off during the developmental phase. See [the affect module](../09-modules/affect.md#emotion-regulation).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `policy` | string | `"three_tier"` | `"three_tier"` runs the monitor; `"passive"` is the off arm, with no regulation. |
 | `set_point` | float | `0.5` | Intensity at or above which a negative appraisal starts an episode (theta_E). |
-| `reappraisal_fraction` | float | `0.5` | Fraction of the gap to the re-run valence target that tier 2 closes (kappa_R). |
 | `selection_bias` | float | `0.2` | Tier-1 bias `b_E`: the target source's scores are multiplied by `1 - b`. |
 | `bias_decay_s` | float | `20.0` | Time constant, in entity seconds, of the tier-1 bias's decay (tau_E). |
 | `sustain_window_s` | float | `30.0` | Episode window per tier, A.5's Delta_R. |

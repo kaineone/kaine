@@ -613,6 +613,28 @@ class Affect(BaseModule):
         if isinstance(self._regulation, ThreeTierRegulation):
             await self._run_regulation(now)
 
+    def _emotion_payload(
+        self, emotion: CategoricalEmotion, scores: AppraisalScores
+    ) -> dict[str, Any]:
+        """Build the payload published on ``affect.emotion``."""
+        return {
+            "emotion": emotion.value,
+            "alert": emotion != CategoricalEmotion.NEUTRAL,
+            "scores": scores.as_tuple(),
+            "state": self._state.to_dict(),
+            # norm_compatibility is fixed at 0.0 and undefined: KAINE
+            # has no standards until an operator writes a list (see
+            # _score_snapshot). No categorical rule reads it.
+            "norm_compatibility_available": False,
+            # False when the coalition is irrelevant (goal score 0):
+            # coping is undefined. When the goal score is nonzero,
+            # including negative values from obstruction, coping is
+            # defined and fear, anger or sadness may be eligible.
+            "coping_available": scores.coping_available,
+            "obstruction": self._last_obstruction,
+            "goal_significance_method": self._goal_method,
+        }
+
     async def _run_regulation(self, now: float) -> None:
         """Execute the three-tier regulation rule for the current tick."""
         if self._development_probe is not None:
@@ -658,31 +680,28 @@ class Affect(BaseModule):
                 "affect.regulation", payload, salience=self._baseline_salience
             )
         elif act.tier == 2:
-            before = self._state.valence
-            after = before
+            before = self._last_emotion
+            emotion = before
             if self._regulation.take_reappraisal() and self._last_snapshot is not None:
                 scores = self._score_snapshot(self._last_snapshot)
-                target = _clip(
-                    scores.intrinsic_pleasantness + (self._wellness - 0.5),
-                    -1.0, 1.0,
-                )
-                after = _clip(
-                    before + cfg.reappraisal_fraction * (target - before),
-                    -1.0, 1.0,
-                )
-                self._state = DimensionalState(
-                    valence=after,
-                    arousal=self._state.arousal,
-                    dominance=self._state.dominance,
-                ).clamped()
+                emotion = classify(scores)
+                if emotion != before:
+                    self._last_emotion = emotion
+                    await self.publish(
+                        "affect.emotion",
+                        {**self._emotion_payload(emotion, scores), "reappraised": True},
+                        salience=self._alert_salience
+                        if emotion != CategoricalEmotion.NEUTRAL
+                        else self._baseline_salience,
+                    )
             payload = {
                 "tier": 2,
                 "action": "reappraisal",
                 "intensity": act.intensity,
                 "episode_s": act.episode_s,
-                "valence_before": before,
-                "valence_after": after,
-                "size": after - before,
+                "emotion_before": before.value,
+                "emotion_after": emotion.value,
+                "size": 1.0 if emotion != before else 0.0,
             }
             log.info(
                 "affect regulation activation: tier=%d action=%s size=%.3f",
@@ -734,23 +753,7 @@ class Affect(BaseModule):
         if emotion != self._last_emotion:
             await self.publish(
                 "affect.emotion",
-                {
-                    "emotion": emotion.value,
-                    "alert": emotion != CategoricalEmotion.NEUTRAL,
-                    "scores": scores.as_tuple(),
-                    "state": self._state.to_dict(),
-                    # norm_compatibility is fixed at 0.0 and undefined: KAINE
-                    # has no standards until an operator writes a list (see
-                    # _score_snapshot). No categorical rule reads it.
-                    "norm_compatibility_available": False,
-                    # False when the coalition is irrelevant (goal score 0):
-                    # coping is undefined. When the goal score is nonzero,
-                    # including negative values from obstruction, coping is
-                    # defined and fear, anger or sadness may be eligible.
-                    "coping_available": scores.coping_available,
-                    "obstruction": self._last_obstruction,
-                    "goal_significance_method": self._goal_method,
-                },
+                self._emotion_payload(emotion, scores),
                 salience=self._alert_salience
                 if emotion != CategoricalEmotion.NEUTRAL
                 else self._baseline_salience,

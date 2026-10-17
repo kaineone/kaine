@@ -18,21 +18,19 @@ from kaine.modules.affect.state import DimensionalState
 def test_config_defaults_equal_table_a1():
     cfg = RegulationConfig()
     assert cfg.set_point == pytest.approx(0.5)
-    assert cfg.reappraisal_fraction == pytest.approx(0.5)
     assert cfg.selection_bias == pytest.approx(0.2)
     assert cfg.bias_decay_s == pytest.approx(20.0)
     assert cfg.sustain_window_s == pytest.approx(30.0)
 
 
 def test_config_defaults_explicit_match():
-    assert RegulationConfig() == RegulationConfig(0.5, 0.5, 0.2, 20.0, 30.0)
+    assert RegulationConfig() == RegulationConfig(0.5, 0.2, 20.0, 30.0)
 
 
 @pytest.mark.parametrize(
     "kwargs",
     [
         {"set_point": -0.1},
-        {"reappraisal_fraction": 1.5},
         {"selection_bias": -0.1},
         {"bias_decay_s": 0},
         {"sustain_window_s": 0},
@@ -42,7 +40,6 @@ def test_config_defaults_explicit_match():
 def test_config_invalid_values_raise(kwargs):
     defaults = {
         "set_point": 0.5,
-        "reappraisal_fraction": 0.5,
         "selection_bias": 0.2,
         "bias_decay_s": 20.0,
         "sustain_window_s": 30.0,
@@ -50,6 +47,11 @@ def test_config_invalid_values_raise(kwargs):
     defaults.update(kwargs)
     with pytest.raises(ValueError):
         RegulationConfig(**defaults)
+
+
+def test_config_rejects_retired_reappraisal_fraction():
+    with pytest.raises(TypeError):
+        RegulationConfig(reappraisal_fraction=0.5)
 
 
 def test_intensity_function():

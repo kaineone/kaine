@@ -5,7 +5,7 @@
 
 ## 2. Affect module
 
-- [x] 2.1 Run the monitor on each update and fire tier 1 (publish the target, bias and decay), tier 2 (one reappraisal per episode, valence moved by `reappraisal_fraction` of the difference) and tier 3 (a maintenance request), each published as `affect.regulation` with its size
+- [x] 2.1 Run the monitor on each update and fire tier 1 (publish the target, bias and decay), tier 2 (one reappraisal per episode, replacing the categorical emotion with the re-run result) and tier 3 (a maintenance request), each published as `affect.regulation` with its size
 - [x] 2.2 Off during the developmental phase through an injected probe; wiring helper re-run on a supervisor rebuild
 - [x] 2.3 `[affect.regulation]` keys in the factory and `config/kaine.toml`; `policy = "passive"` bit-for-bit as before
 

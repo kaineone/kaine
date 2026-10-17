@@ -23,11 +23,15 @@ During an episode the module SHALL sum, per source, the intensity of the members
 - **THEN** tier 1 names `vision` with bias 0.2
 
 ### Requirement: Tier 2 reappraises once per episode
-Tier 2 SHALL re-run the appraisal of the last broadcast against the current coping and goal state and move valence toward the re-run valence target `clip(pl + w - 1/2, -1, 1)` by `reappraisal_fraction` of the difference, at most once per episode, leaving arousal unchanged. Its `size` SHALL be the valence change.
+Tier 2 SHALL re-run the appraisal of the last broadcast against the current coping and goal state at most once per episode and replace the categorical emotion with the classification of the result. When the emotion changes it SHALL publish `affect.emotion` with `reappraised: true`. It SHALL NOT change valence, arousal or dominance. Its event SHALL carry `emotion_before` and `emotion_after`, and `size` 1 if the emotion changed, else 0.
 
-#### Scenario: Reappraisal moves valence by the fraction
-- **WHEN** tier 2 fires with valence -0.6, a re-run valence target of -0.2 and `reappraisal_fraction` 0.5
-- **THEN** valence becomes -0.4 and the event's `size` is 0.2
+#### Scenario: Improved coping turns fear into another emotion
+- **WHEN** a broadcast was appraised as fear with coping -0.8 and the dominant drive's success record has since raised coping to 0.8
+- **THEN** tier 2 replaces fear with a non-fear emotion, publishes `affect.emotion` with `reappraised: true`, has `size` 1, and leaves valence unchanged
+
+#### Scenario: Unchanged appraisal keeps the emotion
+- **WHEN** tier 2 re-runs an appraisal whose coping and goal state have not changed
+- **THEN** the emotion is kept, no `affect.emotion` event is published and `size` is 0
 
 ### Requirement: Tier 3 requests sleep through the maintenance path
 Tier 3 SHALL publish `action: "request_maintenance"`, and the sleep module SHALL start a maintenance sleep on it under the same guards as the interoception module's request.

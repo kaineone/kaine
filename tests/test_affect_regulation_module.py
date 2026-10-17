@@ -14,12 +14,14 @@ from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.affect import Affect
+from kaine.modules.affect.appraisal import CategoricalEmotion
 from kaine.modules.affect.regulation import (
     PassiveDecay,
     RegulationConfig,
     ThreeTierRegulation,
 )
 from kaine.modules.affect.state import DimensionalState
+from kaine.workspace.strategies import dominant_drive
 
 
 @pytest.fixture
@@ -75,6 +77,17 @@ async def _reg_events(bus):
         if isinstance(e, tuple):
             e = e[1]
         if getattr(e, "type", None) == "affect.regulation":
+            events.append(e)
+    return events
+
+
+async def _emotion_events(bus):
+    entries = await bus.read("affect.out", last_id="0", count=500)
+    events = []
+    for e in entries:
+        if isinstance(e, tuple):
+            e = e[1]
+        if getattr(e, "type", None) == "affect.emotion":
             events.append(e)
     return events
 
@@ -162,11 +175,12 @@ async def test_escalation_tiers_one_two_three(bus):
 
     p2 = events[1].payload
     assert p2["action"] == "reappraisal"
-    target = -0.4
-    assert p2["valence_after"] == pytest.approx(
-        p2["valence_before"] + 0.5 * (target - p2["valence_before"])
+    assert "valence_before" not in p2
+    assert isinstance(p2["emotion_before"], str)
+    assert isinstance(p2["emotion_after"], str)
+    assert p2["size"] == pytest.approx(
+        1.0 if p2["emotion_before"] != p2["emotion_after"] else 0.0
     )
-    assert p2["size"] == pytest.approx(p2["valence_after"] - p2["valence_before"])
 
     p3 = events[2].payload
     assert p3["action"] == "request_maintenance"
@@ -174,7 +188,7 @@ async def test_escalation_tiers_one_two_three(bus):
 
 
 @pytest.mark.asyncio
-async def test_tier2_preserves_arousal(monkeypatch):
+async def test_tier2_leaves_dimensions_unchanged(monkeypatch):
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
@@ -191,13 +205,129 @@ async def test_tier2_preserves_arousal(monkeypatch):
     affect._state = DimensionalState(valence=-0.8, arousal=0.55, dominance=0.0)
 
     affect._regulation.update(now=0.0, intensity=0.8, negative=True)
-    before = affect.state.arousal
+    before_state = affect.state.to_dict()
     await affect._run_regulation(60.0)
-    assert affect.state.arousal == before
+    assert affect.state.to_dict() == before_state
     events = await _reg_events(bus)
     assert len(events) == 1
     assert events[0].payload["tier"] == 2
     await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_reappraisal_turns_fear_into_non_fear_when_coping_improves(monkeypatch):
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    client = fakeredis.FakeRedis(decode_responses=True)
+    bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    affect = Affect(
+        bus,
+        clock=lambda: 0.0,
+        regulation=ThreeTierRegulation(RegulationConfig()),
+        publish_interval_s=1000.0,
+    )
+    affect.set_drive_relevance(
+        {
+            "social_drive": frozenset({"audition"}),
+            "curiosity": frozenset({"vision"}),
+            "boredom": frozenset(),
+            "restlessness": frozenset(),
+        },
+        dominant_drive,
+    )
+    monkeypatch.setattr(affect, "_pleasantness", lambda g: -0.4)
+    affect.drives.social_drive.value = 0.8
+    affect.drives.social_drive._has_fired = True
+    affect.drives.social_drive.own_ends = 0
+    affect.drives.social_drive.other_ends = 8
+    affect._state = DimensionalState(valence=-0.6, arousal=0.6, dominance=0.0)
+
+    snap = _snapshot([_ev("audition", salience=0.9, eid="a")])
+    await affect._appraise_snapshot(snap)
+    assert affect.last_emotion == CategoricalEmotion.FEAR
+
+    affect.drives.social_drive.own_ends = 8
+    affect.drives.social_drive.other_ends = 0
+
+    affect._regulation.update(now=0.0, intensity=0.8, negative=True)
+    before_valence = affect.state.valence
+    await affect._run_regulation(60.0)
+    assert affect.state.valence == before_valence
+    assert affect.last_emotion is not CategoricalEmotion.FEAR
+
+    emotion_events = await _emotion_events(bus)
+    reappraised = [e for e in emotion_events if e.payload.get("reappraised")]
+    assert reappraised
+    last_reappraised = reappraised[-1]
+    assert last_reappraised.payload["emotion"] == affect.last_emotion.value
+    assert last_reappraised.payload["reappraised"] is True
+
+    reg_events = await _reg_events(bus)
+    p2 = [e.payload for e in reg_events if e.payload.get("tier") == 2][-1]
+    assert p2["emotion_before"] == "fear"
+    assert p2["emotion_after"] == affect.last_emotion.value
+    assert p2["size"] == pytest.approx(1.0)
+    await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_reappraisal_without_change_publishes_no_emotion(monkeypatch):
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    client = fakeredis.FakeRedis(decode_responses=True)
+    bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    affect = Affect(
+        bus,
+        clock=lambda: 0.0,
+        regulation=ThreeTierRegulation(RegulationConfig()),
+        publish_interval_s=1000.0,
+    )
+    affect.set_drive_relevance(
+        {
+            "social_drive": frozenset({"audition"}),
+            "curiosity": frozenset({"vision"}),
+            "boredom": frozenset(),
+            "restlessness": frozenset(),
+        },
+        dominant_drive,
+    )
+    monkeypatch.setattr(affect, "_pleasantness", lambda g: -0.4)
+    affect.drives.social_drive.value = 0.8
+    affect.drives.social_drive._has_fired = True
+    affect.drives.social_drive.own_ends = 0
+    affect.drives.social_drive.other_ends = 8
+    affect._state = DimensionalState(valence=-0.6, arousal=0.6, dominance=0.0)
+
+    snap = _snapshot([_ev("audition", salience=0.9, eid="a")])
+    await affect._appraise_snapshot(snap)
+    assert affect.last_emotion == CategoricalEmotion.FEAR
+
+    affect._regulation.update(now=0.0, intensity=0.8, negative=True)
+    await affect._run_regulation(60.0)
+    assert affect.last_emotion == CategoricalEmotion.FEAR
+
+    reg_events = await _reg_events(bus)
+    p2 = [e.payload for e in reg_events if e.payload.get("tier") == 2][-1]
+    assert p2["emotion_before"] == "fear"
+    assert p2["emotion_after"] == "fear"
+    assert p2["size"] == pytest.approx(0.0)
+
+    emotion_events = await _emotion_events(bus)
+    assert not any(e.payload.get("reappraised") for e in emotion_events)
+    await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_reappraisal_once_per_episode(bus):
+    t = [0.0]
+    affect = Affect(
+        bus,
+        clock=lambda: t[0],
+        regulation=ThreeTierRegulation(RegulationConfig()),
+        publish_interval_s=1000.0,
+    )
+    await _drive(affect, t, 95, valence=-0.8, negative=True)
+    events = await _reg_events(bus)
+    tier2 = [e for e in events if e.payload["tier"] == 2]
+    assert len(tier2) == 1
 
 
 @pytest.mark.asyncio
@@ -280,6 +410,12 @@ async def test_factory_rejects_bogus_key(bus):
     # [affect.coupling].
     with pytest.raises(ValueError, match="bogus"):
         make_affect(bus, {"regulation": {"bogus": 1}})
+
+
+@pytest.mark.asyncio
+async def test_factory_rejects_retired_reappraisal_fraction(bus):
+    with pytest.raises(ValueError, match="reappraisal_fraction"):
+        make_affect(bus, {"regulation": {"reappraisal_fraction": 0.5}})
 
 
 @pytest.mark.asyncio

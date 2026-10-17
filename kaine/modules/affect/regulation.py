@@ -10,7 +10,10 @@ rule of paper §3.5 and appendix A.5: when affective intensity stays
 above theta_E while the appraisal is negative, an episode clock begins.
 After Delta_st entity seconds, each further window of Delta_R seconds
 emits one activation, escalating through Tier 1 (attentional
-deployment), Tier 2 (reappraisal), and Tier 3 (sleep request). The
+deployment), Tier 2 (reappraisal), and Tier 3 (sleep request). Tier 2
+re-runs the appraisal once per episode against the latest coping and
+goal state and replaces the categorical emotion with the re-run's
+result; it does not move any dimensional state directly. The
 ``PassiveDecay`` off arm leaves regulation to the dimensional state's
 homeostatic drift toward baseline and serves as the default policy.
 """
@@ -65,7 +68,6 @@ class RegulationConfig:
     """Hyper-parameters for ``ThreeTierRegulation``."""
 
     set_point: float = 0.5
-    reappraisal_fraction: float = 0.5
     selection_bias: float = 0.2
     bias_decay_s: float = 20.0
     sustain_window_s: float = 30.0
@@ -76,11 +78,6 @@ class RegulationConfig:
                 raise ValueError(f"RegulationConfig.{field}")
 
         _require("set_point", math.isfinite(self.set_point) and self.set_point >= 0)
-        _require(
-            "reappraisal_fraction",
-            math.isfinite(self.reappraisal_fraction)
-            and 0 <= self.reappraisal_fraction <= 1,
-        )
         _require(
             "selection_bias",
             math.isfinite(self.selection_bias) and 0 <= self.selection_bias <= 1,
@@ -103,7 +100,11 @@ class RegulationActivation:
 
 
 class ThreeTierRegulation:
-    """Three-tier emotion-regulation monitor (paper §3.5 and A.5)."""
+    """Three-tier emotion-regulation monitor (paper §3.5 and A.5).
+
+    Tier 2 re-runs the appraisal against the latest coping and goal
+    state and replaces the categorical emotion with the re-run's result.
+    """
 
     def __init__(self, config: Optional[RegulationConfig] = None) -> None:
         self._config = config if config is not None else RegulationConfig()

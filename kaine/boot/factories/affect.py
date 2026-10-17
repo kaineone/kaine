@@ -126,7 +126,6 @@ def make_affect(
     regulation_allowed = {
         "policy",
         "set_point",
-        "reappraisal_fraction",
         "selection_bias",
         "bias_decay_s",
         "sustain_window_s",
@@ -140,7 +139,6 @@ def make_affect(
             regulation_section,
             (
                 "set_point",
-                "reappraisal_fraction",
                 "selection_bias",
                 "bias_decay_s",
                 "sustain_window_s",

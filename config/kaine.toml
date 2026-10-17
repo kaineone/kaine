@@ -747,15 +747,14 @@ decay_s = 10.0
 # the last appraisal is negative (pleasantness or goal score below 0), one tier per
 # sustain_window_s (A.5's Delta_R): tier 1 lowers the workspace scores of the
 # source dominating the negatively appraised content by selection_bias (b_E),
-# decaying with bias_decay_s (tau_E); tier 2 reappraises once per episode, moving
-# valence toward the re-run target by reappraisal_fraction (kappa_R); tier 3
+# decaying with bias_decay_s (tau_E); tier 2 reappraises once per episode,
+# replacing the categorical emotion with the re-run appraisal's result; tier 3
 # requests sleep through the maintenance path. Off during the developmental
 # phase. "passive" is the off arm (no regulation, the earlier behaviour).
 # [workspace].regulation_bias gates tier 1 in selection; every workspace-mediation
 # study arm sets it false.
 policy = "three_tier"
 set_point = 0.5
-reappraisal_fraction = 0.5
 selection_bias = 0.2
 bias_decay_s = 20.0
 sustain_window_s = 30.0
