@@ -20,7 +20,12 @@ from kaine.cycle.protocols import (
 from kaine.cycle.time_scale_controller import TimeScaleController
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.workspace.action_selection import ActionSelection
+from kaine.workspace.action_selection import (
+    OWN_EXTERNAL_SPEECH_SOURCE,
+    OWN_EXTERNAL_SPEECH_TYPE,
+    OWN_INTERNAL_SPEECH_TYPE,
+    ActionSelection,
+)
 
 if TYPE_CHECKING:
     from kaine.cycle.access_rate import AccessRateController
@@ -591,6 +596,10 @@ class CognitiveCycle:
             for stream, entry_id, event in gathered
         ]
 
+        # Release in-flight guards for the language organ's own published speech
+        # before this tick's action selection runs, on every tick.
+        self._forward_own_output(events)
+
         # Refresh the affect/drive snapshot the live salience factors read, from
         # the canonically-ordered batch above (so which affect.state "wins" a
         # multi-event tick is deterministic). No-op when no real factor is wired.
@@ -714,6 +723,33 @@ class CognitiveCycle:
         )
         self._tick_index += 1
         return result
+
+    def _forward_own_output(self, events: list[tuple[str, Event]]) -> None:
+        """Hand each language-organ speech event gathered this tick to action selection.
+
+        The matching in-flight guard is released on the organ's own published
+        output, whether or not the event is selected or accessed (paper A.6
+        step 1): a producer knows its command has run from a copy of the
+        command, not by perceiving the output.
+        """
+        if self._action_selection is None:
+            return
+        observe = getattr(self._action_selection, "observe_own_output", None)
+        if not callable(observe):
+            return
+        for _, event in events:
+            if event.source != OWN_EXTERNAL_SPEECH_SOURCE:
+                continue
+            if event.type not in (OWN_EXTERNAL_SPEECH_TYPE, OWN_INTERNAL_SPEECH_TYPE):
+                continue
+            try:
+                observe(event)
+            except Exception:
+                log.warning(
+                    "own-output guard release failed on tick %d",
+                    self._tick_index,
+                    exc_info=True,
+                )
 
     async def _run_action_selection(self, snapshot: WorkspaceSnapshot) -> None:
         """Invoke action selection and publish produced intents.

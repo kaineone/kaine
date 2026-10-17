@@ -130,6 +130,32 @@ class PlanningProposalSource:
         for _, event in self._find_proposals(snapshot):
             self._record_outcome(event, reason, realized=False)
 
+    def mark_realized(self) -> None:
+        """Clear the local speak guard and forward the release to the wrapped policy.
+
+        The wrapper clears its own local guard and forwards the release to the
+        wrapped policy, so it never holds a stale guard after the organ has
+        published (paper A.6 step 1).
+        """
+        self._speak_in_flight = False
+        self._speak_armed_at = None
+        hook = getattr(self._inner, "mark_realized", None)
+        if callable(hook):
+            hook()
+
+    def mark_think_realized(self) -> None:
+        """Clear the local think guard and forward the release to the wrapped policy.
+
+        The wrapper clears its own local guard and forwards the release to the
+        wrapped policy, so it never holds a stale guard after the organ has
+        published (paper A.6 step 1).
+        """
+        self._think_in_flight = False
+        self._think_armed_at = None
+        hook = getattr(self._inner, "mark_think_realized", None)
+        if callable(hook):
+            hook()
+
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         self._last_outcomes = []
         # Guard clearing and timeout checks must run at the start of EVERY

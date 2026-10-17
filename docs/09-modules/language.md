@@ -97,7 +97,7 @@ The organ's weights have the single direction that mediates refusal projected ou
 
 Both speech events carry `text`, `mode`, `model`, `prompt_length`, `latency_ms`, `record_id`, `origin` (when the intent had one) and `faithful_rendering`. The published `faithful_rendering` is redacted: heard speech in it is replaced by `[heard speech]`, as in the intent log. `external_speech` carries `user_input` only for felt and event intents, with any heard text in it redacted. Under the default `self_initiated_report` policy that field is the policy's own description of the leading candidate. A reply to heard speech never carries `user_input`, so the A/B divergence sidecar measures only felt- and event-triggered replies and records replies to heard speech as content-free skips.
 
-The action-selection policy's guard timeouts are what free speech after a failed generation; `realization_failed` is the audit trail.
+The cycle reads each `external_speech` and `internal_speech` event from `language.out` and hands it to action selection, which releases the matching in-flight guard whether or not the event is accessed (paper A.6 step 1). `realization_failed` is not mirrored there, so after a failed generation the action-selection policy's 48 s guard timeout frees the channel; `realization_failed` is the audit trail.
 
 ## Configuration
 
