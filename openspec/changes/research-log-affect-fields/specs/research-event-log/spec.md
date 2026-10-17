@@ -24,3 +24,10 @@ The research log's `sleep.sleep.completed` record SHALL keep `memory_links_prune
 #### Scenario: Link counts survive
 - **WHEN** a sleep completes with `memory_links_pruned` 3 and `memory_nodes_pruned` 1
 - **THEN** the research record has both counts
+
+### Requirement: Processor reports carry the change ratio
+The research log SHALL keep `normalised_change` on `vision.report` and `audition.perception` when the payload carries it.
+
+#### Scenario: The vision change ratio survives
+- **WHEN** the vision module publishes `vision.report` with `normalised_change` 1.4
+- **THEN** the research record has `normalised_change` 1.4
