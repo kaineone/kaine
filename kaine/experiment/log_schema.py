@@ -94,6 +94,21 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     },
     # affect.drive carries {drive, value}; each drive value is in [0, 1].
     "affect.drive": {"value": UNIT},
+    # kaine.modules.affect.module: priority is clipped to [0, 1]; likelihood is a
+    # Laplace-smoothed success ratio, clipped to [0, 1] when it falls.
+    "affect.goal": {"priority": UNIT, "likelihood": UNIT},
+    # kaine.modules.affect.module: obstruction is a non-negative scalar.
+    "affect.emotion": {"obstruction": NONNEG},
+    # kaine.modules.affect.module: tier is 1..3; intensity is the larger of |valence|
+    # and arousal minus baseline; size is the bias, 0 or 1, or the intensity.
+    "affect.regulation": {
+        "tier": (1.0, 3.0),
+        "intensity": UNIT,
+        "size": UNIT,
+        "bias": UNIT,
+        "episode_s": NONNEG,
+        "decay_s": NONNEG,
+    },
     # --- Perception (derived) ---
     "audition.emotion": {"confidence": UNIT, "tone_error_ratio": NONNEG},
     # --- Self / social ---
@@ -104,6 +119,8 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     # --- Coherence (PLV phase-locking value ∈ [0, 1]) ---
     # The coherence observer records a dict of pair -> PLV; handled specially in
     # _coherence_violations (nested), not via the flat SCHEMA.
+    # --- Memory / sleep ---
+    "sleep.sleep.completed": {"memory_links_pruned": NONNEG, "memory_nodes_pruned": NONNEG},
 }
 
 # ---------------------------------------------------------------------------

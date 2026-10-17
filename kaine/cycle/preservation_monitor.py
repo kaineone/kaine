@@ -548,6 +548,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                 {
                     "monitor": "divergence",
                     "transition": "crossing_rate_limited",
+                    "reason": "+".join(sorted(new_arms)),
                     "run_id": self._run_id(),
                     "poll_index": self.poll_index,
                     "signals": dict(assessment.signals or {}),
@@ -564,12 +565,14 @@ class DivergenceMonitor(_BaseSafetyMonitor):
     async def _preserve(
         self, assessment, now: float, *, new_arms: frozenset[str]
     ) -> bool:
+        """Preserve the live entity; the reason names the new arms, sorted and joined with "+"."""
         incident_id = uuid.uuid4().hex[:16]
-        label = f"individuation:{incident_id}"
+        reason = "+".join(sorted(new_arms)) if new_arms else "diverged"
+        label = f"divergence:{incident_id}"
         try:
             result = await self._fork_manager.preserve_live(
                 self._registry,
-                reason="individuation",
+                reason=reason,
                 label=label,
                 out_root=resolve(self._config.out_root),
                 entity_name=self._config.entity_name,
@@ -586,6 +589,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                     "monitor": "divergence",
                     "transition": "preserve_failed",
                     "incident_id": incident_id,
+                    "reason": reason,
                     "run_id": self._run_id(),
                     "poll_index": self.poll_index,
                     "error": scrub_paths(f"{type(exc).__name__}: {exc}"),
@@ -602,7 +606,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
                 "monitor": "divergence",
                 "transition": "preserved",
                 "incident_id": incident_id,
-                "reason": "individuation",
+                "reason": reason,
                 "run_id": self._run_id(),
                 "preservation_id": result.preservation_id,
                 "snapshot_id": result.snapshot_id,
@@ -614,8 +618,9 @@ class DivergenceMonitor(_BaseSafetyMonitor):
             event_type="preservation.preserved",
         )
         log.info(
-            "divergence monitor: preserved individuating entity "
-            "(preservation_id=%s, snapshot=%s)",
+            "divergence monitor: preserved diverging entity "
+            "(arms=%s, preservation_id=%s, snapshot=%s)",
+            reason,
             result.preservation_id,
             result.snapshot_id,
         )
