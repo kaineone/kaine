@@ -54,6 +54,11 @@ class _ScriptedBus:
         self.reads.append((stream, last_id))
         if self._fail:
             raise ConnectionError("bus down")
+        if stream == "affect.out":
+            # The sleep module's maintenance consumer also polls the affect
+            # module's stream for emotion regulation's sleep request; the
+            # scripted batches belong to the other streams.
+            return [], None
         if not self._batches:
             await asyncio.Event().wait()  # park forever
         return self._batches.pop(0)
@@ -291,6 +296,7 @@ class _HypConsumerStub:
         self._stopped = asyncio.Event()
         self._bus = bus
         self._interoception_cursor = "0"
+        self._affect_cursor = "0"
         self._sleep_lock = asyncio.Lock()
         self._sleep_pending = False
         self._sleep_task = None
@@ -321,6 +327,7 @@ async def test_sleep_task_not_collected_and_no_double_trigger():
     stub._fatigue_triggered_enter_sleep_inner = types.MethodType(
         Sleep._fatigue_triggered_enter_sleep_inner, stub
     )
+    stub._start_maintenance_sleep = types.MethodType(Sleep._start_maintenance_sleep, stub)
     consumer = asyncio.create_task(Sleep._interoception_consumer_loop(stub))
     for _ in range(200):
         if stub.enter_started == 1:

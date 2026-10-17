@@ -232,6 +232,118 @@ async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus,
     await sleep.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_affect_regulation_request_maintenance_triggers(bus: AsyncBus, tmp_path: Path):
+    """affect.regulation with tier=3 and action=request_maintenance triggers a sleep cycle."""
+    sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
+    await sleep.initialize()
+
+    sleep_fired = asyncio.Event()
+    original_run = sleep._run_pipeline
+
+    async def _mock_run():
+        sleep_fired.set()
+        return await original_run()
+
+    sleep._run_pipeline = _mock_run
+
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import validate_event
+
+    event = validate_event(
+        source="affect",
+        type="affect.regulation",
+        payload={"tier": 3, "action": "request_maintenance", "size": 0.8},
+        salience=0.7,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await bus.publish(event)
+
+    try:
+        await asyncio.wait_for(sleep_fired.wait(), timeout=2.0)
+    except asyncio.TimeoutError:
+        pytest.fail(
+            "affect.regulation request_maintenance did not fire maintenance within 2s"
+        )
+
+    await sleep.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_affect_regulation_other_tier_does_not_trigger(bus: AsyncBus, tmp_path: Path):
+    """affect.regulation with tier 1 and tier 2 actions must NOT trigger sleep."""
+    sleep = _make_sleep(bus, tmp_path, fatigue_triggered=True)
+    await sleep.initialize()
+
+    sleep_fired = asyncio.Event()
+    original_run = sleep._run_pipeline
+
+    async def _mock_run():
+        sleep_fired.set()
+        return await original_run()
+
+    sleep._run_pipeline = _mock_run
+
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import validate_event
+
+    tier1_event = validate_event(
+        source="affect",
+        type="affect.regulation",
+        payload={"tier": 1, "action": "attentional_deployment"},
+        salience=0.3,
+        timestamp=datetime.now(timezone.utc),
+    )
+    tier2_event = validate_event(
+        source="affect",
+        type="affect.regulation",
+        payload={"tier": 2, "action": "reappraisal"},
+        salience=0.3,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await bus.publish(tier1_event)
+    await bus.publish(tier2_event)
+
+    await asyncio.sleep(0.15)
+    assert not sleep_fired.is_set(), "tier 1 / tier 2 affect regulation must not trigger maintenance"
+    await sleep.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_affect_request_ignored_when_fatigue_trigger_off(bus: AsyncBus, tmp_path: Path):
+    """With fatigue_triggered=False, a tier-3 affect request does not start a sleep."""
+    sleep = _make_sleep(bus, tmp_path, fatigue_triggered=False)
+    await sleep.initialize()
+
+    sleep_fired = asyncio.Event()
+    original_run = sleep._run_pipeline
+
+    async def _mock_run():
+        sleep_fired.set()
+        return await original_run()
+
+    sleep._run_pipeline = _mock_run
+
+    from datetime import datetime, timezone
+
+    from kaine.bus.schema import validate_event
+
+    event = validate_event(
+        source="affect",
+        type="affect.regulation",
+        payload={"tier": 3, "action": "request_maintenance", "size": 0.8},
+        salience=0.7,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await bus.publish(event)
+
+    await asyncio.sleep(0.15)
+    assert not sleep_fired.is_set(), "tier-3 affect request must not trigger maintenance when fatigue_triggered is False"
+    await sleep.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # Test 2: interval_seconds safety-net fires even without fatigue
 # ---------------------------------------------------------------------------

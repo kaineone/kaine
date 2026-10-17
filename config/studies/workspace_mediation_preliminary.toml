@@ -10,6 +10,9 @@ temperature = 0.0
 
 [workspace]
 arm = "competitive"
+# Emotion regulation's tier-1 selection bias stays neutral in every arm
+# (paper §3.5), so the A.1 ranking by intensity and novelty holds.
+regulation_bias = false
 
 [planned_test]
 # The one preliminary run, on a seed never used again, that estimates each

@@ -201,6 +201,7 @@ class Sleep(BaseModule):
 
         # Fatigue trigger state
         self._interoception_cursor: str = "0"
+        self._affect_cursor: str = "0"
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
         # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
@@ -320,6 +321,16 @@ class Sleep(BaseModule):
                 if isinstance(entry_id, bytes):
                     entry_id = entry_id.decode()
                 self._interoception_cursor = entry_id
+            # Seed cursor so we only process new affect module events from now on.
+            try:
+                latest = await self._bus.client.xrevrange("affect.out", count=1)
+            except Exception:
+                latest = []
+            if latest:
+                entry_id = latest[0][0]
+                if isinstance(entry_id, bytes):
+                    entry_id = entry_id.decode()
+                self._affect_cursor = entry_id
             self._tasks.append(
                 asyncio.create_task(self._interoception_consumer_loop(), name="sleep-interoception-consumer")
             )
@@ -362,12 +373,11 @@ class Sleep(BaseModule):
                     task.exception()
 
     async def _interoception_consumer_loop(self) -> None:
-        """Background loop: watch interoception.out for maintenance triggers.
+        """Background loop: watch interoception.out and affect.out for maintenance triggers.
 
-        Two event shapes on ``interoception.out`` trigger an immediate maintenance
-        cycle when the sleep module is not already sleeping (subject to the same
-        non-interruptibility / freeze-preemption guards as the interval-based
-        trigger):
+        Three event shapes trigger an immediate maintenance cycle when the sleep
+        module is not already sleeping (subject to the same non-interruptibility /
+        freeze-preemption guards as the interval-based trigger):
 
         * ``interoception.fatigue`` with ``crossed == true`` — the fatigue accumulator
           crossed its maintenance threshold.
@@ -377,22 +387,26 @@ class Sleep(BaseModule):
           directly on ``interoception.out`` (the cycle engine separately latches an
           advisory ``maintenance_requested`` flag for diagnostics, but the sleep module
           does not read that flag).
+        * ``affect.regulation`` with ``action == "request_maintenance"`` on
+          ``affect.out``: emotion regulation's tier 3 request (paper §3.5).
         """
         try:
             while not self._stopped.is_set():
                 try:
-                    entries, last_scanned = await self._bus.read_entries(
+                    idle = True
+                    interoception_entries, interoception_last_scanned = await self._bus.read_entries(
                         "interoception.out",
                         last_id=self._interoception_cursor,
                         count=32,
                         block_ms=0,
                     )
-                    if last_scanned:
+                    if interoception_last_scanned:
                         # H2 — advance by the last SCANNED id (decodable or
                         # not) so a poison batch cannot wedge the cursor.
-                        self._interoception_cursor = last_scanned
-                    if entries:
-                        for _, event in entries:
+                        self._interoception_cursor = interoception_last_scanned
+                    if interoception_entries:
+                        idle = False
+                        for _, event in interoception_entries:
                             fatigue_trigger = event.type == "interoception.fatigue" and event.payload.get(
                                 "crossed", False
                             )
@@ -412,18 +426,32 @@ class Sleep(BaseModule):
                                     "sleep: interoception.regulation request_maintenance "
                                     "— triggering regulation-driven maintenance"
                                 )
-                            # L3 — hold the task reference (no GC mid-sleep)
-                            # and guard with a pending flag so a second
-                            # trigger while one sleep is starting cannot
-                            # double-fire and mis-annotate the running
-                            # sleep's summary via the loser branch.
-                            if not self._sleep_lock.locked() and not self._sleep_pending:
-                                self._sleep_pending = True
-                                self._sleep_task = asyncio.create_task(
-                                    self._fatigue_triggered_enter_sleep(),
-                                    name="sleep-fatigue-sleep",
+                            await self._start_maintenance_sleep()
+
+                    affect_entries, affect_last_scanned = await self._bus.read_entries(
+                        "affect.out",
+                        last_id=self._affect_cursor,
+                        count=32,
+                        block_ms=0,
+                    )
+                    if affect_last_scanned:
+                        # H2: advance by the last SCANNED id (decodable or
+                        # not) so a poison batch cannot wedge the cursor.
+                        self._affect_cursor = affect_last_scanned
+                    if affect_entries:
+                        idle = False
+                        for _, event in affect_entries:
+                            if (
+                                event.type == "affect.regulation"
+                                and event.payload.get("action") == "request_maintenance"
+                            ):
+                                log.info(
+                                    "sleep: affect.regulation request_maintenance, "
+                                    "triggering affect-driven maintenance"
                                 )
-                    else:
+                                await self._start_maintenance_sleep()
+
+                    if idle:
                         await asyncio.sleep(0.05)
                 except asyncio.CancelledError:
                     raise
@@ -432,6 +460,24 @@ class Sleep(BaseModule):
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
+
+    async def _start_maintenance_sleep(self) -> None:
+        """Guarded start of a fatigue-triggered maintenance sleep.
+
+        Shared helper so the lock/pending guard is identical for every
+        event-driven trigger site.
+        """
+        # L3: hold the task reference (no GC mid-sleep)
+        # and guard with a pending flag so a second
+        # trigger while one sleep is starting cannot
+        # double-fire and mis-annotate the running
+        # sleep's summary via the loser branch.
+        if not self._sleep_lock.locked() and not self._sleep_pending:
+            self._sleep_pending = True
+            self._sleep_task = asyncio.create_task(
+                self._fatigue_triggered_enter_sleep(),
+                name="sleep-fatigue-sleep",
+            )
 
     async def _action_selection_consumer_loop(self) -> None:
         """Background loop: watch action_selection.out for rest requests.

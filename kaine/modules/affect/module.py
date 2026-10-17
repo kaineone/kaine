@@ -25,7 +25,11 @@ from kaine.modules.affect.coupling import (
 from kaine.modules.affect.drives import DriveSet
 from kaine.modules.affect.goals import GoalLedger, GoalState
 from kaine.modules.affect.modulator import StateModulator
-from kaine.modules.affect.regulation import PassiveDecay, RegulationPolicy
+from kaine.modules.affect.regulation import (
+    PassiveDecay,
+    RegulationPolicy,
+    ThreeTierRegulation,
+)
 from kaine.modules.affect.state import DimensionalState
 from kaine.modules.base import BaseModule
 
@@ -135,6 +139,10 @@ class Affect(BaseModule):
         self._publish_interval = float(publish_interval_s)
 
         self._regulation: RegulationPolicy = regulation or PassiveDecay()
+        self._development_probe: Optional[Callable[[], bool]] = None
+        self._last_pleasantness = 0.0
+        self._last_goal_score = 0.0
+        self._last_snapshot: Optional[WorkspaceSnapshot] = None
         self._drives = drives or DriveSet()
         self._baseline_salience = float(baseline_salience)
         self._alert_salience = float(alert_salience)
@@ -246,8 +254,23 @@ class Affect(BaseModule):
         return self._goals
 
     @property
+    def regulation(self) -> RegulationPolicy:
+        return self._regulation
+
+    @property
     def last_emotion(self) -> CategoricalEmotion:
         return self._last_emotion
+
+    def set_development_probe(
+        self, probe: Optional[Callable[[], bool]]
+    ) -> None:
+        """Store a callable that returns True while the entity is developing.
+
+        Regulation is disabled during the developmental phase (paper §3.5).
+        With no probe, regulation runs: staging disabled means the entity counts
+        as matured. Injected at boot by the cycle.
+        """
+        self._development_probe = probe
 
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
@@ -587,6 +610,121 @@ class Affect(BaseModule):
             arousal=adj.arousal,
             dominance=adj.dominance,
         )
+        if isinstance(self._regulation, ThreeTierRegulation):
+            await self._run_regulation(now)
+
+    def _emotion_payload(
+        self, emotion: CategoricalEmotion, scores: AppraisalScores
+    ) -> dict[str, Any]:
+        """Build the payload published on ``affect.emotion``."""
+        return {
+            "emotion": emotion.value,
+            "alert": emotion != CategoricalEmotion.NEUTRAL,
+            "scores": scores.as_tuple(),
+            "state": self._state.to_dict(),
+            # norm_compatibility is fixed at 0.0 and undefined: KAINE
+            # has no standards until an operator writes a list (see
+            # _score_snapshot). No categorical rule reads it.
+            "norm_compatibility_available": False,
+            # False when the coalition is irrelevant (goal score 0):
+            # coping is undefined. When the goal score is nonzero,
+            # including negative values from obstruction, coping is
+            # defined and fear, anger or sadness may be eligible.
+            "coping_available": scores.coping_available,
+            "obstruction": self._last_obstruction,
+            "goal_significance_method": self._goal_method,
+        }
+
+    async def _run_regulation(self, now: float) -> None:
+        """Execute the three-tier regulation rule for the current tick."""
+        if self._development_probe is not None:
+            try:
+                developing = self._development_probe()
+            except Exception:
+                log.warning(
+                    "affect regulation: development probe failed, treating entity as developing"
+                )
+                developing = True
+            if developing:
+                self._regulation.reset()
+                return
+
+        intensity = ThreeTierRegulation.intensity(
+            self._state.valence, self._state.arousal, self._baseline.arousal
+        )
+        negative = self._last_pleasantness < 0.0 or self._last_goal_score < 0.0
+        act = self._regulation.update(
+            now=now, intensity=intensity, negative=negative
+        )
+        if act is None:
+            return
+
+        cfg = self._regulation.config
+        if act.tier == 1:
+            bias = cfg.selection_bias if act.target_source is not None else 0.0
+            payload = {
+                "tier": 1,
+                "action": "attentional_deployment",
+                "source": act.target_source,
+                "bias": bias,
+                "decay_s": cfg.bias_decay_s,
+                "intensity": act.intensity,
+                "episode_s": act.episode_s,
+                "size": bias,
+            }
+            log.info(
+                "affect regulation activation: tier=%d action=%s size=%.3f source=%s",
+                act.tier, payload["action"], payload["size"], act.target_source,
+            )
+            await self.publish(
+                "affect.regulation", payload, salience=self._baseline_salience
+            )
+        elif act.tier == 2:
+            before = self._last_emotion
+            emotion = before
+            if self._regulation.take_reappraisal() and self._last_snapshot is not None:
+                scores = self._score_snapshot(self._last_snapshot)
+                emotion = classify(scores)
+                if emotion != before:
+                    self._last_emotion = emotion
+                    await self.publish(
+                        "affect.emotion",
+                        {**self._emotion_payload(emotion, scores), "reappraised": True},
+                        salience=self._alert_salience
+                        if emotion != CategoricalEmotion.NEUTRAL
+                        else self._baseline_salience,
+                    )
+            payload = {
+                "tier": 2,
+                "action": "reappraisal",
+                "intensity": act.intensity,
+                "episode_s": act.episode_s,
+                "emotion_before": before.value,
+                "emotion_after": emotion.value,
+                "size": 1.0 if emotion != before else 0.0,
+            }
+            log.info(
+                "affect regulation activation: tier=%d action=%s size=%.3f",
+                act.tier, payload["action"], payload["size"],
+            )
+            await self.publish(
+                "affect.regulation", payload, salience=self._baseline_salience
+            )
+        elif act.tier == 3:
+            payload = {
+                "tier": 3,
+                "action": "request_maintenance",
+                "intensity": act.intensity,
+                "episode_s": act.episode_s,
+                "size": act.intensity,
+            }
+            log.info(
+                "affect regulation activation: tier=%d action=%s size=%.3f",
+                act.tier, payload["action"], payload["size"],
+            )
+            await self.publish(
+                "affect.regulation", payload, salience=self._baseline_salience
+            )
 
     async def _appraise_snapshot(self, snapshot: WorkspaceSnapshot) -> None:
         # Update the exponential intent-rate estimate and reset the counter.
@@ -598,29 +736,24 @@ class Affect(BaseModule):
         scores = self._score_snapshot(snapshot)
         # Held obstruction applies to one appraisal only.
         self._held_obstruction.clear()
+        self._last_pleasantness = scores.intrinsic_pleasantness
+        self._last_goal_score = scores.goal_significance
+        self._last_snapshot = snapshot
+        if isinstance(self._regulation, ThreeTierRegulation):
+            self._regulation.observe_coalition(
+                ((ev.source, float(ev.salience)) for _, ev in snapshot.selected_events),
+                negative=(
+                    scores.intrinsic_pleasantness < 0.0 or scores.goal_significance < 0.0
+                ),
+            )
+
         emotion = classify(scores)
         # Surprise reaches arousal through the perceptual-alert path;
         # valence follows learning progress.
         if emotion != self._last_emotion:
             await self.publish(
                 "affect.emotion",
-                {
-                    "emotion": emotion.value,
-                    "alert": emotion != CategoricalEmotion.NEUTRAL,
-                    "scores": scores.as_tuple(),
-                    "state": self._state.to_dict(),
-                    # norm_compatibility is fixed at 0.0 and undefined: KAINE
-                    # has no standards until an operator writes a list (see
-                    # _score_snapshot). No categorical rule reads it.
-                    "norm_compatibility_available": False,
-                    # False when the coalition is irrelevant (goal score 0):
-                    # coping is undefined. When the goal score is nonzero,
-                    # including negative values from obstruction, coping is
-                    # defined and fear, anger or sadness may be eligible.
-                    "coping_available": scores.coping_available,
-                    "obstruction": self._last_obstruction,
-                    "goal_significance_method": self._goal_method,
-                },
+                self._emotion_payload(emotion, scores),
                 salience=self._alert_salience
                 if emotion != CategoricalEmotion.NEUTRAL
                 else self._baseline_salience,
@@ -1026,6 +1159,12 @@ class Affect(BaseModule):
         )
 
     async def affective_reset(self) -> None:
+        if isinstance(self._regulation, ThreeTierRegulation):
+            self._regulation.reset()
+        self._last_pleasantness = 0.0
+        self._last_goal_score = 0.0
+        self._last_snapshot = None
+
         self._state = DimensionalState(
             valence=self._baseline.valence,
             arousal=self._baseline.arousal,

@@ -10,6 +10,9 @@ temperature = 0.0
 
 [workspace]
 arm = "competitive"
+# Emotion regulation's tier-1 selection bias stays neutral in every arm
+# (paper §3.5), so the A.1 ranking by intensity and novelty holds.
+regulation_bias = false
 
 [audition]
 # The tone variant: every tone event is graded by the tone error ratio alone (paper A.8).

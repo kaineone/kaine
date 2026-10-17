@@ -61,7 +61,7 @@ With `[workspace].salience_affect_factor = "static"`, the affect module's factor
 
 ### What the formula does and does not do
 
-The workspace applies no weight per source. Precision is local to each predictive processor: the vision, audition, interoception and sequence modules each divide their current prediction error by the mean of their own recent errors and report a graded intensity from that ratio (`kaine/modules/intensity.py`):
+The workspace applies no precision weight per source. The one per-source factor is emotion regulation's tier 1 (paper §3.5): when `[workspace].regulation_bias` is true and the affect module has named a source in a tier-1 `affect.regulation` event, every score of that source is multiplied by `1 - b`, with `b` decaying from 0.2 with a 20-entity-second time constant, and the workspace records `regulation_bias` (source, factor) in the broadcast metadata. Every workspace-mediation study arm turns `[workspace].regulation_bias` off, so there the ranking by intensity times novelty holds. Precision is local to each predictive processor: the vision, audition, interoception and sequence modules each divide their current prediction error by the mean of their own recent errors and report a graded intensity from that ratio (`kaine/modules/intensity.py`):
 
 ```
 I = alert level                                              on a categorical alert
@@ -70,7 +70,7 @@ I = baseline + (alert level − baseline) × min(1, ratio / 2)  otherwise
 
 So within a tick the processors' candidates compete on surprise measured against each channel's own history. A module's baseline and alert levels set the range over which its surprise is graded, which makes them per-source weights in effect. The affect, sleep and language modules publish at fixed levels. Every predictive processor's report payload carries a boolean `alert`.
 
-Arousal is the global gain. Because `T` is common to every candidate and `C_g` is strictly increasing, arousal never changes the order of the candidates within a tick. It moves the scores relative to the access threshold and the report bars, so it decides whether a broadcast is accessed and which of its members are, and it widens the gap between strong and weak candidates' scores. Arousal also sizes the sensory apertures (the vision module's fovea and the audition module's attended window), which changes what the processors report next.
+Arousal is the global gain. Because `T` is common to every candidate and `C_g` is strictly increasing, and assuming no regulation bias is active, arousal never changes the order of the candidates within a tick. It moves the scores relative to the access threshold and the report bars, so it decides whether a broadcast is accessed and which of its members are, and it widens the gap between strong and weak candidates' scores. Arousal also sizes the sensory apertures (the vision module's fovea and the audition module's attended window), which changes what the processors report next.
 
 With the shipped values, resting arousal (0.3) gives `T = 0.44` and `g = 0`, so a candidate reaches the threshold of 0.35 only when its priority is at least about 0.80. A priority below about 0.43 never reaches the threshold at any arousal. The intensity levels, the threshold and the report bars are provisional and are to be calibrated together on the live system before the planned runs; that calibration has not been done yet.
 

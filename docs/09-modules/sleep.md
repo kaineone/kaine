@@ -34,10 +34,11 @@ After the phases the sleep module runs the sleep-time intent audit. A base-form 
 |---|---|---|
 | Fatigue | `interoception.out`, `interoception.fatigue` | `crossed == true` |
 | Maintenance request | `interoception.out`, `interoception.regulation` | `action == "request_maintenance"` |
+| Emotion-regulation request | `affect.out`, `affect.regulation` | `action == "request_maintenance"` (tier 3 of the affect module's emotion regulation) |
 | Interval backstop | `RestScheduler.is_due()` | `interval_seconds` of entity time since the last completed sleep, or since boot (one entity hour by default) |
 | Requested rest | `action_selection.out`, `intent.rest` | At least `requested_rest_min_interval_s` of entity time since the last sleep ended, and no sleep running |
 
-The fatigue and maintenance triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
+The fatigue, maintenance and emotion-regulation triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
 
 Rest requests come from the planning module through the action selection module's `PlanningProposalSource` (`origin = "planning"`), so they arise only when the planning module is enabled. The sleep module answers each with a `sleep.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
 

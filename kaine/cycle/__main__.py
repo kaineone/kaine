@@ -47,6 +47,7 @@ from kaine.boot import (
 )
 from kaine.boot.feedback import make_workspace_feedback
 from kaine.boot.perception_feed import bind_stimulus_source_unawake_source
+from kaine.boot.wiring import _wire_affect_development, make_regulation_bias
 from kaine.bus.client import CYCLE_CLIENT_NAME, AsyncBus
 from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
@@ -1874,6 +1875,32 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         or ctx.access_rate is not None
     )
     ctx.affect_observer = ctx.affect_provider.observe if reads_affect else None
+    # Emotion regulation's tier 1 (paper §3.5): the workspace reads the affect
+    # module's tier-1 events from each tick's candidates and lowers one source's
+    # scores by a decaying factor. [workspace].regulation_bias = false (every
+    # workspace-mediation study arm) leaves selection unbiased.
+    entity_clock = getattr(ctx.registry, "entity_clock", None)
+    regulation_bias = make_regulation_bias(
+        ctx.kaine_config, entity_clock.now if entity_clock is not None else time.monotonic
+    )
+    if regulation_bias is not None:
+        affect_observer = ctx.affect_observer
+
+        def _observe_affect_and_regulation(events: Any) -> None:
+            if affect_observer is not None:
+                affect_observer(events)
+            regulation_bias.observe(events)
+
+        ctx.affect_observer = _observe_affect_and_regulation
+    # Emotion regulation is off during the developmental phase (paper §3.5).
+    _wire_affect_development(
+        ctx.registry,
+        lambda: bool(
+            ctx.staging_enabled
+            and ctx.gate_runner is not None
+            and ctx.gate_runner.stage.is_developing
+        ),
+    )
     ctx.workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),
@@ -1884,6 +1911,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
         top_k=int(syn_cfg.get("top_k", 5)),
         publication_threshold=float(syn_cfg.get("publication_threshold", 0.35)),
         coherence=ctx.coherence_scorer,
+        regulation_bias=regulation_bias,
         feedback=make_workspace_feedback(
             ctx.kaine_config,
             seed=_workspace_arm_kwargs(syn_cfg, ctx.run_ctx)["arm_seed"],

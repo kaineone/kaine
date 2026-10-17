@@ -24,6 +24,12 @@ def make_affect(
     from kaine.modules.affect.coupling import CouplingConfig
     from kaine.modules.affect.drives import DriveSet
     from kaine.modules.affect.module import Affect
+    from kaine.modules.affect.regulation import (
+        PassiveDecay,
+        RegulationConfig,
+        RegulationPolicy,
+        ThreeTierRegulation,
+    )
     from kaine.modules.affect.state import DimensionalState
 
     allowed = {
@@ -51,6 +57,7 @@ def make_affect(
         "goal_likelihood_fall",
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
         "coupling",  # nested [affect.coupling] sub-table
+        "regulation",  # nested [affect.regulation] sub-table
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
     retired = {"social_drive_time_scale_s"}
@@ -113,4 +120,42 @@ def make_affect(
     _warn_retired_keys(coupling_section, coupling_ignored, "[affect.coupling]")
     coupling_kwargs = config_kwargs(coupling_section, coupling_allowed, CouplingConfig)
     kwargs["coupling"] = CouplingConfig(**coupling_kwargs)
+
+    # Build the regulation policy from the optional [affect.regulation] sub-table.
+    regulation_section = section.get("regulation") or {}
+    regulation_allowed = {
+        "policy",
+        "set_point",
+        "selection_bias",
+        "bias_decay_s",
+        "sustain_window_s",
+    }
+    _require_keys(regulation_section, regulation_allowed)
+    policy_name = regulation_section.get("policy", "three_tier")
+    if policy_name == "passive":
+        policy: RegulationPolicy = PassiveDecay()
+    elif policy_name == "three_tier":
+        reg_config_kwargs = config_kwargs(
+            regulation_section,
+            (
+                "set_point",
+                "selection_bias",
+                "bias_decay_s",
+                "sustain_window_s",
+            ),
+            RegulationConfig,
+        )
+        try:
+            config = RegulationConfig(**reg_config_kwargs)
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"Invalid [affect.regulation] configuration: {exc}"
+            ) from exc
+        policy = ThreeTierRegulation(config)
+    else:
+        raise ConfigurationError(
+            '[affect.regulation].policy must be "three_tier" or "passive"'
+        )
+    kwargs["regulation"] = policy
+
     return Affect(bus, entity_clock=entity_clock, **kwargs)
