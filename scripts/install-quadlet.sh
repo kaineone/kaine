@@ -10,8 +10,10 @@
 # - Skips any unit whose basename contains "unattended".
 # - Refuses a ROOT path with unsafe characters (anything outside
 #   /[A-Za-z0-9._/+-]/) or that is not absolute.
-# - Refuses when config/kaine.operator.toml, config/secrets.toml or compose/.env
-#   is missing, naming the bootstrap step that creates each.
+# - Refuses when config/kaine.operator.toml or compose/.env is missing.
+# - Creates compose/caretaker.env when it is missing (empty, mode 0600), never
+#   modifying an existing file, so the cycle can read caretaker tokens from the
+#   environment.
 # - Verifies the rendered units with the podman quadlet generator if found.
 # - Never enables, starts, or restarts any unit.
 # - Removes a unit this script installed under a name that was since renamed
@@ -78,9 +80,6 @@ fi
 missing=()
 if [[ ! -f "$ROOT_RESOLVED/config/kaine.operator.toml" ]]; then
   missing+=("config/kaine.operator.toml: copy config/kaine.toml and edit it, see docs/04-getting-started/README.md")
-fi
-if [[ ! -f "$ROOT_RESOLVED/config/secrets.toml" ]]; then
-  missing+=("config/secrets.toml: run bash scripts/redis-bootstrap.sh to create it")
 fi
 if [[ ! -f "$ROOT_RESOLVED/compose/.env" ]]; then
   missing+=("compose/.env: run bash scripts/redis-bootstrap.sh and bash scripts/qdrant-bootstrap.sh")
@@ -209,6 +208,10 @@ if [[ $DRY_RUN -eq 1 ]]; then
   for name in "${rendered[@]}"; do
     echo "would install $name"
   done
+  caretaker_env="$ROOT_RESOLVED/compose/caretaker.env"
+  if [[ ! -e "$caretaker_env" ]]; then
+    echo "would create compose/caretaker.env"
+  fi
   exit 0
 fi
 
@@ -219,6 +222,13 @@ for name in "${rendered[@]}"; do
   mv -f "$tmp" "$DEST/$name"
   echo "installed $name"
 done
+
+caretaker_env="$ROOT_RESOLVED/compose/caretaker.env"
+if [[ ! -e "$caretaker_env" ]]; then
+  (umask 077 && : > "$caretaker_env")
+  chmod 600 "$caretaker_env"
+  echo "created compose/caretaker.env (empty, mode 600) for caretaker tokens"
+fi
 
 cat <<'EOF'
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from kaine import legacy_aliases
+from kaine import legacy_aliases, secrets_file
 from kaine.config import deep_merge
 
 log = logging.getLogger(__name__)
@@ -308,13 +308,13 @@ def load_dashboard_config(
         config = replace(config, operator_token=env_token)
     else:
         secrets_target = Path(secrets_path or base_dir / "secrets.toml")
-        if secrets_target.exists():
-            try:
-                secrets_raw = tomllib.loads(secrets_target.read_text(encoding="utf-8"))
-            except Exception as e:
-                raise DashboardConfigError(
-                    f"malformed Dashboard secrets file: {secrets_target}"
-                ) from e
+        try:
+            secrets_raw = secrets_file.load_secrets_doc(secrets_target)
+        except Exception as e:
+            raise DashboardConfigError(
+                f"malformed Dashboard secrets file: {secrets_target}"
+            ) from e
+        if secrets_raw:
             # Name the file by role, never by path: the path is derived from the secrets location.
             secrets_raw = _normalize_secrets_layer(secrets_raw)
             secrets_token = (secrets_raw.get("dashboard") or {}).get("operator_token")

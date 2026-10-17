@@ -756,6 +756,10 @@ class Vision(BaseModule):
             # quantity the alert criterion uses). Exposed so the affect layer can
             # scale arousal by perceptual surprise (perception→arousal coupling).
             "normalised_error": normalised_error,
+            # The change score over the running mean of change scores, the ratio the
+            # change alert uses, published so the affect layer can raise arousal on
+            # change alerts (paper A.2, A.5).
+            "normalised_change": normalised_change,
             # Cross-module broadcast information gain and context age (Appendix A.8).
             # Paired evaluations behind the information-gain measure.
             "context_gain": context_gain,

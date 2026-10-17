@@ -225,9 +225,10 @@ class Affect(BaseModule):
         self._audition_emotion_stream = "audition.out"
         self._social_cognition_agent_model_stream = "social_cognition.out"
         # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
-        # audition acoustic onsets) arouses the entity, scaled by the normalised
-        # prediction error, mirroring the interoception module's alert→arousal path.
-        # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
+        # audition acoustic onsets) arouses the entity, scaled by the larger of the
+        # normalised prediction error ratio and the normalised change ratio,
+        # mirroring the interoception module's alert→arousal path.
+        # These streams are read UNCONDITIONALLY (arousal is pre-attentive; a
         # startle does not require the emotion-coupling path to be enabled).
         self._vision_stream = "vision.out"
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
@@ -1016,6 +1017,15 @@ class Affect(BaseModule):
                     return v
                 return None
 
+            def _to_ratio(value: object) -> float:
+                try:
+                    v = float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+                if math.isfinite(v):
+                    return v
+                return 0.0
+
             e = _to_error(payload.get("prediction_error"))
             if e is not None:
                 source: str = getattr(event, "source", None) or event.type
@@ -1048,8 +1058,9 @@ class Affect(BaseModule):
             if alert:
                 self._alert_fast += 1.0 / self._fast_time_constant_s
                 self._alert_slow += 1.0 / self._slow_time_constant_s
-                norm = float(payload.get("normalised_error", 0.0) or 0.0)
-                surprise = min(self._perception_arousal_cap, max(0.0, norm - 1.0))
+                err_ratio = _to_ratio(payload.get("normalised_error"))
+                chg_ratio = _to_ratio(payload.get("normalised_change"))
+                surprise = min(self._perception_arousal_cap, max(0.0, max(err_ratio, chg_ratio) - 1.0))
                 if surprise > 0.0:
                     self._state = self._state.nudged(
                         arousal=self._perception_arousal_gain * surprise,
@@ -1171,7 +1182,7 @@ class Affect(BaseModule):
             dominance=self._baseline.dominance,
         )
         self._drives.reset_all()
-        self._goals.clear_active()
+        removed = self._goals.clear_active()
         self._goal_above_since.clear()
         self._response_windows.clear()
         self._held_obstruction.clear()
@@ -1192,6 +1203,20 @@ class Affect(BaseModule):
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
         self._perceived_emotion = None
+
+        # A goal cleared by sleep counts as neither completed nor abandoned (paper A.4),
+        # so the ledger's outcome counts are unchanged.
+        payloads = [
+            {
+                "action": "cleared",
+                "id": goal.id,
+                "description": goal.description,
+                "drive": goal.drive,
+                "reason": "sleep_reset",
+            }
+            for goal in removed
+        ]
+        await self._publish_goal_events(payloads)
 
         await self.publish(
             "affect.state",
@@ -1253,6 +1278,9 @@ class Affect(BaseModule):
             "baseline": self._baseline.to_dict(),
             "drives": self._drives.to_dict(),
             "drive_outcomes": self._drives.outcomes_to_dict(),
+            # Persist the crossing latch so a revive does not re-fire a drive
+            # that already fired.
+            "drive_fired": self._drives.fired_to_dict(),
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
@@ -1282,6 +1310,10 @@ class Affect(BaseModule):
                 drive = getattr(self._drives, name, None)
                 if drive is not None:
                     drive.value = max(0.0, min(1.0, float(value)))
+        # Restore the crossing latch after values because the fallback for
+        # older state reads the restored drive values.
+        if "drives" in state or "drive_fired" in state:
+            self._drives.load_fired(state.get("drive_fired"))
         if "drive_outcomes" in state:
             self._drives.load_outcomes(state["drive_outcomes"])
         if "last_emotion" in state:

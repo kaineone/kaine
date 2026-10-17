@@ -75,7 +75,7 @@ baseline_salience + (alert_salience − baseline_salience) × min(1, ratio / 2)
 
 `audition.transcription` is graded by the tone model's error ratio. A failed classification or transcription is published at `alert_salience` with an `error` field and no `alert` flag. `audition.prosody` is always at `baseline_salience`.
 
-The access rate's phasic input counts only events whose payload has `alert` set to true, so a failed classification does not raise the access rate. The affect module reads acoustic alerts directly from `audition.out` and raises arousal in proportion to how far `normalised_error` exceeds 1.
+The access rate's phasic input counts only events whose payload has `alert` set to true, so a failed classification does not raise the access rate. The affect module reads acoustic alerts directly from `audition.out` and raises arousal in proportion to how far the larger of `normalised_error` and `normalised_change` exceeds 1.
 
 ## Inputs
 
@@ -95,13 +95,13 @@ All events are published to the `audition.out` stream.
 
 | Event type | Payload fields | Intensity |
 |---|---|---|
-| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
+| `audition.perception` (general audition only) | `source_label`, `change_score`, `prediction_error`, `normalised_error`, `normalised_change`, `context_gain`, `null_prediction_error`, `mean_prediction_error`, `context_age_s`, `prediction_broadcast_tick`, `prediction_context_age_s`, `entity_time_s`, `awake`, `alert`, `energy_dbfs`, `encoder_model_id`, `attended_window`, `attended_seconds`; `item` and `item_order` with a playlist feed | `alert_salience` on an alert, otherwise graded by the acoustic error ratio |
 | `audition.emotion` | `category`, `alert`, `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `prediction_error`, `tone_error_ratio`, `tone_rule`, `entity_time_s`, `classified`; `degraded` when the classifier did not run | With `tone_rule = "categorical"`, `alert_salience` for a non-neutral tone, otherwise graded by the tone error ratio; with `"error_ratio"`, always graded by the ratio |
 | `audition.emotion` (failure) | `category` (`neutral`), `confidence`, `scores`, `model`, `source_label`, `latency_ms`, `error`, `tone_rule`, `entity_time_s`, `classified` (false); `tone_error_ratio` under `"error_ratio"` | `alert_salience`; graded by the ratio under `"error_ratio"` |
 | `audition.transcription` (only with `transcription_enabled = true`) | `text`, `backend`, `source_label`, `model`, `sample_rate`, `audio_bytes_length`, `latency_ms`, `prediction_error`; `error` on failure | Graded by the tone error ratio; `alert_salience` on failure |
 | `audition.prosody` | `source_label`, `f0_mean_hz`, `f0_std_hz`, `f0_voiced_frac`, `rms_mean`, `rms_std`, `tempo_bpm` | `baseline_salience` |
 
-`normalised_error` is the acoustic error ratio. `context_age_s` is the age of the held context in seconds, or `null` before the first accessed broadcast. `energy_dbfs` is the attended span's RMS level in dB full scale (floored at -120), computed independently of the encoder. `attended_window` is the fraction of the window that was encoded and `attended_seconds` the time it covered. With workspace feedback on, `audition.perception` also carries a `workspace_feedback` dict with `disagreement`, `error_ratio`, `gain`, `top_down_weight`, `own_error`, and `top_down_error`.
+`normalised_error` is the acoustic error ratio. `normalised_change` is the acoustic change ratio the change alert uses: the change score over the running mean of recent acoustic change scores, the current one included, or 0 when that mean is 0. `context_age_s` is the age of the held context in seconds, or `null` before the first accessed broadcast. `energy_dbfs` is the attended span's RMS level in dB full scale (floored at -120), computed independently of the encoder. `attended_window` is the fraction of the window that was encoded and `attended_seconds` the time it covered. With workspace feedback on, `audition.perception` also carries a `workspace_feedback` dict with `disagreement`, `error_ratio`, `gain`, `top_down_weight`, `own_error`, and `top_down_error`.
 
 `source_label` is `"microphone"` for direct `process_audio()` calls and `"live_mic"` for utterances from the physical microphone; for a deterministic feed it is the feed mode's name. Emotion `category` is one of `neutral`, `happy`, `sad`, `angry`, `surprised`, `fearful`, `disgusted`, and `scores` carries the full seven-class distribution.
 

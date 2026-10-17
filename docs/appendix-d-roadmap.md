@@ -7,6 +7,10 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | resume-checkpoint | 9/9 (100%) | A plain restart resumes every module's state from one rolling, encrypted checkpoint written each awake entity minute and at shutdown; a revive always wins over it (paper A.7). |
+| container-secrets-readable | 8/8 (100%) | Let the containers run without reading config/secrets.toml, with every secret from the environment. |
+| affect-testboot-fixes | 4/4 (100%) | Fix three affect defects from the 2026-10-16 test boot: the sleep reset reports the goals it clears, the drive crossing latch survives a revive, and fear follows the Sander, Grandjean and Scherer (2005) Table 3 profile instead of firing on near-neutral input. |
+| arousal-change-excess | 5/5 (100%) | Perceptual alerts raise arousal by the larger excess of the error and change ratios over 1, and vision and audition reports carry the change ratio (paper A.5). |
+| research-log-affect-fields | 7/7 (100%) | Log the affect goal, emotion and regulation fields, the regulation bias and feedback gains on each broadcast, and the link pruning counts in the curated research log. |
 | restart-keeps-development | 9/9 (100%) | Store the self-rhythm identity in the state tree so a plain restart keeps the developmental progress. |
 | sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
@@ -21,7 +25,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | sequence-finite-payload | 3/3 (100%) | Publish `time_since_last_interaction_s` as `null` until the first interaction, so `sequence.report` and the research records stay strict JSON instead of carrying `Infinity`. |
-| workspace-feedback | 11/14 (79%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
+| workspace-feedback | 12/14 (86%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
 | appraisal-relevance | 3/3 (100%) | Score goal significance as relevance in [0, 1], as the paper's A.4 now does, so content that serves no drive or goal is irrelevant and an idle entity no longer classifies as anger. |
 | test-honesty-fixes | 4/4 (100%) | Make three tests run what they claim: the merger output-dir test stops skipping, the real InternVideo-Next test uses the weights it checked, and the reversible-unload tests use a deadlock bound so the suite also passes serially; correct the social cognition hook docstring. |
 | affect-regulation | 10/10 (100%) | Replace the passive regulation no-op with the paper's three-tier emotion regulation (attentional deployment, reappraisal, a sleep request) on A.5's episode rule, off during the developmental phase, with the tier-1 selection bias held neutral in every workspace-mediation study arm. |
@@ -116,6 +120,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 90 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 94 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

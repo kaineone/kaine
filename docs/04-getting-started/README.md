@@ -53,12 +53,12 @@ Both wizards ask the same questions, in this order (the terminal wizard runs eve
 12. Optional extras: offers to `pip install -e ".[…]"` the extras implied by your module choices.
 13. Consented organ download and serve: downloads and serves the selected organ model only if you consent.
 14. External dependencies: detects which services the enabled modules need and whether each is already running. For Redis and Qdrant it shows the exact bootstrap command and runs it only if you consent. For the heavy GPU services (model server, Speaches, Chatterbox) it prints the setup steps and a docs link and installs nothing.
-15. Dashboard token: generates a token into `config/secrets.toml` if none exists.
+15. Dashboard token: generates a token into `config/secrets.toml` if none exists, and adds it to `compose/.env` as `KAINE_DASHBOARD_TOKEN` for the dashboard container.
 16. Summary: the environment gates, service bring-up commands, and how to launch.
 
 In the browser, steps 1 to 10 are the wizard pages and the review page. The browser wizard does not write the container settings (step 11); run the terminal wizard for those. After you save, the browser wizard offers the remaining setup work (optional extras, the organ download, shared services and the dashboard) as consented jobs, and its finish page takes the place of the summary.
 
-Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_DASHBOARD_TOKEN` environment variable is unset. The token is only needed when `[dashboard].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
+Saving the operator file creates the dashboard sign-in token in `config/secrets.toml` only if no token exists and the `KAINE_DASHBOARD_TOKEN` environment variable is unset. It also writes the token to `compose/.env` as `KAINE_DASHBOARD_TOKEN`, unless that file already sets a dashboard token, because the dashboard container reads it only from there. The token is only needed when `[dashboard].access` is set to `"token"`. The browser wizard then moves to the **jobs** page. Run each consented job there; its output streams live in the page. When the jobs are done, go to the **finish** page.
 
 The finish page shows a service status light for each known local service and for the dashboard, a **Start Dashboard** button when the dashboard is not running, a **Show sign-in token** button, and a **Close setup** button. The sign-in token is read from `config/secrets.toml` or from the `KAINE_DASHBOARD_TOKEN` environment variable and is shown only when you press the button. The token is never stored in the browser URL or in the session.
 

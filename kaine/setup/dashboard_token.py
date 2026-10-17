@@ -17,6 +17,9 @@ DEFAULT_SECRETS_PATH = Path("config/secrets.toml")
 # The dashboard rejects shorter operator tokens (kaine.dashboard.config.load_dashboard_config).
 _MIN_DASHBOARD_TOKEN_LEN = 32
 
+# The key that the dashboard container reads from compose/.env.
+COMPOSE_ENV_KEY = "KAINE_DASHBOARD_TOKEN"
+
 
 def _table_names(secrets_path: Path) -> set[str]:
     """Return the set of top-level table names in *secrets_path*.
@@ -24,11 +27,72 @@ def _table_names(secrets_path: Path) -> set[str]:
     A missing or unreadable file is treated as empty.
     """
     try:
-        with open(secrets_path, "rb") as fh:
-            data = tomllib.load(fh)
+        data = secrets_file.load_secrets_doc(secrets_path, tolerate_unreadable=False)
     except (FileNotFoundError, OSError):
         return set()
     return set(data.keys())
+
+
+def _mirror_to_compose_env(
+    env_path: Path | None,
+    token: str,
+    out: Callable[[str], Any],
+) -> None:
+    """Mirror *token* to *env_path* unless it already sets a dashboard token.
+
+    The token value is never printed.
+    """
+    if env_path is None:
+        return
+
+    try:
+        content = env_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        content = ""
+    except OSError as exc:
+        out(
+            f"Could not save the Dashboard sign-in token to {env_path} "
+            f"({type(exc).__name__}); add {COMPOSE_ENV_KEY} there by hand "
+            "for the dashboard container.\n"
+        )
+        return
+
+    # Active KEY=value lines with a non-empty value. The token key is looked up
+    # through the legacy alias reader, so its deprecated name also counts.
+    entries: dict[str, str] = {}
+    for raw in content.splitlines():
+        line = raw.lstrip()
+        if line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if value.strip():
+            entries.setdefault(key.strip(), value.strip())
+    try:
+        existing = legacy_aliases.getenv(COMPOSE_ENV_KEY, environ=entries)
+    except legacy_aliases.LegacyNameConflict:
+        existing = "conflict"
+
+    if existing:
+        out(
+            f"Dashboard sign-in token: {env_path} already sets a dashboard token; "
+            "left unchanged.\n"
+        )
+        return
+
+    try:
+        secrets_file.upsert_env(env_path, COMPOSE_ENV_KEY, token)
+    except (OSError, ValueError) as exc:
+        out(
+            f"Could not save the Dashboard sign-in token to {env_path} "
+            f"({type(exc).__name__}); add {COMPOSE_ENV_KEY} there by hand "
+            "for the dashboard container.\n"
+        )
+        return
+
+    out(
+        f"Dashboard sign-in token: also saved to {env_path} as {COMPOSE_ENV_KEY} "
+        "(mode 600), which the dashboard container reads.\n"
+    )
 
 
 def ensure_dashboard_token(
@@ -36,15 +100,26 @@ def ensure_dashboard_token(
     *,
     out: Callable[[str], Any],
     env: dict[str, str] | None = None,
+    env_path: Path | None = None,
 ) -> str:
     """Ensure a dashboard operator sign-in token exists.
 
     Without a token, the dashboard rejects every sign-in with 503. The environment
     variable ``KAINE_DASHBOARD_TOKEN`` takes precedence; otherwise the token is read
     from or written to ``[dashboard] operator_token`` in the secrets file.
+
+    When the secrets file lives in a ``config`` directory, the token is also mirrored
+    to ``../compose/.env`` as ``KAINE_DASHBOARD_TOKEN`` so the dashboard container can
+    read it. An existing non-empty value for ``KAINE_DASHBOARD_TOKEN``, or for its
+    deprecated name, in that file is left unchanged.
     """
     env = os.environ if env is None else env
     out("\n")
+
+    if env_path is None:
+        secrets_parent = Path(secrets_path).parent
+        if secrets_parent.name == "config":
+            env_path = secrets_parent.parent / "compose" / ".env"
 
     try:
         env_token = (legacy_aliases.getenv("KAINE_DASHBOARD_TOKEN", "", environ=env) or "").strip()
@@ -122,6 +197,7 @@ def ensure_dashboard_token(
             out(
                 "The old table name still works; you may rename it to [dashboard].\n"
             )
+        _mirror_to_compose_env(env_path, token_str, out)
         return "kept"
 
     # If an old-named table exists without a usable token, do not write a new
@@ -152,4 +228,5 @@ def ensure_dashboard_token(
         "[dashboard] operator_token (mode 600). It is not shown here; open that file "
         "when the dashboard asks for it.\n"
     )
+    _mirror_to_compose_env(env_path, token, out)
     return "generated"
