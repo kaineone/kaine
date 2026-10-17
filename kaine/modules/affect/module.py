@@ -92,6 +92,7 @@ class Affect(BaseModule):
         goal_response_window_s: float = 10.0,
         goal_likelihood_fall: float = 0.5,
         drive_arousal_gain: float = 0.2,
+        boredom_engagement_relief: float = 0.5,
         clock: Optional[Callable[[], float]] = None,
         # Shared subjective clock (injected at boot). Affect drift and the
         # publish interval are cognitive time constants, so they run in subjective
@@ -140,6 +141,8 @@ class Affect(BaseModule):
             raise ValueError("goal_likelihood_fall must be finite and in [0, 1]")
         if not math.isfinite(drive_arousal_gain) or not (0.0 <= drive_arousal_gain <= 1.0):
             raise ValueError("drive_arousal_gain must be finite and in [0, 1]")
+        if not math.isfinite(boredom_engagement_relief) or not (0.0 <= boredom_engagement_relief <= 1.0):
+            raise ValueError("boredom_engagement_relief must be finite and in [0, 1]")
 
         self._baseline = (baseline or DimensionalState()).clamped()
         self._state = DimensionalState(
@@ -174,6 +177,7 @@ class Affect(BaseModule):
         self._goal_response_window_s = float(goal_response_window_s)
         self._goal_likelihood_fall = float(goal_likelihood_fall)
         self._drive_arousal_gain = float(drive_arousal_gain)
+        self._boredom_engagement_relief = float(boredom_engagement_relief)
 
         # Perceptual learning-progress state.
         # Time-decayed mean trackers per source: sum and count for each tau.
@@ -628,6 +632,7 @@ class Affect(BaseModule):
         # is independent of the report rate, so drives can still build under noise.
         # own marks relief produced by the entity's own response, which coping
         # counts as success (paper A.4).
+        # Boredom is also relieved, as own, by engaging intents (_handle_peer_event).
         self._drives.relieve_rate("curiosity", lp, dt, own=True)
         self._drives.relieve_rate("boredom", nb, dt, own=False)
 
@@ -1192,6 +1197,18 @@ class Affect(BaseModule):
             self._open_response_windows(self._clock())
             self._intents_since_broadcast += 1
             self._drives.relieve("restlessness", 1.0, own=True)
+
+            # Engagement meets boredom (paper A.4): an intent not about a drive relieves
+            # it by rho_eng as the entity's own response. An intent about a drive's felt
+            # state is not engagement, since noticing one's failure to engage is part of
+            # boredom (Eastwood et al. 2012). Skipped entirely when rho_eng is 0.
+            if self._boredom_engagement_relief > 0.0:
+                payload = event.payload if isinstance(event.payload, dict) else {}
+                if payload.get("about_kind") != "felt":
+                    self._drives.relieve_fraction(
+                        "boredom", self._boredom_engagement_relief, own=True
+                    )
+
             payloads = self._settle_goal_ends()
             self._check_response_windows(self._clock())
             await self._publish_goal_events(payloads)
