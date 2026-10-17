@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| affect-testboot-fixes | 0/4 (0%) | Fix three affect defects from the 2026-10-16 test boot: the sleep reset reports the goals it clears, the drive crossing latch survives a revive, and fear follows the Sander, Grandjean and Scherer (2005) Table 3 profile instead of firing on near-neutral input. |
 | sleep-associative-links | 6/6 (100%) | Associative replay links related traces of different periods with weighted links that downscaling scales, forms schema nodes, returns linked partners in recall, and counts links and nodes in the pruned store (paper A.10). |
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
@@ -113,6 +114,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 87 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 88 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
