@@ -55,6 +55,7 @@ def make_affect(
         "goal_cap",
         "goal_response_window_s",
         "goal_likelihood_fall",
+        "drive_arousal_gain",
         "drives",  # nested per-drive sub-tables, consumed by DriveSet default
         "coupling",  # nested [affect.coupling] sub-table
         "regulation",  # nested [affect.regulation] sub-table
@@ -92,6 +93,7 @@ def make_affect(
                 "goal_cap",
                 "goal_response_window_s",
                 "goal_likelihood_fall",
+                "drive_arousal_gain",
             ),
             Affect,
         )

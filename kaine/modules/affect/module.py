@@ -91,6 +91,7 @@ class Affect(BaseModule):
         goal_cap: int = 3,
         goal_response_window_s: float = 10.0,
         goal_likelihood_fall: float = 0.5,
+        drive_arousal_gain: float = 0.2,
         clock: Optional[Callable[[], float]] = None,
         # Shared subjective clock (injected at boot). Affect drift and the
         # publish interval are cognitive time constants, so they run in subjective
@@ -137,6 +138,8 @@ class Affect(BaseModule):
             raise ValueError("goal_response_window_s must be finite and > 0")
         if not math.isfinite(goal_likelihood_fall) or not (0.0 <= goal_likelihood_fall <= 1.0):
             raise ValueError("goal_likelihood_fall must be finite and in [0, 1]")
+        if not math.isfinite(drive_arousal_gain) or not (0.0 <= drive_arousal_gain <= 1.0):
+            raise ValueError("drive_arousal_gain must be finite and in [0, 1]")
 
         self._baseline = (baseline or DimensionalState()).clamped()
         self._state = DimensionalState(
@@ -170,6 +173,7 @@ class Affect(BaseModule):
         self._goal_cap = int(goal_cap)
         self._goal_response_window_s = float(goal_response_window_s)
         self._goal_likelihood_fall = float(goal_likelihood_fall)
+        self._drive_arousal_gain = float(drive_arousal_gain)
 
         # Perceptual learning-progress state.
         # Time-decayed mean trackers per source: sum and count for each tau.
@@ -353,6 +357,17 @@ class Affect(BaseModule):
             _clip(self._alert_rate_ratio() - 1.0, 0.0, 1.0),
             math.exp(-self._alert_slow * self._slow_time_constant_s),
         )
+
+    def _arousal_target(self) -> float:
+        """Return the relaxation target a_inf = a_0 + gamma_D (1 - a_0) v* (paper A.4 item 3).
+
+        v* is the dominant (largest) drive value at the start of the update. Tonic locus
+        coeruleus activity rises when the utility of the current engagement wanes
+        (Aston-Jones and Cohen 2005), and drive energizes behavior (Hull 1943).
+        """
+        v_star = max((d.value for d in self._drives.all()), default=0.0)
+        a_0 = self._baseline.arousal
+        return a_0 + self._drive_arousal_gain * (1.0 - a_0) * v_star
 
     def set_drive_relevance(
         self,
@@ -586,10 +601,13 @@ class Affect(BaseModule):
         self._alert_slow *= math.exp(-dt / slow_tau)
         nb = self._alert_excess()
 
-        # Arousal and dominance drift toward baseline; valence relaxes below.
-        drifted = self._state.drift_toward(
-            self._baseline, self._drift_rate, dt
+        # Arousal drifts toward the drive-raised target; dominance drifts toward baseline; valence relaxes below.
+        target = DimensionalState(
+            valence=self._baseline.valence,
+            arousal=self._arousal_target(),
+            dominance=self._baseline.dominance,
         )
+        drifted = self._state.drift_toward(target, self._drift_rate, dt)
         v = self._state.valence  # pre-drift valence
         if dt > 0.0:
             # Valence relaxes toward the appraisal's pleasantness shifted by

@@ -99,10 +99,12 @@ async def test_base_rate_habituation(bus):
             await affect._handle_peer_event("vision.out", _alert())
         await affect._tick()
         if second >= 450:
-            late_arousals.append(affect.state.arousal)
+            # Base-rate alerts add nothing on top of the relaxation target, which
+            # the drives raise (tonic-drive-arousal, paper A.4 item 3).
+            late_arousals.append(affect.state.arousal - affect._arousal_target())
 
     assert all(h < 1e-6 for h in late_hs)
-    assert all(abs(a - affect.baseline.arousal) < 0.01 for a in late_arousals)
+    assert all(abs(a) < 0.01 for a in late_arousals)
 
 
 async def test_burst_arousal(bus):
