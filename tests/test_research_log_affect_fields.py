@@ -148,6 +148,13 @@ async def test_goal_end_real_producer(bus):
     assert record["source"] == "affect"
 
 
+# Payload keys reviewed and deliberately kept out of the research log, per event
+# type. A key here must be absent from the record.
+_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
+    "affect.goal": frozenset({"description"}),
+}
+
+
 @pytest.mark.asyncio
 async def test_drift_guard_allowlist(bus):
     # Goal-producing setup on the function-scoped bus fixture.
@@ -213,9 +220,9 @@ async def test_drift_guard_allowlist(bus):
             failures.append(f"{ev.type} produced no record")
             continue
         for key, value in ev.payload.items():
-            if ev.type == "affect.goal" and key == "description":
-                if "description" in record:
-                    failures.append("affect.goal record leaked description")
+            if key in _EXCLUDED_KEYS.get(ev.type, frozenset()):
+                if key in record:
+                    failures.append(f"{ev.type} record leaked excluded key {key}")
             elif ev.type == "affect.regulation" and key == "source":
                 if record.get("target_source") != value:
                     failures.append(
@@ -227,7 +234,11 @@ async def test_drift_guard_allowlist(bus):
                     )
             else:
                 if key not in record:
-                    failures.append(f"{ev.type} missing allowlisted key {key}")
+                    failures.append(
+                        f"{ev.type}: payload key {key!r} is not in the research record. "
+                        f"Review it: allowlist it in _TAXONOMY only if it is a content-free number, "
+                        f"flag, fixed code or opaque id; otherwise add it to _EXCLUDED_KEYS."
+                    )
 
     assert not failures, "\n".join(failures)
 

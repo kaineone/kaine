@@ -9,4 +9,4 @@
 ## 2. Verification
 
 - [x] 2.1 Mutation checks on the allowlists and the source rename
-- [ ] 2.2 Worker first-pass review and fixes
+- [x] 2.2 Worker first-pass review and fixes
