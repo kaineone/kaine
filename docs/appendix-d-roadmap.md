@@ -93,6 +93,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | paper-retitle | 2/2 (100%) | Cite the research paper by its new title, *KAINE: A Modular Cognitive Architecture with a Predictive Global Workspace*. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
 | remove-hiatus-notices | 4/4 (100%) | The README, roadmap, records and change notes no longer describe the project as paused or on hiatus. |
+| preservation-trigger-reason | 0/5 (0%) | Name the divergence arm that fired in the reason of a divergence-triggered preservation, in place of a fixed "individuation". |
 
 ## Open operator and device steps
 
