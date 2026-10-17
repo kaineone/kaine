@@ -240,7 +240,8 @@ async def test_divergence_rising_edge_preserves_once(bus, tmp_path, monkeypatch)
         await mon._poll_once(stop)
     # Two rising edges → two preservations (the stay-high poll did NOT re-fire).
     assert len(fm.calls) == 2
-    assert all(c["reason"] == "individuation" for c in fm.calls)
+    # _diverged() names no arm, so the reason is the fallback arm.
+    assert all(c["reason"] == "diverged" for c in fm.calls)
     # Read-only: the live entity identity is untouched.
     assert reg.get("self_model").model.name == "Aria"
     await eid.shutdown()

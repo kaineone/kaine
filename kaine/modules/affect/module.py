@@ -225,9 +225,10 @@ class Affect(BaseModule):
         self._audition_emotion_stream = "audition.out"
         self._social_cognition_agent_model_stream = "social_cognition.out"
         # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
-        # audition acoustic onsets) arouses the entity, scaled by the normalised
-        # prediction error, mirroring the interoception module's alert→arousal path.
-        # These streams are read UNCONDITIONALLY (arousal is pre-attentive — a
+        # audition acoustic onsets) arouses the entity, scaled by the larger of the
+        # normalised prediction error ratio and the normalised change ratio,
+        # mirroring the interoception module's alert→arousal path.
+        # These streams are read UNCONDITIONALLY (arousal is pre-attentive; a
         # startle does not require the emotion-coupling path to be enabled).
         self._vision_stream = "vision.out"
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
@@ -1016,6 +1017,15 @@ class Affect(BaseModule):
                     return v
                 return None
 
+            def _to_ratio(value: object) -> float:
+                try:
+                    v = float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+                if math.isfinite(v):
+                    return v
+                return 0.0
+
             e = _to_error(payload.get("prediction_error"))
             if e is not None:
                 source: str = getattr(event, "source", None) or event.type
@@ -1048,8 +1058,9 @@ class Affect(BaseModule):
             if alert:
                 self._alert_fast += 1.0 / self._fast_time_constant_s
                 self._alert_slow += 1.0 / self._slow_time_constant_s
-                norm = float(payload.get("normalised_error", 0.0) or 0.0)
-                surprise = min(self._perception_arousal_cap, max(0.0, norm - 1.0))
+                err_ratio = _to_ratio(payload.get("normalised_error"))
+                chg_ratio = _to_ratio(payload.get("normalised_change"))
+                surprise = min(self._perception_arousal_cap, max(0.0, max(err_ratio, chg_ratio) - 1.0))
                 if surprise > 0.0:
                     self._state = self._state.nudged(
                         arousal=self._perception_arousal_gain * surprise,
