@@ -293,5 +293,36 @@ class DriveSet:
                 if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
                     setattr(drive, target, value)
 
+    def fired_to_dict(self) -> dict[str, bool]:
+        """Return the crossing latch state for each drive.
+
+        ``_has_fired`` is the hysteresis latch set by ``consume_crossing()``
+        and cleared by ``_check_hysteresis()``; persisting it prevents a
+        revived drive from re-firing on its first tick.
+        """
+        return {d.name: d._has_fired for d in self.all()}
+
+    def load_fired(self, data: Any) -> None:
+        """Restore the crossing latches.
+
+        For each drive, a saved bool is used unchanged. For anything else,
+        including older state saved before the latch was persisted, the latch
+        is inferred from the restored value: a drive at or above its threshold
+        must already have fired, because ``consume_crossing()`` fires on every
+        tick at which the value is at or above the threshold with the latch
+        clear; below the threshold the latch is inferred as clear.
+        """
+        for d in self.all():
+            if isinstance(data, dict):
+                value = data.get(d.name)
+                if isinstance(value, bool):
+                    d._has_fired = value
+                    continue
+            # Fallback for state saved before the latch was persisted: a drive
+            # at or above its threshold must already have fired, because
+            # consume_crossing() fires on every tick at which the value is at
+            # or above the threshold with the latch clear.
+            d._has_fired = d.value >= d.threshold
+
     def to_dict(self) -> dict[str, float]:
         return {d.name: d.value for d in self.all()}

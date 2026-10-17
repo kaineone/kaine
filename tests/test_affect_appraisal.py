@@ -30,7 +30,7 @@ def test_joy_for_positive_pleasantness_and_goal():
 
 
 def test_fear_for_negative_pleasantness_low_coping():
-    assert classify(_scores(novelty=0.7, pleasantness=-0.6, coping=-0.5)) == CategoricalEmotion.FEAR
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=-0.5, coping=-0.5)) == CategoricalEmotion.FEAR
 
 
 def test_surprise_for_high_novelty_neutral_otherwise():
@@ -84,8 +84,36 @@ def test_mildly_unpleasant_content_is_not_disgust():
     assert classify(_scores(novelty=0.7, pleasantness=-0.4)) != CategoricalEmotion.DISGUST
 
 
-def test_fear_keeps_precedence_over_disgust():
-    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.2, coping=-0.5)) == CategoricalEmotion.FEAR
+def test_unobstructed_unpleasant_novel_content_is_disgust_not_fear():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.2, coping=-0.5)) == CategoricalEmotion.DISGUST
+
+
+def test_fear_at_the_boundary():
+    assert classify(_scores(novelty=0.31, pleasantness=-0.3, goal=-0.3, coping=-0.3)) == CategoricalEmotion.FEAR
+
+
+def test_fear_not_at_near_neutral_pleasantness():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.001, goal=-0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+    assert classify(_scores(novelty=0.7, pleasantness=-0.29, goal=-0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+
+
+def test_fear_requires_obstruction():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=-0.29, coping=-0.5)) != CategoricalEmotion.FEAR
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+
+
+def test_fear_requires_novelty():
+    assert classify(_scores(novelty=0.3, pleasantness=-0.6, goal=-0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+    assert classify(_scores(novelty=0.1, pleasantness=-0.6, goal=-0.5, coping=-0.5)) != CategoricalEmotion.FEAR
+
+
+def test_fear_requires_low_coping():
+    assert classify(_scores(novelty=0.7, pleasantness=-0.6, goal=-0.5, coping=-0.29)) != CategoricalEmotion.FEAR
+
+
+def test_fear_requires_coping_available():
+    profile = _scores(novelty=0.7, pleasantness=-0.6, goal=-0.5, coping=-0.5)
+    assert classify(dataclasses.replace(profile, coping_available=False)) != CategoricalEmotion.FEAR
 
 
 def test_disgust_norm_score_does_not_move_result():

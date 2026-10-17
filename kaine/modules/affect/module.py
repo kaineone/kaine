@@ -1171,7 +1171,7 @@ class Affect(BaseModule):
             dominance=self._baseline.dominance,
         )
         self._drives.reset_all()
-        self._goals.clear_active()
+        removed = self._goals.clear_active()
         self._goal_above_since.clear()
         self._response_windows.clear()
         self._held_obstruction.clear()
@@ -1192,6 +1192,20 @@ class Affect(BaseModule):
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
         self._perceived_emotion = None
+
+        # A goal cleared by sleep counts as neither completed nor abandoned (paper A.4),
+        # so the ledger's outcome counts are unchanged.
+        payloads = [
+            {
+                "action": "cleared",
+                "id": goal.id,
+                "description": goal.description,
+                "drive": goal.drive,
+                "reason": "sleep_reset",
+            }
+            for goal in removed
+        ]
+        await self._publish_goal_events(payloads)
 
         await self.publish(
             "affect.state",
@@ -1253,6 +1267,9 @@ class Affect(BaseModule):
             "baseline": self._baseline.to_dict(),
             "drives": self._drives.to_dict(),
             "drive_outcomes": self._drives.outcomes_to_dict(),
+            # Persist the crossing latch so a revive does not re-fire a drive
+            # that already fired.
+            "drive_fired": self._drives.fired_to_dict(),
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
@@ -1282,6 +1299,10 @@ class Affect(BaseModule):
                 drive = getattr(self._drives, name, None)
                 if drive is not None:
                     drive.value = max(0.0, min(1.0, float(value)))
+        # Restore the crossing latch after values because the fallback for
+        # older state reads the restored drive values.
+        if "drives" in state or "drive_fired" in state:
+            self._drives.load_fired(state.get("drive_fired"))
         if "drive_outcomes" in state:
             self._drives.load_outcomes(state["drive_outcomes"])
         if "last_emotion" in state:
