@@ -359,3 +359,36 @@ def test_factory_accepts_awareness_rendering(tmp_path, bus):
         },
     )
     assert language._assembler.awareness_rendering == "felt"
+
+
+def test_chat_redaction_per_mode():
+    snap = WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[
+            ("c", _ev("embodiment", "embodiment.chat", {"text": "hello 42"})),
+        ],
+        salience_scores={"c": 0.6},
+    )
+
+    for assembler in (ContextAssembler(), ContextAssembler(awareness_rendering="numeric")):
+        ctx = assembler.assemble(
+            about="x",
+            snapshot=snap,
+            self_model={},
+            mode="internal",
+            about_is_heard=False,
+        )
+        assert ctx.working_memory == "- embodiment emitted embodiment.chat carrying text=hello 42."
+        assert ctx.logged_working_memory == "- embodiment emitted embodiment.chat carrying text=[heard speech]."
+        assert ctx.numeric_working_memory is None
+
+    ctx = ContextAssembler(awareness_rendering="felt").assemble(
+        about="x",
+        snapshot=snap,
+        self_model={},
+        mode="internal",
+        about_is_heard=False,
+    )
+    assert ctx.working_memory == '- Someone writes to me: "hello 42".'
+    assert ctx.logged_working_memory == '- Someone writes to me: "[heard speech]".'
+    assert ctx.numeric_working_memory == "- embodiment emitted embodiment.chat carrying text=[heard speech]."
