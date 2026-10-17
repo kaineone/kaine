@@ -126,6 +126,55 @@ arousal_contrast_gain = 8.0
 # off. Every broadcast records its arm in the research log.
 arm = "competitive"
 
+[workspace.feedback]
+# Workspace feedback is a held extension (paper §3.2, §6.4). When enabled, the
+# workspace sends two top-down signals back to the context-conditioned processors:
+# a learned linear head predicts each processor's next input from the broadcast
+# context and the sequence module's next featurization, and blends with the
+# processor's own prediction by inverse squared mean errors; and a per-processor
+# gain on standardized error before intensity, bounded in [pi_min, pi_max] with
+# mean one. Conflict resolution shifts gain toward the accessed processor with the
+# lowest precision-weighted error and away from the conflicting one. It ships off;
+# enabled = false builds nothing and runs the current build. Select an arm with
+# KAINE_STUDY=workspace_feedback_<arm> for off, head_only, head_gain, full, or
+# matched_random. The boot refuses to start this extension when
+# [oscillator].enabled is true, when [workspace].arm is not "competitive", or
+# when [positive_control].enabled is true.
+
+# Switch. False builds nothing and the current build runs.
+enabled = false
+
+# Arm selector: "off", "head_only", "head_gain", "full", "matched_random".
+arm = "full"
+
+# Gain floor and ceiling (paper Table A1).
+pi_min = 0.8
+pi_max = 1.25
+
+# Distance over mean error at which own and top-down predictions disagree
+# (design value; the paper does not fix it).
+disagreement_threshold = 2.0
+
+# Error ratio at which a processor's error counts as high, the ratio at which
+# intensity reaches the alert level (design value).
+conflict_error_ratio = 2.0
+
+# Gain moved per episode, clipped to keep both processors inside bounds
+# (design value).
+gain_step = 0.1
+
+# Relaxation time constant, entity seconds, for gains returning to one
+# (design value, the fast time constant tau_f).
+gain_relax_s = 10.0
+
+# Refractory period, entity seconds, before a processor can start another
+# episode (design value).
+refractory_s = 10.0
+
+# Learning rate for the top-down linear head, the forward models' eta_fm
+# (design value).
+head_learning_rate = 0.001
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and

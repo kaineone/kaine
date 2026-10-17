@@ -134,9 +134,9 @@ async def test_interoception_passes_timespan_to_forward_model(bus: AsyncBus):
             super().__init__(backend="numpy", feature_dim=8, units=8, seed=1)
             self.calls: list[float] = []
 
-        def step(self, feature, timespan: float = 1.0):
+        def step(self, feature, timespan: float = 1.0, **kwargs):
             self.calls.append(timespan)
-            return super().step(feature, timespan=timespan)
+            return super().step(feature, timespan=timespan, **kwargs)
 
     clock = _FakeClock(0.0)
     fm = RecordingForwardModel()

@@ -63,6 +63,7 @@ class Sequence(BaseModule):
         # Forward prediction config
         forward_prediction: bool = False,
         prediction_error_window: int = 32,
+        publish_next_prediction: bool = False,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -111,6 +112,9 @@ class Sequence(BaseModule):
         # Forward-prediction head (lazy — created alongside the network)
         self._forward_prediction: bool = bool(forward_prediction)
         self._prediction_error_window: int = int(prediction_error_window)
+        # Workspace feedback (paper §3.2) reads the predicted next broadcast
+        # featurization from the report; off by default, so the report is unchanged.
+        self._publish_next_prediction = bool(publish_next_prediction)
         self._pred_head: Optional[Any] = None  # ForwardPredictionHead or None
         self._pred_errors: deque[float] = deque(maxlen=self._prediction_error_window)
         self._last_hidden: Optional[list[float]] = None  # hidden state from previous tick
@@ -240,6 +244,7 @@ class Sequence(BaseModule):
         # Forward prediction: compute error from last tick's prediction,
         # then adapt, then store hidden for next tick.
         temporal_prediction_error: float = 0.0
+        next_prediction: list[float] | None = None
         if self._forward_prediction and self._pred_head is not None:
             if self._last_hidden is not None:
                 # Predict what feature_vec should have been, based on previous hidden
@@ -252,6 +257,8 @@ class Sequence(BaseModule):
                 self._pred_head.suspended = self._in_sleep
                 self._pred_head.adapt(self._last_hidden, feature_vec)
             self._last_hidden = list(hidden)
+            if self._publish_next_prediction:
+                next_prediction = [float(v) for v in self._pred_head.predict(hidden)]
 
         normalised: float | None = None
         # Anomaly salience: driven by prediction error when forward_prediction
@@ -280,18 +287,22 @@ class Sequence(BaseModule):
             salience = graded
         else:
             salience = self._baseline_salience
+
+        payload: dict[str, Any] = {
+            "alert": alert,
+            "temporal_context": hidden,
+            "anomaly_score": anomaly_score,
+            "habituation_score": rumination.habituation,
+            "rumination_detected": rumination.detected,
+            "time_since_last_interaction_s": tsli,
+            "feature_vector": feature_vec,
+            "temporal_prediction_error": temporal_prediction_error,
+        }
+        if self._publish_next_prediction and next_prediction is not None:
+            payload["predicted_next_feature_vector"] = next_prediction
         await self.publish(
             "sequence.report",
-            {
-                "alert": alert,
-                "temporal_context": hidden,
-                "anomaly_score": anomaly_score,
-                "habituation_score": rumination.habituation,
-                "rumination_detected": rumination.detected,
-                "time_since_last_interaction_s": tsli,
-                "feature_vector": feature_vec,
-                "temporal_prediction_error": temporal_prediction_error,
-            },
+            payload,
             salience=salience,
         )
 
