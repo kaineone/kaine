@@ -4,9 +4,22 @@
 """Hearing band schedule and FIR filter design.
 
 The developmental stimulus's audio passes a hearing band that widens over the
-entity's awake time, following the order fetal hearing matures: fetuses first
-respond to a 500 Hz tone; the range of tones responded to then widens
-downwards to 250 Hz and 100 Hz, and then upwards to 1000 Hz and 3000 Hz.
+entity's awake time, following the order fetal hearing matures. Band edges are
+placed geometrically midway between the outermost tested tone the fetus can
+hear and the next tested tone outside that range. Once the lowest tested
+tone (100 Hz) is heard there is no unheard tone below it, so the low edge
+disappears; likewise once the highest tested tone (3000 Hz) is heard the high
+edge disappears. ``None`` in a stage edge means no filter on that side.
+
+Stages:
+    0: 500 Hz only (band-pass).
+    1: 250 Hz and 500 Hz (band-pass).
+    2: 100 Hz through 500 Hz (low-pass; the heartbeat thud and DC pass).
+    3: 100 Hz through 1000 Hz (low-pass; the heartbeat thud and DC pass).
+    4: 100 Hz through 3000 Hz (open; the heartbeat thud and DC pass).
+
+The bed and voice streams are zero-mean, so passing DC is not audible; the
+band-off stream also passes it unchanged.
 
 Hepper and Shahidullah 1994, Archives of Disease in Childhood Fetal and
 Neonatal Edition 71(2), F81-F87.
@@ -26,7 +39,7 @@ __all__ = (
     "HEARING_TONES_HZ",
     "HEARING_BAND_TAPS",
     "HEARING_BAND_STAGES",
-    "HEARING_BAND_END_HIGH_HZ",
+    "HEARING_TOP_TONE_HZ",
     "HearingBandParams",
     "hearing_stage",
     "band_edges",
@@ -39,15 +52,20 @@ HEARING_TONES_HZ: tuple[float, ...] = (100.0, 250.0, 500.0, 1000.0, 3000.0)
 HEARING_BAND_TAPS: int = 1025
 
 _T0, _T1, _T2, _T3, _T4 = HEARING_TONES_HZ
-HEARING_BAND_STAGES: tuple[tuple[float, float], ...] = (
+
+# Highest tested tone (3000 Hz). With the band on, the maternal voice loads
+# with its low-pass here, and the stream rate must exceed twice it.
+HEARING_TOP_TONE_HZ: float = _T4
+
+# Edges are geometric midpoints between adjacent tested tones; None means the
+# edge disappears because there is no unheard tested tone beyond it.
+HEARING_BAND_STAGES: tuple[tuple[float | None, float | None], ...] = (
     (math.sqrt(_T1 * _T2), math.sqrt(_T2 * _T3)),
     (math.sqrt(_T0 * _T1), math.sqrt(_T2 * _T3)),
-    (_T0, math.sqrt(_T2 * _T3)),
-    (_T0, math.sqrt(_T3 * _T4)),
-    (_T0, _T4),
+    (None, math.sqrt(_T2 * _T3)),
+    (None, math.sqrt(_T3 * _T4)),
+    (None, None),
 )
-
-HEARING_BAND_END_HIGH_HZ: float = HEARING_BAND_STAGES[-1][1]
 
 
 @dataclass(frozen=True)
@@ -137,7 +155,7 @@ def hearing_stage(awake_seconds: float, params: HearingBandParams) -> int:
     T = float(awake_seconds)
     W = params.maturation_seconds
 
-    if not math.isfinite(T) or T < W / 4.0:
+    if not math.isfinite(T):
         return 0
 
     if T >= W:
@@ -152,51 +170,94 @@ def hearing_stage(awake_seconds: float, params: HearingBandParams) -> int:
     return 0
 
 
-def band_edges(awake_seconds: float, params: HearingBandParams) -> tuple[float, float]:
+def band_edges(
+    awake_seconds: float, params: HearingBandParams
+) -> tuple[float | None, float | None]:
     """Return the low and high band edges for the given awake time."""
     return HEARING_BAND_STAGES[hearing_stage(awake_seconds, params)]
 
 
-def band_taps(low_hz: float, high_hz: float, sample_rate: float) -> np.ndarray:
-    """Design a windowed FIR bandpass filter.
+def band_taps(
+    low_hz: float | None, high_hz: float | None, sample_rate: float
+) -> np.ndarray:
+    """Design a windowed FIR hearing-band filter.
 
-    The filter is a Hamming-windowed difference of two sinc lowpass kernels
-    with cutoffs at ``low_hz`` and ``high_hz``. It is normalized so that the
-    response at the geometric centre frequency is unity.
+    The filter type depends on which edges are supplied:
+    * both: band-pass, unity gain at the geometric centre;
+    * only ``high_hz``: low-pass, unity DC gain;
+    * only ``low_hz``: high-pass, total (no current stage uses this);
+    * neither: identity, a single unit impulse so delay stays constant.
+
+    All variants share ``HEARING_BAND_TAPS`` coefficients and are symmetric
+    about the centre tap, so the group delay is ``(HEARING_BAND_TAPS - 1) / 2``
+    samples regardless of stage.
 
     Args:
-        low_hz: Lower cutoff frequency in Hz.
-        high_hz: Upper cutoff frequency in Hz.
+        low_hz: Lower cutoff frequency in Hz, or ``None`` for no high-pass edge.
+        high_hz: Upper cutoff frequency in Hz, or ``None`` for no low-pass edge.
         sample_rate: Audio sample rate in Hz.
 
     Returns:
         A length ``HEARING_BAND_TAPS`` float64 coefficient array.
 
     Raises:
-        ValueError: If the edges do not satisfy
-            ``0 < low_hz < high_hz < sample_rate / 2``.
+        ValueError: If ``sample_rate`` is not finite and positive, a supplied
+            edge is not finite and in ``(0, sample_rate / 2)``, or both edges
+            are supplied with ``low_hz >= high_hz``.
     """
-    if not (
-        math.isfinite(low_hz)
-        and math.isfinite(high_hz)
-        and math.isfinite(sample_rate)
-    ):
-        raise ValueError(
-            "band edges must satisfy 0 < low_hz < high_hz < sample_rate / 2"
-        )
-    if not (0.0 < low_hz < high_hz < sample_rate / 2.0):
-        raise ValueError(
-            "band edges must satisfy 0 < low_hz < high_hz < sample_rate / 2"
-        )
+    if not (math.isfinite(sample_rate) and sample_rate > 0.0):
+        raise ValueError("sample_rate must be finite and positive")
 
-    return _cached_band_taps(float(low_hz), float(high_hz), float(sample_rate)).copy()
+    def _check_edge(edge: float) -> None:
+        if not (
+            math.isfinite(edge) and 0.0 < edge < sample_rate / 2.0
+        ):
+            raise ValueError(
+                "each band edge must be finite and satisfy 0 < edge < sample_rate / 2"
+            )
+
+    if low_hz is not None:
+        _check_edge(low_hz)
+    if high_hz is not None:
+        _check_edge(high_hz)
+    if low_hz is not None and high_hz is not None and not (low_hz < high_hz):
+        raise ValueError("low_hz must be less than high_hz")
+
+    return _cached_band_taps(
+        float(low_hz) if low_hz is not None else None,
+        float(high_hz) if high_hz is not None else None,
+        float(sample_rate),
+    ).copy()
 
 
 @functools.lru_cache(maxsize=16)
-def _cached_band_taps(low_hz: float, high_hz: float, sample_rate: float) -> np.ndarray:
-    """Compute bandpass taps; the result is cached and returned without copying."""
+def _cached_band_taps(
+    low_hz: float | None, high_hz: float | None, sample_rate: float
+) -> np.ndarray:
+    """Compute hearing-band taps; the result is cached and returned without copying."""
     N = HEARING_BAND_TAPS
     n = np.arange(N, dtype=np.float64) - (N - 1) / 2.0
+    centre = (N - 1) // 2
+
+    def _lowpass(cutoff_hz: float) -> np.ndarray:
+        b = cutoff_hz / sample_rate
+        h = 2.0 * b * np.sinc(2.0 * b * n)
+        h *= np.hamming(N)
+        return h / h.sum()
+
+    if low_hz is None and high_hz is None:
+        h = np.zeros(N, dtype=np.float64)
+        h[centre] = 1.0
+        return h
+
+    if low_hz is None:
+        return _lowpass(high_hz)
+
+    if high_hz is None:
+        delta = np.zeros(N, dtype=np.float64)
+        delta[centre] = 1.0
+        return delta - _lowpass(low_hz)
+
     a = low_hz / sample_rate
     b = high_hz / sample_rate
 

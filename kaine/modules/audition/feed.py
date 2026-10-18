@@ -615,13 +615,6 @@ class StimulusSourceProceduralAudioStream:
 
         if self._hearing is None:
             samples = self._soundscape(block_index)
-            base_amp_total = self._BASE_AMP_TOTAL
-            noise_rms = self._NOISE_RMS
-            thud_amp = self._THUD_AMP
-
-            # Headroom for the fixed bed. With a voice the headroom grows by the
-            # voice's RMS level and a soft limiter catches the rare peaks above it.
-            max_possible = base_amp_total + 4 * noise_rms + thud_amp
             if self._voice is not None:
                 awake = (
                     awake_seconds
@@ -633,17 +626,6 @@ class StimulusSourceProceduralAudioStream:
                     )
                 )
                 samples = samples + self._voice.render(block_index * n, n, awake)
-                max_possible = max_possible + self._voice.headroom
-                gain = (_INT16_MAX * 0.9) / max_possible
-                samples = soft_limit(
-                    samples * gain,
-                    knee=_INT16_MAX * 0.9,
-                    # One step below full scale, so rounding never reaches it.
-                    ceiling=float(_INT16_MAX - 1),
-                )
-            else:
-                gain = (_INT16_MAX * 0.9) / max_possible
-                samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
         else:
             from kaine.modules.audition.hearing_band import (
                 HEARING_BAND_TAPS,
@@ -670,25 +652,25 @@ class StimulusSourceProceduralAudioStream:
             taps = band_taps(low, high, float(max(1, s.sample_rate)))
             samples = np.convolve(x, taps, mode="valid")
 
-            base_amp_total = self._BASE_AMP_TOTAL
-            noise_rms = self._NOISE_RMS
-            thud_amp = self._THUD_AMP
+        base_amp_total = self._BASE_AMP_TOTAL
+        noise_rms = self._NOISE_RMS
+        thud_amp = self._THUD_AMP
 
-            # Headroom for the fixed bed. With a voice the headroom grows by the
-            # voice's RMS level and a soft limiter catches the rare peaks above it.
-            max_possible = base_amp_total + 4 * noise_rms + thud_amp
-            if self._voice is not None:
-                max_possible = max_possible + self._voice.headroom
-                gain = (_INT16_MAX * 0.9) / max_possible
-                samples = soft_limit(
-                    samples * gain,
-                    knee=_INT16_MAX * 0.9,
-                    # One step below full scale, so rounding never reaches it.
-                    ceiling=float(_INT16_MAX - 1),
-                )
-            else:
-                gain = (_INT16_MAX * 0.9) / max_possible
-                samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
+        # Headroom for the fixed bed. With a voice the headroom grows by the
+        # voice's RMS level and a soft limiter catches the rare peaks above it.
+        max_possible = base_amp_total + 4 * noise_rms + thud_amp
+        if self._voice is not None:
+            max_possible = max_possible + self._voice.headroom
+            gain = (_INT16_MAX * 0.9) / max_possible
+            samples = soft_limit(
+                samples * gain,
+                knee=_INT16_MAX * 0.9,
+                # One step below full scale, so rounding never reaches it.
+                ceiling=float(_INT16_MAX - 1),
+            )
+        else:
+            gain = (_INT16_MAX * 0.9) / max_possible
+            samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 
         q = np.rint(samples).astype(np.int16)
         if maturation_progress is not None:

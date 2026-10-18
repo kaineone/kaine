@@ -233,11 +233,26 @@ def test_spectrum_follows_moving_edges(schedule, params):
         freqs = np.fft.rfftfreq(x.size, 1 / 16000.0)
 
         lo, hi = HEARING_BAND_STAGES[s]
-        in_band = (freqs >= lo) & (freqs <= hi)
-        out_band = (freqs < lo / np.sqrt(2)) | (freqs > hi * np.sqrt(2))
+        in_band = np.ones_like(freqs, dtype=bool)
+        if lo is not None:
+            in_band &= freqs >= lo
+        else:
+            in_band &= freqs >= 0.0
+        if hi is not None:
+            in_band &= freqs <= hi
+        else:
+            in_band &= freqs <= 8000.0
+
+        out_band = np.zeros_like(freqs, dtype=bool)
+        if lo is not None:
+            out_band |= freqs < lo / np.sqrt(2)
+        if hi is not None:
+            out_band |= freqs > hi * np.sqrt(2)
+
         p_in = float(np.sum(pwr[in_band]))
         p_out = float(np.sum(pwr[out_band]))
-        assert 10.0 * np.log10(p_in / p_out) >= 40.0
+        if s < 4:
+            assert 10.0 * np.log10(p_in / p_out) >= 40.0
 
         below_300 = freqs < 300.0
         p_below = float(np.sum(pwr[below_300]))
@@ -245,6 +260,55 @@ def test_spectrum_follows_moving_edges(schedule, params):
             stage0_below_300 = p_below
         elif s == 2:
             assert 10.0 * np.log10(p_below / stage0_below_300) >= 10.0
+
+
+def test_heartbeat_thud_heard_from_stage_two(schedule, params):
+    on = _make_stream(schedule, params, hearing=HearingBandParams())
+    off = _make_stream(schedule, params, hearing=None)
+
+    def thud_power(chunks):
+        x = np.frombuffer(chunks, dtype="<i2").astype(np.float64)[2000:]
+        pwr = np.abs(np.fft.rfft(x)) ** 2
+        freqs = np.fft.rfftfreq(x.size, 1 / 16000.0)
+        mask = (freqs >= 40.0) & (freqs <= 60.0)
+        return float(np.sum(pwr[mask]))
+
+    for s in range(5):
+        a = s * 21600.0 + 600.0 if s < 4 else 86400.0 + 600.0
+        k0 = int(a / 0.03)
+        on_chunks = b"".join(
+            on.pcm_at(k, awake_seconds=a) for k in range(k0, k0 + 2000)
+        )
+        off_chunks = b"".join(
+            off.pcm_at(k, awake_seconds=a) for k in range(k0, k0 + 2000)
+        )
+        p_on = thud_power(on_chunks)
+        p_off = thud_power(off_chunks)
+        ratio_db = 10.0 * np.log10(p_on / p_off)
+        if s in (0, 1):
+            assert ratio_db <= -40.0
+        else:
+            assert abs(ratio_db) <= 1.0
+
+
+def test_open_band_is_the_band_off_stream_delayed(schedule, params):
+    on = _make_stream(schedule, params, hearing=HearingBandParams())
+    off = _make_stream(schedule, params, hearing=None)
+    awake = 86400.0 + 600.0
+    k0 = 3000000
+
+    on_chunks = b"".join(
+        on.pcm_at(k, awake_seconds=awake) for k in range(k0, k0 + 10)
+    )
+    off_chunks = b"".join(
+        off.pcm_at(k, awake_seconds=awake) for k in range(k0 - 2, k0 + 10)
+    )
+
+    on_x = np.frombuffer(on_chunks, dtype="<i2")
+    off_x = np.frombuffer(off_chunks, dtype="<i2")
+    start = 2 * 480 - 512
+    expected = off_x[start:start + 10 * 480]
+    assert np.array_equal(on_x, expected)
 
 
 def test_band_reaches_voice_formants_late(

@@ -710,7 +710,7 @@ def _build_perception_feed_audio_factory(
     audio = dict(feed.get("audio") or {})
     if mode == "stimulus_source":
         params = _stimulus_source_params(feed)
-        from kaine.modules.audition.hearing_band import HEARING_BAND_END_HIGH_HZ
+        from kaine.modules.audition.hearing_band import HEARING_TOP_TONE_HZ
         hearing = _hearing_band_params(feed)
         sr = int(audio.get("sample_rate", sample_rate))
         ch = int(audio.get("channels", channels))
@@ -726,9 +726,9 @@ def _build_perception_feed_audio_factory(
                 f"[perception_feed.stimulus_source] requires lowpass_hz < sample_rate/2; "
                 f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
             )
-        if hearing.enabled and HEARING_BAND_END_HIGH_HZ >= sr / 2.0:
+        if hearing.enabled and HEARING_TOP_TONE_HZ >= sr / 2.0:
             raise ValueError(
-                f"[perception_feed.stimulus_source.hearing] needs sample_rate above {2 * HEARING_BAND_END_HIGH_HZ:.0f} Hz; got {sr} Hz"
+                f"[perception_feed.stimulus_source.hearing] needs sample_rate above {2 * HEARING_TOP_TONE_HZ:.0f} Hz; got {sr} Hz"
             )
         schedule = StimulusSourceAudioSchedule(
             seed=int(feed.get("seed", 0)),
@@ -743,7 +743,7 @@ def _build_perception_feed_audio_factory(
             try:
                 # The voice reaches the fetus with higher frequencies attenuated but present; the hearing band then limits what the entity hears.
                 repertoire = MaternalVoiceRepertoire.load(
-                    sample_rate=sr, lowpass_hz=HEARING_BAND_END_HIGH_HZ if hearing.enabled else params.lowpass_hz
+                    sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ if hearing.enabled else params.lowpass_hz
                 )
             except PerceptionUnavailableError as exc:
                 log.critical(
