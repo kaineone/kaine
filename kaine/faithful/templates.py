@@ -256,6 +256,8 @@ def _t_affect_emotion(payload: dict[str, Any]) -> str:
 def _t_affect_drive(payload: dict[str, Any]) -> str:
     drive = payload.get("drive", "unknown")
     value = payload.get("value")
+    if payload.get("reentry") is True:
+        return f"Affect drive {_fmt(drive)} remains above threshold at {_fmt(value)}."
     return f"Affect drive {_fmt(drive)} crossed threshold at {_fmt(value)}."
 
 

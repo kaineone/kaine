@@ -798,6 +798,12 @@ drive_arousal_gain = 0.2
 # Perceptual novelty still relieves boredom continuously, counted as not own.
 # 0 turns the channel off and restores novelty-only relief.
 boredom_engagement_relief = 0.5
+# Sustained-concern re-entry interval P_re (paper A.4, Table A1): while a goal is
+# active and its drive stays at or above threshold, the drive event recurs this
+# often (entity seconds) at the drive's value, not as an alert, so an unmet concern
+# keeps returning to thought (Klinger 2013). The stall horizon ends it.
+# 0 turns re-entry off and restores crossing-only drive events.
+concern_reentry_s = 30.0
 baseline_salience = 0.1
 alert_salience = 0.7
 interoception_stream = "interoception.out"
