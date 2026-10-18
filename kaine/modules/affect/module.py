@@ -1549,6 +1549,15 @@ class Affect(BaseModule):
         )
 
     def serialize(self) -> dict[str, Any]:
+        now = self._clock()
+        goal_above_elapsed: dict[str, float] = {}
+        for goal_id, since in self._goal_above_since.items():
+            try:
+                goal = self._goals.get(goal_id)
+            except KeyError:
+                continue
+            if goal.state == GoalState.ACTIVE:
+                goal_above_elapsed[goal_id] = max(0.0, now - since)
         state: dict[str, Any] = {
             "state": self._state.to_dict(),
             "baseline": self._baseline.to_dict(),
@@ -1564,6 +1573,10 @@ class Affect(BaseModule):
             # Goals: the entity's own intentions, not sense data, so they also
             # satisfy the zero raw-sense-data persistence rule.
             "goals": self._goals.to_dict(),
+            # Elapsed entity seconds each active goal's drive has stayed at or
+            # above threshold (the stall clock of paper A.4). Stored as durations
+            # because the entity clock restarts with each process.
+            "goal_above_elapsed": goal_above_elapsed,
             # Perceptual alert rates r_f and r_s (alerts per entity second; paper A.4 boredom alert excess).
             "alert_rates": {"fast": self._alert_fast, "slow": self._alert_slow},
             # Scalar error statistics, not sense data, so they satisfy the zero raw-sense-data persistence rule.
@@ -1713,9 +1726,10 @@ class Affect(BaseModule):
         if isinstance(raw_seen, bool):
             self._interaction_seen = raw_seen
 
-        # Transient state is not restored: resync end counters so restored
-        # outcomes do not look like new ones, and restart stall/response timers.
-        # Running estimates above are restored from saved numbers; the
+        # Response windows and other transient timers restart, while the stall
+        # clock is restored from the saved elapsed durations below. Resync end
+        # counters so restored outcomes do not look like new ones. Running
+        # estimates above are restored from saved numbers; the
         # sequence-reported interaction gap is read fresh after a boot, so
         # _last_tsli is intentionally left None.
         self._drive_end_counts = {
@@ -1726,3 +1740,21 @@ class Affect(BaseModule):
         self._held_obstruction.clear()
         self._reentry_due.clear()
         self._concern_pending.clear()
+
+        # Restore the saved stall clock for active goals.
+        raw_goal_above = state.get("goal_above_elapsed")
+        if isinstance(raw_goal_above, dict):
+            now = self._clock()
+            for goal_id, value in raw_goal_above.items():
+                if not isinstance(goal_id, str):
+                    continue
+                elapsed = _finite_number(value)
+                if elapsed is None or elapsed < 0.0:
+                    continue
+                try:
+                    goal = self._goals.get(goal_id)
+                except KeyError:
+                    continue
+                if goal.state != GoalState.ACTIVE:
+                    continue
+                self._goal_above_since[goal_id] = now - elapsed
