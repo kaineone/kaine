@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 """Sustained-concern re-entry of drive events (paper 3.5, A.4)."""
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -10,6 +11,7 @@ from kaine.boot.factories.affect import make_affect
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
+from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.affect import Affect
 from kaine.modules.affect.drives import Drive, DriveSet
 from kaine.modules.affect.goals import GoalState
@@ -50,54 +52,186 @@ def _reentries(events, drive):
     ]
 
 
-async def test_cadence_and_intensity(bus):
+def _snap(key, event, *, score=0.5, threshold=0.3, inhibited=False, selected=True):
+    return WorkspaceSnapshot(
+        tick_index=1,
+        selected_events=[(key, event)] if selected else [],
+        inhibited=inhibited,
+        salience_scores={key: score},
+        metadata={"access_threshold": threshold},
+    )
+
+
+def _assert_reentry(event, name, value):
+    assert event.payload == {
+        "drive": name,
+        "value": value,
+        "alert": False,
+        "reentry": True,
+    }
+    assert event.salience == pytest.approx(value)
+
+
+async def test_missed_crossing_recurs_on_own_updates(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
     affect.drives.curiosity.value = 0.75
 
     await affect._tick()
     events = await _drive_events(bus)
-    crossings = [e for _, e in events if not e.payload.get("reentry")]
-    assert len(crossings) == 1
-    assert crossings[0].payload == {
-        "drive": "curiosity",
-        "value": 0.75,
-        "alert": True,
-    }
+    assert len([e for _, e in events if e.payload.get("alert")]) == 1
+    assert len(_reentries(events, "curiosity")) == 0
 
-    t[0] = 29.9
+    t[0] = 0.2
+    await affect._tick(own_update=True)
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 0.6
     await affect._tick()
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
 
-    t[0] = 30.0
-    await affect._tick()
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     reentries = _reentries(await _drive_events(bus), "curiosity")
     assert len(reentries) == 1
-    for _, e in reentries:
-        assert e.payload == {
-            "drive": "curiosity",
-            "value": 0.75,
-            "alert": False,
-            "reentry": True,
-        }
-        assert e.salience == pytest.approx(0.75)
+    _assert_reentry(reentries[0][1], "curiosity", 0.75)
 
-    t[0] = 45.0
-    await affect._tick()
+    t[0] = 1.3
+    await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
 
-    t[0] = 60.0
-    await affect._tick()
+    t[0] = 1.5
+    await affect._tick(own_update=True)
     reentries = _reentries(await _drive_events(bus), "curiosity")
     assert len(reentries) == 2
     for _, e in reentries:
-        assert e.payload == {
-            "drive": "curiosity",
-            "value": 0.75,
-            "alert": False,
-            "reentry": True,
-        }
-        assert e.salience == pytest.approx(0.75)
+        _assert_reentry(e, "curiosity", 0.75)
+
+
+async def test_access_starts_interval(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    affect.drives.curiosity.value = 0.75
+
+    await affect._tick()
+
+    t[0] = 1.0
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
+    eid, reentry = reentries[0]
+
+    t[0] = 1.2
+    await affect.on_workspace(_snap(f"affect.out:{eid}", reentry))
+    assert affect._concern_pending == {}
+    goal = affect.goals.active_for_drive("curiosity")
+    assert affect._reentry_due[goal.id] == pytest.approx(31.2)
+
+    for ts in (2.0, 10.0, 31.1):
+        t[0] = ts
+        await affect._tick(own_update=True)
+        assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
+
+    t[0] = 31.2
+    await affect._tick()
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
+
+    t[0] = 31.3
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 2
+    for _, e in reentries:
+        _assert_reentry(e, "curiosity", 0.75)
+
+
+async def test_access_of_crossing_starts_interval(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    affect.drives.curiosity.value = 0.75
+
+    await affect._tick()
+    events = await _drive_events(bus)
+    eid, crossing = next((eid, e) for eid, e in events if e.payload.get("alert"))
+
+    t[0] = 0.1
+    await affect.on_workspace(_snap(f"affect.out:{eid}", crossing))
+    assert affect._concern_pending == {}
+    goal = affect.goals.active_for_drive("curiosity")
+    assert affect._reentry_due[goal.id] == pytest.approx(30.1)
+
+    for ts in (1.0, 30.0):
+        t[0] = ts
+        await affect._tick(own_update=True)
+        assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 30.2
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
+    _assert_reentry(reentries[0][1], "curiosity", 0.75)
+
+
+@pytest.mark.parametrize(
+    "inhibited,score,selected,key_stream",
+    [
+        (True, 0.5, True, "affect"),
+        (False, 0.2, True, "affect"),
+        (False, 0.5, False, "affect"),
+        (False, 0.5, True, "vision"),
+    ],
+)
+async def test_non_access_keeps_pending(bus, inhibited, score, selected, key_stream):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    affect.drives.curiosity.value = 0.75
+    await affect._tick()
+
+    t[0] = 1.0
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
+    eid, reentry = reentries[0]
+
+    t[0] = 1.1
+    key = f"{key_stream}.out:{eid}" if key_stream != "affect" else f"affect.out:{eid}"
+    await affect.on_workspace(
+        _snap(key, reentry, score=score, threshold=0.3, inhibited=inhibited, selected=selected)
+    )
+
+    assert affect.goals.active_for_drive("curiosity").id in affect._concern_pending
+
+    t[0] = 1.6
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 2
+
+
+async def test_late_access_of_older_copy(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    affect.drives.curiosity.value = 0.75
+    await affect._tick()
+
+    t[0] = 1.0
+    await affect._tick(own_update=True)
+    events = await _drive_events(bus)
+    reentries = _reentries(events, "curiosity")
+    assert len(reentries) == 1
+    first_eid, first_reentry = reentries[0]
+
+    t[0] = 1.5
+    await affect._tick(own_update=True)
+    events = await _drive_events(bus)
+    reentries = _reentries(events, "curiosity")
+    assert len(reentries) == 2
+
+    t[0] = 1.6
+    await affect.on_workspace(_snap(f"affect.out:{first_eid}", first_reentry))
+    assert affect._concern_pending == {}
+
+    t[0] = 2.5
+    await affect._tick(own_update=True)
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 2
 
 
 async def test_intensity_follows_drive(bus):
@@ -106,149 +240,158 @@ async def test_intensity_follows_drive(bus):
     affect.drives.curiosity.value = 0.75
     await affect._tick()
 
-    t[0] = 29.9
-    await affect._tick()
     affect.drives.curiosity.value = 0.9
-
-    t[0] = 30.0
-    await affect._tick()
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     reentries = _reentries(await _drive_events(bus), "curiosity")
     assert len(reentries) == 1
-    _, e = reentries[0]
+    e = reentries[0][1]
     assert e.payload["value"] == 0.9
     assert e.salience == pytest.approx(0.9)
 
 
-async def test_sparse_updates(bus):
-    t = [0.0]
-    affect = Affect(bus, clock=lambda: t[0], drives=_static())
-    affect.drives.curiosity.value = 0.75
-    await affect._tick()
-
-    t[0] = 100.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
-
-    t[0] = 129.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
-
-    t[0] = 130.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 2
-
-
-async def test_below_threshold_keeps_schedule(bus):
+async def test_below_threshold_pauses(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
     affect.drives.curiosity.value = 0.75
     await affect._tick()
     assert affect.goals.active_for_drive("curiosity") is not None
+    assert affect.goals.active_for_drive("curiosity").id in affect._concern_pending
 
     affect.drives.curiosity.value = 0.65
-    t[0] = 30.0
-    await affect._tick()
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
     assert affect.goals.active_for_drive("curiosity") is not None
+    assert affect.goals.active_for_drive("curiosity").id in affect._concern_pending
+
+    t[0] = 2.0
+    await affect._tick(own_update=True)
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+    assert affect.goals.active_for_drive("curiosity").id in affect._concern_pending
 
     affect.drives.curiosity.value = 0.75
-    t[0] = 31.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
+    t[0] = 2.1
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
+    _assert_reentry(reentries[0][1], "curiosity", 0.75)
 
 
-async def test_goal_end_stops_reentry(bus):
+async def test_goal_end_clears_pending(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
     affect.drives.curiosity.value = 0.75
     await affect._tick()
-    goal_id = affect.goals.active_for_drive("curiosity").id
 
     affect.drives.curiosity.value = 0.5
-    t[0] = 10.0
+    t[0] = 1.0
     await affect._tick()
-    assert affect.goals.get(goal_id).state != GoalState.ACTIVE
+    assert affect._concern_pending == {}
+    assert affect._reentry_due == {}
 
     affect.drives.curiosity.value = 0.69
-    t[0] = 40.0
-    await affect._tick()
-    t[0] = 80.0
-    await affect._tick()
+    for ts in (2.0, 3.0):
+        t[0] = ts
+        await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
-    assert affect._reentry_due == {}
 
 
-async def test_stall_stops_reentry(bus):
+async def test_stall_clears_pending(bus):
     t = [0.0]
     affect = Affect(
-        bus, clock=lambda: t[0], drives=_static(), goal_stall_s=50.0
+        bus, clock=lambda: t[0], drives=_static(), goal_stall_s=5.0
     )
     affect.drives.curiosity.value = 0.75
-    await affect._tick()
-    goal_id = affect.goals.active_for_drive("curiosity").id
 
-    t[0] = 30.0
-    await affect._tick()
+    t[0] = 0.0
+    await affect._tick(own_update=True)
+    goal_id = affect.goals.active_for_drive("curiosity").id
+    events = await _drive_events(bus)
+    assert len([e for _, e in events if e.payload.get("alert")]) == 1
+    assert len(_reentries(events, "curiosity")) == 0
+
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
 
-    t[0] = 55.0
-    await affect._tick()
+    t[0] = 6.0
+    await affect._tick(own_update=True)
     assert affect.goals.get(goal_id).state == GoalState.ABANDONED
 
-    t[0] = 90.0
-    await affect._tick()
+    for ts in (7.0, 8.0):
+        t[0] = ts
+        await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
+    assert affect._concern_pending == {}
 
 
-async def test_sleep_reset_clears_schedule(bus):
+async def test_sleep_reset_clears_pending(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
     affect.drives.curiosity.value = 0.75
-    await affect._tick()
 
-    t[0] = 30.0
-    await affect._tick()
+    await affect._tick(own_update=True)
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
+    old_goal_id = affect.goals.active_for_drive("curiosity").id
+    assert old_goal_id in affect._concern_pending
 
     await affect.affective_reset()
+    assert affect._concern_pending == {}
     assert affect._reentry_due == {}
 
     affect.drives.curiosity.value = 0.75
-    t[0] = 31.0
-    await affect._tick()
-    assert affect.goals.active_for_drive("curiosity") is not None
+    t[0] = 2.0
+    await affect._tick(own_update=True)
+    new_goal_id = affect.goals.active_for_drive("curiosity").id
+    assert new_goal_id != old_goal_id
+    assert new_goal_id in affect._concern_pending
 
-    t[0] = 40.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
-
-    t[0] = 61.0
-    await affect._tick()
+    t[0] = 3.0
+    await affect._tick(own_update=True)
     reentries = _reentries(await _drive_events(bus), "curiosity")
     assert len(reentries) == 2
-    assert len(affect._reentry_due) == 1
-    new_goal_id = affect.goals.active_for_drive("curiosity").id
-    assert new_goal_id in affect._reentry_due
+    assert set(affect._concern_pending.keys()) == {new_goal_id}
 
 
-async def test_no_drive_no_reentry(bus):
+async def test_restore_clears_pending(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
-    await affect.add_goal("watch the window")
-    for ts in (0.0, 30.0, 60.0):
-        t[0] = ts
-        await affect._tick()
-    assert len(await _drive_events(bus)) == 0
+    affect.drives.curiosity.value = 0.75
+    await affect._tick()
+    assert affect._concern_pending
+
+    t[0] = 20.0
+    affect.deserialize(affect.serialize())
+    assert affect._concern_pending == {}
+    assert affect._reentry_due == {}
+
+    t[0] = 30.0
+    await affect._tick()
+    goal = affect.goals.active_for_drive("curiosity")
+    assert affect._reentry_due[goal.id] == pytest.approx(60.0)
+
+    t[0] = 59.9
+    await affect._tick(own_update=True)
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 60.0
+    await affect._tick(own_update=True)
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
+    _assert_reentry(reentries[0][1], "curiosity", 0.75)
 
 
-async def test_intent_about_reentry_is_about_drive(bus):
+async def test_intent_about_repeat_is_about_drive(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
     affect.drives.boredom.value = 0.75
     await affect._tick()
 
-    t[0] = 30.0
-    await affect._tick()
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     reentries = _reentries(await _drive_events(bus), "boredom")
     assert len(reentries) == 1
     eid, _ = reentries[0]
@@ -273,20 +416,65 @@ async def test_intent_about_reentry_is_about_drive(bus):
     assert affect.drives.restlessness.value == pytest.approx(0.4)
 
 
-async def test_off_no_reentry(bus):
+async def test_no_drive_no_reentry(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    await affect.add_goal("watch the window")
+    for ts in (0.0, 30.0, 60.0):
+        t[0] = ts
+        await affect._tick(own_update=True)
+    assert len(await _drive_events(bus)) == 0
+
+
+async def test_off_no_repeat_no_state(bus):
     t = [0.0]
     affect = Affect(
         bus, clock=lambda: t[0], drives=_static(), concern_reentry_s=0.0
     )
     affect.drives.curiosity.value = 0.75
-    for ts in (0.0, 30.0, 60.0, 120.0):
-        t[0] = ts
-        await affect._tick()
+
+    await affect._tick()
+    t[0] = 1.0
+    await affect._tick(own_update=True)
     events = await _drive_events(bus)
     assert len(events) == 1
-    assert events[0][1].payload.get("alert") is True
-    assert "reentry" not in events[0][1].payload
+    eid, crossing = events[0]
+    assert crossing.payload == {
+        "drive": "curiosity",
+        "value": 0.75,
+        "alert": True,
+    }
+    assert "reentry" not in crossing.payload
+    assert affect._concern_pending == {}
     assert affect._reentry_due == {}
+
+    t[0] = 1.5
+    await affect.on_workspace(_snap(f"affect.out:{eid}", crossing))
+    assert affect._concern_pending == {}
+    assert affect._reentry_due == {}
+
+    for ts in (2.0, 31.0, 61.0):
+        t[0] = ts
+        await affect._tick(own_update=True)
+    events = await _drive_events(bus)
+    assert len(events) == 1
+
+
+async def test_timer_loop_is_own_update(bus):
+    t = [0.0]
+    affect = Affect(
+        bus, clock=lambda: t[0], drives=_static(), publish_interval_s=0.05
+    )
+    affect.drives.curiosity.value = 0.75
+    await affect._tick()
+
+    t[0] = 1.0
+    task = asyncio.create_task(affect._state_timer_loop())
+    await asyncio.sleep(0.3)
+    affect._stopped.set()
+    await task
+    reentries = _reentries(await _drive_events(bus), "curiosity")
+    assert len(reentries) == 1
 
 
 async def test_concern_reentry_s_validation(bus):
@@ -302,29 +490,3 @@ async def test_config_wiring(bus):
 
     affect_default = make_affect(bus, {})
     assert affect_default._concern_reentry_s == 30.0
-
-
-async def test_restore_restarts_schedule(bus):
-    t = [0.0]
-    affect = Affect(bus, clock=lambda: t[0], drives=_static())
-    affect.drives.curiosity.value = 0.75
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
-
-    t[0] = 20.0
-    await affect._tick()
-    state = affect.serialize()
-    affect.deserialize(state)
-    assert affect._reentry_due == {}
-
-    t[0] = 30.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
-
-    t[0] = 59.9
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
-
-    t[0] = 60.0
-    await affect._tick()
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1

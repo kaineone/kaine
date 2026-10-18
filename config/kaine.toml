@@ -799,9 +799,10 @@ drive_arousal_gain = 0.2
 # 0 turns the channel off and restores novelty-only relief.
 boredom_engagement_relief = 0.5
 # Sustained-concern re-entry interval P_re (paper A.4, Table A1): while a goal is
-# active and its drive stays at or above threshold, the drive event recurs this
-# often (entity seconds) at the drive's value, not as an alert, so an unmet concern
-# keeps returning to thought (Klinger 2013). The stall horizon ends it.
+# active and its drive stays at or above threshold, its drive event recurs at the
+# drive's value, not as an alert, on each own publish_interval_s update until a
+# broadcast accesses it, then this long (entity seconds) after that access, so an
+# unmet concern keeps returning to thought (Klinger 2013). The stall horizon ends it.
 # 0 turns re-entry off and restores crossing-only drive events.
 concern_reentry_s = 30.0
 baseline_salience = 0.1
