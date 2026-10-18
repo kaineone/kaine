@@ -100,11 +100,13 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
         clock=lambda: fake_now[0],
         drift_rate_per_s=0.0,
         publish_interval_s=999.0,
+        learning_progress_span_s=20.0,
+        learning_progress_bin_s=10.0,
     )
     await affect.initialize()
     try:
-        # 60 s of steady error gives the averages a history (a fresh tracker
-        # reports no progress), then the error falls from 3.0 to 1.0 over 20 s.
+        # 20 s progress window in 10 s bins; two completed bins are needed,
+        # so we first provide steady error, then let it fall over 20 s.
         for i in range(800):
             fake_now[0] = i * 0.1
             if i == 600:
@@ -671,6 +673,8 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
         clock=lambda: fake_now[0],
         drift_rate_per_s=0.0,
         publish_interval_s=999.0,
+        learning_progress_span_s=20.0,
+        learning_progress_bin_s=10.0,
     )
     await affect.initialize()
     try:

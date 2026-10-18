@@ -346,6 +346,7 @@ def test_manifest_is_content_free(tmp_path):
         "model_ids",
         "config_digest",
         "config_key_scheme",
+        "learning_progress_scheme",
         "kaine_version",
         # Reproducible perception-feed covariate (descriptor only — no frames,
         # no operator paths). Defaults to {"mode": "off"} when unconfigured.

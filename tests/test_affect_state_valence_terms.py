@@ -83,10 +83,13 @@ EXPECTED_KEYS = frozenset({
     "vision_error_fast",
     "vision_error_slow",
     "vision_progress",
+    "vision_learning_progress",
     "audition_error_fast",
     "audition_error_slow",
     "audition_progress",
+    "audition_learning_progress",
     "signed_progress",
+    "signed_learning_progress",
     "learning_progress",
     "wellness",
     "wellness_fast",
@@ -128,8 +131,7 @@ async def test_values_match_trackers(bus):
     g_a = max(-1.0, min(1.0, (audition_slow - audition_fast) / audition_slow))
 
     g = (g_v + g_a) / 2.0
-    floor = affect._learning_progress_floor
-    lp = max(0.0, g - floor) / (1.0 - floor)
+    lp = 0.0
 
     well_fast = (df * 0.9 + 0.6) / (df + 1.0)
     well_slow = (ds * 0.9 + 0.6) / (ds + 1.0)
@@ -141,10 +143,13 @@ async def test_values_match_trackers(bus):
     assert p["vision_error_fast"] == pytest.approx(vision_fast)
     assert p["vision_error_slow"] == pytest.approx(vision_slow)
     assert p["vision_progress"] == pytest.approx(g_v)
+    assert p["vision_learning_progress"] is None
     assert p["audition_error_fast"] == pytest.approx(audition_fast)
     assert p["audition_error_slow"] == pytest.approx(audition_slow)
     assert p["audition_progress"] == pytest.approx(g_a)
+    assert p["audition_learning_progress"] is None
     assert p["signed_progress"] == pytest.approx(g)
+    assert p["signed_learning_progress"] == pytest.approx(0.0)
     assert p["learning_progress"] == pytest.approx(lp)
     assert p["wellness"] == pytest.approx(0.6)
     assert p["wellness_fast"] == pytest.approx(well_fast)
@@ -168,7 +173,7 @@ async def test_absent_source_is_null(bus):
     await affect._maybe_publish_state()
 
     p = await _last_state_payload(bus)
-    for k in ("audition_error_fast", "audition_error_slow", "audition_progress"):
+    for k in ("audition_error_fast", "audition_error_slow", "audition_progress", "audition_learning_progress"):
         assert p[k] is None
     for k in ("vision_error_fast", "vision_error_slow", "vision_progress"):
         assert isinstance(p[k], float)
@@ -187,7 +192,9 @@ async def test_no_data(bus):
         assert p[f"{source}_error_fast"] is None
         assert p[f"{source}_error_slow"] is None
         assert p[f"{source}_progress"] is None
+        assert p[f"{source}_learning_progress"] is None
     assert p["signed_progress"] == 0.0
+    assert p["signed_learning_progress"] == 0.0
     assert p["learning_progress"] == 0.0
     assert p["wellness"] == 0.5
     assert p["wellness_fast"] is None
@@ -238,7 +245,9 @@ async def test_degenerate_slow_mean_gives_null_progress(bus):
     p = await _last_state_payload(bus)
     assert p["vision_error_slow"] == 0.0
     assert p["vision_progress"] is None
+    assert p["vision_learning_progress"] is None
     assert p["signed_progress"] == 0.0
+    assert p["signed_learning_progress"] == 0.0
     assert frozenset(p.keys()) == EXPECTED_KEYS
 
 
