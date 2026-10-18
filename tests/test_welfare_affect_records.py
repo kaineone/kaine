@@ -138,9 +138,49 @@ def test_tally_uncontrolled_ends():
     snap = tally.snapshot()
     assert snap["boredom_uncontrolled_share"] == pytest.approx(0.75)
     assert snap["boredom_uncontrolled_per_awake_hour"] == pytest.approx(108.0)
-    assert snap["restlessness_uncontrolled_share"] is None
+    assert snap["restlessness_uncontrolled_share"] == pytest.approx(1.0)
+    assert snap["restlessness_uncontrolled_per_awake_hour"] == pytest.approx(36.0)
     assert snap["curiosity_uncontrolled_share"] is None
     assert snap["social_drive_uncontrolled_share"] is None
+
+
+def test_tally_stalled_and_cap_are_uncontrolled():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    for ts in range(101):
+        tally.observe_state(float(ts), 0.0)
+    tally.observe_goal("curiosity", "abandoned", "stalled")
+    tally.observe_goal("curiosity", "abandoned", "stalled")
+    tally.observe_goal("curiosity", "abandoned", "stalled")
+    tally.observe_goal("curiosity", "completed", "own_response")
+    tally.observe_goal("boredom", "abandoned", "cap")
+    snap = tally.snapshot()
+    assert snap["curiosity_uncontrolled_share"] == pytest.approx(0.75)
+    assert snap["curiosity_uncontrolled_per_awake_hour"] == pytest.approx(108.0)
+    assert snap["boredom_uncontrolled_share"] == pytest.approx(1.0)
+
+
+def test_tally_sleep_reset_counts_as_neither():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    tally.observe_goal("social_drive", "cleared", "sleep_reset")
+    assert tally.changed is False
+    assert tally.snapshot()["social_drive_uncontrolled_share"] is None
+
+
+def test_tally_unknown_reason_counts_as_neither():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    for ts in range(101):
+        tally.observe_state(float(ts), 0.0)
+    tally.snapshot()
+    tally.observe_goal("restlessness", "abandoned", "mystery")
+    tally.observe_goal("restlessness", "abandoned", None)
+    tally.observe_goal("restlessness", "abandoned", ["stalled"])
+    tally.observe_goal("restlessness", "completed", "without_response")
+    tally.observe_goal("restlessness", "completed", "stalled")
+    tally.observe_goal("restlessness", "cleared", "stalled")
+    assert tally.changed is False
+    snap = tally.snapshot()
+    assert snap["restlessness_uncontrolled_share"] is None
+    assert snap["restlessness_uncontrolled_per_awake_hour"] == pytest.approx(0.0)
 
 
 def test_tally_initially_empty():
@@ -178,6 +218,55 @@ def test_tally_content_free_and_fixed_keys():
     serialized = str(snap).lower()
     assert "secret" not in serialized
     assert "private" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_observer_counts_stalled_goal_from_bus_event():
+    u = _Mono(0.0)
+    obs, bus, sink = _observer(u, affect_summary_interval_s=300.0)
+    await obs._tick()  # starts the summary interval at u = 0
+
+    for t in range(101):
+        await obs.handle(
+            "affect.out",
+            "1-0",
+            _event(
+                "affect",
+                "affect.state",
+                {"state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0}},
+                float(t),
+            ),
+        )
+
+    await obs.handle(
+        "affect.out",
+        "1-0",
+        _event(
+            "affect",
+            "affect.goal",
+            {"action": "abandoned", "drive": "curiosity", "reason": "stalled"},
+            100.0,
+        ),
+    )
+    await obs.handle(
+        "affect.out",
+        "1-0",
+        _event(
+            "affect",
+            "affect.goal",
+            {"action": "completed", "drive": "curiosity", "reason": "own_response"},
+            100.0,
+        ),
+    )
+
+    u.value = 300.0
+    await obs._tick()
+    affect_rows = [r for r in sink.rows if r.get("record") == "affect_welfare"]
+    assert len(affect_rows) == 1
+    row = affect_rows[0]
+    assert row["curiosity_uncontrolled_share"] == pytest.approx(0.5)
+    assert row["curiosity_uncontrolled_per_awake_hour"] == pytest.approx(36.0)
+    assert len(bus.published) == 0
 
 
 @pytest.mark.asyncio

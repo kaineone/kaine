@@ -14,10 +14,10 @@ The same boot showed a second defect: two goals stalled 10.2 minutes after a res
 
 ### Modified Capabilities
 
-- `welfare-monitoring`: the `affect_welfare` record counts stalled and cap-dropped goals as ends without the entity's own response.
+- `evaluation-observers`: the `affect_welfare` record counts stalled and cap-dropped goals as ends without the entity's own response. This corrects the uncontrolled-end rule added by `valence-error-dynamics` (not yet archived), whose requirement text and scenario are amended to match.
 - `affect`: the goal stall clock persists across a restore.
 
 ## Impact
 
-- `kaine/evaluation/observers/welfare_observer.py`, `kaine/modules/affect/module.py`, `tests/test_welfare_affect_records.py`, a new `tests/test_affect_stall_clock_persistence.py`, `docs/09-modules/affect.md`, `docs/17-research-data/README.md`.
+- `kaine/evaluation/observers/welfare_observer.py`, `kaine/modules/affect/module.py`, `tests/test_welfare_affect_records.py`, a new `tests/test_affect_stall_clock_persistence.py`, `docs/09-modules/affect.md`, `docs/17-research-data/README.md`, and the `valence-error-dynamics` change's `evaluation-observers` spec delta.
 - Behaviour: `<drive>_uncontrolled_share` and `<drive>_uncontrolled_per_awake_hour` rise for drives whose goals stall or lose to the cap. A goal restored after a restart stalls `Delta_stall` after it first stayed above threshold, not `Delta_stall` after the restore.

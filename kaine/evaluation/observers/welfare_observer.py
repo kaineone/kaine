@@ -35,7 +35,8 @@ cycle-layer autonomous welfare-protective monitor can act on ALL four categories
 The observer also writes an ``affect_welfare`` record to its JSONL log every
 ``affect_summary_interval_s`` of unfrozen time and when it stops: the share of
 awake time with valence below ``-negative_valence_bar`` and, per drive, the
-share of goal ends credited "other" (``without_response``) among credited ends,
+share of goal ends abandoned without the entity's own response (``without_response``,
+``stalled`` or ``cap``) among those ends and the ends completed by its own response,
 with that rate per awake hour (paper 6.2). It holds numbers only and is not
 published on the bus.
 
@@ -145,8 +146,10 @@ _AFFECT_SAMPLE_GAP_CAP_S = 5.0
 _AFFECT_WELFARE_RECORD = "affect_welfare"
 # Fixed drive table: the only drive names that may appear in record keys.
 _WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
-_OWN_REASON = "own_response"
-_OTHER_REASON = "without_response"
+# Reasons of a completed goal end credited to the entity's own response.
+_OWN_REASONS = frozenset({"own_response"})
+# Reasons of an abandoned goal end credited as response-independent (uncontrolled).
+_UNCONTROLLED_REASONS = frozenset({"without_response", "stalled", "cap"})
 
 
 class AffectWelfareTally:
@@ -157,11 +160,14 @@ class AffectWelfareTally:
     1. The share of awake time (measured between ``affect.state`` timestamps,
        capped at ``max_gap_s``) whose valence is strictly below
        ``-negative_valence_bar``.
-    2. Per drive in the fixed table, the share of credited goal ends that are
-       credited "other" (``without_response``) rather than "own"
-       (``own_response``), using the A.4 credit rule. Response-independent
-       outcomes are those that define helplessness (Maier and Seligman 2016).
-       The same count is also reported as uncontrolled ends per awake hour.
+    2. Per drive in the fixed table, the share of goal ends without the
+       entity's own response: every abandoned end (``without_response``,
+       ``stalled`` or ``cap``) counts as "other" and a completed
+       ``own_response`` end as "own" (paper 6.2, A.4); a sleep reset
+       (``cleared``/``sleep_reset``) and any unrecognised reason count as
+       neither. Response-independent outcomes are those that define
+       helplessness (Maier and Seligman 2016). The same count is also reported
+       as uncontrolled ends per awake hour.
 
     Sleep intervals announced by the sleep module are excluded from awake time.
     Because each interval takes the state of the sample that began it, a sample
@@ -234,10 +240,12 @@ class AffectWelfareTally:
     def observe_goal(self, drive: object, action: object, reason: object) -> None:
         if not isinstance(drive, str) or drive not in _WELFARE_DRIVES:
             return
-        if action == "completed" and reason == _OWN_REASON:
+        if not isinstance(reason, str):
+            return
+        if action == "completed" and reason in _OWN_REASONS:
             self._ends[drive][0] += 1
             self._changed = True
-        elif action == "abandoned" and reason == _OTHER_REASON:
+        elif action == "abandoned" and reason in _UNCONTROLLED_REASONS:
             self._ends[drive][1] += 1
             self._changed = True
 
