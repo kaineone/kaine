@@ -1114,6 +1114,24 @@ colour_ramp_seconds = 3600      # lived seconds over which colour rises from gre
 [perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 
+# pre-rendered speech (no runtime synthesis) shipped under
+# kaine/modules/audition/maternal_voice_data/, rendered offline by
+# tools/maintainer/generate_maternal_voice.py; it passes the same low-pass as
+# the soundscape; it plays through sleep; a missing or altered file stops the
+# stimulus loudly; enabled = false gives the voice-free soundscape byte for byte.
+# The voice needs [perception_feed.audio].sample_rate = 16000 (twice its 8 kHz
+# takes); any other rate fails boot unless enabled = false.
+[perception_feed.stimulus_source.voice]   # the maternal voice heard in utero (paper §7, A.7)
+enabled = true                  # maternal voice on/off master switch
+level_db = 6.0                  # voice RMS over the soundscape RMS, dB; the mother's voice is heard above the intrauterine background, Querleu et al. 1988; Benzaquen et al. 1990
+jitter_db = 3.0                 # per-utterance level variation either way
+slot_seconds = 30.0             # speech is decided per slot
+episode_probability = 0.2       # a slot talks with this times the maternal arousal; about 7% of the time is speech, near a woman's daily word count, Mehl et al. 2007
+repeat_share = 0.25             # an episode opens with the repeated passage, DeCasper and Spence 1986
+unlock_seconds = 3600.0         # one more repertoire item per hour of awake time
+pause_min_seconds = 0.5         # minimum pause between utterances
+pause_max_seconds = 1.5         # maximum pause between utterances
+
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so
 # they are bounded, announced on development.out (development.probe events), and

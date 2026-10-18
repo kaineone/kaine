@@ -24,6 +24,8 @@ compose/*.env
 voices/
 **/*.wav
 **/*.flac
+# The maternal-voice takes are shipped stimulus data, not private voices; the stimulus audio does not start without them.
+!kaine/modules/audition/maternal_voice_data/*.flac
 state/sleep/adapters/
 # The pre-rename location, in case an old state tree is in the build context.
 state/hypnos/adapters/
