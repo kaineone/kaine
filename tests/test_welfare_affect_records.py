@@ -254,6 +254,43 @@ async def test_observer_end_to_end():
 
 
 @pytest.mark.asyncio
+async def test_cleanup_writes_nothing_when_unchanged():
+    u = _Mono(0.0)
+    obs, _bus, sink = _observer(u, affect_summary_interval_s=300.0)
+    await obs._tick()
+
+    await obs.handle(
+        "affect.out",
+        "1-0",
+        _event(
+            "affect",
+            "affect.state",
+            {"state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0}},
+            0.0,
+        ),
+    )
+    await obs.handle(
+        "affect.out",
+        "1-0",
+        _event(
+            "affect",
+            "affect.state",
+            {"state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0}},
+            1.0,
+        ),
+    )
+
+    u.value = 300.0
+    await obs._tick()
+    assert len([r for r in sink.rows if r.get("record") == "affect_welfare"]) == 1
+
+    u.value = 600.0
+    await obs._tick()
+    await obs._cleanup()
+    assert len([r for r in sink.rows if r.get("record") == "affect_welfare"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_observer_row_types():
     u = _Mono(0.0)
     obs, _bus, sink = _observer(u, affect_summary_interval_s=300.0)

@@ -717,9 +717,10 @@ class WelfareObserver(StreamSubscriberObserver):
     async def _write_affect_summary(self) -> None:
         """Write an ``affect_welfare`` record to the JSONL sink only.
 
-        CONTENT CONTRACT: numbers computed here plus the fixed ``record`` label;
-        nothing is copied from a source payload. The record is never published
-        on the bus because it is a welfare record, not a gray-zone event.
+        CONTENT CONTRACT: the observer's own numbers (the measures it computed
+        and its configured bar) plus the fixed ``record`` label; nothing is
+        copied from a source payload. The record is never published on the bus
+        because it is a welfare record, not a gray-zone event.
         """
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -919,6 +920,7 @@ class WelfareObserver(StreamSubscriberObserver):
                 await self._emit_sustained_interoceptive_distress(seconds)
 
     async def _cleanup(self) -> None:
+        """Write a final ``affect_welfare`` record if anything changed since the last one (records are cumulative, so an unchanged record would repeat the previous one)."""
         await super()._cleanup()
         if self._affect_tally.changed:
             await self._write_affect_summary()
