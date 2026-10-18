@@ -58,6 +58,7 @@ from kaine.modules.vision.feed import (
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
     import numpy as np
 
+    from kaine.modules.audition.hearing_band import HearingBandParams
     from kaine.modules.audition.maternal_voice import MaternalVoiceLayer
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
@@ -378,6 +379,11 @@ class StimulusSourceProceduralAudioStream:
     a soft limiter rounds the rare peaks above it (Querleu et al. 1988;
     Gerhardt and Abrams 2000); without one the output is unchanged.
 
+    When an enabled hearing band is given, the bed and the voice pass a
+    band-pass that widens over awake time in the order fetal hearing
+    matures (Hepper and Shahidullah 1994); without one, or with it
+    disabled, the output is unchanged.
+
     Persists only ``(seed, schedule, params, clock)``; no PCM is written.
     """
 
@@ -395,6 +401,7 @@ class StimulusSourceProceduralAudioStream:
         callback: Callable[[bytes], None],
         voice: "MaternalVoiceLayer | None" = None,
         awake: Callable[[], float] | None = None,
+        hearing: "HearingBandParams | None" = None,
     ) -> None:
         self._schedule = schedule
         self._params = params
@@ -402,6 +409,10 @@ class StimulusSourceProceduralAudioStream:
         self._callback = callback
         self._voice = voice
         self._awake = awake
+        self._hearing = hearing if (hearing is not None and hearing.enabled) else None
+        self._mix_cache: dict[int, "np.ndarray"] = {}
+        self._mix_newest: int | None = None
+        self._mix_lock = threading.Lock()
         if voice is not None and voice.repertoire.sample_rate != schedule.sample_rate:
             raise ValueError(
                 f"voice sample rate {voice.repertoire.sample_rate} does not match "
@@ -446,11 +457,42 @@ class StimulusSourceProceduralAudioStream:
         return k
 
     def _read_awake(self) -> float | None:
-        """Return the current awake time, or ``None`` if no voice is attached
-        or no awake provider is configured."""
-        if self._voice is None or self._awake is None:
+        """Return the current awake time, or ``None`` if no awake provider is set
+        or neither a voice nor an enabled hearing band is attached."""
+        if self._awake is None or (self._voice is None and self._hearing is None):
             return None
         return float(self._awake())
+
+    def _mix(self, block_index: int, awake: float) -> "np.ndarray":
+        """Return the unfiltered float mix of ``block_index``."""
+        import numpy as np
+
+        if block_index < 0:
+            n = max(1, int(self._schedule.frames_per_block))
+            return np.zeros(n, dtype=np.float64)
+
+        with self._mix_lock:
+            cached = self._mix_cache.get(block_index)
+            if cached is not None:
+                return cached
+
+            n = max(1, int(self._schedule.frames_per_block))
+            samples = self._soundscape(block_index)
+            if self._voice is not None:
+                samples = samples + self._voice.render(block_index * n, n, awake)
+
+            # Keep only blocks within 8 of the newest requested index.
+            newest = self._mix_newest
+            if newest is None or block_index > newest:
+                self._mix_newest = block_index
+                newest = block_index
+            cutoff = newest - 8
+            for key in list(self._mix_cache.keys()):
+                if key < cutoff:
+                    del self._mix_cache[key]
+
+            self._mix_cache[block_index] = samples
+            return samples
 
     def _produce(self) -> None:
         s = self._schedule
@@ -561,6 +603,9 @@ class StimulusSourceProceduralAudioStream:
 
         Pure function of ``(seed, block_index, params, maturation_progress)``
         and, with a voice, of the awake time at each slot's first rendering.
+        With an enabled hearing band the block is additionally a pure function
+        of the awake time and the voice plans, regardless of which blocks were
+        rendered before it.
         """
         import numpy as np
 
@@ -568,36 +613,82 @@ class StimulusSourceProceduralAudioStream:
         n = max(1, int(s.frames_per_block))
         channels = max(1, int(s.channels))
 
-        samples = self._soundscape(block_index)
-        base_amp_total = self._BASE_AMP_TOTAL
-        noise_rms = self._NOISE_RMS
-        thud_amp = self._THUD_AMP
+        if self._hearing is None:
+            samples = self._soundscape(block_index)
+            base_amp_total = self._BASE_AMP_TOTAL
+            noise_rms = self._NOISE_RMS
+            thud_amp = self._THUD_AMP
 
-        # Headroom for the fixed bed. With a voice the headroom grows by the
-        # voice's RMS level and a soft limiter catches the rare peaks above it.
-        max_possible = base_amp_total + 4 * noise_rms + thud_amp
-        if self._voice is not None:
-            awake = (
-                awake_seconds
-                if awake_seconds is not None
-                else (
-                    float(self._awake())
-                    if self._awake is not None
-                    else 0.0
+            # Headroom for the fixed bed. With a voice the headroom grows by the
+            # voice's RMS level and a soft limiter catches the rare peaks above it.
+            max_possible = base_amp_total + 4 * noise_rms + thud_amp
+            if self._voice is not None:
+                awake = (
+                    awake_seconds
+                    if awake_seconds is not None
+                    else (
+                        float(self._awake())
+                        if self._awake is not None
+                        else 0.0
+                    )
                 )
-            )
-            samples = samples + self._voice.render(block_index * n, n, awake)
-            max_possible = max_possible + self._voice.headroom
-            gain = (_INT16_MAX * 0.9) / max_possible
-            samples = soft_limit(
-                samples * gain,
-                knee=_INT16_MAX * 0.9,
-                # One step below full scale, so rounding never reaches it.
-                ceiling=float(_INT16_MAX - 1),
-            )
+                samples = samples + self._voice.render(block_index * n, n, awake)
+                max_possible = max_possible + self._voice.headroom
+                gain = (_INT16_MAX * 0.9) / max_possible
+                samples = soft_limit(
+                    samples * gain,
+                    knee=_INT16_MAX * 0.9,
+                    # One step below full scale, so rounding never reaches it.
+                    ceiling=float(_INT16_MAX - 1),
+                )
+            else:
+                gain = (_INT16_MAX * 0.9) / max_possible
+                samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
         else:
-            gain = (_INT16_MAX * 0.9) / max_possible
-            samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
+            from kaine.modules.audition.hearing_band import (
+                HEARING_BAND_TAPS,
+                band_edges,
+                band_taps,
+            )
+
+            if awake_seconds is not None:
+                awake = float(awake_seconds)
+            elif self._awake is not None:
+                awake = float(self._awake())
+            else:
+                awake = 0.0
+
+            hist = -(-(HEARING_BAND_TAPS - 1) // n)
+            x = np.concatenate(
+                [self._mix(block_index - j, awake) for j in range(hist, 0, -1)]
+                + [self._mix(block_index, awake)]
+            )
+            keep = n + HEARING_BAND_TAPS - 1
+            x = x[-keep:]
+
+            low, high = band_edges(awake, self._hearing)
+            taps = band_taps(low, high, float(max(1, s.sample_rate)))
+            samples = np.convolve(x, taps, mode="valid")
+
+            base_amp_total = self._BASE_AMP_TOTAL
+            noise_rms = self._NOISE_RMS
+            thud_amp = self._THUD_AMP
+
+            # Headroom for the fixed bed. With a voice the headroom grows by the
+            # voice's RMS level and a soft limiter catches the rare peaks above it.
+            max_possible = base_amp_total + 4 * noise_rms + thud_amp
+            if self._voice is not None:
+                max_possible = max_possible + self._voice.headroom
+                gain = (_INT16_MAX * 0.9) / max_possible
+                samples = soft_limit(
+                    samples * gain,
+                    knee=_INT16_MAX * 0.9,
+                    # One step below full scale, so rounding never reaches it.
+                    ceiling=float(_INT16_MAX - 1),
+                )
+            else:
+                gain = (_INT16_MAX * 0.9) / max_possible
+                samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 
         q = np.rint(samples).astype(np.int16)
         if maturation_progress is not None:
