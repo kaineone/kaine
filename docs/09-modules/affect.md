@@ -52,6 +52,24 @@ Falling errors make `g` positive and pull valence up; rising errors make it nega
 
 `[affect].valence_rule` selects the rule. `"error_dynamics"` (the default) is the rule above. `"wellness_level"` keeps the earlier rule, `v_target = clip(pl + (wellness - 0.5), -1, 1)` with the last reported wellness (0.5 before any), and then the module behaves bit for bit as before: it neither updates nor stores the wellness means. In the fourth test boot (2026-10-17) the earlier rule held valence near +0.38 for the whole run on a healthy host (wellness near 0.88) and it never went below 0. A replay estimate of the error-dynamics rule over the same run puts valence at a median of +0.01 (5th to 95th percentile -0.03 to +0.04), below 0 for 28% of the time and never below -0.12.
 
+### Valence-target terms in the state event
+
+Every `affect.state` event, the periodic one and the one after a sleep reset, also carries the terms behind the valence target, computed when it is published, so a fall or rise of valence in a run can be traced to its cause from the research log. They are numbers about the entity's own error and wellness means, never sense data or vectors, and each is a finite number or null:
+
+| Key | Meaning |
+|---|---|
+| `vision_error_fast`, `vision_error_slow`, `vision_progress` | The vision source's `E_fast`, `E_slow` and its clipped relative fall `g_m` |
+| `audition_error_fast`, `audition_error_slow`, `audition_progress` | The same for the audition module's acoustic path |
+| `signed_progress` | The pooled `g` (paper `lp`) |
+| `learning_progress` | `g` above its floor, `max(0, g - learning_progress_floor) / (1 - learning_progress_floor)` (paper `lp+`), the curiosity relief |
+| `wellness` | The last reported wellness (0.5 before any) |
+| `wellness_fast`, `wellness_slow` | `W_fast` and `W_slow`; null before the first wellness report and under the `wellness_level` rule |
+| `wellness_change` | `W_fast - W_slow` as the rule adds it, 0 before the first report |
+| `pleasantness` | `pl` |
+| `valence_target` | `v_target` under the active `valence_rule` |
+
+The sources are a fixed table, so the event always has the same keys. A source that has not reported gives null for its three keys, and a source whose slow mean is not above 1e-9 gives its means and a null progress, because the pooling skips it. A perceptual report from any other source still counts in `signed_progress` but adds no keys. The values come from the same helpers the update uses, so they are the terms valence relaxed toward at that moment.
+
 ## Drives
 
 Each drive is a deficit in `[0, 1]` that builds while its need goes unmet and is reduced by the events that meet it, the reduction serving as the drive's reward (Hull 1943; Keramati and Gutkin 2014). Between updates a drive follows the exact solution of `dD/dt = build_rate × u × (1 - D) - decay_rate × D`, so it relaxes toward `build_rate × u / (build_rate × u + decay_rate)` at a rate that does not depend on how often the affect module updates. Each default decay rate is about a ninth of its build rate, so a fully deprived drive settles near 0.9, above its 0.7 threshold.
@@ -187,7 +205,7 @@ The vision, audition and social cognition modules' stream names are fixed. The i
 
 | Stream | Event type | When | Intensity |
 |---|---|---|---|
-| `affect.out` | `affect.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives and the current emotion label, plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
+| `affect.out` | `affect.state` | Every `publish_interval_s` of entity time, on its own timer and after a broadcast once the interval has passed; carries the VAD state, the drives, the current emotion label and the [valence-target terms](#valence-target-terms-in-the-state-event), plus `reset: true` after a sleep reset | `baseline_salience`; `alert_salience` after a reset |
 | `affect.out` | `affect.emotion` | On a change of categorical emotion; carries the five scores, the state, `norm_compatibility_available`, `coping_available`, `goal_significance_method`, `obstruction` and `alert` (true for a non-neutral emotion) | `alert_salience`, or `baseline_salience` for `neutral` |
 | `affect.out` | `affect.drive` | On a threshold crossing; carries the drive name and value, and `alert: true`, so a crossing raises the access rate | `alert_salience` |
 | `affect.out` | `affect.drive` (re-entry) | On the module's own timer updates while an active goal's drive stays at or above threshold: each `P_Aff` until a broadcast accesses the goal's drive event, then `concern_reentry_s` after that access; carries the drive name and value, `alert: false` and `reentry: true` | the drive's value |
@@ -339,6 +357,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_reset_goal_events.py` | The sleep reset publishes a `cleared` goal event per active goal and leaves the outcome counts unchanged |
 | `tests/test_affect_drive_latch_persistence.py` | The drive crossing latch survives serialize and deserialize; older state infers it from value and threshold |
 | `tests/test_affect_stall_clock_persistence.py` | The stall clock survives a restore: a restored goal stalls on its original horizon; older state, invalid entries, unknown goals and a non-dict field restart the clock; a goal below threshold stores no entry |
+| `tests/test_affect_state_valence_terms.py` | The state event's valence-target terms match the trackers and the target on constructed inputs; an absent source is null and an unlisted one adds no keys; every value is finite or null; the reset event carries them; computing them leaves the dynamics unchanged |
 | `tests/test_affect_state_persistence.py` | The alert rates, error means, intent rate, wellness and interaction flag survive a restore into a fresh clock; a restore does not relieve boredom; older or invalid state keeps the defaults |
 | `tests/test_affect_regulation.py` | Monitor, episode detection and three-tier activation |
 | `tests/test_affect_regulation_module.py` | Tiers in the module, developmental phase, passive arm and factory |

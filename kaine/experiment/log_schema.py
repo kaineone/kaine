@@ -86,11 +86,24 @@ SCHEMA: dict[str, dict[str, tuple[float, float]]] = {
     "planning.timeout": {"confidence": UNIT},
     # preference is a softmax probability in [0, 1] (planning.module).
     "planning.proposal": {"preference": UNIT},
-    # --- Affect / motivation (affect.state: documented [-1,1]/[0,1]) ---
+    # --- Affect / motivation (affect.state: documented [-1,1]/[0,1] plus the valence target terms from paper A.4) ---
     "affect.state": {
         "valence": SIGNED_UNIT,
         "arousal": UNIT,
         "dominance": SIGNED_UNIT,
+        "vision_error_fast": NONNEG,
+        "vision_error_slow": NONNEG,
+        "audition_error_fast": NONNEG,
+        "audition_error_slow": NONNEG,
+        "vision_progress": SIGNED_UNIT,
+        "audition_progress": SIGNED_UNIT,
+        "signed_progress": SIGNED_UNIT,
+        "learning_progress": UNIT,
+        "wellness_fast": UNIT,
+        "wellness_slow": UNIT,
+        "wellness_change": SIGNED_UNIT,
+        "pleasantness": SIGNED_UNIT,
+        "valence_target": SIGNED_UNIT,
     },
     # affect.drive carries {drive, value}; each drive value is in [0, 1].
     "affect.drive": {"value": UNIT},

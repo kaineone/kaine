@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| affect-state-error-terms | 0/5 (0%) | The affect state event and its research record carry the terms behind the valence target (per-source error means and progress, pooled progress, wellness means and change, pleasantness, target), so a valence trough can be attributed (paper A.4). |
+| affect-state-error-terms | 5/5 (100%) | The affect state event and its research record carry the terms behind the valence target (per-source error means and progress, pooled progress, wellness means and change, pleasantness, target), so a valence trough can be attributed (paper A.4). |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | welfare-uncontrolled-ends | 4/4 (100%) | The affect welfare record counts stalled and cap-dropped goals as ends without the entity's own response, and a restored goal keeps its stall clock (paper 6.2, A.4). |
 | organ-degeneration-control | 4/4 (100%) | The organ's decoding carries a DRY repetition penalty and a shorter cap for thought than speech, and a looping or capped text is cut at a sentence boundary (paper 3.5, Table A1). |

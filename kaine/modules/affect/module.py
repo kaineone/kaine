@@ -319,6 +319,27 @@ class Affect(BaseModule):
         """
         self._development_probe = probe
 
+    def _source_error_terms(self, source: str) -> tuple[float | None, float | None, float | None]:
+        """Return the fast mean, slow mean and signed progress for one perceptual source.
+
+        Mirrors the arithmetic in ``_progress``. Returns ``(fast, slow, None)``
+        when the source cannot contribute to the pooled progress, and
+        ``(None, None, None)`` before it has registered any reports.
+        """
+        n_slow = self._err_slow_count.get(source, 0.0)
+        if n_slow <= 0.0:
+            return None, None, None
+        slow = self._err_slow_sum[source] / n_slow
+        n_fast = self._err_fast_count.get(source, 0.0)
+        if n_fast <= 0.0:
+            return None, slow, None
+        fast = self._err_fast_sum[source] / n_fast
+        if slow <= 1e-9:
+            return fast, slow, None
+        g_m = (slow - fast) / slow
+        g_m = max(-1.0, min(1.0, g_m))
+        return fast, slow, g_m
+
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
 
@@ -328,19 +349,10 @@ class Affect(BaseModule):
         2007; Schmidhuber 2010).
         """
         g_values: list[float] = []
-        for source, n_slow in self._err_slow_count.items():
-            if n_slow <= 0.0:
-                continue
-            slow = self._err_slow_sum[source] / n_slow
-            if slow <= 1e-9:
-                continue
-            n_fast = self._err_fast_count.get(source, 0.0)
-            if n_fast <= 0.0:
-                continue
-            fast = self._err_fast_sum[source] / n_fast
-            g_m = (slow - fast) / slow
-            g_m = max(-1.0, min(1.0, g_m))
-            g_values.append(g_m)
+        for source in self._err_slow_count:
+            g_m = self._source_error_terms(source)[2]
+            if g_m is not None:
+                g_values.append(g_m)
         if not g_values:
             return 0.0, 0.0
         g = sum(g_values) / len(g_values)
@@ -373,6 +385,47 @@ class Affect(BaseModule):
             return 0.0
         return self._well_fast_sum / fast_count - self._well_slow_sum / slow_count
 
+    def _valence_target(self, g: float) -> float:
+        """Return the valence relaxation target for signed progress ``g``.
+
+        Valence follows error dynamics (paper A.4): it relaxes toward the
+        appraisal's pleasantness plus the change in wellness, so a steady state is
+        neutral. The wellness_level rule keeps the earlier wellness level instead.
+        Coupling reaches valence only through the appraisal.
+        """
+        if self._valence_rule == "wellness_level":
+            return _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
+        return _clip(self._pleasantness(g) + self._wellness_change(), -1.0, 1.0)
+
+    def _valence_terms(self) -> dict[str, float | None]:
+        """Return the terms behind the valence target (paper A.4).
+
+        All values are scalars; sense data and vectors are never included.
+        Non-finite numbers are returned as ``None``.
+        """
+        terms: dict[str, float | None] = {}
+        for source in self._VALENCE_TERM_SOURCES:
+            fast, slow, g_m = self._source_error_terms(source)
+            terms[f"{source}_error_fast"] = _finite_number(fast)
+            terms[f"{source}_error_slow"] = _finite_number(slow)
+            terms[f"{source}_progress"] = _finite_number(g_m)
+        lp, g = self._progress()
+        terms["signed_progress"] = _finite_number(g)
+        terms["learning_progress"] = _finite_number(lp)
+        terms["wellness"] = _finite_number(self._wellness)
+        if self._well_fast_count > 0.0:
+            terms["wellness_fast"] = _finite_number(self._well_fast_sum / self._well_fast_count)
+        else:
+            terms["wellness_fast"] = None
+        if self._well_slow_count > 0.0:
+            terms["wellness_slow"] = _finite_number(self._well_slow_sum / self._well_slow_count)
+        else:
+            terms["wellness_slow"] = None
+        terms["wellness_change"] = _finite_number(self._wellness_change())
+        terms["pleasantness"] = _finite_number(self._pleasantness(g))
+        terms["valence_target"] = _finite_number(self._valence_target(g))
+        return terms
+
     def _pleasantness(self, g: float) -> float:
         """Appraisal pleasantness for signed progress `g`.
 
@@ -386,6 +439,10 @@ class Affect(BaseModule):
             math.tanh(self._valence_progress_gain * g) + coupling_pleasantness,
             -1.0, 1.0,
         )
+
+    # The perceptual sources itemised in the affect state payload; a fixed table,
+    # so the payload keys never depend on which sources reported.
+    _VALENCE_TERM_SOURCES: ClassVar[tuple[str, ...]] = ("vision", "audition")
 
     _ALERT_RATE_FLOOR_PER_S: ClassVar[float] = 0.05
 
@@ -767,14 +824,8 @@ class Affect(BaseModule):
         drifted = self._state.drift_toward(target, self._drift_rate, dt)
         v = self._state.valence  # pre-drift valence
         if dt > 0.0:
-            # Valence follows error dynamics (paper A.4): it relaxes toward the
-            # appraisal's pleasantness plus the change in wellness, so a steady state is
-            # neutral. The wellness_level rule keeps the earlier wellness level instead.
-            # Coupling reaches valence only through the appraisal.
-            if self._valence_rule == "wellness_level":
-                v_target = _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
-            else:
-                v_target = _clip(self._pleasantness(g) + self._wellness_change(), -1.0, 1.0)
+            # Valence target from error dynamics (paper A.4).
+            v_target = self._valence_target(g)
             k = 1.0 - math.exp(-dt / self._valence_time_constant_s)
             new_valence = v + (v_target - v) * k
         else:
@@ -1175,6 +1226,7 @@ class Affect(BaseModule):
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
                 "emotion": self._last_emotion.value,
+                **self._valence_terms(),
             },
             salience=self._baseline_salience,
         )
@@ -1502,6 +1554,7 @@ class Affect(BaseModule):
                 "emotion": self._last_emotion.value,
                 "reset": True,
                 "alert": True,
+                **self._valence_terms(),
             },
             salience=self._alert_salience,
         )

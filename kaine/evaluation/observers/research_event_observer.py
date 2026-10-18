@@ -193,7 +193,31 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # --- Affect / motivation ---
     "affect.state": frozenset(
-        {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance", "reset", "alert"}
+        {
+            "state",
+            "drives",
+            "emotion",
+            "emotion_category",
+            "valence",
+            "arousal",
+            "dominance",
+            "reset",
+            "alert",
+            "vision_error_fast",
+            "vision_error_slow",
+            "vision_progress",
+            "audition_error_fast",
+            "audition_error_slow",
+            "audition_progress",
+            "signed_progress",
+            "learning_progress",
+            "wellness",
+            "wellness_fast",
+            "wellness_slow",
+            "wellness_change",
+            "pleasantness",
+            "valence_target",
+        }
     ),
     "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert", "state", "coping_available", "obstruction", "goal_significance_method", "reappraised"}),
     "affect.drive": frozenset({"drive", "value", "alert", "reentry"}),
