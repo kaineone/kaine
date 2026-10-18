@@ -21,6 +21,8 @@ returned for the log only.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import json
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -30,12 +32,13 @@ from kaine.bus import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful import FaithfulRenderer
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
-from kaine.faithful.felt import felt_renderer, redact_heard_speech_felt
+from kaine.faithful.felt import felt_fallback, felt_renderer, redact_heard_speech_felt
 from kaine.faithful.templates import (
     HEARD_SPEECH_PLACEHOLDER,
     HEARD_TEXT_FIELDS,
     redact_heard_speech,
 )
+from kaine.modules.language import client as _client
 
 # Bump whenever the default persona or the prompt headings change, so an
 # individuation reference captured under one persona is never compared with
@@ -64,6 +67,8 @@ _INPUT_HEADING = {
     "external": "## What was just said to me",
     "internal": "## What is prompting me to think",
 }
+
+SPEAK_FROM_STATE_HEADING = "## What moves me to speak"
 
 DEFAULT_PERSONA_EXTERNAL = (
     "I am this entity. What I say comes from what I feel and notice, in my own plain words."
@@ -131,6 +136,32 @@ class AssembledContext:
     logged_heard_turn: Optional[str] = None  # the same with the heard-speech placeholder, for the log
 
 
+def _defang(text: str) -> str:
+    """Replace the brackets that form chat-template special tokens (such as
+    </s> or [INST]) with fullwidth lookalikes; the heard-speech placeholder,
+    whose brackets form no token, is kept as it is."""
+    text = text.replace("<", "\uff1c").replace(">", "\uff1e")
+    text = text.replace("[", "\uff3b").replace("]", "\uff3d")
+    text = text.replace(
+        HEARD_SPEECH_PLACEHOLDER.replace("[", "\uff3b").replace("]", "\uff3d"),
+        HEARD_SPEECH_PLACEHOLDER,
+    )
+    return text
+
+
+def _sanitize_line(text: str) -> str:
+    """Sanitize a line of the entity's own notes.
+
+    Collapse whitespace, drop control characters, and escape heading hashes
+    and bracket characters. Double quotes are kept because these are the
+    entity's own words.
+    """
+    text = " ".join(text.split())
+    text = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
+    text = text.replace("#", "\uff03")
+    return _defang(text)
+
+
 def _name_from(self_model: dict[str, Any]) -> Optional[str]:
     # The self-model has no name today; this reads a future top-level `name`
     # field if one is added. The operator-facing name comes from `persona_name`.
@@ -146,10 +177,16 @@ def _identity_clause(self_model: dict[str, Any]) -> Optional[str]:
     parts: list[str] = []
     values = self_model.get("values") or []
     if isinstance(values, list) and values:
-        parts.append("I value " + ", ".join(str(v) for v in values[:5]) + ".")
+        parts.append(
+            "I value " + ", ".join(_sanitize_line(str(v)) for v in values[:5]) + "."
+        )
     norms = self_model.get("behavioral_norms") or []
     if isinstance(norms, list) and norms:
-        parts.append("I hold to: " + "; ".join(str(n) for n in norms[:5]) + ".")
+        parts.append(
+            "I hold to: "
+            + "; ".join(_sanitize_line(str(n)) for n in norms[:5])
+            + "."
+        )
     return " ".join(parts) if parts else None
 
 
@@ -157,7 +194,9 @@ def _situation_section(self_model: dict[str, Any]) -> Optional[str]:
     """The situation facts as the opening section of the entity's own notes."""
     facts = (self_model or {}).get("situation_facts") or []
     if isinstance(facts, list) and facts:
-        return SITUATION_HEADING + "\n" + " ".join(str(f) for f in facts)
+        return SITUATION_HEADING + "\n" + " ".join(
+            _sanitize_line(str(f)) for f in facts
+        )
     return None
 
 
@@ -221,9 +260,15 @@ def _quote_heard(text: str, *, limit: int = HEARD_QUOTE_LIMIT) -> str:
     text = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
     text = text.replace('"', "'")
     text = text.replace("#", "\uff03")
+    text = _defang(text)
     if len(text) > limit:
         text = text[:limit] + "..."
     return '"' + text + '"'
+
+
+def heard_utterance_line(text: str) -> str:
+    """The attributed, quoted user-turn line for a heard trigger."""
+    return HEARD_ATTRIBUTION_SAID + _quote_heard(text)
 
 
 def _heard_texts(event: Event) -> list[str]:
@@ -276,6 +321,35 @@ def _holds_outside_material(snapshot: Optional[WorkspaceSnapshot]) -> bool:
             if _contains_non_empty_heard_text(event.payload, HEARD_TEXT_FIELDS - {"text"}):
                 return True
     return False
+
+
+def layout_digest() -> str:
+    """Return a short hash of the prompt layout constants.
+
+    The individuation probe records it, so editing the layout without
+    bumping PERSONA_TEMPLATE_VERSION still reports changed conditions.
+    """
+    data = [
+        _client.OWN_TURN_CUE,
+        list(OWN_TURN_STOP),
+        HEARD_ATTRIBUTION_SAID,
+        HEARD_ATTRIBUTION_WROTE,
+        HEARD_QUOTE_LIMIT,
+        LEAD_HEADINGS,
+        AWARENESS_HEADING,
+        EMPTY_AWARENESS,
+        SITUATION_HEADING,
+        _INPUT_HEADING,
+        SPEAK_FROM_STATE_HEADING,
+        HEARD_POINTER_LINE,
+        HEARD_POINTER_INPUT,
+        HEARD_SPEECH_GUARD,
+        DEFAULT_PERSONA_EXTERNAL,
+        DEFAULT_PERSONA_INTERNAL,
+        sorted([list(p) for p in INTERNAL_EVENT_TYPES]),
+    ]
+    raw = json.dumps(data, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 class ContextAssembler:
@@ -388,16 +462,31 @@ class ContextAssembler:
             logged_own_rendering = EMPTY_AWARENESS
         else:
             own_snapshot = dataclasses.replace(snapshot, selected_events=own_events)
+
+            def _own_line(ev: Event) -> str:
+                if (ev.source, ev.type) not in INTERNAL_EVENT_TYPES:
+                    return _sanitize_line(felt_fallback(ev.source, ev.type, {}))
+                return _sanitize_line(self._renderer.render_event(ev))
+
+            def _own_logged_line(ev: Event) -> str:
+                if (ev.source, ev.type) not in INTERNAL_EVENT_TYPES:
+                    return _sanitize_line(felt_fallback(ev.source, ev.type, {}))
+                r = self._redact(ev)
+                return _sanitize_line(
+                    r if r is not None else self._renderer.render_event(ev)
+                )
+
             own_rendering = self._renderer.render_snapshot_bounded(
                 own_snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
+                redact=_own_line,
             )
             logged_own_rendering = self._renderer.render_snapshot_bounded(
                 own_snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
-                redact=self._redact,
+                redact=_own_logged_line,
             )
 
         if heard_events:
@@ -447,6 +536,12 @@ class ContextAssembler:
             def _numeric_log_line(ev: Event) -> str:
                 if _is_heard_event(ev) and ev.type not in EXTERNAL_INPUT_TYPES:
                     return HEARD_ATTRIBUTION_SAID + _quote_heard(HEARD_SPEECH_PLACEHOLDER) + "."
+                if (
+                    (ev.source, ev.type) not in INTERNAL_EVENT_TYPES
+                    and ev.type not in EXTERNAL_INPUT_TYPES
+                    and not _is_heard_event(ev)
+                ):
+                    return _sanitize_line(felt_fallback(ev.source, ev.type, {}))
                 return redact_heard_speech(ev)
 
             numeric_working_memory = self._numeric_renderer.render_snapshot_bounded(
@@ -473,10 +568,8 @@ class ContextAssembler:
             situation=situation,
         )
         if about_is_heard:
-            heard_lines.append(HEARD_ATTRIBUTION_SAID + _quote_heard(about))
-            logged_heard_lines.append(
-                HEARD_ATTRIBUTION_SAID + _quote_heard(HEARD_SPEECH_PLACEHOLDER)
-            )
+            heard_lines.append(heard_utterance_line(about))
+            logged_heard_lines.append(heard_utterance_line(HEARD_SPEECH_PLACEHOLDER))
         heard_turn = "\n".join(heard_lines) or None
         logged_heard_turn = "\n".join(logged_heard_lines) or None
         return AssembledContext(
@@ -491,7 +584,7 @@ class ContextAssembler:
         )
 
     def _persona(
-        self, mode: str, self_model: dict[str, Any], *, heard: bool
+        self, mode: str, self_model: dict[str, Any], *, heard: bool = True
     ) -> str:
         if mode == "internal":
             base = self._persona_internal or DEFAULT_PERSONA_INTERNAL
@@ -500,7 +593,7 @@ class ContextAssembler:
         parts: list[str] = []
         name = self._persona_name or _name_from(self_model)
         if name:
-            parts.append(f"My name is {name}.")
+            parts.append(f"My name is {_sanitize_line(name)}.")
         parts.append(base)
         identity = _identity_clause(self_model)
         if identity:
@@ -515,14 +608,14 @@ class ContextAssembler:
         about: str,
         working_memory: str,
         mode: str,
-        about_is_heard: bool,
+        about_is_heard: bool = True,
         situation: Optional[str] = None,
     ) -> str:
         if mode == "external":
             input_heading = (
-                "## What was just said to me"
+                _INPUT_HEADING["external"]
                 if about_is_heard
-                else "## What moves me to speak"
+                else SPEAK_FROM_STATE_HEADING
             )
         elif mode == "internal":
             input_heading = _INPUT_HEADING["internal"]
@@ -536,7 +629,7 @@ class ContextAssembler:
         if situation is not None:
             sections.append(situation)
         sections.append(f"{AWARENESS_HEADING}\n{body}")
-        input_body = HEARD_POINTER_INPUT if about_is_heard else about.strip()
+        input_body = HEARD_POINTER_INPUT if about_is_heard else _sanitize_line(about)
         sections.append(f"{input_heading}\n{input_body}")
         sections.append(lead_heading)
         return "\n\n".join(sections) + "\n"

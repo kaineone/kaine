@@ -37,8 +37,21 @@ from kaine.lifecycle.individuation_store import (
     conditioning_from_snapshot,
     report_sink,
 )
+from kaine.modules.language.context import HEARD_QUOTE_LIMIT
 
 log = logging.getLogger(__name__)
+
+
+def check_battery_quotes(battery: Sequence[str]) -> None:
+    for i, prompt in enumerate(battery):
+        collapsed = " ".join(str(prompt).split())
+        length = len(collapsed)
+        if length > HEARD_QUOTE_LIMIT:
+            raise ValueError(
+                f"individuation battery prompt {i} is {length} characters; "
+                f"the organ quotes at most {HEARD_QUOTE_LIMIT}, so the probe "
+                "would ask a cut question"
+            )
 
 
 def _organ_root_url(chat_url: str) -> str:
@@ -425,6 +438,7 @@ def build_runtime(
     served_identity: "ServedOrganIdentity | None" = None,
     entity_name: str = "",
 ) -> IndividuationRuntime:
+    check_battery_quotes(battery)
     paths = IndividuationPaths(root=state_root)
 
     def embedder_ready() -> bool:

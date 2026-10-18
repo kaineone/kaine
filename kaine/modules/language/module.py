@@ -32,6 +32,7 @@ from kaine.modules.language.context import (
     OWN_TURN_STOP,
     PERSONA_TEMPLATE_VERSION,
     ContextAssembler,
+    layout_digest,
 )
 from kaine.modules.language.intent_log import IntentExpressionLog
 from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
@@ -499,6 +500,7 @@ class Language(BaseModule):
             "think": self._think,
             "persona_digest": self._persona_digest,
             "persona_template_version": PERSONA_TEMPLATE_VERSION,
+            "prompt_layout_digest": layout_digest(),
         }
 
     def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:

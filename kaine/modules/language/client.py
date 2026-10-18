@@ -260,15 +260,21 @@ class OpenAIChatClient:
         # chain-of-thought field so the caller still gets text. llama.cpp / Unsloth
         # Studio name it `reasoning_content`; some servers use `reasoning` — both.
         message = data["choices"][0]["message"]
-        content = message.get("content")
+        raw_content = message.get("content")
+        content = raw_content
         if content:
             content = own_turn_text(request, content)
         from_content = bool(content)
+        # an echo with nothing generated is no reply, and the reasoning channel must not stand in for it.
         text = (
             content
-            or message.get("reasoning_content")
-            or message.get("reasoning")
-            or ""
+            if request.own_turn and raw_content
+            else (
+                content
+                or message.get("reasoning_content")
+                or message.get("reasoning")
+                or ""
+            )
         )
         finish_reason = data["choices"][0].get("finish_reason")
         usage = data.get("usage") or {}

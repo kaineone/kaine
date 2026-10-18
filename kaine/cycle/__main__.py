@@ -522,7 +522,7 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     """
     from kaine.evaluation.ab_divergence import AssemblerConditionedClient
     from kaine.modules.language.client import ChatRequest, OpenAIChatClient
-    from kaine.modules.language.context import ContextAssembler
+    from kaine.modules.language.context import OWN_TURN_STOP, ContextAssembler, heard_utterance_line
 
     assembler = assembler or ContextAssembler()
     client = OpenAIChatClient(
@@ -534,18 +534,26 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     think = eval_cfg.chat_think
 
     def _build_prompt(utterance: str, conditioning: str):
-        # Inject `conditioning` as the rendered working-memory block by passing a
-        # pre-rendered string to the assembler's prompt builder. Empty
-        # conditioning → the assembler's EMPTY_AWARENESS prompt (bare arm).
+        # The `conditioning` block becomes the entity's notes (working memory).
+        # The utterance is another speaker's words and is placed in the user turn,
+        # exactly as the language module does in production for own-turn output.
         prompt = assembler._build_prompt(
-            about=utterance, working_memory=conditioning, mode="external"
+            about=utterance, working_memory=conditioning, mode="external", about_is_heard=True
         )
-        system = assembler._persona("external", {})
-        return system, prompt
+        system = assembler._persona("external", {}, heard=True)
+        return system, prompt, heard_utterance_line(utterance)
 
-    async def _complete(system: str, prompt: str) -> str:
+    async def _complete(system: str, prompt: str, user_turn=None) -> str:
         resp = await client.complete(
-            ChatRequest(prompt=prompt, model=model, system=system, think=think)
+            ChatRequest(
+                prompt=prompt,
+                model=model,
+                system=system,
+                think=think,
+                own_turn=True,
+                user_turn=user_turn,
+                stop=list(OWN_TURN_STOP),
+            )
         )
         return resp.text
 

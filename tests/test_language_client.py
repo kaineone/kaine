@@ -367,3 +367,36 @@ def test_own_turn_text_keeps_unechoed_output():
     content = "  The frame is new.\n## not a heading"
     assert own_turn_text(req, content) == "The frame is new.\n## not a heading"
     assert own_turn_text(req, "fram") == "fram"
+
+
+@pytest.mark.asyncio
+async def test_own_turn_echo_only_does_not_fall_back_to_reasoning():
+    payload = {
+        "model": "m",
+        "choices": [
+            {"message": {"content": "frame\n", "reasoning_content": "secret reasoning"}}
+        ],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    assert out.text == ""
+    assert out.from_content is False
+
+
+@pytest.mark.asyncio
+async def test_user_turn_still_falls_back_to_reasoning():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "", "reasoning_content": "thought"}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="p", model="m", system="s", own_turn=False)
+    )
+    assert out.text == "thought"

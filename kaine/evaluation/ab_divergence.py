@@ -222,12 +222,14 @@ class AssemblerConditionedClient:
     Parameters
     ----------
     build_prompt:
-        ``(utterance, conditioning) -> (system, prompt)``. Built from a real
-        ``ContextAssembler`` at the entrypoint. Both arms call it with the same
-        ``utterance``, differing only in ``conditioning``.
+        ``(utterance, conditioning) -> (system, prompt)`` or
+        ``(utterance, conditioning) -> (system, prompt, user_turn)``. Built from a
+        real ``ContextAssembler`` at the entrypoint. Both arms call it with the
+        same ``utterance``, differing only in ``conditioning``.
     complete:
-        ``(system, prompt) -> str`` — the language-organ chat call. Both arms
-        share it, so model/temperature/think are identical across arms.
+        ``(system, prompt) -> str`` or ``(system, prompt, user_turn) -> str`` —
+        the language-organ chat call. Both arms share it, so
+        model/temperature/think are identical across arms.
     """
 
     def __init__(self, build_prompt, complete) -> None:
@@ -235,8 +237,8 @@ class AssemblerConditionedClient:
         self._complete = complete
 
     async def complete_conditioned(self, utterance: str, conditioning: str) -> str:
-        system, prompt = self._build_prompt(utterance, conditioning)
-        return await self._complete(system, prompt)
+        parts = self._build_prompt(utterance, conditioning)
+        return await self._complete(*parts)
 
 
 class ABDivergenceObserver(StreamSubscriberObserver):
