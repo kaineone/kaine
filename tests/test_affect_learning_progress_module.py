@@ -87,32 +87,33 @@ async def test_curiosity_relief_follows_windows(bus):
         bus,
         clock=lambda: tf[0],
         publish_interval_s=1.0,
-        learning_progress_span_s=240.0,
-        learning_progress_bin_s=60.0,
+        learning_progress_span_s=2400.0,
+        learning_progress_bin_s=600.0,
     )
     const = Affect(
         bus,
         clock=lambda: tc[0],
         publish_interval_s=1.0,
-        learning_progress_span_s=240.0,
-        learning_progress_bin_s=60.0,
+        learning_progress_span_s=2400.0,
+        learning_progress_bin_s=600.0,
     )
 
     await fall._handle_peer_event("vision.out", _vision(1.0))
     await const._handle_peer_event("vision.out", _vision(1.0))
 
-    for _ in range(240):
-        tf[0] += 1.0
-        tc[0] += 1.0
-        err = 0.5 if tf[0] > 120.0 else 1.0
+    for _ in range(2400):
+        tf[0] += 2.0
+        tc[0] += 2.0
+        err = 1.0 - 0.4 * tf[0] / 4800.0
         await fall._handle_peer_event("vision.out", _vision(err))
         await const._handle_peer_event("vision.out", _vision(1.0))
         await fall._tick()
         await const._tick()
 
+    assert fall._progress()[1] < 0.05
     assert fall._progress()[0] > 0.0
     assert const._progress()[0] == pytest.approx(0.0)
-    assert fall._drives.curiosity.value < const._drives.curiosity.value
+    assert fall._drives.curiosity.value < const._drives.curiosity.value - 0.05
 
 
 async def test_progress_matches_fresh_windowed_estimator(bus):
@@ -345,19 +346,29 @@ async def test_restore_keeps_current_bin_time(bus):
     )
     m2.deserialize(snap)
 
-    for _ in range(90):
+    assert m2._lp_windows["vision"].to_dict(t[0])["elapsed_s"] == pytest.approx(
+        m1._lp_windows["vision"].to_dict(t[0])["elapsed_s"]
+    )
+    assert m1._lp_windows["vision"].to_dict(t[0])["elapsed_s"] > 0
+
+    def _same(a, b):
+        if a is None or b is None:
+            assert a is None and b is None
+        else:
+            assert a == pytest.approx(b)
+
+    for _ in range(180):
         t[0] += 1.0
-        err = 0.5
+        err = 0.2 if int((t[0] - 150.0) // 20.0) % 2 == 0 else 0.8
         await m1._handle_peer_event("vision.out", _vision(err))
         await m2._handle_peer_event("vision.out", _vision(err))
         await m1._tick()
         await m2._tick()
 
-    assert m1._progress()[0] == pytest.approx(m2._progress()[0])
-    v1, lp1 = m1._learning_progress_terms(t[0])
-    v2, lp2 = m2._learning_progress_terms(t[0])
-    assert v1["vision"] == pytest.approx(v2["vision"])
-    assert lp1 == pytest.approx(lp2)
+        v1 = m1._learning_progress_terms(t[0])[0].get("vision")
+        v2 = m2._learning_progress_terms(t[0])[0].get("vision")
+        _same(v1, v2)
+        assert m1._progress()[0] == pytest.approx(m2._progress()[0])
 
 
 async def test_old_snapshot_without_bins_restarts_bins(bus):
@@ -383,10 +394,21 @@ async def test_old_snapshot_without_bins_restarts_bins(bus):
         learning_progress_span_s=240.0,
         learning_progress_bin_s=60.0,
     )
+    await m2._handle_peer_event("vision.out", _vision(1.0))
+    for _ in range(180):
+        t[0] += 1.0
+        err = 0.5 if t[0] > 120.0 else 1.0
+        await m2._handle_peer_event("vision.out", _vision(err))
+        await m2._tick()
+
+    assert m2._lp_windows
+    assert m2._progress()[0] > 0.0
+
     m2.deserialize(snap)
 
     assert "vision" in m2._err_slow_count
     assert m2._lp_windows == {}
+    assert m2._progress()[0] == 0.0
 
 
 async def test_missing_or_bad_bins_clears_existing_windows(bus):

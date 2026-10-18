@@ -17,7 +17,10 @@ from typing import Any
 
 
 def _validate_pair(item: object) -> tuple[float, int] | None:
-    """Return a validated (sum, count) pair, or None if invalid."""
+    """Return a validated (sum, count) pair, or None if invalid.
+
+    A pair with count 0 must have sum exactly 0.0; otherwise it is invalid.
+    """
     if not isinstance(item, (list, tuple)) or len(item) != 2:
         return None
     raw_sum, raw_count = item
@@ -43,6 +46,9 @@ def _validate_pair(item: object) -> tuple[float, int] | None:
             return None
         count_value = int(raw_count)
     else:
+        return None
+
+    if count_value == 0 and sum_value != 0.0:
         return None
 
     return (sum_value, count_value)

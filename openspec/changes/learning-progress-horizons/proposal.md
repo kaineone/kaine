@@ -12,6 +12,9 @@ In the intrinsic-motivation literature learning progress is the decrease of the 
 - The bins, the current partial bin and the time elapsed in it persist in the affect snapshot under `learning_progress_bins` and carry through sleep like the error means. An old snapshot without the key, or one saved with a different bin width, starts the bins fresh; a snapshot with more bins than the span keeps the newest.
 - `affect.state` and its research record add `vision_learning_progress`, `audition_learning_progress` (each source's windowed progress, null while undefined) and `signed_learning_progress` (the pooled `lp`). `learning_progress` keeps its meaning, `lp+`, now from the windows.
 
+- The run manifest gains `learning_progress_scheme = 2` (`LEARNING_PROGRESS_SCHEME`, the `config_key_scheme` convention): the research-log field `learning_progress` keeps its name, and a manifest without the field marks a run whose `learning_progress` came from the fast and slow means (scheme 1), so analyses can tell the estimators apart.
+- A restored bin whose count is 0 must have an error sum of 0; otherwise the source's bins start empty.
+
 Calibration (offline, 16 awake hours, 3 seeds, the live audition path with a fresh forward model, the voice from the first boot, the real broadcast-context featurizer fed with accessed broadcasts matched to the eighth boot, and a vision proxy fitted to its live error course): with these defaults curiosity's median is 0.1 to 0.75 over the first six hours while the forward models learn, held below threshold so it rarely crosses, then near 0.9; a phase-randomized voice and the voice-free feed match the voice, and a frozen forward model gives 0.04 own reliefs an hour. With the old horizons curiosity's median stays near 0.9 throughout and the voice feed gives 7.7 own reliefs an hour from hour 6 on (phase-randomized 8.5, voice-free 2.0, frozen 0.36): those reliefs are the re-adaptation transients after each speech episode, and the first hours, when the models learn most, give 0.3 to 2.7.
 
 ## Capabilities
@@ -25,6 +28,6 @@ Calibration (offline, 16 awake hours, 3 seeds, the live audition path with a fre
 
 ## Impact
 
-- `kaine/modules/affect/learning_progress.py` (new), `kaine/modules/affect/module.py`, `kaine/boot/factories/affect.py`, `config/kaine.toml`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/modules.md`, `docs/17-research-data/event-streams.md`, tests.
+- `kaine/modules/affect/learning_progress.py` (new), `kaine/modules/affect/module.py`, `kaine/boot/factories/affect.py`, `config/kaine.toml`, `kaine/evaluation/observers/research_event_observer.py`, `kaine/experiment/log_schema.py`, `kaine/experiment/run_context.py`, `docs/09-modules/affect.md`, `docs/16-run-identity.md`, `docs/appendix-a-configuration/modules.md`, `docs/17-research-data/event-streams.md`, tests.
 - Behaviour: curiosity's relief and build input change for every entity, the kept seed included (high risk, second review). A converged entity sees little progress, as before; a learning one sees it for hours. Valence, boredom, arousal and the alert rates are unchanged. The persisted state adds at most 91 pairs of scalars per perceptual source, no sense data.
 - Paper: A.4 learning progress, Table A1 (`T_lp`, `Delta_lp`), A.7 calibration sentence, on branch `paper-lp-horizons`.

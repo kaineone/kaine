@@ -295,3 +295,93 @@ def test_from_dict_trims_excess_bins_to_max_bins():
     assert len(snapshot["bins"]) == 4
     assert snapshot["bins"] == [[3.0, 1], [4.0, 1], [5.0, 1], [6.0, 1]]
     assert p.value(0.0) == pytest.approx(1.0 - 5.5 / 3.5)
+
+
+def test_from_dict_rejects_positive_sum_with_zero_count():
+    base = WindowedProgress(BIN_S, MAX_BINS)
+    feed(base, 0.0, 59.0, 1.0)
+    base.add(60.0, 0.7)
+    d = base.to_dict(90.0)
+
+    bad_bins = dict(d)
+    bad_bins["bins"] = [[2.5, 0]]
+    assert (
+        WindowedProgress.from_dict(
+            bad_bins, bin_s=BIN_S, max_bins=MAX_BINS, t=90.0
+        )
+        is None
+    )
+
+    bad_current = dict(d)
+    bad_current["current"] = [2.5, 0]
+    assert (
+        WindowedProgress.from_dict(
+            bad_current, bin_s=BIN_S, max_bins=MAX_BINS, t=90.0
+        )
+        is None
+    )
+
+    zero_sum = dict(d)
+    zero_sum["bins"] = [[0.0, 0]]
+    assert (
+        WindowedProgress.from_dict(
+            zero_sum, bin_s=BIN_S, max_bins=MAX_BINS, t=90.0
+        )
+        is not None
+    )
+
+    zero_current = dict(d)
+    zero_current["current"] = [0.0, 0]
+    assert (
+        WindowedProgress.from_dict(
+            zero_current, bin_s=BIN_S, max_bins=MAX_BINS, t=90.0
+        )
+        is not None
+    )
+
+
+def test_value_none_when_older_half_has_no_reports():
+    p = WindowedProgress(BIN_S, 4)
+    feed(p, 0.0, 59.0, 1.0)
+    # bins 1, 2 and 3 are empty
+    feed(p, 240.0, 359.0, 1.0)
+    assert p.value(360.0) is None
+
+
+def test_value_none_when_newer_half_has_no_reports():
+    p = WindowedProgress(BIN_S, 4)
+    feed(p, 0.0, 119.0, 1.0)
+    # bins 2 and 3 are empty
+    assert p.value(240.0) is None
+
+
+def test_gap_of_exactly_max_bins_empty_bins_gives_none_then_recover():
+    p = WindowedProgress(60.0, 4)
+    feed(p, 0.0, 119.0, 1.0)
+    feed(p, 120.0, 239.0, 0.5)
+    p.add(240.0, 0.9)
+
+    # advancing from bin 4 to bin 9 appends bin 4 and four empty bins,
+    # so the deque ends up holding four empty bins
+    assert p.value(540.0) is None
+
+    feed(p, 540.0, 659.0, 0.8)
+    assert p.value(660.0) is None
+
+    feed(p, 660.0, 779.0, 0.4)
+    assert p.value(780.0) == pytest.approx(0.5)
+
+
+def test_gap_of_max_bins_minus_one_empty_bins_gives_none():
+    p = WindowedProgress(60.0, 4)
+    feed(p, 0.0, 119.0, 1.0)
+    feed(p, 120.0, 239.0, 0.5)
+    p.add(240.0, 0.9)
+
+    # three skipped bins (bins 5, 6, 7); next report is in bin 8
+    assert p.value(480.0) is None
+    # bin 4 survives the gap as the oldest completed bin
+    assert p.to_dict(480.0)["bins"] == [[0.9, 1], [0.0, 0], [0.0, 0], [0.0, 0]]
+
+    feed(p, 480.0, 599.0, 0.45)
+    assert p.value(600.0) is None

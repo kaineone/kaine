@@ -201,7 +201,7 @@ class Affect(BaseModule):
         self._boredom_engagement_relief = float(boredom_engagement_relief)
         self._concern_reentry_s = float(concern_reentry_s)
 
-        # Perceptual learning-progress state.
+        # Perceptual error-dynamics state (valence; paper A.4).
         # Time-decayed mean trackers per source: sum and count for each tau.
         self._err_fast_sum: dict[str, float] = {}
         self._err_fast_count: dict[str, float] = {}
@@ -1070,7 +1070,7 @@ class Affect(BaseModule):
 
         emotion = classify(scores)
         # Surprise reaches arousal through the perceptual-alert path;
-        # valence follows learning progress.
+        # valence follows the error dynamics.
         if emotion != self._last_emotion:
             await self.publish(
                 "affect.emotion",
@@ -1120,7 +1120,7 @@ class Affect(BaseModule):
             has_novel = True
         novelty = 1.0 - prod_factor if has_novel else 0.0
 
-        # Pleasantness is the appraisal's signed learning progress; coupling
+        # Pleasantness is the appraisal's error dynamics; coupling
         # contributes only through the appraisal, not by a direct state write.
         _, g = self._progress()
         pleas = self._pleasantness(g)
