@@ -22,6 +22,13 @@ def make_language(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "model_id",
         "temperature",
         "max_tokens",
+        # decoding bounds (paper 3.5): think cap, DRY repetition penalty, sentence cut
+        "think_max_tokens",
+        "dry_multiplier",
+        "dry_base",
+        "dry_allowed_length",
+        "dry_penalty_last_n",
+        "sentence_cut",
         "think",
         "request_timeout_s",
         # read by kaine.organ_server.lifecycle when it launches the organ, not by the language module

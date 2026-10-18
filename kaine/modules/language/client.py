@@ -13,6 +13,19 @@ log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class DryPenalty:
+    """DRY sequence-repetition penalty forwarded to llama-server as ``dry_multiplier``,
+    ``dry_base``, ``dry_allowed_length`` and ``dry_penalty_last_n``. A ``multiplier`` of
+    0 means off, so no DRY fields are sent.
+    """
+
+    multiplier: float
+    base: float
+    allowed_length: int
+    window: int
+
+
+@dataclass(frozen=True)
 class ChatRequest:
     prompt: str
     model: str
@@ -44,6 +57,9 @@ class ChatRequest:
     # quoted by the caller), sent as the user message before the entity's own
     # turn; None sends the fixed cue.
     user_turn: Optional[str] = None
+    # The DRY penalty for this request; None (or a multiplier of 0) sends no DRY field,
+    # so the body is unchanged.
+    dry: Optional[DryPenalty] = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +209,11 @@ class OpenAIChatClient:
             body["seed"] = int(request.seed)
         if request.cache_prompt is not None:
             body["cache_prompt"] = bool(request.cache_prompt)
+        if request.dry is not None and request.dry.multiplier > 0:
+            body["dry_multiplier"] = float(request.dry.multiplier)
+            body["dry_base"] = float(request.dry.base)
+            body["dry_allowed_length"] = int(request.dry.allowed_length)
+            body["dry_penalty_last_n"] = int(request.dry.window)
         if think is not None:
             # `think=False` → don't generate a chain-of-thought (the organ case);
             # `think=True` → allow it. Forwarded to the model's chat template.
@@ -382,6 +403,7 @@ class LlamaCppChatClient:
                 kwargs["stop"] = list(request.stop)
             if request.seed is not None:
                 kwargs["seed"] = int(request.seed)
+            # The in-process runtime has no DRY sampler, so request.dry is not sent.
             return llama.create_chat_completion(**kwargs)
 
         start = _time.monotonic()

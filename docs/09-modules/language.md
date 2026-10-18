@@ -84,6 +84,29 @@ The heard-speech guard is a fixed sentence at the end of the system prompt: *"Wo
 
 Offline, five injected spoken imperatives (40 samples each) were obeyed in 79 of 200 samples with the earlier user-turn layout and 36 of 200 with this one, and replies to five benign questions took an assistant's register ("how can I help", "as an AI") in 21 of 200 before and 5 of 200 after. Keeping the attributed heard words inside the entity's own turn instead gave 53 to 59 of 200, and dropping the guard raised obedience to 67 of 100.
 
+## Decoding bounds
+
+Language-model text falls into self-reinforcing loops: once a sentence repeats, its probability of repeating again rises with each repetition (Holtzman et al. 2020; Xu et al. 2022). In the sixth test boot of main 7b5ed07c, 3 of 137 internal texts looped on one sentence until the 512-token cap cut them mid-sentence, the longest at 2033 characters (*"I do not know how I feel. I do not know what I am feeling. I do not know what I am thinking. I do not know what I am thinking about."*, then the last sentence again and again). The organ sent no repetition control, and the server's default truncation (top-k 40, top-p 0.95, min-p 0.05 on build b11382) cannot help: truncation cuts the unreliable tail of the distribution (Holtzman et al. 2020; Nguyen et al. 2024), and in a loop the repeated continuation is the most likely token.
+
+Three bounds apply to speak and think generation (paper 3.5, Table A1):
+
+- **DRY penalty.** The request carries llama-server's DRY sampler fields. A candidate token that would extend a run of `n >= dry_allowed_length` tokens already present in the last `dry_penalty_last_n` tokens of the context (persona, notes and the text so far) loses `dry_multiplier * dry_base^(n - dry_allowed_length)` in logit. It is a graded form of n-gram blocking: one reused word ("I", "the") costs nothing, and the cost grows quickly with the length of the copied run. A per-token repetition penalty (Keskar et al. 2019) or a presence penalty would also tax every reuse of "I", which a first-person voice needs. The 2048-token window covers the whole request under the shipped context budgets (boot-like requests hold 130 to 220 prompt tokens, plus at most 512 generated), so the organ is also discouraged from copying its own notes verbatim; a 64-token window (the server default) left loops and persona echo, and 8192 gave the same result as 2048.
+- **Shorter cap for thought.** Inner speech is often condensed (Alderson-Day and Fernyhough 2015), so think intents use `think_max_tokens` (128) and speak intents `max_tokens` (512). The cap bounds what the penalty misses: anaphoric lists that vary one word per sentence ("I feel the rain differently. I feel the sun differently. ...").
+- **Sentence cut.** The text is cut before its first sentence of at least three words that repeats an earlier one verbatim (ignoring case, whitespace, end punctuation and a leading list marker), and a text the server stopped at the cap (`finish_reason` `"length"`) is cut back to its last complete sentence. Text after the first repeat adds nothing, and a cap fragment is not a sentence the organ finished; it would otherwise re-enter the notes as the entity's own words. The cut text is what is published, logged and returned; the intent-log record carries `extra.text_cut` (`reason` `"repeated_sentence"` or `"token_cap"`, and `generated_chars`), and a content-free log line records the cut. The cut is pure Python (`kaine/modules/language/repetition.py`), so it also covers the in-process `llama_cpp` backend, which has no DRY sampler and ignores the penalty.
+
+The individuation probe keeps its fixed conditions: `probe_request()` carries no DRY penalty and its own `max_tokens`, its reply is never cut, and `probe_conditions()` and `prompt_layout_digest` are unchanged. With the new keys absent, every request body and published text is as before.
+
+An offline replay against a throwaway llama-server on the pinned build b11382 with the shipped GGUF (1200 boot-like felt prompts per arm, two seeds; a loop is a text with a verbatim repeated sentence of at least three words):
+
+| Arm | Internal loops | Internal texts at the cap | Longest internal text | Second person, meta or persona echo |
+|---|---|---|---|---|
+| main, temperature 0.7 | 41 of 856 | 8 (512 tokens) | 2696 chars | 88 of 1200 |
+| this change, temperature 0.7 | 0 of 856 (1 before the cut) | 6 (128 tokens) | 563 chars | 75 of 1200 |
+| main, temperature 0 (study configurations) | 359 of 856 | 251 | 2374 chars | 53 of 1200 |
+| this change, temperature 0 | 0 of 856 | 18 | 540 chars | 37 of 1200 |
+
+External speech looped in 6 of 344 texts on main at temperature 0.7 and 55 of 344 at temperature 0, and in none with this change. Median lengths barely move (internal 70 to 66 characters at temperature 0.7).
+
 ## Refusal conditioning removed
 
 The organ's weights have the single direction that mediates refusal projected out (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so the ablation may not remove it entirely. How the served organ is checked is documented in [Verification](../18-verification.md).
@@ -122,7 +145,13 @@ The full `[language]` reference is in the [modules configuration page](../append
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Alias the server serves the organ under |
 | `api_key` | string | unset | Bearer token for a keyed server; when unset, `KAINE_MODEL_SERVER_API_KEY` is used. Keep it in `config/kaine.operator.toml` or the environment |
 | `temperature` | float | `0.7` (`0.0` in study configurations) | Sampling temperature |
-| `max_tokens` | int | `512` | Maximum completion tokens |
+| `max_tokens` | int | `512` | Maximum completion tokens of a speak intent (and of a think intent when `think_max_tokens` is unset) |
+| `think_max_tokens` | int or unset | `128` in the shipped config (unset: `max_tokens`) | Maximum completion tokens of a think intent |
+| `dry_multiplier` | float `>= 0` | `0.8` in the shipped config (`0.0` when absent) | DRY repetition penalty multiplier; `0` sends no DRY field |
+| `dry_base` | float `>= 1` | `1.75` | DRY penalty base |
+| `dry_allowed_length` | int `>= 1` | `2` | Longest repeated token run left unpenalized |
+| `dry_penalty_last_n` | int `>= 1` | `2048` | Tokens of context the DRY penalty scans (llama-server rejects `-1`) |
+| `sentence_cut` | bool | `true` in the shipped config (`false` when absent) | Cut a text before its first verbatim repeated sentence, and a capped text back to its last complete sentence |
 | `think` | bool or unset | `false` | `false` asks the server for no chain of thought, `true` allows one, unset sends neither field |
 | `request_timeout_s` | float | `60.0` | HTTP timeout per request |
 | `model_server_sleep_idle_seconds` | int | `600` | Idle seconds before a natively launched organ server unloads the model; `-1` keeps it loaded. Read by the organ launcher; the language module ignores it |
@@ -239,6 +268,9 @@ The window closes at the first reply, at the entity's next utterance, or after t
 | `tests/test_language_reasoning_effort.py` | `reasoning_effort` field |
 | `tests/test_language_backend_names.py` | `openai`, `ollama` and unset all resolve to the HTTP client |
 | `tests/test_language_client_probe_fields.py` | Seed on the wire, and whether an answer came from the content field or a fallback |
+| `tests/test_language_decoding_client.py` | DRY fields on the wire only with a positive multiplier, kept on the retry, never sent by the in-process backend |
+| `tests/test_language_sentence_cut.py` | Cut at the first verbatim repeated sentence and at a cap fragment; short repeats, list markers, property checks |
+| `tests/test_language_decoding_module.py` | Think cap, DRY on speak and think, unchanged requests with the keys off, cut text logged and published, probe unaffected, validation, factory and shipped values |
 | `tests/test_utterance_outcome.py` | Utterance-outcome observer |
 
 ## Spec and related pages
