@@ -125,7 +125,7 @@ def test_working_memory_includes_rendered_events():
     )
     assert "Interoception reports wellness" in ctx.prompt
     assert "Affect state" in ctx.prompt
-    assert 'Speech heard: "are you there"' in ctx.prompt
+    assert 'Someone else said, in their words and not mine: "are you there"' in ctx.prompt
     assert "are you there" in ctx.prompt  # the triggering input too
     assert AWARENESS_HEADING in ctx.prompt
     assert "Interoception reports" in ctx.working_memory  # exposed for the eval log
@@ -145,7 +145,7 @@ def test_budget_caps_event_count_by_salience():
         about="x", snapshot=_snap(triples), self_model={}, mode="external"
     )
     aware = ctx.working_memory
-    assert aware.count("Speech heard") == 3  # capped
+    assert aware.count("Someone else said") == 3  # capped
     # The three highest-salience events (08/09/10) were chosen; low ones dropped.
     assert "item-10" in aware and "item-09" in aware and "item-08" in aware
     assert "item-01" not in aware and "item-02" not in aware
@@ -159,7 +159,7 @@ def test_char_budget_drops_lowest_salience():
     ctx = ContextAssembler(max_events=20, char_budget=160).assemble(
         about="q", snapshot=_snap(triples), self_model={}, mode="external"
     )
-    n = ctx.working_memory.count("Speech heard")
+    n = ctx.working_memory.count("Someone else said")
     assert 0 < n < 10  # budget truncated the block
 
 
@@ -351,7 +351,7 @@ async def test_rolling_latest_snapshot_conditions_speech(bus, tmp_path):
         assert await _wait_entries(bus, EXTERNAL_STREAM)
         req = language.chat_client.requests[-1]
         # Conditioned on the heard utterance from the conscious workspace.
-        assert 'Speech heard: "are you awake"' in req.prompt
+        assert 'Someone else said, in their words and not mine: "are you awake"' in req.prompt
     finally:
         await language.shutdown()
 

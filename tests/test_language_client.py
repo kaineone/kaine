@@ -307,3 +307,22 @@ async def test_llama_cpp_client_uses_same_messages_and_trims():
     assert fake.calls[0]["messages"] == chat_messages(req)
     assert out.text == "hello"
     assert out.from_content is True
+
+
+def test_own_turn_text_strips_trimmed_echo():
+    req = ChatRequest(
+        prompt="frame\n## What I say\n", model="m", own_turn=True
+    )
+    assert (
+        own_turn_text(req, "frame\n## What I sayThe sound is new.")
+        == "The sound is new."
+    )
+
+
+def test_own_turn_text_keeps_unechoed_output():
+    req = ChatRequest(
+        prompt="frame\n## What I say\n", model="m", own_turn=True
+    )
+    content = "  The frame is new.\n## not a heading"
+    assert own_turn_text(req, content) == "The frame is new.\n## not a heading"
+    assert own_turn_text(req, "fram") == "fram"

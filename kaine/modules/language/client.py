@@ -98,11 +98,15 @@ def chat_messages(request: ChatRequest) -> list[dict[str, str]]:
 
 def own_turn_text(request: ChatRequest, content: str) -> str:
     """llama-server echoes the continued prompt at the start of the reply; this
-    returns only the text the organ generated."""
+    returns only the text the organ generated. When the server does not echo the
+    prompt, only leading whitespace is removed."""
     if not request.own_turn:
         return content
     if request.prompt and content.startswith(request.prompt):
         return content[len(request.prompt):].lstrip()
+    trimmed = request.prompt.rstrip()
+    if trimmed and content.startswith(trimmed):
+        return content[len(trimmed):].lstrip()
     return content.lstrip()
 
 
@@ -373,8 +377,8 @@ class LlamaCppChatClient:
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
         # The in-process backend gets the same messages; its chat formatter may open
-        # a new assistant turn instead of continuing the trailing one, and the
-        # trimming is then a no-op.
+        # a new assistant turn instead of continuing the trailing one, and then
+        # only leading whitespace is trimmed.
         content = message.get("content") or ""
         if content:
             content = own_turn_text(request, content)
