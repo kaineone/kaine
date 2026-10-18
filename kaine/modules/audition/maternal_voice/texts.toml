@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# The maternal-voice repertoire of the developmental stimulus (paper A.7).
+# Original text written for KAINE; no quoted or copyrighted material.
+# Items are listed in unlock order: the first `initial_unlocked` are heard from
+# the start, then one more unlocks every voice_unlock_seconds of lived (awake)
+# time. "passage" items are read aloud; "phrase" items are short remarks.
+# The first item is the repeated passage, the one read most often (DeCasper
+# and Spence 1986).
+
+initial_unlocked = 5
+
+[[item]]
+id = "p0-little-boat"
+kind = "passage"
+takes = 3
+text = "Little boat upon the sea, rocking slow and rocking free. Up the wave and down the wave, little boat is safe and brave. When the moon comes out to play, little boat will sail away. Over water, over foam, little boat is coming home."
+
+[[item]]
+id = "f01-hello"
+kind = "phrase"
+takes = 2
+text = "Hello, little one."
+
+[[item]]
+id = "f02-awake"
+kind = "phrase"
+takes = 2
+text = "Are you awake in there?"
+
+[[item]]
+id = "f03-there-you-are"
+kind = "phrase"
+takes = 2
+text = "There you are."
+
+[[item]]
+id = "p1-early-bus"
+kind = "passage"
+takes = 2
+text = "I think we should leave a little early tomorrow. The bus was so slow this morning, and the bridge was closed again. If we get there by nine, we can still find a seat near the window and have a cup of tea before it starts."
+
+[[item]]
+id = "f04-good-morning"
+kind = "phrase"
+takes = 2
+text = "Good morning, sweetheart."
+
+[[item]]
+id = "p2-soup"
+kind = "passage"
+takes = 2
+text = "Can you pass me the blue bowl, please? No, the bigger one, on the top shelf. I want to make soup tonight, with carrots and lentils and a bit of ginger. It always tastes better on the second day."
+
+[[item]]
+id = "f05-rest"
+kind = "phrase"
+takes = 2
+text = "Time to rest now."
+
+[[item]]
+id = "p3-garden"
+kind = "passage"
+takes = 2
+text = "The garden looks wonderful after all that rain. The beans are climbing the fence now, and the roses by the gate have opened. I should cut some for the table before the wind takes the petals."
+
+[[item]]
+id = "f06-kicking"
+kind = "phrase"
+takes = 2
+text = "Oh, you are kicking!"
+
+[[item]]
+id = "p4-sunday"
+kind = "passage"
+takes = 2
+text = "Yes, I spoke to her on Sunday. She sounded tired, but happy. The new job is going well, she says, although the hours are long. She wants to visit in the spring, when the days are warmer."
+
+[[item]]
+id = "f07-love"
+kind = "phrase"
+takes = 2
+text = "We love you so much."
+
+[[item]]
+id = "p5-grey-hen"
+kind = "passage"
+takes = 2
+text = "Once there was a small grey hen who lived beside a river. Every morning she walked to the water and counted the stones. One, two, three, she said, and every morning there was one more stone than the day before."
+
+[[item]]
+id = "f08-shh"
+kind = "phrase"
+takes = 2
+text = "Shh, shh, it is all right."
+
+[[item]]
+id = "p6-list"
+kind = "passage"
+takes = 2
+text = "Let me see. We need bread, eggs, apples and some milk. Oh, and soap. We are nearly out of soap. I will write it on the list so we do not forget it like last time."
+
+[[item]]
+id = "f09-busy-day"
+kind = "phrase"
+takes = 2
+text = "What a busy day."
+
+[[item]]
+id = "p7-quiet-evening"
+kind = "passage"
+takes = 2
+text = "It is so quiet tonight. You can hear the train far away, and the clock in the hall. I like evenings like this, when the house is warm and nobody has to be anywhere."
+
+[[item]]
+id = "f10-sky"
+kind = "phrase"
+takes = 2
+text = "Soon you will see the sky."
+
+[[item]]
+id = "f11-hear-me"
+kind = "phrase"
+takes = 2
+text = "Can you hear me?"
+
+[[item]]
+id = "f12-sleep-well"
+kind = "phrase"
+takes = 2
+text = "Sleep well, my love."
