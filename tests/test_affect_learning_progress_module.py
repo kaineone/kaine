@@ -389,6 +389,42 @@ async def test_old_snapshot_without_bins_restarts_bins(bus):
     assert m2._lp_windows == {}
 
 
+async def test_missing_or_bad_bins_clears_existing_windows(bus):
+    t = [0.0]
+    m1 = Affect(
+        bus,
+        clock=lambda: t[0],
+        publish_interval_s=1.0,
+        learning_progress_span_s=240.0,
+        learning_progress_bin_s=60.0,
+    )
+
+    await m1._handle_peer_event("vision.out", _vision(1.0))
+    for _ in range(180):
+        t[0] += 1.0
+        err = 0.5 if t[0] > 120.0 else 1.0
+        await m1._handle_peer_event("vision.out", _vision(err))
+        await m1._tick()
+
+    assert m1._lp_windows
+    snap = m1.serialize()
+
+    # Restoring into the populated module itself: a state without the key, or
+    # with a non-dict value, leaves no bins behind.
+    no_bins = dict(snap)
+    no_bins.pop("learning_progress_bins")
+    m1.deserialize(no_bins)
+    assert m1._lp_windows == {}
+    assert m1._progress()[0] == 0.0
+
+    m1.deserialize(snap)
+    assert m1._lp_windows
+    bad_bins = dict(snap)
+    bad_bins["learning_progress_bins"] = "x"
+    m1.deserialize(bad_bins)
+    assert m1._lp_windows == {}
+
+
 async def test_mismatched_bin_width_restarts_bins(bus):
     t = [0.0]
     m1 = Affect(

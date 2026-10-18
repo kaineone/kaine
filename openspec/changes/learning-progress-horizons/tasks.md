@@ -5,4 +5,4 @@
 - [x] 1.3 Boot factory and `config/kaine.toml` keys with the Table A1 defaults
 - [x] 1.4 Research event observer allowlist and log range check for the new terms
 - [x] 1.5 Docs: affect module page, configuration appendix, research event streams
-- [ ] 1.6 Full suite unsandboxed, mutation checks, worker first-pass review
+- [x] 1.6 Full suite unsandboxed, mutation checks, worker first-pass review

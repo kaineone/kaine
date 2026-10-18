@@ -1791,8 +1791,9 @@ class Affect(BaseModule):
                 self._err_last_at[source] = self._clock()
 
         raw_lp = state.get("learning_progress_bins")
+        # A state without the key predates the windows, so the bins start empty.
+        self._lp_windows.clear()
         if isinstance(raw_lp, dict):
-            self._lp_windows.clear()
             now = self._clock()
             for source, entry in raw_lp.items():
                 if not isinstance(source, str):
