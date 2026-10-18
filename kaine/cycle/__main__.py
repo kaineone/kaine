@@ -2499,6 +2499,9 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
     _stimulus_source_feed = ctx.kaine_config.get("perception_feed") or {}
     _maturation_clock = _stimulus_source_feed.get("_shared_stimulus_source_clock")
     _stimulus_source_maturation_hook = None
+    # The gate records the stimulus source time in the stage file, so a restart resumes it.
+    if _maturation_clock is not None:
+        ctx.gate_runner.set_stimulus_source_clock(_maturation_clock.stimulus_source_seconds)
     if _maturation_clock is not None:
         from kaine.boot import _stimulus_source_params
 

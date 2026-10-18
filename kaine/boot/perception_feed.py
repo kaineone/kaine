@@ -66,6 +66,47 @@ def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
     return value
 
 
+def _stimulus_source_resume_seconds(state: Any | None, lived_offset: float) -> float:
+    """Return the stimulus source time a boot resumes from.
+
+    Uses the stage's recorded ``stimulus_source_seconds``, the clock's own elapsed time,
+    so a restart neither repeats nor skips stimulus; time while the process was stopped is not added.
+    A stage without it (written before the field existed) falls back to ``lived_offset``,
+    the awake time.
+    """
+    import math
+
+    if state is None:
+        return lived_offset
+    raw = getattr(state, "stimulus_source_seconds", None)
+    if raw is None or isinstance(raw, bool):
+        return lived_offset
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return lived_offset
+    if not math.isfinite(value) or value < 0.0:
+        return lived_offset
+    return value
+
+
+def _stimulus_source_offsets(stage_path: Path | None = None) -> tuple[float, float]:
+    """Return ``(lived_offset, stimulus_offset)`` from one read of the stage file."""
+    import math
+
+    from kaine.lifecycle.stage import read_stage
+
+    state = read_stage(stage_path)
+    if state is None:
+        return (0.0, 0.0)
+    lived_raw = float(state.lived_seconds)
+    if not math.isfinite(lived_raw) or lived_raw < 0.0:
+        lived = 0.0
+    else:
+        lived = lived_raw
+    return (lived, _stimulus_source_resume_seconds(state, lived))
+
+
 def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourceClock, Callable[[], float]]:
     from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -73,8 +114,8 @@ def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourc
     lived = feed.get("_stimulus_source_lived_seconds")
     if clock is not None and lived is not None:
         return (clock, lived)
-    offset = _stimulus_source_lived_offset()
-    return (StimulusSourceClock(lived_offset_seconds=offset), lambda: offset)
+    offset, resume = _stimulus_source_offsets()
+    return (StimulusSourceClock(lived_offset_seconds=resume), lambda: offset)
 
 
 def _install_shared_stimulus_source_clock(
@@ -88,8 +129,10 @@ def _install_shared_stimulus_source_clock(
     """Install one shared stimulus source clock for both A/V surfaces.
 
     One clock for both surfaces so the beat is seen and heard together; the
-    offset continues the maternal trajectory across boots; stimulus source time runs on
-    the real monotonic clock (the mother is external), while the colour schedule
+    clock resumes from the stage's recorded stimulus source time (awake time
+    for a stage written before it was recorded), so the maternal trajectory
+    continues across boots without repeating, and time while the process was
+    stopped is not added; stimulus source time runs on the real monotonic clock (the mother is external), while the colour schedule
     follows lived subjective time.
     """
     import math
@@ -100,9 +143,10 @@ def _install_shared_stimulus_source_clock(
     if stage_state is not None:
         lived = float(stage_state.lived_seconds)
         offset = lived if math.isfinite(lived) and lived >= 0.0 else 0.0
+        resume = _stimulus_source_resume_seconds(stage_state, offset)
     else:
-        offset = _stimulus_source_lived_offset(stage_path)
-    clock = StimulusSourceClock(lived_offset_seconds=offset)
+        offset, resume = _stimulus_source_offsets(stage_path)
+    clock = StimulusSourceClock(lived_offset_seconds=resume)
 
     if stage_state is not None:
         if stage_state.is_embodied:
@@ -867,7 +911,9 @@ def gather_perception_feed_descriptor(
             channels=channels,
             frames_per_block=max(1, sample_rate * vad_frame_ms // 1000),
         ).as_descriptor()
-        descriptor["lived_offset_seconds"] = _stimulus_source_lived_offset()
+        _lived_offset, _stimulus_offset = _stimulus_source_offsets()
+        descriptor["lived_offset_seconds"] = _lived_offset
+        descriptor["stimulus_source_offset_seconds"] = _stimulus_offset
     elif mode == "playlist":
         manifest_path = str(feed.get("playlist_manifest", "")).strip()
         try:
