@@ -925,7 +925,27 @@ chat_url = "http://127.0.0.1:11434/v1"
 # baseline tracks this value automatically).
 model_id = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 temperature = 0.7
+# max_tokens caps a speak intent; think_max_tokens caps a think intent, shorter
+# because inner speech is condensed (paper 3.5, Table A1). Without
+# think_max_tokens both use max_tokens.
 max_tokens = 512
+think_max_tokens = 128
+# DRY repetition penalty (llama-server sampler): extending a token run that
+# already occurs in the last dry_penalty_last_n tokens of the context (persona,
+# notes and the text so far) costs dry_multiplier * dry_base^(n - dry_allowed_length)
+# in logit for a run of n tokens, so the organ cannot fall into a loop of one
+# sentence while single words ("I") stay free. llama-server needs a window of at
+# least 1 (it rejects -1); dry_multiplier = 0 sends no DRY field. The in-process
+# llama_cpp backend has no DRY sampler and ignores these keys.
+dry_multiplier = 0.8
+dry_base = 1.75
+dry_allowed_length = 2
+dry_penalty_last_n = 2048
+# Cut a generated text before its first verbatim repeated sentence (at least three
+# words), and a text stopped by its token cap back to its last complete sentence.
+# The cut text is what is published and logged; the intent log's extra.text_cut
+# records the reason and the generated length.
+sentence_cut = true
 request_timeout_s = 60.0
 # The organ server unloads the model after this many idle seconds and reloads it
 # on the next request; -1 keeps it loaded. Applies when KAINE launches the organ

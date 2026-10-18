@@ -440,7 +440,13 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | Base URL of the model server. The client posts to `/v1/chat/completions`. |
 | `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. It must match a model the server serves. |
 | `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `first_configuration` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
-| `max_tokens` | integer | `512` | Maximum tokens per generation. |
+| `max_tokens` | integer | `512` | Maximum tokens of a speak intent, and of a think intent when `think_max_tokens` is unset. |
+| `think_max_tokens` | integer | `128` (unset when absent: `max_tokens`) | Maximum tokens of a think intent; inner speech is often condensed (paper 3.5). |
+| `dry_multiplier` | float | `0.8` (`0.0` when absent) | DRY repetition penalty multiplier sent to llama-server; `0` sends no DRY field. |
+| `dry_base` | float | `1.75` | DRY penalty base: a repeated run of `n` tokens costs `dry_multiplier * dry_base^(n - dry_allowed_length)` in logit. |
+| `dry_allowed_length` | integer | `2` | Longest repeated token run left unpenalized. |
+| `dry_penalty_last_n` | integer | `2048` | Tokens of context the penalty scans; at least 1 (llama-server rejects `-1`). The in-process `llama_cpp` backend ignores the DRY keys. |
+| `sentence_cut` | boolean | `true` (`false` when absent) | Cut a text before its first verbatim repeated sentence of at least three words, and a text stopped by its token cap back to its last complete sentence; the intent log records the cut under `extra.text_cut`. |
 | `request_timeout_s` | float | `60.0` | HTTP request timeout for model server calls. |
 | `model_server_sleep_idle_seconds` | integer | `600` | Seconds of inactivity before the natively launched organ server unloads the model; `-1` keeps it loaded. |
 | `intent_log_path` | string | `"state/language/intent_expression.jsonl"` | Path where intent/expression preference pairs are logged for the sleep module's voice alignment. |

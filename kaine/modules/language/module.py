@@ -26,6 +26,7 @@ from kaine.modules.base import BaseModule
 from kaine.modules.language.client import (
     ChatClient,
     ChatRequest,
+    DryPenalty,
     OpenAIChatClient,
 )
 from kaine.modules.language.context import (
@@ -35,6 +36,7 @@ from kaine.modules.language.context import (
     layout_digest,
 )
 from kaine.modules.language.intent_log import IntentExpressionLog
+from kaine.modules.language.repetition import cut_text
 from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
 from kaine.storage import resolve
 from kaine.workspace.action_selection import ACTION_SELECTION_STREAM, SPEAK, THINK
@@ -112,6 +114,12 @@ class Language(BaseModule):
         model_id: str = "kaineone/Qwen3.5-4B-abliterated-GGUF",
         temperature: float = 0.7,
         max_tokens: int = 512,
+        think_max_tokens: Optional[int] = None,
+        dry_multiplier: float = 0.0,
+        dry_base: float = 1.75,
+        dry_allowed_length: int = 2,
+        dry_penalty_last_n: int = 2048,
+        sentence_cut: bool = False,
         think: Optional[bool] = False,
         request_timeout_s: float = 60.0,
         api_key: Optional[str] = None,
@@ -133,6 +141,40 @@ class Language(BaseModule):
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
             raise ValueError("alert_salience must be in [0, 1]")
+        if think_max_tokens is not None and (
+            isinstance(think_max_tokens, bool)
+            or not isinstance(think_max_tokens, int)
+            or think_max_tokens < 1
+        ):
+            raise ValueError("think_max_tokens must be None or an int >= 1")
+        if (
+            isinstance(dry_multiplier, bool)
+            or not isinstance(dry_multiplier, (int, float))
+            or not math.isfinite(dry_multiplier)
+            or dry_multiplier < 0
+        ):
+            raise ValueError("dry_multiplier must be a finite number >= 0")
+        if (
+            isinstance(dry_base, bool)
+            or not isinstance(dry_base, (int, float))
+            or not math.isfinite(dry_base)
+            or dry_base < 1
+        ):
+            raise ValueError("dry_base must be a finite number >= 1")
+        if (
+            isinstance(dry_allowed_length, bool)
+            or not isinstance(dry_allowed_length, int)
+            or dry_allowed_length < 1
+        ):
+            raise ValueError("dry_allowed_length must be an int >= 1")
+        if (
+            isinstance(dry_penalty_last_n, bool)
+            or not isinstance(dry_penalty_last_n, int)
+            or dry_penalty_last_n < 1
+        ):
+            raise ValueError("dry_penalty_last_n must be an int >= 1")
+        if not isinstance(sentence_cut, bool):
+            raise ValueError("sentence_cut must be a bool")
         self._chat_client: ChatClient = chat_client or OpenAIChatClient(
             base_url=chat_url, timeout_s=request_timeout_s, api_key=api_key
         )
@@ -145,6 +187,20 @@ class Language(BaseModule):
         # the voice's temperature never reaches the probe.
         self._probe_temperature = 0.0
         self._max_tokens = int(max_tokens)
+        # think intents take their own cap because inner speech is condensed; the
+        # DRY penalty and the sentence cut bound self-reinforcing loops of model text (paper 3.5).
+        self._think_max_tokens = None if think_max_tokens is None else int(think_max_tokens)
+        self._dry = (
+            DryPenalty(
+                float(dry_multiplier),
+                float(dry_base),
+                int(dry_allowed_length),
+                int(dry_penalty_last_n),
+            )
+            if dry_multiplier > 0
+            else None
+        )
+        self._sentence_cut = sentence_cut
         # The workspace access conditions every generation. The language module caches the
         # latest broadcast it observed (via _snapshot_cache_loop) and renders it
         # into the prompt at speak/think time - the rolling-latest pattern
@@ -864,19 +920,40 @@ class Language(BaseModule):
             mode=mode,
             about_is_heard=about_is_heard,
         )
+        max_tokens = (
+            self._think_max_tokens
+            if mode == "internal" and self._think_max_tokens is not None
+            else self._max_tokens
+        )
         request = ChatRequest(
             prompt=ctx.prompt,
             model=self._model_id,
             system=ctx.system,
             temperature=self._temperature,
-            max_tokens=self._max_tokens,
+            max_tokens=max_tokens,
             think=self._think,
             seed=None,
             own_turn=True,
             user_turn=ctx.heard_turn,
             stop=list(OWN_TURN_STOP),
+            dry=self._dry,
         )
         response = await self._chat_client.complete(request)
+
+        # A loop or a cap-cut fragment ends at a sentence boundary (paper 3.5); the
+        # cut text is what is logged, published and returned.
+        text = response.text
+        cut_reason: Optional[str] = None
+        if self._sentence_cut and text:
+            text, cut_reason = cut_text(text, stopped_by_cap=response.finish_reason == "length")
+            if cut_reason is not None:
+                log.info(
+                    "language: %s text cut (%s), %d of %d characters kept",
+                    mode,
+                    cut_reason,
+                    len(text),
+                    len(response.text),
+                )
 
         # The log is the training corpus of the entity's own utterances. Heard
         # speech never reaches it: prompt and faithful rendering are redacted.
@@ -915,11 +992,16 @@ class Language(BaseModule):
         except Exception:
             log.exception("system prompt store failed")
 
+        extra: dict[str, Any] = {}
+        if logged_heard_turn:
+            extra["heard_turn"] = logged_heard_turn
+        if cut_reason is not None:
+            extra["text_cut"] = {"reason": cut_reason, "generated_chars": len(response.text)}
         try:
             self._intent_log.append(
                 mode=mode,
                 prompt=logged_prompt,
-                generated_text=response.text,
+                generated_text=text,
                 model=response.model,
                 faithful_rendering=logged_faithful,
                 prompt_tokens=response.prompt_tokens,
@@ -933,7 +1015,7 @@ class Language(BaseModule):
                 seed=request.seed,
                 numeric_rendering=logged_numeric,
                 about_values=logged_about_values,
-                extra={"heard_turn": logged_heard_turn} if logged_heard_turn else None,
+                extra=extra or None,
             )
         except Exception:
             log.exception("intent log append failed")
@@ -942,7 +1024,7 @@ class Language(BaseModule):
         # persisted; user_input is carried only for tagged felt/event triggers,
         # never for heard speech.
         payload: dict[str, Any] = {
-            "text": response.text,
+            "text": text,
             "mode": mode,
             "model": response.model,
             "prompt_length": len(ctx.prompt),
@@ -985,7 +1067,7 @@ class Language(BaseModule):
                 timestamp=datetime.now(timezone.utc),
             )
         )
-        return response.text
+        return text
 
 
 def _now_iso() -> str:
