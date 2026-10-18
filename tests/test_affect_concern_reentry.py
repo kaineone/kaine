@@ -302,3 +302,29 @@ async def test_config_wiring(bus):
 
     affect_default = make_affect(bus, {})
     assert affect_default._concern_reentry_s == 30.0
+
+
+async def test_restore_restarts_schedule(bus):
+    t = [0.0]
+    affect = Affect(bus, clock=lambda: t[0], drives=_static())
+    affect.drives.curiosity.value = 0.75
+    await affect._tick()
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 20.0
+    await affect._tick()
+    state = affect.serialize()
+    affect.deserialize(state)
+    assert affect._reentry_due == {}
+
+    t[0] = 30.0
+    await affect._tick()
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 59.9
+    await affect._tick()
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 0
+
+    t[0] = 60.0
+    await affect._tick()
+    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1

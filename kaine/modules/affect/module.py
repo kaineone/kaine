@@ -1647,3 +1647,4 @@ class Affect(BaseModule):
         self._goal_above_since.clear()
         self._response_windows.clear()
         self._held_obstruction.clear()
+        self._reentry_due.clear()
