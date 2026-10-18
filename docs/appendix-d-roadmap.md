@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| welfare-uncontrolled-ends | 0/4 (0%) | The affect welfare record counts stalled and cap-dropped goals as ends without the entity's own response, and a restored goal keeps its stall clock (paper 6.2, A.4). |
 | organ-degeneration-control | 4/4 (100%) | The organ's decoding carries a DRY repetition penalty and a shorter cap for thought than speech, and a looping or capped text is cut at a sentence boundary (paper 3.5, Table A1). |
 | reentry-until-broadcast | 5/5 (100%) | A sustained concern's drive event recurs on the affect module's own updates until a broadcast accesses it, and the re-entry interval runs from that access, so re-entries stop landing on discarded ticks (paper 3.5, A.4). |
 | organ-first-person-framing | 4/4 (100%) | The organ continues the entity's own first-person turn under a descriptive persona, and the individuation disclosure is first person, so the organ stops answering its own state as an assistant (paper 3.5). |
@@ -133,6 +134,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 107 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 108 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
