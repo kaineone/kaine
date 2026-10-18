@@ -7,6 +7,7 @@ import pytest
 from kaine.modules.audition.feed import (
     StimulusSourceAudioSchedule,
     StimulusSourceProceduralAudioStream,
+    soft_limit,
     stimulus_source_soundscape_rms,
 )
 from kaine.modules.stimulus_source_signal import StimulusSourceParams
@@ -155,6 +156,50 @@ def _make_voice(schedule, params, seed, episode_probability=1.0):
     )
 
 
+def test_soft_limit():
+    knee = 10.0
+    ceiling = 12.0
+
+    # Identity below the knee.
+    below = np.linspace(-knee, knee, 2001)
+    np.testing.assert_array_equal(soft_limit(below, knee=knee, ceiling=ceiling), below)
+
+    # Never above the ceiling (tanh saturates to it in floating point for
+    # huge inputs) and strictly below it over the range the stream produces.
+    huge = np.array([-1e9, -1e6, -1e3, 0.0, 1e3, 1e6, 1e9])
+    limited = soft_limit(huge, knee=knee, ceiling=ceiling)
+    assert np.all(np.abs(limited) <= ceiling)
+    moderate = np.linspace(-(knee + 5 * (ceiling - knee)), knee + 5 * (ceiling - knee), 1001)
+    assert np.all(np.abs(soft_limit(moderate, knee=knee, ceiling=ceiling)) < ceiling)
+
+    # Odd symmetry.
+    assert np.allclose(
+        soft_limit(-huge, knee=knee, ceiling=ceiling),
+        -soft_limit(huge, knee=knee, ceiling=ceiling),
+    )
+
+    # Monotonic non-decreasing over a dense grid.
+    grid = np.linspace(-1e3, 1e3, 100001)
+    out = soft_limit(grid, knee=knee, ceiling=ceiling)
+    assert np.all(np.diff(out) >= -1e-12)
+
+    # Numerical derivative just above the knee is essentially 1.
+    h = 1e-6
+    left = soft_limit(np.array([knee - h]), knee=knee, ceiling=ceiling)[0]
+    right = soft_limit(np.array([knee + h]), knee=knee, ceiling=ceiling)[0]
+    assert abs(((right - left) / (2 * h)) - 1.0) < 1e-3
+
+    # Validation.
+    with pytest.raises(ValueError):
+        soft_limit(np.array([1.0]), knee=ceiling, ceiling=ceiling)
+    with pytest.raises(ValueError):
+        soft_limit(np.array([1.0]), knee=ceiling + 1.0, ceiling=ceiling)
+    with pytest.raises(ValueError):
+        soft_limit(np.array([1.0]), knee=0.0, ceiling=ceiling)
+    with pytest.raises(ValueError):
+        soft_limit(np.array([1.0]), knee=-1.0, ceiling=ceiling)
+
+
 def test_voiced_deterministic_and_seed_sensitive(schedule, params):
     voice1 = _make_voice(schedule, params, seed=schedule.seed)
     voice2 = _make_voice(schedule, params, seed=schedule.seed)
@@ -206,6 +251,106 @@ def test_voiced_deterministic_and_seed_sensitive(schedule, params):
             different = True
             break
     assert different
+
+
+def test_voiced_bed_level_lowered(schedule, params):
+    voice = _make_voice(schedule, params, seed=schedule.seed)
+    n = schedule.frames_per_block
+
+    quiet_start = None
+    candidate = 0
+    while candidate < 50000:
+        rendered = [
+            voice.render((candidate + i) * n, n, 0.0) for i in range(200)
+        ]
+        if all(np.all(r == 0.0) for r in rendered):
+            quiet_start = candidate
+            break
+        candidate += 200
+    assert quiet_start is not None, "could not find 200 consecutive silent blocks"
+
+    voiced = StimulusSourceProceduralAudioStream(
+        schedule,
+        params=params,
+        clock=None,
+        callback=lambda _b: None,
+        voice=voice,
+        awake=lambda: 0.0,
+    )
+    free = StimulusSourceProceduralAudioStream(
+        schedule, params=params, clock=None, callback=lambda _b: None
+    )
+
+    voiced_medians = []
+    free_medians = []
+    for block_index in range(quiet_start, quiet_start + 200):
+        v = np.frombuffer(
+            voiced.pcm_at(block_index, awake_seconds=0.0), dtype=np.int16
+        )
+        f = np.frombuffer(free.pcm_at(block_index), dtype=np.int16)
+        voiced_medians.append(float(np.median(np.abs(v))))
+        free_medians.append(float(np.median(np.abs(f))))
+
+    ratio_db = 20.0 * np.log10(np.median(voiced_medians) / np.median(free_medians))
+    assert -3.0 < ratio_db < -1.5
+
+
+def test_voiced_soft_limiter_rarely_acts(schedule, params):
+    voice = _make_voice(
+        schedule, params, seed=schedule.seed, episode_probability=1.0
+    )
+    n = schedule.frames_per_block
+    stream = StimulusSourceProceduralAudioStream(
+        schedule,
+        params=params,
+        clock=None,
+        callback=lambda _b: None,
+        voice=voice,
+        awake=lambda: 0.0,
+    )
+
+    base_amp_total = stream._BASE_AMP_TOTAL
+    noise_rms = stream._NOISE_RMS
+    thud_amp = stream._THUD_AMP
+    max_possible = base_amp_total + 4 * noise_rms + thud_amp + voice.headroom
+    gain = (_INT16_MAX * 0.9) / max_possible
+    knee = _INT16_MAX * 0.9
+
+    voiced_samples = 0
+    exceeded = 0
+    for block_index in range(20000):
+        mix = stream._soundscape(block_index) + voice.render(
+            block_index * n, n, 0.0
+        )
+        scaled = mix * gain
+        voice_render = voice.render(block_index * n, n, 0.0)
+        nonzero = voice_render != 0.0
+        voiced_samples += int(np.count_nonzero(nonzero))
+        exceeded += int(np.count_nonzero((np.abs(scaled) > knee) & nonzero))
+
+    assert voiced_samples > 0
+    share = exceeded / voiced_samples
+    assert share < 0.01
+
+
+def test_voiced_no_full_scale_over_long_run(schedule, params):
+    voice = _make_voice(
+        schedule, params, seed=schedule.seed, episode_probability=1.0
+    )
+    stream = StimulusSourceProceduralAudioStream(
+        schedule,
+        params=params,
+        clock=None,
+        callback=lambda _b: None,
+        voice=voice,
+        awake=lambda: 0.0,
+    )
+
+    for block_index in range(20000):
+        pcm = stream.pcm_at(block_index, awake_seconds=0.0)
+        samples = np.frombuffer(pcm, dtype=np.int16)
+        assert np.max(samples) < _INT16_MAX
+        assert np.min(samples) > -_INT16_MAX - 1
 
 
 def test_voiced_headroom_and_not_just_gain(schedule, params):

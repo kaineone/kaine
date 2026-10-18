@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: The developmental soundscape carries a pre-rendered maternal voice
-When `[perception_feed.stimulus_source.voice].enabled` is true (the default), the stimulus-source audio SHALL mix a maternal voice into the soundscape from pre-rendered utterances shipped with the package and listed in a manifest, and SHALL NOT synthesize speech at runtime. Every take SHALL be upsampled by two to the stream rate, low-pass filtered with the soundscape's `lowpass_hz` filter, scaled to unit RMS, and played at `level_db` above the soundscape's RMS over its first 60 s of stimulus time for the run seed, times a seeded per-utterance gain of up to `jitter_db` either way. The output headroom SHALL include the loudest possible voice peak so the mix does not clip. When the voice is disabled, every audio block SHALL be byte-identical to the stream without the voice. The voice parameters SHALL NOT enter the stimulus-source parameter digest.
+When `[perception_feed.stimulus_source.voice].enabled` is true (the default), the stimulus-source audio SHALL mix a maternal voice into the soundscape from pre-rendered utterances shipped with the package and listed in a manifest, and SHALL NOT synthesize speech at runtime. Every take SHALL be upsampled by two to the stream rate, low-pass filtered with the soundscape's `lowpass_hz` filter, scaled to unit RMS, and played at `level_db` above the soundscape's RMS over its first 60 s of stimulus time for the run seed, times a seeded per-utterance gain of up to `jitter_db` either way. The output headroom SHALL grow by the voice's RMS level rather than its worst-case peak (so the heartbeat-and-noise bed keeps nearly its voice-free level, 2.4 dB lower with the defaults), and samples above the former full-headroom point SHALL pass a smooth tanh soft limiter that is the identity below its knee, has a continuous slope at the knee, and stays below int16 full scale; with the defaults it acts on about 0.25% of speech samples. When the voice is disabled, every audio block SHALL be byte-identical to the stream without the voice. The voice parameters SHALL NOT enter the stimulus-source parameter digest.
 
 #### Scenario: Disabled voice leaves the audio unchanged
 - **WHEN** the voice is disabled
 - **THEN** every block of the stimulus-source audio equals, byte for byte, the block the stream produced before the voice existed
+
+#### Scenario: The bed keeps nearly its level
+- **WHEN** the voice is enabled with the defaults and nobody speaks
+- **THEN** the soundscape's median absolute sample is within 3 dB of the voice-free stream's, and no voiced sample reaches int16 full scale
 
 #### Scenario: The voice stays below the intrauterine cutoff
 - **WHEN** a talking slot is rendered with `lowpass_hz` = 500
@@ -26,12 +30,12 @@ Stimulus time SHALL be cut into slots of `slot_seconds`. Slot `s` SHALL hold spe
 - **WHEN** slots are compared across maternal arousal
 - **THEN** the share of talking slots rises with arousal, and no slot talks when `episode_probability` is 0
 
-#### Scenario: Sleep pauses unlocking, not speech
+#### Scenario: Sleep pauses unlocking while speech continues
 - **WHEN** awake time stops advancing while stimulus time runs on
 - **THEN** talking slots keep occurring and no further item unlocks
 
 ### Requirement: A missing or corrupt maternal-voice file fails loudly
-At load, the repertoire SHALL verify every manifest entry's sha256, decode it, and check its sample rate, channel count and frame count against the manifest. A missing manifest, a missing or altered file, a decode failure, a mismatch, or PyAV being absent SHALL raise `PerceptionUnavailableError` naming the problem, and boot SHALL NOT start the stimulus-source audio without the voice when the voice is enabled.
+At load, the repertoire SHALL verify every manifest entry's sha256, decode it, and check its sample rate, channel count and frame count against the manifest. A missing manifest, a missing or altered file, a decode failure, a mismatch, or PyAV being absent SHALL raise `PerceptionUnavailableError` naming the problem, as SHALL a malformed manifest entry (a missing or mistyped id, takes list, file, sha256 or frame count, or a file path that is absolute or leaves the directory), and boot SHALL NOT start the stimulus-source audio without the voice when the voice is enabled.
 
 #### Scenario: An altered file stops the load
 - **WHEN** one take's bytes differ from its manifest sha256

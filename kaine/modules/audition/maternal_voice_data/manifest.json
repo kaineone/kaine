@@ -581,7 +581,7 @@
     "reference_wav_sha256": "0639b873e49fb8dc8d4a1a06857e978730c679cfad0eaf0dfa2e9a267458c12e"
   },
   "sample_rate": 8000,
-  "texts_sha256": "11b9f2449636e159edd45a92de56b5ba3c52cc0666f9eb91dd3623d0c956ff47",
+  "texts_sha256": "9bdccec4366cd4804d5664434f3deaf54562d42cf202bc4f05d8f319c8c82750",
   "total_bytes": 2073087,
   "total_seconds": 199.739
 }

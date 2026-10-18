@@ -4,7 +4,7 @@
 # The maternal-voice repertoire of the developmental stimulus (paper A.7).
 # Original text written for KAINE; no quoted or copyrighted material.
 # Items are listed in unlock order: the first `initial_unlocked` are heard from
-# the start, then one more unlocks every voice_unlock_seconds of lived (awake)
+# the start, then one more unlocks every unlock_seconds of lived (awake)
 # time. "passage" items are read aloud; "phrase" items are short remarks.
 # The first item is the repeated passage, the one read most often (DeCasper
 # and Spence 1986).

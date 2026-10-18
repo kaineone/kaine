@@ -326,6 +326,25 @@ class MaternalVoiceRepertoire:
     def manifest_sha256(self) -> str:
         return self._manifest_sha256
 
+    @staticmethod
+    def _manifest_entry_error(
+        manifest_path: Path,
+        item_index: int,
+        message: str,
+        take_index: int | None = None,
+    ) -> None:
+        if take_index is None:
+            detail = (
+                f"maternal voice manifest item {item_index} is malformed "
+                f"({message}): {manifest_path}"
+            )
+        else:
+            detail = (
+                f"maternal voice manifest item {item_index} take {take_index} "
+                f"is malformed ({message}): {manifest_path}"
+            )
+        raise PerceptionUnavailableError(detail)
+
     @classmethod
     def load(
         cls,
@@ -394,13 +413,57 @@ class MaternalVoiceRepertoire:
         loaded_takes: list[tuple[np.ndarray, ...]] = []
         item_ids: list[str] = []
 
-        for item in items:
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                cls._manifest_entry_error(
+                    manifest_path, i, "item is not a dict"
+                )
             item_id = item.get("id")
+            if not isinstance(item_id, str) or not item_id:
+                cls._manifest_entry_error(
+                    manifest_path, i, "id must be a non-empty string"
+                )
             item_ids.append(item_id)
-            take_entries = item.get("takes", [])
+            take_entries = item.get("takes")
+            if not isinstance(take_entries, list) or len(take_entries) == 0:
+                cls._manifest_entry_error(
+                    manifest_path, i, "takes must be a non-empty list"
+                )
             item_arrays: list[np.ndarray] = []
-            for take in take_entries:
+            for j, take in enumerate(take_entries):
+                if not isinstance(take, dict):
+                    cls._manifest_entry_error(
+                        manifest_path, i, "take is not a dict", j
+                    )
                 file_name = take.get("file")
+                if not isinstance(file_name, str) or not file_name:
+                    cls._manifest_entry_error(
+                        manifest_path, i, "file must be a non-empty string", j
+                    )
+                if (
+                    Path(file_name).is_absolute()
+                    or file_name.startswith(("/", "\\"))
+                    or (len(file_name) >= 2 and file_name[1] == ":")
+                ):
+                    cls._manifest_entry_error(
+                        manifest_path, i, "file path is absolute", j
+                    )
+                if ".." in Path(file_name).parts:
+                    cls._manifest_entry_error(
+                        manifest_path, i, "file path must not contain '..'", j
+                    )
+                expected_hash = take.get("sha256")
+                if not isinstance(expected_hash, str):
+                    cls._manifest_entry_error(
+                        manifest_path, i, "sha256 must be a string", j
+                    )
+                expected_frames = take.get("frames")
+                if isinstance(expected_frames, bool) or not isinstance(
+                    expected_frames, int
+                ):
+                    cls._manifest_entry_error(
+                        manifest_path, i, "frames must be an int", j
+                    )
                 take_path = directory / file_name
                 expected_hash = take.get("sha256")
                 expected_frames = take.get("frames")
@@ -493,6 +556,17 @@ class MaternalVoiceLayer:
 
     @property
     def target_rms(self) -> float:
+        return self._target
+
+    @property
+    def headroom(self) -> float:
+        """Amount the stimulus audio stream adds to its fixed headroom for the voice.
+
+        Design choice: the headroom is the voice's RMS level rather than its
+        worst-case peak, so the heartbeat-and-noise bed keeps nearly its
+        voice-free level (2.4 dB lower with the defaults), and the stream
+        soft-limits the rare speech samples above it.
+        """
         return self._target
 
     def slot_plan(self, slot: int, unlocked: int) -> tuple[Utterance, ...]:

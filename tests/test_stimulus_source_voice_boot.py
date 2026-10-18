@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import logging
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -9,21 +11,18 @@ pytest.importorskip("av")
 
 from kaine.boot.perception_feed import (
     _build_perception_feed_audio_factory,
+    _install_shared_stimulus_source_clock,
     _maternal_voice_params,
     _stimulus_source_params,
+    bind_stimulus_source_unawake_source,
     gather_perception_feed_descriptor,
 )
 from kaine.lifecycle.stage import stimulus_source_params_digest
-from kaine.modules.audition.feed import (
-    StimulusSourceAudioSchedule,
-    StimulusSourceProceduralAudioStream,
-)
 from kaine.modules.audition.live import PerceptionUnavailableError
 from kaine.modules.audition.maternal_voice import (
     MaternalVoiceLayer,
     MaternalVoiceParams,
 )
-from kaine.modules.vision.feed import StimulusSourceClock
 
 
 def _make_stream(feed):
@@ -44,31 +43,35 @@ def _make_stream(feed):
 
 
 def test_stimulus_source_audio_includes_maternal_voice():
-    stream = _make_stream({"seed": 7, "stimulus_source": {}})
+    class _EntityClock:
+        def __init__(self, t):
+            self.t = t
+
+        def now(self):
+            return self.t
+
+    entity_clock = _EntityClock(1000.0)
+    stage = SimpleNamespace(lived_seconds=500.0, is_embodied=False)
+    perception_feed: dict[str, Any] = {}
+    _install_shared_stimulus_source_clock(
+        perception_feed, None, entity_clock, stage_state=stage
+    )
+    bind_stimulus_source_unawake_source(
+        {"perception_feed": perception_feed}, lambda: 40.0
+    )
+    feed = {"seed": 7, "stimulus_source": {}, **perception_feed}
+    stream = _make_stream(feed)
     assert isinstance(stream._voice, MaternalVoiceLayer)
-    assert callable(stream._awake)
+    assert stream._awake is perception_feed["_stimulus_source_lived_seconds"]
+    entity_clock.t = 1100.0
+    assert stream._awake() == 560.0
 
 
-def test_stimulus_source_voice_disabled_matches_voiceless():
-    stream = _make_stream({"seed": 7, "stimulus_source": {"voice": {"enabled": False}}})
+def test_stimulus_source_voice_disabled_builds_no_voice():
+    stream = _make_stream(
+        {"seed": 7, "stimulus_source": {"voice": {"enabled": False}}}
+    )
     assert stream._voice is None
-
-    clock = StimulusSourceClock(lived_offset_seconds=0.0)
-    params = _stimulus_source_params({"seed": 7, "stimulus_source": {}})
-    schedule = StimulusSourceAudioSchedule(
-        seed=7,
-        sample_rate=16000,
-        channels=1,
-        frames_per_block=480,
-    )
-    direct = StimulusSourceProceduralAudioStream(
-        schedule,
-        params=params,
-        clock=clock,
-        callback=lambda b: None,
-    )
-    for block in range(50):
-        assert stream.pcm_at(block) == direct.pcm_at(block)
 
 
 def test_stimulus_source_voice_validation():

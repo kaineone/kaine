@@ -288,6 +288,52 @@ def test_pyav_absent_raises(monkeypatch, tmp_path):
         MaternalVoiceRepertoire.load(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda m: m["items"].__setitem__(0, "string"),
+        lambda m: m["items"][0].pop("id"),
+        lambda m: m["items"][0].update({"id": 5}),
+        lambda m: m["items"][0].pop("takes"),
+        lambda m: m["items"][0].update({"takes": []}),
+        lambda m: m["items"][0]["takes"].__setitem__(0, []),
+        lambda m: m["items"][0]["takes"][0].pop("file"),
+        lambda m: m["items"][0]["takes"][0].update({"file": None}),
+        lambda m: m["items"][0]["takes"][0].update({"file": "../escape.flac"}),
+        lambda m: m["items"][0]["takes"][0].update({"file": "/etc/passwd"}),
+        lambda m: m["items"][0]["takes"][0].pop("sha256"),
+        lambda m: m["items"][0]["takes"][0].update({"frames": "1600"}),
+        lambda m: m["items"][0]["takes"][0].update({"frames": True}),
+    ],
+)
+def test_manifest_validation_rejects_malformed_entries(tmp_path, mutator):
+    _synthetic_dir(tmp_path, n_items=2, initial_unlocked=1)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    mutator(manifest)
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(PerceptionUnavailableError) as exc_info:
+        MaternalVoiceRepertoire.load(tmp_path)
+    assert "manifest" in str(exc_info.value)
+
+
+@pytest.mark.skipif(
+    not (VOICE_DATA_DIR / "manifest.json").exists(),
+    reason="shipped maternal voice data is not present",
+)
+def test_layer_headroom_equals_target_rms_and_below_peak():
+    rep = MaternalVoiceRepertoire.load()
+    layer = MaternalVoiceLayer(
+        rep,
+        MaternalVoiceParams(),
+        seed=1,
+        stimulus_params=StimulusSourceParams(),
+        background_rms=0.16,
+    )
+    assert layer.headroom == layer.target_rms
+    assert layer.headroom < layer.peak
+
+
 def test_render_determinism(tmp_path):
     rep = MaternalVoiceRepertoire.load(_synthetic_dir(tmp_path))
     params = MaternalVoiceParams(episode_probability=1.0, slot_seconds=5.0)

@@ -1119,6 +1119,8 @@ lowpass_hz = 500                # soundscape low-pass corner (100-2000)
 # tools/maintainer/generate_maternal_voice.py; it passes the same low-pass as
 # the soundscape; it plays through sleep; a missing or altered file stops the
 # stimulus loudly; enabled = false gives the voice-free soundscape byte for byte.
+# The voice needs [perception_feed.audio].sample_rate = 16000 (twice its 8 kHz
+# takes); any other rate fails boot unless enabled = false.
 [perception_feed.stimulus_source.voice]   # the maternal voice heard in utero (paper §7, A.7)
 enabled = true                  # maternal voice on/off master switch
 level_db = 6.0                  # voice RMS over the soundscape RMS, dB; the mother's voice is heard above the intrauterine background, Querleu et al. 1988; Benzaquen et al. 1990
