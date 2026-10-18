@@ -201,7 +201,7 @@ class Affect(BaseModule):
         self._intents_since_broadcast = 0
         # Bus entry ids of this module's recent affect.drive crossing and re-entry
         # events, so an intent about a drive does not count as engagement (paper A.4).
-        # Transient and bounded; at most one re-entry per active goal per P_re.
+        # Transient and bounded; at most one re-entry per active goal per own update.
         self._drive_entry_ids: deque[str] = deque(maxlen=256)
         self._wellness = 0.5  # neutral prior: no interoception module wellness information yet
         # Fast and slow time-decayed means of the reported wellness (paper A.4):
@@ -245,6 +245,9 @@ class Affect(BaseModule):
 
         # Goal id -> entity time its drive event next re-enters (paper A.4); transient.
         self._reentry_due: dict[str, float] = {}
+        # Goal id -> (bus entry id, entity time) of its latest drive event, the crossing or a
+        # re-entry, that no broadcast has accessed yet (paper A.4); transient.
+        self._concern_pending: dict[str, tuple[str, float]] = {}
 
         self._last_emotion: CategoricalEmotion = CategoricalEmotion.NEUTRAL
         self._cursors: dict[str, str] = {}
@@ -477,9 +480,56 @@ class Affect(BaseModule):
         await super().shutdown()
 
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
+        self._observe_concern_access(snapshot)
         await self._tick()
         await self._appraise_snapshot(snapshot)
         await self._maybe_publish_state()
+
+    def _observe_concern_access(self, snapshot: WorkspaceSnapshot) -> None:
+        """Resolve pending drive events that this broadcast accessed (paper A.4).
+
+        A current concern cues thought until it is attended (Klinger 2013), so the
+        re-entry interval runs from the access: a coalition member at or above the
+        broadcast's access threshold (paper A.1) that is one of this module's drive
+        events for the goal's drive ends the goal's pending event, and the next
+        re-entry is due P_re later. Off when P_re is 0.
+        """
+        if self._concern_reentry_s <= 0.0:
+            return
+        if not self._concern_pending:
+            return
+        if snapshot.inhibited:
+            return
+
+        threshold = _finite_number(snapshot.metadata.get("access_threshold"))
+
+        for key, event in snapshot.selected_events:
+            stream, eid = split_stream_entry_key(key)
+            if stream not in (None, module_stream(self.name)):
+                continue
+            if eid not in self._drive_entry_ids:
+                continue
+            if event.type != "affect.drive":
+                continue
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            drive_name = payload.get("drive")
+            if not isinstance(drive_name, str):
+                continue
+            if threshold is None:
+                accessed = True
+            else:
+                score = snapshot.salience_scores.get(key, event.salience)
+                score_f = _finite_number(score)
+                accessed = score_f is not None and score_f >= threshold
+            if not accessed:
+                continue
+            goal = self._goals.active_for_drive(drive_name)
+            if goal is None:
+                continue
+            if goal.id not in self._concern_pending:
+                continue
+            self._concern_pending.pop(goal.id, None)
+            self._reentry_due[goal.id] = self._clock() + self._concern_reentry_s
 
     async def _publish_goal_events(self, payloads: list[dict[str, Any]]) -> None:
         """Publish goal lifecycle events after all synchronous state changes."""
@@ -496,6 +546,7 @@ class Affect(BaseModule):
             w for w in self._response_windows if w.get("goal_id") != goal_id
         ]
         self._reentry_due.pop(goal_id, None)
+        self._concern_pending.pop(goal_id, None)
 
     def _end_goal(
         self, goal_id: str, outcome: str, reason: str
@@ -643,13 +694,27 @@ class Affect(BaseModule):
                 }
             )
 
-    def _due_reentries(self, now: float) -> list[tuple[str, float]]:
-        """Return (drive, value) for each active goal whose drive event re-enters now.
+    def _mark_crossings_pending(self, crossing_ids: Mapping[str, str], now: float) -> None:
+        """Make each crossing the pending drive event of its drive's active goal (paper A.4)."""
+        if self._concern_reentry_s <= 0.0:
+            return
+        for name, entry_id in crossing_ids.items():
+            goal = self._goals.active_for_drive(name)
+            if goal is None:
+                continue
+            self._concern_pending[goal.id] = (entry_id, now)
+            self._reentry_due.pop(goal.id, None)
+
+    def _due_reentries(self, now: float, own_update: bool) -> list[tuple[str, str, float]]:
+        """Return (goal id, drive, value) for each active goal whose drive event is published now.
 
         An active goal is a current concern, which keeps cueing thought until met or
-        dropped (Klinger 2013): while its drive stays at or above threshold, the drive
-        event recurs every P_re after the crossing or the previous re-entry (paper A.4).
-        Off when P_re is 0.
+        dropped (Klinger 2013). While its drive stays at or above threshold, its drive
+        event recurs each P_Aff until a broadcast accesses it, then P_re after that
+        access (paper A.4). Only the module's own P_Aff updates publish: an event
+        published on a broadcast's update reaches the cycle's next tick, which rarely
+        broadcasts. A pending copy younger than half of P_Aff may still be unread, so
+        it is not repeated yet. Off when P_re is 0.
         """
         if self._concern_reentry_s <= 0.0:
             return []
@@ -657,7 +722,10 @@ class Affect(BaseModule):
         for goal_id in list(self._reentry_due):
             if goal_id not in active_ids:
                 self._reentry_due.pop(goal_id, None)
-        due_now: list[tuple[str, float]] = []
+        for goal_id in list(self._concern_pending):
+            if goal_id not in active_ids:
+                self._concern_pending.pop(goal_id, None)
+        due_now: list[tuple[str, str, float]] = []
         for goal in self._goals.active():
             if not goal.drive:
                 continue
@@ -666,13 +734,18 @@ class Affect(BaseModule):
                 continue
             if drive.value < drive.threshold:
                 continue
+            pending = self._concern_pending.get(goal.id)
+            if pending is not None:
+                if own_update and now - pending[1] >= 0.5 * self._publish_interval:
+                    due_now.append((goal.id, goal.drive, drive.value))
+                continue
             due = self._reentry_due.setdefault(goal.id, now + self._concern_reentry_s)
-            if now >= due:
-                due_now.append((goal.drive, drive.value))
-                self._reentry_due[goal.id] = now + self._concern_reentry_s
+            if own_update and now >= due:
+                due_now.append((goal.id, goal.drive, drive.value))
         return due_now
 
-    async def _tick(self) -> None:
+    async def _tick(self, own_update: bool = False) -> None:
+        """Run one affect update; own_update is True on the module's own P_Aff timer updates."""
         now = self._clock()
         dt = max(0.0, now - self._last_tick_at)
         self._last_tick_at = now
@@ -729,37 +802,40 @@ class Affect(BaseModule):
             social_signal=social_signal,
             action_signal=max(0.0, 1.0 - self._intent_rate),
         )
+        crossing_ids: dict[str, str] = {}
         for crossing in crossings:
             entry_id = await self.publish(
                 "affect.drive",
                 {"drive": crossing.name, "value": crossing.value, "alert": True},
                 salience=self._alert_salience,
             )
-            self._drive_entry_ids.append(
-                entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
-            )
+            eid = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
+            self._drive_entry_ids.append(eid)
+            crossing_ids[crossing.name] = eid
         # Goal lifecycle (paper A.4): settle credit ends first so a drive that
         # ended and re-crossed in the same tick is handled correctly, then create
         # goals for new crossings, check stall timers, and expire response windows.
         # All state changes are synchronous; events are published afterwards.
         payloads = self._settle_goal_ends()
         payloads += self._create_goals(crossings, now)
+        self._mark_crossings_pending(crossing_ids, now)
         payloads += self._check_stalls(now)
         self._check_response_windows(now)
         await self._publish_goal_events(payloads)
 
-        # Sustained concern (paper A.4): an active goal's drive event recurs at the
-        # drive's value while the drive stays at or above threshold. It is not an alert,
-        # and its entry id marks intents about it as about a drive.
-        for name, value in self._due_reentries(now):
+        # Sustained concern (paper A.4): an active goal's drive event recurs at the drive's
+        # value on own updates until a broadcast accesses it. It is not an alert, and its
+        # entry id marks intents about it as about a drive.
+        for goal_id, name, value in self._due_reentries(now, own_update):
             reentry_id = await self.publish(
                 "affect.drive",
                 {"drive": name, "value": value, "alert": False, "reentry": True},
                 salience=_clip01(value),
             )
-            self._drive_entry_ids.append(
-                reentry_id.decode() if isinstance(reentry_id, bytes) else str(reentry_id)
-            )
+            eid = reentry_id.decode() if isinstance(reentry_id, bytes) else str(reentry_id)
+            self._drive_entry_ids.append(eid)
+            self._concern_pending[goal_id] = (eid, now)
+            self._reentry_due.pop(goal_id, None)
 
         adj = await self._regulation.suggest(self._state)
         self._state = self._state.nudged(
@@ -1127,7 +1203,7 @@ class Affect(BaseModule):
                 if self._stopped.is_set():
                     break
                 try:
-                    await self._tick()
+                    await self._tick(own_update=True)
                     await self._maybe_publish_state()
                 except asyncio.CancelledError:
                     raise
@@ -1391,6 +1467,7 @@ class Affect(BaseModule):
         self._response_windows.clear()
         self._held_obstruction.clear()
         self._reentry_due.clear()
+        self._concern_pending.clear()
         self._last_obstruction = 0.0
         self._drive_end_counts = {
             d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
@@ -1648,3 +1725,4 @@ class Affect(BaseModule):
         self._response_windows.clear()
         self._held_obstruction.clear()
         self._reentry_due.clear()
+        self._concern_pending.clear()

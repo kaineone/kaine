@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| reentry-until-broadcast | 0/5 (0%) | A sustained concern's drive event recurs on the affect module's own updates until a broadcast accesses it, and the re-entry interval runs from that access, so re-entries stop landing on discarded ticks (paper 3.5, A.4). |
+| reentry-until-broadcast | 5/5 (100%) | A sustained concern's drive event recurs on the affect module's own updates until a broadcast accesses it, and the re-entry interval runs from that access, so re-entries stop landing on discarded ticks (paper 3.5, A.4). |
 | organ-first-person-framing | 4/4 (100%) | The organ continues the entity's own first-person turn under a descriptive persona, and the individuation disclosure is first person, so the organ stops answering its own state as an assistant (paper 3.5). |
 | sustained-concern-reentry | 5/5 (100%) | While a goal is active and its drive stays above threshold, the drive event re-enters the workspace every P_re at the drive's value, so an unmet concern keeps returning to thought (paper 3.5, A.4). |
 | valence-error-dynamics | 5/5 (100%) | Valence follows error dynamics, the fall or rise of prediction errors and the change in wellness, so a steady state is neutral; the welfare log gives the negative-valence share and per-drive uncontrolled goal ends (paper 3.5, A.4, 6.2). |
