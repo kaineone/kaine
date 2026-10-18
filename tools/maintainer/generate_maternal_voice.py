@@ -368,13 +368,13 @@ def main() -> int:
     parser.add_argument(
         "--texts",
         type=Path,
-        default=repo_root / "kaine" / "modules" / "audition" / "maternal_voice" / "texts.toml",
-        help="path to the texts TOML file (default: <repo>/kaine/modules/audition/maternal_voice/texts.toml)",
+        default=repo_root / "kaine" / "modules" / "audition" / "maternal_voice_data" / "texts.toml",
+        help="path to the texts TOML file (default: <repo>/kaine/modules/audition/maternal_voice_data/texts.toml)",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=repo_root / "kaine" / "modules" / "audition" / "maternal_voice",
+        default=repo_root / "kaine" / "modules" / "audition" / "maternal_voice_data",
         help="output directory for FLAC files and manifest.json",
     )
     parser.add_argument(
