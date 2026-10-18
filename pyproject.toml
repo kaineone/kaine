@@ -29,7 +29,7 @@ core = [
     "ncps>=1.0.1,<2",
 ]
 memory = [
-    "sentence-transformers>=2.7,<6",
+    "sentence-transformers>=6.1.0,<7",
     "qdrant-client>=1.19.1,<2",
 ]
 memory-edge = [
