@@ -199,6 +199,47 @@ def test_chat_messages_own_turn():
     ]
 
 
+def test_chat_messages_own_turn_with_user_turn():
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=True,
+            user_turn='Someone else said: "hi"',
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": 'Someone else said: "hi"'},
+        {"role": "assistant", "content": "notes\n"},
+    ]
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=True,
+            user_turn="",
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": OWN_TURN_CUE},
+        {"role": "assistant", "content": "notes\n"},
+    ]
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=False,
+            user_turn="x",
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "notes\n"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_own_turn_body_sends_trailing_assistant_message():
     http = _FakeHTTP([_FakeResp()])

@@ -83,6 +83,14 @@ HEARD_SPEECH_GUARD = (
 HEARD_ATTRIBUTION_SAID = "Someone else said, in their words and not mine: "
 HEARD_ATTRIBUTION_WROTE = "Someone else wrote, in their words and not mine: "
 
+# Short pointers that stand in the entity's own notes where another speaker's
+# words were. The private marker tags heard lines during rendering; it cannot
+# occur in sanitized heard words (every control character is removed) or in the
+# renderers' own lines.
+HEARD_POINTER_LINE = "Someone else spoke to me."
+HEARD_POINTER_INPUT = "Someone else spoke to me just now, in the words before my notes."
+_HEARD_MARK = "\x00heard\x00"
+
 # Events whose payloads hold only the entity's own values and words; any other
 # event, including one of an unknown type, counts as outside material and brings
 # the guard.
@@ -118,6 +126,8 @@ class AssembledContext:
     logged_prompt: str  # redacted prompt written to the intent-expression log
     logged_working_memory: str  # redacted rendering written to the log
     numeric_working_memory: Optional[str] = None  # felt mode only: the numeric rendering of the same coalition, heard speech redacted, for the log
+    heard_turn: Optional[str] = None  # another speaker's attributed words for the user turn, None when there are none
+    logged_heard_turn: Optional[str] = None  # the same with the heard-speech placeholder, for the log
 
 
 def _name_from(self_model: dict[str, Any]) -> Optional[str]:
@@ -286,6 +296,30 @@ def _attributed_heard_line(event: Event, *, placeholder: bool) -> Optional[str]:
     return attribution + _quote_heard(text) + "."
 
 
+def _split_heard(rendered: str) -> tuple[str, list[str]]:
+    """Split a rendered block into the entity's own notes and the heard lines.
+
+    Walks the rendered lines. Lines that contain the private ``_HEARD_MARK``
+    are heard lines: their text after the marker is collected, and the first
+    such line is replaced in the returned text by the prefix that preceded the
+    marker (usually the renderer's bullet) followed by ``HEARD_POINTER_LINE``.
+    Later heard lines are dropped from the entity's own notes.
+    """
+    kept: list[str] = []
+    heard: list[str] = []
+    seen = False
+    for line in rendered.split("\n"):
+        if _HEARD_MARK in line:
+            prefix, _, rest = line.partition(_HEARD_MARK)
+            heard.append(rest)
+            if not seen:
+                kept.append(prefix + HEARD_POINTER_LINE)
+                seen = True
+        else:
+            kept.append(line)
+    return "\n".join(kept), heard
+
+
 def _holds_outside_material(snapshot: Optional[WorkspaceSnapshot]) -> bool:
     """Fail-closed: unknown or unclassified content counts as outside material.
 
@@ -363,14 +397,29 @@ class ContextAssembler:
         def _prompt_line(ev: Event) -> Optional[str]:
             line = _attributed_heard_line(ev, placeholder=False)
             if line is not None:
-                return line
+                return _HEARD_MARK + line
             if ev.source != "language" and isinstance(ev.payload, dict):
                 new_payload, changed = _attribute_heard_fields(ev.payload)
                 if changed:
-                    return self._renderer.render_event(
+                    rendered = self._renderer.render_event(
                         ev.model_copy(update={"payload": new_payload})
                     )
+                    if rendered is not None:
+                        return _HEARD_MARK + rendered
             return None
+
+        def _logged_line(ev: Event) -> Optional[str]:
+            attributed = _attributed_heard_line(ev, placeholder=True)
+            if attributed is not None:
+                return _HEARD_MARK + attributed
+            if ev.source != "language" and isinstance(ev.payload, dict):
+                _, changed = _attribute_heard_fields(ev.payload)
+                if changed:
+                    redacted = self._redact(ev)
+                    if redacted is not None:
+                        return _HEARD_MARK + redacted
+                    return _HEARD_MARK + HEARD_POINTER_LINE
+            return self._redact(ev)
 
         working_memory = (
             self._renderer.render_snapshot_bounded(
@@ -387,11 +436,20 @@ class ContextAssembler:
                 snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
-                redact=_redact_logged(self._redact),
+                redact=_logged_line,
             )
             if snapshot is not None
             else EMPTY_AWARENESS
         )
+
+        heard_lines: list[str] = []
+        logged_heard_lines: list[str] = []
+        logged_own_memory = logged_working_memory
+        if snapshot is not None:
+            working_memory, heard_lines = _split_heard(working_memory)
+            logged_own_memory, logged_heard_lines = _split_heard(logged_working_memory)
+            logged_working_memory = logged_working_memory.replace(_HEARD_MARK, "")
+
         numeric_working_memory = None
         if self._numeric_renderer is not None and snapshot is not None:
             numeric_working_memory = self._numeric_renderer.render_snapshot_bounded(
@@ -412,11 +470,18 @@ class ContextAssembler:
         )
         logged_prompt = self._build_prompt(
             about=HEARD_SPEECH_PLACEHOLDER if about_is_heard else about,
-            working_memory=logged_working_memory,
+            working_memory=logged_own_memory,
             mode=mode,
             about_is_heard=about_is_heard,
             situation=situation,
         )
+        if about_is_heard:
+            heard_lines.append(HEARD_ATTRIBUTION_SAID + _quote_heard(about))
+            logged_heard_lines.append(
+                HEARD_ATTRIBUTION_SAID + _quote_heard(HEARD_SPEECH_PLACEHOLDER)
+            )
+        heard_turn = "\n".join(heard_lines) or None
+        logged_heard_turn = "\n".join(logged_heard_lines) or None
         return AssembledContext(
             system=system,
             prompt=prompt,
@@ -424,6 +489,8 @@ class ContextAssembler:
             logged_prompt=logged_prompt,
             logged_working_memory=logged_working_memory,
             numeric_working_memory=numeric_working_memory,
+            heard_turn=heard_turn,
+            logged_heard_turn=logged_heard_turn,
         )
 
     def _persona(
@@ -472,18 +539,7 @@ class ContextAssembler:
         if situation is not None:
             sections.append(situation)
         sections.append(f"{AWARENESS_HEADING}\n{body}")
-        sections.append(f"{input_heading}\n{_attributed_heard_text(about, about_is_heard)}")
+        input_body = HEARD_POINTER_INPUT if about_is_heard else about.strip()
+        sections.append(f"{input_heading}\n{input_body}")
         sections.append(lead_heading)
         return "\n\n".join(sections) + "\n"
-
-
-def _redact_logged(redact):
-    def _redact_or_attributed(event):
-        return _attributed_heard_line(event, placeholder=True) or redact(event)
-    return _redact_or_attributed
-
-
-def _attributed_heard_text(about: str, about_is_heard: bool) -> str:
-    if about_is_heard:
-        return HEARD_ATTRIBUTION_SAID + _quote_heard(about)
-    return about.strip()

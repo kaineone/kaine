@@ -521,6 +521,7 @@ class Language(BaseModule):
             seed=int(seed),
             cache_prompt=False,
             own_turn=True,
+            user_turn=ctx.heard_turn,
             stop=list(OWN_TURN_STOP),
         )
 
@@ -870,6 +871,7 @@ class Language(BaseModule):
             think=self._think,
             seed=None,
             own_turn=True,
+            user_turn=ctx.heard_turn,
             stop=list(OWN_TURN_STOP),
         )
         response = await self._chat_client.complete(request)
@@ -885,6 +887,11 @@ class Language(BaseModule):
                     logged_faithful = logged_faithful.replace(
                         heard, HEARD_SPEECH_PLACEHOLDER
                     )
+        logged_heard_turn = ctx.logged_heard_turn
+        if logged_heard_turn is not None:
+            for heard in redact_texts:
+                if len(heard) >= 3:
+                    logged_heard_turn = logged_heard_turn.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_numeric = ctx.numeric_working_memory if snap is not None else None
         if logged_numeric is not None:
             for heard in redact_texts:
@@ -924,6 +931,7 @@ class Language(BaseModule):
                 seed=request.seed,
                 numeric_rendering=logged_numeric,
                 about_values=logged_about_values,
+                extra={"heard_turn": logged_heard_turn} if logged_heard_turn else None,
             )
         except Exception:
             log.exception("intent log append failed")

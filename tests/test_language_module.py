@@ -21,7 +21,10 @@ from kaine.modules.language import (
     IntentExpressionLog,
     Language,
 )
-from kaine.modules.language.context import PERSONA_TEMPLATE_VERSION
+from kaine.modules.language.context import (
+    HEARD_POINTER_INPUT,
+    PERSONA_TEMPLATE_VERSION,
+)
 from kaine.modules.sleep.ignition_audit import classify_realizations
 from kaine.workspace.action_selection import SPEAK
 from tests._fakes import wait_for
@@ -255,11 +258,13 @@ async def test_language_realizes_speak_intent(bus: AsyncBus, tmp_path: Path):
         payload = json.loads(fields["payload"])
         assert payload["text"] == "a reply"
         assert payload["mode"] == "external"
-        # The triggering utterance is embedded in the assembled prompt, which now
-        # also carries the conscious-workspace awareness block and a persona
-        # system prompt (the language organ is conditioned, not a bare chatbot).
+        # The triggering utterance is embedded in the assembled request as the
+        # attributed user turn, while the prompt carries only the pointer in the
+        # entity's own notes (the language organ is conditioned, not a bare chatbot).
         req = language.chat_client.requests[-1]
-        assert "how are you?" in req.prompt
+        assert "how are you?" in req.user_turn
+        assert "how are you?" not in req.prompt
+        assert HEARD_POINTER_INPUT in req.prompt
         assert "How I feel and what I notice" in req.prompt
         assert req.system  # persona is set (was None before conditioning)
         # An untagged about counts as heard, and heard input never goes on the bus.

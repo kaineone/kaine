@@ -32,7 +32,10 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.language import FakeChatClient
-from kaine.modules.language.context import AWARENESS_HEADING
+from kaine.modules.language.context import (
+    AWARENESS_HEADING,
+    HEARD_POINTER_INPUT,
+)
 from kaine.modules.registry import ModuleRegistry
 
 
@@ -114,8 +117,11 @@ async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
     # Working memory (the conscious coalition) is rendered into the prompt...
     assert AWARENESS_HEADING in req.prompt
     assert "Interoception reports" in req.prompt
-    # ...alongside the triggering input, and it is not the bare utterance alone.
-    assert "hello there" in req.prompt
+    # ...and the heard trigger reaches the model as a separate attributed user turn,
+    # not inside the entity's own notes.
+    assert "hello there" in req.user_turn
+    assert "hello there" not in req.prompt
+    assert HEARD_POINTER_INPUT in req.prompt
     assert req.prompt.strip() != "hello there"
 
 

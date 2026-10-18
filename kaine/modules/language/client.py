@@ -40,6 +40,10 @@ class ChatRequest:
     # and the reply excludes the echoed prompt. False keeps the plain user-turn
     # layout every other caller uses.
     own_turn: bool = False
+    # In the own-turn layout, what another speaker said (already attributed and
+    # quoted by the caller), sent as the user message before the entity's own
+    # turn; None sends the fixed cue.
+    user_turn: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -84,12 +88,17 @@ OWN_TURN_CUE = "(next)"
 
 
 def chat_messages(request: ChatRequest) -> list[dict[str, str]]:
-    """Return the message list for a request."""
+    """Return the message list for a request.
+
+    In the own-turn layout, a non-empty ``user_turn`` replaces the fixed user
+    cue with caller-attributed speech before the entity's own turn.
+    """
     messages: list[dict[str, str]] = []
     if request.system:
         messages.append({"role": "system", "content": request.system})
     if request.own_turn:
-        messages.append({"role": "user", "content": OWN_TURN_CUE})
+        user_content = request.user_turn if request.user_turn else OWN_TURN_CUE
+        messages.append({"role": "user", "content": user_content})
         messages.append({"role": "assistant", "content": request.prompt})
     else:
         messages.append({"role": "user", "content": request.prompt})
