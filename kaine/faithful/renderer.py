@@ -26,10 +26,12 @@ class FaithfulRenderer:
         self,
         *,
         templates=None,
+        fallback: Optional[Callable[[str, str, dict], str]] = None,
         empty_snapshot_text: str = DEFAULT_EMPTY_SNAPSHOT_TEXT,
         line_prefix: str = "- ",
     ) -> None:
         self._templates = dict(templates) if templates is not None else dict(TEMPLATES)
+        self._fallback = fallback if fallback is not None else fallback_template
         self._empty_snapshot_text = empty_snapshot_text
         self._line_prefix = line_prefix
 
@@ -37,7 +39,7 @@ class FaithfulRenderer:
         key = (event.source, event.type)
         template = self._templates.get(key)
         if template is None:
-            return fallback_template(event.source, event.type, dict(event.payload))
+            return self._fallback(event.source, event.type, dict(event.payload))
         return template(dict(event.payload))
 
     def render_snapshot(

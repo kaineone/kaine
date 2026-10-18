@@ -91,6 +91,11 @@ drive_initiative = false
 # source report again.
 sig_expiry_s = 300.0
 
+[language]
+# The organ gets accessed content and each intent's cause in graded words, not
+# instrument values; the intent log keeps the values (paper 3.5).
+awareness_rendering = "felt"
+
 [sequence]
 # The sequence module predicts the next broadcast and publishes temporal prediction errors.
 # The shipped kaine.toml keeps the forward head off.

@@ -1987,6 +1987,11 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
     # ablation runs while still recording proposal outcomes.
     modules_cfg = ctx.kaine_config.get("modules") or {}
     planning_cfg = ctx.kaine_config.get("planning") or {}
+    # One key names the awareness rendering for the organ and the cause the
+    # report and planning intents give it: "felt" (graded words) or "numeric".
+    about_style = str(
+        (ctx.kaine_config.get("language") or {}).get("awareness_rendering", "numeric")
+    )
     planning_enabled = bool(modules_cfg.get("planning", True))
 
     def _wrap_policy(policy):
@@ -1997,6 +2002,7 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
         return PlanningProposalSource(
             policy,
             drive_actions=bool(planning_cfg.get("drive_actions", True)),
+            about_style=about_style,
             speak_refractory_s=float(action_selection_cfg.get("speak_refractory_s", 8.0)),
             think_refractory_s=float(action_selection_cfg.get("think_refractory_s", 3.0)),
             rest_min_interval_s=float(
@@ -2039,6 +2045,7 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
                     sig_expiry_s=(float(_sig_expiry_raw) if _sig_expiry_raw is not None else None),
                     clock=_report_clock,
                     guard_clock=ctx.registry.entity_clock.wall if ctx.registry.entity_clock is not None else None,
+                    about_style=about_style,
                 )
             ),
             signer=intent_signer,
