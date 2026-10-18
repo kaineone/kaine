@@ -62,6 +62,8 @@ Tune the sidecar welfare observer's interoceptive-distress rule and its sensor a
 |---|---|---|---|
 | `interoceptive_distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
 | `interoceptive_distress_duration_s` | float | `30.0` | Seconds the distress must be sustained: wall time while distress samples arrive, unfrozen time after the last sample. |
+| `negative_valence_bar` | float `[0, 1]` | `0.5` | The `affect_welfare` record counts awake time with valence below minus this bar as negative. The default is the emotion-regulation set point `theta_E` (paper 6.2). |
+| `affect_summary_interval_s` | float `> 0` | `300.0` | Unfrozen seconds between `affect_welfare` records in the welfare log. |
 | `blind_sensor_samples` | integer | `0` | Consecutive null `prediction_error` samples from one processor after which the observer publishes a `welfare.blind_sensor` advisory. `0` means the run must span `interoceptive_distress_duration_s`, on the observer's unfrozen read clock and between the reports' timestamps, which is the number of samples that duration holds at the processor's own rate. The advisory is not a gray-zone event and the protective response does not act on it. |
 
 ### `[individuation]`

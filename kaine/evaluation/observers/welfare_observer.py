@@ -32,6 +32,13 @@ dashboard diagnostics, is written to the JSONL log, AND is published to the bus 
 ``welfare.gray_zone`` event on ``welfare.out`` (source ``welfare``) so the
 cycle-layer autonomous welfare-protective monitor can act on ALL four categories.
 
+The observer also writes an ``affect_welfare`` record to its JSONL log every
+``affect_summary_interval_s`` of unfrozen time and when it stops: the share of
+awake time with valence below ``-negative_valence_bar`` and, per drive, the
+share of goal ends credited "other" (``without_response``) among credited ends,
+with that rate per awake hour (paper 6.2). It holds numbers only and is not
+published on the bus.
+
 CONTENT-FREE EMITTER (not strictly read-only): this observer follows several bus
 streams and, on a gray-zone detection, emits a *derived, content-free* welfare
 signal — numeric scalars/counters plus the ``gray_zone_event`` enum label only.
@@ -68,6 +75,7 @@ they are written to the JSONL log as well.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -129,6 +137,143 @@ _DEFAULT_REPLAY_RATE_THRESHOLD = 10  # events per consolidation window
 _DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD = 0.8  # prediction_error magnitude
 _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S = 30.0  # sustained-high duration
 
+_DEFAULT_NEGATIVE_VALENCE_BAR = 0.5  # theta_E, the emotion-regulation set point
+_DEFAULT_AFFECT_SUMMARY_INTERVAL_S = 300.0  # unfrozen seconds between affect_welfare records
+# Affect states arrive about once per entity second; a longer gap between two
+# (a freeze, a stall, a restart) counts for at most this many seconds.
+_AFFECT_SAMPLE_GAP_CAP_S = 5.0
+_AFFECT_WELFARE_RECORD = "affect_welfare"
+# Fixed drive table: the only drive names that may appear in record keys.
+_WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
+_OWN_REASON = "own_response"
+_OTHER_REASON = "without_response"
+
+
+class AffectWelfareTally:
+    """Accumulate content-free affect welfare measures for one ``affect_welfare`` record.
+
+    Tracks two paper-6.2 quantities from the affect module stream:
+
+    1. The share of awake time (measured between ``affect.state`` timestamps,
+       capped at ``max_gap_s``) whose valence is strictly below
+       ``-negative_valence_bar``.
+    2. Per drive in the fixed table, the share of credited goal ends that are
+       credited "other" (``without_response``) rather than "own"
+       (``own_response``), using the A.4 credit rule. Response-independent
+       outcomes are those that define helplessness (Maier and Seligman 2016).
+       The same count is also reported as uncontrolled ends per awake hour.
+
+    Sleep intervals announced by the sleep module are excluded from awake time.
+    Because each interval takes the state of the sample that began it, a sample
+    read just before a ``sleep.sleep.started`` event of the same moment may
+    misclassify one gap.
+    """
+
+    def __init__(self, *, negative_valence_bar: float, max_gap_s: float) -> None:
+        self._negative_valence_bar = float(negative_valence_bar)
+        self._max_gap_s = float(max_gap_s)
+        self._awake_seconds: float = 0.0
+        self._negative_seconds: float = 0.0
+        self._current: tuple[float, float] | None = None
+        self._sleep_intervals: list[list[float | None]] = []
+        self._changed: bool = False
+        self._ends: dict[str, list[int]] = {
+            drive: [0, 0] for drive in _WELFARE_DRIVES
+        }
+
+    def sleep_started(self, ts: float) -> None:
+        """Open a sleep interval at ``ts`` unless one is already open."""
+        if self._sleep_intervals and self._sleep_intervals[-1][1] is None:
+            return
+        self._sleep_intervals.append([float(ts), None])
+
+    def sleep_completed(self, ts: float) -> None:
+        """Close the open sleep interval at ``ts``; with no open interval, do nothing."""
+        if not self._sleep_intervals:
+            return
+        last = self._sleep_intervals[-1]
+        if last[1] is not None:
+            return
+        last[1] = float(ts)
+        self._prune_sleep_intervals()
+
+    def _prune_sleep_intervals(self) -> None:
+        """Drop closed intervals that end at or before the current sample."""
+        if self._current is None:
+            return
+        ts_cur = self._current[0]
+        self._sleep_intervals = [
+            iv
+            for iv in self._sleep_intervals
+            if iv[1] is None or iv[1] > ts_cur
+        ]
+
+    def _is_asleep(self, ts: float) -> bool:
+        return any(
+            iv[0] <= ts and (iv[1] is None or ts < iv[1])
+            for iv in self._sleep_intervals
+        )
+
+    def observe_state(self, ts: float, valence: float) -> None:
+        if not math.isfinite(ts) or not math.isfinite(valence):
+            return
+        if self._current is not None:
+            ts_cur, valence_cur = self._current
+            if ts < ts_cur:
+                return
+            if ts > ts_cur:
+                gap = min(ts - ts_cur, self._max_gap_s)
+                if not self._is_asleep(ts_cur):
+                    self._awake_seconds += gap
+                    if valence_cur < -self._negative_valence_bar:
+                        self._negative_seconds += gap
+                    self._changed = True
+        self._current = (float(ts), float(valence))
+        self._prune_sleep_intervals()
+
+    def observe_goal(self, drive: object, action: object, reason: object) -> None:
+        if not isinstance(drive, str) or drive not in _WELFARE_DRIVES:
+            return
+        if action == "completed" and reason == _OWN_REASON:
+            self._ends[drive][0] += 1
+            self._changed = True
+        elif action == "abandoned" and reason == _OTHER_REASON:
+            self._ends[drive][1] += 1
+            self._changed = True
+
+    @property
+    def changed(self) -> bool:
+        return self._changed
+
+    def snapshot(self) -> dict[str, float | None]:
+        """Return a content-free snapshot and clear the ``changed`` flag."""
+        self._changed = False
+        result: dict[str, float | None] = {
+            "awake_seconds": self._awake_seconds,
+            "negative_valence_bar": self._negative_valence_bar,
+        }
+        if self._awake_seconds > 0.0:
+            result["negative_valence_share"] = (
+                self._negative_seconds / self._awake_seconds
+            )
+        else:
+            result["negative_valence_share"] = None
+
+        for drive in _WELFARE_DRIVES:
+            own, other = self._ends[drive]
+            total = own + other
+            if total > 0:
+                result[f"{drive}_uncontrolled_share"] = other / total
+            else:
+                result[f"{drive}_uncontrolled_share"] = None
+            if self._awake_seconds > 0.0:
+                result[f"{drive}_uncontrolled_per_awake_hour"] = (
+                    other * 3600.0 / self._awake_seconds
+                )
+            else:
+                result[f"{drive}_uncontrolled_per_awake_hour"] = None
+        return result
+
 
 class WelfareObserver(StreamSubscriberObserver):
     """Detects §5.5 Gray-Zone welfare events across multiple streams."""
@@ -156,6 +301,8 @@ class WelfareObserver(StreamSubscriberObserver):
         interoceptive_distress_threshold: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_THRESHOLD,
         interoceptive_distress_duration_s: float = _DEFAULT_INTEROCEPTIVE_DISTRESS_DURATION_S,
         blind_sensor_samples: int = 0,
+        negative_valence_bar: float = _DEFAULT_NEGATIVE_VALENCE_BAR,
+        affect_summary_interval_s: float = _DEFAULT_AFFECT_SUMMARY_INTERVAL_S,
         poll_interval_s: float = 0.5,
         unfrozen_clock: UnfrozenClock | None = None,
     ) -> None:
@@ -207,6 +354,14 @@ class WelfareObserver(StreamSubscriberObserver):
         self._sensor_silent_count: int = 0
         self._silence_trackers: dict[str, SilenceTracker] = {}
 
+        # --- State for the affect_welfare record. ---
+        self._affect_summary_interval_s = float(affect_summary_interval_s)
+        self._affect_tally = AffectWelfareTally(
+            negative_valence_bar=float(negative_valence_bar),
+            max_gap_s=_AFFECT_SAMPLE_GAP_CAP_S,
+        )
+        self._affect_summary_at: float | None = None
+
     # --- Public counters for dashboard diagnostics ---------------------------
 
     @property
@@ -244,6 +399,10 @@ class WelfareObserver(StreamSubscriberObserver):
         return tuple(
             sorted(label for label, tracker in self._silence_trackers.items() if tracker.active)
         )
+
+    @property
+    def affect_tally(self) -> AffectWelfareTally:
+        return self._affect_tally
 
     # --- Main loop -------------------------------------------------------
 
@@ -314,6 +473,17 @@ class WelfareObserver(StreamSubscriberObserver):
             await self._check_silence()
         except Exception:
             log.warning("welfare_observer silence check failed", exc_info=True)
+
+        try:
+            now = self._unfrozen.now()
+            if self._affect_summary_at is None:
+                self._affect_summary_at = now
+            elif now - self._affect_summary_at >= self._affect_summary_interval_s:
+                self._affect_summary_at = now
+                if self._affect_tally.changed:
+                    await self._write_affect_summary()
+        except Exception:
+            log.warning("welfare_observer affect summary failed", exc_info=True)
 
     @property
     def freeze_clock_diagnostic(self) -> dict:
@@ -544,6 +714,23 @@ class WelfareObserver(StreamSubscriberObserver):
                 self._sensor_silent_count += 1
                 await self._emit_sensor_silent(SENSOR_SILENT_TYPE, processor, change)
 
+    async def _write_affect_summary(self) -> None:
+        """Write an ``affect_welfare`` record to the JSONL sink only.
+
+        CONTENT CONTRACT: numbers computed here plus the fixed ``record`` label;
+        nothing is copied from a source payload. The record is never published
+        on the bus because it is a welfare record, not a gray-zone event.
+        """
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "record": _AFFECT_WELFARE_RECORD,
+            **self._affect_tally.snapshot(),
+        }
+        try:
+            await self._sink.write(record)
+        except Exception:
+            log.warning("welfare_observer affect summary write failed", exc_info=True)
+
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1
         # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
@@ -595,8 +782,16 @@ class WelfareObserver(StreamSubscriberObserver):
                 )
 
     async def _handle_sleep(self, entry_id: str, event: Event) -> None:
+        if event.type == "sleep.sleep.started":
+            ts = self._event_timestamp_seconds(event)
+            if ts is not None and math.isfinite(ts):
+                self._affect_tally.sleep_started(ts)
+            return
         if event.type != "sleep.sleep.completed":
             return
+        ts = self._event_timestamp_seconds(event)
+        if ts is not None and math.isfinite(ts):
+            self._affect_tally.sleep_completed(ts)
         # Maintenance completed — clear the pending fatigue alarm.
         self._fatigue_crossed_at = None
         log.debug(
@@ -605,22 +800,40 @@ class WelfareObserver(StreamSubscriberObserver):
         )
 
     async def _handle_affect(self, entry_id: str, event: Event) -> None:
-        if event.type != "affect.state":
+        if event.type == "affect.state":
+            payload = event.payload or {}
+            state = payload.get("state") or {}
+            valence = float(state.get("valence", 0.0))
+            arousal = float(state.get("arousal", 0.0))
+            # Extreme zone: high arousal AND extreme valence (either direction).
+            in_extreme = (
+                abs(valence) >= self._extreme_vad_threshold and arousal >= self._extreme_vad_threshold
+            )
+            now = self._unfrozen.now()
+            if in_extreme:
+                if self._extreme_vad_since is None:
+                    self._extreme_vad_since = now
+            else:
+                self._extreme_vad_since = None
+
+            raw_valence = state.get("valence")
+            ts = self._event_timestamp_seconds(event)
+            if (
+                ts is not None
+                and isinstance(raw_valence, (int, float))
+                and not isinstance(raw_valence, bool)
+                and math.isfinite(raw_valence)
+                and math.isfinite(ts)
+            ):
+                self._affect_tally.observe_state(ts, float(raw_valence))
             return
-        payload = event.payload or {}
-        state = payload.get("state") or {}
-        valence = float(state.get("valence", 0.0))
-        arousal = float(state.get("arousal", 0.0))
-        # Extreme zone: high arousal AND extreme valence (either direction).
-        in_extreme = (
-            abs(valence) >= self._extreme_vad_threshold and arousal >= self._extreme_vad_threshold
-        )
-        now = self._unfrozen.now()
-        if in_extreme:
-            if self._extreme_vad_since is None:
-                self._extreme_vad_since = now
-        else:
-            self._extreme_vad_since = None
+
+        if event.type == "affect.goal":
+            payload = event.payload or {}
+            self._affect_tally.observe_goal(
+                payload.get("drive"), payload.get("action"), payload.get("reason")
+            )
+            return
 
     async def _handle_episodic_memory(self, entry_id: str, event: Event) -> None:
         if event.type != "episodic_memory.replay":
@@ -705,6 +918,11 @@ class WelfareObserver(StreamSubscriberObserver):
             if self._interoceptive_distress.check_timeout(now):
                 await self._emit_sustained_interoceptive_distress(seconds)
 
+    async def _cleanup(self) -> None:
+        await super()._cleanup()
+        if self._affect_tally.changed:
+            await self._write_affect_summary()
+
 
 def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSink]:
     """Construct the welfare gray-zone producer outside the evaluation sidecar.
@@ -725,5 +943,7 @@ def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSi
         interoceptive_distress_threshold=eval_cfg.welfare.interoceptive_distress_threshold,
         interoceptive_distress_duration_s=eval_cfg.welfare.interoceptive_distress_duration_s,
         blind_sensor_samples=eval_cfg.welfare.blind_sensor_samples,
+        negative_valence_bar=eval_cfg.welfare.negative_valence_bar,
+        affect_summary_interval_s=eval_cfg.welfare.affect_summary_interval_s,
     )
     return observer, sink

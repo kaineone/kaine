@@ -755,8 +755,10 @@ baseline_arousal = 0.3
 baseline_dominance = 0.0
 drift_rate_per_s = 0.05
 publish_interval_s = 1.0
-# Valence relaxes toward the appraisal's pleasantness (learning progress + coupling)
-# shifted by wellness (Joffily and Coricelli 2013). The time constant is subjective seconds.
+# Valence follows error dynamics (paper A.4): it relaxes toward the appraisal's
+# pleasantness (learning progress + coupling) plus the change in wellness, fast minus
+# slow mean, so a steady state is neutral (Joffily and Coricelli 2013; Van de Cruys
+# 2017; Kiverstein, Miller and Rietveld 2019). The time constant is subjective seconds.
 action_selection_stream = "action_selection.out"
 # Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
 fast_time_constant_s = 10.0
@@ -769,6 +771,9 @@ alert_excess_margin = 0.5
 intent_rate_weight = 0.05
 valence_time_constant_s = 30.0
 valence_progress_gain = 2.0
+# "error_dynamics" (default) or "wellness_level", the earlier rule: pleasantness plus
+# (wellness - 0.5), the wellness level. The earlier rule behaves bit for bit as before.
+valence_rule = "error_dynamics"
 # Goals (paper A.4): each drive crossing creates the goal of relieving that drive.
 # A goal is abandoned when its drive stays at or above threshold for goal_stall_s
 # entity seconds (Delta_stall), or as the lowest priority once more than goal_cap

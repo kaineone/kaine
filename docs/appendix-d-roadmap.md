@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| valence-error-dynamics | 0/5 (0%) | Valence follows error dynamics, the fall or rise of prediction errors and the change in wellness, so a steady state is neutral; the welfare log gives the negative-valence share and per-drive uncontrolled goal ends (paper 3.5, A.4, 6.2). |
+| valence-error-dynamics | 5/5 (100%) | Valence follows error dynamics, the fall or rise of prediction errors and the change in wellness, so a steady state is neutral; the welfare log gives the negative-valence share and per-drive uncontrolled goal ends (paper 3.5, A.4, 6.2). |
 | boredom-own-engagement | 4/4 (100%) | The entity's own intents, unless about a drive, relieve boredom and count as its own response, so boredom stops teaching helplessness (paper 3.5, A.4). |
 | guard-release-on-output | 4/4 (100%) | The speak and think guards release when the language organ publishes its output, accessed or not, so an intent no longer mutes its channel for 48 s (paper A.6). |
 | sleep-keeps-alert-rates | 3/3 (100%) | The sleep reset keeps the alert rates, error means and intent rate, so a familiar scene stays habituated after sleep and the post-sleep access burst is gone (paper A.4). |

@@ -151,6 +151,8 @@ Detects four gray-zone events:
 | Replay write-rate excess | `episodic_memory.replay` events exceed threshold within consolidation window | 10 events / 5 s |
 | Sustained interoceptive distress | `interoception.report` `prediction_error` ≥ threshold continuously | ≥ 0.8 for 30 s |
 
+The observer also writes an `affect_welfare` record to the same JSONL log every `[evaluation.welfare].affect_summary_interval_s` (300 s of unfrozen time) when it has read new affect events, and once when it stops (paper 6.2). It is cumulative since the observer started and holds numbers only: `awake_seconds`; `negative_valence_share`, the share of awake time with valence below `-negative_valence_bar` (0.5, the emotion-regulation set point); and for each drive (`curiosity`, `boredom`, `social_drive`, `restlessness`) `<drive>_uncontrolled_share`, the share of goal ends credited "other" (`without_response`) among ends credited "own" (`own_response`) or "other" by the A.4 credit rule, and `<drive>_uncontrolled_per_awake_hour`. Response-independent outcomes are the ones that define helplessness (Maier and Seligman 2016). Goals that stall, lose to the goal cap or are cleared by a sleep reset are not credited ends. Time runs between consecutive `affect.state` timestamps, each gap capped at 5 s so a freeze or stall does not count as one long state, and a gap that starts inside a sleep (between `sleep.sleep.started` and `sleep.sleep.completed`) is not awake time. A share with no denominator is null. The record is not published on the bus and the protective monitor does not act on it.
+
 The interoceptive-distress threshold and duration are set by `[evaluation.welfare].interoceptive_distress_threshold` (0.8) and `interoceptive_distress_duration_s` (30.0); the other windows are constructor defaults with no config key. Each condition is counted separately. Counts are exposed as properties on the `WelfareObserver` instance for dashboard diagnostics, and each detected event is written to JSONL.
 
 On each detection the observer publishes a `welfare.gray_zone` event on `welfare.out` (source `welfare`). The published payload is the same content-free dict written to the sink: a category label plus numeric scalars and counters, with no field copied from a source event payload. The sustained-interoceptive-distress rule lives in a shared core primitive (`kaine.lifecycle.welfare_signal.SustainedThresholdTracker`) imported by both the observer and the monitor, so the detection rule never diverges across the sidecar boundary. See [Preservation and the safety net](../11-preservation.md).
@@ -400,6 +402,8 @@ planning_policy = true
 interoceptive_distress_threshold = 0.8
 interoceptive_distress_duration_s = 30.0
 blind_sensor_samples = 0        # 0: one distress duration at each processor's rate
+negative_valence_bar = 0.5      # affect_welfare: valence below -0.5 counts as negative
+affect_summary_interval_s = 300.0
 
 [individuation]
 enabled = false

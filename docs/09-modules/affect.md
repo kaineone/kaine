@@ -34,20 +34,23 @@ A missing, non-numeric or non-finite ratio counts as 0, so a report without `nor
 
 The tonic target follows two accounts. Tonic locus coeruleus activity rises when the utility of the current engagement wanes, driving disengagement and exploration (Aston-Jones and Cohen 2005). Drive energizes learned responses generally (Hull 1943). A drive deficit is the sustained absence of the reward its relief would bring, so the largest one stands for that waning utility. Without the target, a habituated entity in a steady scene sits at `a0` with its drives near 0.9. There only audition alerts reach access (paper A.11), and the 2026-10-17 third test boot had 0 to 3 accessed broadcasts a minute for 17 of its 41 minutes. With the default gain 0.2, a dominant drive between its threshold (0.7) and its deprived level (0.9) puts the target at 0.40 to 0.43. That is above the arousal of about 0.37 that vision, sequence, interoception and affect alerts need to reach the access threshold, and below the 0.45 at which an audition alert reaches the think bar, so reports still need a phasic step. A satisfied entity (`v*` = 0) rests at `a0`. The sleep reset sets every drive to 0, so the target is `a0` right after sleep. A replay of both 2026-10-17 boots put arousal at or above 0.37 for 99% of the time with the gain (55 to 58% without it) and at or above the speak bar of 0.63 for 31 to 35% (23 to 26% without it). Access feeds back: intents relieve restlessness and, unless about a drive, boredom, and lower `v*` when one of them is the largest drive. In a monotonous scene without such intents boredom falls only with alert excess and holds the target up until sleep. The workspace contrast gain and the regulation intensity keep `a0` as their reference.
 
-## Valence from learning progress
+## Valence from error dynamics
 
-Valence follows learning progress, the reading of valence as the negative rate of change of free energy (Joffily and Coricelli 2013). For each perceptual source (the vision module and the audition module's acoustic path) the affect module keeps a fast and a slow time-decayed mean of the raw `prediction_error` its reports carry, counting from the source's first positive error:
+Valence follows error dynamics, how fast the entity's prediction errors fall or rise, so a steady state is neutral: valence as the negative rate of change of free energy (Joffily and Coricelli 2013), positive while errors fall and negative while they rise (Van de Cruys 2017; Kiverstein, Miller and Rietveld 2019). For each perceptual source (the vision module and the audition module's acoustic path) the affect module keeps a fast and a slow time-decayed mean of the raw `prediction_error` its reports carry, counting from the source's first positive error:
 
 ```
 S <- d*S + e,  N <- d*N + 1,  E = S / N,  d = exp(-dt / tau)
        tau = fast_time_constant_s (10) or slow_time_constant_s (100)
 g        = mean over sources of clip((E_slow - E_fast) / E_slow, -1, 1)
 pl       = clip(tanh(valence_progress_gain * g) + coupling, -1, 1)
-v_target = clip(pl + (wellness - 0.5), -1, 1)
+W_fast, W_slow = time-decayed means of the reported wellness (same tau values)
+v_target = clip(pl + W_fast - W_slow, -1, 1)
 valence += (v_target - valence) * (1 - exp(-dt / valence_time_constant_s))
 ```
 
-Falling errors make `g` positive and pull valence up; rising errors make it negative. `pl` is the appraisal's pleasantness check, and `coupling` is the perceived-emotion term described under [Affect coupling](#affect-coupling), zero in the first configuration. `wellness` is the value the interoception module last reported, 0.5 before the first report. Early on the fast and slow means are both close to the plain mean of the samples so far, so `g` starts near zero.
+Falling errors make `g` positive and pull valence up; rising errors make it negative. `pl` is the appraisal's pleasantness check, and `coupling` is the perceived-emotion term described under [Affect coupling](#affect-coupling), zero in the first configuration. Wellness enters as its change, the dynamics of the homeostatic error: a dip in host headroom pulls valence down and its recovery pulls it up, while a steady host, healthy or not, adds nothing. `W_fast - W_slow` is 0 before the first wellness report. The wellness means carry through sleep and persist with the error means. Early on the fast and slow means are both close to the plain mean of the samples so far, so `g` starts near zero.
+
+`[affect].valence_rule` selects the rule. `"error_dynamics"` (the default) is the rule above. `"wellness_level"` keeps the earlier rule, `v_target = clip(pl + (wellness - 0.5), -1, 1)` with the last reported wellness (0.5 before any), and then the module behaves bit for bit as before: it neither updates nor stores the wellness means. In the fourth test boot (2026-10-17) the earlier rule held valence near +0.38 for the whole run on a healthy host (wellness near 0.88) and it never went below 0. A replay estimate of the error-dynamics rule over the same run puts valence at a median of +0.01 (5th to 95th percentile -0.03 to +0.04), below 0 for 28% of the time and never below -0.12.
 
 ## Drives
 
@@ -158,7 +161,7 @@ Besides the workspace broadcast, the affect module reads the peer streams below 
 | `vision.out` | `vision.report` | Learning-progress means; on `alert: true`, alert rates and arousal |
 | `audition.out` | `audition.perception` | Learning-progress means; on `alert: true`, alert rates and arousal |
 | `audition.out` | `audition.emotion` | Perceived speaker emotion, recorded only when coupling is enabled |
-| `interoception.out` | `interoception.report` | `wellness` shifts the valence target; a non-empty `alerts` list raises arousal |
+| `interoception.out` | `interoception.report` | the change in `wellness` shifts the valence target; a non-empty `alerts` list raises arousal |
 | `sequence.out` | `sequence.report` | `time_since_last_interaction_s` starts and relieves the social drive |
 | `action_selection.out` | `intent.*` | Each intent other than `intent.rest` relieves restlessness and counts toward the intent rate; unless it is about a drive (`about_kind` `felt`, or an `entry_id` naming one of the module's `affect.drive` events), it also relieves boredom as the entity's own response |
 | `episodic_memory.out` | `episodic_memory.recall` | `max_affect_intensity` raises arousal |
@@ -198,6 +201,7 @@ The full `[affect]` reference is in the [modules configuration page](../appendix
 | `intent_rate_weight` | float `(0, 1]` | `0.05` | Per-broadcast weight of the intent-rate average |
 | `valence_time_constant_s` | float `> 0` | `30.0` | Time constant of valence's relaxation toward its target |
 | `valence_progress_gain` | float `>= 0` | `2.0` | Gain on learning progress in the pleasantness check |
+| `valence_rule` | `"error_dynamics"` or `"wellness_level"` | `"error_dynamics"` | Valence target: pleasantness plus the change in wellness, or the earlier pleasantness plus the wellness level |
 | `goal_stall_s` | float `> 0` | `600.0` | Seconds a drive may stay at or above its threshold before its active goal is abandoned |
 | `goal_cap` | int `>= 1` | `3` | Maximum number of active goals |
 | `goal_response_window_s` | float `> 0` | `10.0` | Seconds a response window stays open after a non-rest intent |
@@ -262,7 +266,7 @@ flowchart TD
     FC -->|lookup| R
     R -->|decaying| AP[Appraisal checks]
     AP -->|classify| EMO[affect.emotion]
-    AP -->|pleasantness + wellness| VT[valence target]
+    AP -->|pleasantness + wellness change| VT[valence target]
     VT -->|exponential relaxation| S[DimensionalState]
 ```
 
@@ -274,7 +278,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`, and each drive's crossing latch as `drive_fired`, so a revive does not fire a drive again that had already fired and is still above its re-arm band. State saved before the latch was persisted has no `drive_fired`; a restore then sets the latch for every drive at or above its threshold, since such a drive must already have fired. Active goals persist with their `drive` and `likelihood`; the ledger stores the running completed and abandoned counts and keeps at most the 256 most recent finished goals (the counts include pruned goals). The running estimates that feed the drives and the appraisal also persist, so a restart or revive resumes them (paper A.7): the perceptual alert rates `r_f` and `r_s` as `alert_rates`, each source's fast and slow error sums and counts behind learning progress as `error_means`, the intent rate `r_int` as `intent_rate`, the last wellness as `wellness`, and whether an interaction has been seen as `interaction_seen`. Without the alert rates, `r_s` would restart at 0 and the first base-rate alerts after a boot would read as a large excess and relieve boredom. No timestamp is stored, because the entity clock restarts with each process and entity time does not pass while the entity is down: a restored source takes the restore time as its latest report time. A missing or invalid value keeps its default, so older state still restores. Response windows, stall timers, the held obstruction, the intent count since the last broadcast, the last interaction gap and a speaker's perceived emotion are transient and restart after a restore. Restoring goals publishes no `affect.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`, and each drive's crossing latch as `drive_fired`, so a revive does not fire a drive again that had already fired and is still above its re-arm band. State saved before the latch was persisted has no `drive_fired`; a restore then sets the latch for every drive at or above its threshold, since such a drive must already have fired. Active goals persist with their `drive` and `likelihood`; the ledger stores the running completed and abandoned counts and keeps at most the 256 most recent finished goals (the counts include pruned goals). The running estimates that feed the drives and the appraisal also persist, so a restart or revive resumes them (paper A.7): the perceptual alert rates `r_f` and `r_s` as `alert_rates`, each source's fast and slow error sums and counts behind learning progress as `error_means`, the intent rate `r_int` as `intent_rate`, the last wellness as `wellness`, the fast and slow wellness sums and counts as `wellness_means` (error-dynamics rule only), and whether an interaction has been seen as `interaction_seen`. Without the alert rates, `r_s` would restart at 0 and the first base-rate alerts after a boot would read as a large excess and relieve boredom. No timestamp is stored, because the entity clock restarts with each process and entity time does not pass while the entity is down: a restored source takes the restore time as its latest report time. A missing or invalid value keeps its default, so older state still restores. Response windows, stall timers, the held obstruction, the intent count since the last broadcast, the last interaction gap and a speaker's perceived emotion are transient and restart after a restore. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 
@@ -322,6 +326,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_affect_regulation.py` | Monitor, episode detection and three-tier activation |
 | `tests/test_affect_regulation_module.py` | Tiers in the module, developmental phase, passive arm and factory |
 | `tests/test_affect_sleep_keeps_rates.py` | The sleep reset keeps the alert rates, error means and intent rate: a habituated stream stays habituated, boredom is not relieved by the reset, a long quiet still restores the first-presentation response, the means are re-weighted by elapsed time, the intent rate decays by its own rule |
+| `tests/test_affect_valence_error_dynamics.py` | Falling error raises valence and rising error lowers it; a steady host is neutral; a wellness dip lowers it; bounded; the earlier rule is the old formula; the wellness means survive sleep and a restore; validation and config wiring |
 | `tests/test_affect_boredom_engagement.py` | Engagement relieves boredom as the entity's own response and completes its goal; felt, drive-led and rest intents do not; novelty alone still counts as other; the sleep reset is unchanged; 0 skips the channel; validation and config wiring |
 | `tests/test_affect_tonic_arousal.py` | The drive-raised arousal target: values, deprived and satisfied rest, phasic steps on top, sleep reset, gain 0 identical to the old rule, validation, config wiring |
 | `tests/test_affect_habituation.py` | The habituation factor: base-rate alerts leave arousal at baseline, a burst raises it, a first alert after quiet, a long pause or a sleep reset gets the full step; novelty from the change ratio, discounted for vision and audition only |

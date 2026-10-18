@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -391,11 +392,20 @@ class WelfareConfig:
         ``welfare.blind_sensor`` advisory.  0 (the default) means the run
         must span one ``interoceptive_distress_duration_s``, which is the
         number of samples in that duration at the processor's own rate.
+    negative_valence_bar:
+        Valence below minus this bar counts as negative in the
+        ``affect_welfare`` record's awake-time share. Default 0.5, the
+        emotion-regulation set point theta_E (paper 6.2, Table A1).
+    affect_summary_interval_s:
+        Unfrozen seconds between ``affect_welfare`` records in the welfare
+        log. Default 300 s.
     """
 
     interoceptive_distress_threshold: float = 0.8
     interoceptive_distress_duration_s: float = 30.0
     blind_sensor_samples: int = 0
+    negative_valence_bar: float = 0.5
+    affect_summary_interval_s: float = 300.0
 
     def __post_init__(self) -> None:
         if self.interoceptive_distress_threshold < 0.0:
@@ -404,6 +414,12 @@ class WelfareConfig:
             raise ValueError("interoceptive_distress_duration_s must be positive")
         if type(self.blind_sensor_samples) is not int or self.blind_sensor_samples < 0:
             raise ValueError("blind_sensor_samples must be a non-negative integer")
+        if not math.isfinite(self.negative_valence_bar) or not (
+            0.0 <= self.negative_valence_bar <= 1.0
+        ):
+            raise ValueError("negative_valence_bar must be finite and in [0, 1]")
+        if not math.isfinite(self.affect_summary_interval_s) or self.affect_summary_interval_s <= 0.0:
+            raise ValueError("affect_summary_interval_s must be finite and positive")
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "WelfareConfig":
@@ -424,6 +440,12 @@ class WelfareConfig:
             blind_sensor_samples=data.get(
                 "blind_sensor_samples",
                 cls.blind_sensor_samples,
+            ),
+            negative_valence_bar=float(
+                data.get("negative_valence_bar", cls.negative_valence_bar)
+            ),
+            affect_summary_interval_s=float(
+                data.get("affect_summary_interval_s", cls.affect_summary_interval_s)
             ),
         )
 
