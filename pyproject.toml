@@ -163,7 +163,7 @@ worldmodel = [
 # FakeOscillator). CPU-only. scipy supplies the Hilbert transform used by the
 # spike-rate → phase estimator.
 oscillator = [
-    "snntorch>=0.9,<1",
+    "snntorch>=1.0.0,<2",
     "scipy>=1.10",
 ]
 
