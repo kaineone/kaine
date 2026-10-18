@@ -226,7 +226,7 @@ def test_real_repertoire_loads():
     not (VOICE_DATA_DIR / "manifest.json").exists(),
     reason="shipped maternal voice data is not present",
 )
-def test_real_spectrum_below_womb_cutoff():
+def test_real_spectrum_below_intrauterine_cutoff():
     rep = MaternalVoiceRepertoire.load(lowpass_hz=500.0)
     all_samples = np.concatenate(
         [t for item in rep.takes for t in item]

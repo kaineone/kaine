@@ -352,7 +352,7 @@ class StimulusSourceProceduralAudioStream:
     (Van Leeuwen 2009; Webb 2015).  The heartbeat is external; the entity's
     own rhythm is emergent, not synthesised here.
 
-    When a maternal-voice layer is given, its pre-rendered, womb-filtered
+    When a maternal-voice layer is given, its pre-rendered, low-pass filtered
     speech is added to the mix and the headroom grows by its peak (Querleu
     et al. 1988; Gerhardt and Abrams 2000); without one the output is unchanged.
 

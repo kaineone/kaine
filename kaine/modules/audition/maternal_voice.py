@@ -6,7 +6,7 @@ The fetal auditory environment is dominated by the maternal heartbeat and
 intrauterine noise.  The maternal voice is audible above this background, but
 its high frequencies are heavily attenuated by the maternal tissues and fluids
 (Querleu et al. 1988; Gerhardt and Abrams 2000; Richards et al. 1992).
-Newborns prefer a passage their mother read aloud before birth (DeCasper and
+Newborns prefer a passage their mother read aloud in late pregnancy (DeCasper and
 Spence 1986), so the repertoire contains a repeated passage alongside short
 phrases.
 
@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -476,6 +477,7 @@ class MaternalVoiceLayer:
         if self._slot_n <= 0:
             raise ValueError("slot_seconds is too small for the repertoire sample rate")
         self._cache: dict[int, tuple[Utterance, ...]] = {}
+        self._cache_lock = threading.Lock()
 
     @property
     def params(self) -> MaternalVoiceParams:
@@ -549,23 +551,24 @@ class MaternalVoiceLayer:
         return tuple(utterances)
 
     def plan_for(self, slot: int, awake_seconds: float) -> tuple[Utterance, ...]:
-        if slot in self._cache:
-            return self._cache[slot]
+        with self._cache_lock:
+            if slot in self._cache:
+                return self._cache[slot]
 
-        unlocked = unlocked_count(
-            awake_seconds,
-            self._repertoire.initial_unlocked,
-            len(self._repertoire.takes),
-            self._params.unlock_seconds,
-        )
-        plan = self.slot_plan(slot, unlocked)
-        self._cache[slot] = plan
+            unlocked = unlocked_count(
+                awake_seconds,
+                self._repertoire.initial_unlocked,
+                len(self._repertoire.takes),
+                self._params.unlock_seconds,
+            )
+            plan = self.slot_plan(slot, unlocked)
+            self._cache[slot] = plan
 
-        for old in list(self._cache.keys()):
-            if old < slot - 2:
-                del self._cache[old]
+            for old in list(self._cache.keys()):
+                if old < slot - 2:
+                    del self._cache[old]
 
-        return plan
+            return plan
 
     def render(self, start: int, n: int, awake_seconds: float) -> np.ndarray:
         if n <= 0:

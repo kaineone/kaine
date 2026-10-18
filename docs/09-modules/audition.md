@@ -330,7 +330,7 @@ Audition holds no raw audio beyond a single `process_audio()` call, except that 
 | `tests/test_audition_live_logging.py` | Live-microphone summary interval and message format |
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
 | `tests/test_audition_feed.py` | Seeded audio (determinism, seek safety, seed decorrelation), playlist audio (manifest verification failing closed, PyAV absent), and `stimulus_source` |
-| `tests/test_maternal_voice.py`, `tests/test_stimulus_source_maternal_voice.py`, `tests/test_stimulus_source_voice_boot.py` | The maternal voice: loud failure on a missing or altered file, spectrum below the womb cutoff, seeded determinism, arousal pacing, repertoire growth with awake time, byte-identical audio when disabled, boot wiring and the parameter digest |
+| `tests/test_maternal_voice.py`, `tests/test_stimulus_source_maternal_voice.py`, `tests/test_stimulus_source_voice_boot.py` | The maternal voice: loud failure on a missing or altered file, spectrum below the intrauterine cutoff, seeded determinism, arousal pacing, repertoire growth with awake time, byte-identical audio when disabled, boot wiring and the parameter digest |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related

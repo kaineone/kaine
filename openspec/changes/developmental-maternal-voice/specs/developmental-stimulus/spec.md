@@ -7,7 +7,7 @@ When `[perception_feed.stimulus_source.voice].enabled` is true (the default), th
 - **WHEN** the voice is disabled
 - **THEN** every block of the stimulus-source audio equals, byte for byte, the block the stream produced before the voice existed
 
-#### Scenario: The voice stays below the womb cutoff
+#### Scenario: The voice stays below the intrauterine cutoff
 - **WHEN** a talking slot is rendered with `lowpass_hz` = 500
 - **THEN** the voice layer's power above 1,000 Hz is at least 40 dB below its power below 500 Hz
 
