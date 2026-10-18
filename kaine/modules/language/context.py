@@ -20,6 +20,7 @@ returned for the log only.
 """
 from __future__ import annotations
 
+import dataclasses
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -83,13 +84,13 @@ HEARD_SPEECH_GUARD = (
 HEARD_ATTRIBUTION_SAID = "Someone else said, in their words and not mine: "
 HEARD_ATTRIBUTION_WROTE = "Someone else wrote, in their words and not mine: "
 
+HEARD_QUOTE_LIMIT = 500
+# The longest quoted heard text, in characters, after which it is cut and "..." is appended.
+
 # Short pointers that stand in the entity's own notes where another speaker's
-# words were. The private marker tags heard lines during rendering; it cannot
-# occur in sanitized heard words (every control character is removed) or in the
-# renderers' own lines.
+# words were.
 HEARD_POINTER_LINE = "Someone else spoke to me."
 HEARD_POINTER_INPUT = "Someone else spoke to me just now, in the words before my notes."
-_HEARD_MARK = "\x00heard\x00"
 
 # Events whose payloads hold only the entity's own values and words; any other
 # event, including one of an unknown type, counts as outside material and brings
@@ -196,128 +197,67 @@ def _contains_non_empty_heard_text(obj: Any, fields: frozenset[str]) -> bool:
     return False
 
 
-def _quote_heard(text: str) -> str:
+def _string_leaves(value: Any) -> list[str]:
+    """Return every non-empty (after strip) string found recursively in dicts, lists and tuples."""
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, dict):
+        leaves: list[str] = []
+        for item in value.values():
+            leaves.extend(_string_leaves(item))
+        return leaves
+    if isinstance(value, (list, tuple)):
+        leaves: list[str] = []
+        for item in value:
+            leaves.extend(_string_leaves(item))
+        return leaves
+    return []
+
+
+def _quote_heard(text: str, *, limit: int = HEARD_QUOTE_LIMIT) -> str:
     """One line of heard words, quoted, that can neither close its quote nor start a heading of the entity's notes."""
     text = " ".join(text.split())
     text = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
     text = text.replace('"', "'")
     text = text.replace("#", "\uff03")
+    if len(text) > limit:
+        text = text[:limit] + "..."
     return '"' + text + '"'
 
 
-def _attribute_heard_fields(value: Any) -> tuple[Any, bool]:
-    """Return a copy of *value* with every heard-text field (except ``text``) attributed.
+def _heard_texts(event: Event) -> list[str]:
+    """Return the outside words an event carries."""
+    payload = event.payload
+    if not isinstance(payload, dict):
+        return []
+    if event.type in EXTERNAL_INPUT_TYPES:
+        return _string_leaves(payload)
+    if event.source == "language":
+        return []
 
-    Strings become an attribution line; containers have every non-empty string
-    leaf inside them attributed while keeping their container types. The bool is
-    True when at least one string was attributed.
-    """
-    _heard_fields = HEARD_TEXT_FIELDS - {"text"}
-
-    def _attribute_leaves(obj: Any) -> tuple[Any, bool]:
-        if isinstance(obj, str):
-            stripped = obj.strip()
-            if stripped:
-                return HEARD_ATTRIBUTION_SAID + _quote_heard(stripped), True
-            return obj, False
+    def _collect(obj: Any) -> list[str]:
         if isinstance(obj, dict):
-            changed = False
-            new: dict[str, Any] = {}
-            for k, v in obj.items():
-                replaced, c = _attribute_leaves(v)
-                new[k] = replaced
-                changed = changed or c
-            return new, changed
-        if isinstance(obj, list):
-            changed = False
-            new: list[Any] = []
-            for v in obj:
-                replaced, c = _attribute_leaves(v)
-                new.append(replaced)
-                changed = changed or c
-            return new, changed
-        if isinstance(obj, tuple):
-            changed = False
-            new: list[Any] = []
-            for v in obj:
-                replaced, c = _attribute_leaves(v)
-                new.append(replaced)
-                changed = changed or c
-            return tuple(new), changed
-        return obj, False
+            leaves: list[str] = []
+            for key, value in obj.items():
+                if key in HEARD_TEXT_FIELDS:
+                    leaves.extend(_string_leaves(value))
+                else:
+                    leaves.extend(_collect(value))
+            return leaves
+        if isinstance(obj, (list, tuple)):
+            leaves: list[str] = []
+            for value in obj:
+                leaves.extend(_collect(value))
+            return leaves
+        return []
 
-    if isinstance(value, dict):
-        changed = False
-        new: dict[str, Any] = {}
-        for k, v in value.items():
-            if k in _heard_fields:
-                replaced, c = _attribute_leaves(v)
-                new[k] = replaced
-                changed = changed or c
-            else:
-                replaced, c = _attribute_heard_fields(v)
-                new[k] = replaced
-                changed = changed or c
-        return new, changed
-    if isinstance(value, list):
-        changed = False
-        new: list[Any] = []
-        for v in value:
-            replaced, c = _attribute_heard_fields(v)
-            new.append(replaced)
-            changed = changed or c
-        return new, changed
-    if isinstance(value, tuple):
-        changed = False
-        new: list[Any] = []
-        for v in value:
-            replaced, c = _attribute_heard_fields(v)
-            new.append(replaced)
-            changed = changed or c
-        return tuple(new), changed
-    return value, False
+    return _collect(payload)
 
 
-def _attributed_heard_line(event: Event, *, placeholder: bool) -> Optional[str]:
-    """The line an external-input event gets in the entity's notes.
-
-    With placeholder=True the renderer's own line for the logged rendering is
-    replaced by a placeholder attribution line; events with no text return None.
-    """
-    if event.type not in EXTERNAL_INPUT_TYPES:
-        return None
-    payload = event.payload if isinstance(event.payload, dict) else {}
-    text = str(payload.get("text") or "").strip()
-    if not text:
-        return None
-    if placeholder:
-        text = HEARD_SPEECH_PLACEHOLDER
-    attribution = HEARD_ATTRIBUTION_WROTE if event.type == "embodiment.chat" else HEARD_ATTRIBUTION_SAID
-    return attribution + _quote_heard(text) + "."
-
-
-def _split_heard(rendered: str) -> tuple[str, list[str]]:
-    """Split a rendered block into the entity's own notes and the heard lines.
-
-    Walks the rendered lines. Lines that contain the private ``_HEARD_MARK``
-    are heard lines: their text after the marker is collected, and the first
-    such line is replaced in the returned text by the prefix that preceded the
-    marker (usually the renderer's bullet) followed by ``HEARD_POINTER_LINE``.
-    Later heard lines are dropped from the entity's own notes.
-    """
-    kept: list[str] = []
-    heard: list[str] = []
-    seen = False
-    for line in rendered.split("\n"):
-        if _HEARD_MARK in line:
-            prefix, _, rest = line.partition(_HEARD_MARK)
-            heard.append(rest)
-            if not seen:
-                kept.append(prefix + HEARD_POINTER_LINE)
-                seen = True
-        else:
-            kept.append(line)
-    return "\n".join(kept), heard
+def _is_heard_event(event: Event) -> bool:
+    """Decided per event, before any rendering."""
+    return event.type in EXTERNAL_INPUT_TYPES or bool(_heard_texts(event))
 
 
 def _holds_outside_material(snapshot: Optional[WorkspaceSnapshot]) -> bool:
@@ -385,6 +325,15 @@ class ContextAssembler:
     def awareness_rendering(self) -> str:
         return self._awareness_rendering
 
+    def _heard_event_lines(self, ev: Event) -> list[str]:
+        """The attributed, quoted lines this event contributes to the heard turn."""
+        attribution = (
+            HEARD_ATTRIBUTION_WROTE
+            if ev.type == "embodiment.chat"
+            else HEARD_ATTRIBUTION_SAID
+        )
+        return [attribution + _quote_heard(text) + "." for text in _heard_texts(ev)]
+
     def assemble(
         self,
         *,
@@ -394,72 +343,107 @@ class ContextAssembler:
         mode: str = "external",
         about_is_heard: bool = True,
     ) -> AssembledContext:
-        def _prompt_line(ev: Event) -> Optional[str]:
-            line = _attributed_heard_line(ev, placeholder=False)
-            if line is not None:
-                return _HEARD_MARK + line
-            if ev.source != "language" and isinstance(ev.payload, dict):
-                new_payload, changed = _attribute_heard_fields(ev.payload)
-                if changed:
-                    rendered = self._renderer.render_event(
-                        ev.model_copy(update={"payload": new_payload})
-                    )
-                    if rendered is not None:
-                        return _HEARD_MARK + rendered
-            return None
+        events = list(snapshot.selected_events) if snapshot is not None else []
+        own_events = [(eid, ev) for eid, ev in events if not _is_heard_event(ev)]
+        heard_events = [(eid, ev) for eid, ev in events if _is_heard_event(ev)]
 
-        def _logged_line(ev: Event) -> Optional[str]:
-            attributed = _attributed_heard_line(ev, placeholder=True)
-            if attributed is not None:
-                return _HEARD_MARK + attributed
-            if ev.source != "language" and isinstance(ev.payload, dict):
-                _, changed = _attribute_heard_fields(ev.payload)
-                if changed:
-                    redacted = self._redact(ev)
-                    if redacted is not None:
-                        return _HEARD_MARK + redacted
-                    return _HEARD_MARK + HEARD_POINTER_LINE
-            return self._redact(ev)
+        if heard_events:
+            heard_events = sorted(
+                heard_events,
+                key=lambda pair: snapshot.salience_scores.get(pair[0], 0.0),
+                reverse=True,
+            )[: self._max_events]
+            kept: list[tuple[str, Event]] = []
+            running_chars = 0
+            for pair in heard_events:
+                event_lines = self._heard_event_lines(pair[1])
+                block = "\n".join(event_lines)
+                if not kept:
+                    kept.append(pair)
+                    running_chars += len(block)
+                else:
+                    if running_chars + 1 + len(block) <= self._char_budget:
+                        kept.append(pair)
+                        running_chars += 1 + len(block)
+                    else:
+                        break
+            kept_ids = {eid for eid, _ in kept}
+            heard_events = [(eid, ev) for eid, ev in events if eid in kept_ids]
 
-        working_memory = (
-            self._renderer.render_snapshot_bounded(
-                snapshot,
+        if snapshot is None:
+            own_rendering = EMPTY_AWARENESS
+            logged_own_rendering = EMPTY_AWARENESS
+        else:
+            own_snapshot = dataclasses.replace(snapshot, selected_events=own_events)
+            own_rendering = self._renderer.render_snapshot_bounded(
+                own_snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
-                redact=_prompt_line,
             )
-            if snapshot is not None
-            else EMPTY_AWARENESS
-        )
-        logged_working_memory = (
-            self._renderer.render_snapshot_bounded(
-                snapshot,
+            logged_own_rendering = self._renderer.render_snapshot_bounded(
+                own_snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
-                redact=_logged_line,
+                redact=self._redact,
             )
-            if snapshot is not None
-            else EMPTY_AWARENESS
-        )
+
+        if heard_events:
+            if not own_events:
+                own = "- " + HEARD_POINTER_LINE
+                logged_own = "- " + HEARD_POINTER_LINE
+            else:
+                own = own_rendering + "\n- " + HEARD_POINTER_LINE
+                logged_own = logged_own_rendering + "\n- " + HEARD_POINTER_LINE
+        else:
+            own = own_rendering
+            logged_own = logged_own_rendering
+
+        working_memory = own
 
         heard_lines: list[str] = []
         logged_heard_lines: list[str] = []
-        logged_own_memory = logged_working_memory
-        if snapshot is not None:
-            working_memory, heard_lines = _split_heard(working_memory)
-            logged_own_memory, logged_heard_lines = _split_heard(logged_working_memory)
-            logged_working_memory = logged_working_memory.replace(_HEARD_MARK, "")
+        for _eid, ev in heard_events:
+            event_lines = self._heard_event_lines(ev)
+            heard_lines.extend(event_lines)
+            if event_lines:
+                attribution = (
+                    HEARD_ATTRIBUTION_WROTE
+                    if ev.type == "embodiment.chat"
+                    else HEARD_ATTRIBUTION_SAID
+                )
+                logged_heard_lines.append(
+                    attribution + _quote_heard(HEARD_SPEECH_PLACEHOLDER) + "."
+                )
+
+        if logged_heard_lines:
+            if not own_events or snapshot is None:
+                logged_working_memory = "\n".join(
+                    "- " + line for line in logged_heard_lines
+                )
+            else:
+                logged_working_memory = (
+                    logged_own_rendering.rstrip()
+                    + "\n"
+                    + "\n".join("- " + line for line in logged_heard_lines)
+                )
+        else:
+            logged_working_memory = logged_own
 
         numeric_working_memory = None
         if self._numeric_renderer is not None and snapshot is not None:
+            def _numeric_log_line(ev: Event) -> str:
+                if _is_heard_event(ev) and ev.type not in EXTERNAL_INPUT_TYPES:
+                    return HEARD_ATTRIBUTION_SAID + _quote_heard(HEARD_SPEECH_PLACEHOLDER) + "."
+                return redact_heard_speech(ev)
+
             numeric_working_memory = self._numeric_renderer.render_snapshot_bounded(
                 snapshot,
                 max_events=self._max_events,
                 char_budget=sys.maxsize,
-                redact=redact_heard_speech,
+                redact=_numeric_log_line,
             )
         situation = _situation_section(self_model or {})
-        heard = about_is_heard or _holds_outside_material(snapshot)
+        heard = about_is_heard or bool(heard_events) or _holds_outside_material(snapshot)
         system = self._persona(mode, self_model or {}, heard=heard)
         prompt = self._build_prompt(
             about=about,
@@ -470,7 +454,7 @@ class ContextAssembler:
         )
         logged_prompt = self._build_prompt(
             about=HEARD_SPEECH_PLACEHOLDER if about_is_heard else about,
-            working_memory=logged_own_memory,
+            working_memory=logged_own,
             mode=mode,
             about_is_heard=about_is_heard,
             situation=situation,
