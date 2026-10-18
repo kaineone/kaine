@@ -196,7 +196,7 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance", "reset", "alert"}
     ),
     "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert", "state", "coping_available", "obstruction", "goal_significance_method", "reappraised"}),
-    "affect.drive": frozenset({"drive", "value", "alert"}),
+    "affect.drive": frozenset({"drive", "value", "alert", "reentry"}),
     # The goal's `description` is free text (an operator-added goal carries
     # arbitrary text) and is deliberately excluded; it is also in CONTENT_FIELDS.
     "affect.goal": frozenset({"action", "id", "drive", "reason", "priority", "likelihood"}),
