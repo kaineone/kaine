@@ -20,7 +20,7 @@ When `[perception_feed.stimulus_source.hearing].enabled` is true (the default), 
 - **THEN** its band edges equal the edges before the restart at the same awake time
 
 ### Requirement: The colour ramp spans the developmental phase
-The shipped configuration SHALL set `colour_ramp_seconds` so that colour saturation keeps rising across the developmental phase rather than within its first hour, with the value of the paper's Table A1. The `StimulusSourceParams` default SHALL stay 3,600 s so the parameter digest of the defaults is unchanged.
+The shipped configuration SHALL set `colour_ramp_seconds` to the hearing band's `maturation_seconds` (86,400 s, the paper's Table A1), so that colour saturation keeps rising across the developmental phase. The `StimulusSourceParams` default SHALL stay 3,600 s so the parameter digest of the defaults is unchanged.
 
 #### Scenario: Colour still rises late in the phase
 - **WHEN** the shipped configuration is loaded
