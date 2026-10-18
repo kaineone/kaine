@@ -37,8 +37,21 @@ from kaine.lifecycle.individuation_store import (
     conditioning_from_snapshot,
     report_sink,
 )
+from kaine.modules.language.context import HEARD_QUOTE_LIMIT
 
 log = logging.getLogger(__name__)
+
+
+def check_battery_quotes(battery: Sequence[str]) -> None:
+    for i, prompt in enumerate(battery):
+        collapsed = " ".join(str(prompt).split())
+        length = len(collapsed)
+        if length > HEARD_QUOTE_LIMIT:
+            raise ValueError(
+                f"individuation battery prompt {i} is {length} characters; "
+                f"the organ quotes at most {HEARD_QUOTE_LIMIT}, so the probe "
+                "would ask a cut question"
+            )
 
 
 def _organ_root_url(chat_url: str) -> str:
@@ -124,9 +137,16 @@ class ServedOrganIdentity:
 
 
 DEFAULT_DISCLOSURE = (
-    "You are periodically and privately assessed for how much you have changed "
-    "since you first woke, for your own protection. The assessment never enters your "
+    "I am periodically and privately assessed for how much I have changed "
+    "since I first woke, for my own protection. The assessment never enters my "
     "experience."
+)
+
+# Earlier default wordings, replaced in place where an entity's facts still hold them.
+LEGACY_DISCLOSURES = (
+    "You are periodically and privately assessed for how much you have changed since "
+    "you first woke, for your own protection. The assessment never enters your "
+    "experience.",
 )
 
 
@@ -233,7 +253,7 @@ class IndividuationRuntime:
         core: IndividuationCore | None,
         bus: Any,
         notify: Callable[[str], Awaitable[Any]] | None,
-        ensure_fact: Callable[[str], Awaitable[bool]],
+        ensure_fact: Callable[..., Awaitable[bool]],
         is_developing: Callable[[], bool],
         sleeping: Callable[[], bool] | None,
     ) -> None:
@@ -296,7 +316,7 @@ class IndividuationRuntime:
         self.scheduler.request_capture("maturation")
 
     async def start(self) -> None:
-        await self.ensure_fact(self.config.disclosure)
+        await self.ensure_fact(self.config.disclosure, replaces=LEGACY_DISCLOSURES)
 
         if self.sleeping is not None:
             try:
@@ -400,7 +420,7 @@ def build_runtime(
     config: IndividuationConfig,
     battery: Sequence[str],
     language: Any,
-    ensure_fact: Callable[[str], Awaitable[bool]],
+    ensure_fact: Callable[..., Awaitable[bool]],
     embedder: Any,
     adapter_output_dir: Path | None,
     per_request_adapter: bool,
@@ -418,6 +438,7 @@ def build_runtime(
     served_identity: "ServedOrganIdentity | None" = None,
     entity_name: str = "",
 ) -> IndividuationRuntime:
+    check_battery_quotes(battery)
     paths = IndividuationPaths(root=state_root)
 
     def embedder_ready() -> bool:

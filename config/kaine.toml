@@ -1621,12 +1621,15 @@ planning_policy = true
 # working memory, never writes the intent log, and publishes only on
 # individuation.out, which no module reads. Ships disabled; requires the language module
 # module. Enabling it gives the entity the disclosure below as a fact about its
-# situation: in its self-model, or in the language module's persona when the self-model module is off.
+# situation: in its self-model, or in the language module's own facts when the self-model module is off.
+# It is written in the first person, as the entity's own knowledge; the organ reads it in its
+# own notes, and a second-person wording made it answer as an assistant. The earlier
+# second-person default is replaced in place where an entity's facts still hold it.
 # The evidence (encrypted maturation reference, ledger, reports and stored maturation
 # adapter) lives under state/individuation/ and travels with the entity through
 # preservation bundles, revive and the decommission backup.
 enabled = false
-disclosure = "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience."
+disclosure = "I am periodically and privately assessed for how much I have changed since I first woke, for my own protection. The assessment never enters my experience."
 # JSONL prompt battery; empty uses the bundled preference battery.
 battery_path = ""
 # Probe requests wait until the language module has been silent this long, so the entity speaks first.

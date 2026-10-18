@@ -98,7 +98,7 @@ async def test_ensure_situation_fact(tmp_path: Path):
         await self_model.ensure_situation_fact("   ")
 
 
-def test_persona_includes_situation_fact_after_identity():
+def test_situation_fact_opens_the_notes_not_the_persona():
     self_model = {
         "values": ["a"],
         "behavioral_norms": ["b"],
@@ -109,9 +109,11 @@ def test_persona_includes_situation_fact_after_identity():
     )
 
     assert "I value a." in ctx.system
-    assert "You are periodically assessed for your own protection." in ctx.system
-    assert ctx.system.index("I value a.") < ctx.system.index(
-        "Facts about my situation:"
+    assert "You are periodically assessed for your own protection." not in ctx.system
+    assert ctx.prompt.startswith(
+        "## What I know about my situation\n"
+        "You are periodically assessed for your own protection.\n\n"
+        "## How I feel and what I notice"
     )
 
     identity_only = _identity_clause(self_model)
@@ -175,7 +177,11 @@ async def test_probe_request(bus: AsyncBus, tmp_path: Path):
     assert req.seed == 11
     assert req.max_tokens == 160
     assert req.cache_prompt is False
-    assert "You are periodically assessed for your own protection." in (req.system or "")
+    assert "You are periodically assessed for your own protection." not in (req.system or "")
+    assert "You are periodically assessed for your own protection." in req.prompt
+    assert req.own_turn is True
+    assert req.stop == ["\n#"]
+    assert req.prompt.endswith("## What I say\n")
     assert EMPTY_AWARENESS in req.prompt
 
     size_after = intent_path.stat().st_size if intent_path.exists() else 0

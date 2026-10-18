@@ -35,6 +35,15 @@ class ChatRequest:
     # When False, the server is told not to reuse a cached prompt, as the
     # individuation probe needs; None leaves the server default.
     cache_prompt: Optional[bool] = None
+    # When True the prompt is the opening of the entity's own turn: it is sent as
+    # a trailing assistant message after a fixed user cue, the server continues it,
+    # and the reply excludes the echoed prompt. False keeps the plain user-turn
+    # layout every other caller uses.
+    own_turn: bool = False
+    # In the own-turn layout, what another speaker said (already attributed and
+    # quoted by the caller), sent as the user message before the entity's own
+    # turn; None sends the fixed cue.
+    user_turn: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +78,45 @@ class ChatClient(Protocol):
 # This is the OpenAI-compatible, backend-portable replacement for Ollama's native
 # top-level `think` flag — see openspec capability `inference-backend`.
 _ENABLE_THINKING_KWARG = "enable_thinking"
+
+
+# The fixed, content-free user message sent before the entity's own turn. The
+# organ's chat template requires a user turn, and this cue carries no content of
+# its own (measured against the served organ, an empty cue led the model to
+# repeat its persona more often).
+OWN_TURN_CUE = "(next)"
+
+
+def chat_messages(request: ChatRequest) -> list[dict[str, str]]:
+    """Return the message list for a request.
+
+    In the own-turn layout, a non-empty ``user_turn`` replaces the fixed user
+    cue with caller-attributed speech before the entity's own turn.
+    """
+    messages: list[dict[str, str]] = []
+    if request.system:
+        messages.append({"role": "system", "content": request.system})
+    if request.own_turn:
+        user_content = request.user_turn if request.user_turn else OWN_TURN_CUE
+        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": "assistant", "content": request.prompt})
+    else:
+        messages.append({"role": "user", "content": request.prompt})
+    return messages
+
+
+def own_turn_text(request: ChatRequest, content: str) -> str:
+    """llama-server echoes the continued prompt at the start of the reply; this
+    returns only the text the organ generated. When the server does not echo the
+    prompt, only leading whitespace is removed."""
+    if not request.own_turn:
+        return content
+    if request.prompt and content.startswith(request.prompt):
+        return content[len(request.prompt):].lstrip()
+    trimmed = request.prompt.rstrip()
+    if trimmed and content.startswith(trimmed):
+        return content[len(trimmed):].lstrip()
+    return content.lstrip()
 
 
 class OpenAIChatClient:
@@ -132,10 +180,7 @@ class OpenAIChatClient:
         return self._client
 
     def _body(self, request: ChatRequest, *, think: Optional[bool]) -> dict[str, Any]:
-        messages: list[dict[str, str]] = []
-        if request.system:
-            messages.append({"role": "system", "content": request.system})
-        messages.append({"role": "user", "content": request.prompt})
+        messages = chat_messages(request)
         body: dict[str, Any] = {
             "model": request.model,
             "messages": messages,
@@ -215,13 +260,21 @@ class OpenAIChatClient:
         # chain-of-thought field so the caller still gets text. llama.cpp / Unsloth
         # Studio name it `reasoning_content`; some servers use `reasoning` — both.
         message = data["choices"][0]["message"]
-        content = message.get("content")
+        raw_content = message.get("content")
+        content = raw_content
+        if content:
+            content = own_turn_text(request, content)
         from_content = bool(content)
+        # an echo with nothing generated is no reply, and the reasoning channel must not stand in for it.
         text = (
             content
-            or message.get("reasoning_content")
-            or message.get("reasoning")
-            or ""
+            if request.own_turn and raw_content
+            else (
+                content
+                or message.get("reasoning_content")
+                or message.get("reasoning")
+                or ""
+            )
         )
         finish_reason = data["choices"][0].get("finish_reason")
         usage = data.get("usage") or {}
@@ -316,10 +369,7 @@ class LlamaCppChatClient:
         import asyncio
         import time as _time
 
-        messages: list[dict[str, str]] = []
-        if request.system:
-            messages.append({"role": "system", "content": request.system})
-        messages.append({"role": "user", "content": request.prompt})
+        messages = chat_messages(request)
 
         def _run() -> dict[str, Any]:
             llama = self._ensure_llama()
@@ -341,10 +391,16 @@ class LlamaCppChatClient:
         elapsed_ms = (_time.monotonic() - start) * 1000.0
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
-        text = message.get("content") or ""
+        # The in-process backend gets the same messages; its chat formatter may open
+        # a new assistant turn instead of continuing the trailing one, and then
+        # only leading whitespace is trimmed.
+        content = message.get("content") or ""
+        if content:
+            content = own_turn_text(request, content)
+        text = content
         usage = data.get("usage") or {}
         finish_reason = choice.get("finish_reason")
-        from_content = bool(message.get("content"))
+        from_content = bool(content)
         return ChatResponse(
             text=text,
             model=str(data.get("model", request.model)),

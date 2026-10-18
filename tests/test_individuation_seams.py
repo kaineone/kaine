@@ -77,6 +77,7 @@ def test_language_probe_conditions(tmp_path: Path):
         "think",
         "persona_digest",
         "persona_template_version",
+        "prompt_layout_digest",
     }
     expected = hashlib.sha256(
         json.dumps([None, "alpha", None]).encode("utf-8")

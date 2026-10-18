@@ -1,14 +1,20 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+from typing import Any
+
 import pytest
 
 from kaine.modules.language.client import (
+    OWN_TURN_CUE,
     ChatClient,
     ChatRequest,
     ChatResponse,
     FakeChatClient,
+    LlamaCppChatClient,
     OpenAIChatClient,
+    chat_messages,
+    own_turn_text,
 )
 
 
@@ -162,3 +168,235 @@ async def test_no_auth_header_when_keyless():
     client = c._ensure_client()
     assert "Authorization" not in client.headers
     await c.aclose()
+
+
+# --- own-turn request layout --------------------------------------------------
+#
+# The organ's chat template requires a user turn, so an own-turn prompt is sent
+# as a trailing assistant message after a fixed user cue. llama-server echoes
+# the continued prompt at the start of the reply, so the client strips it before
+# returning the response.
+
+
+def test_chat_messages_user_turn_by_default():
+    assert chat_messages(ChatRequest(prompt="p", model="m", system="s")) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "p"},
+    ]
+    assert chat_messages(ChatRequest(prompt="p", model="m")) == [
+        {"role": "user", "content": "p"},
+    ]
+
+
+def test_chat_messages_own_turn():
+    assert OWN_TURN_CUE == "(next)"
+    assert chat_messages(
+        ChatRequest(prompt="## My notes\n", model="m", system="s", own_turn=True)
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": OWN_TURN_CUE},
+        {"role": "assistant", "content": "## My notes\n"},
+    ]
+
+
+def test_chat_messages_own_turn_with_user_turn():
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=True,
+            user_turn='Someone else said: "hi"',
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": 'Someone else said: "hi"'},
+        {"role": "assistant", "content": "notes\n"},
+    ]
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=True,
+            user_turn="",
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": OWN_TURN_CUE},
+        {"role": "assistant", "content": "notes\n"},
+    ]
+    assert chat_messages(
+        ChatRequest(
+            prompt="notes\n",
+            model="m",
+            system="s",
+            own_turn=False,
+            user_turn="x",
+        )
+    ) == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "notes\n"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_own_turn_body_sends_trailing_assistant_message():
+    http = _FakeHTTP([_FakeResp()])
+    c = _client_with(http)
+    await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    _path, body = http.posts[0]
+    assert body["messages"][-1] == {"role": "assistant", "content": "frame\n"}
+    assert body["messages"][-2] == {"role": "user", "content": "(next)"}
+
+
+@pytest.mark.asyncio
+async def test_own_turn_strips_echoed_prompt():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "frame\n The sound is new."}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    assert out.text == "The sound is new."
+    assert out.from_content is True
+
+
+@pytest.mark.asyncio
+async def test_own_turn_echo_only_is_not_content():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "frame\n"}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    assert out.text == ""
+    assert out.from_content is False
+
+
+@pytest.mark.asyncio
+async def test_own_turn_without_echo_keeps_generated_text():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "  The sound is new."}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    assert out.text == "The sound is new."
+
+
+@pytest.mark.asyncio
+async def test_user_turn_reply_is_not_trimmed():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "frame\n rest"}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=False)
+    )
+    assert out.text == "frame\n rest"
+
+
+def test_own_turn_text_helper():
+    user_req = ChatRequest(prompt="frame\n", model="m", own_turn=False)
+    assert own_turn_text(user_req, "frame\n rest") == "frame\n rest"
+
+    own_req = ChatRequest(prompt="frame\n", model="m", own_turn=True)
+    assert own_turn_text(own_req, "frame\n rest") == "rest"
+    assert own_turn_text(own_req, "  The sound is new.") == "The sound is new."
+
+
+class _FakeLlama:
+    def __init__(self):
+        self.calls: list[dict[str, Any]] = []
+
+    def create_chat_completion(self, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "choices": [
+                {"message": {"content": "frame\nhello"}, "finish_reason": "stop"}
+            ],
+            "usage": {},
+            "model": "m",
+        }
+
+
+@pytest.mark.asyncio
+async def test_llama_cpp_client_uses_same_messages_and_trims():
+    c = LlamaCppChatClient(model_path="/x.gguf")
+    fake = _FakeLlama()
+    c._llama = fake
+    req = ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    out = await c.complete(req)
+    assert fake.calls[0]["messages"] == chat_messages(req)
+    assert out.text == "hello"
+    assert out.from_content is True
+
+
+def test_own_turn_text_strips_trimmed_echo():
+    req = ChatRequest(
+        prompt="frame\n## What I say\n", model="m", own_turn=True
+    )
+    assert (
+        own_turn_text(req, "frame\n## What I sayThe sound is new.")
+        == "The sound is new."
+    )
+
+
+def test_own_turn_text_keeps_unechoed_output():
+    req = ChatRequest(
+        prompt="frame\n## What I say\n", model="m", own_turn=True
+    )
+    content = "  The frame is new.\n## not a heading"
+    assert own_turn_text(req, content) == "The frame is new.\n## not a heading"
+    assert own_turn_text(req, "fram") == "fram"
+
+
+@pytest.mark.asyncio
+async def test_own_turn_echo_only_does_not_fall_back_to_reasoning():
+    payload = {
+        "model": "m",
+        "choices": [
+            {"message": {"content": "frame\n", "reasoning_content": "secret reasoning"}}
+        ],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="frame\n", model="m", system="s", own_turn=True)
+    )
+    assert out.text == ""
+    assert out.from_content is False
+
+
+@pytest.mark.asyncio
+async def test_user_turn_still_falls_back_to_reasoning():
+    payload = {
+        "model": "m",
+        "choices": [{"message": {"content": "", "reasoning_content": "thought"}}],
+        "usage": {},
+    }
+    http = _FakeHTTP([_FakeResp(payload=payload)])
+    c = _client_with(http)
+    out = await c.complete(
+        ChatRequest(prompt="p", model="m", system="s", own_turn=False)
+    )
+    assert out.text == "thought"

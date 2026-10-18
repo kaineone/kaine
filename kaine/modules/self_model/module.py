@@ -466,21 +466,36 @@ class SelfModel(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def ensure_situation_fact(self, text: str) -> bool:
+    async def ensure_situation_fact(self, text: str, *, replaces: tuple[str, ...] = ()) -> bool:
         """Tell the entity a fact about its situation.
 
         The fact is persisted and published at once, so the language organ can
         condition on it immediately. It is not a value or norm and never touches
-        drift or identity history.
+        drift or identity history. A fact listed in ``replaces`` (an earlier
+        wording) is replaced in place.
         """
         text = text.strip()
         if not text:
             raise ValueError("situation fact text must be non-empty")
-        if text in self._model.situation_facts:
+        old = set(replaces) - {text}
+        facts = list(self._model.situation_facts)
+        if text in facts:
+            new = [f for f in facts if f not in old]
+        else:
+            new = []
+            replaced = False
+            for f in facts:
+                if f in old:
+                    if not replaced:
+                        new.append(text)
+                        replaced = True
+                else:
+                    new.append(f)
+            if not replaced:
+                new.append(text)
+        if new == facts:
             return False
-        self._model = self._model.with_updates(
-            situation_facts=[*self._model.situation_facts, text]
-        )
+        self._model = self._model.with_updates(situation_facts=new)
         await self._publish_self_model()
         await self._save_to_disk()
         return True

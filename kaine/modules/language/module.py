@@ -28,7 +28,12 @@ from kaine.modules.language.client import (
     ChatRequest,
     OpenAIChatClient,
 )
-from kaine.modules.language.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
+from kaine.modules.language.context import (
+    OWN_TURN_STOP,
+    PERSONA_TEMPLATE_VERSION,
+    ContextAssembler,
+    layout_digest,
+)
 from kaine.modules.language.intent_log import IntentExpressionLog
 from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
 from kaine.storage import resolve
@@ -195,14 +200,32 @@ class Language(BaseModule):
         """Whether a self-model is part of this entity; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
         self._expects_self_model = expected
 
-    async def add_situation_fact(self, text: str) -> bool:
-        """A fact about the entity's situation that the language module renders in its persona when no self-model carries it. It is held in memory and re-given at every boot."""
+    async def add_situation_fact(
+        self, text: str, *, replaces: tuple[str, ...] = ()
+    ) -> bool:
+        """A fact about the entity's situation that the language module renders in its own notes when no self-model carries it. It is held in memory and re-given at every boot. A fact listed in `replaces` (an earlier wording) is replaced in place."""
         text = text.strip()
         if not text:
             raise ValueError("situation fact cannot be empty")
-        if text in self._own_situation_facts:
+        old = set(replaces) - {text}
+        facts = self._own_situation_facts
+        if text in facts:
+            new = [f for f in facts if f not in old]
+        else:
+            new = []
+            replaced = False
+            for fact in facts:
+                if fact in old:
+                    if not replaced:
+                        new.append(text)
+                        replaced = True
+                else:
+                    new.append(fact)
+            if not replaced:
+                new.append(text)
+        if new == facts:
             return False
-        self._own_situation_facts.append(text)
+        self._own_situation_facts = new
         return True
 
     def _with_own_facts(self, sm: dict) -> dict:
@@ -477,6 +500,7 @@ class Language(BaseModule):
             "think": self._think,
             "persona_digest": self._persona_digest,
             "persona_template_version": PERSONA_TEMPLATE_VERSION,
+            "prompt_layout_digest": layout_digest(),
         }
 
     def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
@@ -498,6 +522,9 @@ class Language(BaseModule):
             think=self._think,
             seed=int(seed),
             cache_prompt=False,
+            own_turn=True,
+            user_turn=ctx.heard_turn,
+            stop=list(OWN_TURN_STOP),
         )
 
     async def speak(
@@ -845,6 +872,9 @@ class Language(BaseModule):
             max_tokens=self._max_tokens,
             think=self._think,
             seed=None,
+            own_turn=True,
+            user_turn=ctx.heard_turn,
+            stop=list(OWN_TURN_STOP),
         )
         response = await self._chat_client.complete(request)
 
@@ -859,6 +889,11 @@ class Language(BaseModule):
                     logged_faithful = logged_faithful.replace(
                         heard, HEARD_SPEECH_PLACEHOLDER
                     )
+        logged_heard_turn = ctx.logged_heard_turn
+        if logged_heard_turn is not None:
+            for heard in redact_texts:
+                if len(heard) >= 3:
+                    logged_heard_turn = logged_heard_turn.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_numeric = ctx.numeric_working_memory if snap is not None else None
         if logged_numeric is not None:
             for heard in redact_texts:
@@ -898,6 +933,7 @@ class Language(BaseModule):
                 seed=request.seed,
                 numeric_rendering=logged_numeric,
                 about_values=logged_about_values,
+                extra={"heard_turn": logged_heard_turn} if logged_heard_turn else None,
             )
         except Exception:
             log.exception("intent log append failed")
