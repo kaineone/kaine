@@ -929,6 +929,13 @@ model_server_sleep_idle_seconds = 600
 intent_log_path = "state/language/intent_expression.jsonl"
 baseline_salience = 0.4
 alert_salience = 0.7
+# How accessed content reaches the organ: "felt" renders it in graded words with
+# no numbers ("What I see is barely changing, feels familiar"), and the report and
+# planning intents name their cause the same way ("Something in what I see stands
+# out strongly."); the intent log keeps the values in numeric_rendering and
+# about_values. "numeric" restores the earlier rendering with raw values. People
+# report magnitudes in graded words, not instrument values (paper 3.5).
+awareness_rendering = "felt"
 
 [audition]
 speaches_url = "http://127.0.0.1:8000"

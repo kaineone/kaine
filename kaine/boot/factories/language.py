@@ -35,6 +35,8 @@ def make_language(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "persona_name",
         "persona_external",
         "persona_internal",
+        # "felt" (graded words, the shipped default) or "numeric" (raw values)
+        "awareness_rendering",
         "baseline_salience",
         "alert_salience",
         # Runtime backend selection (openspec runtime-backends). Absent/"openai"

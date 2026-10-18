@@ -468,6 +468,7 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 | `persona_name` | string | Entity's persona name, seeded from the self-model module at runtime. |
 | `persona_external` | string | External persona prompt fragment. |
 | `persona_internal` | string | Internal persona prompt fragment. |
+| `awareness_rendering` | string | `"felt"` (shipped) renders accessed content and the report and planning intents' cause in graded words without numbers, with the values kept in the intent log as `numeric_rendering` and `about_values`; `"numeric"` is the earlier rendering with raw values. Absent means `"numeric"`. |
 
 Inspect served models with:
 

@@ -33,6 +33,10 @@ class IntentExpressionLog:
     When state encryption is enabled, each line is written as its own
     AES-256-GCM envelope and the live log is migrated atomically on the first
     write of the process.
+
+    In the felt awareness mode, `prompt` and `faithful_rendering` are what the
+    organ saw (words, no numbers) and the sidecars `numeric_rendering` and
+    `about_values` keep the values for audits.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -63,6 +67,8 @@ class IntentExpressionLog:
         sleep_index: Optional[int] = None,
         system_digest: Optional[str] = None,
         seed: Optional[int] = None,
+        numeric_rendering: Optional[str] = None,
+        about_values: Optional[dict[str, Any]] = None,
         extra: Optional[dict[str, Any]] = None,
     ) -> None:
         record: dict[str, Any] = {
@@ -85,6 +91,10 @@ class IntentExpressionLog:
             record["faithful_rendering"] = faithful_rendering
         if snapshot_summary is not None:
             record["snapshot_summary"] = snapshot_summary
+        if numeric_rendering is not None:
+            record["numeric_rendering"] = numeric_rendering
+        if about_values is not None:
+            record["about_values"] = dict(about_values)
         if extra:
             record["extra"] = dict(extra)
         self._write(record)

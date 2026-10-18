@@ -38,6 +38,7 @@ import time
 from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.felt import felt_event_phrase
 from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
@@ -62,6 +63,12 @@ class SelfInitiatedReportPolicy:
     ``clock`` (the entity's subjective clock in production; default monotonic).
     ``guard_clock`` times the in-flight speak/think guards; in production it is
     the real monotonic wall clock while ``clock`` remains subjective.
+
+    ``about_style`` selects how the intent names its cause: ``"numeric"`` (default)
+    gives ``"<source> (surprise=<x.xxx>)"`` with ``about_kind`` ``"event"``;
+    ``"felt"`` gives a felt phrase without numbers (``felt_event_phrase``) with
+    ``about_kind`` ``"event"`` (the kind names what the intent is about; the
+    phrase is felt) and the values in ``about_values``.
     """
 
     # C3: the same guard timeout as the default and drive policies. A guard
@@ -80,7 +87,12 @@ class SelfInitiatedReportPolicy:
         sig_expiry_s: Optional[float] = None,
         clock: Optional[Callable[[], float]] = None,
         guard_clock: Optional[Callable[[], float]] = None,
+        about_style: str = "numeric",
     ) -> None:
+        if about_style not in ("numeric", "felt"):
+            raise ValueError(
+                f"about_style must be 'numeric' or 'felt', got {about_style!r}"
+            )
         if not 0.0 <= think_threshold <= report_threshold <= 1.0:
             raise ValueError(
                 "require 0 <= think_threshold <= report_threshold <= 1, got "
@@ -110,6 +122,7 @@ class SelfInitiatedReportPolicy:
         # The in-flight guards time real generation and playback, so the guard
         # timeout reads wall time; refractory periods stay on the subjective clock.
         self._guard_clock = guard_clock or time.monotonic
+        self._about_style = about_style
         self._speak_in_flight = False
         self._think_in_flight = False
         self._speak_armed_at = float("-inf")
@@ -209,6 +222,15 @@ class SelfInitiatedReportPolicy:
             self._think_in_flight = False
             self._think_armed_at = float("-inf")
 
+    def _about(self, event, surprise: float) -> tuple[str, str, Optional[dict]]:
+        if self._about_style == "felt":
+            return (
+                felt_event_phrase(event.source, surprise),
+                "event",
+                {"source": event.source, "type": event.type, "surprise": surprise},
+            )
+        return f"{event.source} (surprise={surprise:.3f})", "event", None
+
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         if snapshot.inhibited:
             return []
@@ -229,6 +251,7 @@ class SelfInitiatedReportPolicy:
             candidates, key=lambda t: float(scores.get(t[0], 0.0))
         )
         surprise = float(scores.get(top_entry_id, 0.0))
+        about, about_kind, about_values = self._about(top_event, surprise)
         signature = (top_event.source, top_event.type)
         now = float(self._clock())
 
@@ -254,10 +277,11 @@ class SelfInitiatedReportPolicy:
             return [
                 Intent(
                     kind=SPEAK,
-                    about=f"{top_event.source} (surprise={surprise:.3f})",
+                    about=about,
                     entry_id=top_entry_id or None,
                     interrupt=True,
-                    about_kind="event",
+                    about_kind=about_kind,
+                    about_values=about_values,
                 )
             ]
 
@@ -276,9 +300,10 @@ class SelfInitiatedReportPolicy:
             return [
                 Intent(
                     kind=SPEAK,
-                    about=f"{top_event.source} (surprise={surprise:.3f})",
+                    about=about,
                     entry_id=top_entry_id or None,
-                    about_kind="event",
+                    about_kind=about_kind,
+                    about_values=about_values,
                 )
             ]
 
@@ -295,9 +320,10 @@ class SelfInitiatedReportPolicy:
             return [
                 Intent(
                     kind=THINK,
-                    about=f"{top_event.source} (surprise={surprise:.3f})",
+                    about=about,
                     entry_id=top_entry_id or None,
-                    about_kind="event",
+                    about_kind=about_kind,
+                    about_values=about_values,
                 )
             ]
 
