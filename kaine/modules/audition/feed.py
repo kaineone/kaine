@@ -56,6 +56,9 @@ from kaine.modules.vision.feed import (
 )
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
+    import numpy as np
+
+    from kaine.modules.audition.maternal_voice import MaternalVoiceLayer
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -349,10 +352,17 @@ class StimulusSourceProceduralAudioStream:
     (Van Leeuwen 2009; Webb 2015).  The heartbeat is external; the entity's
     own rhythm is emergent, not synthesised here.
 
+    When a maternal-voice layer is given, its pre-rendered, womb-filtered
+    speech is added to the mix and the headroom grows by its peak (Querleu
+    et al. 1988; Gerhardt and Abrams 2000); without one the output is unchanged.
+
     Persists only ``(seed, schedule, params, clock)``; no PCM is written.
     """
 
     _MAX_LAG_BLOCKS = 5
+    _BASE_AMP_TOTAL = 0.35
+    _NOISE_RMS = 0.08
+    _THUD_AMP = 0.35
 
     def __init__(
         self,
@@ -361,11 +371,20 @@ class StimulusSourceProceduralAudioStream:
         params: StimulusSourceParams,
         clock: StimulusSourceClock,
         callback: Callable[[bytes], None],
+        voice: "MaternalVoiceLayer | None" = None,
+        awake: Callable[[], float] | None = None,
     ) -> None:
         self._schedule = schedule
         self._params = params
         self._clock = clock
         self._callback = callback
+        self._voice = voice
+        self._awake = awake
+        if voice is not None and voice.repertoire.sample_rate != schedule.sample_rate:
+            raise ValueError(
+                f"voice sample rate {voice.repertoire.sample_rate} does not match "
+                f"schedule sample rate {schedule.sample_rate}"
+            )
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
 
@@ -404,6 +423,13 @@ class StimulusSourceProceduralAudioStream:
             return now_k
         return k
 
+    def _read_awake(self) -> float | None:
+        """Return the current awake time, or ``None`` if no voice is attached
+        or no awake provider is configured."""
+        if self._voice is None or self._awake is None:
+            return None
+        return float(self._awake())
+
     def _produce(self) -> None:
         s = self._schedule
         bs = max(1, s.frames_per_block) / float(max(1, s.sample_rate))
@@ -418,7 +444,11 @@ class StimulusSourceProceduralAudioStream:
                 self._stopped.wait(timeout=(k - now_k) * bs)
                 continue
             try:
-                pcm = self.pcm_at(k, maturation_progress=self._clock.maturation_progress())
+                pcm = self.pcm_at(
+                    k,
+                    maturation_progress=self._clock.maturation_progress(),
+                    awake_seconds=self._read_awake(),
+                )
             except Exception:
                 log.error(
                     "stimulus source audio: synthesis failed at block %d; the stimulus source audio stream stops",
@@ -436,13 +466,8 @@ class StimulusSourceProceduralAudioStream:
                 self._clock.mark_delivered("audio", k)
             k += 1
 
-    def pcm_at(
-        self, block_index: int, *, maturation_progress: float | None = None
-    ) -> bytes:
-        """Synthesize the int16 LE PCM block at ``block_index``.
-
-        Pure function of ``(seed, block_index, params, maturation_progress)``.
-        """
+    def _soundscape(self, block_index: int) -> np.ndarray:
+        """Return the voice-free float soundscape for ``block_index``."""
         import math
 
         import numpy as np
@@ -460,7 +485,6 @@ class StimulusSourceProceduralAudioStream:
         p = self._params
         n = max(1, int(s.frames_per_block))
         sr = float(max(1, s.sample_rate))
-        channels = max(1, int(s.channels))
         seed = int(s.seed)
 
         t0 = block_index * n / sr
@@ -471,7 +495,7 @@ class StimulusSourceProceduralAudioStream:
         # Low-frequency soundscape: a few seed-derived sinusoids below the
         # low-pass corner.
         n_base = 4
-        base_amp_total = 0.35
+        base_amp_total = self._BASE_AMP_TOTAL
         lp = float(p.lowpass_hz)
         max_base_f = min(250.0, 0.8 * lp)
         base_freq_range = max_base_f - 30.0
@@ -488,7 +512,7 @@ class StimulusSourceProceduralAudioStream:
         # FIR.  The output is continuous across block boundaries and still a
         # pure function of ``(seed, block_index)``.  Low-pass, low-frequency
         # intrauterine soundscape (Benzaquen 1990; Parga 2018; Webb 2015).
-        noise_rms = 0.08
+        noise_rms = self._NOISE_RMS
         samples += noise_rms * lowpassed_noise(seed, block_index, n, sr, lp)
 
         # Maternal heartbeat thud, phase-shared with the video pulse.
@@ -500,12 +524,48 @@ class StimulusSourceProceduralAudioStream:
         thud_ph = two_pi * _unit_float(
             _keyed_u64(seed, 0, SEED_SALT_AUDIO | 0x41)
         )
-        thud_amp = 0.35
+        thud_amp = self._THUD_AMP
         samples += thud_amp * env * np.sin(two_pi * thud_f * t + thud_ph)
+        return samples
+
+    def pcm_at(
+        self,
+        block_index: int,
+        *,
+        maturation_progress: float | None = None,
+        awake_seconds: float | None = None,
+    ) -> bytes:
+        """Synthesize the int16 LE PCM block at ``block_index``.
+
+        Pure function of ``(seed, block_index, params, maturation_progress)``
+        and, with a voice, of the awake time at each slot's first rendering.
+        """
+        import numpy as np
+
+        s = self._schedule
+        n = max(1, int(s.frames_per_block))
+        channels = max(1, int(s.channels))
+
+        samples = self._soundscape(block_index)
+        base_amp_total = self._BASE_AMP_TOTAL
+        noise_rms = self._NOISE_RMS
+        thud_amp = self._THUD_AMP
 
         # Fixed headroom so the stream almost never clips; rare noise peaks
         # beyond 4 RMS are clipped.
         max_possible = base_amp_total + 4 * noise_rms + thud_amp
+        if self._voice is not None:
+            awake = (
+                awake_seconds
+                if awake_seconds is not None
+                else (
+                    float(self._awake())
+                    if self._awake is not None
+                    else 0.0
+                )
+            )
+            samples = samples + self._voice.render(block_index * n, n, awake)
+            max_possible = max_possible + self._voice.peak
         gain = (_INT16_MAX * 0.9) / max_possible
         samples = np.clip(samples * gain, -_INT16_MAX, _INT16_MAX)
 
@@ -516,6 +576,46 @@ class StimulusSourceProceduralAudioStream:
         if channels > 1:
             q = np.repeat(q, channels)
         return q.tobytes()
+
+
+def stimulus_source_soundscape_rms(
+    schedule: StimulusSourceAudioSchedule,
+    params: "StimulusSourceParams",
+    *,
+    seconds: float = 60.0,
+) -> float:
+    """RMS of the voice-free float soundscape over the first ``seconds``.
+
+    The reference level the maternal voice is set against (its first minute of
+    stimulus time for the run seed). ``seconds`` must be finite and greater
+    than 0 (ValueError).
+    """
+    if not math.isfinite(seconds) or seconds <= 0.0:
+        raise ValueError("seconds must be finite and greater than 0")
+
+    import numpy as np
+
+    s = schedule
+    n = max(1, int(s.frames_per_block))
+    sr = float(max(1, s.sample_rate))
+    blocks = math.ceil(seconds * sr / n)
+
+    stream = StimulusSourceProceduralAudioStream(
+        schedule,
+        params=params,
+        clock=None,  # type: ignore[arg-type]
+        callback=lambda _b: None,
+        voice=None,
+        awake=None,
+    )
+
+    sum_sq = 0.0
+    count = 0
+    for block_index in range(blocks):
+        samples = stream._soundscape(block_index)
+        sum_sq += float(np.sum(samples * samples))
+        count += samples.shape[0]
+    return math.sqrt(sum_sq / max(1, count))
 
 
 # ---------------------------------------------------------------------------
@@ -801,6 +901,9 @@ class PlaylistAudioStream:
 __all__ = [
     "SeededAudioSchedule",
     "SeededProceduralAudioStream",
+    "StimulusSourceAudioSchedule",
+    "StimulusSourceProceduralAudioStream",
+    "stimulus_source_soundscape_rms",
     "PlaylistAudioStream",
     "PlaylistPosition",
 ]
