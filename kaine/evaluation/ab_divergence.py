@@ -227,7 +227,7 @@ class AssemblerConditionedClient:
         real ``ContextAssembler`` at the entrypoint. Both arms call it with the
         same ``utterance``, differing only in ``conditioning``.
     complete:
-        ``(system, prompt) -> str`` or ``(system, prompt, user_turn) -> str`` —
+        ``(system, prompt) -> str`` or ``(system, prompt, user_turn) -> str``:
         the language-organ chat call. Both arms share it, so
         model/temperature/think are identical across arms.
     """
