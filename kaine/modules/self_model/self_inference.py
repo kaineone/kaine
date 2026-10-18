@@ -260,8 +260,10 @@ class SelfInferenceEngine:
         self._last_vad = (v, a, d)
 
     def observe_affect_drive(self, payload: dict[str, Any]) -> None:
-        """Record one affect.drive crossing event."""
+        """Record one affect.drive crossing event; re-entries (payload reentry true) are not crossings and are ignored."""
         if not self._enabled:
+            return
+        if payload.get("reentry") is True:
             return
         drive = str(payload.get("drive") or "")
         if drive:

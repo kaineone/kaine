@@ -95,6 +95,7 @@ class Affect(BaseModule):
         goal_likelihood_fall: float = 0.5,
         drive_arousal_gain: float = 0.2,
         boredom_engagement_relief: float = 0.5,
+        concern_reentry_s: float = 30.0,
         clock: Optional[Callable[[], float]] = None,
         # Shared subjective clock (injected at boot). Affect drift and the
         # publish interval are cognitive time constants, so they run in subjective
@@ -147,6 +148,8 @@ class Affect(BaseModule):
             raise ValueError("drive_arousal_gain must be finite and in [0, 1]")
         if not math.isfinite(boredom_engagement_relief) or not (0.0 <= boredom_engagement_relief <= 1.0):
             raise ValueError("boredom_engagement_relief must be finite and in [0, 1]")
+        if not math.isfinite(concern_reentry_s) or concern_reentry_s < 0.0:
+            raise ValueError("concern_reentry_s must be finite and >= 0")
 
         self._baseline = (baseline or DimensionalState()).clamped()
         self._state = DimensionalState(
@@ -183,6 +186,7 @@ class Affect(BaseModule):
         self._goal_likelihood_fall = float(goal_likelihood_fall)
         self._drive_arousal_gain = float(drive_arousal_gain)
         self._boredom_engagement_relief = float(boredom_engagement_relief)
+        self._concern_reentry_s = float(concern_reentry_s)
 
         # Perceptual learning-progress state.
         # Time-decayed mean trackers per source: sum and count for each tau.
@@ -195,10 +199,10 @@ class Affect(BaseModule):
         self._alert_slow = 0.0
         self._intent_rate = 0.0
         self._intents_since_broadcast = 0
-        # Bus entry ids of this module's recent affect.drive crossing events, so an
-        # intent about a drive crossing does not count as engagement (paper A.4).
-        # Transient and bounded; crossings are rare.
-        self._drive_entry_ids: deque[str] = deque(maxlen=64)
+        # Bus entry ids of this module's recent affect.drive crossing and re-entry
+        # events, so an intent about a drive does not count as engagement (paper A.4).
+        # Transient and bounded; at most one re-entry per active goal per P_re.
+        self._drive_entry_ids: deque[str] = deque(maxlen=256)
         self._wellness = 0.5  # neutral prior: no interoception module wellness information yet
         # Fast and slow time-decayed means of the reported wellness (paper A.4):
         # under the error-dynamics valence rule their difference, the change in
@@ -238,6 +242,9 @@ class Affect(BaseModule):
         # Goal id -> accumulated Delta L to apply to the next appraisal.
         self._held_obstruction: dict[str, float] = {}
         self._last_obstruction = 0.0
+
+        # Goal id -> entity time its drive event next re-enters (paper A.4); transient.
+        self._reentry_due: dict[str, float] = {}
 
         self._last_emotion: CategoricalEmotion = CategoricalEmotion.NEUTRAL
         self._cursors: dict[str, str] = {}
@@ -488,6 +495,7 @@ class Affect(BaseModule):
         self._response_windows = [
             w for w in self._response_windows if w.get("goal_id") != goal_id
         ]
+        self._reentry_due.pop(goal_id, None)
 
     def _end_goal(
         self, goal_id: str, outcome: str, reason: str
@@ -635,6 +643,35 @@ class Affect(BaseModule):
                 }
             )
 
+    def _due_reentries(self, now: float) -> list[tuple[str, float]]:
+        """Return (drive, value) for each active goal whose drive event re-enters now.
+
+        An active goal is a current concern, which keeps cueing thought until met or
+        dropped (Klinger 2013): while its drive stays at or above threshold, the drive
+        event recurs every P_re after the crossing or the previous re-entry (paper A.4).
+        Off when P_re is 0.
+        """
+        if self._concern_reentry_s <= 0.0:
+            return []
+        active_ids = {g.id for g in self._goals.active()}
+        for goal_id in list(self._reentry_due):
+            if goal_id not in active_ids:
+                self._reentry_due.pop(goal_id, None)
+        due_now: list[tuple[str, float]] = []
+        for goal in self._goals.active():
+            if not goal.drive:
+                continue
+            drive = getattr(self._drives, goal.drive, None)
+            if drive is None:
+                continue
+            if drive.value < drive.threshold:
+                continue
+            due = self._reentry_due.setdefault(goal.id, now + self._concern_reentry_s)
+            if now >= due:
+                due_now.append((goal.drive, drive.value))
+                self._reentry_due[goal.id] = now + self._concern_reentry_s
+        return due_now
+
     async def _tick(self) -> None:
         now = self._clock()
         dt = max(0.0, now - self._last_tick_at)
@@ -710,6 +747,20 @@ class Affect(BaseModule):
         payloads += self._check_stalls(now)
         self._check_response_windows(now)
         await self._publish_goal_events(payloads)
+
+        # Sustained concern (paper A.4): an active goal's drive event recurs at the
+        # drive's value while the drive stays at or above threshold. It is not an alert,
+        # and its entry id marks intents about it as about a drive.
+        for name, value in self._due_reentries(now):
+            reentry_id = await self.publish(
+                "affect.drive",
+                {"drive": name, "value": value, "alert": False, "reentry": True},
+                salience=_clip01(value),
+            )
+            self._drive_entry_ids.append(
+                reentry_id.decode() if isinstance(reentry_id, bytes) else str(reentry_id)
+            )
+
         adj = await self._regulation.suggest(self._state)
         self._state = self._state.nudged(
             valence=adj.valence,
@@ -1339,6 +1390,7 @@ class Affect(BaseModule):
         self._goal_above_since.clear()
         self._response_windows.clear()
         self._held_obstruction.clear()
+        self._reentry_due.clear()
         self._last_obstruction = 0.0
         self._drive_end_counts = {
             d.name: (d.own_ends, d.other_ends) for d in self._drives.all()
@@ -1595,3 +1647,4 @@ class Affect(BaseModule):
         self._goal_above_since.clear()
         self._response_windows.clear()
         self._held_obstruction.clear()
+        self._reentry_due.clear()
