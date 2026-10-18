@@ -8,6 +8,18 @@ The developmental phase, the maternal heartbeat, maturation and the seed entity 
 
 The code and its config keys call the developmental stimulus the stimulus source. It is generated on the host CPU and feeds the entity a dim, low-contrast visual field and a low-pass-filtered soundscape. Both pulse with the maternal heartbeat, a periodic beat at `heartbeat_bpm` (70 by default) with slow drift, and both are tinted by a slowly varying maternal state. Colour rises from near-grey as awake time passes, with the time constant `colour_ramp_seconds` (3,600 s). The stimulus keeps playing while the entity sleeps; it is the one feed that sleep does not pause (see the [sleep module](../10-sleep/README.md)).
 
+### The maternal voice
+
+The soundscape also carries a maternal voice, as a fetus hears its mother above the intrauterine background with the high frequencies attenuated (Querleu et al. 1988; Gerhardt and Abrams 2000; Richards et al. 1992). The speech is pre-rendered, not synthesized at runtime: 41 takes of 20 original items (a repeated passage, seven passages and twelve short phrases) ship in `kaine/modules/audition/maternal_voice_data/`, with their attribution in its README. Each take passes the soundscape's low-pass (`lowpass_hz`) and plays `level_db` (6 dB) above the soundscape, with a seeded variation of up to `jitter_db` (3 dB).
+
+- Timing: time is cut into `slot_seconds` (30 s) slots, and a slot holds speech with probability `episode_probability` (0.2) times the maternal arousal at its start, so the mother talks more when her state is aroused. Speech fills about 7% of the time, near a woman's daily speaking time (Mehl et al. 2007). Utterances in a slot are separated by pauses of 0.5 to 1.5 s.
+- The repeated passage: a quarter of the episodes (`repeat_share`) open with it, after the passage mothers read aloud before birth in DeCasper and Spence (1986).
+- The repertoire grows: five items are heard at first and one more unlocks every `unlock_seconds` (3,600 s) of awake time, so all 20 are heard after 15 awake hours. A slot's content is fixed when it is first heard.
+- Sleep: the voice plays on while the entity sleeps; unlocking waits for awake time.
+- Loud failure: at boot every file is checked against the manifest's sha256 and decoded; a missing or altered file is logged at CRITICAL and the stimulus audio does not start, so the stimulus-loss watch freezes the entity rather than letting the voice vanish unnoticed. `enabled = false` restores the voice-free soundscape byte for byte.
+
+The voice reaches nothing the maturation gate or the self-rhythm reads: the maternal drive comes from the heartbeat phase, not from the audio, and the gate reads the self-rhythm markers and the vision error ratio. An offline calibration over the real audition encoder, forward model and drive equations found learning progress above its floor in about a third of awake time with the voice, against none without it, and curiosity relieved by learning progress about 7.5 times an hour instead of never. A control with the same timing and spectrum but no temporal structure relieved curiosity as often, so the relief comes from the forward model re-adapting at each episode of speech, not from learning the speech itself.
+
 The maternal channel is external: nothing the entity does changes it. The entity's own rhythm comes from a self-rhythm oscillator inside the [interoception module](../09-modules/interoception.md), which the interoception module reads as part of its interoceptive input and which the maternal beat drives through a weak input. Media and world simulation belong to the [embodiment module](../09-modules/embodiment.md) and its planned Paracosmic adapter.
 
 ## Requirements
@@ -155,6 +167,7 @@ The transition runs only when the mode is `playlist`, `transition_seconds` is ab
 | `[perception_feed]` | `mode`, `seed`, and the developmental-phase-to-films transition (`transition_seconds`, `transition_audio_fade_seconds`). |
 | `[perception_feed.stimulus_source]` | The maternal heartbeat and state, the drive's bound (`external_drive_max_amplitude`), and `maturation_transition_seconds`. |
 | `[perception_feed.stimulus_source.video]` / `.audio` | The dim field, pulse depth and colour ramp; the soundscape's low-pass corner. |
+| `[perception_feed.stimulus_source.voice]` | The maternal voice: `enabled`, `level_db`, `jitter_db`, `slot_seconds`, `episode_probability`, `repeat_share`, `unlock_seconds`, `pause_min_seconds`, `pause_max_seconds`. |
 | `[perception_feed.stimulus_source.readout]` | The readout period, the probe protocol, the entrainment test and the viability watch. The probe lengths' hard maxima are enforced in code. |
 | `[developmental_stage]` | The gate's floors and cadence, `require_operator_ack_for_maturation`, and the stimulus source timings `stimulus_source_ready_retry_seconds`, `stimulus_source_check_seconds`, `stimulus_source_loss_after_seconds`, `stimulus_source_arm_timeout_seconds` and `stimulus_source_presence_window_seconds`. |
 | `[developmental_stage.regulation_thresholds]` | The C1 thresholds. |
