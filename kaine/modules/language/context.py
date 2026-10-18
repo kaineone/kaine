@@ -21,6 +21,7 @@ returned for the log only.
 from __future__ import annotations
 
 import sys
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -186,8 +187,85 @@ def _contains_non_empty_heard_text(obj: Any, fields: frozenset[str]) -> bool:
 
 
 def _quote_heard(text: str) -> str:
-    """Return heard text in double quotes, with inner double quotes neutralized."""
-    return '"' + text.strip().replace('"', "'") + '"'
+    """One line of heard words, quoted, that can neither close its quote nor start a heading of the entity's notes."""
+    text = " ".join(text.split())
+    text = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
+    text = text.replace('"', "'")
+    text = text.replace("#", "\uff03")
+    return '"' + text + '"'
+
+
+def _attribute_heard_fields(value: Any) -> tuple[Any, bool]:
+    """Return a copy of *value* with every heard-text field (except ``text``) attributed.
+
+    Strings become an attribution line; containers have every non-empty string
+    leaf inside them attributed while keeping their container types. The bool is
+    True when at least one string was attributed.
+    """
+    _heard_fields = HEARD_TEXT_FIELDS - {"text"}
+
+    def _attribute_leaves(obj: Any) -> tuple[Any, bool]:
+        if isinstance(obj, str):
+            stripped = obj.strip()
+            if stripped:
+                return HEARD_ATTRIBUTION_SAID + _quote_heard(stripped), True
+            return obj, False
+        if isinstance(obj, dict):
+            changed = False
+            new: dict[str, Any] = {}
+            for k, v in obj.items():
+                replaced, c = _attribute_leaves(v)
+                new[k] = replaced
+                changed = changed or c
+            return new, changed
+        if isinstance(obj, list):
+            changed = False
+            new: list[Any] = []
+            for v in obj:
+                replaced, c = _attribute_leaves(v)
+                new.append(replaced)
+                changed = changed or c
+            return new, changed
+        if isinstance(obj, tuple):
+            changed = False
+            new: list[Any] = []
+            for v in obj:
+                replaced, c = _attribute_leaves(v)
+                new.append(replaced)
+                changed = changed or c
+            return tuple(new), changed
+        return obj, False
+
+    if isinstance(value, dict):
+        changed = False
+        new: dict[str, Any] = {}
+        for k, v in value.items():
+            if k in _heard_fields:
+                replaced, c = _attribute_leaves(v)
+                new[k] = replaced
+                changed = changed or c
+            else:
+                replaced, c = _attribute_heard_fields(v)
+                new[k] = replaced
+                changed = changed or c
+        return new, changed
+    if isinstance(value, list):
+        changed = False
+        new: list[Any] = []
+        for v in value:
+            replaced, c = _attribute_heard_fields(v)
+            new.append(replaced)
+            changed = changed or c
+        return new, changed
+    if isinstance(value, tuple):
+        changed = False
+        new: list[Any] = []
+        for v in value:
+            replaced, c = _attribute_heard_fields(v)
+            new.append(replaced)
+            changed = changed or c
+        return tuple(new), changed
+    return value, False
 
 
 def _attributed_heard_line(event: Event, *, placeholder: bool) -> Optional[str]:
@@ -282,12 +360,24 @@ class ContextAssembler:
         mode: str = "external",
         about_is_heard: bool = True,
     ) -> AssembledContext:
+        def _prompt_line(ev: Event) -> Optional[str]:
+            line = _attributed_heard_line(ev, placeholder=False)
+            if line is not None:
+                return line
+            if ev.source != "language" and isinstance(ev.payload, dict):
+                new_payload, changed = _attribute_heard_fields(ev.payload)
+                if changed:
+                    return self._renderer.render_event(
+                        ev.model_copy(update={"payload": new_payload})
+                    )
+            return None
+
         working_memory = (
             self._renderer.render_snapshot_bounded(
                 snapshot,
                 max_events=self._max_events,
                 char_budget=self._char_budget,
-                redact=lambda ev: _attributed_heard_line(ev, placeholder=False),
+                redact=_prompt_line,
             )
             if snapshot is not None
             else EMPTY_AWARENESS
