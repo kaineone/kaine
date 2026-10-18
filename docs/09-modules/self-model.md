@@ -102,7 +102,7 @@ If `seed_path` is set, the engine reads the JSONL file once at first boot throug
 
 ### Situation facts
 
-`ensure_situation_fact(text)` records a fact about the entity's situation that it is told, saves the self-model and publishes it at once. The individuation producer uses it (`kaine/cycle/__main__.py`), falling back to the language module when the self-model module is not registered. Situation facts are separate from values and norms and never touch drift or the identity history.
+`ensure_situation_fact(text, *, replaces=())` records a fact about the entity's situation that it is told, saves the self-model and publishes it at once. A fact listed in `replaces` (an earlier wording) is replaced in place, so the individuation producer's first-person disclosure takes the place of the earlier second-person one. The language organ reads the facts at the top of its own notes (see [Language](language.md)). The individuation producer uses it (`kaine/cycle/__main__.py`), falling back to the language module when the self-model module is not registered. Situation facts are separate from values and norms and never touch drift or the identity history.
 
 ### Persistence and encryption
 

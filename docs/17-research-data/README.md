@@ -331,7 +331,7 @@ The memory coherence probe (`memory_probes.py`) measures whether the full cognit
 
 The individuation producer lives in the cognitive cycle at `kaine/cycle/individuation_producer.py`, `individuation_scheduler.py`, and `individuation_runtime.py`. It measures whether an entity has changed measurably since its maturation reference. It is enabled by `[individuation].enabled`, which defaults to `false`, and it requires the `language` module; otherwise the cycle refuses to boot.
 
-At start, the entity is told, as a situation fact in its self-model (or in the language module's persona when the self-model module is not enabled), the operator-approved disclosure: "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience." Probes fail closed until the fact is present.
+At start, the entity is told, as a situation fact in its self-model (or in the language module's own facts when the self-model module is not enabled), the operator-approved disclosure: "I am periodically and privately assessed for how much I have changed since I first woke, for my own protection. The assessment never enters my experience." Probes fail closed until the fact is present.
 
 The probe asks a fixed battery of 12 preference prompts through the language module's own chat client. It conditions on the same self-model and adapter, with empty working memory. The probe never writes the intent log and never publishes on the bus, so it never enters the entity's experience; the runtime publishes only its content-free `individuation.divergence` results and alerts on `individuation.out`. Probe requests wait until the language module has been silent for `language_quiet_s` (10 s), so the entity's own speech always goes first.
 
@@ -407,7 +407,7 @@ affect_summary_interval_s = 300.0
 
 [individuation]
 enabled = false
-disclosure = "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience."
+disclosure = "I am periodically and privately assessed for how much I have changed since I first woke, for my own protection. The assessment never enters my experience."
 battery_path = ""
 language_quiet_s = 10.0
 probe_temperature = 0.0

@@ -28,7 +28,11 @@ from kaine.modules.language.client import (
     ChatRequest,
     OpenAIChatClient,
 )
-from kaine.modules.language.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
+from kaine.modules.language.context import (
+    OWN_TURN_STOP,
+    PERSONA_TEMPLATE_VERSION,
+    ContextAssembler,
+)
 from kaine.modules.language.intent_log import IntentExpressionLog
 from kaine.persistence.system_prompts import digest_of, store_dir_for, write_system_prompt
 from kaine.storage import resolve
@@ -195,14 +199,32 @@ class Language(BaseModule):
         """Whether a self-model is part of this entity; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
         self._expects_self_model = expected
 
-    async def add_situation_fact(self, text: str) -> bool:
-        """A fact about the entity's situation that the language module renders in its persona when no self-model carries it. It is held in memory and re-given at every boot."""
+    async def add_situation_fact(
+        self, text: str, *, replaces: tuple[str, ...] = ()
+    ) -> bool:
+        """A fact about the entity's situation that the language module renders in its own notes when no self-model carries it. It is held in memory and re-given at every boot. A fact listed in `replaces` (an earlier wording) is replaced in place."""
         text = text.strip()
         if not text:
             raise ValueError("situation fact cannot be empty")
-        if text in self._own_situation_facts:
+        old = set(replaces) - {text}
+        facts = self._own_situation_facts
+        if text in facts:
+            new = [f for f in facts if f not in old]
+        else:
+            new = []
+            replaced = False
+            for fact in facts:
+                if fact in old:
+                    if not replaced:
+                        new.append(text)
+                        replaced = True
+                else:
+                    new.append(fact)
+            if not replaced:
+                new.append(text)
+        if new == facts:
             return False
-        self._own_situation_facts.append(text)
+        self._own_situation_facts = new
         return True
 
     def _with_own_facts(self, sm: dict) -> dict:
@@ -498,6 +520,8 @@ class Language(BaseModule):
             think=self._think,
             seed=int(seed),
             cache_prompt=False,
+            own_turn=True,
+            stop=list(OWN_TURN_STOP),
         )
 
     async def speak(
@@ -845,6 +869,8 @@ class Language(BaseModule):
             max_tokens=self._max_tokens,
             think=self._think,
             seed=None,
+            own_turn=True,
+            stop=list(OWN_TURN_STOP),
         )
         response = await self._chat_client.complete(request)
 

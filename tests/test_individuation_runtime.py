@@ -15,6 +15,7 @@ from kaine.bus.schema import Event
 from kaine.cycle.individuation_probe import ProbeFailure
 from kaine.cycle.individuation_runtime import (
     DEFAULT_DISCLOSURE,
+    LEGACY_DISCLOSURES,
     IndividuationConfig,
     build_runtime,
 )
@@ -96,9 +97,11 @@ class FakeEmbedder:
 class FakeEnsureFact:
     def __init__(self) -> None:
         self.facts: list[str] = []
+        self.replaces: list[tuple[str, ...]] = []
 
-    async def __call__(self, fact: str) -> bool:
+    async def __call__(self, fact: str, *, replaces: tuple[str, ...] = ()) -> bool:
         self.facts.append(fact)
+        self.replaces.append(replaces)
         return True
 
 
@@ -200,6 +203,7 @@ async def test_start_disclosure_and_boot_capture(tmp_path: Path):
     runtime = build(tmp_path)
     await runtime.start()
     assert runtime.ensure_fact.facts == [DEFAULT_DISCLOSURE]
+    assert runtime.ensure_fact.replaces == [LEGACY_DISCLOSURES]
     assert runtime.scheduler._capture_kind == "capture"
 
 

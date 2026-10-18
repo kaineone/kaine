@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| organ-first-person-framing | 0/4 (0%) | The organ continues the entity's own first-person turn under a descriptive persona, and the individuation disclosure is first person, so the organ stops answering its own state as an assistant (paper 3.5). |
+| organ-first-person-framing | 4/4 (100%) | The organ continues the entity's own first-person turn under a descriptive persona, and the individuation disclosure is first person, so the organ stops answering its own state as an assistant (paper 3.5). |
 | valence-error-dynamics | 5/5 (100%) | Valence follows error dynamics, the fall or rise of prediction errors and the change in wellness, so a steady state is neutral; the welfare log gives the negative-valence share and per-drive uncontrolled goal ends (paper 3.5, A.4, 6.2). |
 | felt-awareness-phrasing | 4/4 (100%) | The organ gets accessed content and each intent's cause as graded words, not instrument values, while the log keeps the values (paper 3.5). |
 | boredom-own-engagement | 4/4 (100%) | The entity's own intents, unless about a drive, relieve boredom and count as its own response, so boredom stops teaching helplessness (paper 3.5, A.4). |
@@ -130,6 +130,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 103 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 104 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
