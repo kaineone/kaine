@@ -67,7 +67,8 @@ class SelfInitiatedReportPolicy:
     ``about_style`` selects how the intent names its cause: ``"numeric"`` (default)
     gives ``"<source> (surprise=<x.xxx>)"`` with ``about_kind`` ``"event"``;
     ``"felt"`` gives a felt phrase without numbers (``felt_event_phrase``) with
-    ``about_kind`` ``"felt"`` and the values in ``about_values``.
+    ``about_kind`` ``"event"`` (the kind names what the intent is about; the
+    phrase is felt) and the values in ``about_values``.
     """
 
     # C3: the same guard timeout as the default and drive policies. A guard
@@ -225,7 +226,7 @@ class SelfInitiatedReportPolicy:
         if self._about_style == "felt":
             return (
                 felt_event_phrase(event.source, surprise),
-                "felt",
+                "event",
                 {"source": event.source, "type": event.type, "surprise": surprise},
             )
         return f"{event.source} (surprise={surprise:.3f})", "event", None

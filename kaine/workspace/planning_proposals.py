@@ -285,7 +285,7 @@ class PlanningProposalSource:
             if isinstance(name, str):
                 return felt_drive_phrase(name, event.payload.get("value")), "felt"
         if self._about_style == "felt":
-            return felt_event_phrase(event.source), "felt"
+            return felt_event_phrase(event.source), "event"
         return f"{event.source}:{event.type}", "event"
 
     def _record_outcome(self, event: object, reason: str, realized: bool) -> None:

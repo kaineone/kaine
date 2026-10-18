@@ -108,9 +108,10 @@ class Intent:
     when set, so non-language consumers (the effectors module) simply never see an unknown field.
 
     ``about_kind`` classifies the ``about`` field for the language module's redaction logic:
-    ``"heard"`` for heard speech, ``"felt"`` for a number-free felt phrase
-    (a drive's felt state, or, with the felt awareness rendering, the event that
-    prompted the intent), or ``"event"`` for another coalition event summary.
+    ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase only,
+    or ``"event"`` for an intent about another coalition event, whether its
+    ``about`` is a summary or, with the felt awareness rendering, a felt phrase
+    without numbers.
     ``None`` is treated as ``"heard"`` (fail-closed), so unmarked intents are
     redacted in the log.
 

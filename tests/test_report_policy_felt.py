@@ -98,7 +98,7 @@ def test_felt_think():
     assert intent.kind == THINK
     assert intent.entry_id == "e1"
     assert intent.about == "Something in what I see stands out noticeably."
-    assert intent.about_kind == "felt"
+    assert intent.about_kind == "event"
     assert intent.about_values == {
         "source": "vision",
         "type": "vision.report",
@@ -116,7 +116,7 @@ def test_felt_speak():
     intent = intents[0]
     assert intent.kind == SPEAK
     assert intent.about == "Something in my body stands out sharply."
-    assert intent.about_kind == "felt"
+    assert intent.about_kind == "event"
 
 
 def test_felt_interrupt():
@@ -134,7 +134,7 @@ def test_felt_interrupt():
     assert intent.interrupt is True
     assert intent.entry_id == "e2"
     assert intent.about == "Something in what I hear stands out sharply."
-    assert intent.about_kind == "felt"
+    assert intent.about_kind == "event"
     assert intent.about_values == {
         "source": "audition",
         "type": "audition.report",
@@ -207,7 +207,7 @@ def test_planning_felt():
     assert felt_intent.origin == "planning"
     assert felt_intent.entry_id == "s1"
     assert felt_intent.about == "Something in my body draws my attention."
-    assert felt_intent.about_kind == "felt"
+    assert felt_intent.about_kind == "event"
 
     numeric = ActionSelection(policy=PlanningProposalSource(lambda s: []))
     numeric_intents = numeric.select(_psnap([sensor, proposal]))

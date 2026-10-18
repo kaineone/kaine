@@ -40,7 +40,7 @@ Two options: log a numeric rendering in place of the felt one, or keep the logge
 
 ### about_kind
 
-The language module treats `"felt"` and `"event"` alike (not heard, published as `user_input`). The new phrase is a number-free felt phrase, so it uses `"felt"`; numeric mode keeps `"event"`.
+The kind names what the intent is about, not how its `about` is worded. Event-led report and planning intents keep `"event"` in felt mode, and only drive phrases (`felt_drive_phrase`) are `"felt"`. The language module treats the two alike (not heard, published as `user_input`), but the affect module does not: boredom engagement relief (boredom-own-engagement, #533) skips intents about a drive, recognised by `about_kind == "felt"` or an `entry_id` naming an `affect.drive` event. Marking event-led intents `"felt"` would stop that relief from ever firing.
 
 ### Persona
 
