@@ -7,7 +7,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | stimulus-clock-continuity | 5/5 (100%) | The stimulus source clock resumes from its own persisted time instead of awake time, and the gate adds the awake time since its last tick at shutdown, so a restart neither repeats stimulus nor drops awake time (paper §7, A.7). |
-| learning-progress-horizons | 0/6 (0%) | Learning progress, the curiosity relief, compares the mean error of the older and newer halves of the last 90 min in 60 s bins, so it spans the forward models' learning curves; valence keeps the fast and slow means (paper A.4, A.7, Table A1). |
+| learning-progress-horizons | 5/6 (83%) | Learning progress, the curiosity relief, compares the mean error of the older and newer halves of the last 90 min in 60 s bins, so it spans the forward models' learning curves; valence keeps the fast and slow means (paper A.4, A.7, Table A1). |
 | affect-state-error-terms | 5/5 (100%) | The affect state event and its research record carry the terms behind the valence target (per-source error means and progress, pooled progress, wellness means and change, pleasantness, target), so a valence trough can be attributed (paper A.4). |
 | developmental-maternal-voice | 5/5 (100%) | The developmental soundscape carries a pre-rendered maternal voice, low-pass filtered as in utero, paced by the maternal state, with a repertoire that unlocks over awake time (paper §7, A.7, Table A1). |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |

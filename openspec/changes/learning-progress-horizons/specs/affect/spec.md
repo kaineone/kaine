@@ -11,7 +11,7 @@ For each perceptual source the affect module SHALL sum the raw `prediction_error
 - **WHEN** a source reports a constant error for longer than the span
 - **THEN** its learning progress is 0 and curiosity is not relieved
 
-#### Scenario: The span grows from birth
+#### Scenario: The span grows from the first report
 - **WHEN** a source has completed one bin
 - **THEN** its learning progress is undefined, and after two completed bins it compares the first bin with the second
 

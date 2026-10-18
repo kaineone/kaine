@@ -763,9 +763,17 @@ action_selection_stream = "action_selection.out"
 # Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
 fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
+# The relative fall of the fast against the slow error mean is the error dynamics behind valence.
 slow_time_constant_s = 100.0
 # Learning-progress floor: progress below this is treated as zero.
 learning_progress_floor = 0.05
+# Learning progress, the curiosity relief (paper A.4, Table A1): each perceptual source's errors
+# are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
+# error from the older to the newer half of the last learning_progress_span_s (the whole history
+# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
+# forward models' learning curves and must be an even whole number of bins (subjective s).
+learning_progress_span_s = 5400.0
+learning_progress_bin_s = 60.0
 # Alert excess margin: alert rate must exceed the habituated rate by this fraction to count as novel.
 alert_excess_margin = 0.5
 intent_rate_weight = 0.05

@@ -89,13 +89,14 @@ async def test_affect_emotion_carries_norm_unavailable_flag(bus: AsyncBus):
         publish_interval_s=5.0,
         drift_rate_per_s=0.0,
         clock=lambda: fake_now[0],
+        learning_progress_span_s=20.0,
+        learning_progress_bin_s=10.0,
     )
     await affect.initialize()
     try:
         # Add a goal so goal_significance can become non-zero → emotion change fires.
         affect.goals.add("explore", priority=1.0)
-        # Errors falling over a minute (the averages run on 10 s and 100 s time
-        # constants) yield positive learning progress / pleasantness.
+        # Errors falling over a minute (20 s window in 10 s bins) yield positive windowed learning progress / pleasantness.
         for idx, r in enumerate(
             [3.0 - 2.0 * i / 599 for i in range(600)]
         ):
@@ -143,12 +144,13 @@ async def test_affect_emotion_carries_goal_significance_method(bus: AsyncBus):
         publish_interval_s=5.0,
         drift_rate_per_s=0.0,
         clock=lambda: fake_now[0],
+        learning_progress_span_s=20.0,
+        learning_progress_bin_s=10.0,
     )
     await affect.initialize()
     try:
         affect.goals.add("navigate", priority=1.0)
-        # Errors falling over a minute (the averages run on 10 s and 100 s time
-        # constants) yield positive learning progress / pleasantness.
+        # Errors falling over a minute (20 s window in 10 s bins) yield positive windowed learning progress / pleasantness.
         for idx, r in enumerate(
             [3.0 - 2.0 * i / 599 for i in range(600)]
         ):

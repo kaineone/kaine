@@ -25,6 +25,7 @@ from kaine.modules.affect.coupling import (
 )
 from kaine.modules.affect.drives import DriveSet
 from kaine.modules.affect.goals import GoalLedger, GoalState
+from kaine.modules.affect.learning_progress import WindowedProgress
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.affect.regulation import (
     PassiveDecay,
@@ -84,6 +85,8 @@ class Affect(BaseModule):
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.05,
+        learning_progress_span_s: float = 5400.0,
+        learning_progress_bin_s: float = 60.0,
         alert_excess_margin: float = 0.5,
         intent_rate_weight: float = 0.05,
         valence_time_constant_s: float = 30.0,
@@ -123,6 +126,14 @@ class Affect(BaseModule):
             raise ValueError("fast_time_constant_s must be < slow_time_constant_s")
         if not math.isfinite(learning_progress_floor) or not (0.0 <= learning_progress_floor < 1.0):
             raise ValueError("learning_progress_floor must be finite and in [0, 1)")
+        if not math.isfinite(learning_progress_span_s) or learning_progress_span_s <= 0.0:
+            raise ValueError("learning_progress_span_s must be finite and > 0")
+        if not math.isfinite(learning_progress_bin_s) or learning_progress_bin_s <= 0.0:
+            raise ValueError("learning_progress_bin_s must be finite and > 0")
+        ratio = learning_progress_span_s / learning_progress_bin_s
+        n = round(ratio)
+        if abs(ratio - n) > 1e-9 * max(1.0, abs(ratio)) or n < 2 or n % 2 != 0:
+            raise ValueError("learning_progress_span_s must be an even whole number (at least 2) of learning_progress_bin_s")
         if not math.isfinite(alert_excess_margin) or alert_excess_margin < 0:
             raise ValueError("alert_excess_margin must be finite and >= 0")
         for name, w in (
@@ -175,6 +186,8 @@ class Affect(BaseModule):
         self._fast_time_constant_s = float(fast_time_constant_s)
         self._slow_time_constant_s = float(slow_time_constant_s)
         self._learning_progress_floor = float(learning_progress_floor)
+        self._lp_bin_s = float(learning_progress_bin_s)
+        self._lp_max_bins = int(n)
         self._alert_excess_margin = float(alert_excess_margin)
         self._intent_rate_weight = float(intent_rate_weight)
         self._valence_time_constant_s = float(valence_time_constant_s)
@@ -195,6 +208,7 @@ class Affect(BaseModule):
         self._err_slow_sum: dict[str, float] = {}
         self._err_slow_count: dict[str, float] = {}
         self._err_last_at: dict[str, float] = {}
+        self._lp_windows: dict[str, WindowedProgress] = {}  # per-source windowed learning-progress bins (paper A.4)
         self._alert_fast = 0.0
         self._alert_slow = 0.0
         self._intent_rate = 0.0
@@ -340,25 +354,44 @@ class Affect(BaseModule):
         g_m = max(-1.0, min(1.0, g_m))
         return fast, slow, g_m
 
+    def _learning_progress_terms(self, now: float) -> tuple[dict[str, float | None], float]:
+        """Return each source's windowed learning progress and the pooled signed ``lp``.
+
+        A source's value is the relative fall of its mean error from the older to
+        the newer half of the last ``learning_progress_span_s`` (paper A.4; Oudeyer,
+        Kaplan and Hafner 2007; Baranes and Oudeyer 2013), None while undefined.
+        The pooled ``lp`` is the mean of the defined values, 0.0 if none.
+        """
+        per_source: dict[str, float | None] = {}
+        values: list[float] = []
+        for source, window in self._lp_windows.items():
+            v = window.value(now)
+            per_source[source] = v
+            if v is not None:
+                values.append(v)
+        if not values:
+            return per_source, 0.0
+        return per_source, sum(values) / len(values)
+
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
 
-        `learning_progress` is max(0, g - floor) / (1 - floor) where g is
-        the per-module relative fall of the raw forward-model prediction
-        error, averaged over the perceptual modules (Oudeyer and Kaplan
-        2007; Schmidhuber 2010).
+        ``learning_progress`` is the windowed relative fall of the mean raw
+        prediction error, pooled over sources and floored (curiosity relief).
+        ``signed_progress`` is the error dynamics ``g`` (fast and slow
+        time-decayed means, valence).
         """
+        now = self._clock()
         g_values: list[float] = []
         for source in self._err_slow_count:
             g_m = self._source_error_terms(source)[2]
             if g_m is not None:
                 g_values.append(g_m)
-        if not g_values:
-            return 0.0, 0.0
-        g = sum(g_values) / len(g_values)
+        g = sum(g_values) / len(g_values) if g_values else 0.0
+        _, lp = self._learning_progress_terms(now)
         floor = self._learning_progress_floor
-        lp = max(0.0, g - floor) / (1.0 - floor)
-        return lp, g
+        lp_plus = max(0.0, lp - floor) / (1.0 - floor)
+        return lp_plus, g
 
     def _record_wellness(self, w: float, now: float) -> None:
         """Update the fast and slow time-decayed wellness means."""
@@ -403,15 +436,19 @@ class Affect(BaseModule):
         All values are scalars; sense data and vectors are never included.
         Non-finite numbers are returned as ``None``.
         """
+        now = self._clock()
+        per_source, lp_signed = self._learning_progress_terms(now)
         terms: dict[str, float | None] = {}
         for source in self._VALENCE_TERM_SOURCES:
             fast, slow, g_m = self._source_error_terms(source)
             terms[f"{source}_error_fast"] = _finite_number(fast)
             terms[f"{source}_error_slow"] = _finite_number(slow)
             terms[f"{source}_progress"] = _finite_number(g_m)
+            terms[f"{source}_learning_progress"] = _finite_number(per_source.get(source))
         lp, g = self._progress()
         terms["signed_progress"] = _finite_number(g)
         terms["learning_progress"] = _finite_number(lp)
+        terms["signed_learning_progress"] = _finite_number(lp_signed)
         terms["wellness"] = _finite_number(self._wellness)
         if self._well_fast_count > 0.0:
             terms["wellness_fast"] = _finite_number(self._well_fast_sum / self._well_fast_count)
@@ -1367,6 +1404,11 @@ class Affect(BaseModule):
                         d_slow * self._err_slow_count[source] + 1.0
                     )
                     self._err_last_at[source] = now
+                window = self._lp_windows.get(source)
+                if window is None:
+                    window = WindowedProgress(self._lp_bin_s, self._lp_max_bins)
+                    self._lp_windows[source] = window
+                window.add(now, e)
             alert = bool(payload.get("alert"))
             if alert:
                 # Habituation is read before the alert's own increment so the step
@@ -1642,6 +1684,12 @@ class Affect(BaseModule):
                 }
                 for source in self._err_slow_count
             },
+            # Scalar error sums and counts per source, not sense data.
+            "learning_progress_bins": {
+                source: window.to_dict(now)
+                for source, window in self._lp_windows.items()
+                if window.started
+            },
             # Intent rate r_int, the restlessness build input (paper A.4).
             "intent_rate": self._intent_rate,
             # Last wellness w from interoception (paper A.4 valence).
@@ -1741,6 +1789,22 @@ class Affect(BaseModule):
                 self._err_slow_sum[source] = slow_sum
                 self._err_slow_count[source] = slow_count
                 self._err_last_at[source] = self._clock()
+
+        raw_lp = state.get("learning_progress_bins")
+        if isinstance(raw_lp, dict):
+            self._lp_windows.clear()
+            now = self._clock()
+            for source, entry in raw_lp.items():
+                if not isinstance(source, str):
+                    continue
+                window = WindowedProgress.from_dict(
+                    entry,
+                    bin_s=self._lp_bin_s,
+                    max_bins=self._lp_max_bins,
+                    t=now,
+                )
+                if window is not None:
+                    self._lp_windows[source] = window
 
         raw_wellness_means = state.get("wellness_means")
         if (

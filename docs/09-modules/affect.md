@@ -59,16 +59,19 @@ Every `affect.state` event, the periodic one and the one after a sleep reset, al
 | Key | Meaning |
 |---|---|
 | `vision_error_fast`, `vision_error_slow`, `vision_progress` | The vision source's `E_fast`, `E_slow` and its clipped relative fall `g_m` |
+| `vision_learning_progress` | The vision source's windowed learning progress `lp_m`; null while undefined |
 | `audition_error_fast`, `audition_error_slow`, `audition_progress` | The same for the audition module's acoustic path |
-| `signed_progress` | The pooled `g` (paper `lp`) |
-| `learning_progress` | `g` above its floor, `max(0, g - learning_progress_floor) / (1 - learning_progress_floor)` (paper `lp+`), the curiosity relief |
+| `audition_learning_progress` | The audition source's windowed learning progress `lp_m`; null while undefined |
+| `signed_progress` | The pooled `g` (paper `ed`) |
+| `signed_learning_progress` | The pooled windowed learning progress `lp` |
+| `learning_progress` | `LP`, the windowed learning progress above its floor, `max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` (paper `lp+`), the curiosity relief |
 | `wellness` | The last reported wellness (0.5 before any) |
 | `wellness_fast`, `wellness_slow` | `W_fast` and `W_slow`; null before the first wellness report and under the `wellness_level` rule |
 | `wellness_change` | `W_fast - W_slow` as the rule adds it, 0 before the first report |
 | `pleasantness` | `pl` |
 | `valence_target` | `v_target` under the active `valence_rule` |
 
-The sources are a fixed table, so the event always has the same keys. A source that has not reported gives null for its three keys, and a source whose slow mean is not above 1e-9 gives its means and a null progress, because the pooling skips it. A perceptual report from any other source still counts in `signed_progress` but adds no keys. The values come from the same helpers the update uses, so they are the terms valence relaxed toward at that moment.
+The sources are a fixed table, so the event always has the same keys. A source that has not reported gives null for its four keys. A source whose slow mean is not above 1e-9 gives its error means and a null `*_progress` for the error dynamics, because that pooling skips it; its `*_learning_progress` is null while the windows are undefined. A perceptual report from any other source still counts in `signed_progress` and `signed_learning_progress` but adds no keys. The values come from the same helpers the update uses, so they are the terms valence relaxed toward at that moment.
 
 ## Drives
 
@@ -78,14 +81,26 @@ Relief comes in two forms. Curiosity and boredom are relieved continuously, `D <
 
 | Drive | Builds with `u` | Relieved by | Grounding |
 |---|---|---|---|
-| `curiosity` | `1 - LP` | continuously, `c = LP` | learning progress (Oudeyer and Kaplan 2007; Schmidhuber 2010) |
+| `curiosity` | `1 - LP` | continuously, `c = LP` | learning progress (Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013; Schmidhuber 2010) |
 | `boredom` | `1 - N` | continuously, `c = N`; and each intent other than `intent.rest` not about a drive, by `boredom_engagement_relief` | a failure to engage attention (Eastwood et al. 2012) or meaning (Westgate and Wilson 2018), met by novelty and by the re-engagement it motivates (Bench and Lench 2013) |
 | `social_drive` | `1` once the entity has heard a voice, else `0` | each new voice, `c = 1` | social homeostasis (Matthews and Tye 2019) |
 | `restlessness` | `1 - intent_rate` | each action selection module intent other than `intent.rest`, `c = 1` | a design choice with no established model behind it |
 
 Boredom is the failure to engage attention with internal or external information (Eastwood et al. 2012) or with valued activity (Westgate and Wilson 2018), and it motivates the pursuit of new goals and experiences (Bench and Lench 2013, 2019). Re-engagement is therefore the entity's own response to it, and the engagement channel is credited as own; novelty that arrives by itself is not. Without the channel every boredom crossing ended as not the entity's own response (in the fourth 2026-10-17 test boot, 8 of 8 boredom goals that ended by a fall were abandoned without response), so coping learned that boredom is uncontrollable, the structure of learned helplessness (Maier and Seligman 2016). Self-generated thought as such does not count: thinking alone is unpleasant and less engaging than mundane activity (Wilson et al. 2014; Westgate, Wilson and Gilbert 2017), and noticing one's failure to engage is part of boredom itself (Eastwood et al. 2012). So an intent about a drive, such as the think or report intent a boredom crossing that reached access itself produces, does not relieve boredom; intents about perceived, heard or other content do.
 
-`LP = max(0, g - learning_progress_floor) / (1 - learning_progress_floor)` is learning progress above a noise floor, so rectified noise in `g` does not relieve curiosity on a scene where nothing is being learned. `N = clip(r_fast / max(r_slow, 0.05) - 1 - alert_excess_margin, 0, 1)` is the novelty of the alert stream. Each perceptual alert raises the fast rate `r_fast` by `1 / fast_time_constant_s` and the slow rate `r_slow` by `1 / slow_time_constant_s`, and both decay with their own time constant. The alert criterion is self-calibrating, so even a still scene alerts at a steady base rate, and only alerts in excess of that habituated rate relieve boredom.
+### Learning progress
+
+For each source the affect module sums the raw `prediction_error` of its reports into consecutive bins of `learning_progress_bin_s` of entity time, counted from the source's first positive error. With `k` the number of the latest completed bins, at most `learning_progress_span_s / learning_progress_bin_s` and rounded down to an even number, the source's learning progress is:
+
+```
+lp_m = clip(1 - mean_new / mean_old, -1, 1)
+```
+
+`mean_old` and `mean_new` are the report-weighted mean errors of the older and newer halves of those `k` bins. The value is undefined while `k < 2`, while a half holds no report, or while `mean_old <= 1e-9`. The span grows with history until it reaches 90 min, so learning progress is defined two minutes after the first report. The pooled `lp` is the mean over sources with a defined value, 0 if none, and `LP = max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` (paper `lp+`) relieves curiosity. This is the estimator of Oudeyer, Kaplan and Hafner (2007) in the two-halves form of Baranes and Oudeyer (2013). Offline calibration with the live audition path and a fresh forward model gives median curiosity 0.1 to 0.75 for the first six hours while the forward models learn, then near 0.9; a frozen forward model gives 0.04 own reliefs per hour.
+
+### Boredom, social and restlessness inputs
+
+`N = clip(r_fast / max(r_slow, 0.05) - 1 - alert_excess_margin, 0, 1)` is the novelty of the alert stream. Each perceptual alert raises the fast rate `r_fast` by `1 / fast_time_constant_s` and the slow rate `r_slow` by `1 / slow_time_constant_s`, and both decay with their own time constant. The alert criterion is self-calibrating, so even a still scene alerts at a steady base rate, and only alerts in excess of that habituated rate relieve boredom.
 
 The social drive reads the sequence module. The sequence module counts an interaction when a tone-of-voice or transcription event arrives from a live source (`live_mic`, `microphone` or `remote`). The first finite `time_since_last_interaction_s` in a `sequence.report` starts the drive building, and each later drop in that value relieves it. The intent rate is an exponential average updated on every broadcast, `r <- r + intent_rate_weight × (min(1, n) - r)`, with `n` the number of non-rest intents since the previous broadcast.
 
@@ -230,10 +245,12 @@ The full `[affect]` reference is in the [modules configuration page](../appendix
 | `fast_time_constant_s` | float `> 0` | `10.0` | Fast mean of each perceptual source's error and the fast alert rate |
 | `slow_time_constant_s` | float `> fast` | `100.0` | Slow mean of each perceptual source's error and the slow alert rate |
 | `learning_progress_floor` | float `[0, 1)` | `0.05` | Noise floor subtracted from learning progress before it relieves curiosity |
+| `learning_progress_span_s` | float | `5400.0` | Span of the learning-progress windows, in entity seconds; must be an even whole number of `learning_progress_bin_s` |
+| `learning_progress_bin_s` | float `> 0` | `60.0` | Bin width for the learning-progress windows, in entity seconds |
 | `alert_excess_margin` | float `>= 0` | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom |
 | `intent_rate_weight` | float `(0, 1]` | `0.05` | Per-broadcast weight of the intent-rate average |
 | `valence_time_constant_s` | float `> 0` | `30.0` | Time constant of valence's relaxation toward its target |
-| `valence_progress_gain` | float `>= 0` | `2.0` | Gain on learning progress in the pleasantness check |
+| `valence_progress_gain` | float `>= 0` | `2.0` | Gain on the error dynamics in the pleasantness check |
 | `valence_rule` | `"error_dynamics"` or `"wellness_level"` | `"error_dynamics"` | Valence target: pleasantness plus the change in wellness, or the earlier pleasantness plus the wellness level |
 | `goal_stall_s` | float `> 0` | `600.0` | Seconds a drive may stay at or above its threshold before its active goal is abandoned |
 | `goal_cap` | int `>= 1` | `3` | Maximum number of active goals |
@@ -312,7 +329,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 
 ## Serialization
 
-`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`, and each drive's crossing latch as `drive_fired`, so a revive does not fire a drive again that had already fired and is still above its re-arm band. State saved before the latch was persisted has no `drive_fired`; a restore then sets the latch for every drive at or above its threshold, since such a drive must already have fired. Active goals persist with their `drive` and `likelihood`; the ledger stores the running completed and abandoned counts and keeps at most the 256 most recent finished goals (the counts include pruned goals). The running estimates that feed the drives and the appraisal also persist, so a restart or revive resumes them (paper A.7): the perceptual alert rates `r_f` and `r_s` as `alert_rates`, each source's fast and slow error sums and counts behind learning progress as `error_means`, the intent rate `r_int` as `intent_rate`, the last wellness as `wellness`, the fast and slow wellness sums and counts as `wellness_means` (error-dynamics rule only), and whether an interaction has been seen as `interaction_seen`. Without the alert rates, `r_s` would restart at 0 and the first base-rate alerts after a boot would read as a large excess and relieve boredom. No timestamp is stored, because the entity clock restarts with each process and entity time does not pass while the entity is down: a restored source takes the restore time as its latest report time. A missing or invalid value keeps its default, so older state still restores. Each active goal's stall clock persists as `goal_above_elapsed`, the entity seconds its drive has stayed at or above threshold, stored as a duration: a restore sets the clock to start that long before the restore time, so a restored goal stalls `goal_stall_s` after its drive first stayed above threshold rather than `goal_stall_s` after the restore (paper A.4, A.7). State without the field, or an entry that is not a finite non-negative number or names no active goal, restarts that clock at the first update. Response windows, the held obstruction, the intent count since the last broadcast, the last interaction gap and a speaker's perceived emotion are transient and restart after a restore. Restoring goals publishes no `affect.goal` events.
+`Affect.serialize()` stores the state, the baseline, the drive values, the last emotion, the familiarity cache and the goal ledger. The cache holds opaque agent-id strings and familiarity values only, no transcribed text. Each drive's own and other outcome counts persist as `drive_outcomes`, and each drive's crossing latch as `drive_fired`, so a revive does not fire a drive again that had already fired and is still above its re-arm band. State saved before the latch was persisted has no `drive_fired`; a restore then sets the latch for every drive at or above its threshold, since such a drive must already have fired. Active goals persist with their `drive` and `likelihood`; the ledger stores the running completed and abandoned counts and keeps at most the 256 most recent finished goals (the counts include pruned goals). The running estimates that feed the drives and the appraisal also persist, so a restart or revive resumes them (paper A.7): the perceptual alert rates `r_f` and `r_s` as `alert_rates`, each source's fast and slow error sums and counts behind the error dynamics as `error_means`, each source's completed and current learning-progress bins and the entity seconds already spent in the current bin as `learning_progress_bins` (state without the key, an invalid entry, or a different bin width starts that source's bins empty; a restore keeps the time spent in the current bin; more bins than the span keep the newest; the bins carry through sleep like the error means), the intent rate `r_int` as `intent_rate`, the last wellness as `wellness`, the fast and slow wellness sums and counts as `wellness_means` (error-dynamics rule only), and whether an interaction has been seen as `interaction_seen`. Without the alert rates, `r_s` would restart at 0 and the first base-rate alerts after a boot would read as a large excess and relieve boredom. No timestamp is stored, because the entity clock restarts with each process and entity time does not pass while the entity is down: a restored source takes the restore time as its latest report time. A missing or invalid value keeps its default, so older state still restores. Each active goal's stall clock persists as `goal_above_elapsed`, the entity seconds its drive has stayed at or above threshold, stored as a duration: a restore sets the clock to start that long before the restore time, so a restored goal stalls `goal_stall_s` after its drive first stayed above threshold rather than `goal_stall_s` after the restore (paper A.4, A.7). State without the field, or an entry that is not a finite non-negative number or names no active goal, restarts that clock at the first update. Response windows, the held obstruction, the intent count since the last broadcast, the last interaction gap and a speaker's perceived emotion are transient and restart after a restore. Restoring goals publishes no `affect.goal` events.
 
 ## Enabling and use
 
@@ -368,6 +385,8 @@ Every dimension is clipped to its range after each update. The perceived emotion
 | `tests/test_concern_reentry_consumers.py` | The research log keeps `reentry`, the self-model counts only crossings, the template describes a re-entry |
 | `tests/test_affect_tonic_arousal.py` | The drive-raised arousal target: values, deprived and satisfied rest, phasic steps on top, sleep reset, gain 0 identical to the old rule, validation, config wiring |
 | `tests/test_affect_habituation.py` | The habituation factor: base-rate alerts leave arousal at baseline, a burst raises it, a first alert after quiet, a long pause or a sleep reset gets the full step; novelty from the change ratio, discounted for vision and audition only |
+| `tests/test_affect_learning_progress_windows.py` | The windowed learning-progress estimator: bins, growing span, halves, gaps, persistence round trip, validation |
+| `tests/test_affect_learning_progress_module.py` | The module's windowed learning progress: curiosity relief, unchanged error dynamics, config validation, state-event terms, snapshot round trip, old and mismatched snapshots, sleep reset keeps the bins |
 | `tests/test_workspace_regulation_bias.py` | Bias factor, decay and neutral behavior in study arms |
 
 ## Spec and related pages
