@@ -332,7 +332,20 @@ class ContextAssembler:
             if ev.type == "embodiment.chat"
             else HEARD_ATTRIBUTION_SAID
         )
-        return [attribution + _quote_heard(text) + "." for text in _heard_texts(ev)]
+        lines: list[str] = []
+        running_chars = 0
+        for text in _heard_texts(ev):
+            line = attribution + _quote_heard(text) + "."
+            if not lines:
+                lines.append(line)
+                running_chars += len(line)
+            else:
+                if running_chars + 1 + len(line) <= self._char_budget:
+                    lines.append(line)
+                    running_chars += 1 + len(line)
+                else:
+                    break
+        return lines
 
     def assemble(
         self,
@@ -350,7 +363,7 @@ class ContextAssembler:
         if heard_events:
             heard_events = sorted(
                 heard_events,
-                key=lambda pair: snapshot.salience_scores.get(pair[0], 0.0),
+                key=lambda pair: (snapshot.salience_scores or {}).get(pair[0], 0.0),
                 reverse=True,
             )[: self._max_events]
             kept: list[tuple[str, Event]] = []

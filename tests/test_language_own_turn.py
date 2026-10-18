@@ -816,3 +816,40 @@ async def test_guard_for_unclassified_types_without_heard_fields(type_):
     )
     assert ctx.system.endswith(HEARD_SPEECH_GUARD)
     assert ctx.heard_turn is None
+
+
+async def test_one_heard_event_with_many_strings_is_bounded():
+    ctx = ContextAssembler(awareness_rendering="felt", char_budget=400).assemble(
+        about="Something stands out.",
+        snapshot=_snap(
+            _ev(
+                "audition",
+                "audition.transcription",
+                {"text": "hi", "chunks": ["qz chunk"] * 5000},
+            )
+        ),
+        self_model={},
+        mode="internal",
+        about_is_heard=False,
+    )
+    assert len(ctx.heard_turn) <= 400
+    assert ctx.heard_turn.count("\n") < 10
+    assert "qz chunk" not in ctx.prompt
+
+
+async def test_missing_salience_scores():
+    ctx = ContextAssembler(awareness_rendering="felt").assemble(
+        about="Something stands out.",
+        snapshot=WorkspaceSnapshot(
+            tick_index=1,
+            selected_events=[
+                ("a", _ev("audition", "audition.transcription", {"text": "hello"}))
+            ],
+            salience_scores=None,
+        ),
+        self_model={},
+        mode="internal",
+        about_is_heard=False,
+    )
+    assert "hello" in ctx.heard_turn
+    assert "hello" not in ctx.prompt
