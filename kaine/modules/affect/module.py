@@ -88,6 +88,7 @@ class Affect(BaseModule):
         intent_rate_weight: float = 0.05,
         valence_time_constant_s: float = 30.0,
         valence_progress_gain: float = 2.0,
+        valence_rule: str = "error_dynamics",
         goal_stall_s: float = 600.0,
         goal_cap: int = 3,
         goal_response_window_s: float = 10.0,
@@ -132,6 +133,8 @@ class Affect(BaseModule):
             raise ValueError("valence_time_constant_s must be finite and > 0")
         if not math.isfinite(valence_progress_gain) or valence_progress_gain < 0:
             raise ValueError("valence_progress_gain must be finite and >= 0")
+        if valence_rule not in ("error_dynamics", "wellness_level"):
+            raise ValueError('valence_rule must be "error_dynamics" or "wellness_level"')
         if not math.isfinite(goal_stall_s) or goal_stall_s <= 0:
             raise ValueError("goal_stall_s must be finite and > 0")
         if not isinstance(goal_cap, int) or isinstance(goal_cap, bool) or goal_cap < 1:
@@ -173,6 +176,7 @@ class Affect(BaseModule):
         self._intent_rate_weight = float(intent_rate_weight)
         self._valence_time_constant_s = float(valence_time_constant_s)
         self._valence_progress_gain = float(valence_progress_gain)
+        self._valence_rule = valence_rule
         self._goal_stall_s = float(goal_stall_s)
         self._goal_cap = int(goal_cap)
         self._goal_response_window_s = float(goal_response_window_s)
@@ -196,6 +200,15 @@ class Affect(BaseModule):
         # Transient and bounded; crossings are rare.
         self._drive_entry_ids: deque[str] = deque(maxlen=64)
         self._wellness = 0.5  # neutral prior: no interoception module wellness information yet
+        # Fast and slow time-decayed means of the reported wellness (paper A.4):
+        # under the error-dynamics valence rule their difference, the change in
+        # wellness, shifts valence, so a steady host is neutral. Count 0 before the
+        # first report. They carry through sleep like the error means.
+        self._well_fast_sum = 0.0
+        self._well_fast_count = 0.0
+        self._well_slow_sum = 0.0
+        self._well_slow_count = 0.0
+        self._well_last_at: Optional[float] = None
         self._interaction_seen = False
         self._last_tsli: Optional[float] = None
 
@@ -325,13 +338,38 @@ class Affect(BaseModule):
         lp = max(0.0, g - floor) / (1.0 - floor)
         return lp, g
 
+    def _record_wellness(self, w: float, now: float) -> None:
+        """Update the fast and slow time-decayed wellness means."""
+        if self._well_last_at is None:
+            self._well_fast_sum = w
+            self._well_fast_count = 1.0
+            self._well_slow_sum = w
+            self._well_slow_count = 1.0
+        else:
+            dt = max(0.0, now - self._well_last_at)
+            d_fast = math.exp(-dt / self._fast_time_constant_s)
+            d_slow = math.exp(-dt / self._slow_time_constant_s)
+            self._well_fast_sum = d_fast * self._well_fast_sum + w
+            self._well_fast_count = d_fast * self._well_fast_count + 1.0
+            self._well_slow_sum = d_slow * self._well_slow_sum + w
+            self._well_slow_count = d_slow * self._well_slow_count + 1.0
+        self._well_last_at = now
+
+    def _wellness_change(self) -> float:
+        """Return the fast wellness mean minus the slow one, or 0.0 before reports."""
+        fast_count = self._well_fast_count
+        slow_count = self._well_slow_count
+        if fast_count <= 0.0 or slow_count <= 0.0:
+            return 0.0
+        return self._well_fast_sum / fast_count - self._well_slow_sum / slow_count
+
     def _pleasantness(self, g: float) -> float:
         """Appraisal pleasantness for signed progress `g`.
 
         Coupling contributes only through the appraisal: the perceived
         other's pleasantness is added to tanh(valence_progress_gain * g),
         then clipped to [-1, 1]. This value is what valence relaxes toward
-        (shifted by wellness).
+        (plus the change in wellness, or its level under the wellness_level rule).
         """
         coupling_pleasantness = self._perceived_appraisal_contribution()[0]
         return _clip(
@@ -619,9 +657,14 @@ class Affect(BaseModule):
         drifted = self._state.drift_toward(target, self._drift_rate, dt)
         v = self._state.valence  # pre-drift valence
         if dt > 0.0:
-            # Valence relaxes toward the appraisal's pleasantness shifted by
-            # wellness; coupling reaches valence only through the appraisal.
-            v_target = _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
+            # Valence follows error dynamics (paper A.4): it relaxes toward the
+            # appraisal's pleasantness plus the change in wellness, so a steady state is
+            # neutral. The wellness_level rule keeps the earlier wellness level instead.
+            # Coupling reaches valence only through the appraisal.
+            if self._valence_rule == "wellness_level":
+                v_target = _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
+            else:
+                v_target = _clip(self._pleasantness(g) + self._wellness_change(), -1.0, 1.0)
             k = 1.0 - math.exp(-dt / self._valence_time_constant_s)
             new_valence = v + (v_target - v) * k
         else:
@@ -1170,6 +1213,8 @@ class Affect(BaseModule):
             else:
                 if math.isfinite(w):
                     self._wellness = _clip01(w)
+                    if self._valence_rule == "error_dynamics":
+                        self._record_wellness(self._wellness, self._clock())
             alerts = event.payload.get("alerts") or []
             if alerts:
                 self._state = self._state.nudged(arousal=0.05)
@@ -1375,7 +1420,7 @@ class Affect(BaseModule):
         )
 
     def serialize(self) -> dict[str, Any]:
-        return {
+        state: dict[str, Any] = {
             "state": self._state.to_dict(),
             "baseline": self._baseline.to_dict(),
             "drives": self._drives.to_dict(),
@@ -1409,6 +1454,15 @@ class Affect(BaseModule):
             # Whether the sequence module has reported an interaction (social drive input).
             "interaction_seen": self._interaction_seen,
         }
+        # Fast and slow wellness means (paper A.4 valence); scalars, not sense data.
+        if self._valence_rule == "error_dynamics" and self._well_last_at is not None:
+            state["wellness_means"] = {
+                "fast_sum": self._well_fast_sum,
+                "fast_count": self._well_fast_count,
+                "slow_sum": self._well_slow_sum,
+                "slow_count": self._well_slow_count,
+            }
+        return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "state" in state:
@@ -1492,6 +1546,33 @@ class Affect(BaseModule):
                 self._err_slow_sum[source] = slow_sum
                 self._err_slow_count[source] = slow_count
                 self._err_last_at[source] = self._clock()
+
+        raw_wellness_means = state.get("wellness_means")
+        if (
+            self._valence_rule == "error_dynamics"
+            and isinstance(raw_wellness_means, dict)
+        ):
+            fast_sum = _finite_number(raw_wellness_means.get("fast_sum"))
+            fast_count = _finite_number(raw_wellness_means.get("fast_count"))
+            slow_sum = _finite_number(raw_wellness_means.get("slow_sum"))
+            slow_count = _finite_number(raw_wellness_means.get("slow_count"))
+            if (
+                fast_sum is not None
+                and fast_sum >= 0.0
+                and fast_count is not None
+                and fast_count > 0.0
+                and fast_sum <= fast_count
+                and slow_sum is not None
+                and slow_sum >= 0.0
+                and slow_count is not None
+                and slow_count > 0.0
+                and slow_sum <= slow_count
+            ):
+                self._well_fast_sum = fast_sum
+                self._well_fast_count = fast_count
+                self._well_slow_sum = slow_sum
+                self._well_slow_count = slow_count
+                self._well_last_at = self._clock()
 
         v = _finite_number(state.get("intent_rate"))
         if v is not None and 0.0 <= v <= 1.0:
