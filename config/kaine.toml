@@ -1117,7 +1117,9 @@ luminance_mean = 0.15           # dim field
 luminance_contrast = 0.10       # low contrast
 luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
 maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
-colour_ramp_seconds = 3600      # lived seconds over which colour rises from grey
+colour_ramp_seconds = 86400     # awake seconds, the time constant of colour's rise from grey; equals the
+                                # hearing band's maturation_seconds, so colour keeps rising across the phase
+                                # (Table A1; newborn colour vision is still limited, Adams et al. 1994)
 
 [perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
@@ -1139,6 +1141,20 @@ repeat_share = 0.25             # an episode opens with the repeated passage, De
 unlock_seconds = 3600.0         # one more repertoire item per hour of awake time
 pause_min_seconds = 0.5         # minimum pause between utterances
 pause_max_seconds = 1.5         # maximum pause between utterances
+
+# The hearing band (paper §7, A.7): the stimulus audio, bed and voice alike,
+# passes a band-pass that widens over awake time in the order fetal hearing
+# matures (Hepper and Shahidullah 1994). Each edge lies midway (log scale)
+# between the outermost tested tone heard and the next one not heard. It starts
+# at 354-707 Hz (500 Hz alone) and over maturation_seconds takes four equal
+# steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins and, with no unheard tone
+# below, the low edge goes (low-pass at 707 Hz, the heartbeat thud heard); 1000 Hz
+# joins (low-pass at 1732 Hz); 3000 Hz joins and the band is open. With it on,
+# the voice loads with its low-pass at 3000 Hz; the bed keeps lowpass_hz.
+# enabled = false gives the audio without the band byte for byte.
+[perception_feed.stimulus_source.hearing]
+enabled = true
+maturation_seconds = 86400.0    # awake seconds over which the band widens (Table A1)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so

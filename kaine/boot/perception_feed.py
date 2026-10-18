@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from kaine.modules.audition.hearing_band import HearingBandParams
     from kaine.modules.audition.maternal_voice import MaternalVoiceParams
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
@@ -38,6 +39,10 @@ def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     voice = stimulus_source.pop("voice", None)
     if voice is not None and not isinstance(voice, dict):
         raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
+    # The hearing band, like the voice, stays out of StimulusSourceParams so the maturation digest does not depend on it.
+    hearing = stimulus_source.pop("hearing", None)
+    if hearing is not None and not isinstance(hearing, dict):
+        raise ValueError("[perception_feed.stimulus_source.hearing] must be a table")
     return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
 
 
@@ -50,6 +55,17 @@ def _maternal_voice_params(feed: dict[str, Any]) -> "MaternalVoiceParams":
     if not isinstance(section, dict):
         raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
     return MaternalVoiceParams.from_section(dict(section))
+
+
+def _hearing_band_params(feed: dict[str, Any]) -> "HearingBandParams":
+    from kaine.modules.audition.hearing_band import HearingBandParams
+
+    section = (feed.get("stimulus_source") or {}).get("hearing")
+    if section is None:
+        return HearingBandParams.from_section(None)
+    if not isinstance(section, dict):
+        raise ValueError("[perception_feed.stimulus_source.hearing] must be a table")
+    return HearingBandParams.from_section(dict(section))
 
 
 def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
@@ -694,6 +710,8 @@ def _build_perception_feed_audio_factory(
     audio = dict(feed.get("audio") or {})
     if mode == "stimulus_source":
         params = _stimulus_source_params(feed)
+        from kaine.modules.audition.hearing_band import HEARING_TOP_TONE_HZ
+        hearing = _hearing_band_params(feed)
         sr = int(audio.get("sample_rate", sample_rate))
         ch = int(audio.get("channels", channels))
         fpb = int(frames_per_block)
@@ -708,6 +726,10 @@ def _build_perception_feed_audio_factory(
                 f"[perception_feed.stimulus_source] requires lowpass_hz < sample_rate/2; "
                 f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
             )
+        if hearing.enabled and HEARING_TOP_TONE_HZ >= sr / 2.0:
+            raise ValueError(
+                f"[perception_feed.stimulus_source.hearing] needs sample_rate above {2 * HEARING_TOP_TONE_HZ:.0f} Hz; got {sr} Hz"
+            )
         schedule = StimulusSourceAudioSchedule(
             seed=int(feed.get("seed", 0)),
             sample_rate=sr,
@@ -719,8 +741,9 @@ def _build_perception_feed_audio_factory(
         voice = None
         if voice_params.enabled:
             try:
+                # The voice reaches the fetus with higher frequencies attenuated but present; the hearing band then limits what the entity hears.
                 repertoire = MaternalVoiceRepertoire.load(
-                    sample_rate=sr, lowpass_hz=params.lowpass_hz
+                    sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ if hearing.enabled else params.lowpass_hz
                 )
             except PerceptionUnavailableError as exc:
                 log.critical(
@@ -748,10 +771,19 @@ def _build_perception_feed_audio_factory(
                 "stimulus source: maternal voice off "
                 "([perception_feed.stimulus_source.voice].enabled = false)"
             )
+        if hearing.enabled:
+            log.info(
+                "stimulus source: hearing band on (widens over %.0f s of awake time)",
+                hearing.maturation_seconds,
+            )
+        else:
+            log.info(
+                "stimulus source: hearing band off ([perception_feed.stimulus_source.hearing].enabled = false)"
+            )
 
         def _stimulus_source_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
             return StimulusSourceProceduralAudioStream(
-                schedule, params=params, clock=clock, callback=callback, voice=voice, awake=lived
+                schedule, params=params, clock=clock, callback=callback, voice=voice, awake=lived, hearing=hearing
             )
 
         return _stimulus_source_factory

@@ -49,7 +49,7 @@ Geometry is taken from `[vision]`.
 
 ### stimulus source channel
 
-`mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure developmental readiness.
+`mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat, heard through a band that widens over awake time. The readout probes briefly disturb the drive to measure developmental readiness.
 
 **`maternal_distress_excursions` must stay `false`.** That feature is not built.
 
@@ -76,13 +76,22 @@ Geometry is taken from `[vision]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
+| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the hearing band's `maturation_seconds`, so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
 
 #### `[perception_feed.stimulus_source.audio]`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `lowpass_hz` | float | `500` | Soundscape low-pass corner frequency, in Hz (100 to 2000). |
+
+#### `[perception_feed.stimulus_source.hearing]`
+
+The hearing band filters the whole stimulus-source audio, the soundscape and the maternal voice alike, with a band-pass that widens over awake time in the order fetal hearing matures (Hepper and Shahidullah 1994). Each edge lies halfway, on a log scale, between the outermost tested tone heard and the next tested tone not heard. It starts at 354 to 707 Hz, around 500 Hz, the first tone fetuses respond to. Over `maturation_seconds` of awake time it takes four equal steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins, and with no unheard tone below it the low edge goes (a low-pass at 707 Hz, so the heartbeat thud is heard); 1000 Hz joins (low-pass at 1,732 Hz); 3000 Hz joins and the band is open. Every stage delays the audio by the same 512 samples. With the band on, the maternal voice loads with its low-pass at 3,000 Hz instead of `lowpass_hz`; the soundscape keeps `lowpass_hz`. The band needs a stream rate above 6,000 Hz. The band follows the same awake time as the colour ramp, so a restart resumes it where it was. It stays out of the parameter digest recorded at maturation.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Apply the hearing band. `false` gives the audio without the band byte for byte. |
+| `maturation_seconds` | float | `86400` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). |
 
 #### `[perception_feed.stimulus_source.readout]`
 
