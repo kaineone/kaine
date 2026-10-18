@@ -12,6 +12,8 @@ For ``curiosity`` and ``boredom`` the relief gain is a continuous rate
 per second at full strength (relieve_rate); for ``social_drive`` and
 ``restlessness`` it is the fraction removed per consummatory event
 (relieve).
+
+Boredom also loses a fraction of its value on each engaging intent (relieve_fraction), the entity's own response (paper A.4).
 """
 from __future__ import annotations
 
@@ -122,6 +124,18 @@ class Drive:
         """
         c = _clamp01(strength)
         self.value = _clamp01(self.value * (1.0 - self.relief_gain * c))
+        self._check_hysteresis(own=own)
+
+    def relieve_fraction(self, fraction: float, *, own: bool) -> None:
+        """Remove ``fraction`` of the drive's value in one event: D <- D (1 - fraction).
+
+        ``fraction`` is clamped to [0, 1]. Unlike ``relieve`` it does not use
+        ``relief_gain``, so a drive can have a second per-event relief channel with
+        its own gain (boredom's engagement relief, paper A.4). `own` says whether
+        the entity's own response is the source of the relief.
+        """
+        c = _clamp01(fraction)
+        self.value = _clamp01(self.value * (1.0 - c))
         self._check_hysteresis(own=own)
 
     def relieve_rate(self, strength: float, dt: float, *, own: bool) -> None:
@@ -266,6 +280,16 @@ class DriveSet:
         if drive is None or not isinstance(drive, Drive):
             raise KeyError(name)
         drive.relieve_rate(strength, dt, own=own)
+
+    def relieve_fraction(self, name: str, fraction: float, *, own: bool) -> None:
+        """Relieve a named drive by a fraction of its current value.
+
+        Unknown names raise KeyError.
+        """
+        drive = getattr(self, name, None)
+        if drive is None or not isinstance(drive, Drive):
+            raise KeyError(name)
+        drive.relieve_fraction(fraction, own=own)
 
     def reset_all(self) -> None:
         for d in self.all():

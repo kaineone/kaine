@@ -786,6 +786,13 @@ goal_likelihood_fall = 0.5
 # 0.40 to 0.43, where non-audition alerts reach access but the report bars still need
 # a phasic step. 0 restores relaxation toward baseline_arousal.
 drive_arousal_gain = 0.2
+# Boredom engagement relief rho_eng (paper A.4, Table A1): each action-selection
+# intent other than rest removes this fraction of boredom, as the entity's own
+# response, unless the intent is about a drive (about_kind "felt", or a coalition
+# led by one of this module's affect.drive crossing events), since noticing one's failure to engage is part of boredom (Eastwood et al. 2012).
+# Perceptual novelty still relieves boredom continuously, counted as not own.
+# 0 turns the channel off and restores novelty-only relief.
+boredom_engagement_relief = 0.5
 baseline_salience = 0.1
 alert_salience = 0.7
 interoception_stream = "interoception.out"
@@ -833,6 +840,7 @@ sustain_window_s = 30.0
 # relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
 # learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
 # relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest action selection intent).
+# Boredom also loses [affect].boredom_engagement_relief of its value per engaging intent.
 # Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [affect.drives.curiosity]
 build_rate = 0.05
