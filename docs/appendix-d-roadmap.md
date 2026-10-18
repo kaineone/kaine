@@ -7,6 +7,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | affect-state-error-terms | 5/5 (100%) | The affect state event and its research record carry the terms behind the valence target (per-source error means and progress, pooled progress, wellness means and change, pleasantness, target), so a valence trough can be attributed (paper A.4). |
+| developmental-maternal-voice | 5/5 (100%) | The developmental soundscape carries a pre-rendered maternal voice, low-pass filtered as in utero, paced by the maternal state, with a repertoire that unlocks over awake time (paper §7, A.7, Table A1). |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | welfare-uncontrolled-ends | 4/4 (100%) | The affect welfare record counts stalled and cap-dropped goals as ends without the entity's own response, and a restored goal keeps its stall clock (paper 6.2, A.4). |
 | organ-degeneration-control | 4/4 (100%) | The organ's decoding carries a DRY repetition penalty and a shorter cap for thought than speech, and a looping or capped text is cut at a sentence boundary (paper 3.5, Table A1). |
@@ -136,6 +137,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 110 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 111 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from kaine.modules.audition.maternal_voice import MaternalVoiceParams
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
 from kaine.bus.streams import PERCEPTION_FEED_SOURCE
@@ -32,7 +33,23 @@ def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     readout = stimulus_source.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
         raise ValueError("[perception_feed.stimulus_source.readout] must be a table")
+    # The maternal voice is read by _maternal_voice_params and stays out of StimulusSourceParams,
+    # so the parameter digest recorded at maturation does not depend on it.
+    voice = stimulus_source.pop("voice", None)
+    if voice is not None and not isinstance(voice, dict):
+        raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
     return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
+
+
+def _maternal_voice_params(feed: dict[str, Any]) -> "MaternalVoiceParams":
+    from kaine.modules.audition.maternal_voice import MaternalVoiceParams
+
+    section = (feed.get("stimulus_source") or {}).get("voice")
+    if section is None:
+        return MaternalVoiceParams.from_section(None)
+    if not isinstance(section, dict):
+        raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
+    return MaternalVoiceParams.from_section(dict(section))
 
 
 def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
@@ -619,6 +636,12 @@ def _build_perception_feed_audio_factory(
         SeededProceduralAudioStream,
         StimulusSourceAudioSchedule,
         StimulusSourceProceduralAudioStream,
+        stimulus_source_soundscape_rms,
+    )
+    from kaine.modules.audition.live import PerceptionUnavailableError
+    from kaine.modules.audition.maternal_voice import (
+        MaternalVoiceLayer,
+        MaternalVoiceRepertoire,
     )
     from kaine.modules.stimulus_source_signal import _LOWPASS_TAPS
     from kaine.modules.vision.feed import load_playlist_manifest
@@ -648,10 +671,43 @@ def _build_perception_feed_audio_factory(
             frames_per_block=fpb,
         )
         clock, lived = _shared_stimulus_source_objects(feed)
+        voice_params = _maternal_voice_params(feed)
+        voice = None
+        if voice_params.enabled:
+            try:
+                repertoire = MaternalVoiceRepertoire.load(
+                    sample_rate=sr, lowpass_hz=params.lowpass_hz
+                )
+            except PerceptionUnavailableError as exc:
+                log.critical(
+                    "stimulus source: the maternal voice repertoire is unavailable (%s); "
+                    "the stimulus source audio does not start without it. Restore the files or "
+                    "set [perception_feed.stimulus_source.voice].enabled = false.",
+                    exc,
+                )
+                raise
+            voice = MaternalVoiceLayer(
+                repertoire,
+                voice_params,
+                seed=schedule.seed,
+                stimulus_params=params,
+                background_rms=stimulus_source_soundscape_rms(schedule, params),
+            )
+            log.info(
+                "stimulus source: maternal voice on (%d items, %d takes, manifest %s)",
+                len(repertoire.item_ids),
+                sum(len(t) for t in repertoire.takes),
+                repertoire.manifest_sha256[:12],
+            )
+        else:
+            log.info(
+                "stimulus source: maternal voice off "
+                "([perception_feed.stimulus_source.voice].enabled = false)"
+            )
 
         def _stimulus_source_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
             return StimulusSourceProceduralAudioStream(
-                schedule, params=params, clock=clock, callback=callback
+                schedule, params=params, clock=clock, callback=callback, voice=voice, awake=lived
             )
 
         return _stimulus_source_factory
@@ -772,6 +828,7 @@ def gather_perception_feed_descriptor(
     elif mode == "stimulus_source":
         from kaine.lifecycle.stored_field_names import stimulus_source_params_record
         from kaine.modules.audition.feed import StimulusSourceAudioSchedule
+        from kaine.modules.audition.maternal_voice import VOICE_DATA_DIR
         from kaine.modules.vision.feed import StimulusSourceSchedule
 
         seed = int(feed.get("seed", 0))
@@ -784,6 +841,18 @@ def gather_perception_feed_descriptor(
             # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.
             descriptor["stimulus_source"] = {"invalid": True}
+        try:
+            from hashlib import sha256 as _sha256
+
+            record = _maternal_voice_params(feed).as_record()
+            manifest_bytes = (VOICE_DATA_DIR / "manifest.json").read_bytes()
+            descriptor["maternal_voice"] = {
+                **record,
+                "manifest_sha256": _sha256(manifest_bytes).hexdigest(),
+            }
+        except Exception:
+            # The repertoire is verified for real at boot; the covariate must not crash the run.
+            descriptor["maternal_voice"] = {"invalid": True}
         descriptor["video"] = StimulusSourceSchedule(
             seed=seed,
             width=int(vision.get("capture_width", 640)),
