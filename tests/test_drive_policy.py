@@ -117,7 +117,7 @@ def test_deliberative_drive_about_is_felt_phrase_with_no_digits(name):
 
 @pytest.mark.parametrize("name, strong, moderate", [
     ("social_drive", "I feel a strong pull towards company.", "I feel a pull towards company."),
-    ("curiosity", "I feel a strong urge to know more.", "I feel curious."),
+    ("curiosity", "I feel absorbed in what I am learning.", "I feel curious."),
     ("boredom", "I feel heavily bored.", "I feel bored."),
     ("restlessness", "I feel very restless.", "I feel restless."),
 ])

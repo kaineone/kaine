@@ -8,10 +8,13 @@ external signal), a decay rate, a threshold, a relief gain, and a
 hysteresis band that prevents event storms when the value oscillates
 near the threshold.
 
-For ``curiosity`` and ``boredom`` the relief gain is a continuous rate
-per second at full strength (relieve_rate); for ``social_drive`` and
-``restlessness`` it is the fraction removed per consummatory event
-(relieve).
+``curiosity`` is heterostatic interest: learning progress lp+ builds it,
+it decays with no relief, and its crossing ends are neither the entity's
+own success nor a failure (paper A.4).
+
+For ``boredom`` the relief gain is a continuous rate per second
+(relieve_rate); for ``social_drive`` and ``restlessness`` it is the
+fraction removed per consummatory event (relieve).
 
 Boredom also loses a fraction of its value on each engaging intent (relieve_fraction), the entity's own response (paper A.4).
 """
@@ -31,11 +34,16 @@ def _clamp01(x: float) -> float:
 
 
 _DRIVE_DEFAULTS: dict[str, dict[str, float]] = {
+    # Curiosity is heterostatic interest (paper A.4; Oudeyer and Kaplan 2007): learning
+    # progress lp+ builds it, nothing relieves it, and it decays at delta_I. delta_I is
+    # calibrated so that a sustained lp+ of 0.045, the progress that ended a crossing of
+    # the earlier deficit form, holds it at its threshold: beta lp+ / (beta lp+ + delta_I)
+    # = 0.7 gives delta_I = 0.05 * 0.045 * 0.3 / 0.7 = 0.00096 per second.
     "curiosity": {
         "build_rate": 0.05,
-        "decay_rate": 0.0055,
+        "decay_rate": 0.00096,
         "threshold": 0.7,
-        "relief_gain": 0.5,
+        "relief_gain": 0.0,
     },
     "boredom": {
         "build_rate": 0.04,
@@ -65,8 +73,9 @@ class Drive:
     build_rate: float = 0.05        # per second when signal = 1.0
     decay_rate: float = 0.0055      # per second
     threshold: float = 0.7
-    relief_gain: float = 0.5  # rate/s at full strength for curiosity/boredom; fraction per event for social/restlessness
+    relief_gain: float = 0.5  # rate/s at full strength for boredom (curiosity has none); fraction per event for social/restlessness
     hysteresis_fraction: float = 0.9  # must drop below threshold * this to re-fire
+    heterostatic: bool = False  # interest rather than a deficit: crossings re-arm without counting an end (paper A.4)
     _has_fired: bool = field(default=False, init=False, repr=False)
     # How this drive's crossings ended, re-armed below the hysteresis band by
     # the entity's own response (own_ends) or any other way (other_ends), the
@@ -155,10 +164,11 @@ class Drive:
         # Reset hysteresis once below the re-fire band.
         if self._has_fired and self.value < self.threshold * self.hysteresis_fraction:
             self._has_fired = False
-            if own:
-                self.own_ends += 1
-            else:
-                self.other_ends += 1
+            if not self.heterostatic:
+                if own:
+                    self.own_ends += 1
+                else:
+                    self.other_ends += 1
 
     def consume_crossing(self) -> bool:
         """Return True at most once per crossing of `threshold`.
@@ -197,13 +207,17 @@ class DriveSet:
         social_drive: Optional[Drive] = None,
         restlessness: Optional[Drive] = None,
     ) -> None:
-        self.curiosity = curiosity or Drive(name="curiosity", **_DRIVE_DEFAULTS["curiosity"])
+        self.curiosity = curiosity or Drive(name="curiosity", heterostatic=True, **_DRIVE_DEFAULTS["curiosity"])
         self.boredom = boredom or Drive(name="boredom", **_DRIVE_DEFAULTS["boredom"])
         self.social_drive = social_drive or Drive(name="social_drive", **_DRIVE_DEFAULTS["social_drive"])
         self.restlessness = restlessness or Drive(name="restlessness", **_DRIVE_DEFAULTS["restlessness"])
 
     def all(self) -> list[Drive]:
         return [self.curiosity, self.boredom, self.social_drive, self.restlessness]
+
+    def deficits(self) -> list[Drive]:
+        """The three homeostatic deficits; curiosity is heterostatic interest."""
+        return [self.boredom, self.social_drive, self.restlessness]
 
     @classmethod
     def from_config(cls, section: Mapping[str, Mapping] | None) -> "DriveSet":
@@ -231,6 +245,8 @@ class DriveSet:
                 "threshold": float(sub.get("threshold", params["threshold"])),
                 "relief_gain": float(sub.get("relief_gain", params["relief_gain"])),
             }
+            if name == "curiosity":
+                kwargs["heterostatic"] = True
             drives[name] = Drive(**kwargs)
         return cls(**drives)
 
@@ -238,24 +254,30 @@ class DriveSet:
         self,
         dt: float,
         *,
-        novelty_signal: float = 0.0,
+        progress_signal: float = 0.0,
         activity_signal: float = 0.0,
         social_signal: float = 0.0,
         action_signal: float = 0.0,
+        boredom_no_response_signal: Optional[float] = None,
     ) -> list[DriveCrossing]:
         """Advance every drive. Returns at most one crossing per drive.
 
         Signals semantics:
-        - `novelty_signal`: 1.0 means LOW learning progress, which RAISES curiosity.
-        - `activity_signal`: 1.0 means LOW alert rate, which raises boredom.
+        - `progress_signal`: learning progress lp+ in [0, 1], which raises
+          curiosity (heterostatic interest).
+        - `activity_signal`: 1.0 means neither learning progress nor alert
+          excess, which raises boredom.
         - `social_signal`: 1.0 once an operator interaction has been seen.
         - `action_signal`: 1.0 means LOW intent rate, which raises restlessness.
-        - ``curiosity`` and ``restlessness`` receive ``no_response_signal=1.0``
-          because their absence-of-relief build inputs are 1.0 when the entity
-          has not learned or acted on its own.
+        - `boredom_no_response_signal`: boredom's build input without the
+          entity's own learning progress (1 - exc), so a fall that only
+          learning progress explains counts as the entity's own.
+        - ``restlessness`` receives ``no_response_signal=1.0`` because its
+          absence-of-action build input is 1.0 when the entity has not acted
+          on its own.
         """
-        self.curiosity.tick(dt, novelty_signal, no_response_signal=1.0)
-        self.boredom.tick(dt, activity_signal)
+        self.curiosity.tick(dt, progress_signal)
+        self.boredom.tick(dt, activity_signal, no_response_signal=boredom_no_response_signal)
         self.social_drive.tick(dt, social_signal)
         self.restlessness.tick(dt, action_signal, no_response_signal=1.0)
         crossings: list[DriveCrossing] = []
@@ -293,6 +315,11 @@ class DriveSet:
 
     def reset_all(self) -> None:
         for d in self.all():
+            d.reset()
+
+    def reset_deficits(self) -> None:
+        """The sleep reset, paper A.4 item 4; interest carries through sleep like the learning-progress bins it reads."""
+        for d in self.deficits():
             d.reset()
 
     def above_to_dict(self) -> dict[str, bool]:

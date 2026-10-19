@@ -387,7 +387,7 @@ Shipped defaults:
 
 | Drive | `build_rate` | `decay_rate` | `threshold` | `relief_gain` |
 |---|---|---|---|---|
-| `curiosity` | `0.05` | `0.0055` | `0.7` | `0.5` |
+| `curiosity` | `0.05` | `0.00096` | `0.7` | `0.0` (unused) |
 | `boredom` | `0.04` | `0.0045` | `0.7` | `0.3` |
 | `social_drive` | `0.01` | `0.0011` | `0.7` | `0.8` |
 | `restlessness` | `0.03` | `0.0033` | `0.7` | `0.5` |

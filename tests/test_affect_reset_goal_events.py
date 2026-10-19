@@ -31,7 +31,7 @@ async def test_reset_clears_active_goals_with_events(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
 
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
     affect.drives.restlessness.value = 0.80
     await affect._tick()
@@ -68,10 +68,10 @@ async def test_reset_leaves_finished_goal_untouched(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
 
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
-    curiosity_goal = affect.goals.active()[0]
-    affect.goals.complete(curiosity_goal.id)
+    boredom_goal = affect.goals.active()[0]
+    affect.goals.complete(boredom_goal.id)
     assert affect.goals.outcome_counts() == (1, 0)
 
     affect.drives.restlessness.value = 0.80
@@ -92,7 +92,7 @@ async def test_reset_leaves_finished_goal_untouched(bus):
 
     assert affect.goals.active() == []
     assert affect.goals.outcome_counts() == (1, 0)
-    assert affect.goals.get(curiosity_goal.id).state == GoalState.COMPLETED
+    assert affect.goals.get(boredom_goal.id).state == GoalState.COMPLETED
 
 
 @pytest.mark.asyncio

@@ -63,6 +63,12 @@ def _finite_number(value: object) -> float | None:
     return v
 
 
+# Affect state scheme for curiosity (paper A.4): 2 is heterostatic interest; state without
+# the key is 1, curiosity as a deficit, and is migrated on restore. Matches
+# kaine.experiment.run_context.CURIOSITY_SCHEME.
+_CURIOSITY_SCHEME = 2
+
+
 class Affect(BaseModule):
     name: ClassVar[str] = "affect"
 
@@ -377,7 +383,7 @@ class Affect(BaseModule):
         """Return (learning_progress, signed_progress).
 
         ``learning_progress`` is the windowed relative fall of the mean raw
-        prediction error, pooled over sources and floored (curiosity relief).
+        prediction error, pooled over sources and floored (curiosity build and boredom relief).
         ``signed_progress`` is the error dynamics ``g`` (fast and slow
         time-decayed means, valence).
         """
@@ -512,11 +518,13 @@ class Affect(BaseModule):
     def _arousal_target(self) -> float:
         """Return the relaxation target a_inf = a_0 + gamma_D (1 - a_0) v* (paper A.4 item 3).
 
-        v* is the dominant (largest) drive value at the start of the update. Tonic locus
-        coeruleus activity rises when the utility of the current engagement wanes
-        (Aston-Jones and Cohen 2005), and drive energizes behavior (Hull 1943).
+        v* is the largest deficit (boredom, social drive, restlessness) at the start of
+        the update. Tonic locus coeruleus activity rises when the utility of the current
+        engagement wanes (Aston-Jones and Cohen 2005); curiosity, heterostatic interest,
+        marks a progress niche whose utility has not waned, so it does not raise the
+        target. Drive energizes behavior (Hull 1943).
         """
-        v_star = max((d.value for d in self._drives.all()), default=0.0)
+        v_star = max((d.value for d in self._drives.deficits()), default=0.0)
         a_0 = self._baseline.arousal
         return a_0 + self._drive_arousal_gain * (1.0 - a_0) * v_star
 
@@ -698,9 +706,14 @@ class Affect(BaseModule):
         return payloads
 
     def _create_goals(self, crossings: list[Any], now: float) -> list[dict[str, Any]]:
-        """Create goals for drives that just crossed theta_D, then enforce cap."""
+        """Create goals for deficits that just crossed theta_D, then enforce cap."""
         payloads: list[dict[str, Any]] = []
         for crossing in crossings:
+            # Interest is no deficit: its affect.drive event still publishes, and no
+            # goal forms (paper A.4).
+            drive = getattr(self._drives, crossing.name, None)
+            if drive is not None and drive.heterostatic:
+                continue
             if self._goals.active_for_drive(crossing.name) is not None:
                 continue
             drive = getattr(self._drives, crossing.name)
@@ -873,22 +886,21 @@ class Affect(BaseModule):
             dominance=drifted.dominance,
         ).clamped()
 
-        # Continuous drive relief: curiosity at full strength = learning progress,
-        # boredom at full strength = alert-stream novelty excess. Rate-based relief
-        # is independent of the report rate, so drives can still build under noise.
-        # own marks relief produced by the entity's own response, which coping
-        # counts as success (paper A.4).
+        # Continuous drive relief (paper A.4): boredom at strength max(lp+, exc). Learning
+        # progress is the entity's own response; alert excess is not. Curiosity is
+        # heterostatic interest: lp+ builds it below and nothing relieves it.
         # Boredom is also relieved, as own, by engaging intents (_handle_peer_event).
-        self._drives.relieve_rate("curiosity", lp, dt, own=True)
-        self._drives.relieve_rate("boredom", nb, dt, own=False)
+        b_relief = max(lp, nb)
+        self._drives.relieve_rate("boredom", b_relief, dt, own=lp > 0.0 and lp >= nb)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
             dt,
-            novelty_signal=max(0.0, 1.0 - lp),
-            activity_signal=max(0.0, 1.0 - nb),
+            progress_signal=lp,
+            activity_signal=max(0.0, 1.0 - b_relief),
             social_signal=social_signal,
             action_signal=max(0.0, 1.0 - self._intent_rate),
+            boredom_no_response_signal=max(0.0, 1.0 - nb),
         )
         crossing_ids: dict[str, str] = {}
         for crossing in crossings:
@@ -1355,8 +1367,8 @@ class Affect(BaseModule):
 
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
         # Perception→arousal coupling: ALL perceptual reports update the
-        # pooled prediction-error trackers and relieve curiosity by learning
-        # progress; alerts additionally relieve boredom and arouse the entity.
+        # pooled prediction-error trackers, whose learning progress builds curiosity and
+        # relieves boredom; alerts additionally relieve boredom and arouse the entity.
         if event.type in ("vision.report", "audition.perception"):
             payload = event.payload or {}
 
@@ -1557,7 +1569,9 @@ class Affect(BaseModule):
             arousal=self._baseline.arousal,
             dominance=self._baseline.dominance,
         )
-        self._drives.reset_all()
+        # The deficits reset; curiosity's interest and its latch carry through sleep
+        # like the learning-progress bins (paper A.4 item 4).
+        self._drives.reset_deficits()
         removed = self._goals.clear_active()
         self._goal_above_since.clear()
         self._response_windows.clear()
@@ -1665,6 +1679,8 @@ class Affect(BaseModule):
             # Persist the crossing latch so a revive does not re-fire a drive
             # that already fired.
             "drive_fired": self._drives.fired_to_dict(),
+            # Curiosity's meaning (interest), so an older deficit-era state can be migrated.
+            "curiosity_scheme": _CURIOSITY_SCHEME,
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
@@ -1847,6 +1863,18 @@ class Affect(BaseModule):
         raw_seen = state.get("interaction_seen")
         if isinstance(raw_seen, bool):
             self._interaction_seen = raw_seen
+
+        # Migration (paper A.4): state saved before curiosity became heterostatic interest
+        # holds it as a deficit, whose value, latch and end counts say nothing about
+        # interest. Restart it at rest and drop any active curiosity goal without a
+        # lifecycle event; interest rebuilds from the restored learning-progress bins.
+        if "drives" in state and state.get("curiosity_scheme") != _CURIOSITY_SCHEME:
+            curiosity = self._drives.curiosity
+            curiosity.value = 0.0
+            curiosity._has_fired = False
+            curiosity.own_ends = 0
+            curiosity.other_ends = 0
+            self._goals.clear_active_for_drive("curiosity")
 
         # Response windows and other transient timers restart, while the stall
         # clock is restored from the saved elapsed durations below. Resync end

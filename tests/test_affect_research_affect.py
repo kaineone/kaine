@@ -82,7 +82,7 @@ def test_drive_relieve_and_from_config_and_defaults():
         DriveSet.from_config({"curiosity": {"unknown": 1.0}})
 
     ds = DriveSet()
-    assert ds.curiosity.relief_gain == 0.5
+    assert ds.curiosity.relief_gain == 0.0
     assert ds.boredom.relief_gain == 0.3
     assert ds.social_drive.relief_gain == 0.8
     assert ds.restlessness.relief_gain == 0.5
@@ -93,7 +93,7 @@ def test_drive_relieve_and_from_config_and_defaults():
 
 
 @pytest.mark.asyncio
-async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
+async def test_curiosity_builds_with_falling_errors(bus: AsyncBus):
     fake_now = [0.0]
     affect = Affect(
         bus,
@@ -107,9 +107,13 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
     try:
         # 20 s progress window in 10 s bins; two completed bins are needed,
         # so we first provide steady error, then let it fall over 20 s.
+        # Curiosity is heterostatic interest, so learning progress raises it.
         for i in range(800):
             fake_now[0] = i * 0.1
             if i == 600:
+                # Tick once first so the steady 60 s before the fall is a single
+                # update and the value set below starts the falling phase.
+                await affect._tick()
                 affect.drives.curiosity.value = 0.6
             r = 3.0 if i < 600 else 3.0 - (2.0 * (i - 600) / 199)
             await affect._handle_peer_event(
@@ -126,7 +130,7 @@ async def test_curiosity_relief_from_falling_errors(bus: AsyncBus):
                 await affect._tick()
         fake_now[0] = 80.0
         await affect._tick()
-        assert affect.drives.curiosity.value < 0.6
+        assert affect.drives.curiosity.value > 0.6
     finally:
         await affect.shutdown()
 
@@ -565,7 +569,7 @@ async def test_drives_build_under_stationary_noise(bus: AsyncBus):
     try:
         step = 0.1
         total = 600.0
-        max_curi = 0.0
+        max_rest = 0.0
         max_bored = 0.0
         for i in range(int(round(total / step)) + 1):
             t = i * step
@@ -588,9 +592,9 @@ async def test_drives_build_under_stationary_noise(bus: AsyncBus):
             )
             if i % 3 == 0:
                 await affect._tick()
-                max_curi = max(max_curi, affect.drives.curiosity.value)
+                max_rest = max(max_rest, affect.drives.restlessness.value)
                 max_bored = max(max_bored, affect.drives.boredom.value)
-        assert max_curi > 0.7
+        assert max_rest > 0.7
         assert max_bored > 0.7
     finally:
         await affect.shutdown()
@@ -665,7 +669,7 @@ async def test_novelty_burst_relieves_boredom(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
+async def test_falling_errors_relieve_boredom(bus: AsyncBus):
     rng = random.Random(44)
     fake_now = [0.0]
     affect = Affect(
@@ -680,7 +684,7 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
     try:
         step = 0.1
 
-        # 300 s of stationary noise to build curiosity above threshold.
+        # 300 s of stationary noise to build boredom above threshold.
         for i in range(3001):
             t = i * step
             fake_now[0] = t
@@ -702,12 +706,13 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
             )
             if i % 3 == 0:
                 await affect._tick()
-        assert affect.drives.curiosity.value > 0.7
+        assert affect.drives.boredom.value > 0.7
 
-        # 60 s in which the error scale falls linearly to 40 %.
+        # With boredom's relief_gain=0.3, the error scale must fall to 20 %
+        # in 60 s for learning-progress relief to push boredom below 0.5.
         for i in range(3001, 3601):
             t = i * step
-            scale = 1.0 - 0.6 * (t - 300.0) / 60.0
+            scale = 1.0 - 0.8 * (t - 300.0) / 60.0
             fake_now[0] = t
             err = rng.lognormvariate(0.0, 0.3) * scale
             alert = rng.random() < 0.05
@@ -727,14 +732,14 @@ async def test_falling_errors_relieve_curiosity(bus: AsyncBus):
             )
             if i % 3 == 0:
                 await affect._tick()
-        assert affect.drives.curiosity.value < 0.5
+        assert affect.drives.boredom.value < 0.5
         assert affect.state.valence > 0.0
     finally:
         await affect.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_curiosity_relief_is_report_rate_invariant(bus: AsyncBus):
+async def test_boredom_relief_is_report_rate_invariant(bus: AsyncBus):
     async def _run(report_interval: float) -> float:
         fake_now = [0.0]
         affect = Affect(
@@ -768,9 +773,9 @@ async def test_curiosity_relief_is_report_rate_invariant(bus: AsyncBus):
                     )
                 if i % 3 == 0:
                     if abs(t - 100.0) < 1e-9:
-                        affect.drives.curiosity.value = 0.8
+                        affect.drives.boredom.value = 0.8
                     await affect._tick()
-            return affect.drives.curiosity.value
+            return affect.drives.boredom.value
         finally:
             await affect.shutdown()
 
@@ -857,6 +862,7 @@ async def test_affective_reset_keeps_progress_trackers(bus: AsyncBus):
         before_fast_count = dict(affect._err_fast_count)
         before_slow_sum = dict(affect._err_slow_sum)
         before_slow_count = dict(affect._err_slow_count)
+        before_curiosity = affect.drives.curiosity.value
         await affect.affective_reset()
         assert affect._progress() == pytest.approx(before_progress)
         assert dict(affect._err_fast_sum) == before_fast_sum
@@ -864,7 +870,9 @@ async def test_affective_reset_keeps_progress_trackers(bus: AsyncBus):
         assert dict(affect._err_slow_sum) == before_slow_sum
         assert dict(affect._err_slow_count) == before_slow_count
         assert affect.state.arousal == affect.baseline.arousal
-        for d in affect.drives.all():
+        assert affect.drives.curiosity.value == pytest.approx(before_curiosity)
+        assert before_curiosity > 0.0
+        for d in (affect.drives.boredom, affect.drives.social_drive, affect.drives.restlessness):
             assert d.value == 0.0
     finally:
         await affect.shutdown()

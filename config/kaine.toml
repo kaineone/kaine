@@ -767,7 +767,7 @@ fast_time_constant_s = 10.0
 slow_time_constant_s = 100.0
 # Learning-progress floor: progress below this is treated as zero.
 learning_progress_floor = 0.05
-# Learning progress, the curiosity relief (paper A.4, Table A1): each perceptual source's errors
+# Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
 # are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
 # error from the older to the newer half of the last learning_progress_span_s (the whole history
 # while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
@@ -782,7 +782,8 @@ valence_progress_gain = 2.0
 # "error_dynamics" (default) or "wellness_level", the earlier rule: pleasantness plus
 # (wellness - 0.5), the wellness level. The earlier rule behaves bit for bit as before.
 valence_rule = "error_dynamics"
-# Goals (paper A.4): each drive crossing creates the goal of relieving that drive.
+# Goals (paper A.4): each deficit crossing creates the goal of relieving that drive;
+# a curiosity crossing (interest) publishes its drive event and creates no goal.
 # A goal is abandoned when its drive stays at or above threshold for goal_stall_s
 # entity seconds (Delta_stall), or as the lowest priority once more than goal_cap
 # goals are active (n_goal). An intent followed by no fall of the goal's drive
@@ -793,7 +794,8 @@ goal_cap = 3
 goal_response_window_s = 10.0
 goal_likelihood_fall = 0.5
 # Tonic drive gain gamma_D (paper A.4 item 3): arousal relaxes toward
-# a_0 + drive_arousal_gain * (1 - a_0) * v*, v* the largest drive value, instead of
+# a_0 + drive_arousal_gain * (1 - a_0) * v*, v* the largest deficit (boredom, social
+# drive, restlessness; curiosity is interest and does not raise it), instead of
 # toward baseline_arousal. Deprivation keeps arousal raised (the exploratory tonic
 # mode of Aston-Jones and Cohen 2005). 0.2 puts a deprived entity (v* 0.7 to 0.9) at
 # 0.40 to 0.43, where non-audition alerts reach access but the report bars still need
@@ -857,16 +859,19 @@ selection_bias = 0.2
 bias_decay_s = 20.0
 sustain_window_s = 30.0
 
-# relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
-# learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
+# Curiosity is heterostatic interest (paper A.4; Oudeyer and Kaplan 2007): learning progress
+# builds it, nothing relieves it, it decays at decay_rate and carries through sleep. Its
+# decay_rate 0.00096 is calibrated: a sustained lp+ (learning progress above its floor) of 0.045 holds it at its
+# threshold (0.05 * 0.045 * 0.3 / 0.7). Its relief_gain is unused.
+# relief_gain: boredom is relieved continuously at relief_gain per second times the larger of
+# learning progress (own) and alert excess (not own); social_drive and restlessness lose
 # relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest action selection intent).
 # Boredom also loses [affect].boredom_engagement_relief of its value per engaging intent.
-# Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
+# Under full deprivation a deficit settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [affect.drives.curiosity]
 build_rate = 0.05
-decay_rate = 0.0055
+decay_rate = 0.00096
 threshold = 0.7
-relief_gain = 0.5
 
 [affect.drives.boredom]
 build_rate = 0.04

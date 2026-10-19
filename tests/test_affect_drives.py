@@ -74,7 +74,7 @@ def test_driveset_tick_returns_crossings():
     s = DriveSet()
     s.curiosity.threshold = 0.1
     s.curiosity.build_rate = 1.0
-    crossings = s.tick(dt=1.0, novelty_signal=1.0)
+    crossings = s.tick(dt=1.0, progress_signal=1.0)
     names = [c.name for c in crossings]
     assert "curiosity" in names
 

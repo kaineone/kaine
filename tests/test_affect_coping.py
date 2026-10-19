@@ -174,27 +174,37 @@ def test_driveset_attribution():
     for d in ds.all():
         d.value = 0.95
         d.consume_crossing()
-    ds.relieve_rate("curiosity", 1.0, 100.0, own=True)
-    ds.relieve_rate("boredom", 1.0, 100.0, own=False)
-    ds.relieve("social_drive", 1.0, own=False)
+    ds.relieve_rate("boredom", 1.0, 100.0, own=True)
+    ds.relieve_rate("social_drive", 1.0, 100.0, own=False)
     ds.relieve("restlessness", 1.0, own=True)
-    assert ds.curiosity.own_ends == 1
+    # Curiosity is heterostatic: nothing relieves it and its ends count neither.
+    ds.relieve_rate("curiosity", 1.0, 100.0, own=True)
+    assert ds.boredom.own_ends == 1
     assert ds.restlessness.own_ends == 1
-    assert ds.boredom.other_ends == 1
     assert ds.social_drive.other_ends == 1
+    assert ds.curiosity.own_ends == 0
+    assert ds.curiosity.other_ends == 0
 
 
 def test_driveset_tick_credits_only_own_inputs():
-    # Full learning progress and a full alert rate hold both build inputs at 0.
-    # Without learning progress curiosity would have kept building, so its fall
-    # is the entity's; boredom's input comes from perception, so its fall is not.
-    ds = DriveSet()
-    for d in (ds.curiosity, ds.boredom):
-        d.value = d.threshold
-        assert d.consume_crossing() is True
-    ds.tick(60.0, novelty_signal=0.0, activity_signal=0.0)
-    assert (ds.curiosity.own_ends, ds.curiosity.other_ends) == (1, 0)
-    assert (ds.boredom.own_ends, ds.boredom.other_ends) == (0, 1)
+    # Learning progress and alert excess both hold boredom's build input at 0.
+    # Without learning progress boredom would have kept building (no-response
+    # input 1 - exc = 1), so its fall is the entity's; when alert excess alone
+    # would have held the input down (no-response input 0), the fall is not.
+    # Curiosity is heterostatic: its crossing ends count neither.
+    own = DriveSet()
+    other = DriveSet()
+    for ds in (own, other):
+        ds.boredom.value = ds.boredom.threshold
+        assert ds.boredom.consume_crossing() is True
+        ds.curiosity.value = ds.curiosity.threshold
+        assert ds.curiosity.consume_crossing() is True
+    own.tick(60.0, progress_signal=0.0, activity_signal=0.0, boredom_no_response_signal=1.0)
+    other.tick(60.0, progress_signal=0.0, activity_signal=0.0, boredom_no_response_signal=0.0)
+    assert (own.boredom.own_ends, own.boredom.other_ends) == (1, 0)
+    assert (other.boredom.own_ends, other.boredom.other_ends) == (0, 1)
+    for ds in (own, other):
+        assert (ds.curiosity.own_ends, ds.curiosity.other_ends) == (0, 0)
 
 
 def test_relieve_requires_own():
