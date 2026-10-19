@@ -295,6 +295,11 @@ class DriveSet:
         for d in self.all():
             d.reset()
 
+    def above_to_dict(self) -> dict[str, bool]:
+        """Return whether each drive is at or above its threshold, for the welfare records (paper 6.2)."""
+        # bool() keeps the payload JSON-serialisable when a value is a numpy float.
+        return {d.name: bool(d.value >= d.threshold) for d in self.all()}
+
     def outcomes_to_dict(self) -> dict[str, dict[str, int]]:
         return {d.name: {"own": d.own_ends, "other": d.other_ends} for d in self.all()}
 

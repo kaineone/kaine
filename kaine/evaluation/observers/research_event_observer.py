@@ -196,6 +196,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {
             "state",
             "drives",
+            "drive_above",
+            "drive_ends",
             "emotion",
             "emotion_category",
             "valence",

@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| welfare-crossing-deprivation | 0/5 (0%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
+| welfare-crossing-deprivation | 5/5 (100%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
 | developmental-sensory-maturation | 5/5 (100%) | The stimulus-source audio passes a hearing band that widens over awake time in the order fetal hearing matures, from 500 Hz down to 100 Hz and then up to 3000 Hz, and the colour ramp spans the developmental phase, so the stimulus keeps offering learnable structure (paper §7, A.7, Table A1). |
 | stimulus-clock-continuity | 5/5 (100%) | The stimulus source clock resumes from its own persisted time instead of awake time, and the gate adds the awake time since its last tick at shutdown, so a restart neither repeats stimulus nor drops awake time (paper §7, A.7). |
 | learning-progress-horizons | 6/6 (100%) | Learning progress, the curiosity relief, compares the mean error of the older and newer halves of the last 90 min in 60 s bins, so it spans the forward models' learning curves; valence keeps the fast and slow means (paper A.4, A.7, Table A1). |
