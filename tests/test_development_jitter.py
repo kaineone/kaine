@@ -323,13 +323,15 @@ async def test_same_seed_gives_identical_schedule_and_different_seed_differs(
         probe_jitter_fraction=0.25,
     )
 
-    async def collect(seed: int) -> list[float]:
+    async def collect(seed: int, run: int) -> list[float]:
+        # Each run starts from fresh state: the probe draws persist with the
+        # entity, so a restart on the same state continues them (paper A.7).
         clock = FakeClock()
         owner = owner_factory(
             clock=clock,
             config=config,
             seed=seed,
-            state_path=tmp_path / f"seed_{seed}.json",
+            state_path=tmp_path / f"run_{run}" / f"seed_{seed}.json",
         )
         dt = 1.0
         starts: list[float] = []
@@ -342,9 +344,9 @@ async def test_same_seed_gives_identical_schedule_and_different_seed_differs(
             prev_state = owner._probe_state
         return starts
 
-    first = await collect(7)
-    second = await collect(7)
-    third = await collect(8)
+    first = await collect(7, 1)
+    second = await collect(7, 2)
+    third = await collect(8, 3)
 
     assert first == second
     assert first != third
@@ -361,6 +363,10 @@ async def test_zero_jitter_intervals_match_fixed_schedule(owner_factory, tmp_pat
         perturbation_period_seconds=100000.0,
         perturbation_seconds=1.0,
         probe_jitter_fraction=0.0,
+        # The withdrawal's wait for a full entrainment window since boot or thaw
+        # (paper A.7) coincides with the settling period here.
+        entrainment_window_seconds=1.0,
+        edge_trim_seconds=0.25,
     )
     owner = owner_factory(
         clock=clock,
@@ -401,6 +407,9 @@ async def test_jittered_probes_wait_for_settle_after_thaw(owner_factory):
         withdrawal_seconds=2.0,
         perturbation_period_seconds=200.0,
         perturbation_seconds=1.0,
+        # The withdrawal's wait for a full entrainment window since boot or thaw
+        # (paper A.7) coincides with the settling period here.
+        entrainment_window_seconds=5.0,
     )
 
     owner = owner_factory(
