@@ -21,6 +21,12 @@ belong in a private scratch directory, never in the repository. Run it from a
 private scratch directory that does not contain a ``state/sleep/organ_window.json``
 file.
 
+Only loopback HTTP(S) URLs are accepted (``127.0.0.1``, ``::1``, or
+``localhost``, checked textually without DNS); userinfo is rejected. Output
+files are created with mode 0600 under directories created with mode 0700, and
+they are refused if they lie inside any git work tree (any ancestor contains a
+``.git`` entry).
+
 Serving recipe: start a separate llama.cpp container from the same pinned image
 the entity's compose file uses, mount the ``kaine-models`` volume read-only,
 give the container its own name and a loopback port, and start and stop it
@@ -33,11 +39,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import statistics
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -56,6 +64,42 @@ MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
 VARIANTS = ("V0", "V1", "V2", "V3", "V123", "raw")
+
+
+def require_loopback(url: str) -> None:
+    """Raise ValueError unless *url* is a loopback HTTP(S) URL without userinfo."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError(f"URL scheme must be http or https, got {parts.scheme!r}")
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
+        raise ValueError("URL must not contain userinfo")
+    hostname = (parts.hostname or "").lower()
+    if hostname not in ("127.0.0.1", "::1", "localhost"):
+        raise ValueError(f"URL hostname {hostname!r} is not a loopback address")
+
+
+def refuse_inside_git_worktree(path: Path) -> None:
+    """Raise ValueError if *path* resolves to a location inside a git work tree."""
+    resolved = path.resolve()
+    current = resolved.parent
+    while True:
+        if (current / ".git").exists():
+            raise ValueError(f"{path} is inside a git work tree")
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+
+def open_private(path: Path, mode: str):
+    """Open *path* for private writing: parents created 0700, file opened 0600."""
+    if mode not in ("w", "a"):
+        raise ValueError("mode must be 'w' or 'a'")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if mode == "w" else os.O_APPEND)
+    fd = os.open(path, flags, 0o600)
+    os.fchmod(fd, 0o600)
+    return os.fdopen(fd, mode, encoding="utf-8")
 
 
 def drop_situation(prompt: str) -> str:
@@ -361,18 +405,27 @@ def decide(results: list[dict], n_boot: int = 2000) -> dict:
 
 
 def _extract_cmd(args: argparse.Namespace) -> None:
+    out_path = Path(args.out)
+    try:
+        refuse_inside_git_worktree(out_path)
+    except ValueError as exc:
+        print(f"refusing --out: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
     state_dir = Path(args.state_dir)
     crypto.install_from_section({"enabled": True})
 
     records: list[dict] = []
     log_paths = sorted(state_dir.glob("intent_log/*.jsonl"))
     log_paths.append(state_dir / "intent_expression.jsonl")
+    unreadable = 0
 
     for path in log_paths:
         if not path.exists():
             continue
         for entry in iter_records(path):
             if entry.unreadable:
+                unreadable += 1
                 continue
             rec = entry.record
             if not isinstance(rec, dict):
@@ -385,9 +438,7 @@ def _extract_cmd(args: argparse.Namespace) -> None:
     skipped_placeholder = 0
     skipped_no_system = 0
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as out_f:
+    with open_private(out_path, "w") as out_f:
         for rec in records:
             if "generated_text" not in rec or "prompt" not in rec:
                 continue
@@ -413,7 +464,10 @@ def _extract_cmd(args: argparse.Namespace) -> None:
             out_f.write(json.dumps(case, ensure_ascii=False) + "\n")
             kept += 1
 
-    print(f"kept {kept}, skipped placeholder {skipped_placeholder}, skipped no system {skipped_no_system}")
+    print(
+        f"kept {kept}, skipped placeholder {skipped_placeholder}, "
+        f"skipped no system {skipped_no_system}, unreadable {unreadable}"
+    )
 
 
 def _existing_triples(path: Path) -> set[tuple[str, str, int]]:
@@ -449,31 +503,46 @@ async def _run_cmd(args: argparse.Namespace) -> None:
         )
         raise SystemExit(2)
 
-    cases = _load_cases(Path(args.cases))
-    variants = [v.strip() for v in args.variants.split(",")]
-    seeds = args.seeds
-    temperature = args.temperature
-    concurrency = args.concurrency
     url = args.url
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    existing = _existing_triples(out_path)
-    chat_client = OpenAIChatClient(url, timeout_s=120.0)
-
     raw_base = url
     if raw_base.endswith("/v1"):
         raw_base = raw_base[:-3]
     raw_base = raw_base.rstrip("/")
     raw_url = raw_base + "/completion"
-    raw_client = httpx.AsyncClient(timeout=120.0)
 
-    total_planned = min(len(cases), args.limit or len(cases)) * len(variants) * seeds
+    try:
+        require_loopback(url)
+        require_loopback(raw_url)
+    except ValueError as exc:
+        print(f"refusing --url: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+    out_path = Path(args.out)
+    try:
+        refuse_inside_git_worktree(out_path)
+    except ValueError as exc:
+        print(f"refusing --out: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+    cases = _load_cases(Path(args.cases))
+    variants = [v.strip() for v in args.variants.split(",")]
+    seeds = args.seeds
+    temperature = args.temperature
+    concurrency = args.concurrency
+
+    existing = _existing_triples(out_path)
+    chat_client = OpenAIChatClient(url, timeout_s=120.0)
+    # trust_env=False, as the chat client does: a proxy from the environment must
+    # never receive the decrypted prompts.
+    raw_client = httpx.AsyncClient(timeout=120.0, trust_env=False)
+
+    limit = len(cases) if args.limit is None else min(args.limit, len(cases))
+    total_planned = limit * len(variants) * seeds
     completed = 0
     sem = asyncio.Semaphore(concurrency)
     write_lock = asyncio.Lock()
 
-    out_f = out_path.open("a", encoding="utf-8")
+    out_f = open_private(out_path, "a")
 
     async def work(case: dict, variant: str, seed: int) -> None:
         nonlocal completed
@@ -559,7 +628,6 @@ async def _run_cmd(args: argparse.Namespace) -> None:
             print(f"completed {completed} / {total_planned} generations")
 
     tasks = []
-    limit = args.limit or len(cases)
     for case in cases[:limit]:
         for variant in variants:
             for s in range(seeds):
