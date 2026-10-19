@@ -12,23 +12,23 @@ Design only: not scheduled. Nothing is built until the start condition below hol
 
 ### What is missing
 
-- **No action input.** The GRU transition takes only the previous stochastic state and deterministic state (`kaine/modules/world_model/rssm_numpy.py:177-193`); `observe_step` and `imagine_step` take no action (`rssm_numpy.py:257-285`), and `RSSMConfig` has no action dimension (`rssm_numpy.py:47-59`). The module docstring states the scope: "It is NOT an agent: it has no actor, critic, reward, or return head" (`module.py:6-8`), which is right and separate from conditioning on actions.
-- **No action-outcome prediction.** Imagined scenarios roll out from the prior trajectory alone (`module.py:17-24`), so nothing can ask what a candidate act would lead to.
+- No action input. The GRU transition takes only the previous stochastic state and deterministic state (`kaine/modules/world_model/rssm_numpy.py:177-193`); `observe_step` and `imagine_step` take no action (`rssm_numpy.py:257-285`), and `RSSMConfig` has no action dimension (`rssm_numpy.py:47-59`). The module docstring states the scope: "It is NOT an agent: it has no actor, critic, reward, or return head" (`module.py:6-8`), which is right and separate from conditioning on actions.
+- No action-outcome prediction. Imagined scenarios roll out from the prior trajectory alone (`module.py:17-24`), so nothing can ask what a candidate act would lead to.
 
 ## What Changes
 
 A design, settled first in the paper and then in code.
 
-1. **Action-conditioned transition (paper §4, an appendix entry).** Each step conditions on the entity's own previous action: the act intents realized by `act-intent-derivation` and `planning-act-proposals`, and the efference copy of the motor command from `embodiment-motor-contingency`. The module stays a world model with no actor, critic or reward head.
-2. **Continuity of a preserved entity.** Recommended: the new action input enters with zero initial weights, so a world model loaded from a checkpoint without it predicts exactly as before until it learns, and a fork keeps its parent's model. The checkpoint format gains the action width in one step for both action kinds, so a preserved entity's weights migrate once.
-3. **Action-outcome error.** Open for the paper change: whether the world model publishes the error between a predicted and an observed action outcome as its own report, the comparator signal of forward-model accounts.
-4. **Imagined acts.** Open for the paper change: whether offline scenarios may roll out a candidate act, which would give the planning module and goal-directed grasping a predicted outcome to weigh.
+1. Action-conditioned transition (paper §4, an appendix entry). Each step conditions on the entity's own previous action: the act intents realized by `act-intent-derivation` and `planning-act-proposals`, and the efference copy of the motor command from `embodiment-motor-contingency`. The module stays a world model with no actor, critic or reward head.
+2. Continuity of a preserved entity. Recommended: the new action input enters with zero initial weights, so a world model loaded from a checkpoint without it predicts exactly as before until it learns, and a fork keeps its parent's model. The checkpoint format gains the action width in one step for both action kinds, so a preserved entity's weights migrate once.
+3. Action-outcome error. Open for the paper change: whether the world model publishes the error between a predicted and an observed action outcome as its own report, the comparator signal of forward-model accounts.
+4. Imagined acts. Open for the paper change: whether offline scenarios may roll out a candidate act, which would give the planning module and goal-directed grasping a predicted outcome to weigh.
 
 ## Dependencies and start condition
 
-- **Gate.** The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage. The world model joins in that first round (branch 2), so it is in the study by then.
-- **Dependencies.** `act-intent-derivation` and `embodiment-motor-contingency` merged, so both action streams exist when the transition gains its action input. Conditioning on both at once changes the checkpoint format once.
-- **Start condition.** Both hold. It may run in parallel with `active-vision`, which it does not need.
+- Gate: The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage. The world model joins in that first round (branch 2), so it is in the study by then.
+- Dependencies: `act-intent-derivation` and `embodiment-motor-contingency` merged, so both action streams exist when the transition gains its action input. Conditioning on both at once changes the checkpoint format once.
+- Start condition: Both hold. It may run in parallel with `active-vision`, which it does not need.
 
 ## Paper sections it depends on
 
