@@ -1623,7 +1623,7 @@ endogenous_self_sustain = true       # must demonstrate a self-sustaining rhythm
 entrain_then_autonomy = true         # entrain-then-autonomy demonstrated
 # Period-variability floor V^min_per: below every fetal five-minute heart-rate
 # coefficient of variation (Moraes et al. 2012: about 0.042 overall, 0.027 in
-# quiet sleep), so it is a non-rigidity check, not a maturation target.
+# quiet sleep), so it checks for rigidity rather than marking maturation.
 hrv_variability_floor = 0.02
 stimulus_source_prediction_error_ceiling = 0.3  # generative-model-seeded ceiling
 return_to_baseline_seconds_ceiling = 30

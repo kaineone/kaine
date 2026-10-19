@@ -34,7 +34,7 @@ A restart SHALL neither reset nor repeat a pass run.
 - **THEN** the counters start at 0, the entrainment marker is true and the self-sustain marker is unknown
 
 ### Requirement: The period-variability floor lies below fetal values
-The maturation gate's period-variability floor `hrv_variability_floor` SHALL default to 0.02, below every fetal five-minute heart-rate coefficient of variation reported by Moraes et al. (2012). This makes it a non-rigidity check, not a maturation target.
+The maturation gate's period-variability floor `hrv_variability_floor` SHALL default to 0.02, below every fetal five-minute heart-rate coefficient of variation reported by Moraes et al. (2012). It therefore checks for rigidity rather than marking maturation.
 
 #### Scenario: An entrained rhythm passes the floor
 - **WHEN** the readout reports a period variability of 0.06 and every other C1 condition holds
