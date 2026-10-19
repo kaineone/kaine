@@ -45,7 +45,9 @@ from kaine.modules.language import client as _client
 # another. Version 4 sends the prompt as the opening of the entity's own turn,
 # makes the persona descriptive, moves situation facts into the prompt and adds
 # the heard-speech guard only with heard material.
-PERSONA_TEMPLATE_VERSION = "4"
+# Version 5 drops the personas' opening "I am this entity.",
+# which the organ filled with its trained self-description.
+PERSONA_TEMPLATE_VERSION = "5"
 
 AWARENESS_HEADING = "## How I feel and what I notice"
 EMPTY_AWARENESS = "Nothing in particular stands out to me right now."
@@ -71,10 +73,10 @@ _INPUT_HEADING = {
 SPEAK_FROM_STATE_HEADING = "## What moves me to speak"
 
 DEFAULT_PERSONA_EXTERNAL = (
-    "I am this entity. What I say comes from what I feel and notice, in my own plain words."
+    "What I say comes from what I feel and notice, in my own plain words."
 )
 DEFAULT_PERSONA_INTERNAL = (
-    "I am this entity. My thoughts come from what I feel and notice, in my own plain words."
+    "My thoughts come from what I feel and notice, in my own plain words."
 )
 
 # Prompt-injection guard: the persona carries this sentence whenever the prompt
