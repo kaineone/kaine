@@ -17,5 +17,5 @@ Both fields are redacted when the language module publishes them (`user_input` a
 
 ## Impact
 
-- `kaine/modules/language/module.py`, new `tests/test_heard_log_own_words.py`.
+- `kaine/modules/language/module.py`, `docs/09-modules/language.md`, new `tests/test_heard_log_own_words.py`.
 - Behaviour: the organ's prompts and published events are unchanged. The intent log keeps the entity's own felt phrases and awareness lines where they were replaced before, and the warning fires only for heard text from outside.

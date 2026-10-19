@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| heard-log-own-words | 0/2 (0%) | The intent log's residual redaction uses the same set as publishing, so the entity's own felt phrases and awareness lines are no longer logged as heard speech. |
+| heard-log-own-words | 2/2 (100%) | The intent log's residual redaction uses the same set as publishing, so the entity's own felt phrases and awareness lines are no longer logged as heard speech. |
 | curiosity-interest | 7/7 (100%) | Curiosity is heterostatic interest that learning progress raises, with no relief and no goal, and boredom, met also by learning progress, carries the cost of an unchanging scene. |
 | welfare-crossing-deprivation | 5/5 (100%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
 | developmental-sensory-maturation | 5/5 (100%) | The stimulus-source audio passes a hearing band that widens over awake time in the order fetal hearing matures, from 500 Hz down to 100 Hz and then up to 3000 Hz, and the colour ramp spans the developmental phase, so the stimulus keeps offering learnable structure (paper §7, A.7, Table A1). |
@@ -143,6 +143,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 116 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 117 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
