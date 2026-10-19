@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| research-log-from-boot | 2/2 (100%) | The curated research observer starts each stream at its newest entry, so a restarted run no longer re-records the previous run's events under its own id. |
 | heard-log-own-words | 2/2 (100%) | The intent log's residual redaction uses the same set as publishing, so the entity's own felt phrases and awareness lines are no longer logged as heard speech. |
 | disclosure-on-waking | 4/4 (100%) | The individuation disclosure, wording unchanged, is given in the first organ call after each boot and each sleep and with every probe, so it no longer opens every prompt. |
 | persona-without-self-category | 3/3 (100%) | The default personas drop their opening "I am this entity.", which the organ filled with "I am an AI"; an offline replay of the ninth boot's requests took AI self-descriptions to 0 of 950 with the situation section gone. |
@@ -147,6 +148,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 121 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 122 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
