@@ -77,6 +77,12 @@ transcription_enabled = false
 # forward-model prediction error → audition.perception competes in the workspace.
 general_audition = true
 
+[workspace]
+# Curiosity directs attention (paper 3.5, A.1): the goal factor raises each
+# perceptual source's priority in proportion to interest and that source's
+# learning progress (Gottlieb et al. 2013; Poli et al. 2020).
+salience_goal_factor = "interest"
+
 [action_selection]
 # Self-initiated voice: speech comes from the entity's OWN precision-weighted
 # surprise (a report threshold above the access threshold, novelty- and
