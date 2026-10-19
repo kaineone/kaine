@@ -177,6 +177,50 @@ async def test_sleep_event_on_the_bus_makes_it_due_again(bus, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_sleep_completed_before_initialization_does_not_count(bus, tmp_path):
+    language = Language(
+        bus,
+        chat_client=FakeChatClient(responses=["hello", "hello again"]),
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
+        model_id="fake-model",
+    )
+    await language.add_situation_fact(DEFAULT_DISCLOSURE)
+    await _init(language)
+    try:
+        await language._produce_inner(
+            about="A",
+            snapshot=_snapshot(),
+            mode="internal",
+            stream=INTERNAL_STREAM,
+            about_kind="felt",
+        )
+        await bus.client.xadd(
+            "sleep.out",
+            {
+                "source": "sleep",
+                "type": "sleep.sleep.completed",
+                "payload": json.dumps({"sleep_index": 1}),
+                "salience": "0.5",
+                "timestamp": "2020-01-01T00:00:00+00:00",
+            },
+        )
+        await asyncio.sleep(0.3)
+        assert language._situation_given is not None
+        await language._produce_inner(
+            about="B",
+            snapshot=_snapshot(),
+            mode="internal",
+            stream=INTERNAL_STREAM,
+            about_kind="felt",
+        )
+        prompts = _prompts(language)
+        assert SITUATION_HEADING not in prompts[-1]
+        assert DEFAULT_DISCLOSURE not in prompts[-1]
+    finally:
+        await language.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_a_new_fact_is_given_at_the_next_call(bus, tmp_path):
     language = Language(
         bus,
