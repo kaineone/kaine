@@ -5,9 +5,9 @@ project no longer uses: em dashes as punctuation, a lead that frames the
 software as "built to test one claim", negation-correction phrasing ("not any
 single component", "the language organ, not the brain") and "a modular
 framework". The project's first sentence about KAINE is that it is
-source-available software implementing existing theories, Global Workspace
-Theory and Predictive Processing, and it leads with the architecture and the
-activation roadmap, with the ablation as the fail state.
+source-available software implementing existing theories (Global Workspace
+Theory and Predictive Processing). The opening then leads with the architecture
+and the activation roadmap and treats the ablation as the fail state.
 
 ## What Changes
 

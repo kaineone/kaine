@@ -3,19 +3,19 @@
 Part of the Kaine project: **[kaine.one](https://kaine.one)**
 
 KAINE (**Kaine Autonomous Intelligent Networked Entity**) is source-available
-software that implements two existing theories, **Global Workspace Theory**
-(Baars; Dehaene) and **Predictive Processing** (Friston; Clark), as one composite
-cognitive architecture. Its hypothesis is that a mind is the **continuous
-competition among specialized predictive processors through a shared global
-workspace** rather than any single component. There is no central executive, and
-the language model serves as the language *organ* rather than the brain.
+software that implements two existing theories, Global Workspace Theory (Baars;
+Dehaene) and Predictive Processing (Friston; Clark), as one composite cognitive
+architecture. Its hypothesis is that a mind is the **continuous competition among
+specialized predictive processors through a shared global workspace** rather than
+any single component. There is no central executive, and the language model is
+the language *organ* rather than the brain.
 
 Each module maintains a forward model and publishes precision-weighted prediction
-errors. A shared workspace (**the workspace**) competitively selects the most
-salient coalition and broadcasts it back to every module as the context it
-predicts against next. The modules exchange events over a Redis Streams bus, cycle
-a few times a second, run entirely on local hardware, and persist **no raw sense
-data**.
+errors. The shared global workspace competitively selects the most salient
+coalition and broadcasts it back to every module as the context it predicts
+against next. The modules exchange events over a Redis Streams bus, cycle
+a few times a second, run entirely on local hardware, and persist no raw sense
+data.
 
 ## The first configuration and the activation roadmap
 
@@ -23,40 +23,40 @@ The project's **default, canonical configuration is the first configuration**: t
 smallest set of *diverse* predictive processors that can genuinely exercise the
 competition:
 
-- **the interoception module** (the compute substrate as a body),
-- **the sequence module** (interval timing),
-- **the vision module** (foveated vision over raw video),
-- **the audition module** (raw sound as prediction error),
-- **the affect module** (affect and arousal: the precision core that sets the gain
-  on the competition and is itself moved by perceptual surprise),
-- **the sleep module** (fatigue-triggered sleep and consolidation, with voice
+- the interoception module (the compute substrate as a body),
+- the sequence module (interval timing),
+- the vision module (foveated vision over raw video),
+- the audition module (raw sound as prediction error),
+- the affect module (affect and arousal: the precision core that sets the gain on
+  the competition and is itself moved by perceptual surprise),
+- the sleep module (fatigue-triggered sleep and consolidation, with voice
   alignment off), and
-- **the language module** (the output-only voice),
+- the language module (the output-only voice),
 
-with **the workspace** and **the action selection module** as scaffolding.
+with the workspace and the action selection module as scaffolding.
 
-Everything richer, **memory, self-model, world model, social cognition,
-effectors, embodiment and a spoken voice** (the remaining nine modules, plus the
-oscillatory and embodiment layers), is **built, tested and gated off** until the
-base result is positive, and stays in the tree, held for activation. The
+The remaining nine modules, plus the oscillatory and embodiment layers, add
+memory, a self-model, a world model, social cognition, effectors, embodiment and a
+spoken voice. They are **built, tested and gated off** until the base result is
+positive, and they stay in the tree, held for activation. The
 [module-addition study](docs/15-experiments/ignition-study.md) then grows an
 entity one held module at a time, in a fixed order, and compares each step with
 the one before it.
 
 ## Observing the entity, and the base test
 
-KAINE is a system you **observe**; there is no chatbot or assistant to converse
-with. Perception enters only as prediction error: the entity hears the *sound* of
-speech and never reads a transcript, and the language organ **verbalizes the
-workspace's own state** rather than answering input. It speaks rarely, from its
-own precision-weighted surprise, and its utterances are saved and observed without
+KAINE is a system you observe; there is no chatbot or assistant to converse with.
+Perception enters only as prediction error: the entity hears the *sound* of speech
+and never reads a transcript. The language organ verbalizes the workspace's own
+state rather than answering input. It speaks rarely, from its own
+precision-weighted surprise, and its utterances are saved and observed without
 anyone speaking back to them.
 
-The base test, and the project's fail state, is a pre-registered
-**workspace-mediation ablation**: the system as built against a matched flat
-concatenation of the same processors' outputs. If routing the processors through
+The base test is a pre-registered **workspace-mediation ablation**, which compares
+the system as built with a matched flat concatenation of the same processors'
+outputs. It is also the project's fail state. If routing the processors through
 the competitive workspace does no measurable work, the architecture is a scored
-prompt-assembler and the hypothesis is falsified; the test is designed so that
+prompt-assembler and the hypothesis is falsified. The test is designed so that
 such a null result is reportable.
 
 ## 📚 Documentation
@@ -101,8 +101,8 @@ seed-reproducibility.
 
 - **All-local at runtime.** No cloud APIs or remote model calls in the loop.
   Dependencies download at setup; the running system needs no network.
-- **Observed by its operators.** There is no chatbot interface; the entity's speech
-  is a self-initiated report of its own state, recorded and observed.
+- **Observation only.** There is no chatbot interface; the entity's speech is a
+  self-initiated report of its own state, recorded and observed.
 - **Reuse over rewrite.** Maintained open-source projects are used wherever they
   fit; custom code is justified. See [Tech Choices](docs/02-architecture/tech-choices.md).
 - **Zero raw-sense-data persistence.** Live audio and video are perceived, processed
