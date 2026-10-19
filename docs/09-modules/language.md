@@ -57,7 +57,7 @@ system
   + heard-speech guard (only when the prompt holds heard material)
 
 prompt (the opening of the entity's own turn)
-  = "## What I know about my situation\n<facts>\n\n" (when any are recorded)
+  = "## What I know about my situation\n<facts>\n\n" (when any are recorded and the situation is due, see below)
   + "## How I feel and what I notice\n<coalition rendering>\n\n"
   + input heading and <about>
       external, heard input:        "## What was just said to me"
@@ -67,6 +67,8 @@ prompt (the opening of the entity's own turn)
       external: "## What I say"
       internal: "## My thought"
 ```
+
+The situation facts are given on waking. They are due when the module initializes (each boot), when it sees a `sleep.sleep.completed` event on `sleep.out` published after it initialized, and when the set of facts changes. The next organ call renders them and, once the chat client has returned, records them as given; a call that raises, or a call made while there are no facts, leaves them due. The intent-log record of a call that gave them carries `extra.situation_given = true`. Every individuation probe request renders the facts of the self-model it is conditioned on, whatever the due state. In the ninth test boot, with the disclosure opening every prompt, 22 of 193 organ texts took up its themes (being assessed, watched or changed), the first thought of the run among them.
 
 The request puts the prompt where the organ continues its own text. An instruction-tuned chat model answers a `user` turn as an assistant talking to someone (Shanahan, McDonell and Reynolds 2023), and in the fifth test boot of main 307b374d 35 of 109 organ texts did so ("Your perception is clear", "Understood. I will adhere to your constraints"). The language module therefore sends each voice and probe request with `own_turn` set: the client sends the persona as `system`, a `user` message (another speaker's attributed words when someone spoke, otherwise the fixed content-free cue `(next)`, since the organ's chat template requires a user turn), and the prompt as a trailing `assistant` message, which llama-server continues. llama-server echoes the continued prompt at the start of its reply, and the client keeps only the generated text after it; `from_content` is false when nothing follows the echo. The stop sequence `"\n#"` ends the text before the organ starts a new heading of its own notes. Every other caller of the chat client keeps the plain `user` turn. The in-process `llama_cpp` backend gets the same messages; its chat formatter may open a new assistant turn after the trailing one, which is untested there.
 

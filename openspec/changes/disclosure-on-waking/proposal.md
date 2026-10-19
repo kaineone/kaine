@@ -6,7 +6,7 @@ The operator approved (2026-10-19) giving the disclosure on waking and with ever
 
 ## What Changes
 
-- The language module renders the situation facts (the disclosure among them) in the first organ call after each boot, after each completed sleep, and after the set of situation facts changes. A call clears that due state only when its prompt held the situation section and the organ call returned; a call made before any fact is recorded leaves it due.
+- The language module renders the situation facts (the disclosure among them) in the first organ call after each boot, after each completed sleep, and after the set of situation facts changes. A call clears that due state only when its prompt held the situation section and the organ call returned; a call made before any fact is recorded leaves it due. The intent-log record of a call that gave the facts carries `extra.situation_given`.
 - Every individuation probe request carries the situation facts, as now. The probe's readiness check (the disclosure must be among the facts) is unchanged.
 - The wording, the self-model field and the language module's own fact store are unchanged.
 
