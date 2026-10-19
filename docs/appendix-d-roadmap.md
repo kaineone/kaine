@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
 | research-log-from-boot | 2/2 (100%) | The curated research observer starts each stream at its newest entry, so a restarted run no longer re-records the previous run's events under its own id. |
 | heard-log-own-words | 2/2 (100%) | The intent log's residual redaction uses the same set as publishing, so the entity's own felt phrases and awareness lines are no longer logged as heard speech. |
 | disclosure-on-waking | 4/4 (100%) | The individuation disclosure, wording unchanged, is given in the first organ call after each boot and each sleep and with every probe, so it no longer opens every prompt. |
@@ -148,6 +149,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 122 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 123 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
