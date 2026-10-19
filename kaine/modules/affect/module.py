@@ -1262,6 +1262,8 @@ class Affect(BaseModule):
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
+                "drive_above": self._drives.above_to_dict(),
+                "drive_ends": self._drives.outcomes_to_dict(),
                 "emotion": self._last_emotion.value,
                 **self._valence_terms(),
             },
@@ -1593,6 +1595,8 @@ class Affect(BaseModule):
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
+                "drive_above": self._drives.above_to_dict(),
+                "drive_ends": self._drives.outcomes_to_dict(),
                 "emotion": self._last_emotion.value,
                 "reset": True,
                 "alert": True,

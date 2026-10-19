@@ -79,6 +79,8 @@ async def _last_state_payload(bus):
 EXPECTED_KEYS = frozenset({
     "state",
     "drives",
+    "drive_above",
+    "drive_ends",
     "emotion",
     "vision_error_fast",
     "vision_error_slow",
@@ -266,7 +268,7 @@ async def test_all_values_finite_or_none(bus):
     await affect._maybe_publish_state()
     p = await _last_state_payload(bus)
 
-    term_keys = [k for k in EXPECTED_KEYS if k not in ("state", "drives", "emotion")]
+    term_keys = [k for k in EXPECTED_KEYS if k not in ("state", "drives", "drive_above", "drive_ends", "emotion")]
     for k in term_keys:
         v = p[k]
         assert v is None or (isinstance(v, float) and not isinstance(v, bool) and math.isfinite(v))
@@ -304,7 +306,7 @@ async def test_reset_payload_carries_terms(bus):
     assert reset_payloads
     p = reset_payloads[-1]
 
-    term_keys = [k for k in EXPECTED_KEYS if k not in ("state", "drives", "emotion")]
+    term_keys = [k for k in EXPECTED_KEYS if k not in ("state", "drives", "drive_above", "drive_ends", "emotion")]
     for k in term_keys:
         assert k in p
 
