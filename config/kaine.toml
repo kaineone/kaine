@@ -861,7 +861,7 @@ sustain_window_s = 30.0
 
 # Curiosity is heterostatic interest (paper A.4; Oudeyer and Kaplan 2007): learning progress
 # builds it, nothing relieves it, it decays at decay_rate and carries through sleep. Its
-# decay_rate 0.00096 is calibrated: a sustained learning progress of 0.045 holds it at its
+# decay_rate 0.00096 is calibrated: a sustained lp+ (learning progress above its floor) of 0.045 holds it at its
 # threshold (0.05 * 0.045 * 0.3 / 0.7). Its relief_gain is unused.
 # relief_gain: boredom is relieved continuously at relief_gain per second times the larger of
 # learning progress (own) and alert excess (not own); social_drive and restlessness lose
