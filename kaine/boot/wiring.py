@@ -164,14 +164,28 @@ def make_salience_factors(
             affect_provider.drive_values, drive_sources=drive_sources
         )
     elif goal_factor == "interest":
-        gain = float(section.get("interest_gain", 0.5))
+        try:
+            gain = float(section.get("interest_gain", 0.5))
+        except (TypeError, ValueError):
+            raise ConfigurationError(
+                "[workspace].interest_gain must be finite and >= 0"
+            )
         if not math.isfinite(gain) or gain < 0.0:
             raise ConfigurationError(
                 "[workspace].interest_gain must be finite and >= 0"
             )
-        floor = float(
-            (kaine_config.get("affect") or {}).get("learning_progress_floor", 0.05)
-        )
+        try:
+            floor = float(
+                (kaine_config.get("affect") or {}).get("learning_progress_floor", 0.05)
+            )
+        except (TypeError, ValueError):
+            raise ConfigurationError(
+                "[affect].learning_progress_floor must be finite and in [0, 1)"
+            )
+        if not math.isfinite(floor) or not (0.0 <= floor < 1.0):
+            raise ConfigurationError(
+                "[affect].learning_progress_floor must be finite and in [0, 1)"
+            )
         goal_scorer = InterestGoalScorer(
             affect_provider.drive_values,
             affect_provider.learning_progress,

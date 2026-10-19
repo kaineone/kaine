@@ -43,7 +43,7 @@ def _affect_state(**kwargs) -> Event:
     if "drives" in kwargs:
         payload["drives"] = kwargs["drives"]
     for key, value in kwargs.items():
-        if key.endswith("_learning_progress"):
+        if key.endswith("learning_progress"):
             payload[key] = value
     return Event(
         source="affect",
@@ -263,6 +263,29 @@ def test_make_salience_factors_rejects_negative_interest_gain():
             provider,
             drive_sources={},
         )
+
+
+@pytest.mark.parametrize(
+    "section,key,value",
+    [
+        ("affect", "learning_progress_floor", 1.0),
+        ("affect", "learning_progress_floor", -0.1),
+        ("affect", "learning_progress_floor", float("nan")),
+        ("affect", "learning_progress_floor", "abc"),
+        ("workspace", "interest_gain", "abc"),
+    ],
+)
+def test_make_salience_factors_interest_rejects_invalid_floor_and_gain(section, key, value):
+    provider = AffectStateProvider()
+    config = {
+        "workspace": {
+            "salience_goal_factor": "interest",
+            "salience_affect_factor": "static",
+        },
+    }
+    config.setdefault(section, {})[key] = value
+    with pytest.raises(ConfigurationError):
+        make_salience_factors(config, provider, drive_sources={})
 
 
 def test_make_salience_factors_rejects_unknown_goal_factor():
