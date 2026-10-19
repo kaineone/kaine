@@ -5,170 +5,88 @@ A two-arm ablation that runs the cycle twice with identical seeds, stimuli and m
 
 ## Requirements
 
-### Requirement: Two-arm workspace-mediation ablation
+### Requirement: The suite's mediation verdict uses the paper's significance inequality
+The offline suite SHALL call the workspace-mediation result significant when the sign-test p-value is at most the suite's alpha (p <= alpha), the rule of paper Appendix A.8, and the Holm correction SHALL reject when an adjusted value is at most alpha, the non-strict rule of Holm (1979). One inequality serves both decisions in the report.
 
-The system SHALL provide an ablation runner that executes the cognitive cycle twice
-under matched seed, matched stimulus schedule, and matched modules, differing ONLY in
-whether the language organ is conditioned by the competitive workspace or by a flat
-fan-in of the same module outputs. The workspace-on arm SHALL use the workspace's
-competitive selection and broadcast as built. The workspace-off arm SHALL bypass
-scoring, threshold, top-k selection, inhibition, and broadcast, and condition the organ
-on a flat rendering of all current module outputs. The runner SHALL reuse the
-deterministic offline harness pattern (in-memory scripted bus, `deterministic=True`).
+#### Scenario: A p-value equal to alpha is significant
+- **WHEN** the per-seed contrasts give a WIN sign-test p-value equal to alpha exactly
+- **THEN** the suite reports a WIN for the mediation experiment
 
-#### Scenario: Arms differ only in workspace mediation
+#### Scenario: A p-value above alpha is not significant
+- **WHEN** the WIN sign-test p-value is above alpha and the NEGATIVE one is too
+- **THEN** the suite does not report a WIN or a NEGATIVE for the mediation experiment
 
-- **WHEN** the runner executes the workspace-on and workspace-off arms
-- **THEN** both arms use the same seed, the same scripted stimulus, and the same
-  registered modules, and the only difference is whether the organ is conditioned by
-  the competitively-selected coalition or by a flat rendering of the same module
-  outputs
+### Requirement: Offline development harness of the workspace-mediation test
+The system SHALL provide an offline development harness that exercises the pipeline of the workspace-mediation test on a reduced pair of real context-conditioned processors, the interoception and vision modules, in a workspace-on arm and a pooled arm only. Both arms SHALL use the same seeds, the same scripted stimulus and identically initialized modules. The harness SHALL be seeded and deterministic, SHALL NOT boot an entity or open a network connection, and SHALL state in its documentation and in every verdict that it is development tooling and does not test the hypothesis.
 
-#### Scenario: No module internals are modified
+#### Scenario: Same seed reproduces the run
+- **WHEN** the harness runs twice with the same seed and stimulus
+- **THEN** both runs produce the same per-report gains, the same effect and the same verdict
 
-- **WHEN** the ablation runs
-- **THEN** the interoception module, the sequence module, the workspace, the action selection module and the language module execute their shipped
-  behavior unchanged, and the workspace-off arm is realized purely in the conditioning
-  path (which snapshot is handed to the context assembler), not by altering any module
+#### Scenario: No network
+- **WHEN** the harness runs with outbound socket connections made to fail
+- **THEN** it completes and produces a verdict
 
-### Requirement: Fair-null rendering discipline
+### Requirement: Development harness measures information gain
+The harness SHALL read each processor's per-report broadcast information gain, the reduction in its prediction error with the held context relative to the null context of Appendix A.8, in units of its running mean error, as the module publishes it. For each arm, `IG_j` SHALL be the mean gain of processor `j` over its reports that have a defined gain and fall after the initial learning period, undefined when there is none, and the headline `IG` SHALL be the mean of `IG_j` over the two processors, undefined when either is. The run contrast `dIG` SHALL be the workspace-on headline minus the pooled headline. The harness SHALL NOT measure or render the language organ's output.
 
-The workspace-off arm SHALL give the language organ the SAME underlying information as
-the workspace-on arm — the module outputs — differing only in structure (competitively
-selected coalition vs. flat concatenation). The rendering budget (max events, char
-budget) SHALL be matched across arms so that any divergence is attributable to
-selection structure and not to information quantity. In the off arm the modules SHALL
-keep their forward models, keep predicting from their own signals, and keep publishing
-real prediction errors; they SHALL NOT be starved, silenced, or fed constants.
+#### Scenario: Gain defined on the coupled battery
+- **WHEN** the harness runs the coupled battery past its initial learning period
+- **THEN** `IG_j` is defined for the interoception and vision modules in both arms and `dIG` is defined
 
-#### Scenario: Rendering budget matched across arms
+#### Scenario: Headline undefined when a processor has no included report
+- **WHEN** one processor has no included report in an arm
+- **THEN** that arm's headline is undefined
 
-- **WHEN** each arm renders its conditioning context for the organ
-- **THEN** both arms use the same max-events and char-budget bounds, so the off arm is
-  not starved and the on arm is not advantaged by information quantity
+### Requirement: Pooled arm of the development harness
+In the pooled arm every candidate of a tick SHALL enter the context, weighted by its reported intensity, with no scoring, selection, access threshold or inhibition. In the workspace-on arm the coalition SHALL be selected by the workspace as built, and the context SHALL be formed from the members whose scores reach the access threshold.
 
-#### Scenario: Off-arm modules remain non-degenerate
+#### Scenario: Pooled snapshot adopts every candidate
+- **WHEN** a pooled snapshot of a tick's candidates is delivered to a processor's broadcast context
+- **THEN** every candidate is adopted as a context member with its own intensity
 
-- **WHEN** the workspace-off arm runs
-- **THEN** each module still runs its forward model and publishes a real prediction
-  error that varies with its own input, so a NULL reflects an inert workspace rather
-  than a degenerate control
+### Requirement: Development harness verdict
+The harness SHALL classify a run as WIN when `dIG` is at least the minimum effect, NEGATIVE when it is at most the negative of the minimum effect, and NULL otherwise. A run SHALL be NOT EXERCISED when the workspace-on arm never had more candidates than its capacity on a tick, when it had no accessed broadcast, or when `dIG` is undefined; such a run SHALL be reported with the shared outcome NOT EXERCISED and its reason. The verdict SHALL NOT be scored from the language organ.
 
-### Requirement: Competition capacity in the minimal set
+#### Scenario: Competition never operates
+- **WHEN** the workspace-on arm's candidates never exceed its capacity
+- **THEN** the run is flagged NOT EXERCISED rather than reported as a clean NULL
 
-The minimal-set ablation SHALL be configured so that competitive selection genuinely
-competes rather than admitting every candidate, since selection only excludes when the
-candidate count exceeds workspace capacity. The runner SHALL either set the
-workspace `top_k` below the number of concurrent candidates, or drive a stimulus that
-produces more concurrent candidates than `top_k`, and SHALL record which regime was
-used. When capacity is not exceeded, the runner SHALL report that the run tests
-broadcast-mediation-plus-gating rather than competitive selection, so a WIN is not
-overclaimed as evidence for competition.
+#### Scenario: Every outcome is reachable
+- **WHEN** the classifier receives a defined `dIG` above, within, or below the minimum-effect band
+- **THEN** it returns WIN, NULL and NEGATIVE respectively
 
-#### Scenario: Selection actually excludes
+### Requirement: Suite aggregation of the development harness
+The offline suite SHALL run the harness over several seeds and apply two one-sided exact sign tests to the per-seed `dIG`: the WIN test on `dIG - min_effect` and the NEGATIVE test on `-min_effect - dIG`, dropping exact zeros. The suite SHALL report WIN when the WIN test's p-value is at most alpha, NEGATIVE when the NEGATIVE test's p-value is at most alpha, NOT EXERCISED when no seed was exercised, and NULL otherwise. The WIN test's p-value SHALL enter the suite's Holm family.
 
-- **WHEN** the minimal-set ablation runs in the competition regime
-- **THEN** the number of candidates per tick exceeds `top_k` on a reported fraction of
-  ticks, so the workspace-on arm excludes candidates the workspace-off arm would have
-  passed to the organ
+#### Scenario: Five positive contrasts at alpha equal to the p-value
+- **WHEN** five seeds each give `dIG` above the minimum effect and alpha equals 1/32
+- **THEN** the suite reports a WIN
 
-#### Scenario: Non-competing regime is disclosed, not hidden
+#### Scenario: Five positive contrasts with alpha below the p-value
+- **WHEN** five seeds each give `dIG` above the minimum effect and alpha is 0.03
+- **THEN** the suite does not report a WIN
 
-- **WHEN** candidate count does not exceed `top_k` for a run
-- **THEN** the runner records that the run exercises broadcast mediation and gating but
-  not competitive exclusion, and the verdict text scopes the claim accordingly
+#### Scenario: Five positive contrasts below alpha
+- **WHEN** five seeds each give `dIG` above the minimum effect and alpha is 0.04
+- **THEN** the suite reports a WIN that names the harness as development tooling
 
-### Requirement: Primary and secondary measures
+### Requirement: NOT EXERCISED is the harness's own outcome
+The development harness SHALL report a run that is not exercised (the workspace-on
+arm never had more candidates than its capacity on a tick, had no accessed broadcast,
+or left `dIG` undefined) with the shared outcome NOT_EXERCISED and its reason, not as
+a NULL. The suite SHALL apply its two sign tests only to the `dIG` of seeds that were
+exercised, SHALL report NOT_EXERCISED when no seed was exercised, and SHALL record
+how many seeds were and were not exercised.
 
-The runner SHALL treat per-module error-trajectory structure and coalition-selection
-structure as the PRIMARY evidence, and language-organ output divergence as SECONDARY
-confirmation. All measures SHALL be computed across multiple seeds with greedy
-(temperature-0) decoding so the observable carries no sampling noise.
+#### Scenario: A run without competition is NOT EXERCISED
+- **WHEN** the workspace-on arm's candidates never exceed its capacity
+- **THEN** the run's verdict outcome is NOT_EXERCISED and its detail gives the reason
 
-#### Scenario: Primary measure 1 — cross-module error coupling
+#### Scenario: An unexercised seed is not evidence
+- **WHEN** a seed is not exercised but its `dIG` is defined
+- **THEN** that `dIG` does not enter either sign test
 
-- **WHEN** the runner analyzes per-module precision-weighted error time series
-- **THEN** it computes the Pearson correlation between the interoception module's and the sequence module's error series
-  over a sliding window for each arm, and the pre-registered directional criterion is a
-  statistically significant INCREASE in that correlation under workspace-on relative to
-  workspace-off (reflecting mutual influence via the shared broadcast); if the on-arm
-  coupling is not greater than the off-arm coupling, the workspace is judged inert on
-  this measure
-
-#### Scenario: Primary measure 2 — coalition-selection structure
-
-- **WHEN** the runner analyzes the on-arm coalition sequence
-- **THEN** it computes the Shannon entropy of the coalition-source distribution over a
-  window (which must fall between uniform and degenerate), and tests whether the
-  structured selection yields different downstream behavior than flat fan-in
-
-#### Scenario: Secondary measure — output divergence confirms propagation
-
-- **WHEN** the runner measures organ output divergence (cosine distance of greedy-
-  decoded response embeddings between arms)
-- **THEN** it is reported as secondary confirmation that the primary effects propagate
-  to the observable, and NOT as independent evidence that the workspace does work
-
-### Requirement: Interoception-salience coverage for measure power
-
-The ablation's stimulus battery SHALL include substrate perturbations that make the interoception module's
-prediction error salient on a reported fraction of ticks, because cross-module coupling
-can only be detected when the interoception module periodically enters the selected coalition. A run in
-which the interoception module never enters the coalition SHALL be flagged as underpowered for the primary
-coupling measure rather than reported as a clean NULL.
-
-#### Scenario: Battery exercises Interoception salience
-
-- **WHEN** the ablation battery runs
-- **THEN** the interoception module's error crosses into the selected coalition on a reported fraction of
-  ticks, so the coupling path from the interoception module through the broadcast to the sequence module is exercised
-
-#### Scenario: Underpowered run is flagged, not counted as NULL
-
-- **WHEN** the interoception module never enters the coalition across a run
-- **THEN** the run is flagged underpowered for primary measure 1 rather than reported
-  as a NULL, so a false NULL from flat substrate is not mistaken for an inert workspace
-
-### Requirement: Reachable adverse verdict
-
-The runner SHALL classify the outcome as WIN, NULL, or NEGATIVE using the shared
-verdict vocabulary, with real non-zero minimum-effect thresholds and at least one
-non-engineered (neutral) stimulus battery, so that a NULL (workspace mediation makes no
-measurable difference — the system is a prompt-assembler) and a NEGATIVE (mediation
-makes a difference adverse to the hypothesis) are both genuinely reachable through the real
-pipeline, not a wiring test wired to always win.
-
-#### Scenario: Indistinguishable arms yield NULL
-
-- **WHEN** the workspace-on and workspace-off arms produce error-coupling and selection
-  structure whose divergence is at or below the minimum-effect threshold
-- **THEN** the runner returns NULL and reports it as a null (the architecture is a
-  fan-in prompt-assembler), not as a win
-
-#### Scenario: Neutral battery available
-
-- **WHEN** the ablation is run
-- **THEN** a neutral, non-engineered stimulus battery is selectable alongside positive
-  and negative controls, and the verdict is not forced by a stimulus constructed to
-  guarantee divergence
-
-### Requirement: Scoped reproducibility and multiple-comparisons correction
-
-Seed-reproducibility SHALL be claimed only for the offline/deterministic runner (same
-seed reproduces verdict and metrics), NOT for the live temperature-driven organ cycle.
-When reported alongside other verdict-producing experiments, a family-wise multiple-
-comparisons correction SHALL be applied across the primary measures and both raw and
-corrected verdicts reported.
-
-#### Scenario: Offline run reproduces from its seed
-
-- **WHEN** the offline runner is executed twice with the same seed
-- **THEN** it produces identical verdict and identical metrics
-
-#### Scenario: Divergence proves work, not superiority
-
-- **WHEN** the runner reports a WIN
-- **THEN** the report states the WIN establishes that workspace mediation does
-  measurable work, and does NOT by itself claim the workspace produces more coherent or
-  better output (which requires an added coherence measure), nor that it beats every
-  possible aggregation strategy beyond the flat fan-in control
+#### Scenario: No exercised seed
+- **WHEN** no seed of a suite run is exercised
+- **THEN** the suite verdict is NOT_EXERCISED and carries no p-value

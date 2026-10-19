@@ -11,9 +11,13 @@ size `clip_len`. The vision module SHALL publish a `vision.report` event to its 
 stream when the ring buffer is full AND a clip latent is produced on the clip
 cadence (see the strided-clip requirement) — NOT once per incoming frame. Before
 the ring buffer first fills, the vision module SHALL publish no `vision.report`. Each published
-event SHALL carry `latent` (list of floats — the pooled clip embedding),
-`change_score` (float `>= 0`), `habituation_score` (float in `[0.0, 1.0]`),
-`encoder_model_id` (string), and `prediction_error` (float). Salience SHALL be
+event SHALL carry `latent` (list of floats — the pooled clip embedding, or null
+when the embedding holds a non-finite value), `change_score` (float `>= 0`),
+`habituation_score` (float in `[0.0, 1.0]`, or null when the first finite
+embedding has not yet been seen), `encoder_model_id` (string), and
+`prediction_error` (float, or null when the report has no defined error). With
+foveation on, `peripheral` and `foveal` SHALL likewise be null when they hold a
+non-finite value. Salience SHALL be
 elevated when `change_score` exceeds the configured alert threshold (or, when the
 forward model is enabled, when the normalized prediction error is surprising).
 
@@ -31,6 +35,10 @@ forward model is enabled, when the normalized prediction error is surprising).
 - **WHEN** two produced clip latents are orthogonal and the change exceeds the
   configured alert threshold
 - **THEN** the second event's salience equals the configured alert salience
+
+#### Scenario: A non-finite embedding is published as null
+- **WHEN** the produced clip latent contains a non-finite value
+- **THEN** the report carries `latent` and `prediction_error` as null and no non-finite number
 
 ### Requirement: Encoder is replaceable via the Encoder protocol
 The vision module SHALL accept an `Encoder` collaborator that exposes `clip_len` (the number
@@ -190,3 +198,21 @@ The composition root SHALL build the vision module's habituator with `[vision].h
 #### Scenario: An unpinned revision is refused
 - **WHEN** `[vision].encoder_revision` names a revision other than the pinned one
 - **THEN** boot refuses with a configuration error naming both revisions, and no encoder is loaded
+
+### Requirement: An encoder unload waits for in-flight inference
+A vision module encoder's unload SHALL release its model only after every inference already running in a worker thread has finished, including an inference whose caller was cancelled.
+
+#### Scenario: A cancelled encode is still running in its worker thread
+- **WHEN** an encode is cancelled while its forward pass runs in a worker thread and unload is then called
+- **THEN** unload does not finish and the model stays loaded until the worker thread returns, after which unload completes and the in-flight count is zero
+
+### Requirement: Vision reports carry the change ratio
+Every `vision.report` SHALL carry `normalised_change`, the change score divided by the running mean of change scores used by the change alert, or 0.0 when that mean is 0, with forward prediction on or off (paper A.2).
+
+#### Scenario: A step change carries a large change ratio
+- **WHEN** four identical frames are followed by an orthogonal frame
+- **THEN** the fifth report's `normalised_change` equals its change score over the running mean of change scores and is at least the change alert factor
+
+#### Scenario: The first report carries zero
+- **WHEN** the first frame is processed
+- **THEN** its report carries `normalised_change` 0.0

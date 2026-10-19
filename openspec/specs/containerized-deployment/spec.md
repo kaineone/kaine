@@ -154,3 +154,50 @@ the cycle SHALL remain a manually-started unit with no auto-start.
   access configured
 - **THEN** the services start with the non-root runtime user, GPU passthrough works,
   and no entity auto-starts
+
+### Requirement: An existing state volume upgrades without a manual ownership fix
+The deployment SHALL mount no volume inside the entity-state volume whose parent directory might not exist there, so the container runtime never creates a root-owned directory inside the state tree. The cycle SHALL find the voice-alignment jobs directory at a mount point outside the state volume. A state volume written by an earlier release SHALL start under the current release, run as the image's non-root user, without the operator changing any ownership.
+
+#### Scenario: Upgrading a volume written before the module rename
+- **WHEN** the cycle starts on a state volume that holds an entity under the old module directories and has no `sleep/` directory
+- **THEN** the state rename completes, the entity runs, and a second start finds nothing to rename
+
+### Requirement: Every reader of the jobs directory resolves it the same way
+The voice-alignment jobs directory SHALL be resolved by one function, from `KAINE_TRAINER_JOBS_DIR` when it is set, then `[sleep.voice_alignment].trainer_jobs_dir`, then `state/sleep/voice_align_jobs`. The sleep module, decommission and the pre-boot report SHALL use it. Decommission SHALL attribute a job written before the upgrade to its entity when the job records paths under the old state layout or the old jobs mount path, and SHALL resolve a relative recorded path against the job's own directory.
+
+#### Scenario: Decommission in the container finds the jobs volume
+- **WHEN** the cycle's jobs directory comes from `KAINE_TRAINER_JOBS_DIR=/trainer-jobs` and a decommission runs with the same environment
+- **THEN** decommission lists and attributes the jobs in `/trainer-jobs`
+
+#### Scenario: A job written under the old layout
+- **WHEN** a job's `job.json` records its adapter output directory under the old sleep module directory (`/app/state/<old sleep directory>/adapters`) and the entity's adapters now live in `state/sleep/adapters`
+- **THEN** decommission attributes the job to the entity
+
+### Requirement: Containers do not depend on a readable secrets file
+Every reader of `config/secrets.toml` SHALL go through one loader. When the file exists but cannot be opened, the loader SHALL treat it as absent and log one warning per process that names the file by role. When the file is readable, its values SHALL be used exactly as before. The container deployments SHALL NOT mount `config/secrets.toml`, and every secret a container needs SHALL reach it through the environment. The file's mode and owner SHALL NOT be changed to make it readable.
+
+#### Scenario: An unreadable file with the environment set
+- **WHEN** `config/secrets.toml` exists with mode 0600 owned by another user, and `KAINE_REDIS_URL` and `KAINE_QDRANT_API_KEY` are set
+- **THEN** the bus config and the Qdrant key resolve from the environment and one warning names the secrets file
+
+#### Scenario: A readable file is unchanged
+- **WHEN** `config/secrets.toml` is readable and the environment sets no secret
+- **THEN** every secret resolves from the file as it does today
+
+### Requirement: Caretaker tokens can come from the environment
+The caretaker token loader SHALL read `KAINE_CARETAKER_TOKEN_<NAME>`, with `<NAME>` the channel's `token_name` upper-cased, before `[caretaker.tokens]` in `config/secrets.toml`.
+
+#### Scenario: Token from the environment
+- **WHEN** an HTTP channel names `token_name = "ntfy"` and `KAINE_CARETAKER_TOKEN_NTFY` is set
+- **THEN** the notice is sent with that bearer token without reading the secrets file
+
+### Requirement: Setup writes the dashboard token where the container reads it
+When setup generates or keeps a dashboard token in `config/secrets.toml`, it SHALL also write it to `compose/.env` as `KAINE_DASHBOARD_TOKEN`, unless that file already sets `KAINE_DASHBOARD_TOKEN` or its deprecated name to a non-empty value, which it SHALL leave unchanged. It SHALL never print the token.
+
+#### Scenario: A new token reaches compose/.env
+- **WHEN** setup generates a token and `compose/.env` sets no dashboard token
+- **THEN** `compose/.env` holds `KAINE_DASHBOARD_TOKEN` with that token, mode 0600
+
+#### Scenario: An existing env token is kept
+- **WHEN** `compose/.env` already sets the deprecated name of `KAINE_DASHBOARD_TOKEN`
+- **THEN** setup leaves the file byte-for-byte unchanged

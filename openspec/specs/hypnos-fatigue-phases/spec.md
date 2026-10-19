@@ -2,7 +2,9 @@
 
 ## Purpose
 How fatigue drives the sleep module: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.
+
 ## Requirements
+
 ### Requirement: Fatigue-triggered maintenance with interval safety net
 The sleep module SHALL trigger offline maintenance when it observes a `interoception.fatigue` event
 with `crossed == true`, and SHALL retain `interval_seconds` only as a max-interval
@@ -34,27 +36,32 @@ during the maintenance cycle.
   factor
 
 ### Requirement: Deep consolidation with global activation downscaling
-The sleep module's phase 2 SHALL apply global activation downscaling to memory (scaling all
-activation weights by `downscale_factor` while preserving relative ordering) and
-SHALL open a replay window during which external perception is suspended. The
-`episodic_memory.replay` re-injection SHALL be driven within that window; before
-`mnemos-replay` ships this drive is a no-op stub.
+The sleep module's phase 2 SHALL first run memory replay and then apply global activation
+downscaling to memory (scaling all activation weights by `downscale_factor`
+while preserving relative ordering). Replay SHALL run inside a replay window
+that the sleep module opens through the episodic memory module immediately before calling `replay_now()` and
+closes once replay returns or raises. External perception SHALL be suspended
+while the window is open.
 
 #### Scenario: Downscaling preserves ordering
 - **WHEN** global activation downscaling is applied
 - **THEN** every trace's weight is reduced and the ordering of traces by weight is
   unchanged
 
+#### Scenario: Replay precedes downscaling
+- **WHEN** phase 2 runs with the episodic memory module present
+- **THEN** `replay_now()` is called before `downscale_activations()`
+
 #### Scenario: Perception is suspended during replay window
 - **WHEN** the phase-2 replay window is open
 - **THEN** live external perception capture is suspended for its duration and
   restored afterward
 
-### Requirement: Fatigue reset in phase 4
-The sleep module's phase 4 SHALL reset the interoception module's fatigue accumulator to its baseline after
-completing the affective-reset step.
+### Requirement: Fatigue reset after the affective reset
+The sleep module SHALL reset the interoception module's fatigue accumulator to its baseline after the
+affective reset that ends the sleep, through the `sleep.sleep.completed`
+event that follows it.
 
 #### Scenario: Fatigue resets after maintenance
-- **WHEN** a maintenance cycle completes phase 4
+- **WHEN** a maintenance cycle completes its affective reset
 - **THEN** the interoception module's fatigue accumulator is at its baseline
-

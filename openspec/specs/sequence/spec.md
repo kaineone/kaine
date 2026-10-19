@@ -182,3 +182,10 @@ The featurizer SHALL produce a 24-dimension vector under a numbered layout. Layo
 #### Scenario: Unknown layout
 - **WHEN** the sequence module is restored from a snapshot that records layout 99
 - **THEN** the restore raises an error naming the layout
+
+### Requirement: Time since the last interaction survives a restart as lived time
+The sequence module SHALL save the time since the last interaction (or that none has occurred) and, on restore, SHALL report time since the last interaction continuing from the saved value, so time the entity was not running is not counted. A snapshot that records only an interaction timestamp SHALL be restored no later than the current entity time.
+
+#### Scenario: A restart does not reset the time alone to zero
+- **WHEN** the sequence module is saved 500 s after the last interaction and restored into a new run whose entity clock starts at 0
+- **THEN** its next report gives a time since the last interaction of about 500 s
