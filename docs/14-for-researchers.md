@@ -34,7 +34,7 @@ A planned affect-gain ablation will run the system with arousal live against a c
 
 The module-addition study grows the architecture one module at a time. In the code and CLI it is the ignition study (`kaine/research/ignition_study/`). A developmental phase produces a seed entity, preserved just after maturation. Branch 0 and a repeat start from that seed with the first-configuration modules, branch `k` starts from the seed with the first `k` held modules added, and an accumulate line carries one entity through every step. The default order adds six modules: the episodic memory, world model, planning, self-model, social cognition and vocal modules. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed, so they would be expected nulls on the reference host; `--order` adds them once one is attached. Every viewing plays the same film program, and the report is content-free (broadcast rate, coalition size, each module's share of broadcasts, member scores, share of inhibited broadcasts). The first study has one entity per condition, so its results are descriptive.
 
-Developmental progress (awake time, consecutive passing withdrawals, pull history, the replication flag and the viability verdict) persists with the entity in `development_progress.json`, so a restart neither resets nor repeats it.
+Developmental progress (awake time, consecutive passing withdrawals, pull history, the replication flag, the viability verdict, the latest markers and the probe draws) persists with the entity in `development_progress.json`, so a restart neither resets nor repeats it.
 
 ```bash
 python -m kaine.research.ignition_study init --study-id <study-id> --programme-manifest <manifest-path>

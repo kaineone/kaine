@@ -245,6 +245,9 @@ async def test_probe_after_thaw_waits_for_readout_period(owner_factory):
         sample_hz=10.0,
         withdrawal_period_seconds=10.0,
         withdrawal_seconds=2.0,
+        # The withdrawal's wait for a full entrainment window since boot or thaw
+        # (paper A.7) coincides with the settling period here.
+        entrainment_window_seconds=5.0,
     )
 
     owner = owner_factory(
@@ -319,6 +322,10 @@ async def test_perturbation_after_withdrawal_waits_for_separation(owner_factory)
         withdrawal_seconds=2.0,
         perturbation_period_seconds=100.0,
         perturbation_seconds=1.0,
+        # The withdrawal's wait for a full entrainment window since boot or thaw
+        # (paper A.7) coincides with the settling period here.
+        entrainment_window_seconds=1.0,
+        edge_trim_seconds=0.25,
     )
 
     owner = owner_factory(
@@ -638,7 +645,14 @@ async def test_an_unreadable_pause_state_counts_as_frozen(owner_factory):
     clock = FakeClock()
     bus = FakeBus()
     drive = FakeDrive()
-    config = _config(readout_period_seconds=1.0, sample_hz=1.0, withdrawal_seconds=5.0)
+    # The withdrawal's entrainment-window wait (paper A.7) coincides with settling.
+    config = _config(
+        readout_period_seconds=1.0,
+        sample_hz=1.0,
+        withdrawal_seconds=5.0,
+        entrainment_window_seconds=1.0,
+        edge_trim_seconds=0.25,
+    )
     broken = {"on": False}
 
     def is_paused() -> bool:

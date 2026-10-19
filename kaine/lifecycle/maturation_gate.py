@@ -83,7 +83,10 @@ class RegulationThresholds:
 
     endogenous_self_sustain: bool = True
     entrain_then_autonomy: bool = True
-    hrv_variability_floor: float = 0.2
+    # The period-variability floor lies below every fetal five-minute heart-rate
+    # coefficient of variation (Moraes et al. 2012), so it checks for rigidity
+    # rather than marking maturation.
+    hrv_variability_floor: float = 0.02
     stimulus_source_prediction_error_ceiling: float = 0.3
     return_to_baseline_seconds_ceiling: float = 30.0
 
