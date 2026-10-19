@@ -24,6 +24,7 @@ Surprise-based intensity alone does the opposite: a processor whose errors are f
 - The salience product clips only the priority. The static and drive-relevance goal factors never exceed 1, so they are unchanged bit for bit.
 - The affect state provider folds each `<source>_learning_progress` term of `affect.state`. The cycle refreshes the provider when the interest factor is selected.
 - The first-configuration profile selects `salience_goal_factor = "interest"`. The shipped `config/kaine.toml` default stays `"static"`, and `"drive_relevance"` still works when selected.
+- Every `config/studies/workspace_mediation_*.toml` arm sets the goal factor back to `"static"`, as it holds emotion regulation's tier 1 neutral, so the planned test ranks by intensity and novelty as before (paper 3.5, 6.3).
 - No new events and no recurring drive event, so nothing paces thought on a timer. Thought follows the progressing source's own surprising reports and fades as the niche is learned.
 
 ## Open question (deferred)
@@ -42,7 +43,7 @@ In the 30 h projection, the offline vision recording's colour-driven error rise 
 ## Impact
 
 - Code: `kaine/workspace/strategies.py`, `kaine/workspace/salience.py`, `kaine/cycle/affect_state.py`, `kaine/boot/wiring.py`, `kaine/cycle/__main__.py`.
-- Config: `config/kaine.toml`, `config/profiles/first_configuration.toml`.
+- Config: `config/kaine.toml`, `config/profiles/first_configuration.toml`, `config/studies/workspace_mediation_*.toml`.
 - Tests and docs (`docs/08-cognitive-cycle/global-workspace.md`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/core.md`, `docs/appendix-b-glossary.md`).
 - Behaviour:
   - A counterfactual replay of the ninth boot's 17,521 main-hour broadcasts reproduces the boot at `gamma_I = 0`: 64/73/16/7/8/7 thoughts per 10 min, against 65/72/16/7/8/7 observed.
