@@ -156,21 +156,31 @@ async def test_default_still_reads_the_backlog():
 
 
 @pytest.mark.asyncio
-async def test_tail_lookup_failure_reads_from_the_head():
-    class FailingTailBus(TailFakeBus):
-        async def last_entry_id(self, stream: str) -> str:
-            raise RuntimeError("tail lookup refused")
+async def test_tail_lookup_failure_starts_at_the_current_time():
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    client = fakeredis.FakeRedis(decode_responses=True)
+    bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
 
-    bus = FailingTailBus()
+    async def _raise(stream):
+        raise RuntimeError("boom")
+
+    await bus.publish(_affect_state_event())
+    await asyncio.sleep(0.01)
+    bus.last_entry_id = _raise
     sink = FakeSink()
-    bus.push("affect.out", _affect_state_event())
     obs = ResearchEventObserver(
         bus, sink, poll_interval_s=0.02, start_at_tail=True
     )
     await obs.start()
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.01)
+    await bus.publish(_affect_state_event())
+    await asyncio.sleep(0.3)
     await obs.stop()
-    assert len(sink.rows) == 1
+    await bus.close()
+    affect_state_rows = [
+        r for r in sink.rows if r.get("event_type") == "affect.state"
+    ]
+    assert len(affect_state_rows) == 1
 
 
 def test_sidecar_builds_the_research_observer_at_the_tail(tmp_path):

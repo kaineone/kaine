@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -578,9 +579,10 @@ class ResearchEventObserver(StreamSubscriberObserver):
 
     Args:
         start_at_tail: If true, each curated stream starts after its newest
-            entry at the moment ``start()`` runs, so only this run's events are
-            recorded. The evaluation sidecar sets it; the default keeps the
-            backlog read.
+            entry at the moment ``start()`` runs, or at the current
+            millisecond when that lookup fails, so a previous run's retained
+            entries are not recorded. The evaluation sidecar sets it; the
+            default keeps the backlog read.
     """
 
     name = "research_event_log"
@@ -618,8 +620,10 @@ class ResearchEventObserver(StreamSubscriberObserver):
     async def _tail_cursor(self, stream: str) -> str:
         """Return the newest entry id for ``stream``, or ``"0"`` when unknown.
 
-        Falls back to reading from the head when the bus cannot report a tail
-        id or the lookup fails.
+        Falls back to reading from the head only when the bus has no
+        ``last_entry_id`` method (test doubles). When the lookup fails on a
+        real bus, starts at the current millisecond so a previous run's
+        retained entries are not recorded.
         """
         if not hasattr(self._bus, "last_entry_id"):
             return "0"
@@ -627,11 +631,11 @@ class ResearchEventObserver(StreamSubscriberObserver):
             return await self._bus.last_entry_id(stream)
         except Exception:
             log.warning(
-                "research observer tail lookup failed for %s; reading from the head",
+                "research observer tail lookup failed for %s; starting at the current time",
                 stream,
                 exc_info=True,
             )
-            return "0"
+            return f"{int(time.time() * 1000)}-0"
 
     # --- Record construction --------------------------------------------
 
