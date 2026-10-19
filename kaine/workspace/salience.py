@@ -49,8 +49,9 @@ def arousal_contrast(p: float, gain: float) -> float:
 class RuleBasedSalience:
     """Product-form salience with arousal contrast.
 
-    priority = intensity * novelty * goal;
+    priority = clip(intensity * novelty * goal);
     score = the affect module's level factor times the arousal contrast of the priority.
+    Only the priority is clipped to [0, 1]; the goal factor may exceed 1.
 
     Precision is local to each processor, which scores its own prediction error
     against its recent errors, so the workspace applies no per-source weight.
@@ -95,7 +96,12 @@ class RuleBasedSalience:
     async def score(self, event: Event, context: dict[str, Any]) -> float:
         intensity = _clamp(event.salience)
         novelty = _clamp(self._novelty.observe(event))
-        goal = _clamp(await self._goal.relevance(event))
+        raw_goal = await self._goal.relevance(event)
+        goal = (
+            raw_goal
+            if isinstance(raw_goal, (int, float)) and math.isfinite(raw_goal) and raw_goal >= 0.0
+            else 0.0
+        )
         affect = _clamp(await self._affect.modulate(event))
 
         priority = _clamp(intensity * novelty * goal)

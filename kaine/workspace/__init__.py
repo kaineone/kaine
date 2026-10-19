@@ -8,6 +8,7 @@ from kaine.workspace.strategies import (
     AffectModulator,
     DriveRelevanceGoalScorer,
     GoalScorer,
+    InterestGoalScorer,
     SalienceStrategy,
     StaticAffectModulator,
     StaticGoalScorer,
@@ -17,6 +18,7 @@ from kaine.workspace.strategies import (
 __all__ = [
     "DriveRelevanceGoalScorer",
     "GoalScorer",
+    "InterestGoalScorer",
     "NoveltyTracker",
     "RuleBasedSalience",
     "SalienceStrategy",
