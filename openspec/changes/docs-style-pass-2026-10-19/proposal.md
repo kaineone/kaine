@@ -1,10 +1,11 @@
 ## Why
 
 Prose added today in `docs-roadmap-hygiene` (#562) and in the six action-path
-proposals (#561) carries patterns from the field guide to AI writing telltales
-that the project's writing rules exclude: bold-first list items, long sentences
-of near-equal length strung with semicolons, a signposting colon ("blocked on two
-things:") and a few crafted antitheses ("informative instead of decorative").
+proposals (#561) has style patterns the project's writing rules exclude. List
+items open with bold stems, long sentences of near-equal length are strung
+together with semicolons, a roadmap row signposts with a colon ("blocked on two
+things:"), and a few phrases are built as antitheses ("informative instead of
+decorative").
 
 ## What Changes
 
