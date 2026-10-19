@@ -185,7 +185,7 @@ def test_guard_and_persona_text(rendering, mode):
         assert text not in system
         assert text not in DEFAULT_PERSONA_EXTERNAL
         assert text not in DEFAULT_PERSONA_INTERNAL
-    assert PERSONA_TEMPLATE_VERSION == "4"
+    assert PERSONA_TEMPLATE_VERSION == "5"
     assert "\u2014" not in system
 
 

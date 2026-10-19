@@ -227,6 +227,12 @@ class Language(BaseModule):
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
         # Situation facts held by the language module when no self-model carries them.
         self._own_situation_facts: list[str] = []
+        # The situation facts last given to the organ in this waking; None means
+        # none given since the module initialized or since the last completed sleep.
+        self._situation_given: Optional[tuple[str, ...]] = None
+        # When the module last initialized; sleeps completed before it do not
+        # start a new waking.
+        self._initialized_at: Optional[datetime] = None
         # Whether a self-model is expected for this entity.
         self._expects_self_model = True
         self._baseline_salience = float(baseline_salience)
@@ -308,6 +314,10 @@ class Language(BaseModule):
         except Exception:
             return self._with_own_facts({})
 
+    def _on_sleep_completed(self) -> None:
+        """A completed sleep starts a new waking, so the situation is given again at the next organ call."""
+        self._situation_given = None
+
     async def _self_model_cache_loop(self) -> None:
         """Cache the latest self-model snapshot published on self_model.out.
 
@@ -386,6 +396,15 @@ class Language(BaseModule):
                         # The latest value, not the largest: a restarted sleep module
                         # counts from zero again, and the record must say so.
                         self._sleep_index = idx
+                    if (
+                        ev.type == "sleep.sleep.completed"
+                        and self._initialized_at is not None
+                        and ev.timestamp >= self._initialized_at
+                    ):
+                        # The cursor normally starts at the tail, but a failed tail
+                        # read starts it at the head, so older completions are
+                        # skipped by time.
+                        self._on_sleep_completed()
             else:
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
@@ -438,6 +457,9 @@ class Language(BaseModule):
         return self._intent_log
 
     async def initialize(self) -> None:
+        # A re-initialized module is a new waking.
+        self._situation_given = None
+        self._initialized_at = datetime.now(timezone.utc)
         # Seek to the latest intent entry so we only realize intents formed
         # after boot, mirroring Audio Out's dedicated-loop cursor seeding.
         try:
@@ -886,10 +908,11 @@ class Language(BaseModule):
         # Heard speech is anything that came from an external-input event in
         # the coalition (audition.transcription, embodiment.chat), plus any unmarked
         # about (fail-closed: felt/event must be explicitly tagged). The
-        # redaction set also holds the values of the heard-speech payload fields
-        # at any depth on any coalition event.
+        # residual pass uses the same set publishing uses: external-input event
+        # texts plus heard-field values from events whose source is not
+        # "language". The language module's own event field values are excluded
+        # because they were already redacted when published.
         heard_texts: set[str] = set()
-        redact_texts: set[str] = set()
         # Heard-field values from events other than the language module's own. Its own
         # earlier user_input is a felt or event phrase it chose to publish.
         foreign_field_texts: set[str] = set()
@@ -901,10 +924,9 @@ class Language(BaseModule):
                 for leaf in _iter_field_values(
                     event.payload, HEARD_TEXT_FIELDS - {"text"}
                 ):
-                    redact_texts.add(leaf)
                     if event.source != "language":
                         foreign_field_texts.add(leaf)
-        redact_texts |= heard_texts
+        residual_texts = heard_texts | foreign_field_texts
 
         # Only an external-input event makes an about heard. Field values (for
         # example a felt phrase the language module itself published as user_input) are
@@ -913,10 +935,20 @@ class Language(BaseModule):
             about_kind not in ("felt", "event") or about.strip() in heard_texts
         )
 
+        # Situation facts are given in the first organ call of each waking
+        # (after boot or a completed sleep) and when the facts change. Repeating
+        # them in every prompt made the disclosure a standing topic of the
+        # entity's thought. The individuation probe builds its own request and
+        # always carries them.
+        self_model = self._self_model()
+        situation = tuple(str(f) for f in (self_model.get("situation_facts") or []))
+        give_situation = bool(situation) and situation != self._situation_given
+        if not give_situation:
+            self_model = {k: v for k, v in self_model.items() if k != "situation_facts"}
         ctx = self._assembler.assemble(
             about=about,
             snapshot=snap,
-            self_model=self._self_model(),
+            self_model=self_model,
             mode=mode,
             about_is_heard=about_is_heard,
         )
@@ -939,6 +971,8 @@ class Language(BaseModule):
             dry=self._dry,
         )
         response = await self._chat_client.complete(request)
+        if give_situation:
+            self._situation_given = situation
 
         # A loop or a cap-cut fragment ends at a sentence boundary (paper 3.5); the
         # cut text is what is logged, published and returned.
@@ -959,7 +993,7 @@ class Language(BaseModule):
         # speech never reaches it: prompt and faithful rendering are redacted.
         logged_prompt = ctx.logged_prompt
         logged_faithful = ctx.logged_working_memory if snap is not None else None
-        for heard in redact_texts:
+        for heard in residual_texts:
             if len(heard) >= 3:
                 logged_prompt = logged_prompt.replace(heard, HEARD_SPEECH_PLACEHOLDER)
                 if logged_faithful is not None:
@@ -968,12 +1002,12 @@ class Language(BaseModule):
                     )
         logged_heard_turn = ctx.logged_heard_turn
         if logged_heard_turn is not None:
-            for heard in redact_texts:
+            for heard in residual_texts:
                 if len(heard) >= 3:
                     logged_heard_turn = logged_heard_turn.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_numeric = ctx.numeric_working_memory if snap is not None else None
         if logged_numeric is not None:
-            for heard in redact_texts:
+            for heard in residual_texts:
                 if len(heard) >= 3:
                     logged_numeric = logged_numeric.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_about_values = _clean_about_values(about_values, heard_texts | foreign_field_texts)
@@ -993,6 +1027,8 @@ class Language(BaseModule):
             log.exception("system prompt store failed")
 
         extra: dict[str, Any] = {}
+        if give_situation:
+            extra["situation_given"] = True
         if logged_heard_turn:
             extra["heard_turn"] = logged_heard_turn
         if cut_reason is not None:

@@ -14,7 +14,8 @@ composition root that already knows about both layers — holds this small
 provider. The engine refreshes it each tick from the events it already has in
 hand (no new bus read), and the salience factors read it back through injected
 callables (``dimensional_state`` for :class:`StateModulator`, ``drive_values``
-for :class:`DriveRelevanceGoalScorer`). Dependency injection, not import.
+for :class:`DriveRelevanceGoalScorer`, ``learning_progress`` for
+:class:`InterestGoalScorer`). Dependency injection, not import.
 
 Purity: ``observe`` folds the last-known ``affect.state`` from a batch the cycle
 already gathered. No wall-clock, no RNG, no bus I/O — so salience stays a pure
@@ -23,7 +24,8 @@ guarantee is preserved.
 """
 from __future__ import annotations
 
-from typing import Iterable
+import math
+from typing import Any, Iterable
 
 from kaine.bus.schema import Event
 from kaine.modules.affect.state import DimensionalState
@@ -40,6 +42,7 @@ class AffectStateProvider:
     def __init__(self, initial: DimensionalState | None = None) -> None:
         self._state = (initial or DimensionalState()).clamped()
         self._drives: dict[str, float] = {}
+        self._learning_progress: dict[str, float] = {}
 
     def observe(self, events: Iterable[tuple[str, Event]]) -> None:
         """Fold the latest ``affect.state`` in ``events`` into the snapshot.
@@ -66,6 +69,24 @@ class AffectStateProvider:
                     if isinstance(value, (int, float))
                 }
 
+            # Fold per-source learning progress for the interest goal factor.
+            lp_keys: list[tuple[str, Any]] = []
+            for key, value in event.payload.items():
+                if not isinstance(key, str) or not key.endswith("_learning_progress"):
+                    continue
+                prefix = key.removesuffix("_learning_progress")
+                if not prefix or prefix == "signed":
+                    continue
+                lp_keys.append((prefix, value))
+            if lp_keys:
+                self._learning_progress = {
+                    prefix: float(value)
+                    for prefix, value in lp_keys
+                    if isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                }
+
     def dimensional_state(self) -> DimensionalState:
         """Current affect state, for the affect module factor (:class:`StateModulator`)."""
         return self._state
@@ -76,3 +97,10 @@ class AffectStateProvider:
         A copy, so a reader can never mutate the snapshot in place.
         """
         return dict(self._drives)
+
+    def learning_progress(self) -> dict[str, float]:
+        """Per-source learning progress for the interest goal factor.
+
+        A copy, so a reader can never mutate the snapshot in place.
+        """
+        return dict(self._learning_progress)
