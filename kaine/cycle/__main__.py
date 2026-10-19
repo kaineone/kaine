@@ -109,6 +109,7 @@ from kaine.state_io import write_json_atomic
 from kaine.storage import install_data_root, resolve
 from kaine.workspace import (
     DriveRelevanceGoalScorer,
+    InterestGoalScorer,
     NoveltyTracker,
     RuleBasedSalience,
     Workspace,
@@ -1894,7 +1895,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
     ctx.access_rate = AccessRateController(access_rate_cfg) if access_rate_cfg.enabled else None
     reads_affect = (
         isinstance(affect_modulator, StateModulator)
-        or isinstance(goal_scorer, DriveRelevanceGoalScorer)
+        or isinstance(goal_scorer, (DriveRelevanceGoalScorer, InterestGoalScorer))
         or vision_reads_arousal
         or audition_reads_arousal
         or ctx.access_rate is not None
@@ -2499,6 +2500,9 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
     _stimulus_source_feed = ctx.kaine_config.get("perception_feed") or {}
     _maturation_clock = _stimulus_source_feed.get("_shared_stimulus_source_clock")
     _stimulus_source_maturation_hook = None
+    # The gate records the stimulus source time in the stage file, so a restart resumes it.
+    if _maturation_clock is not None:
+        ctx.gate_runner.set_stimulus_source_clock(_maturation_clock.stimulus_source_seconds)
     if _maturation_clock is not None:
         from kaine.boot import _stimulus_source_params
 

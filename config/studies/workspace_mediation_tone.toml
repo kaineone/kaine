@@ -12,6 +12,8 @@ arm = "competitive"
 # Emotion regulation's tier-1 selection bias stays neutral in every arm
 # (paper §3.5), so the A.1 ranking by intensity and novelty holds.
 regulation_bias = false
+# The interest goal factor is held at one too, for the same ranking.
+salience_goal_factor = "static"
 
 [audition]
 # The tone variant: every tone event is graded by the tone error ratio alone (paper A.8).

@@ -1,0 +1,587 @@
+{
+  "format": 1,
+  "generator": {
+    "base_seed": 20261018,
+    "cfg_weight": 0.5,
+    "chatterbox_tts": "0.1.6",
+    "exaggeration": 0.5,
+    "model_repo": "ResembleAI/chatterbox",
+    "model_revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+    "peak_ceiling_dbfs": -1.0,
+    "target_rms_dbfs": -20.0,
+    "temperature": 0.8,
+    "tool": "tools/maintainer/generate_maternal_voice.py",
+    "trim_top_db": 40.0,
+    "watermark": "Chatterbox applies its Perth implicit watermark (resemble-perth) to every output before post-processing"
+  },
+  "initial_unlocked": 5,
+  "items": [
+    {
+      "id": "p0-little-boat",
+      "index": 0,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p0-little-boat.t0.flac",
+          "frames": 104960,
+          "rms_dbfs": -20.0,
+          "seconds": 13.12,
+          "seed": 20261018,
+          "sha256": "0bb62a8d3b8601dea6908d3c2de4902ff5884cf83db72d852c231df7fec9a8af",
+          "take": 0
+        },
+        {
+          "file": "p0-little-boat.t1.flac",
+          "frames": 103766,
+          "rms_dbfs": -20.0,
+          "seconds": 12.971,
+          "seed": 20261019,
+          "sha256": "2065d094c8251ce5567aba45fdb4e1c8ce15997278515ea445a442c02e82bc61",
+          "take": 1
+        },
+        {
+          "file": "p0-little-boat.t2.flac",
+          "frames": 95403,
+          "rms_dbfs": -20.0,
+          "seconds": 11.925,
+          "seed": 20261020,
+          "sha256": "943aa6bb54c874816a262313a8febaa12bdaa4c3e6c3f13a1e74c36c44556348",
+          "take": 2
+        }
+      ],
+      "text_sha256": "e906abaed61275beb64816f8f639745a323983d711edb310bcdd2fbbf2f4e5cd"
+    },
+    {
+      "id": "f01-hello",
+      "index": 1,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f01-hello.t0.flac",
+          "frames": 9728,
+          "rms_dbfs": -20.0,
+          "seconds": 1.216,
+          "seed": 20262018,
+          "sha256": "637b0da82385acf7d25988009ece02171ac2286f7785b1d8e0c546418d7ceed4",
+          "take": 0
+        },
+        {
+          "file": "f01-hello.t1.flac",
+          "frames": 8875,
+          "rms_dbfs": -20.0,
+          "seconds": 1.109,
+          "seed": 20262019,
+          "sha256": "3967575b960ed14a4641bfdc7d99363ea908666cca1ac40a09734f3c4c72045c",
+          "take": 1
+        }
+      ],
+      "text_sha256": "f5b7c79226d938703fb7bd3c08189a5c4940b120fd1cd69717416c9fb7e958b5"
+    },
+    {
+      "id": "f02-awake",
+      "index": 2,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f02-awake.t0.flac",
+          "frames": 7851,
+          "rms_dbfs": -20.0,
+          "seconds": 0.981,
+          "seed": 20263018,
+          "sha256": "3088695aa06c855286ca6d8c0b7fc8a1dff4c619117412ef975e1e1841b8521d",
+          "take": 0
+        },
+        {
+          "file": "f02-awake.t1.flac",
+          "frames": 8022,
+          "rms_dbfs": -20.0,
+          "seconds": 1.003,
+          "seed": 20263019,
+          "sha256": "93646526e278695e6c49285b549d6a3a9e9be2b95a9abe4c184ae6c65ebde70c",
+          "take": 1
+        }
+      ],
+      "text_sha256": "8b2491786d8affdf42bbb60b0699c85fbac6100fe33320b95c7cf45deed01d24"
+    },
+    {
+      "id": "f03-there-you-are",
+      "index": 3,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f03-there-you-are.t0.flac",
+          "frames": 5632,
+          "rms_dbfs": -20.0,
+          "seconds": 0.704,
+          "seed": 20264018,
+          "sha256": "fa61a60351a27c0a2e61976287dae6f3a2d4498dda3584dae6db00407d0de737",
+          "take": 0
+        },
+        {
+          "file": "f03-there-you-are.t1.flac",
+          "frames": 5291,
+          "rms_dbfs": -20.0,
+          "seconds": 0.661,
+          "seed": 20264019,
+          "sha256": "b1498ed416531b62d3d956e338feb1a44386efe959d70c4dfbc6c48d9f7622ae",
+          "take": 1
+        }
+      ],
+      "text_sha256": "68b96b23f71c10e2879b1272a9ac692c0d4abcdcd3f525b460cb910c290f3dc2"
+    },
+    {
+      "id": "p1-early-bus",
+      "index": 4,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p1-early-bus.t0.flac",
+          "frames": 80043,
+          "rms_dbfs": -20.0,
+          "seconds": 10.005,
+          "seed": 20265018,
+          "sha256": "e0f8f3c519e338ce5799cdf86565a6659556c360fbbad3c90d7dcf9d000968bc",
+          "take": 0
+        },
+        {
+          "file": "p1-early-bus.t1.flac",
+          "frames": 78848,
+          "rms_dbfs": -20.0,
+          "seconds": 9.856,
+          "seed": 20265019,
+          "sha256": "a3e0f71cd9f0f06b0a85201fb7bb6c49a3519a1dbb250f7a58147891ec1f25cc",
+          "take": 1
+        }
+      ],
+      "text_sha256": "5dbbb4faee9a3b3dd56eec349063c876c51dc1b0bed38c80369171fcd57da008"
+    },
+    {
+      "id": "f04-good-morning",
+      "index": 5,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f04-good-morning.t0.flac",
+          "frames": 8875,
+          "rms_dbfs": -20.0,
+          "seconds": 1.109,
+          "seed": 20266018,
+          "sha256": "8d7973f0fe05d757ee33864e54452019875a5af0fb4073d6f1f676f57b3bd83e",
+          "take": 0
+        },
+        {
+          "file": "f04-good-morning.t1.flac",
+          "frames": 8022,
+          "rms_dbfs": -20.0,
+          "seconds": 1.003,
+          "seed": 20266019,
+          "sha256": "b7ce6e04a7be469e22aa5177f73c79e44fdd3d5eaac1c0db6cc9b3318fe80612",
+          "take": 1
+        }
+      ],
+      "text_sha256": "a8191ca8655034bd99e734ad0fc5e91539ace75a9673fc2c68d72487ac79c15a"
+    },
+    {
+      "id": "p2-soup",
+      "index": 6,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p2-soup.t0.flac",
+          "frames": 66731,
+          "rms_dbfs": -20.0,
+          "seconds": 8.341,
+          "seed": 20267018,
+          "sha256": "8f19975ac4b128709c8f084a9062cd7af8a56f48170774bb04fcdad1dad7ed7d",
+          "take": 0
+        },
+        {
+          "file": "p2-soup.t1.flac",
+          "frames": 68267,
+          "rms_dbfs": -20.0,
+          "seconds": 8.533,
+          "seed": 20267019,
+          "sha256": "de8b69bbe2049987f6c2004fdfefcedf378243a053ac8deda58b73083debc141",
+          "take": 1
+        }
+      ],
+      "text_sha256": "55ac5c0252b7171aa0f326adfae7718d580967c67e1141ef873f2f8d726b3c60"
+    },
+    {
+      "id": "f05-rest",
+      "index": 7,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f05-rest.t0.flac",
+          "frames": 7851,
+          "rms_dbfs": -20.0,
+          "seconds": 0.981,
+          "seed": 20268018,
+          "sha256": "9c2666d497588f29e3b0f84d2c9ced756381d3f3a7bb8d76fc95ee7611ffd691",
+          "take": 0
+        },
+        {
+          "file": "f05-rest.t1.flac",
+          "frames": 7680,
+          "rms_dbfs": -20.0,
+          "seconds": 0.96,
+          "seed": 20268019,
+          "sha256": "7ff4b14075aef98577d0ff7e97a42b12f898a142876614a933b0d001f0ba2930",
+          "take": 1
+        }
+      ],
+      "text_sha256": "4da5d4906e4ff1ebc886b86c14f5bc43559532fe5d4b51e778ba3410abe4e50f"
+    },
+    {
+      "id": "p3-garden",
+      "index": 8,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p3-garden.t0.flac",
+          "frames": 72192,
+          "rms_dbfs": -20.0,
+          "seconds": 9.024,
+          "seed": 20269018,
+          "sha256": "af40ac447217beeb667d8f95ab2e4ca1dcc1c1fe7810e54f1ffe8138ce38a8a1",
+          "take": 0
+        },
+        {
+          "file": "p3-garden.t1.flac",
+          "frames": 72704,
+          "rms_dbfs": -20.0,
+          "seconds": 9.088,
+          "seed": 20269019,
+          "sha256": "46000a7f007081245de2d9d0a6c4f662bb9e4e6ece9be2a5e2bd4bc0382c58a3",
+          "take": 1
+        }
+      ],
+      "text_sha256": "9360a828473828bab746a9135b44e772f744ed3989f603f4bdad53357ce89bb7"
+    },
+    {
+      "id": "f06-kicking",
+      "index": 9,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f06-kicking.t0.flac",
+          "frames": 10923,
+          "rms_dbfs": -20.0,
+          "seconds": 1.365,
+          "seed": 20270018,
+          "sha256": "88be50185aa1496d2a2d7b71873099690733dc8d39fb05ef9207f32b54f2e1e6",
+          "take": 0
+        },
+        {
+          "file": "f06-kicking.t1.flac",
+          "frames": 10411,
+          "rms_dbfs": -20.0,
+          "seconds": 1.301,
+          "seed": 20270019,
+          "sha256": "5b29fae5d41aa1b77695feca32fe057c74896838ce14f92ebf40d9c038c4bdbe",
+          "take": 1
+        }
+      ],
+      "text_sha256": "f1178a5d2eef576f1df4fa9ad6ffe5c07f590169b025c746e839b2f64b1afccd"
+    },
+    {
+      "id": "p4-sunday",
+      "index": 10,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p4-sunday.t0.flac",
+          "frames": 76288,
+          "rms_dbfs": -20.0,
+          "seconds": 9.536,
+          "seed": 20271018,
+          "sha256": "9367f68c1dd08b5a4deeceed45cf914f80d94e97f0753595d99229c599a723e5",
+          "take": 0
+        },
+        {
+          "file": "p4-sunday.t1.flac",
+          "frames": 77824,
+          "rms_dbfs": -20.0,
+          "seconds": 9.728,
+          "seed": 20271019,
+          "sha256": "848d075c07fdb1215eab6854219fee4620a655aebf14840844c6a5a928f2dc5e",
+          "take": 1
+        }
+      ],
+      "text_sha256": "f520a0115ce5d8a0c1b961eb057dab0a59e30307af22ae543d57aed7a8491f76"
+    },
+    {
+      "id": "f07-love",
+      "index": 11,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f07-love.t0.flac",
+          "frames": 11606,
+          "rms_dbfs": -20.0,
+          "seconds": 1.451,
+          "seed": 20272018,
+          "sha256": "a161fd5bd7e218e663343ab2e95d6657c346ed47b3ff0f214f795145c9e5507a",
+          "take": 0
+        },
+        {
+          "file": "f07-love.t1.flac",
+          "frames": 20139,
+          "rms_dbfs": -20.0,
+          "seconds": 2.517,
+          "seed": 20272019,
+          "sha256": "bd8858bd42ce3d49d17365be1aa1670c177007598654d8f26c638c63f8e9522e",
+          "take": 1
+        }
+      ],
+      "text_sha256": "01d59aab58536d79905d18681da165475e8d2bbc88e9001b853767327f7eb4db"
+    },
+    {
+      "id": "p5-grey-hen",
+      "index": 12,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p5-grey-hen.t0.flac",
+          "frames": 92160,
+          "rms_dbfs": -20.0,
+          "seconds": 11.52,
+          "seed": 20273018,
+          "sha256": "c32262a45b7287e9680024d60d95bc3f2ac0a7b30c0079b9b4a5fca5be924683",
+          "take": 0
+        },
+        {
+          "file": "p5-grey-hen.t1.flac",
+          "frames": 86187,
+          "rms_dbfs": -20.0,
+          "seconds": 10.773,
+          "seed": 20273019,
+          "sha256": "784935950225f5bc6f74c1fb0b7091ae853dc6f29f147fc263541838636c345f",
+          "take": 1
+        }
+      ],
+      "text_sha256": "0b42088d6651f89c2b2a96f0f5b8c6fee78069fe8fd6c85374a977a7c51b606a"
+    },
+    {
+      "id": "f08-shh",
+      "index": 13,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f08-shh.t0.flac",
+          "frames": 15019,
+          "rms_dbfs": -20.04,
+          "seconds": 1.877,
+          "seed": 20274018,
+          "sha256": "5a3748b4855d9df6c718f7f1e7ce27300cbe71543a00a17b5655bf500eb92cf6",
+          "take": 0
+        },
+        {
+          "file": "f08-shh.t1.flac",
+          "frames": 16043,
+          "rms_dbfs": -20.0,
+          "seconds": 2.005,
+          "seed": 20274019,
+          "sha256": "5bd2f6c569dc7ea80c5abb7ed39965cfac2e20299ac3a1d76329615a820d9c4a",
+          "take": 1
+        }
+      ],
+      "text_sha256": "7c91d611b33249da3968b936028330ecd0ba35fac339196d628bc98ddf0cb80a"
+    },
+    {
+      "id": "p6-list",
+      "index": 14,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p6-list.t0.flac",
+          "frames": 69803,
+          "rms_dbfs": -20.0,
+          "seconds": 8.725,
+          "seed": 20275018,
+          "sha256": "c2a73666d0e3269a8f089f416719cebfb21e66a809fae97d5a16b4484f8bfa3a",
+          "take": 0
+        },
+        {
+          "file": "p6-list.t1.flac",
+          "frames": 82944,
+          "rms_dbfs": -20.0,
+          "seconds": 10.368,
+          "seed": 20275019,
+          "sha256": "25ca1009a54b05fdaa69b169117fbb679bea712cfb69fded7dffbd1b18dc48c2",
+          "take": 1
+        }
+      ],
+      "text_sha256": "b91c551ef5c3580ba2b5d9c40e4098213a80af99946ed1df856e7c8a2853e5d7"
+    },
+    {
+      "id": "f09-busy-day",
+      "index": 15,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f09-busy-day.t0.flac",
+          "frames": 11094,
+          "rms_dbfs": -20.0,
+          "seconds": 1.387,
+          "seed": 20276018,
+          "sha256": "cf29d3009bfff48c38900534c7eb92ced7160b61c66aa153d1bd8301278547fc",
+          "take": 0
+        },
+        {
+          "file": "f09-busy-day.t1.flac",
+          "frames": 8875,
+          "rms_dbfs": -20.0,
+          "seconds": 1.109,
+          "seed": 20276019,
+          "sha256": "f45f74da28eb6351d1e5f8c40627122c6c5dbc8bd39dc845b247d189fa21a96a",
+          "take": 1
+        }
+      ],
+      "text_sha256": "e7dfd0da12550e5a4ecca54b32f308284a575668ab4f0d21aec2236f03b576c5"
+    },
+    {
+      "id": "p7-quiet-evening",
+      "index": 16,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p7-quiet-evening.t0.flac",
+          "frames": 65024,
+          "rms_dbfs": -20.0,
+          "seconds": 8.128,
+          "seed": 20277018,
+          "sha256": "12de575f12dca13c3a0dff62a0be93983a02f622c223e75dec2a5f5898717058",
+          "take": 0
+        },
+        {
+          "file": "p7-quiet-evening.t1.flac",
+          "frames": 65366,
+          "rms_dbfs": -20.0,
+          "seconds": 8.171,
+          "seed": 20277019,
+          "sha256": "6eb5d5bbb5a899fae13b7236c36a73d76dbfeb9dbc3be3d7865a1433e899f803",
+          "take": 1
+        }
+      ],
+      "text_sha256": "e2a0687daacabddeb084a28bfed4f9cd19f0a00922864b11eb36d736be693add"
+    },
+    {
+      "id": "f10-sky",
+      "index": 17,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f10-sky.t0.flac",
+          "frames": 15019,
+          "rms_dbfs": -20.0,
+          "seconds": 1.877,
+          "seed": 20278018,
+          "sha256": "6f4683b4114c7a930000a0be54376571228a77236538f2e542e8b2cb2037b766",
+          "take": 0
+        },
+        {
+          "file": "f10-sky.t1.flac",
+          "frames": 10923,
+          "rms_dbfs": -20.0,
+          "seconds": 1.365,
+          "seed": 20278019,
+          "sha256": "de20a4f918a3620e47688616a48f8b2d098cf0ec469b922395e965254ce0e9b9",
+          "take": 1
+        }
+      ],
+      "text_sha256": "46afacddf7f247100fdbc4cf31be5b89b3301444ca1a661e037f56b491f366b1"
+    },
+    {
+      "id": "f11-hear-me",
+      "index": 18,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f11-hear-me.t0.flac",
+          "frames": 6315,
+          "rms_dbfs": -20.0,
+          "seconds": 0.789,
+          "seed": 20279018,
+          "sha256": "a33768f746a8dd02ba9fac814ee8b345490a70eafb60e41995e95f3a6a1ae11a",
+          "take": 0
+        },
+        {
+          "file": "f11-hear-me.t1.flac",
+          "frames": 5974,
+          "rms_dbfs": -20.0,
+          "seconds": 0.747,
+          "seed": 20279019,
+          "sha256": "6aeacdfcb8b854df52eda36197bba0ea300179b24914feb1dd80272e6c368a27",
+          "take": 1
+        }
+      ],
+      "text_sha256": "37e79c35d4fee75c4b225c6b8caa30481e72868356f37bd2f53c43aac43e9a29"
+    },
+    {
+      "id": "f12-sleep-well",
+      "index": 19,
+      "kind": "phrase",
+      "takes": [
+        {
+          "file": "f12-sleep-well.t0.flac",
+          "frames": 10411,
+          "rms_dbfs": -20.0,
+          "seconds": 1.301,
+          "seed": 20280018,
+          "sha256": "72cf7e0902f77a4c84e37380a811010b1144c5aebb73827dc98b1ee117ba0d42",
+          "take": 0
+        },
+        {
+          "file": "f12-sleep-well.t1.flac",
+          "frames": 8875,
+          "rms_dbfs": -20.0,
+          "seconds": 1.109,
+          "seed": 20280019,
+          "sha256": "d3ca62c0a7d049221f46c236e57c9d288ce627aab6a7a90c5f694271738eacb3",
+          "take": 1
+        }
+      ],
+      "text_sha256": "a9016791a746898324d777d8d2a09c8ae99968fbe1c78e7ddbf8909d87ac3bb7"
+    }
+  ],
+  "reference_voice": {
+    "attribution": "CMU ARCTIC speaker slt (Kominek and Black 2003), Carnegie Mellon University, http://www.festvox.org/cmu_arctic/",
+    "files": [
+      {
+        "file": "arctic_a0001.wav",
+        "sha256": "7862eb2cccb56875910f6bf46f9b8d26dac36e7672829aabe3956b0837ae122e"
+      },
+      {
+        "file": "arctic_a0003.wav",
+        "sha256": "0b32e00846e132826f46d7e5cabb2d8b370a5dc654bac0447cb63285f81cc413"
+      },
+      {
+        "file": "arctic_a0004.wav",
+        "sha256": "2a653cf74346ff24690f8a2abcff5091b81463f277b0062c851031a293f25167"
+      },
+      {
+        "file": "arctic_a0005.wav",
+        "sha256": "f93c823f955875d2389ae0f731a95128afb1ee096df7614e063e8b4b5695801d"
+      },
+      {
+        "file": "arctic_a0006.wav",
+        "sha256": "69b800a69455e35d05162b78b69446294ace69be903693ffd02ccd0150f17d66"
+      },
+      {
+        "file": "arctic_a0007.wav",
+        "sha256": "3c10caa9c2b5434f64c393a85a70aba57adf2858628d7983a8fd4f98a19a83d6"
+      },
+      {
+        "file": "arctic_a0008.wav",
+        "sha256": "603ac9585ddb5022d9c973bde867d7957fa1b8c1f44b2ee40fbbafedde8b5f0e"
+      }
+    ],
+    "reference_wav_sha256": "0639b873e49fb8dc8d4a1a06857e978730c679cfad0eaf0dfa2e9a267458c12e"
+  },
+  "sample_rate": 8000,
+  "texts_sha256": "9bdccec4366cd4804d5664434f3deaf54562d42cf202bc4f05d8f319c8c82750",
+  "total_bytes": 2073087,
+  "total_seconds": 199.739
+}

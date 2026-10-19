@@ -49,7 +49,7 @@ Geometry is taken from `[vision]`.
 
 ### stimulus source channel
 
-`mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat. The readout probes briefly disturb the drive to measure developmental readiness.
+`mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat, heard through a band that widens over awake time. The readout probes briefly disturb the drive to measure developmental readiness.
 
 **`maternal_distress_excursions` must stay `false`.** That feature is not built.
 
@@ -76,7 +76,7 @@ Geometry is taken from `[vision]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `3600` | Time constant, in entity seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). |
+| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the hearing band's `maturation_seconds`, so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
 
 #### `[perception_feed.stimulus_source.audio]`
 
@@ -84,11 +84,20 @@ Geometry is taken from `[vision]`.
 |---|---|---|---|
 | `lowpass_hz` | float | `500` | Soundscape low-pass corner frequency, in Hz (100 to 2000). |
 
+#### `[perception_feed.stimulus_source.hearing]`
+
+The hearing band filters the whole stimulus-source audio, the soundscape and the maternal voice alike, with a band-pass that widens over awake time in the order fetal hearing matures (Hepper and Shahidullah 1994). Each edge lies halfway, on a log scale, between the outermost tested tone heard and the next tested tone not heard. It starts at 354 to 707 Hz, around 500 Hz, the first tone fetuses respond to. Over `maturation_seconds` of awake time it takes four equal steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins, and with no unheard tone below it the low edge goes (a low-pass at 707 Hz, so the heartbeat thud is heard); 1000 Hz joins (low-pass at 1,732 Hz); 3000 Hz joins and the band is open. Every stage delays the audio by the same 512 samples. With the band on, the maternal voice loads with its low-pass at 3,000 Hz instead of `lowpass_hz`; the soundscape keeps `lowpass_hz`. The band needs a stream rate above 6,000 Hz. The band follows the same awake time as the colour ramp, so a restart resumes it where it was. It stays out of the parameter digest recorded at maturation.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Apply the hearing band. `false` gives the audio without the band byte for byte. |
+| `maturation_seconds` | float | `86400` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). |
+
 #### `[perception_feed.stimulus_source.readout]`
 
 The readout probes briefly change the maternal drive that an entity in its developmental phase perceives. They are bounded, announced on `development.out` as `development.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
-The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `development_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm identity, which the readout stores in `self_rhythm_identity.json` in the same directory; on boot the readout restores the progress when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `development_readout.json`, so the progress also survives a revive.
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, the viability verdict, the latest self-sustain and entrainment markers, and the probe-jitter counters) to `development_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm identity, which the readout stores in `self_rhythm_identity.json` in the same directory; on boot the readout restores the progress when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `development_readout.json`, so the progress also survives a revive.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -101,7 +110,7 @@ The readout saves its progress (awake seconds, consecutive passing withdrawals, 
 | `perturbation_drive_fraction` | float | `0.75` | Raised drive as a fraction of `external_drive_max_amplitude` (1.5× the usual 0.5). |
 | `probe_jitter_fraction` | float | `0.25` | Each probe time varies ±25% around its period. `0` = fixed schedule. |
 | `baseline_drive_fraction` | float | `0.5` | Usual drive as a fraction of `external_drive_max_amplitude`. |
-| `entrainment_window_seconds` | float | `300` | Window before each withdrawal over which the self-rhythm's phase locking to the heartbeat (marker 2) is measured. |
+| `entrainment_window_seconds` | float | `300` | Window before each withdrawal over which the self-rhythm's phase locking to the heartbeat (marker 2) is measured. A withdrawal waits at least this long after boot or a thaw. |
 | `entrainment_band_low_hz` / `entrainment_band_high_hz` | float | `0.3` / `2.0` | Band the self-rhythm's activity is filtered to before its phase is taken. Must lie below half of `sample_hz`. |
 | `edge_trim_seconds` | float | `2.0` | Trimmed from each end of the filtered window. |
 | `frequency_pull_floor` | float | `0.5` | Minimum pull of the self-rhythm's frequency after withdrawal toward the beat, measured from the entity's own baseline. |

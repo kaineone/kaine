@@ -34,11 +34,14 @@ cycle-layer autonomous welfare-protective monitor can act on ALL four categories
 
 The observer also writes an ``affect_welfare`` record to its JSONL log every
 ``affect_summary_interval_s`` of unfrozen time and when it stops: the share of
-awake time with valence below ``-negative_valence_bar`` and, per drive, the
-share of goal ends abandoned without the entity's own response (``without_response``,
-``stalled`` or ``cap``) among those ends and the ends completed by its own response,
-with that rate per awake hour (paper 6.2). It holds numbers only and is not
-published on the bus.
+awake time with valence below ``-negative_valence_bar`` and, per deficit
+(boredom, social drive, restlessness), the share of drive crossings ended
+without the entity's own response among the crossings ended (a stalled or
+cap-dropped goal leaves its crossing open, and a sleep reset counts as
+neither), with that rate per awake hour, and the share of awake time the drive
+spends at or above its threshold; for curiosity, heterostatic interest, the
+share of awake time at or above its threshold as an interest share (paper 6.2,
+A.4). It holds numbers only and is not published on the bus.
 
 CONTENT-FREE EMITTER (not strictly read-only): this observer follows several bus
 streams and, on a gray-zone detection, emits a *derived, content-free* welfare
@@ -146,28 +149,36 @@ _AFFECT_SAMPLE_GAP_CAP_S = 5.0
 _AFFECT_WELFARE_RECORD = "affect_welfare"
 # Fixed drive table: the only drive names that may appear in record keys.
 _WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
-# Reasons of a completed goal end credited to the entity's own response.
-_OWN_REASONS = frozenset({"own_response"})
-# Reasons of an abandoned goal end credited as response-independent (uncontrolled).
-_UNCONTROLLED_REASONS = frozenset({"without_response", "stalled", "cap"})
+# The homeostatic deficits: their time at or above threshold is time without relief.
+_DEFICIT_DRIVES = ("boredom", "social_drive", "restlessness")
+# Heterostatic interest (paper A.4): time at or above threshold is a progress niche.
+_INTEREST_DRIVES = ("curiosity",)
 
 
 class AffectWelfareTally:
     """Accumulate content-free affect welfare measures for one ``affect_welfare`` record.
 
-    Tracks two paper-6.2 quantities from the affect module stream:
+    Tracks three paper-6.2 quantities and one paper-A.4 quantity from the affect
+    module stream:
 
     1. The share of awake time (measured between ``affect.state`` timestamps,
        capped at ``max_gap_s``) whose valence is strictly below
        ``-negative_valence_bar``.
-    2. Per drive in the fixed table, the share of goal ends without the
-       entity's own response: every abandoned end (``without_response``,
-       ``stalled`` or ``cap``) counts as "other" and a completed
-       ``own_response`` end as "own" (paper 6.2, A.4); a sleep reset
-       (``cleared``/``sleep_reset``) and any unrecognised reason count as
+    2. Per drive in the three-deficit table, the share of crossing ends credited
+       to anything but the entity's own response (the A.4 credit rule, read from
+       increases of ``drive_ends`` between consecutive ``affect.state`` events;
+       the first event sets the baseline; a fall re-baselines), so a stalled
+       or cap-dropped goal leaves its crossing open and a sleep reset counts as
        neither. Response-independent outcomes are those that define
        helplessness (Maier and Seligman 2016). The same count is also reported
        as uncontrolled ends per awake hour.
+    3. Per drive in the three-deficit table, the share of awake time the drive
+       spends at or above its threshold (from ``drive_above`` of the event that
+       begins each interval), the time without relief, since passivity is the
+       default response to prolonged aversive events (Maier and Seligman 2016).
+    4. Curiosity's share of awake time at or above its threshold, an interest
+       share, since curiosity is heterostatic interest raised by learning
+       progress (paper A.4; Oudeyer and Kaplan 2007).
 
     Sleep intervals announced by the sleep module are excluded from awake time.
     Because each interval takes the state of the sample that began it, a sample
@@ -180,11 +191,20 @@ class AffectWelfareTally:
         self._max_gap_s = float(max_gap_s)
         self._awake_seconds: float = 0.0
         self._negative_seconds: float = 0.0
-        self._current: tuple[float, float] | None = None
+        self._current: tuple[float, float, dict[str, bool]] | None = None
         self._sleep_intervals: list[list[float | None]] = []
         self._changed: bool = False
         self._ends: dict[str, list[int]] = {
             drive: [0, 0] for drive in _WELFARE_DRIVES
+        }
+        self._last_ends: dict[str, tuple[int, int] | None] = {
+            drive: None for drive in _WELFARE_DRIVES
+        }
+        self._drive_seconds: dict[str, float] = {
+            drive: 0.0 for drive in _WELFARE_DRIVES
+        }
+        self._above_seconds: dict[str, float] = {
+            drive: 0.0 for drive in _WELFARE_DRIVES
         }
 
     def sleep_started(self, ts: float) -> None:
@@ -220,11 +240,23 @@ class AffectWelfareTally:
             for iv in self._sleep_intervals
         )
 
-    def observe_state(self, ts: float, valence: float) -> None:
+    def observe_state(
+        self,
+        ts: float,
+        valence: float,
+        drive_above: object = None,
+        drive_ends: object = None,
+    ) -> None:
         if not math.isfinite(ts) or not math.isfinite(valence):
             return
+        above: dict[str, bool] = {}
+        if isinstance(drive_above, dict):
+            for drive in _WELFARE_DRIVES:
+                v = drive_above.get(drive)
+                if isinstance(v, bool):
+                    above[drive] = v
         if self._current is not None:
-            ts_cur, valence_cur = self._current
+            ts_cur, valence_cur, above_cur = self._current
             if ts < ts_cur:
                 return
             if ts > ts_cur:
@@ -233,21 +265,40 @@ class AffectWelfareTally:
                     self._awake_seconds += gap
                     if valence_cur < -self._negative_valence_bar:
                         self._negative_seconds += gap
+                    for drive, was_above in above_cur.items():
+                        self._drive_seconds[drive] += gap
+                        if was_above:
+                            self._above_seconds[drive] += gap
                     self._changed = True
-        self._current = (float(ts), float(valence))
+        if isinstance(drive_ends, dict):
+            for drive in _DEFICIT_DRIVES:
+                entry = drive_ends.get(drive)
+                if isinstance(entry, dict):
+                    own_raw = entry.get("own")
+                    other_raw = entry.get("other")
+                    if (
+                        isinstance(own_raw, int)
+                        and not isinstance(own_raw, bool)
+                        and isinstance(other_raw, int)
+                        and not isinstance(other_raw, bool)
+                        and own_raw >= 0
+                        and other_raw >= 0
+                    ):
+                        last = self._last_ends[drive]
+                        if last is None:
+                            self._last_ends[drive] = (own_raw, other_raw)
+                        else:
+                            last_own, last_other = last
+                            if own_raw >= last_own and other_raw >= last_other:
+                                if own_raw > last_own or other_raw > last_other:
+                                    self._ends[drive][0] += own_raw - last_own
+                                    self._ends[drive][1] += other_raw - last_other
+                                    self._changed = True
+                                self._last_ends[drive] = (own_raw, other_raw)
+                            else:
+                                self._last_ends[drive] = (own_raw, other_raw)
+        self._current = (float(ts), float(valence), above)
         self._prune_sleep_intervals()
-
-    def observe_goal(self, drive: object, action: object, reason: object) -> None:
-        if not isinstance(drive, str) or drive not in _WELFARE_DRIVES:
-            return
-        if not isinstance(reason, str):
-            return
-        if action == "completed" and reason in _OWN_REASONS:
-            self._ends[drive][0] += 1
-            self._changed = True
-        elif action == "abandoned" and reason in _UNCONTROLLED_REASONS:
-            self._ends[drive][1] += 1
-            self._changed = True
 
     @property
     def changed(self) -> bool:
@@ -267,7 +318,7 @@ class AffectWelfareTally:
         else:
             result["negative_valence_share"] = None
 
-        for drive in _WELFARE_DRIVES:
+        for drive in _DEFICIT_DRIVES:
             own, other = self._ends[drive]
             total = own + other
             if total > 0:
@@ -280,6 +331,22 @@ class AffectWelfareTally:
                 )
             else:
                 result[f"{drive}_uncontrolled_per_awake_hour"] = None
+            drive_seconds = self._drive_seconds[drive]
+            if drive_seconds > 0.0:
+                result[f"{drive}_deprivation_share"] = (
+                    self._above_seconds[drive] / drive_seconds
+                )
+            else:
+                result[f"{drive}_deprivation_share"] = None
+
+        for drive in _INTEREST_DRIVES:
+            drive_seconds = self._drive_seconds[drive]
+            if drive_seconds > 0.0:
+                result[f"{drive}_interest_share"] = (
+                    self._above_seconds[drive] / drive_seconds
+                )
+            else:
+                result[f"{drive}_interest_share"] = None
         return result
 
 
@@ -834,14 +901,12 @@ class WelfareObserver(StreamSubscriberObserver):
                 and math.isfinite(raw_valence)
                 and math.isfinite(ts)
             ):
-                self._affect_tally.observe_state(ts, float(raw_valence))
-            return
-
-        if event.type == "affect.goal":
-            payload = event.payload or {}
-            self._affect_tally.observe_goal(
-                payload.get("drive"), payload.get("action"), payload.get("reason")
-            )
+                self._affect_tally.observe_state(
+                    ts,
+                    float(raw_valence),
+                    payload.get("drive_above"),
+                    payload.get("drive_ends"),
+                )
             return
 
     async def _handle_episodic_memory(self, entry_id: str, event: Event) -> None:

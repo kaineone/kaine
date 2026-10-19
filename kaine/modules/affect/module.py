@@ -25,6 +25,7 @@ from kaine.modules.affect.coupling import (
 )
 from kaine.modules.affect.drives import DriveSet
 from kaine.modules.affect.goals import GoalLedger, GoalState
+from kaine.modules.affect.learning_progress import WindowedProgress
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.affect.regulation import (
     PassiveDecay,
@@ -62,6 +63,12 @@ def _finite_number(value: object) -> float | None:
     return v
 
 
+# Affect state scheme for curiosity (paper A.4): 2 is heterostatic interest; state without
+# the key is 1, curiosity as a deficit, and is migrated on restore. Matches
+# kaine.experiment.run_context.CURIOSITY_SCHEME.
+_CURIOSITY_SCHEME = 2
+
+
 class Affect(BaseModule):
     name: ClassVar[str] = "affect"
 
@@ -84,6 +91,8 @@ class Affect(BaseModule):
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.05,
+        learning_progress_span_s: float = 5400.0,
+        learning_progress_bin_s: float = 60.0,
         alert_excess_margin: float = 0.5,
         intent_rate_weight: float = 0.05,
         valence_time_constant_s: float = 30.0,
@@ -123,6 +132,14 @@ class Affect(BaseModule):
             raise ValueError("fast_time_constant_s must be < slow_time_constant_s")
         if not math.isfinite(learning_progress_floor) or not (0.0 <= learning_progress_floor < 1.0):
             raise ValueError("learning_progress_floor must be finite and in [0, 1)")
+        if not math.isfinite(learning_progress_span_s) or learning_progress_span_s <= 0.0:
+            raise ValueError("learning_progress_span_s must be finite and > 0")
+        if not math.isfinite(learning_progress_bin_s) or learning_progress_bin_s <= 0.0:
+            raise ValueError("learning_progress_bin_s must be finite and > 0")
+        ratio = learning_progress_span_s / learning_progress_bin_s
+        n = round(ratio)
+        if abs(ratio - n) > 1e-9 * max(1.0, abs(ratio)) or n < 2 or n % 2 != 0:
+            raise ValueError("learning_progress_span_s must be an even whole number (at least 2) of learning_progress_bin_s")
         if not math.isfinite(alert_excess_margin) or alert_excess_margin < 0:
             raise ValueError("alert_excess_margin must be finite and >= 0")
         for name, w in (
@@ -175,6 +192,8 @@ class Affect(BaseModule):
         self._fast_time_constant_s = float(fast_time_constant_s)
         self._slow_time_constant_s = float(slow_time_constant_s)
         self._learning_progress_floor = float(learning_progress_floor)
+        self._lp_bin_s = float(learning_progress_bin_s)
+        self._lp_max_bins = int(n)
         self._alert_excess_margin = float(alert_excess_margin)
         self._intent_rate_weight = float(intent_rate_weight)
         self._valence_time_constant_s = float(valence_time_constant_s)
@@ -188,13 +207,14 @@ class Affect(BaseModule):
         self._boredom_engagement_relief = float(boredom_engagement_relief)
         self._concern_reentry_s = float(concern_reentry_s)
 
-        # Perceptual learning-progress state.
+        # Perceptual error-dynamics state (valence; paper A.4).
         # Time-decayed mean trackers per source: sum and count for each tau.
         self._err_fast_sum: dict[str, float] = {}
         self._err_fast_count: dict[str, float] = {}
         self._err_slow_sum: dict[str, float] = {}
         self._err_slow_count: dict[str, float] = {}
         self._err_last_at: dict[str, float] = {}
+        self._lp_windows: dict[str, WindowedProgress] = {}  # per-source windowed learning-progress bins (paper A.4)
         self._alert_fast = 0.0
         self._alert_slow = 0.0
         self._intent_rate = 0.0
@@ -319,34 +339,65 @@ class Affect(BaseModule):
         """
         self._development_probe = probe
 
+    def _source_error_terms(self, source: str) -> tuple[float | None, float | None, float | None]:
+        """Return the fast mean, slow mean and signed progress for one perceptual source.
+
+        Mirrors the arithmetic in ``_progress``. Returns ``(fast, slow, None)``
+        when the source cannot contribute to the pooled progress, and
+        ``(None, None, None)`` before it has registered any reports.
+        """
+        n_slow = self._err_slow_count.get(source, 0.0)
+        if n_slow <= 0.0:
+            return None, None, None
+        slow = self._err_slow_sum[source] / n_slow
+        n_fast = self._err_fast_count.get(source, 0.0)
+        if n_fast <= 0.0:
+            return None, slow, None
+        fast = self._err_fast_sum[source] / n_fast
+        if slow <= 1e-9:
+            return fast, slow, None
+        g_m = (slow - fast) / slow
+        g_m = max(-1.0, min(1.0, g_m))
+        return fast, slow, g_m
+
+    def _learning_progress_terms(self, now: float) -> tuple[dict[str, float | None], float]:
+        """Return each source's windowed learning progress and the pooled signed ``lp``.
+
+        A source's value is the relative fall of its mean error from the older to
+        the newer half of the last ``learning_progress_span_s`` (paper A.4; Oudeyer,
+        Kaplan and Hafner 2007; Baranes and Oudeyer 2013), None while undefined.
+        The pooled ``lp`` is the mean of the defined values, 0.0 if none.
+        """
+        per_source: dict[str, float | None] = {}
+        values: list[float] = []
+        for source, window in self._lp_windows.items():
+            v = window.value(now)
+            per_source[source] = v
+            if v is not None:
+                values.append(v)
+        if not values:
+            return per_source, 0.0
+        return per_source, sum(values) / len(values)
+
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
 
-        `learning_progress` is max(0, g - floor) / (1 - floor) where g is
-        the per-module relative fall of the raw forward-model prediction
-        error, averaged over the perceptual modules (Oudeyer and Kaplan
-        2007; Schmidhuber 2010).
+        ``learning_progress`` is the windowed relative fall of the mean raw
+        prediction error, pooled over sources and floored (curiosity build and boredom relief).
+        ``signed_progress`` is the error dynamics ``g`` (fast and slow
+        time-decayed means, valence).
         """
+        now = self._clock()
         g_values: list[float] = []
-        for source, n_slow in self._err_slow_count.items():
-            if n_slow <= 0.0:
-                continue
-            slow = self._err_slow_sum[source] / n_slow
-            if slow <= 1e-9:
-                continue
-            n_fast = self._err_fast_count.get(source, 0.0)
-            if n_fast <= 0.0:
-                continue
-            fast = self._err_fast_sum[source] / n_fast
-            g_m = (slow - fast) / slow
-            g_m = max(-1.0, min(1.0, g_m))
-            g_values.append(g_m)
-        if not g_values:
-            return 0.0, 0.0
-        g = sum(g_values) / len(g_values)
+        for source in self._err_slow_count:
+            g_m = self._source_error_terms(source)[2]
+            if g_m is not None:
+                g_values.append(g_m)
+        g = sum(g_values) / len(g_values) if g_values else 0.0
+        _, lp = self._learning_progress_terms(now)
         floor = self._learning_progress_floor
-        lp = max(0.0, g - floor) / (1.0 - floor)
-        return lp, g
+        lp_plus = max(0.0, lp - floor) / (1.0 - floor)
+        return lp_plus, g
 
     def _record_wellness(self, w: float, now: float) -> None:
         """Update the fast and slow time-decayed wellness means."""
@@ -373,6 +424,51 @@ class Affect(BaseModule):
             return 0.0
         return self._well_fast_sum / fast_count - self._well_slow_sum / slow_count
 
+    def _valence_target(self, g: float) -> float:
+        """Return the valence relaxation target for signed progress ``g``.
+
+        Valence follows error dynamics (paper A.4): it relaxes toward the
+        appraisal's pleasantness plus the change in wellness, so a steady state is
+        neutral. The wellness_level rule keeps the earlier wellness level instead.
+        Coupling reaches valence only through the appraisal.
+        """
+        if self._valence_rule == "wellness_level":
+            return _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
+        return _clip(self._pleasantness(g) + self._wellness_change(), -1.0, 1.0)
+
+    def _valence_terms(self) -> dict[str, float | None]:
+        """Return the terms behind the valence target (paper A.4).
+
+        All values are scalars; sense data and vectors are never included.
+        Non-finite numbers are returned as ``None``.
+        """
+        now = self._clock()
+        per_source, lp_signed = self._learning_progress_terms(now)
+        terms: dict[str, float | None] = {}
+        for source in self._VALENCE_TERM_SOURCES:
+            fast, slow, g_m = self._source_error_terms(source)
+            terms[f"{source}_error_fast"] = _finite_number(fast)
+            terms[f"{source}_error_slow"] = _finite_number(slow)
+            terms[f"{source}_progress"] = _finite_number(g_m)
+            terms[f"{source}_learning_progress"] = _finite_number(per_source.get(source))
+        lp, g = self._progress()
+        terms["signed_progress"] = _finite_number(g)
+        terms["learning_progress"] = _finite_number(lp)
+        terms["signed_learning_progress"] = _finite_number(lp_signed)
+        terms["wellness"] = _finite_number(self._wellness)
+        if self._well_fast_count > 0.0:
+            terms["wellness_fast"] = _finite_number(self._well_fast_sum / self._well_fast_count)
+        else:
+            terms["wellness_fast"] = None
+        if self._well_slow_count > 0.0:
+            terms["wellness_slow"] = _finite_number(self._well_slow_sum / self._well_slow_count)
+        else:
+            terms["wellness_slow"] = None
+        terms["wellness_change"] = _finite_number(self._wellness_change())
+        terms["pleasantness"] = _finite_number(self._pleasantness(g))
+        terms["valence_target"] = _finite_number(self._valence_target(g))
+        return terms
+
     def _pleasantness(self, g: float) -> float:
         """Appraisal pleasantness for signed progress `g`.
 
@@ -386,6 +482,10 @@ class Affect(BaseModule):
             math.tanh(self._valence_progress_gain * g) + coupling_pleasantness,
             -1.0, 1.0,
         )
+
+    # The perceptual sources itemised in the affect state payload; a fixed table,
+    # so the payload keys never depend on which sources reported.
+    _VALENCE_TERM_SOURCES: ClassVar[tuple[str, ...]] = ("vision", "audition")
 
     _ALERT_RATE_FLOOR_PER_S: ClassVar[float] = 0.05
 
@@ -418,11 +518,13 @@ class Affect(BaseModule):
     def _arousal_target(self) -> float:
         """Return the relaxation target a_inf = a_0 + gamma_D (1 - a_0) v* (paper A.4 item 3).
 
-        v* is the dominant (largest) drive value at the start of the update. Tonic locus
-        coeruleus activity rises when the utility of the current engagement wanes
-        (Aston-Jones and Cohen 2005), and drive energizes behavior (Hull 1943).
+        v* is the largest deficit (boredom, social drive, restlessness) at the start of
+        the update. Tonic locus coeruleus activity rises when the utility of the current
+        engagement wanes (Aston-Jones and Cohen 2005); curiosity, heterostatic interest,
+        marks a progress niche whose utility has not waned, so it does not raise the
+        target. Drive energizes behavior (Hull 1943).
         """
-        v_star = max((d.value for d in self._drives.all()), default=0.0)
+        v_star = max((d.value for d in self._drives.deficits()), default=0.0)
         a_0 = self._baseline.arousal
         return a_0 + self._drive_arousal_gain * (1.0 - a_0) * v_star
 
@@ -604,9 +706,14 @@ class Affect(BaseModule):
         return payloads
 
     def _create_goals(self, crossings: list[Any], now: float) -> list[dict[str, Any]]:
-        """Create goals for drives that just crossed theta_D, then enforce cap."""
+        """Create goals for deficits that just crossed theta_D, then enforce cap."""
         payloads: list[dict[str, Any]] = []
         for crossing in crossings:
+            # Interest is no deficit: its affect.drive event still publishes, and no
+            # goal forms (paper A.4).
+            drive = getattr(self._drives, crossing.name, None)
+            if drive is not None and drive.heterostatic:
+                continue
             if self._goals.active_for_drive(crossing.name) is not None:
                 continue
             drive = getattr(self._drives, crossing.name)
@@ -767,14 +874,8 @@ class Affect(BaseModule):
         drifted = self._state.drift_toward(target, self._drift_rate, dt)
         v = self._state.valence  # pre-drift valence
         if dt > 0.0:
-            # Valence follows error dynamics (paper A.4): it relaxes toward the
-            # appraisal's pleasantness plus the change in wellness, so a steady state is
-            # neutral. The wellness_level rule keeps the earlier wellness level instead.
-            # Coupling reaches valence only through the appraisal.
-            if self._valence_rule == "wellness_level":
-                v_target = _clip(self._pleasantness(g) + (self._wellness - 0.5), -1.0, 1.0)
-            else:
-                v_target = _clip(self._pleasantness(g) + self._wellness_change(), -1.0, 1.0)
+            # Valence target from error dynamics (paper A.4).
+            v_target = self._valence_target(g)
             k = 1.0 - math.exp(-dt / self._valence_time_constant_s)
             new_valence = v + (v_target - v) * k
         else:
@@ -785,22 +886,21 @@ class Affect(BaseModule):
             dominance=drifted.dominance,
         ).clamped()
 
-        # Continuous drive relief: curiosity at full strength = learning progress,
-        # boredom at full strength = alert-stream novelty excess. Rate-based relief
-        # is independent of the report rate, so drives can still build under noise.
-        # own marks relief produced by the entity's own response, which coping
-        # counts as success (paper A.4).
+        # Continuous drive relief (paper A.4): boredom at strength max(lp+, exc). Learning
+        # progress is the entity's own response; alert excess is not. Curiosity is
+        # heterostatic interest: lp+ builds it below and nothing relieves it.
         # Boredom is also relieved, as own, by engaging intents (_handle_peer_event).
-        self._drives.relieve_rate("curiosity", lp, dt, own=True)
-        self._drives.relieve_rate("boredom", nb, dt, own=False)
+        b_relief = max(lp, nb)
+        self._drives.relieve_rate("boredom", b_relief, dt, own=lp > 0.0 and lp >= nb)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
             dt,
-            novelty_signal=max(0.0, 1.0 - lp),
-            activity_signal=max(0.0, 1.0 - nb),
+            progress_signal=lp,
+            activity_signal=max(0.0, 1.0 - b_relief),
             social_signal=social_signal,
             action_signal=max(0.0, 1.0 - self._intent_rate),
+            boredom_no_response_signal=max(0.0, 1.0 - nb),
         )
         crossing_ids: dict[str, str] = {}
         for crossing in crossings:
@@ -982,7 +1082,7 @@ class Affect(BaseModule):
 
         emotion = classify(scores)
         # Surprise reaches arousal through the perceptual-alert path;
-        # valence follows learning progress.
+        # valence follows the error dynamics.
         if emotion != self._last_emotion:
             await self.publish(
                 "affect.emotion",
@@ -1032,7 +1132,7 @@ class Affect(BaseModule):
             has_novel = True
         novelty = 1.0 - prod_factor if has_novel else 0.0
 
-        # Pleasantness is the appraisal's signed learning progress; coupling
+        # Pleasantness is the appraisal's error dynamics; coupling
         # contributes only through the appraisal, not by a direct state write.
         _, g = self._progress()
         pleas = self._pleasantness(g)
@@ -1174,7 +1274,10 @@ class Affect(BaseModule):
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
+                "drive_above": self._drives.above_to_dict(),
+                "drive_ends": self._drives.outcomes_to_dict(),
                 "emotion": self._last_emotion.value,
+                **self._valence_terms(),
             },
             salience=self._baseline_salience,
         )
@@ -1264,8 +1367,8 @@ class Affect(BaseModule):
 
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
         # Perception→arousal coupling: ALL perceptual reports update the
-        # pooled prediction-error trackers and relieve curiosity by learning
-        # progress; alerts additionally relieve boredom and arouse the entity.
+        # pooled prediction-error trackers, whose learning progress builds curiosity and
+        # relieves boredom; alerts additionally relieve boredom and arouse the entity.
         if event.type in ("vision.report", "audition.perception"):
             payload = event.payload or {}
 
@@ -1315,6 +1418,11 @@ class Affect(BaseModule):
                         d_slow * self._err_slow_count[source] + 1.0
                     )
                     self._err_last_at[source] = now
+                window = self._lp_windows.get(source)
+                if window is None:
+                    window = WindowedProgress(self._lp_bin_s, self._lp_max_bins)
+                    self._lp_windows[source] = window
+                window.add(now, e)
             alert = bool(payload.get("alert"))
             if alert:
                 # Habituation is read before the alert's own increment so the step
@@ -1461,7 +1569,9 @@ class Affect(BaseModule):
             arousal=self._baseline.arousal,
             dominance=self._baseline.dominance,
         )
-        self._drives.reset_all()
+        # The deficits reset; curiosity's interest and its latch carry through sleep
+        # like the learning-progress bins (paper A.4 item 4).
+        self._drives.reset_deficits()
         removed = self._goals.clear_active()
         self._goal_above_since.clear()
         self._response_windows.clear()
@@ -1499,9 +1609,12 @@ class Affect(BaseModule):
             {
                 "state": self._state.to_dict(),
                 "drives": self._drives.to_dict(),
+                "drive_above": self._drives.above_to_dict(),
+                "drive_ends": self._drives.outcomes_to_dict(),
                 "emotion": self._last_emotion.value,
                 "reset": True,
                 "alert": True,
+                **self._valence_terms(),
             },
             salience=self._alert_salience,
         )
@@ -1566,6 +1679,8 @@ class Affect(BaseModule):
             # Persist the crossing latch so a revive does not re-fire a drive
             # that already fired.
             "drive_fired": self._drives.fired_to_dict(),
+            # Curiosity's meaning (interest), so an older deficit-era state can be migrated.
+            "curiosity_scheme": _CURIOSITY_SCHEME,
             "last_emotion": self._last_emotion.value,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
@@ -1588,6 +1703,12 @@ class Affect(BaseModule):
                     "slow_count": self._err_slow_count[source],
                 }
                 for source in self._err_slow_count
+            },
+            # Scalar error sums and counts per source, not sense data.
+            "learning_progress_bins": {
+                source: window.to_dict(now)
+                for source, window in self._lp_windows.items()
+                if window.started
             },
             # Intent rate r_int, the restlessness build input (paper A.4).
             "intent_rate": self._intent_rate,
@@ -1689,6 +1810,23 @@ class Affect(BaseModule):
                 self._err_slow_count[source] = slow_count
                 self._err_last_at[source] = self._clock()
 
+        raw_lp = state.get("learning_progress_bins")
+        # A state without the key predates the windows, so the bins start empty.
+        self._lp_windows.clear()
+        if isinstance(raw_lp, dict):
+            now = self._clock()
+            for source, entry in raw_lp.items():
+                if not isinstance(source, str):
+                    continue
+                window = WindowedProgress.from_dict(
+                    entry,
+                    bin_s=self._lp_bin_s,
+                    max_bins=self._lp_max_bins,
+                    t=now,
+                )
+                if window is not None:
+                    self._lp_windows[source] = window
+
         raw_wellness_means = state.get("wellness_means")
         if (
             self._valence_rule == "error_dynamics"
@@ -1725,6 +1863,18 @@ class Affect(BaseModule):
         raw_seen = state.get("interaction_seen")
         if isinstance(raw_seen, bool):
             self._interaction_seen = raw_seen
+
+        # Migration (paper A.4): state saved before curiosity became heterostatic interest
+        # holds it as a deficit, whose value, latch and end counts say nothing about
+        # interest. Restart it at rest and drop any active curiosity goal without a
+        # lifecycle event; interest rebuilds from the restored learning-progress bins.
+        if "drives" in state and state.get("curiosity_scheme") != _CURIOSITY_SCHEME:
+            curiosity = self._drives.curiosity
+            curiosity.value = 0.0
+            curiosity._has_fired = False
+            curiosity.own_ends = 0
+            curiosity.other_ends = 0
+            self._goals.clear_active_for_drive("curiosity")
 
         # Response windows and other transient timers restart, while the stall
         # clock is restored from the saved elapsed durations below. Resync end

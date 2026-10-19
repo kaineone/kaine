@@ -27,6 +27,10 @@ from typing import Any, Mapping, Optional
 
 # 2: the configuration uses the functional module names; absent in a run manifest means 1
 CONFIG_KEY_SCHEME = 2
+# 2: affect learning_progress is the windowed estimator (paper A.4); absent in a run manifest means 1, the fast and slow time-decayed means
+LEARNING_PROGRESS_SCHEME = 2
+# 2: affect curiosity is heterostatic interest that learning progress raises (paper A.4); absent in a run manifest means 1, curiosity as a deficit relieved by learning progress
+CURIOSITY_SCHEME = 2
 
 
 def _utc_iso() -> str:
@@ -50,6 +54,8 @@ class RunContext:
     model_ids: dict[str, str] = field(default_factory=dict)
     config_digest: str = ""
     config_key_scheme: int = CONFIG_KEY_SCHEME
+    learning_progress_scheme: int = LEARNING_PROGRESS_SCHEME
+    curiosity_scheme: int = CURIOSITY_SCHEME
     kaine_version: str = ""
     # Reproducible perceptual-feed descriptor (reproducible-perception-feed):
     # {"mode": "off"|"seeded"|"playlist"|"camera", ...}. For seeded the seed +
@@ -206,6 +212,8 @@ def set_run_context(ctx: Optional[RunContext]) -> None:
 __all__ = [
     "RunContext",
     "CONFIG_KEY_SCHEME",
+    "LEARNING_PROGRESS_SCHEME",
+    "CURIOSITY_SCHEME",
     "_utc_iso",
     "compute_git_sha",
     "compute_config_digest",

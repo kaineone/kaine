@@ -522,7 +522,8 @@ def test_stimulus_source_is_cpu_only_and_torch_free() -> None:
 
 def test_no_entity_state_feeds_the_stimulus_source() -> None:
     # The stimulus source is external: its only inputs are the seed, the parameters, the
-    # shared stimulus source clock and (for the colour-onset schedule only) lived time.
+    # shared stimulus source clock and lived time (for the colour-onset schedule and
+    # the maternal voice's repertoire unlocking and the hearing band only).
     # Nothing from the entity's affect, workspace or modules may reach it.
     import ast
     import importlib.util
@@ -533,7 +534,7 @@ def test_no_entity_state_feeds_the_stimulus_source() -> None:
         "self", "schedule", "params", "clock", "lived_seconds",
     ]
     assert list(inspect.signature(StimulusSourceProceduralAudioStream.__init__).parameters) == [
-        "self", "schedule", "params", "clock", "callback",
+        "self", "schedule", "params", "clock", "callback", "voice", "awake", "hearing",
     ]
     spec = importlib.util.find_spec("kaine.modules.stimulus_source_signal")
     assert spec is not None and spec.origin is not None

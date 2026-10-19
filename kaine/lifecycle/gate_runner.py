@@ -13,7 +13,7 @@ module registry exist. It runs a periodic task during the developmental phase th
      ack, or keep developing.
   4. Emits observable lifecycle events on ``lifecycle.out`` and writes the
      stage file on its first tick, when accumulated evidence changes, and at
-     maturation.
+     maturation, and when the runner stops.
 
 The runner itself changes no cognitive-module state; it only reads signals and
 triggers the monotonic stage transition. Development remains emergent and is
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,6 +122,8 @@ class MaturationGateRunner:
         self._maturation_ack_path = maturation_ack_path or MATURATION_ACK_PATH
         self._maturation_request = None
         self._last_status: dict[str, Any] = {}
+        # Reads the stimulus source clock; handed over by the cycle entrypoint.
+        self._stimulus_source_seconds: Callable[[], float] | None = None
 
     def set_pause_sources(
         self,
@@ -140,6 +143,10 @@ class MaturationGateRunner:
     def set_maturation_hook(self, fn: Callable[[], None] | None) -> None:
         """Hand over the stimulus source's ``begin_maturation``; the runner calls it once, after the stage file says embodied."""
         self._on_maturation = fn
+
+    def set_stimulus_source_clock(self, read: Callable[[], float] | None) -> None:
+        """Hand over the stimulus source clock's reader, recorded in the stage file each tick and at shutdown."""
+        self._stimulus_source_seconds = read
 
     @property
     def stage(self) -> lifecycle_stage.StageState:
@@ -274,6 +281,19 @@ class MaturationGateRunner:
         if delta > 0:
             self._stage = replace(self._stage, lived_seconds=self._stage.lived_seconds + delta)
 
+    def _record_stimulus_source_seconds(self) -> None:
+        """Record the stimulus source clock's reading in the stage, so a restart resumes it."""
+        if self._stimulus_source_seconds is None:
+            return
+        try:
+            value = float(self._stimulus_source_seconds())
+        except Exception:
+            log.debug("maturation gate: could not read the stimulus source clock", exc_info=True)
+            return
+        if not math.isfinite(value) or value < 0:
+            return
+        self._stage = replace(self._stage, stimulus_source_seconds=value)
+
     async def _stimulus_source_readiness_readout(self) -> Mapping[str, Any] | None:
         """Read the latest stimulus source ``development.readiness`` event from the bus.
 
@@ -324,6 +344,23 @@ class MaturationGateRunner:
             self._stage_written = True
         except OSError:
             log.warning("maturation gate: could not persist stage file", exc_info=True)
+
+    def _final_lived_time(self) -> None:
+        """Add the awake time since the last tick and persist the stage, before any await.
+
+        The periodic ticks add awake time only every cadence, so without this a restart drops
+        the time since the last tick. It runs synchronously so a cancelled task still records it.
+        Each boot's first tick still only anchors, so downtime never counts and no span is counted twice.
+        """
+        if self._blocked_reason() is not None:
+            return
+        self._accumulate_lived_time()
+        self._record_stimulus_source_seconds()
+        try:
+            lifecycle_stage.write_stage(self._stage)
+            self._stage_written = True
+        except OSError:
+            log.warning("maturation gate: could not persist stage file at shutdown", exc_info=True)
 
     async def _evaluate_once(self) -> None:
         """One gate evaluation: gather signals, decide, act, emit."""
@@ -408,6 +445,7 @@ class MaturationGateRunner:
             return
 
         self._accumulate_lived_time()
+        self._record_stimulus_source_seconds()
         await self._count_new_sleeps()
         self._persist_if_changed(before)
 
@@ -647,17 +685,22 @@ class MaturationGateRunner:
             return
 
         cadence = max(1.0, float(self._config.gate_cadence_seconds))
-        while not stop_event.is_set():
-            try:
-                await self._evaluate_once()
-            except Exception:
-                log.exception("maturation gate: evaluation failed")
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=cadence)
-            except asyncio.TimeoutError:
-                # Expected: cadence elapsed, evaluate again.
-                continue
+        try:
+            while not stop_event.is_set():
+                try:
+                    await self._evaluate_once()
+                except Exception:
+                    log.exception("maturation gate: evaluation failed")
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=cadence)
+                except asyncio.TimeoutError:
+                    # Expected: cadence elapsed, evaluate again.
+                    continue
+        except asyncio.CancelledError:
+            self._final_lived_time()
+            raise
 
+        self._final_lived_time()
         await self._final_sleep_count()
 
     async def shutdown(self) -> None:
@@ -667,7 +710,9 @@ class MaturationGateRunner:
                 await self._task
             except asyncio.CancelledError:
                 # Expected: we just cancelled the task.
+                self._final_lived_time()
                 await self._final_sleep_count()
                 return
 
+        self._final_lived_time()
         await self._final_sleep_count()

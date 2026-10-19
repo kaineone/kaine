@@ -43,8 +43,7 @@ def _ev(source="interoception", type_="t", salience=0.5, eid="e0", **payload):
 
 DRIVE_SOURCES = {
     "social_drive": frozenset({"audition"}),
-    "curiosity": frozenset({"vision"}),
-    "boredom": frozenset(),
+    "boredom": frozenset({"vision"}),
     "restlessness": frozenset(),
 }
 
@@ -58,30 +57,30 @@ async def _goal_events(bus):
 async def test_crossing_creates_one_goal(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.own_ends = 1
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.own_ends = 1
+    affect.drives.boredom.value = 0.75
     await affect._tick()
     active = affect.goals.active()
     assert len(active) == 1
     g = active[0]
-    assert g.drive == "curiosity"
+    assert g.drive == "boredom"
     assert g.state == GoalState.ACTIVE
     assert g.priority == pytest.approx(0.75, abs=0.05)
     assert g.likelihood == pytest.approx(2 / 3)
     events = await _goal_events(bus)
     assert len(events) == 1
     assert events[0].payload["action"] == "added"
-    assert events[0].payload["drive"] == "curiosity"
+    assert events[0].payload["drive"] == "boredom"
 
 
 @pytest.mark.asyncio
 async def test_no_duplicate_goal_for_active_drive(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.value = 0.75
     await affect._tick()
     assert len(affect.goals.active()) == 1
-    affect.drives.curiosity._has_fired = False
+    affect.drives.boredom._has_fired = False
     t[0] += 0.1
     await affect._tick()
     assert len(affect.goals.active()) == 1
@@ -153,13 +152,13 @@ async def test_stall_timer_abandons_and_resets_on_dip(bus):
     affect = Affect(bus, clock=lambda: t[0], goal_stall_s=5.0)
 
     # Straight stall: drive stays high until abandonment.
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
-    goal = affect.goals.active_for_drive("curiosity")
+    goal = affect.goals.active_for_drive("boredom")
     assert goal is not None
     for _ in range(6):
         t[0] += 1.0
-        affect.drives.curiosity.value = 0.80
+        affect.drives.boredom.value = 0.80
         await affect._tick()
     assert affect.goals.get(goal.id).state == GoalState.ABANDONED
     assert affect.goals.outcome_counts() == (0, 1)
@@ -167,27 +166,27 @@ async def test_stall_timer_abandons_and_resets_on_dip(bus):
     # Reset state and verify a dip below threshold resets the timer.
     affect2 = Affect(bus, clock=lambda: t[0], goal_stall_s=5.0)
     t[0] = 0.0
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
-    goal2 = affect2.goals.active_for_drive("curiosity")
+    goal2 = affect2.goals.active_for_drive("boredom")
     assert goal2 is not None
     for _ in range(3):
         t[0] += 1.0
-        affect2.drives.curiosity.value = 0.80
+        affect2.drives.boredom.value = 0.80
         await affect2._tick()
     t[0] += 1.0
-    affect2.drives.curiosity.value = 0.65
+    affect2.drives.boredom.value = 0.65
     await affect2._tick()
     t[0] += 1.0
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
     assert affect2.goals.get(goal2.id).state == GoalState.ACTIVE
     t[0] += 3.0
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
     assert affect2.goals.get(goal2.id).state == GoalState.ACTIVE
     t[0] += 2.0
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
     assert affect2.goals.get(goal2.id).state == GoalState.ABANDONED
 
@@ -195,19 +194,18 @@ async def test_stall_timer_abandons_and_resets_on_dip(bus):
 @pytest.mark.asyncio
 async def test_goal_cap_drops_lowest_priority(bus):
     t = [0.0]
-    affect = Affect(bus, clock=lambda: t[0], goal_cap=3)
+    affect = Affect(bus, clock=lambda: t[0], goal_cap=2)
     affect._interaction_seen = True
     drives = [
-        ("curiosity", 0.80),
-        ("boredom", 0.75),
         ("restlessness", 0.90),
+        ("boredom", 0.80),
         ("social_drive", 0.71),
     ]
     for name, value in drives:
         t[0] += 0.1
         getattr(affect.drives, name).value = value
         await affect._tick()
-    assert len(affect.goals.active()) == 3
+    assert len(affect.goals.active()) == 2
     assert affect.goals.active_for_drive("social_drive") is None
     events = await _goal_events(bus)
     caps = [e for e in events if e.payload.get("reason") == "cap"]
@@ -225,9 +223,9 @@ async def test_likelihood_fall_and_obstruction(bus):
         goal_likelihood_fall=0.5,
     )
     affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
-    goal = affect.goals.active_for_drive("curiosity")
+    goal = affect.goals.active_for_drive("boredom")
     assert goal is not None
     assert goal.likelihood == pytest.approx(0.5)
 
@@ -235,19 +233,21 @@ async def test_likelihood_fall_and_obstruction(bus):
     intent = Event(
         source="action_selection",
         type="intent.speak",
-        payload={},
+        # An intent about a drive (a felt phrase) does not relieve boredom, so the
+        # goal's drive stays up and the response window expires (paper A.4).
+        payload={"about_kind": "felt"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     await affect._handle_peer_event("action_selection.out", intent)
     for _ in range(21):
         t[0] += 0.5
-        affect.drives.curiosity.value = 0.80
+        affect.drives.boredom.value = 0.80
         await affect._tick()
     goal = affect.goals.get(goal.id)
     assert goal.likelihood == pytest.approx(0.25)
 
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     scores = affect._score_snapshot(
         _snapshot([_ev(source="interoception", salience=0.5)])
     )
@@ -305,9 +305,9 @@ async def test_fall_within_window_keeps_active_goal_likelihood(bus):
         goal_response_window_s=10.0,
         goal_likelihood_fall=0.5,
     )
-    affect.drives.curiosity.value = 0.80
+    affect.drives.social_drive.value = 0.80
     await affect._tick()
-    goal = affect.goals.active_for_drive("curiosity")
+    goal = affect.goals.active_for_drive("social_drive")
     assert goal is not None
     assert goal.likelihood == pytest.approx(0.5)
 
@@ -322,12 +322,12 @@ async def test_fall_within_window_keeps_active_goal_likelihood(bus):
     await affect._handle_peer_event("action_selection.out", intent)
 
     t[0] += 1.0
-    affect.drives.curiosity.value = 0.68
+    affect.drives.social_drive.value = 0.68
     await affect._tick()
 
     while t[0] < 13.0:
         t[0] += 1.0
-        affect.drives.curiosity.value = 0.68
+        affect.drives.social_drive.value = 0.68
         await affect._tick()
 
     final = affect.goals.get(goal.id)
@@ -346,25 +346,27 @@ async def test_non_dominant_goal_does_not_obstruct(bus):
         goal_likelihood_fall=0.5,
     )
     affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
     t[0] += 1.0
     intent = Event(
         source="action_selection",
         type="intent.speak",
-        payload={},
+        # An intent about a drive (a felt phrase) does not relieve boredom, so the
+        # goal's drive stays up and the response window expires (paper A.4).
+        payload={"about_kind": "felt"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     await affect._handle_peer_event("action_selection.out", intent)
     for _ in range(21):
         t[0] += 0.5
-        affect.drives.curiosity.value = 0.80
+        affect.drives.boredom.value = 0.80
         await affect._tick()
     assert affect._held_obstruction
 
-    affect.drives.social_drive._has_fired = True
-    affect.drives.social_drive.value = 0.85
+    affect.drives.restlessness._has_fired = True
+    affect.drives.restlessness.value = 0.85
     scores = affect._score_snapshot(
         _snapshot([_ev(source="interoception", salience=0.5)])
     )
@@ -382,26 +384,28 @@ async def test_anger_reachable_via_obstruction(bus):
         goal_likelihood_fall=0.5,
     )
     affect.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-    affect.drives.curiosity.own_ends = 8
-    affect.drives.curiosity.other_ends = 0
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.own_ends = 8
+    affect.drives.boredom.other_ends = 0
+    affect.drives.boredom.value = 0.80
     await affect._tick()
 
     t[0] += 1.0
     intent = Event(
         source="action_selection",
         type="intent.speak",
-        payload={},
+        # An intent about a drive (a felt phrase) does not relieve boredom, so the
+        # goal's drive stays up and the response window expires (paper A.4).
+        payload={"about_kind": "felt"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     await affect._handle_peer_event("action_selection.out", intent)
     for _ in range(21):
         t[0] += 0.5
-        affect.drives.curiosity.value = 0.80
+        affect.drives.boredom.value = 0.80
         await affect._tick()
 
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     scores = affect._score_snapshot(
         _snapshot([_ev(source="interoception", salience=0.5)])
     )
@@ -414,12 +418,12 @@ async def test_anger_reachable_via_obstruction(bus):
 async def test_sleep_reset_clears_active_goals(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
     affect.drives.restlessness.value = 0.80
     await affect._tick()
-    curiosity_goal = affect.goals.active_for_drive("curiosity")
-    affect.goals.complete(curiosity_goal.id)
+    boredom_goal = affect.goals.active_for_drive("boredom")
+    affect.goals.complete(boredom_goal.id)
     assert len(affect.goals.active()) == 1
     assert affect.goals.outcome_counts() == (1, 0)
 
@@ -439,22 +443,24 @@ async def test_persistence_keeps_likelihood_and_id(bus):
         goal_response_window_s=10.0,
         goal_likelihood_fall=0.5,
     )
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
     t[0] += 1.0
     intent = Event(
         source="action_selection",
         type="intent.speak",
-        payload={},
+        # An intent about a drive (a felt phrase) does not relieve boredom, so the
+        # goal's drive stays up and the response window expires (paper A.4).
+        payload={"about_kind": "felt"},
         salience=0.5,
         timestamp=datetime.now(timezone.utc),
     )
     await affect._handle_peer_event("action_selection.out", intent)
     for _ in range(21):
         t[0] += 0.5
-        affect.drives.curiosity.value = 0.80
+        affect.drives.boredom.value = 0.80
         await affect._tick()
-    goal = affect.goals.get(affect.goals.active_for_drive("curiosity").id)
+    goal = affect.goals.get(affect.goals.active_for_drive("boredom").id)
     assert goal.likelihood == pytest.approx(0.25)
     gid = goal.id
 
@@ -462,7 +468,7 @@ async def test_persistence_keeps_likelihood_and_id(bus):
     t2 = [100.0]
     affect2 = Affect(bus, clock=lambda: t2[0])
     affect2.deserialize(state)
-    restored = affect2.goals.active_for_drive("curiosity")
+    restored = affect2.goals.active_for_drive("boredom")
     assert restored is not None
     assert restored.id == gid
     assert restored.likelihood == pytest.approx(0.25)
@@ -481,11 +487,11 @@ async def test_persistence_keeps_likelihood_and_id(bus):
 async def test_restore_with_outcome_counts_publishes_no_end(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.own_ends = 3
-    affect.drives.curiosity.other_ends = 2
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.own_ends = 3
+    affect.drives.boredom.other_ends = 2
+    affect.drives.boredom.value = 0.80
     await affect._tick()
-    goal = affect.goals.active_for_drive("curiosity")
+    goal = affect.goals.active_for_drive("boredom")
     assert goal is not None
     gid = goal.id
 
@@ -493,8 +499,8 @@ async def test_restore_with_outcome_counts_publishes_no_end(bus):
     t2 = [100.0]
     affect2 = Affect(bus, clock=lambda: t2[0])
     affect2.deserialize(state)
-    affect2.drives.curiosity._has_fired = True
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom._has_fired = True
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
 
     restored = affect2.goals.get(gid)
@@ -518,9 +524,9 @@ async def test_manual_goal_cleanup_and_cap(bus):
         goal_response_window_s=10.0,
         goal_likelihood_fall=0.5,
     )
-    affect.drives.curiosity.value = 0.80
+    affect.drives.social_drive.value = 0.80
     await affect._tick()
-    goal = affect.goals.active_for_drive("curiosity")
+    goal = affect.goals.active_for_drive("social_drive")
     assert goal is not None
 
     t[0] += 1.0
@@ -561,17 +567,17 @@ async def test_manual_goal_cleanup_and_cap(bus):
 async def test_inactive_goal_leaves_scores_unchanged(bus):
     fresh = Affect(bus, clock=lambda: 0.0)
     fresh.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-    fresh.drives.curiosity.value = 0.5
+    fresh.drives.boredom.value = 0.5
     fresh.drives.social_drive.value = 0.5
 
     used = Affect(bus, clock=lambda: 0.0)
     used.set_drive_relevance(DRIVE_SOURCES, dominant_drive)
-    used.drives.curiosity.value = 0.80
+    used.drives.boredom.value = 0.80
     await used._tick()
-    goal = used.goals.active_for_drive("curiosity")
+    goal = used.goals.active_for_drive("boredom")
     used.goals.complete(goal.id)
     used._held_obstruction.clear()
-    used.drives.curiosity.value = 0.5
+    used.drives.boredom.value = 0.5
     used.drives.social_drive.value = 0.5
 
     snapshot = _snapshot([

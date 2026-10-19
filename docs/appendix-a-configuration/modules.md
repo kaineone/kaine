@@ -324,12 +324,14 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `episodic_memory_stream` | string | `"episodic_memory.out"` | Stream observed for memory recall events that trigger affect. |
 | `action_selection_stream` | string | `"action_selection.out"` | Stream observed for the action selection module's intents; each non-rest intent relieves restlessness. |
 | `fast_time_constant_s` | float | `10.0` | Time constant, in entity seconds, of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
-| `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; learning progress is the relative fall from slow to fast. |
+| `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; the error dynamics behind valence is the relative fall from slow to fast. |
 | `learning_progress_floor` | float | `0.05` | Noise floor on learning progress before it relieves curiosity. |
+| `learning_progress_span_s` | float | `5400.0` | Span of the learning-progress windows, in entity seconds; must be an even whole number of `learning_progress_bin_s`. |
+| `learning_progress_bin_s` | float | `60.0` | Bin width for the learning-progress windows, in entity seconds. |
 | `alert_excess_margin` | float | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom. |
 | `intent_rate_weight` | float | `0.05` | Per-broadcast weight of the intent-rate average that holds off restlessness. |
 | `valence_time_constant_s` | float | `30.0` | Time constant of valence's relaxation toward its target. |
-| `valence_progress_gain` | float | `2.0` | Gain on learning progress in the valence target and the pleasantness check. |
+| `valence_progress_gain` | float | `2.0` | Gain on the error dynamics in the valence target and the pleasantness check. |
 | `goal_stall_s` | float | `600.0` | Entity seconds a drive goal's drive may stay at or above its threshold before the goal is abandoned (Delta_stall, paper A.4). |
 | `goal_cap` | int | `3` | Most active goals; beyond it the lowest-priority goal is abandoned (n_goal). |
 | `goal_response_window_s` | float | `10.0` | Entity seconds within which a non-rest intent must be followed by a fall of an active goal's drive (Delta_resp). |
@@ -385,7 +387,7 @@ Shipped defaults:
 
 | Drive | `build_rate` | `decay_rate` | `threshold` | `relief_gain` |
 |---|---|---|---|---|
-| `curiosity` | `0.05` | `0.0055` | `0.7` | `0.5` |
+| `curiosity` | `0.05` | `0.00096` | `0.7` | `0.0` (unused) |
 | `boredom` | `0.04` | `0.0045` | `0.7` | `0.3` |
 | `social_drive` | `0.01` | `0.0011` | `0.7` | `0.8` |
 | `restlessness` | `0.03` | `0.0033` | `0.7` | `0.5` |

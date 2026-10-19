@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from kaine.modules.audition.hearing_band import HearingBandParams
+    from kaine.modules.audition.maternal_voice import MaternalVoiceParams
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
     from kaine.modules.vision.feed import StimulusSourceClock
 from kaine.bus.streams import PERCEPTION_FEED_SOURCE
@@ -32,7 +34,38 @@ def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     readout = stimulus_source.pop("readout", None)
     if readout is not None and not isinstance(readout, dict):
         raise ValueError("[perception_feed.stimulus_source.readout] must be a table")
+    # The maternal voice is read by _maternal_voice_params and stays out of StimulusSourceParams,
+    # so the parameter digest recorded at maturation does not depend on it.
+    voice = stimulus_source.pop("voice", None)
+    if voice is not None and not isinstance(voice, dict):
+        raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
+    # The hearing band, like the voice, stays out of StimulusSourceParams so the maturation digest does not depend on it.
+    hearing = stimulus_source.pop("hearing", None)
+    if hearing is not None and not isinstance(hearing, dict):
+        raise ValueError("[perception_feed.stimulus_source.hearing] must be a table")
     return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
+
+
+def _maternal_voice_params(feed: dict[str, Any]) -> "MaternalVoiceParams":
+    from kaine.modules.audition.maternal_voice import MaternalVoiceParams
+
+    section = (feed.get("stimulus_source") or {}).get("voice")
+    if section is None:
+        return MaternalVoiceParams.from_section(None)
+    if not isinstance(section, dict):
+        raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
+    return MaternalVoiceParams.from_section(dict(section))
+
+
+def _hearing_band_params(feed: dict[str, Any]) -> "HearingBandParams":
+    from kaine.modules.audition.hearing_band import HearingBandParams
+
+    section = (feed.get("stimulus_source") or {}).get("hearing")
+    if section is None:
+        return HearingBandParams.from_section(None)
+    if not isinstance(section, dict):
+        raise ValueError("[perception_feed.stimulus_source.hearing] must be a table")
+    return HearingBandParams.from_section(dict(section))
 
 
 def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
@@ -49,6 +82,47 @@ def _stimulus_source_lived_offset(stage_path: Path | None = None) -> float:
     return value
 
 
+def _stimulus_source_resume_seconds(state: Any | None, lived_offset: float) -> float:
+    """Return the stimulus source time a boot resumes from.
+
+    Uses the stage's recorded ``stimulus_source_seconds``, the clock's own elapsed time,
+    so a restart neither repeats nor skips stimulus; time while the process was stopped is not added.
+    A stage without it (written before the field existed) falls back to ``lived_offset``,
+    the awake time.
+    """
+    import math
+
+    if state is None:
+        return lived_offset
+    raw = getattr(state, "stimulus_source_seconds", None)
+    if raw is None or isinstance(raw, bool):
+        return lived_offset
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return lived_offset
+    if not math.isfinite(value) or value < 0.0:
+        return lived_offset
+    return value
+
+
+def _stimulus_source_offsets(stage_path: Path | None = None) -> tuple[float, float]:
+    """Return ``(lived_offset, stimulus_offset)`` from one read of the stage file."""
+    import math
+
+    from kaine.lifecycle.stage import read_stage
+
+    state = read_stage(stage_path)
+    if state is None:
+        return (0.0, 0.0)
+    lived_raw = float(state.lived_seconds)
+    if not math.isfinite(lived_raw) or lived_raw < 0.0:
+        lived = 0.0
+    else:
+        lived = lived_raw
+    return (lived, _stimulus_source_resume_seconds(state, lived))
+
+
 def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourceClock, Callable[[], float]]:
     from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -56,8 +130,8 @@ def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourc
     lived = feed.get("_stimulus_source_lived_seconds")
     if clock is not None and lived is not None:
         return (clock, lived)
-    offset = _stimulus_source_lived_offset()
-    return (StimulusSourceClock(lived_offset_seconds=offset), lambda: offset)
+    offset, resume = _stimulus_source_offsets()
+    return (StimulusSourceClock(lived_offset_seconds=resume), lambda: offset)
 
 
 def _install_shared_stimulus_source_clock(
@@ -71,8 +145,10 @@ def _install_shared_stimulus_source_clock(
     """Install one shared stimulus source clock for both A/V surfaces.
 
     One clock for both surfaces so the beat is seen and heard together; the
-    offset continues the maternal trajectory across boots; stimulus source time runs on
-    the real monotonic clock (the mother is external), while the colour schedule
+    clock resumes from the stage's recorded stimulus source time (awake time
+    for a stage written before it was recorded), so the maternal trajectory
+    continues across boots without repeating, and time while the process was
+    stopped is not added; stimulus source time runs on the real monotonic clock (the mother is external), while the colour schedule
     follows lived subjective time.
     """
     import math
@@ -83,9 +159,10 @@ def _install_shared_stimulus_source_clock(
     if stage_state is not None:
         lived = float(stage_state.lived_seconds)
         offset = lived if math.isfinite(lived) and lived >= 0.0 else 0.0
+        resume = _stimulus_source_resume_seconds(stage_state, offset)
     else:
-        offset = _stimulus_source_lived_offset(stage_path)
-    clock = StimulusSourceClock(lived_offset_seconds=offset)
+        offset, resume = _stimulus_source_offsets(stage_path)
+    clock = StimulusSourceClock(lived_offset_seconds=resume)
 
     if stage_state is not None:
         if stage_state.is_embodied:
@@ -619,6 +696,12 @@ def _build_perception_feed_audio_factory(
         SeededProceduralAudioStream,
         StimulusSourceAudioSchedule,
         StimulusSourceProceduralAudioStream,
+        stimulus_source_soundscape_rms,
+    )
+    from kaine.modules.audition.live import PerceptionUnavailableError
+    from kaine.modules.audition.maternal_voice import (
+        MaternalVoiceLayer,
+        MaternalVoiceRepertoire,
     )
     from kaine.modules.stimulus_source_signal import _LOWPASS_TAPS
     from kaine.modules.vision.feed import load_playlist_manifest
@@ -627,6 +710,8 @@ def _build_perception_feed_audio_factory(
     audio = dict(feed.get("audio") or {})
     if mode == "stimulus_source":
         params = _stimulus_source_params(feed)
+        from kaine.modules.audition.hearing_band import HEARING_TOP_TONE_HZ
+        hearing = _hearing_band_params(feed)
         sr = int(audio.get("sample_rate", sample_rate))
         ch = int(audio.get("channels", channels))
         fpb = int(frames_per_block)
@@ -641,6 +726,10 @@ def _build_perception_feed_audio_factory(
                 f"[perception_feed.stimulus_source] requires lowpass_hz < sample_rate/2; "
                 f"got {params.lowpass_hz} Hz with sample_rate {sr} Hz"
             )
+        if hearing.enabled and HEARING_TOP_TONE_HZ >= sr / 2.0:
+            raise ValueError(
+                f"[perception_feed.stimulus_source.hearing] needs sample_rate above {2 * HEARING_TOP_TONE_HZ:.0f} Hz; got {sr} Hz"
+            )
         schedule = StimulusSourceAudioSchedule(
             seed=int(feed.get("seed", 0)),
             sample_rate=sr,
@@ -648,10 +737,53 @@ def _build_perception_feed_audio_factory(
             frames_per_block=fpb,
         )
         clock, lived = _shared_stimulus_source_objects(feed)
+        voice_params = _maternal_voice_params(feed)
+        voice = None
+        if voice_params.enabled:
+            try:
+                # The voice reaches the fetus with higher frequencies attenuated but present; the hearing band then limits what the entity hears.
+                repertoire = MaternalVoiceRepertoire.load(
+                    sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ if hearing.enabled else params.lowpass_hz
+                )
+            except PerceptionUnavailableError as exc:
+                log.critical(
+                    "stimulus source: the maternal voice repertoire is unavailable (%s); "
+                    "the stimulus source audio does not start without it. Restore the files or "
+                    "set [perception_feed.stimulus_source.voice].enabled = false.",
+                    exc,
+                )
+                raise
+            voice = MaternalVoiceLayer(
+                repertoire,
+                voice_params,
+                seed=schedule.seed,
+                stimulus_params=params,
+                background_rms=stimulus_source_soundscape_rms(schedule, params),
+            )
+            log.info(
+                "stimulus source: maternal voice on (%d items, %d takes, manifest %s)",
+                len(repertoire.item_ids),
+                sum(len(t) for t in repertoire.takes),
+                repertoire.manifest_sha256[:12],
+            )
+        else:
+            log.info(
+                "stimulus source: maternal voice off "
+                "([perception_feed.stimulus_source.voice].enabled = false)"
+            )
+        if hearing.enabled:
+            log.info(
+                "stimulus source: hearing band on (widens over %.0f s of awake time)",
+                hearing.maturation_seconds,
+            )
+        else:
+            log.info(
+                "stimulus source: hearing band off ([perception_feed.stimulus_source.hearing].enabled = false)"
+            )
 
         def _stimulus_source_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
             return StimulusSourceProceduralAudioStream(
-                schedule, params=params, clock=clock, callback=callback
+                schedule, params=params, clock=clock, callback=callback, voice=voice, awake=lived, hearing=hearing
             )
 
         return _stimulus_source_factory
@@ -772,6 +904,7 @@ def gather_perception_feed_descriptor(
     elif mode == "stimulus_source":
         from kaine.lifecycle.stored_field_names import stimulus_source_params_record
         from kaine.modules.audition.feed import StimulusSourceAudioSchedule
+        from kaine.modules.audition.maternal_voice import VOICE_DATA_DIR
         from kaine.modules.vision.feed import StimulusSourceSchedule
 
         seed = int(feed.get("seed", 0))
@@ -784,6 +917,18 @@ def gather_perception_feed_descriptor(
             # The stimulus source parameters are validated for real at boot time; the
             # covariate must not crash the run if they can't be read here.
             descriptor["stimulus_source"] = {"invalid": True}
+        try:
+            from hashlib import sha256 as _sha256
+
+            record = _maternal_voice_params(feed).as_record()
+            manifest_bytes = (VOICE_DATA_DIR / "manifest.json").read_bytes()
+            descriptor["maternal_voice"] = {
+                **record,
+                "manifest_sha256": _sha256(manifest_bytes).hexdigest(),
+            }
+        except Exception:
+            # The repertoire is verified for real at boot; the covariate must not crash the run.
+            descriptor["maternal_voice"] = {"invalid": True}
         descriptor["video"] = StimulusSourceSchedule(
             seed=seed,
             width=int(vision.get("capture_width", 640)),
@@ -798,7 +943,9 @@ def gather_perception_feed_descriptor(
             channels=channels,
             frames_per_block=max(1, sample_rate * vad_frame_ms // 1000),
         ).as_descriptor()
-        descriptor["lived_offset_seconds"] = _stimulus_source_lived_offset()
+        _lived_offset, _stimulus_offset = _stimulus_source_offsets()
+        descriptor["lived_offset_seconds"] = _lived_offset
+        descriptor["stimulus_source_offset_seconds"] = _stimulus_offset
     elif mode == "playlist":
         manifest_path = str(feed.get("playlist_manifest", "")).strip()
         try:

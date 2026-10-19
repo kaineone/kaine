@@ -6,7 +6,27 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
+| research-log-from-boot | 2/2 (100%) | The curated research observer starts each stream at its newest entry, so a restarted run no longer re-records the previous run's events under its own id. |
+| heard-log-own-words | 2/2 (100%) | The intent log's residual redaction uses the same set as publishing, so the entity's own felt phrases and awareness lines are no longer logged as heard speech. |
+| disclosure-on-waking | 4/4 (100%) | The individuation disclosure, wording unchanged, is given in the first organ call after each boot and each sleep and with every probe, so it no longer opens every prompt. |
+| persona-without-self-category | 3/3 (100%) | The default personas drop their opening "I am this entity.", which the organ filled with "I am an AI"; an offline replay of the ninth boot's requests took AI self-descriptions to 0 of 950 with the situation section gone. |
+| gate-c1-reachability | 5/5 (100%) | The period-variability floor drops to 0.02, below fetal values; a withdrawal waits for a scorable window after boot or thaw; probe draws and the latest markers persist so a restart neither resets nor repeats a pass run. |
+| interest-goal-factor | 6/6 (100%) | Curiosity directs attention: the goal factor raises each perceptual source's priority in proportion to interest and that source's learning progress, on in the first configuration. |
+| curiosity-interest | 7/7 (100%) | Curiosity is heterostatic interest that learning progress raises, with no relief and no goal, and boredom, met also by learning progress, carries the cost of an unchanging scene. |
+| welfare-crossing-deprivation | 5/5 (100%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
+| developmental-sensory-maturation | 5/5 (100%) | The stimulus-source audio passes a hearing band that widens over awake time in the order fetal hearing matures, from 500 Hz down to 100 Hz and then up to 3000 Hz, and the colour ramp spans the developmental phase, so the stimulus keeps offering learnable structure (paper §7, A.7, Table A1). |
+| stimulus-clock-continuity | 5/5 (100%) | The stimulus source clock resumes from its own persisted time instead of awake time, and the gate adds the awake time since its last tick at shutdown, so a restart neither repeats stimulus nor drops awake time (paper §7, A.7). |
+| learning-progress-horizons | 6/6 (100%) | Learning progress, the curiosity relief, compares the mean error of the older and newer halves of the last 90 min in 60 s bins, so it spans the forward models' learning curves; valence keeps the fast and slow means (paper A.4, A.7, Table A1). |
+| affect-state-error-terms | 5/5 (100%) | The affect state event and its research record carry the terms behind the valence target (per-source error means and progress, pooled progress, wellness means and change, pleasantness, target), so a valence trough can be attributed (paper A.4). |
+| developmental-maternal-voice | 5/5 (100%) | The developmental soundscape carries a pre-rendered maternal voice, low-pass filtered as in utero, paced by the maternal state, with a repertoire that unlocks over awake time (paper §7, A.7, Table A1). |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
+| act-intent-derivation | 0/5 (0%) | Action path, step 1 of 6: the action-selection module derives act intents by the act outcome of the report-or-act decision the report bars stand in for (Whyte and Smith 2021), and the first whitelisted device effector is a light in the camera's view. Design only: not scheduled. Starts at the module-addition study's hardware stage (paper §6.5) once a light is attached. |
+| planning-act-proposals | 0/5 (0%) | Action path, step 2 of 6: the planning module's action space grows by the attached effector's declared actions, so its proposals can ask for acts. Design only: not scheduled. Starts after act-intent-derivation, at the module-addition study's hardware stage (paper §6.5). |
+| embodiment-motor-contingency | 0/6 (0%) | Action path, step 3 of 6: a motor-contingency learner, its driving loop and body-declared freeze-then-free stages for the embodiment control surface, with a pan-tilt camera as the first body. Design only: not scheduled. Starts after act-intent-derivation, at the module-addition study's hardware stage (paper §6.5) once the camera is attached. |
+| active-vision | 0/5 (0%) | Action path, step 4 of 6: the entity chooses where to look by expected free energy and turns the pan-tilt camera to look. Design only: not scheduled. Starts after embodiment-motor-contingency has freed the camera's gaze channels, at the module-addition study's hardware stage (paper §6.5). |
+| world-model-action-outcomes | 0/5 (0%) | Action path, step 5 of 6 (parallel with step 4): the world model conditions on the entity's own acts and motor commands, so it predicts their outcomes. Design only: not scheduled. Starts after act-intent-derivation and embodiment-motor-contingency, at the module-addition study's hardware stage (paper §6.5). |
+| goal-directed-grasping | 0/5 (0%) | Action path, step 6 of 6: goal-directed grasping with an arm and gripper, composed from steps 1 to 5. Design only: not scheduled. Starts after all five earlier steps, at the module-addition study's hardware stage (paper §6.5) once the arm is attached. |
 | welfare-uncontrolled-ends | 4/4 (100%) | The affect welfare record counts stalled and cap-dropped goals as ends without the entity's own response, and a restored goal keeps its stall clock (paper 6.2, A.4). |
 | organ-degeneration-control | 4/4 (100%) | The organ's decoding carries a DRY repetition penalty and a shorter cap for thought than speech, and a looping or capped text is cut at a sentence boundary (paper 3.5, Table A1). |
 | reentry-until-broadcast | 5/5 (100%) | A sustained concern's drive event recurs on the affect module's own updates until a broadcast accesses it, and the re-entry interval runs from that access, so re-entries stop landing on discarded ticks (paper 3.5, A.4). |
@@ -135,6 +155,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 109 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 123 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

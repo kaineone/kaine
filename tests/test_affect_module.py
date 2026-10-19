@@ -112,7 +112,7 @@ async def test_workspace_publishes_emotion_when_changes(bus: AsyncBus):
 
 
 @pytest.mark.asyncio
-async def test_affective_reset_zeroes_state_and_drives(bus: AsyncBus):
+async def test_affective_reset_zeroes_state_and_deficits_keeps_curiosity(bus: AsyncBus):
     affect = Affect(bus)
     affect._state = DimensionalState(valence=0.7, arousal=0.8)
     affect.drives.curiosity.value = 0.9
@@ -121,7 +121,10 @@ async def test_affective_reset_zeroes_state_and_drives(bus: AsyncBus):
         await affect.affective_reset()
         assert affect.state == affect.baseline
         for d in affect.drives.all():
-            assert d.value == 0.0
+            if d.name == "curiosity":
+                assert d.value == 0.9
+            else:
+                assert d.value == 0.0
         assert affect.last_emotion == CategoricalEmotion.NEUTRAL
     finally:
         await affect.shutdown()

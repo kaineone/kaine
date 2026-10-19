@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The welfare log's affect_welfare record: negative-valence share and uncontrolled goal ends (paper 6.2)."""
+"""The welfare log's affect_welfare record: negative-valence share, crossing ends by the credit rule and deprivation shares (paper 6.2)."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -78,6 +78,20 @@ def _observer(u: _Mono, **kw):
     return obs, bus, sink
 
 
+def _ends(**counts):
+    return {
+        drive: {
+            "own": counts.get(drive, (0, 0))[0],
+            "other": counts.get(drive, (0, 0))[1],
+        }
+        for drive in _DRIVES
+    }
+
+
+def _above(**flags):
+    return {drive: flags.get(drive, False) for drive in _DRIVES}
+
+
 def test_tally_synthetic_run():
     tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
     tally.sleep_started(100.0)
@@ -125,62 +139,183 @@ def test_tally_ignores_out_of_order_and_non_finite():
     assert snap["negative_valence_share"] == pytest.approx(1.0)
 
 
-def test_tally_uncontrolled_ends():
+def test_tally_crossing_ends_from_counts():
     tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
-    for ts in range(101):
-        tally.observe_state(float(ts), 0.0)
-    tally.observe_goal("boredom", "abandoned", "without_response")
-    tally.observe_goal("boredom", "abandoned", "without_response")
-    tally.observe_goal("boredom", "abandoned", "without_response")
-    tally.observe_goal("boredom", "completed", "own_response")
-    tally.observe_goal("restlessness", "abandoned", "stalled")
-    tally.observe_goal("curiosity", "cleared", "sleep_reset")
+    for t in range(101):
+        ends = (
+            _ends(boredom=(5, 7))
+            if t < 50
+            else _ends(boredom=(6, 10))
+        )
+        tally.observe_state(float(t), 0.0, drive_ends=ends)
     snap = tally.snapshot()
     assert snap["boredom_uncontrolled_share"] == pytest.approx(0.75)
     assert snap["boredom_uncontrolled_per_awake_hour"] == pytest.approx(108.0)
-    assert snap["restlessness_uncontrolled_share"] == pytest.approx(1.0)
-    assert snap["restlessness_uncontrolled_per_awake_hour"] == pytest.approx(36.0)
-    assert snap["curiosity_uncontrolled_share"] is None
-    assert snap["social_drive_uncontrolled_share"] is None
+    assert "curiosity_uncontrolled_share" not in snap
 
 
-def test_tally_stalled_and_cap_are_uncontrolled():
+def test_tally_first_sample_is_baseline():
     tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
-    for ts in range(101):
-        tally.observe_state(float(ts), 0.0)
-    tally.observe_goal("curiosity", "abandoned", "stalled")
-    tally.observe_goal("curiosity", "abandoned", "stalled")
-    tally.observe_goal("curiosity", "abandoned", "stalled")
-    tally.observe_goal("curiosity", "completed", "own_response")
-    tally.observe_goal("boredom", "abandoned", "cap")
+    tally.observe_state(0.0, 0.0, drive_ends=_ends(boredom=(4, 2)))
     snap = tally.snapshot()
-    assert snap["curiosity_uncontrolled_share"] == pytest.approx(0.75)
-    assert snap["curiosity_uncontrolled_per_awake_hour"] == pytest.approx(108.0)
-    assert snap["boredom_uncontrolled_share"] == pytest.approx(1.0)
-
-
-def test_tally_sleep_reset_counts_as_neither():
-    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
-    tally.observe_goal("social_drive", "cleared", "sleep_reset")
+    for drive in ("boredom", "social_drive", "restlessness"):
+        assert snap[f"{drive}_uncontrolled_share"] is None
     assert tally.changed is False
-    assert tally.snapshot()["social_drive_uncontrolled_share"] is None
 
 
-def test_tally_unknown_reason_counts_as_neither():
+def test_tally_count_fall_rebaselines():
     tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
-    for ts in range(101):
-        tally.observe_state(float(ts), 0.0)
-    tally.snapshot()
-    tally.observe_goal("restlessness", "abandoned", "mystery")
-    tally.observe_goal("restlessness", "abandoned", None)
-    tally.observe_goal("restlessness", "abandoned", ["stalled"])
-    tally.observe_goal("restlessness", "completed", "without_response")
-    tally.observe_goal("restlessness", "completed", "stalled")
-    tally.observe_goal("restlessness", "cleared", "stalled")
-    assert tally.changed is False
+    tally.observe_state(0.0, 0.0, drive_ends=_ends(boredom=(3, 3)))
+    tally.observe_state(1.0, 0.0, drive_ends=_ends(boredom=(0, 0)))
+    tally.observe_state(2.0, 0.0, drive_ends=_ends(boredom=(1, 0)))
     snap = tally.snapshot()
-    assert snap["restlessness_uncontrolled_share"] is None
-    assert snap["restlessness_uncontrolled_per_awake_hour"] == pytest.approx(0.0)
+    assert snap["boredom_uncontrolled_share"] == pytest.approx(0.0)
+    assert snap["boredom_uncontrolled_per_awake_hour"] == pytest.approx(0.0)
+
+
+def test_tally_partial_count_fall_rebaselines():
+    # A restored entity whose counts are lower than the last ones read: the
+    # counts at the fall are a new baseline, and only later increases count.
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    tally.observe_state(0.0, 0.0, drive_ends=_ends(boredom=(5, 5)))
+    tally.observe_state(1.0, 0.0, drive_ends=_ends(boredom=(2, 6)))
+    tally.observe_state(2.0, 0.0, drive_ends=_ends(boredom=(3, 6)))
+    snap = tally.snapshot()
+    assert snap["boredom_uncontrolled_share"] == pytest.approx(0.0)
+    assert snap["boredom_uncontrolled_per_awake_hour"] == pytest.approx(0.0)
+
+
+def test_tally_invalid_ends_ignored():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    tally.observe_state(0.0, 0.0, drive_ends=_ends(boredom=(1, 1)))
+    bad_bool = {"boredom": {"own": True, "other": 1}}
+    bad_neg = {"boredom": {"own": -1, "other": 0}}
+    bad_float = {"boredom": {"own": 1.0, "other": 0}}
+    bad_missing = {"boredom": {"own": 1}}
+    bad_non_dict = {"boredom": "x"}
+    bad_drive_ends = "not a dict"
+    bad_unknown = {"secret thoughts": {"own": 9, "other": 9}}
+    for inv in [
+        bad_bool,
+        bad_neg,
+        bad_float,
+        bad_missing,
+        bad_non_dict,
+        bad_drive_ends,
+        bad_unknown,
+    ]:
+        tally.observe_state(1.0, 0.0, drive_ends=inv)
+    snap = tally.snapshot()
+    for drive in ("boredom", "social_drive", "restlessness"):
+        assert snap[f"{drive}_uncontrolled_share"] is None
+    assert "secret_thoughts_uncontrolled_share" not in snap
+    assert "secret" not in str(snap).lower()
+
+
+def test_tally_deprivation_share():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    for t in range(101):
+        above = _above(boredom=(t < 60))
+        tally.observe_state(float(t), 0.0, drive_above=above)
+    snap = tally.snapshot()
+    assert snap["boredom_deprivation_share"] == pytest.approx(0.6)
+    assert snap["restlessness_deprivation_share"] == pytest.approx(0.0)
+
+
+def test_tally_deprivation_excludes_sleep_and_missing_flags():
+    # A: sleep removes 10 s of above boredom time.
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    tally.sleep_started(20.0)
+    tally.sleep_completed(30.0)
+    for t in range(101):
+        tally.observe_state(float(t), 0.0, drive_above=_above(boredom=True))
+    snap = tally.snapshot()
+    assert snap["awake_seconds"] == pytest.approx(90.0)
+    assert snap["boredom_deprivation_share"] == pytest.approx(1.0)
+
+    # B: no drive_above for the first 50 s means those intervals count in neither part.
+    tally2 = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    for t in range(101):
+        above = None if t < 50 else _above(boredom=True)
+        tally2.observe_state(float(t), 0.0, drive_above=above)
+    snap2 = tally2.snapshot()
+    assert snap2["awake_seconds"] == pytest.approx(100.0)
+    assert snap2["boredom_deprivation_share"] == pytest.approx(1.0)
+
+    # C: an int 1 value for a drive flag is treated as missing.
+    tally3 = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    tally3.observe_state(0.0, 0.0, drive_above=_above(boredom=True))
+    tally3.observe_state(1.0, 0.0, drive_above={"boredom": 1})
+    tally3.observe_state(2.0, 0.0, drive_above=_above(boredom=False))
+    snap3 = tally3.snapshot()
+    assert snap3["boredom_deprivation_share"] == pytest.approx(1.0)
+
+
+def test_curiosity_interest_share():
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    for t in range(101):
+        above = _above(curiosity=(t < 30))
+        ends = _ends(curiosity=(0, min(t // 10, 5)))
+        tally.observe_state(float(t), 0.0, drive_above=above, drive_ends=ends)
+    snap = tally.snapshot()
+    assert snap["curiosity_interest_share"] == pytest.approx(0.3)
+    assert "curiosity_uncontrolled_share" not in snap
+    assert "curiosity_uncontrolled_per_awake_hour" not in snap
+    assert "curiosity_deprivation_share" not in snap
+    assert snap["boredom_uncontrolled_share"] is None
+
+
+def _run_drive_history(history: str, with_sleep: bool):
+    tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
+    if with_sleep:
+        for k in range(1, 8):
+            tally.sleep_started(k * 1500.0)
+            tally.sleep_completed(k * 1500.0 + 10.0)
+    own = 0
+    learning_ends = {1500, 4000, 6500, 9000, 10800}
+    for t in range(10801):
+        if history == "frozen":
+            above_flag = True
+        else:
+            period_pos = t % 2500
+            above_flag = period_pos < 1500
+            if with_sleep:
+                for k in range(1, 8):
+                    start = k * 1500 + 10
+                    end = k * 1500 + 37
+                    if start <= t < end:
+                        above_flag = False
+                        break
+            if history == "learning" and t in learning_ends:
+                own += 1
+        ends = _ends(boredom=(own, 0)) if history == "learning" else _ends()
+        tally.observe_state(
+            float(t),
+            0.0,
+            drive_above=_above(boredom=above_flag),
+            drive_ends=ends,
+        )
+    return tally.snapshot()
+
+
+def test_frozen_control_ranks_worst_at_any_sleep_cadence():
+    frozen_no = _run_drive_history("frozen", False)
+    frozen_sleep = _run_drive_history("frozen", True)
+    learning_no = _run_drive_history("learning", False)
+    learning_sleep = _run_drive_history("learning", True)
+
+    assert frozen_no["boredom_deprivation_share"] > learning_no["boredom_deprivation_share"]
+    assert frozen_sleep["boredom_deprivation_share"] > learning_sleep["boredom_deprivation_share"]
+    assert abs(frozen_no["boredom_deprivation_share"] - frozen_sleep["boredom_deprivation_share"]) < 0.05
+    assert abs(learning_no["boredom_deprivation_share"] - learning_sleep["boredom_deprivation_share"]) < 0.05
+
+    assert frozen_no["boredom_uncontrolled_share"] is None
+    assert frozen_sleep["boredom_uncontrolled_share"] is None
+    assert learning_no["boredom_uncontrolled_share"] == pytest.approx(0.0)
+    assert learning_sleep["boredom_uncontrolled_share"] == pytest.approx(0.0)
+
+    assert frozen_no["curiosity_interest_share"] == pytest.approx(0.0)
+    assert frozen_sleep["curiosity_interest_share"] == pytest.approx(0.0)
 
 
 def test_tally_initially_empty():
@@ -188,29 +323,32 @@ def test_tally_initially_empty():
     snap = tally.snapshot()
     assert snap["awake_seconds"] == pytest.approx(0.0)
     assert snap["negative_valence_share"] is None
-    for drive in _DRIVES:
+    for drive in ("boredom", "social_drive", "restlessness"):
         assert snap[f"{drive}_uncontrolled_share"] is None
         assert snap[f"{drive}_uncontrolled_per_awake_hour"] is None
+        assert snap[f"{drive}_deprivation_share"] is None
+    assert snap["curiosity_interest_share"] is None
 
 
 def test_tally_content_free_and_fixed_keys():
     tally = AffectWelfareTally(negative_valence_bar=0.5, max_gap_s=5.0)
-    tally.observe_goal("secret thoughts", "abandoned", "without_response")
-    tally.observe_state(0.0, 0.0)
-    payload = {
-        "action": "abandoned",
-        "drive": "secret thoughts",
-        "reason": "without_response",
-        "text": "private",
-    }
-    tally.observe_goal(
-        payload.get("drive"), payload.get("action"), payload.get("reason")
+    tally.observe_state(
+        0.0,
+        0.0,
+        drive_above={"secret thoughts": True, "curiosity": True, "text": "private"},
+        drive_ends={
+            "secret thoughts": {"own": 9, "other": 9},
+            "text": "private",
+        },
     )
+    tally.observe_state(1.0, 0.0, drive_above=_above(), drive_ends=_ends())
     snap = tally.snapshot()
     fixed = {"awake_seconds", "negative_valence_bar", "negative_valence_share"}
-    for drive in _DRIVES:
+    for drive in ("boredom", "social_drive", "restlessness"):
         fixed.add(f"{drive}_uncontrolled_share")
         fixed.add(f"{drive}_uncontrolled_per_awake_hour")
+        fixed.add(f"{drive}_deprivation_share")
+    fixed.add("curiosity_interest_share")
     assert set(snap.keys()) == fixed
     for k, v in snap.items():
         assert not isinstance(v, bool)
@@ -218,10 +356,13 @@ def test_tally_content_free_and_fixed_keys():
     serialized = str(snap).lower()
     assert "secret" not in serialized
     assert "private" not in serialized
+    assert not any(
+        k.startswith("curiosity_") and k != "curiosity_interest_share" for k in snap
+    )
 
 
 @pytest.mark.asyncio
-async def test_observer_counts_stalled_goal_from_bus_event():
+async def test_observer_stalled_goal_leaves_crossing_open():
     u = _Mono(0.0)
     obs, bus, sink = _observer(u, affect_summary_interval_s=300.0)
     await obs._tick()  # starts the summary interval at u = 0
@@ -233,7 +374,11 @@ async def test_observer_counts_stalled_goal_from_bus_event():
             _event(
                 "affect",
                 "affect.state",
-                {"state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0}},
+                {
+                    "state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0},
+                    "drive_above": _above(boredom=True),
+                    "drive_ends": _ends(),
+                },
                 float(t),
             ),
         )
@@ -244,28 +389,35 @@ async def test_observer_counts_stalled_goal_from_bus_event():
         _event(
             "affect",
             "affect.goal",
-            {"action": "abandoned", "drive": "curiosity", "reason": "stalled"},
+            {"action": "abandoned", "drive": "boredom", "reason": "stalled"},
             100.0,
         ),
     )
-    await obs.handle(
-        "affect.out",
-        "1-0",
-        _event(
-            "affect",
-            "affect.goal",
-            {"action": "completed", "drive": "curiosity", "reason": "own_response"},
-            100.0,
-        ),
-    )
+
+    for t in range(101, 201):
+        await obs.handle(
+            "affect.out",
+            "1-0",
+            _event(
+                "affect",
+                "affect.state",
+                {
+                    "state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0},
+                    "drive_above": _above(boredom=False),
+                    "drive_ends": _ends(boredom=(1, 0)),
+                },
+                float(t),
+            ),
+        )
 
     u.value = 300.0
     await obs._tick()
     affect_rows = [r for r in sink.rows if r.get("record") == "affect_welfare"]
     assert len(affect_rows) == 1
     row = affect_rows[0]
-    assert row["curiosity_uncontrolled_share"] == pytest.approx(0.5)
-    assert row["curiosity_uncontrolled_per_awake_hour"] == pytest.approx(36.0)
+    assert row["boredom_uncontrolled_share"] == pytest.approx(0.0)
+    assert row["boredom_uncontrolled_per_awake_hour"] == pytest.approx(0.0)
+    assert row["boredom_deprivation_share"] == pytest.approx(0.5, abs=0.01)
     assert len(bus.published) == 0
 
 
@@ -288,27 +440,20 @@ async def test_observer_end_to_end():
 
     for t in range(101):
         v = -0.6 if t < 50 else 0.0
+        ends = _ends() if t < 60 else _ends(boredom=(0, 1))
         await obs.handle(
             "affect.out",
             "1-0",
             _event(
                 "affect",
                 "affect.state",
-                {"state": {"valence": v, "arousal": 0.3, "dominance": 0.0}},
+                {
+                    "state": {"valence": v, "arousal": 0.3, "dominance": 0.0},
+                    "drive_ends": ends,
+                },
                 float(t),
             ),
         )
-
-    await obs.handle(
-        "affect.out",
-        "1-0",
-        _event(
-            "affect",
-            "affect.goal",
-            {"action": "abandoned", "drive": "boredom", "reason": "without_response"},
-            100.0,
-        ),
-    )
 
     u.value = 299.0
     await obs._tick()
@@ -334,7 +479,10 @@ async def test_observer_end_to_end():
         _event(
             "affect",
             "affect.state",
-            {"state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0}},
+            {
+                "state": {"valence": 0.0, "arousal": 0.3, "dominance": 0.0},
+                "drive_ends": _ends(boredom=(0, 1)),
+            },
             101.0,
         ),
     )

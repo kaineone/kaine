@@ -111,7 +111,17 @@ salience_affect_factor = "state_modulator"
 # function (§3.4.3) and turning it on changes what reaches the workspace, which
 # would shift the research baseline. It is staged behind this flag pending
 # validation on logged runs; flip to "drive_relevance" once validated.
+# "interest" (selected by the first-configuration profile, paper A.1) raises the
+# priority of each perceptual source in proportion to curiosity and that source's
+# learning progress: G = 1 + interest_gain * curiosity * lp+, with lp+ the
+# source's learning progress floored by [affect].learning_progress_floor. G may
+# exceed 1; only the priority is clipped. Every workspace-mediation study arm
+# holds the goal factor static, so the test's ranking is unchanged.
 salience_goal_factor = "static"
+# gamma_I, the interest gain (calibrated): the smallest round value at which full
+# interest with a source's lp+ of 0.5 lifts that source's 0.7 alerts to the think
+# bar at the tonic arousal a dominant drive sets (paper A.1, A.11).
+interest_gain = 0.5
 
 # Arousal contrast (adaptive gain). Above baseline arousal the score is the level
 # factor times a logistic of the priority whose slope rises to this gain at full
@@ -763,9 +773,17 @@ action_selection_stream = "action_selection.out"
 # Fast time constant for prediction-error averaging and alert-rate fast habituation (subjective s).
 fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
+# The relative fall of the fast against the slow error mean is the error dynamics behind valence.
 slow_time_constant_s = 100.0
 # Learning-progress floor: progress below this is treated as zero.
 learning_progress_floor = 0.05
+# Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
+# are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
+# error from the older to the newer half of the last learning_progress_span_s (the whole history
+# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
+# forward models' learning curves and must be an even whole number of bins (subjective s).
+learning_progress_span_s = 5400.0
+learning_progress_bin_s = 60.0
 # Alert excess margin: alert rate must exceed the habituated rate by this fraction to count as novel.
 alert_excess_margin = 0.5
 intent_rate_weight = 0.05
@@ -774,7 +792,8 @@ valence_progress_gain = 2.0
 # "error_dynamics" (default) or "wellness_level", the earlier rule: pleasantness plus
 # (wellness - 0.5), the wellness level. The earlier rule behaves bit for bit as before.
 valence_rule = "error_dynamics"
-# Goals (paper A.4): each drive crossing creates the goal of relieving that drive.
+# Goals (paper A.4): each deficit crossing creates the goal of relieving that drive;
+# a curiosity crossing (interest) publishes its drive event and creates no goal.
 # A goal is abandoned when its drive stays at or above threshold for goal_stall_s
 # entity seconds (Delta_stall), or as the lowest priority once more than goal_cap
 # goals are active (n_goal). An intent followed by no fall of the goal's drive
@@ -785,7 +804,8 @@ goal_cap = 3
 goal_response_window_s = 10.0
 goal_likelihood_fall = 0.5
 # Tonic drive gain gamma_D (paper A.4 item 3): arousal relaxes toward
-# a_0 + drive_arousal_gain * (1 - a_0) * v*, v* the largest drive value, instead of
+# a_0 + drive_arousal_gain * (1 - a_0) * v*, v* the largest deficit (boredom, social
+# drive, restlessness; curiosity is interest and does not raise it), instead of
 # toward baseline_arousal. Deprivation keeps arousal raised (the exploratory tonic
 # mode of Aston-Jones and Cohen 2005). 0.2 puts a deprived entity (v* 0.7 to 0.9) at
 # 0.40 to 0.43, where non-audition alerts reach access but the report bars still need
@@ -849,16 +869,19 @@ selection_bias = 0.2
 bias_decay_s = 20.0
 sustain_window_s = 30.0
 
-# relief_gain: curiosity and boredom are relieved continuously at relief_gain per second times
-# learning progress (curiosity) or alert excess (boredom); social_drive and restlessness lose
+# Curiosity is heterostatic interest (paper A.4; Oudeyer and Kaplan 2007): learning progress
+# builds it, nothing relieves it, it decays at decay_rate and carries through sleep. Its
+# decay_rate 0.00096 is calibrated: a sustained lp+ (learning progress above its floor) of 0.045 holds it at its
+# threshold (0.05 * 0.045 * 0.3 / 0.7). Its relief_gain is unused.
+# relief_gain: boredom is relieved continuously at relief_gain per second times the larger of
+# learning progress (own) and alert excess (not own); social_drive and restlessness lose
 # relief_gain of their value per event (social: a new operator interaction; restlessness: a non-rest action selection intent).
 # Boredom also loses [affect].boredom_engagement_relief of its value per engaging intent.
-# Under full deprivation a drive settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
+# Under full deprivation a deficit settles at build_rate / (build_rate + decay_rate), about 0.9 here, so it can cross its 0.7 threshold.
 [affect.drives.curiosity]
 build_rate = 0.05
-decay_rate = 0.0055
+decay_rate = 0.00096
 threshold = 0.7
-relief_gain = 0.5
 
 [affect.drives.boredom]
 build_rate = 0.04
@@ -1109,10 +1132,44 @@ luminance_mean = 0.15           # dim field
 luminance_contrast = 0.10       # low contrast
 luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
 maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
-colour_ramp_seconds = 3600      # lived seconds over which colour rises from grey
+colour_ramp_seconds = 86400     # awake seconds, the time constant of colour's rise from grey; equals the
+                                # hearing band's maturation_seconds, so colour keeps rising across the phase
+                                # (Table A1; newborn colour vision is still limited, Adams et al. 1994)
 
 [perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
+
+# pre-rendered speech (no runtime synthesis) shipped under
+# kaine/modules/audition/maternal_voice_data/, rendered offline by
+# tools/maintainer/generate_maternal_voice.py; it passes the same low-pass as
+# the soundscape; it plays through sleep; a missing or altered file stops the
+# stimulus loudly; enabled = false gives the voice-free soundscape byte for byte.
+# The voice needs [perception_feed.audio].sample_rate = 16000 (twice its 8 kHz
+# takes); any other rate fails boot unless enabled = false.
+[perception_feed.stimulus_source.voice]   # the maternal voice heard in utero (paper §7, A.7)
+enabled = true                  # maternal voice on/off master switch
+level_db = 6.0                  # voice RMS over the soundscape RMS, dB; the mother's voice is heard above the intrauterine background, Querleu et al. 1988; Benzaquen et al. 1990
+jitter_db = 3.0                 # per-utterance level variation either way
+slot_seconds = 30.0             # speech is decided per slot
+episode_probability = 0.2       # a slot talks with this times the maternal arousal; about 7% of the time is speech, near a woman's daily word count, Mehl et al. 2007
+repeat_share = 0.25             # an episode opens with the repeated passage, DeCasper and Spence 1986
+unlock_seconds = 3600.0         # one more repertoire item per hour of awake time
+pause_min_seconds = 0.5         # minimum pause between utterances
+pause_max_seconds = 1.5         # maximum pause between utterances
+
+# The hearing band (paper §7, A.7): the stimulus audio, bed and voice alike,
+# passes a band-pass that widens over awake time in the order fetal hearing
+# matures (Hepper and Shahidullah 1994). Each edge lies midway (log scale)
+# between the outermost tested tone heard and the next one not heard. It starts
+# at 354-707 Hz (500 Hz alone) and over maturation_seconds takes four equal
+# steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins and, with no unheard tone
+# below, the low edge goes (low-pass at 707 Hz, the heartbeat thud heard); 1000 Hz
+# joins (low-pass at 1732 Hz); 3000 Hz joins and the band is open. With it on,
+# the voice loads with its low-pass at 3000 Hz; the bed keeps lowpass_hz.
+# enabled = false gives the audio without the band byte for byte.
+[perception_feed.stimulus_source.hearing]
+enabled = true
+maturation_seconds = 86400.0    # awake seconds over which the band widens (Table A1)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so
@@ -1574,7 +1631,10 @@ stimulus_source_presence_window_seconds = 3  # presence must advance within this
 # change owns the thresholds + the decision; the stimulus source change owns the measurement.
 endogenous_self_sustain = true       # must demonstrate a self-sustaining rhythm
 entrain_then_autonomy = true         # entrain-then-autonomy demonstrated
-hrv_variability_floor = 0.2          # autonomic-maturation marker floor
+# Period-variability floor V^min_per: below every fetal five-minute heart-rate
+# coefficient of variation (Moraes et al. 2012: about 0.042 overall, 0.027 in
+# quiet sleep), so it checks for rigidity rather than marking maturation.
+hrv_variability_floor = 0.02
 stimulus_source_prediction_error_ceiling = 0.3  # generative-model-seeded ceiling
 return_to_baseline_seconds_ceiling = 30
 

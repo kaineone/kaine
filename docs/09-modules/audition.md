@@ -226,7 +226,7 @@ For reproducible research runs, the shared top-level `[perception_feed]` section
 - `seeded`: `SeededProceduralAudioStream` synthesizes int16 PCM as a pure function of `(seed, block_index)`, a learnable base soundscape of low-frequency sinusoids plus surprise bursts on the shared cross-modal cadence (`[perception_feed.video].surprise_interval`). It is sound, not speech.
 - `playlist`: `PlaylistAudioStream` decodes the audio track of the same checksummed manifest media through PyAV (`av`, in the `[audio]` extra), resamples it, and emits PCM. A digest mismatch fails closed; without PyAV it raises `PerceptionUnavailableError` with an install hint and never substitutes silence. To install both playlist surfaces in one step, use `bash scripts/install.sh --research` or `pip install -e .[perception]`.
 - `screen`: `MonitorAudioStream` (`kaine/modules/audition/monitor.py`) captures the desktop audio monitor through the system ffmpeg binary (`pulse` on Linux, `dshow` on Windows, `avfoundation` on macOS), so the entity hears whatever plays on the shared screen. The device comes from `[perception_feed.screen].monitor_device` (on Linux the current sink's `.monitor` when unset). It is not reproducible and is for demos with an operator present.
-- `stimulus_source`: the developmental audio source; see [the developmental phase](../06-operation/development.md).
+- `stimulus_source`: the developmental audio source, a low-passed soundscape with the maternal heartbeat and a pre-rendered maternal voice (`kaine/modules/audition/maternal_voice.py`), heard through a band that widens over awake time in the order fetal hearing matures (`kaine/modules/audition/hearing_band.py`); see [the developmental phase](../06-operation/development.md#the-hearing-band). The voice needs the 16 kHz stream rate (`[perception_feed.audio].sample_rate`, twice its 8 kHz takes); any other rate fails boot unless `[perception_feed.stimulus_source.voice].enabled = false`.
 
 Raw PCM lives only in memory, never on disk.
 
@@ -330,6 +330,8 @@ Audition holds no raw audio beyond a single `process_audio()` call, except that 
 | `tests/test_audition_live_logging.py` | Live-microphone summary interval and message format |
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
 | `tests/test_audition_feed.py` | Seeded audio (determinism, seek safety, seed decorrelation), playlist audio (manifest verification failing closed, PyAV absent), and `stimulus_source` |
+| `tests/test_maternal_voice.py`, `tests/test_stimulus_source_maternal_voice.py`, `tests/test_stimulus_source_voice_boot.py` | The maternal voice: loud failure on a missing or altered file, spectrum below the intrauterine cutoff, seeded determinism, arousal pacing, repertoire growth with awake time, byte-identical audio when disabled, boot wiring and the parameter digest |
+| `tests/test_hearing_band.py`, `tests/test_stimulus_source_hearing_band.py`, `tests/test_stimulus_source_hearing_boot.py` | The hearing band: the stepwise schedule on the tested tones, the filter's stopbands, byte-identical audio when disabled, independence from earlier blocks, restart continuity, the spectrum under the moving edges, boot wiring and the parameter digest |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related

@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -193,7 +194,36 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     ),
     # --- Affect / motivation ---
     "affect.state": frozenset(
-        {"state", "drives", "emotion", "emotion_category", "valence", "arousal", "dominance", "reset", "alert"}
+        {
+            "state",
+            "drives",
+            "drive_above",
+            "drive_ends",
+            "emotion",
+            "emotion_category",
+            "valence",
+            "arousal",
+            "dominance",
+            "reset",
+            "alert",
+            "vision_error_fast",
+            "vision_error_slow",
+            "vision_progress",
+            "vision_learning_progress",
+            "audition_error_fast",
+            "audition_error_slow",
+            "audition_progress",
+            "audition_learning_progress",
+            "signed_progress",
+            "learning_progress",
+            "signed_learning_progress",
+            "wellness",
+            "wellness_fast",
+            "wellness_slow",
+            "wellness_change",
+            "pleasantness",
+            "valence_target",
+        }
     ),
     "affect.emotion": frozenset({"emotion", "scores", "norm_compatibility_available", "alert", "state", "coping_available", "obstruction", "goal_significance_method", "reappraised"}),
     "affect.drive": frozenset({"drive", "value", "alert", "reentry"}),
@@ -546,6 +576,13 @@ class ResearchEventObserver(StreamSubscriberObserver):
     Multi-cursor poll loop over the curated streams via
     ``StreamSubscriberObserver`` plus an inner ``WorkspaceSubscriberObserver``
     for ``workspace.broadcast`` metadata. Writes to a single ``AsyncJsonlSink``.
+
+    Args:
+        start_at_tail: If true, each curated stream starts after its newest
+            entry at the moment ``start()`` runs, or at the current
+            millisecond when that lookup fails, so a previous run's retained
+            entries are not recorded. The evaluation sidecar sets it; the
+            default keeps the backlog read.
     """
 
     name = "research_event_log"
@@ -558,21 +595,47 @@ class ResearchEventObserver(StreamSubscriberObserver):
         *,
         poll_interval_s: float = 0.5,
         privacy_filter: PrivacyFilter | None = None,
+        start_at_tail: bool = False,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
         self._privacy = privacy_filter or PrivacyFilter()
+        self._start_at_tail = start_at_tail
         self._workspace = _WorkspaceMetadataObserver(bus, sink, self._privacy)
 
     # --- Lifecycle (also drives the inner workspace observer) ------------
 
     async def start(self) -> None:
+        if self._start_at_tail and not self._cursors:
+            self._cursors = {}
+            for stream in self.streams:
+                self._cursors[stream] = await self._tail_cursor(stream)
         await super().start()
         await self._workspace.start()
 
     async def stop(self) -> None:
         await self._workspace.stop()
         await super().stop()
+
+    async def _tail_cursor(self, stream: str) -> str:
+        """Return the newest entry id for ``stream``, or ``"0"`` when unknown.
+
+        Falls back to reading from the head only when the bus has no
+        ``last_entry_id`` method (test doubles). When the lookup fails on a
+        real bus, starts at the current millisecond so a previous run's
+        retained entries are not recorded.
+        """
+        if not hasattr(self._bus, "last_entry_id"):
+            return "0"
+        try:
+            return await self._bus.last_entry_id(stream)
+        except Exception:
+            log.warning(
+                "research observer tail lookup failed for %s; starting at the current time",
+                stream,
+                exc_info=True,
+            )
+            return f"{int(time.time() * 1000)}-0"
 
     # --- Record construction --------------------------------------------
 

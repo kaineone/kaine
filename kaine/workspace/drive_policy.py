@@ -23,6 +23,8 @@ Mapping (conservative v1):
   - ``curiosity`` /
     ``boredom`` /
     ``restlessness``   → ``think``  (internal deliberation; never reaches TTS).
+    A curiosity crossing marks a progress niche (learning progress is high), so its
+    think intent attends to what is being learned rather than to a lack (paper A.4).
 
 Guards (all inherited from the executive design, never bypassing it):
   - the action selection module checks inhibition first; this policy is only called when the

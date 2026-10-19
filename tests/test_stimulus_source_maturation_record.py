@@ -39,6 +39,7 @@ def test_stage_state_round_trips_new_fields():
         "stimulus_source_seed": 42,
         "stimulus_source_params_digest": "a" * 64,
         "maturation_bloom_ends_at": "2026-01-02T00:00:05+00:00",
+        "stimulus_source_seconds": 1001.25,
     }
     state = lifecycle_stage.StageState.from_dict(data)
     assert state.to_dict() == data

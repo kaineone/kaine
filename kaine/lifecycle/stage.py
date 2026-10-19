@@ -196,6 +196,19 @@ def _coerce_stimulus_source_t_at_maturation(value: Any) -> float | None:
     return value
 
 
+def _coerce_stimulus_source_seconds(value: Any) -> float | None:
+    """Defensive coerce: a corrupt stimulus source time is treated as unrecorded."""
+    if isinstance(value, bool):
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
 def _coerce_stimulus_source_seed(value: Any) -> int | None:
     """Defensive coerce: a corrupt stimulus source seed is treated as unrecorded."""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -233,6 +246,7 @@ class StageState:
     ``stimulus_source_seed``            — procedural stimulus source seed active at maturation (None until recorded).
     ``stimulus_source_params_digest``   — sha256 hex digest of the stimulus source parameters active at maturation (None until recorded).
     ``maturation_bloom_ends_at``  — UTC wall time when the maturation bloom ends (ISO-8601, None until recorded).
+    ``stimulus_source_seconds``: the stimulus source clock's own elapsed time, recorded by the gate runner each tick and at shutdown, so a restart resumes the stimulus where it stopped (None until recorded).
     """
 
     stage: str = DEVELOPMENT
@@ -245,6 +259,7 @@ class StageState:
     stimulus_source_seed: int | None = None
     stimulus_source_params_digest: str | None = None
     maturation_bloom_ends_at: str | None = None
+    stimulus_source_seconds: float | None = None
 
     @property
     def is_developing(self) -> bool:
@@ -277,6 +292,7 @@ class StageState:
             stimulus_source_seed=_coerce_stimulus_source_seed(data.get("stimulus_source_seed")),
             stimulus_source_params_digest=_coerce_stimulus_source_params_digest(data.get("stimulus_source_params_digest")),
             maturation_bloom_ends_at=_coerce_maturation_bloom_ends_at(data.get("maturation_bloom_ends_at")),
+            stimulus_source_seconds=_coerce_stimulus_source_seconds(data.get("stimulus_source_seconds")),
         )
 
 

@@ -98,8 +98,8 @@ async def bus():
 async def test_goal_added_real_producer(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.own_ends = 1
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.own_ends = 1
+    affect.drives.boredom.value = 0.75
     await affect._tick()
 
     events = [e for e in await _read_affect_events(bus) if e.type == "affect.goal"]
@@ -122,8 +122,8 @@ async def test_goal_added_real_producer(bus):
 async def test_goal_end_real_producer(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.own_ends = 1
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.own_ends = 1
+    affect.drives.boredom.value = 0.75
     await affect._tick()
 
     goal_id = affect.goals.active()[0].id
@@ -142,7 +142,7 @@ async def test_goal_end_real_producer(bus):
 
     assert record["action"] == "abandoned"
     assert record["id"] == goal_id
-    assert record["drive"] == "curiosity"
+    assert record["drive"] == "boredom"
     assert record["reason"] == "stalled"
     assert "description" not in record
     assert record["source"] == "affect"
@@ -160,8 +160,8 @@ async def test_drift_guard_allowlist(bus):
     # Goal-producing setup on the function-scoped bus fixture.
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
-    affect.drives.curiosity.own_ends = 1
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.own_ends = 1
+    affect.drives.boredom.value = 0.75
     await affect._tick()
     goal_events = [
         e for e in await _read_affect_events(bus) if e.type == "affect.goal"

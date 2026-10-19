@@ -139,6 +139,18 @@ class GoalLedger:
             del self._goals[goal_id]
         return removed
 
+    def clear_active_for_drive(self, drive: str) -> list[Goal]:
+        """Used when restoring older state, so the removal is no lifecycle change."""
+        removed: list[Goal] = []
+        to_delete: list[str] = []
+        for goal_id, goal in self._goals.items():
+            if goal.state == GoalState.ACTIVE and goal.drive == drive:
+                to_delete.append(goal_id)
+                removed.append(goal)
+        for goal_id in to_delete:
+            del self._goals[goal_id]
+        return removed
+
     def _transition(self, goal_id: str, new_state: GoalState) -> Goal:
         if goal_id not in self._goals:
             raise KeyError(f"unknown goal id {goal_id!r}")
