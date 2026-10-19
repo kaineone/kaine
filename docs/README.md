@@ -1,6 +1,6 @@
 # About this book
 
-This is the documentation for KAINE, a cognitive architecture for synthetic minds: a modular framework whose modules can be replaced, and whose first instantiation is a predictive global workspace. The documentation is written as one book. Read it in order to learn the system from the ideas behind it to how to extend it, or jump to the chapter you need. The reference appendices at the end list every configuration key, define the terms, and record licences and the roadmap.
+This is the documentation for KAINE, source-available software that implements existing theories, Global Workspace Theory and Predictive Processing, as a cognitive architecture for synthetic minds. Each of its modules can be replaced, and its first instantiation is a predictive global workspace that starts in the first configuration and adds its held modules one at a time. The documentation is written as one book. Read it in order to learn the system from the ideas behind it to how to extend it, or jump to the chapter you need. The reference appendices at the end list every configuration key, define the terms, and record licences and the roadmap.
 
 The chapters are plain Markdown and read fine on GitHub. To read them as a book with a sidebar, search and next/previous pages, install [mdBook](https://rust-lang.github.io/mdBook/) and run `mdbook serve docs` from the repository root; the built book is written to `book/` and is not committed.
 
