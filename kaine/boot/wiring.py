@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
@@ -80,6 +81,7 @@ _WORKSPACE_ALLOWED_KEYS: set[str] = {
     "novelty_window",
     "salience_affect_factor",
     "salience_goal_factor",
+    "interest_gain",  # gamma_I of the interest goal factor, paper A.1
     "arousal_contrast_gain",
     "arm",  # the arm of the planned test, read by the cycle
     "regulation_bias",  # emotion regulation's tier-1 selection bias gate (paper §3.5); false in every study arm
@@ -120,6 +122,7 @@ def make_salience_factors(
     from kaine.modules.affect.modulator import StateModulator
     from kaine.workspace import (
         DriveRelevanceGoalScorer,
+        InterestGoalScorer,
         StaticAffectModulator,
         StaticGoalScorer,
     )
@@ -160,12 +163,41 @@ def make_salience_factors(
         goal_scorer = DriveRelevanceGoalScorer(
             affect_provider.drive_values, drive_sources=drive_sources
         )
+    elif goal_factor == "interest":
+        try:
+            gain = float(section.get("interest_gain", 0.5))
+        except (TypeError, ValueError):
+            raise ConfigurationError(
+                "[workspace].interest_gain must be finite and >= 0"
+            )
+        if not math.isfinite(gain) or gain < 0.0:
+            raise ConfigurationError(
+                "[workspace].interest_gain must be finite and >= 0"
+            )
+        try:
+            floor = float(
+                (kaine_config.get("affect") or {}).get("learning_progress_floor", 0.05)
+            )
+        except (TypeError, ValueError):
+            raise ConfigurationError(
+                "[affect].learning_progress_floor must be finite and in [0, 1)"
+            )
+        if not math.isfinite(floor) or not (0.0 <= floor < 1.0):
+            raise ConfigurationError(
+                "[affect].learning_progress_floor must be finite and in [0, 1)"
+            )
+        goal_scorer = InterestGoalScorer(
+            affect_provider.drive_values,
+            affect_provider.learning_progress,
+            gain=gain,
+            floor=floor,
+        )
     elif goal_factor == "static":
         goal_scorer = StaticGoalScorer()
     else:
         raise ConfigurationError(
             "unknown [workspace].salience_goal_factor "
-            f"{goal_factor!r} (expected 'drive_relevance' or 'static')"
+            f"{goal_factor!r} (expected 'drive_relevance', 'interest' or 'static')"
         )
 
     # A factor is a deliberate downgrade when it is static but ships real.
@@ -180,8 +212,8 @@ def make_salience_factors(
     if goal_factor == "static" and _SALIENCE_GOAL_FACTOR_DEFAULT == "static":
         log.info(
             "salience goal factor is on the staged static baseline "
-            "(set [workspace].salience_goal_factor = 'drive_relevance' to activate "
-            "the drive-relevance scorer once validated)"
+            "(set [workspace].salience_goal_factor = 'drive_relevance' or 'interest' to activate "
+            "a real goal scorer once validated)"
         )
 
     return affect_modulator, goal_scorer, downgraded_factors

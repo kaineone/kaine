@@ -8,6 +8,7 @@ wiring that feeds the rolling-latest coalition into each generation.
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -95,7 +96,14 @@ def test_default_personas_are_first_person_and_forbidden_word_free():
         lowered = persona.lower()
         for word in forbidden:
             assert word not in lowered
-        assert persona.startswith("I am this entity.")
+        assert "I am this entity" not in persona
+
+
+def test_default_personas_name_no_category():
+    for persona in (DEFAULT_PERSONA_EXTERNAL, DEFAULT_PERSONA_INTERNAL):
+        assert re.search(r"\bI am (?:a|an|this)\b", persona) is None
+    assert DEFAULT_PERSONA_EXTERNAL.startswith("What I say")
+    assert DEFAULT_PERSONA_INTERNAL.startswith("My thoughts")
 
 
 def test_awareness_heading_in_prompt():

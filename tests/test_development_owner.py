@@ -456,6 +456,9 @@ async def test_pause_aborts_withdrawal(owner_factory):
         readout_period_seconds=10.0,
         withdrawal_period_seconds=10.0,
         withdrawal_seconds=5.0,
+        # The withdrawal's wait for a full entrainment window since boot or thaw
+        # (paper A.7) coincides with the settling period here.
+        entrainment_window_seconds=10.0,
     )
     paused = {"value": False}
 

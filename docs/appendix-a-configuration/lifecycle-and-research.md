@@ -151,7 +151,7 @@ The maturation gate that decides when an entity in its developmental phase matur
 |---|---|---|---|
 | `endogenous_self_sustain` | boolean | `true` | Require the endogenous self-sustain readiness marker. |
 | `entrain_then_autonomy` | boolean | `true` | Require the entrain-then-autonomy readiness marker. |
-| `hrv_variability_floor` | float | `0.2` | Minimum variability of the self-rhythm's period (marker 3). |
+| `hrv_variability_floor` | float | `0.02` | Minimum variability of the self-rhythm's period (marker 3). It lies below every fetal five-minute heart-rate coefficient of variation (Moraes et al. 2012), so it checks for rigidity rather than marking maturation. |
 | `stimulus_source_prediction_error_ceiling` | float | `0.3` | Maximum stimulus source prediction-error marker. |
 | `return_to_baseline_seconds_ceiling` | float | `30.0` | Maximum seconds to return to baseline. |
 
