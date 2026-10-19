@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 from kaine.bus.schema import Event
@@ -39,7 +40,8 @@ class StaticGoalScorer:
 
     Returns the same value for every event, so the product-form salience score
     collapses to ``intensity × novelty × <constant>``. It is NOT the default in
-    the live cycle (the real :class:`DriveRelevanceGoalScorer` is selectable via
+    the live cycle (the real :class:`DriveRelevanceGoalScorer` or
+    :class:`InterestGoalScorer` is selectable via
     ``[workspace].salience_goal_factor``); it is retained as the runnable
     two-factor negative control and as a fixed-value seam for crafted tests.
     """
@@ -168,3 +170,59 @@ class DriveRelevanceGoalScorer:
         serving = self._drive_sources.get(dominant[0], frozenset())
         relevance = 1.0 if event.source in serving else 0.0
         return _clamp01(1.0 - dominant[1] * (1.0 - relevance) * self._attenuation)
+
+
+class InterestGoalScorer:
+    """Goal factor: curiosity-directed attention based on learning progress.
+
+    Curiosity directs attention toward the source being learned, in proportion
+    to its learning progress (Gottlieb et al. 2013; Poli et al. 2020). The factor
+    is in ``[1, 1 + gain]`` and may exceed 1; the priority is clipped by the
+    salience product. Pure: no clock, no RNG.
+    """
+
+    def __init__(
+        self,
+        drive_getter: Callable[[], Mapping[str, float]],
+        learning_progress_getter: Callable[[], Mapping[str, float]],
+        *,
+        gain: float = 0.5,
+        floor: float = 0.05,
+    ) -> None:
+        if not math.isfinite(gain) or gain < 0.0:
+            raise ValueError("gain must be finite and >= 0")
+        if not math.isfinite(floor) or floor < 0.0 or floor >= 1.0:
+            raise ValueError("floor must be finite and in [0, 1)")
+        self._drive_getter = drive_getter
+        self._learning_progress_getter = learning_progress_getter
+        self._gain = float(gain)
+        self._floor = float(floor)
+
+    async def relevance(self, event: Event) -> float:
+        drives = self._drive_getter()
+        curiosity = drives.get("curiosity", 0.0)
+        if not isinstance(curiosity, (int, float)) or not math.isfinite(curiosity):
+            d = 0.0
+        else:
+            d = curiosity
+        if d < 0.0:
+            d = 0.0
+        if d > 1.0:
+            d = 1.0
+        if d == 0.0:
+            return 1.0
+
+        lp = self._learning_progress_getter().get(event.source)
+        if not isinstance(lp, (int, float)) or not math.isfinite(lp):
+            return 1.0
+        if lp < 0.0:
+            lp = 0.0
+        if lp > 1.0:
+            lp = 1.0
+        if lp <= self._floor:
+            return 1.0
+
+        lp_plus = (lp - self._floor) / (1.0 - self._floor)
+        if lp_plus == 0.0:
+            return 1.0
+        return 1.0 + self._gain * d * lp_plus

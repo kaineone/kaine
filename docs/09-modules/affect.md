@@ -6,7 +6,7 @@ The affect module ships disabled in the default config (`[modules].affect = fals
 
 ## Arousal: the global gain and contrast
 
-Every predictive processor scales its own prediction error by its recent errors (local precision). Arousal adds one gain across all of them, following the adaptive-gain account of locus coeruleus function. The workspace computes each candidate's priority as `p = clip(intensity × novelty × goal, 0, 1)`, with the goal factor held at 1 by default (`[workspace].salience_goal_factor = "static"`), and turns it into a score with two arousal terms:
+Every predictive processor scales its own prediction error by its recent errors (local precision). Arousal adds one gain across all of them, following the adaptive-gain account of locus coeruleus function. The workspace computes each candidate's priority as `p = clip(intensity × novelty × goal, 0, 1)`, with the goal factor held at 1 by default (`[workspace].salience_goal_factor = "static"`). The first-configuration profile selects `"interest"`, through which curiosity multiplies each perceptual source's priority by `1 + gamma_I × curiosity × lp+` of that source (see the global workspace page). The workspace then turns the priority into a score with two arousal terms:
 
 ```
 T = 0.2 + 0.8 × a                                 level gain, common to every candidate

@@ -97,7 +97,7 @@ The hearing band filters the whole stimulus-source audio, the soundscape and the
 
 The readout probes briefly change the maternal drive that an entity in its developmental phase perceives. They are bounded, announced on `development.out` as `development.probe` events, and never run while the entity is frozen (including during a welfare response), within a readout period after boot or thaw, or within 60 seconds of another probe. Their timing is jittered from the run seed so the entity cannot learn the schedule, while a research run with the same seed reproduces it exactly. All durations are entity seconds.
 
-The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, and the viability verdict) to `development_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm identity, which the readout stores in `self_rhythm_identity.json` in the same directory; on boot the readout restores the progress when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `development_readout.json`, so the progress also survives a revive.
+The readout saves its progress (awake seconds, consecutive passing withdrawals, the frequency-pull history, whether the marker was ever met, the viability verdict, the latest self-sustain and entrainment markers, and the probe-jitter counters) to `development_progress.json` beside its readout file, by default in `state/lifecycle/`. The file is keyed to the entity's seed and self-rhythm identity, which the readout stores in `self_rhythm_identity.json` in the same directory; on boot the readout restores the progress when the key matches, so the developmental phase continues where it left off after a restart. Preservation bundles carry this file and `development_readout.json`, so the progress also survives a revive.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -110,7 +110,7 @@ The readout saves its progress (awake seconds, consecutive passing withdrawals, 
 | `perturbation_drive_fraction` | float | `0.75` | Raised drive as a fraction of `external_drive_max_amplitude` (1.5× the usual 0.5). |
 | `probe_jitter_fraction` | float | `0.25` | Each probe time varies ±25% around its period. `0` = fixed schedule. |
 | `baseline_drive_fraction` | float | `0.5` | Usual drive as a fraction of `external_drive_max_amplitude`. |
-| `entrainment_window_seconds` | float | `300` | Window before each withdrawal over which the self-rhythm's phase locking to the heartbeat (marker 2) is measured. |
+| `entrainment_window_seconds` | float | `300` | Window before each withdrawal over which the self-rhythm's phase locking to the heartbeat (marker 2) is measured. A withdrawal waits at least this long after boot or a thaw. |
 | `entrainment_band_low_hz` / `entrainment_band_high_hz` | float | `0.3` / `2.0` | Band the self-rhythm's activity is filtered to before its phase is taken. Must lie below half of `sample_hz`. |
 | `edge_trim_seconds` | float | `2.0` | Trimmed from each end of the filtered window. |
 | `frequency_pull_floor` | float | `0.5` | Minimum pull of the self-rhythm's frequency after withdrawal toward the beat, measured from the entity's own baseline. |

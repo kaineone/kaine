@@ -578,24 +578,9 @@ class DevelopmentOwner:
             self._started_at + self._config.readout_period_seconds
         )
         self._paused_last_step: bool = False
+        self._awake_since: float = self._started_at
         self._last_probe_end: float = -float("inf")
 
-        settle_end = self._settle_until
-        self._next_withdrawal_at: float = (
-            settle_end
-            + self._jitter_unit("withdrawal")
-            * self._config.probe_jitter_fraction
-            * self._config.withdrawal_period_seconds
-        )
-        self._next_perturbation_at: float = (
-            self._started_at
-            + self._config.readout_period_seconds
-            + self._config.withdrawal_seconds
-            + 60.0
-            + self._jitter_unit("perturbation")
-            * self._config.probe_jitter_fraction
-            * self._config.perturbation_period_seconds
-        )
         self._next_readout_at: float = (
             self._started_at + self._config.readout_period_seconds
         )
@@ -640,6 +625,23 @@ class DevelopmentOwner:
         self._progress_path: Path = self._state_path.parent / "development_progress.json"
         self._last_progress_save_awake: float = 0.0
         self._load_progress()
+
+        settle_end = self._settle_until
+        self._next_withdrawal_at: float = (
+            settle_end
+            + self._jitter_unit("withdrawal")
+            * self._config.probe_jitter_fraction
+            * self._config.withdrawal_period_seconds
+        )
+        self._next_perturbation_at: float = (
+            self._started_at
+            + self._config.readout_period_seconds
+            + self._config.withdrawal_seconds
+            + 60.0
+            + self._jitter_unit("perturbation")
+            * self._config.probe_jitter_fraction
+            * self._config.perturbation_period_seconds
+        )
 
     def _jitter_unit(self, kind: str) -> float:
         """Return a fresh unit draw for ``kind`` and advance its counter."""
@@ -808,6 +810,40 @@ class DevelopmentOwner:
             passes = data.get("consecutive_passes")
             if isinstance(passes, int) and passes >= 0:
                 self._entrainment_consecutive_passes = passes
+
+            # Older files without jitter_counters or the latest marker fields migrate
+            # here; the next save writes them back.
+            jitter = data.get("jitter_counters")
+            if isinstance(jitter, dict):
+                withdrawal = jitter.get("withdrawal")
+                if (
+                    isinstance(withdrawal, int)
+                    and not isinstance(withdrawal, bool)
+                    and withdrawal >= 0
+                ):
+                    self._jitter_counter_withdrawal = withdrawal
+                perturbation = jitter.get("perturbation")
+                if (
+                    isinstance(perturbation, int)
+                    and not isinstance(perturbation, bool)
+                    and perturbation >= 0
+                ):
+                    self._jitter_counter_perturbation = perturbation
+
+            if "entrain_then_autonomy" in data:
+                value = data["entrain_then_autonomy"]
+                if isinstance(value, bool) or value is None:
+                    self._entrain_then_autonomy = value
+            elif self._entrainment_consecutive_passes >= int(
+                self._config.entrainment_replications
+            ):
+                self._entrain_then_autonomy = True
+
+            if "endogenous_self_sustain" in data:
+                value = data["endogenous_self_sustain"]
+                if isinstance(value, bool) or value is None:
+                    self._endogenous_self_sustain = value
+
             history = data.get("viability_history")
             if isinstance(history, list):
                 cleaned: list[dict] = []
@@ -853,6 +889,12 @@ class DevelopmentOwner:
                 "viability_history": self._viability_history,
                 "ever_replicated": self._ever_replicated,
                 "viability_verdict": self._viability_verdict,
+                "jitter_counters": {
+                    "withdrawal": self._jitter_counter_withdrawal,
+                    "perturbation": self._jitter_counter_perturbation,
+                },
+                "entrain_then_autonomy": self._entrain_then_autonomy,
+                "endogenous_self_sustain": self._endogenous_self_sustain,
             }
             write_json_atomic(self._progress_path, data)
             self._last_progress_save_awake = self._active_lived_seconds
@@ -903,6 +945,7 @@ class DevelopmentOwner:
         elif not paused:
             if self._paused_last_step:
                 self._settle_until = now + self._config.readout_period_seconds
+                self._awake_since = now
             await self._handle_probes(now)
 
         self._paused_last_step = paused
@@ -996,11 +1039,14 @@ class DevelopmentOwner:
 
         # When both are due, the more overdue one goes first, so neither kind can
         # starve the other.
-        due = [
-            (self._next_withdrawal_at, "withdrawal"),
-            (self._next_perturbation_at, "perturbation"),
-        ]
-        due = [d for d in due if now >= d[0]]
+        # A withdrawal needs a full entrainment window of awake samples since
+        # boot or thaw, otherwise its phase-locking value is undefined and the
+        # persisted pass run would reset (paper A.7).
+        due = []
+        if now >= self._next_withdrawal_at and now >= self._awake_since + self._config.entrainment_window_seconds:
+            due.append((self._next_withdrawal_at, "withdrawal"))
+        if now >= self._next_perturbation_at:
+            due.append((self._next_perturbation_at, "perturbation"))
         if due:
             await self._start_probe(now, min(due)[1])
 
@@ -1026,6 +1072,7 @@ class DevelopmentOwner:
         self._probe_start = now
         self._probe_end = now + seconds
         await self._publish_probe_event(kind, "start", seconds)
+        self._persist_progress()
 
     async def _end_probe(self, now: float) -> None:
         kind = self._probe_kind
