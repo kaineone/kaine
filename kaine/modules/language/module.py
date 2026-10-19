@@ -908,10 +908,11 @@ class Language(BaseModule):
         # Heard speech is anything that came from an external-input event in
         # the coalition (audition.transcription, embodiment.chat), plus any unmarked
         # about (fail-closed: felt/event must be explicitly tagged). The
-        # redaction set also holds the values of the heard-speech payload fields
-        # at any depth on any coalition event.
+        # residual pass uses the same set publishing uses: external-input event
+        # texts plus heard-field values from events whose source is not
+        # "language". The language module's own event field values are excluded
+        # because they were already redacted when published.
         heard_texts: set[str] = set()
-        redact_texts: set[str] = set()
         # Heard-field values from events other than the language module's own. Its own
         # earlier user_input is a felt or event phrase it chose to publish.
         foreign_field_texts: set[str] = set()
@@ -923,10 +924,9 @@ class Language(BaseModule):
                 for leaf in _iter_field_values(
                     event.payload, HEARD_TEXT_FIELDS - {"text"}
                 ):
-                    redact_texts.add(leaf)
                     if event.source != "language":
                         foreign_field_texts.add(leaf)
-        redact_texts |= heard_texts
+        residual_texts = heard_texts | foreign_field_texts
 
         # Only an external-input event makes an about heard. Field values (for
         # example a felt phrase the language module itself published as user_input) are
@@ -993,7 +993,7 @@ class Language(BaseModule):
         # speech never reaches it: prompt and faithful rendering are redacted.
         logged_prompt = ctx.logged_prompt
         logged_faithful = ctx.logged_working_memory if snap is not None else None
-        for heard in redact_texts:
+        for heard in residual_texts:
             if len(heard) >= 3:
                 logged_prompt = logged_prompt.replace(heard, HEARD_SPEECH_PLACEHOLDER)
                 if logged_faithful is not None:
@@ -1002,12 +1002,12 @@ class Language(BaseModule):
                     )
         logged_heard_turn = ctx.logged_heard_turn
         if logged_heard_turn is not None:
-            for heard in redact_texts:
+            for heard in residual_texts:
                 if len(heard) >= 3:
                     logged_heard_turn = logged_heard_turn.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_numeric = ctx.numeric_working_memory if snap is not None else None
         if logged_numeric is not None:
-            for heard in redact_texts:
+            for heard in residual_texts:
                 if len(heard) >= 3:
                     logged_numeric = logged_numeric.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_about_values = _clean_about_values(about_values, heard_texts | foreign_field_texts)

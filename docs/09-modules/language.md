@@ -198,7 +198,7 @@ Every generation is appended to `state/language/intent_expression.jsonl` by `Int
 - `system_digest`, the SHA-256 of the system prompt;
 - `seed`, the sampling seed, `null` for ordinary utterances.
 
-Heard speech is redacted. Every external-input event (`audition.transcription`, and `embodiment.chat` from other avatars) is replaced by `[heard speech]` at every text leaf of the logged rendering and prompt, as are heard-text fields nested in other events. The logged rendering lists the same events in the same order as the rendering the organ saw. Any heard text that still appears is replaced as a last resort, and a warning is logged without the text.
+Heard speech is redacted. Every external-input event (`audition.transcription`, and `embodiment.chat` from other avatars) is replaced by `[heard speech]` at every text leaf of the logged rendering and prompt, as are heard-text fields nested in other events. The logged rendering lists the same events in the same order as the rendering the organ saw. Any heard text that still appears is replaced as a last resort, and a warning is logged without the text. That last pass uses the set publishing uses: the texts of external-input events and the heard-field values of other modules' events. The language module's own earlier events are left out of it, because their `user_input` and `faithful_rendering` were redacted when they were published, so the entity's own felt phrase or awareness line recurring in a later prompt is logged as written.
 
 The language module never truncates the log. At each sleep the sleep module moves the waking log into the per-sleep corpus under `state/language/intent_log/`.
 
