@@ -356,3 +356,39 @@ The research log SHALL keep `normalised_change` on `vision.report` and `audition
 #### Scenario: The vision change ratio survives
 - **WHEN** the vision module publishes `vision.report` with `normalised_change` 1.4
 - **THEN** the research record has `normalised_change` 1.4
+
+### Requirement: The research record of affect state keeps the valence-target terms
+The research event observer SHALL copy into every `affect.state` record the valence-target terms the affect module publishes (`vision_error_fast`, `vision_error_slow`, `vision_progress`, `audition_error_fast`, `audition_error_slow`, `audition_progress`, `signed_progress`, `learning_progress`, `wellness`, `wellness_fast`, `wellness_slow`, `wellness_change`, `pleasantness`, `valence_target`), null values included. The post-run log range check SHALL declare their bounds: error means non-negative; `learning_progress`, `wellness`, `wellness_fast` and `wellness_slow` in [0, 1]; the progress terms, `wellness_change`, `pleasantness` and `valence_target` in [-1, 1].
+
+#### Scenario: A periodic affect state record keeps the terms
+- **WHEN** the observer builds a record from a periodic `affect.state` event published by the affect module
+- **THEN** every payload key, the valence-target terms included, is in the record with the payload's value
+
+### Requirement: The research record of affect state keeps the windowed progress terms
+The research event observer SHALL copy `vision_learning_progress`, `audition_learning_progress` and `signed_learning_progress` into every `affect.state` record, null values included, and the post-run log range check SHALL declare them in [-1, 1].
+
+#### Scenario: A periodic affect state record keeps the terms
+- **WHEN** the observer builds a record from an `affect.state` event that carries the windowed progress terms
+- **THEN** the record has each of them with the payload's value
+
+### Requirement: The run manifest marks the learning-progress estimator
+The run manifest SHALL carry `learning_progress_scheme`, 2 for runs whose `affect.state` field `learning_progress` is the windowed estimator. A manifest without the field marks scheme 1, the fast and slow time-decayed means.
+
+#### Scenario: A new run's manifest
+- **WHEN** a run context is minted and its manifest written
+- **THEN** the manifest has `learning_progress_scheme` equal to 2
+
+### Requirement: The research log records only its own run
+When the evaluation sidecar builds the curated research observer, the observer SHALL start each curated stream after the newest entry present when the observer starts, so entries a previous run published to the persisted streams are never recorded under the current run, and every entry published after the observer started is recorded. A stream that is empty at start SHALL be read from its head. When the newest-entry lookup fails, the observer SHALL start at the current millisecond and SHALL NOT read from the head.
+
+#### Scenario: A restart does not replay the previous run
+- **WHEN** the curated streams hold entries from a previous run and the observer starts
+- **THEN** none of those entries is written to the log
+
+#### Scenario: Entries after start are recorded
+- **WHEN** an entry is published to a curated stream after the observer started
+- **THEN** it is written to the log
+
+#### Scenario: A failed lookup does not replay
+- **WHEN** the newest-entry lookup raises at start
+- **THEN** entries published before start are not written and entries published after start are

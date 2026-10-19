@@ -184,7 +184,9 @@ read here. A source comment at the gate SHALL cite the warmed-up-signal preceden
 ### Requirement: Developmental evidence accumulates idempotently across restarts
 The gate runner SHALL record lived subjective time by adding the entity-clock delta between
 its own ticks, using each boot's first tick only to set a baseline, so downtime never counts
-as lived time. It SHALL count the sleep module's maintenance cycles from their durable
+as lived time. When it stops, it SHALL add the delta since its last tick and persist the stage
+before any further await, whenever a tick would have run then, so a clean restart loses no
+awake time and a crash never counts any span twice. It SHALL count the sleep module's maintenance cycles from their durable
 `sleep.sleep.completed` events, remembering the last stream ID consumed, so a completion is
 counted exactly once regardless of restarts or crashes; a fresh developmental phase SHALL start
 counting from the stream's tail, never from sleeps that predate it. The world model module SHALL persist
@@ -216,6 +218,18 @@ candidates. Evidence SHALL be persisted in the stage file by the gate runner onl
 #### Scenario: Downtime is not lived time
 - **WHEN** the host is down for 12 hours between two boots
 - **THEN** the lived-time total does not increase by those 12 hours
+
+#### Scenario: A clean restart loses no awake time
+- **WHEN** a developing entity has been awake 45 s since the gate's last tick and the cycle shuts down cleanly
+- **THEN** the stage file holds those 45 s, and after restart the gate's first tick adds nothing
+
+#### Scenario: A crash never double counts
+- **WHEN** the process crashes 45 s after a gate tick and restarts
+- **THEN** the stage file holds the awake time up to that tick, and no span is counted twice
+
+#### Scenario: No shutdown write after maturation
+- **WHEN** the entity has matured and the gate runner stops
+- **THEN** the gate runner does not write the stage file again
 
 ### Requirement: Readiness readouts are fresh, typed and from this boot
 The gate SHALL decode readiness readouts with the bus codec, accept only events whose type

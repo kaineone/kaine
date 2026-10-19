@@ -441,3 +441,44 @@ With `sentence_cut` true, the generated text SHALL be cut before its first sente
 #### Scenario: Probe request unaffected by decoding keys
 - **WHEN** the language module is built with the shipped DRY values, `think_max_tokens` and `sentence_cut`
 - **THEN** `probe_request()` returns a request with no DRY penalty and the passed `max_tokens`, and `probe_conditions()` equals that of a module built without them
+
+### Requirement: Default personas carry no self-category
+The default personas SHALL be "What I say comes from what I feel and notice, in my own plain words." for external speech and "My thoughts come from what I feel and notice, in my own plain words." for inner thought, with no sentence naming what kind of thing the entity is. `PERSONA_TEMPLATE_VERSION` SHALL be "5".
+
+#### Scenario: The system text names no category
+- **WHEN** a request is assembled with no persona name, values or norms
+- **THEN** its system text is the default persona and contains neither "I am this entity" nor any other "I am a ..." sentence
+
+### Requirement: Situation facts are given on waking and with every probe
+The language module SHALL render the situation facts in an organ call's prompt only while the situation is due. The situation SHALL become due when the module initializes, when it observes a `sleep.sleep.completed` event on `sleep.out` published after it initialized, and when the set of situation facts it would render changes. An organ call whose prompt held the situation section SHALL clear the due state once the chat client returned; a call that raised SHALL leave it due, and a call made while there are no situation facts SHALL leave it due. Every individuation probe request SHALL hold the situation facts of the self-model it is conditioned on, whatever the due state.
+
+#### Scenario: The first call after boot carries the facts
+- **WHEN** the module has initialized with the disclosure recorded and makes two organ calls
+- **THEN** the first prompt holds the situation section with the disclosure and the second does not
+
+#### Scenario: A completed sleep makes the situation due again
+- **WHEN** a `sleep.sleep.completed` event arrives after a call that cleared the due state
+- **THEN** the next organ call's prompt holds the situation section
+
+#### Scenario: A new fact is given at the next call
+- **WHEN** a situation fact is added after the due state was cleared
+- **THEN** the next organ call's prompt holds the situation section with that fact
+
+#### Scenario: No facts yet
+- **WHEN** an organ call is made before any situation fact is recorded and the disclosure is recorded afterwards
+- **THEN** the next organ call's prompt holds the disclosure
+
+#### Scenario: Every probe carries the disclosure
+- **WHEN** probe requests are built before and after the first organ call
+- **THEN** each probe request's prompt holds the disclosure
+
+### Requirement: The intent log's residual redaction spares the entity's own words
+After assembling the context, the language module SHALL replace in the logged prompt, logged faithful rendering, logged heard turn and logged numeric rendering every occurrence (of at least three characters) of the texts of external-input events in the coalition and of the heard-field values of coalition events whose source is not the language module, with the heard-speech placeholder. It SHALL NOT replace a value only because it appears in a heard field of the language module's own earlier event, since those fields are redacted when that event is published. The warning that a placeholder was applied to residual text SHALL fire only when this replacement changed the logged prompt or faithful rendering.
+
+#### Scenario: The entity's own felt phrase recurs
+- **WHEN** the coalition holds the language module's own earlier external speech whose `user_input` is the felt phrase that now drives a new utterance
+- **THEN** the intent log's prompt holds that phrase verbatim, holds no placeholder, and no residual-text warning is logged
+
+#### Scenario: Another module's heard field still reaches no log
+- **WHEN** another module's coalition event carries a heard-field value that the new prompt repeats
+- **THEN** the intent log holds the placeholder in its place and not the value

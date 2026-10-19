@@ -24,7 +24,15 @@ Salience SHALL be elevated when `rumination_detected` is true or
   `rumination_detected == True` and salience equal to the configured
   alert salience
 
+## REMOVED Requirements
+
 ### Requirement: time_since_last_interaction subscribes to user-input streams
+**Reason**: Replaced by "time_since_last_interaction subscribes to user-input streams and is null before any interaction": before the first interaction the value is `null` rather than `inf`, so the payload stays valid JSON, and the operator sources are the fixed `OPERATOR_SOURCES` set.
+**Migration**: Readers of `sequence.report` treat a `null` `time_since_last_interaction_s` as no interaction yet.
+
+## ADDED Requirements
+
+### Requirement: time_since_last_interaction subscribes to user-input streams and is null before any interaction
 The sequence module SHALL subscribe to a configurable set of streams known to carry user input (default `audition.out`) in addition to `workspace.broadcast`. Only an interaction SHALL reset the interaction clock: a speech-path event (`audition.transcription` with non-empty text, or `audition.emotion`) whose `source_label` is an operator source. The operator sources SHALL be the fixed `OPERATOR_SOURCES` set in `kaine.bus.schema`, which is also the default list of the action selection and social cognition modules; the sequence module SHALL NOT read `[social_cognition].operator_sources`. Every other event on those streams, including `audition.perception`, `audition.prosody` and speech heard from a perception feed, SHALL NOT reset it. The time of the most recent interaction SHALL be the basis for `time_since_last_interaction_s`; if no interaction has occurred, the reported value SHALL be `null` (Python `None`), never a non-finite float.
 
 #### Scenario: No interactions yields null

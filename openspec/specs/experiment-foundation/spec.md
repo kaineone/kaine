@@ -201,3 +201,10 @@ name them as not exercised.
 #### Scenario: An exercised harness enters with its own p-value
 - **WHEN** the workspace-mediation harness gives WIN, NULL or NEGATIVE
 - **THEN** its WIN sign-test p-value is its family member and `not_exercised` is empty
+
+### Requirement: The run manifest records the curiosity scheme
+The run context SHALL carry `curiosity_scheme` 2, curiosity as heterostatic interest; a manifest without it means 1, curiosity as a deficit.
+
+#### Scenario: A new run's manifest
+- **WHEN** a run context is minted and its manifest written
+- **THEN** the manifest has `curiosity_scheme` 2

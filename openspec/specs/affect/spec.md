@@ -208,21 +208,6 @@ The affect module SHALL include its goal ledger in its serialized state — each
 - **WHEN** the affect module is restored from a snapshot that has no goals key
 - **THEN** its goal ledger is left as it was
 
-### Requirement: Goal significance is scored against the entity's dominant drive
-The affect module's goal-significance appraisal check SHALL score the selected events against the entity's dominant drive (the highest-valued affect drive, ties broken by name), using the drive-to-source table built from each registered module's `relieves_drives` declaration and injected by the boot wiring and re-injected when the affect module is restarted. With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive, the drive score SHALL be `v × (2f − 1)`. With no drive above zero, the drive score SHALL be `0.0`. When the goal ledger holds active goals, the check SHALL return the larger of the drive score and `relevance × 2 − 1` (the ledger score alone when no table was injected); otherwise it SHALL return the drive score, or `0.0` when no table was injected. No constant offset SHALL be applied.
-
-#### Scenario: Content serving a pressing need is goal-conducive
-- **WHEN** the social drive is the dominant drive at 0.8 and every selected event comes from a source that relieves the social drive
-- **THEN** goal significance is 0.8
-
-#### Scenario: Content ignoring a pressing need is obstructive
-- **WHEN** the social drive is the dominant drive at 0.8 and no selected event comes from a source that relieves it
-- **THEN** goal significance is -0.8
-
-#### Scenario: No pressing need
-- **WHEN** every drive is at 0.0 and no goals are active
-- **THEN** goal significance is 0.0
-
 ### Requirement: The modulator reports a contrast gain
 The affect module's state modulator SHALL report a contrast gain that is zero when arousal is at or below the baseline arousal and rises linearly to the configured `arousal_contrast_gain` at arousal 1.0. A static modulator SHALL report zero.
 
@@ -325,7 +310,7 @@ boot.
 - **THEN** `social_drive_time_scale_s` is not among them
 
 ### Requirement: Coping potential is gated by relevance and estimated as a success ratio
-The affect module SHALL compute coping potential only when the goal score is above 0. When the goal score is 0, coping SHALL be unavailable: the appraisal scores SHALL carry `coping_available = False` with a numeric coping value of 0.0, and `classify()` SHALL NOT return fear, anger or sadness. When coping is available it SHALL be `2p - 1` with `p = (s + 1) / (s + f + 2)`. When the drive term sets the goal score (including a tie with the ledger term), `s` SHALL be the dominant drive's crossings ended by the entity's own response and `f` those ended any other way; when the ledger term sets it, `s` and `f` SHALL be the ledger's completed and abandoned goals. A crossing ends when the drive falls below its re-arm band. It SHALL count as own when the fall happens in a relief whose source is the entity's own response (learning progress for curiosity, intents for restlessness), or in `tick` when the entity's response held the build input below its no-response value and a counterfactual step at that value would not have fallen below the band. Every other end SHALL count as other, and a sleep reset SHALL count as neither. Arousal and valence SHALL NOT enter coping. The drive counts SHALL survive serialize and deserialize. The `affect.emotion` payload SHALL carry `coping_available`.
+The affect module SHALL compute coping potential only when the goal score is nonzero. When the goal score is 0, coping SHALL be unavailable: the appraisal scores SHALL carry `coping_available = False` with a numeric coping value of 0.0, and `classify()` SHALL NOT return fear, anger or sadness. When coping is available it SHALL be `2p - 1` with `p = (s + 1) / (s + f + 2)`. When the drive term sets the conducive part of the goal score (including a tie with the ledger term), `s` SHALL be the dominant drive's crossings ended by the entity's own response and `f` those ended any other way; when the ledger term sets it, `s` and `f` SHALL be the ledger's completed and abandoned goals. A crossing ends when the drive falls below its re-arm band. It SHALL count as own when the fall happens in a relief whose source is the entity's own response (learning progress for curiosity, intents for restlessness), or in `tick` when the entity's response held the build input below its no-response value and a counterfactual step at that value would not have fallen below the band. Every other end SHALL count as other, and a sleep reset SHALL count as neither. Arousal and valence SHALL NOT enter coping. The drive counts SHALL survive serialize and deserialize. The `affect.emotion` payload SHALL carry `coping_available`.
 
 #### Scenario: Irrelevant content leaves coping unavailable
 - **WHEN** the goal score is 0.0, pleasantness is -0.6 and novelty is 0.1
@@ -362,6 +347,10 @@ The affect module SHALL compute coping potential only when the goal score is abo
 #### Scenario: A held-down build input counts as the response
 - **WHEN** a fired curiosity drive falls below its re-arm band during `tick` with learning progress above 0, and the same step at zero learning progress would have left it above the band
 - **THEN** its own count rises
+
+#### Scenario: A negative goal score makes coping available
+- **WHEN** the conducive part is 0 and the obstruction is 0.2
+- **THEN** the goal score is -0.2 and `coping_available` is true
 
 ### Requirement: Disgust follows the Table 3 appraisal profile
 `classify()` SHALL return `disgust` when intrinsic pleasantness is at or below -0.5, novelty is above 0.3 and the absolute goal score is below 0.3, whatever the norm compatibility score, provided the near-neutral, surprise, fear and anger rules did not match first. Novelty stands for Table 3's familiarity check: KAINE's single novelty check covers suddenness, familiarity and predictability, so low familiarity maps to high novelty. Norm compatibility SHALL stay unavailable: the module SHALL keep its numeric value at 0.0 and publish `norm_compatibility_available: false`.
@@ -719,3 +708,192 @@ The affect module SHALL store, for each active goal whose drive is at or above i
 #### Scenario: An invalid entry is ignored
 - **WHEN** `goal_above_elapsed` holds a negative, non-finite, boolean or non-numeric value, or names an unknown goal
 - **THEN** that goal's stall clock restarts at the first update after the restore and the restore raises no error
+
+### Requirement: Goal relevance is scored in [0, 1] against the entity's dominant drive
+The affect module's goal-significance appraisal check SHALL score the selected events against the entity's dominant drive (the highest-valued affect drive, ties broken by name), using the drive-to-source table built from each registered module's `relieves_drives` declaration and injected by the boot wiring and re-injected when the affect module is restarted. With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive (`0` for an empty coalition or a zero total), the drive score SHALL be `v × f`. With no drive above zero, the drive score SHALL be `0.0`. When the goal ledger holds active goals, the check SHALL return the larger of the drive score and the ledger `relevance` (the ledger relevance alone when no table was injected); otherwise it SHALL return the drive score, or `0.0` when no table was injected. The score SHALL lie in `[0, 1]`: content that serves neither the drive nor a goal is irrelevant, not obstructive. No constant offset SHALL be applied.
+
+#### Scenario: Content serving a pressing need is goal-conducive
+- **WHEN** the social drive is the dominant drive at 0.8 and every selected event comes from a source that relieves the social drive
+- **THEN** goal significance is 0.8
+
+#### Scenario: Content ignoring a pressing need is irrelevant
+- **WHEN** the social drive is the dominant drive at 0.8 and no selected event comes from a source that relieves it
+- **THEN** goal significance is 0.0
+
+#### Scenario: An empty coalition is irrelevant
+- **WHEN** the curiosity drive is the dominant drive at 0.3 and the coalition is empty
+- **THEN** goal significance is 0.0
+
+#### Scenario: An idle coalition does not classify as anger
+- **WHEN** the dominant drive is unmet, no selected event relieves it, and affect is at baseline
+- **THEN** the categorical emotion is not `anger`
+
+#### Scenario: No pressing need
+- **WHEN** every drive is at 0.0 and no goals are active
+- **THEN** goal significance is 0.0
+
+### Requirement: Goals come from drive crossings
+On each crossing of a drive's threshold the affect module SHALL create the goal of relieving that drive, with priority equal to the drive value at the crossing and expected-relief likelihood `L` equal to that drive's success ratio `(s + 1) / (s + f + 2)`, unless that drive already has an active goal. Intents SHALL NOT create goals. Each creation SHALL publish an `affect.goal` event with `action: "added"`, the drive and `L`.
+
+#### Scenario: A crossing creates a goal
+- **WHEN** curiosity crosses its threshold at 0.72 with no active curiosity goal, one own end and no other ends
+- **THEN** the ledger holds one active goal for curiosity with priority 0.72 and `L` 2/3, and an `affect.goal` event with `action: "added"` is published
+
+#### Scenario: A drive keeps one goal
+- **WHEN** curiosity crosses its threshold again while its goal is still active
+- **THEN** no second curiosity goal is created
+
+### Requirement: Drive goals end by the credit rule, a stall or the cap
+A drive goal SHALL complete when its drive falls below the re-arm band and the credit rule counts the end as the entity's own response. It SHALL be abandoned when the credit rule counts the end as another's, when the drive stays at or above its threshold for `goal_stall_s` entity seconds without an update seeing it below, or when active goals exceed `goal_cap`, in which case the lowest-priority active goal, ties going to the earliest created, SHALL be abandoned. Each end SHALL publish an `affect.goal` event and count in the ledger's completed or abandoned total.
+
+#### Scenario: Own relief completes the goal
+- **WHEN** an intent relieves an active restlessness goal's drive below its re-arm band
+- **THEN** the goal is completed and the ledger's completed count rises by one
+
+#### Scenario: Relief by another abandons the goal
+- **WHEN** another's voice relieves an active social-drive goal's drive below its re-arm band
+- **THEN** the goal is abandoned and the ledger's abandoned count rises by one
+
+#### Scenario: A stalled goal is abandoned
+- **WHEN** a goal's drive stays at or above its threshold for `goal_stall_s`
+- **THEN** the goal is abandoned
+
+#### Scenario: The cap abandons the lowest priority
+- **WHEN** a fourth drive goal is created with `goal_cap` 3 and priorities 0.71, 0.80, 0.75 and 0.90
+- **THEN** the goal with priority 0.71 is abandoned and three stay active
+
+### Requirement: Unanswered responses obstruct the dominant drive's goal
+For each intent other than `intent.rest` made while a drive goal is active, the affect module SHALL record the drive's value just before the intent. When no update within `goal_response_window_s` sees the drive below that value, the goal's `L` SHALL fall by `ΔL = goal_likelihood_fall × L`, and `ΔL` SHALL be held for the next appraisal. That appraisal SHALL take the obstruction `o = v* × ΔL` when the held `ΔL` belongs to the dominant drive's goal and `o = 0` otherwise, and SHALL clear every held `ΔL`. The goal score SHALL be `clip(r - o, -1, 1)`, with `r` the conducive part. Coping SHALL be checked whenever the goal score is nonzero. `affect.emotion` SHALL carry the `obstruction` applied.
+
+#### Scenario: An unanswered intent lowers the likelihood
+- **WHEN** an intent is made while a curiosity goal with `L` 0.5 is active and curiosity does not fall within `goal_response_window_s`
+- **THEN** `L` becomes 0.25 and the next appraisal, with curiosity dominant at 0.8 and irrelevant content, has goal score -0.2
+
+#### Scenario: A fall within the window leaves the likelihood
+- **WHEN** an intent relieves restlessness while a restlessness goal is active
+- **THEN** `L` is unchanged and the next appraisal has obstruction 0
+
+#### Scenario: A non-dominant goal does not obstruct
+- **WHEN** a held `ΔL` belongs to a goal whose drive is not dominant at the next appraisal
+- **THEN** that appraisal has obstruction 0 and the held `ΔL` is cleared
+
+#### Scenario: Obstruction with high power yields anger
+- **WHEN** the goal score is at or below -0.3 and the dominant drive's success ratio gives coping at least 0.3
+- **THEN** the categorical emotion is `anger`
+
+#### Scenario: Nothing changes without an active goal
+- **WHEN** no goal is active
+- **THEN** the appraisal scores equal those computed without the goal rules
+
+### Requirement: The sleep reset clears active goals and goals persist
+The affective reset SHALL remove every active goal without counting it as completed or abandoned, and SHALL clear the response windows and held obstruction. Serialize and deserialize SHALL preserve every goal with its drive and `L`, and the ledger's completed and abandoned counts. The ledger SHALL retain at most 256 finished goals while its counts include pruned ones.
+
+#### Scenario: Sleep removes active goals
+- **WHEN** the affective reset runs with two active goals
+- **THEN** no goal is active and the completed and abandoned counts are unchanged
+
+#### Scenario: Goals survive preservation
+- **WHEN** an affect module with an active curiosity goal at `L` 0.25 is serialized and a new instance deserializes the state
+- **THEN** the new instance holds the active curiosity goal with `L` 0.25
+
+### Requirement: The affect state event carries the valence-target terms
+Every `affect.state` payload, periodic or after an affective reset, SHALL carry, in addition to its existing keys, the terms behind the valence target computed at publication: for each source in the fixed table (`vision`, `audition`) the keys `<source>_error_fast`, `<source>_error_slow` and `<source>_progress` (the fast and slow time-decayed means of its raw prediction error and its clipped relative fall `g_m`); `signed_progress` (the pooled `g`, paper `lp`); `learning_progress` (paper `lp+`); `wellness`; `wellness_fast`, `wellness_slow` and `wellness_change`; `pleasantness`; and `valence_target` under the active `valence_rule`. A source absent from the trackers SHALL give null for its three keys, and a source whose slow mean is not above 1e-9 SHALL give a null progress. The wellness means SHALL be null before the first wellness report, and `wellness_change` SHALL be the value the error-dynamics rule adds (0.0 before reports). Every value SHALL be a finite number or null, and the key set SHALL NOT depend on which sources have reported. The values SHALL equal the ones the update step uses, and the affect dynamics SHALL be unchanged.
+
+#### Scenario: Values match the trackers
+- **WHEN** vision has reported known errors at known times, interoception has reported known wellness values, and the module publishes `affect.state`
+- **THEN** `vision_error_fast`, `vision_error_slow` and `vision_progress` equal the time-decayed means and `g_m` computed from those reports, `signed_progress` and `learning_progress` equal `_progress()`, `wellness_change` equals the fast minus the slow wellness mean, and `valence_target` equals `clip(tanh(valence_progress_gain * g) + wellness_change, -1, 1)`
+
+#### Scenario: An absent source is null
+- **WHEN** only vision has reported
+- **THEN** `audition_error_fast`, `audition_error_slow` and `audition_progress` are null and the payload has the same keys as when both sources have reported
+
+#### Scenario: An unlisted source adds no keys
+- **WHEN** a perceptual report arrives from a source outside the table
+- **THEN** it counts in `signed_progress` and the payload's key set is unchanged
+
+### Requirement: Learning progress compares windowed error means
+For each perceptual source the affect module SHALL sum the raw `prediction_error` of its reports, counted from the source's first positive error, into consecutive bins of `learning_progress_bin_s` of entity time. With `k` the number of the latest completed bins, at most `learning_progress_span_s / learning_progress_bin_s` and rounded down to an even number, the source's learning progress SHALL be `clip(1 - mean_new / mean_old, -1, 1)`, where `mean_old` and `mean_new` are the report-weighted mean errors of the older and newer halves of those `k` bins, and it SHALL be undefined while `k < 2`, while either half holds no report, or while `mean_old <= 1e-9`. The pooled learning progress `lp` SHALL be the mean over sources with a defined value, 0.0 if none, and `lp+ = max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` SHALL be the curiosity relief strength and `1 - lp+` its build input (paper A.4). The fast and slow time-decayed error means and their pooled relative fall SHALL keep setting the pleasantness check, unchanged.
+
+#### Scenario: Falling error gives progress
+- **WHEN** a source reports an error that falls 30 percent from the older to the newer half of the span
+- **THEN** its learning progress is 0.3 and `lp+` relieves curiosity
+
+#### Scenario: Flat error gives none
+- **WHEN** a source reports a constant error for longer than the span
+- **THEN** its learning progress is 0 and curiosity is not relieved
+
+#### Scenario: The span grows from the first report
+- **WHEN** a source has completed one bin
+- **THEN** its learning progress is undefined, and after two completed bins it compares the first bin with the second
+
+#### Scenario: Valence is unchanged
+- **WHEN** the same reports arrive as in the build before this change
+- **THEN** `signed_progress`, the pleasantness and the valence target equal that build's values
+
+### Requirement: Learning-progress configuration
+The `[affect]` section SHALL accept `learning_progress_span_s` (default 5400.0) and `learning_progress_bin_s` (default 60.0). Both SHALL be finite and positive, and the span SHALL be an even whole number of bins, at least 2, or construction SHALL raise `ValueError`.
+
+#### Scenario: A span that is not an even number of bins is refused
+- **WHEN** the affect module is built with `learning_progress_span_s = 150.0` and `learning_progress_bin_s = 60.0`
+- **THEN** it raises `ValueError`
+
+### Requirement: Learning-progress bins persist
+The affect snapshot SHALL carry each source's completed bins, its current bin and the entity time elapsed in it under `learning_progress_bins`, with the bin width, and a restore SHALL reproduce the source's learning progress. A snapshot without the key, an entry with invalid numbers, or one saved with a different bin width SHALL leave that source's bins empty; more bins than the span SHALL keep the newest. The bins SHALL carry through sleep like the error means.
+
+#### Scenario: Round trip
+- **WHEN** a module with bins for vision and audition is serialized and a fresh module deserializes the state
+- **THEN** both report the same learning progress
+
+#### Scenario: Old snapshot
+- **WHEN** a snapshot saved before this change is restored
+- **THEN** the error means are restored and the learning-progress bins start empty
+
+### Requirement: The affect state event carries the windowed progress terms
+Every `affect.state` payload SHALL carry `vision_learning_progress` and `audition_learning_progress`, each source's windowed learning progress or null while undefined, and `signed_learning_progress`, the pooled `lp`. `learning_progress` SHALL be `lp+` from the windows. Every value SHALL be finite or null and the key set SHALL be fixed.
+
+#### Scenario: Terms match the estimator
+- **WHEN** vision has reported for several bins and the module publishes `affect.state`
+- **THEN** `vision_learning_progress` equals the estimator's value, `audition_learning_progress` is null, and `signed_learning_progress` equals `vision_learning_progress`
+
+### Requirement: The affect state event carries each drive's threshold flag and crossing-end counts
+Every `affect.state` event, the periodic one and the one after a sleep reset, SHALL carry `drive_above`, mapping each drive name to whether its value is at or above its threshold, and `drive_ends`, mapping each drive name to its cumulative `own` and `other` crossing-end counts, the counts the coping drive term uses (paper A.4). Both SHALL hold only booleans and non-negative integers keyed by drive name.
+
+#### Scenario: A deprived drive is flagged
+- **WHEN** curiosity is at 0.9 with threshold 0.7 and boredom at 0.2
+- **THEN** the next `affect.state` event has `drive_above.curiosity` true and `drive_above.boredom` false
+
+#### Scenario: The reset event carries the counts
+- **WHEN** a sleep reset follows one own end of curiosity
+- **THEN** the reset `affect.state` event has `drive_ends.curiosity` equal to `{"own": 1, "other": 0}` and every `drive_above` entry false
+
+### Requirement: Curiosity is heterostatic interest raised by learning progress
+The affect module SHALL build curiosity with input `u = lp+` by the exact drive step, with decay `delta_I` (default 0.00096 per second, at which a sustained `lp+` of 0.045 holds curiosity at `theta_D`) and no relief. A curiosity crossing SHALL publish its `affect.drive` event and SHALL NOT create a goal. Curiosity falling back below its re-arm band SHALL re-arm its crossing without counting an own or other end.
+
+#### Scenario: Nothing learnable leaves curiosity at rest
+- **WHEN** learning progress stays 0 for an hour
+- **THEN** curiosity stays at 0 and no curiosity crossing is published
+
+#### Scenario: A progress niche raises curiosity without a goal
+- **WHEN** `lp+` stays at 0.1 until curiosity crosses `theta_D`
+- **THEN** an `affect.drive` event for curiosity is published, the goal ledger holds no curiosity goal, and curiosity's own and other end counts stay 0 after it decays back below the band
+
+### Requirement: Boredom is also met by learning progress
+Each update SHALL relieve boredom at strength `max(lp+, exc)` and build it with input `1 - max(lp+, exc)`. The relief SHALL count as the entity's own response when `lp+` is positive and at least `exc`, and a fall back below the band on a step SHALL count as own when it would not have happened at the no-response build input `1 - exc`.
+
+#### Scenario: Learning ends a boredom crossing as the entity's own
+- **WHEN** boredom is above threshold, `exc` is 0 and `lp+` is 0.3 until boredom falls below its band
+- **THEN** boredom's own end count rises by one
+
+### Requirement: Arousal, sleep reset and goals apply to deficits
+The tonic arousal target SHALL use the largest value among boredom, the social drive and restlessness. The sleep reset SHALL set those three drives to 0 and re-arm their crossings, and SHALL keep curiosity's value and crossing latch.
+
+#### Scenario: Interest survives sleep
+- **WHEN** curiosity is 0.8 with its crossing latched and the sleep reset runs
+- **THEN** curiosity is still 0.8 and latched, and boredom is 0
+
+### Requirement: Older checkpoints migrate curiosity
+The affect state SHALL carry `curiosity_scheme` 2. Restoring state without it SHALL set curiosity to 0 with its latch clear and its end counts 0, and SHALL remove any active curiosity goal without publishing an `affect.goal` event; the other drives, counts and goals restore unchanged.
+
+#### Scenario: A deficit-era checkpoint
+- **WHEN** a state without `curiosity_scheme` holds curiosity 0.9, latched, with 3 own ends and an active curiosity goal
+- **THEN** after restore curiosity is 0, unlatched, with 0 own and 0 other ends, and no curiosity goal is active
