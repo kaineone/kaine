@@ -202,6 +202,10 @@ Heard speech is redacted. Every external-input event (`audition.transcription`, 
 
 The language module never truncates the log. At each sleep the sleep module moves the waking log into the per-sleep corpus under `state/language/intent_log/`.
 
+### Replaying logged requests
+
+A change to the persona or the prompt layout is tested offline before it is adopted, with `tools/maintainer/organ_replay.py`. `extract` copies an entity's `state/language` tree, decrypts the intent log and writes one case per record: the logged prompt, its mode and the system prompt named by `system_digest`. Records whose prompt holds the `[heard speech]` placeholder are skipped. `run` sends every case under each named variant and seed to a locally served organ, with the language module's request shape (own turn with the fixed user cue, thinking off, the configured temperature and DRY penalty, the stop sequence, the mode's length cap and the sentence cut). V0 is the request as logged, V1 drops the situation section, V2 drops a persona self-category opening, V3 renders the awareness lines as prose, V12 and V123 combine them, and `raw` sends V0 as a plain completion without the chat template. `score` reports each variant's rate of texts in assistant or meta register and its grounded rate, paired by case with 95% cluster-bootstrap intervals, and prints its fixed rule: V2 or V3 is adopted when the upper bound of its meta-rate difference from V0 is below 0, its mean grounded difference from V0 is above -5 points, and V123 against V1 meets the same two conditions. `raw` is exploratory and never adopted. Case and result files hold decrypted prompts and texts; the tool writes them with mode 0600, refuses paths inside a git work tree, and accepts only a loopback organ URL. The persona above was chosen this way.
+
 ### Utterance outcomes
 
 When the language module is enabled, the cycle runs an observer (`kaine/cycle/utterance_outcome.py`) that appends one record per external utterance to `state/language/utterance_outcomes.jsonl`, joined to the intent log by `record_id`. Each record holds these fields and no text:
