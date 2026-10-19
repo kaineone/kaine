@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| persona-without-self-category | 0/3 (0%) | The default personas drop their opening "I am this entity.", which the organ filled with "I am an AI"; an offline replay of the ninth boot's requests took AI self-descriptions to 0 of 950 with the situation section gone. |
 | curiosity-interest | 7/7 (100%) | Curiosity is heterostatic interest that learning progress raises, with no relief and no goal, and boredom, met also by learning progress, carries the cost of an unchanging scene. |
 | welfare-crossing-deprivation | 5/5 (100%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
 | developmental-sensory-maturation | 5/5 (100%) | The stimulus-source audio passes a hearing band that widens over awake time in the order fetal hearing matures, from 500 Hz down to 100 Hz and then up to 3000 Hz, and the colour ramp spans the developmental phase, so the stimulus keeps offering learnable structure (paper §7, A.7, Table A1). |
