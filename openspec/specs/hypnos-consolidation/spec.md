@@ -5,31 +5,20 @@ Sleep-time memory work: synaptic downscaling, offline replay behind a suspended 
 
 ## Requirements
 
-### Requirement: Phase-3 associative replay with World model scenarios
-The sleep module's phase 3 SHALL replay traces from different memory periods in novel
-combinations, cue the world model module for scenario extensions by publishing to
-`world_model.scenario`, and re-inject the resulting associations into the workspace.
-Before `phantasia-dreamerv3` is present, the world model module cue SHALL be a no-op stub.
-
-#### Scenario: Associative phase cues World model
-- **WHEN** phase 3 runs with the world model module enabled
-- **THEN** the world model module is cued and `world_model.scenario` events are consumed and
-  re-injected into the workspace
-
-#### Scenario: Cross-period traces are combined
-- **WHEN** phase 3 selects traces for replay
-- **THEN** traces from at least two distinct memory periods appear in the same
-  replay batch
-
 ### Requirement: NAR belief-revision burst removed
-The sleep module SHALL NOT execute a standalone NARS belief-revision step-burst during
-maintenance. Belief revision SHALL occur naturally as replayed traces re-enter the
-the workspace and the planning module (pymdp) updates beliefs on them in the normal cognitive cycle.
+The sleep module SHALL NOT execute a standalone belief-revision step-burst during
+maintenance, and SHALL NOT take a planning module collaborator to step. Belief revision
+SHALL occur as replayed traces re-enter the workspace and the planning module (pymdp) updates
+beliefs on them in the normal cognitive cycle.
 
 #### Scenario: No NAR burst fires during maintenance
 - **WHEN** a maintenance cycle runs
-- **THEN** no NARS step-burst call is made and the planning module processes replayed traces via
-  the standard pymdp update path
+- **THEN** no phase named for belief revision runs and the planning module processes replayed
+  traces via the standard pymdp update path
+
+#### Scenario: Sleep has no Planning argument
+- **WHEN** the sleep module's constructor's parameters are inspected
+- **THEN** neither `planning_process` nor `planning_step_burst` is among them
 
 ### Requirement: Abliteration-probe welfare veto in phase-5 voice alignment
 Voice alignment phase 5 SHALL score each candidate adapter against an abliteration
@@ -104,3 +93,18 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 #### Scenario: audit runs every sleep and rides sleep.completed
 - **WHEN** any sleep runs
 - **THEN** `sleep.ignition_audit` is emitted on sleep.out with sleep_index, and the audit is merged into PhaseResult metadata so it persists via `sleep.sleep.completed` into the sleep_snapshots JSONL
+
+### Requirement: Phase-3 associative replay links related traces
+When `[sleep.consolidation].associative_replay` is true, phase 2 SHALL downscale without pruning, and phase 3 SHALL call the episodic memory module's `associate()` and then its `prune()`, the latter also when `associate()` fails. Phase 3 SHALL publish one `sleep.association` event per co-replayed pair carrying only the pair's two point ids (`a`, `b`) and its new weight (`weight`). Phase 3 SHALL NOT cue the world model module. When the flag is false, phase 3 SHALL be a successful no-op and phase 2 SHALL call `downscale` exactly as before, which prunes.
+
+#### Scenario: Phase 3 off leaves phase 2 unchanged
+- **WHEN** a sleep runs with `associative_replay = false`
+- **THEN** phase 2 calls `downscale(protect=...)` with no other argument and phase 3 reports that the flag is not enabled
+
+#### Scenario: Phase 3 on links and then prunes
+- **WHEN** a sleep runs with `associative_replay = true`
+- **THEN** phase 2 calls `downscale(protect=..., prune=False)`, phase 3 calls `associate()` then `prune()`, and one `sleep.association` event with `a`, `b` and `weight` and no text is published per reported pair
+
+#### Scenario: Pruning runs when association fails
+- **WHEN** `associate()` raises during phase 3
+- **THEN** `prune()` is still called and phase 3 reports failure

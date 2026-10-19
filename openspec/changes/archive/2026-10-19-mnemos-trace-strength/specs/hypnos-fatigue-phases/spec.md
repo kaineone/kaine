@@ -9,13 +9,19 @@ stored since the previous sleep, the factor, the number protected, the number
 pruned at the floor and for the budget, the total strength before and after
 the scaling, and the store size after pruning. When replay fails,
 phase 2 SHALL skip the downscaling and pruning for that sleep and record
-`downscale_skipped`; the wake's traces stay in the next sleep's pool. `[sleep.consolidation].downscale_factor`
-SHALL NOT be accepted.
+`downscale_skipped`; the wake's traces stay in the next sleep's pool. Replay SHALL run inside
+a replay window that the sleep module opens through the episodic memory module immediately
+before calling `replay_now()` and closes once replay returns or raises.
+`[sleep.consolidation].downscale_factor` SHALL NOT be accepted.
 
 #### Scenario: Downscaling preserves ordering
 - **WHEN** downscaling is applied
 - **THEN** every unprotected trace's strength is reduced by the same factor and
   their ordering by strength is unchanged
+
+#### Scenario: Replay precedes downscaling
+- **WHEN** phase 2 runs with the episodic memory module present
+- **THEN** `replay_now()` is called before `downscale()`
 
 #### Scenario: Perception is suspended during replay window
 - **WHEN** the phase-2 replay window is open

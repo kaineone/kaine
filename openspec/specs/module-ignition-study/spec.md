@@ -112,3 +112,17 @@ During a developmental step, until it requests the maturation or a disk-low pres
 #### Scenario: Evaluation observers are off in a study
 - **WHEN** the operator config sets `[evaluation].enabled = true`
 - **THEN** every step's overlay sets `[evaluation].enabled = false`
+
+### Requirement: The first round adds six held modules by default
+Without an explicit order, `init` SHALL record the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules SHALL join only through an explicit order, once an effector, body or alternative sensor feed is attached.
+
+#### Scenario: Default order
+- **WHEN** a study is initialised without `--order`
+- **THEN** its plan's order is episodic memory, world model, planning, self-model, social cognition, vocal modules.
+
+### Requirement: Study steps decode greedily in the competitive arm
+Every study step's overlay SHALL set `[language].temperature` to 0.0 and `[workspace].arm` to `"competitive"`, overriding the operator configuration.
+
+#### Scenario: An operator temperature does not reach a study step
+- **WHEN** the operator configuration sets `[language].temperature = 0.7` and `[workspace].arm = "pooled"`
+- **THEN** the step's overlay has temperature 0.0 and arm "competitive"

@@ -464,3 +464,27 @@ be appended to a local record with its time and text version.
 
 - **WHEN** the pre-boot check runs from the browser and from the terminal on the same machine
 - **THEN** both run the same checks and reach the same result
+
+### Requirement: A stopped setup job reports its final status after its output is complete
+When the operator cancels a running setup job, or the setup server shuts down
+while one runs, the runner SHALL stop the job's whole process group, including
+descendants that ignore SIGTERM. The job SHALL then report a final status
+(`cancelled` after a cancel, `failed` after a shutdown) once its process has
+exited and its output has been fully read.
+
+#### Scenario: Cancelling a job whose descendant ignores SIGTERM
+- **WHEN** the operator cancels a job whose child spawned a grandchild that ignores SIGTERM
+- **THEN** the grandchild is gone
+- **AND** once the job is done its status is `cancelled`
+
+#### Scenario: Shutting down while such a job runs
+- **WHEN** the setup server shuts down while that job runs
+- **THEN** the grandchild is gone
+- **AND** once the job is done its status is `failed`
+
+### Requirement: The wizard offers the first configuration
+The wizard's module step SHALL name the profile-defined preset "the first configuration" and SHALL read its module set from `config/profiles/first_configuration.toml`. The answer `b` SHALL keep selecting that preset.
+
+#### Scenario: Scripted answer b
+- **WHEN** the module step receives the answer `b`
+- **THEN** it writes exactly the `[modules]` table of `config/profiles/first_configuration.toml`, with the recorder off, and labels the choice "first configuration"

@@ -8,7 +8,7 @@ The effectors module is built and tested, and held: it is off in the shipped `co
 
 The effectors module is not in the default order of the [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code). The reference host attaches no effector, and with nothing to act on the effectors module would be an expected null, so it joins the study only once an effector is attached, through an explicit `--order`.
 
-In the first configuration the action selection module derives only speak and think intents, and no shipped action-selection policy emits `act` (the planning module proposes only think, speak and rest). The effectors module therefore runs only when an operator-supplied policy or code emits `act` intents.
+In the first configuration the action selection module derives only speak and think intents, and no shipped action-selection policy emits `act` (the planning module proposes only think, speak and rest). The effectors module therefore runs only when an operator-supplied policy or code emits `act` intents. The action path that would change this is designed in six ordered steps and not scheduled: act intents derived by the action selection module with a light in the camera's view as the first whitelisted effector, act proposals from the planning module, a motor-contingency learner for a pan-tilt camera, active vision, a world model conditioned on the entity's own acts, and goal-directed grasping. Each step starts at the module-addition study's hardware stage (paper §6.5) once its device is attached; the [roadmap](../appendix-d-roadmap.md) lists them as `act-intent-derivation` through `goal-directed-grasping`.
 
 ## What it does
 

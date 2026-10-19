@@ -29,3 +29,30 @@ into line with them, not the reverse.
 - **THEN** it uses "reference stimulus corpus" (manifest-identified), reserving
   "seeded" for the offline ablation's synthetic streams, and it does not describe the
   retired A/B divergence comparison as a current test
+
+### Requirement: Code comments use the paper's terms
+Comments and docstrings in the code and the shipped configuration SHALL describe the workspace in terms of access as the paper of record does, and SHALL NOT describe the system as conscious or ground the access rate in the P3b.
+
+#### Scenario: No consciousness wording in code comments
+- **WHEN** the code and shipped configuration are searched for "conscious", "P3b" or "sovereignty"
+- **THEN** no comment or docstring describes the system with those terms
+
+### Requirement: Documentation cites the paper by its current title
+
+Where the documentation names the project's research paper, it SHALL use the
+paper's current title as the paper's own repository states it.
+
+#### Scenario: The book cites the retitled paper
+
+- **WHEN** a reader looks up which paper the concepts follow
+- **THEN** the book names *KAINE: A Modular Cognitive Architecture with a
+  Predictive Global Workspace*
+
+### Requirement: Documentation does not describe the project as paused
+
+The documentation, records and change notes SHALL NOT describe the project's development as paused, on hiatus, or waiting on funding.
+
+#### Scenario: A reader opens the README
+
+- **WHEN** a reader opens the repository README or the roadmap appendix
+- **THEN** neither says that development is paused or on hiatus

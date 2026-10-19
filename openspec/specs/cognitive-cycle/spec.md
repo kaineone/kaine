@@ -306,12 +306,24 @@ identical across runs; in normal mode it SHALL use the injected/real wall clock.
 
 ### Requirement: Canonical within-tick event ordering
 Before scoring and selection, the cycle SHALL order each tick's gathered events by
-a total deterministic key (`source`, `type`, `entry_id`) so that selection
-tie-breaks do not depend on dispatch incidentals.
+a total deterministic key (`source`, `type`, `entry_id`, `stream`), where `entry_id`
+is the bus entry id compared as the integer pair (milliseconds, sequence), which is arrival order within a
+stream, and `stream` the stream the event was read from, so that selection
+tie-breaks do not depend on dispatch incidentals. After ordering, the cycle SHALL name
+each event by its stream-qualified key `<stream>:<entry_id>` and hand the workspace those
+keys as the candidate ids.
 
 #### Scenario: Tie-break is stable regardless of arrival order
 - **WHEN** equal-salience events from different sources are gathered in an arbitrary arrival order
-- **THEN** the selection tie-break resolves them in the canonical `(source, type, entry_id)` order
+- **THEN** the selection tie-break resolves them in the canonical `(source, type, entry_id, stream)` order
+
+#### Scenario: Entry ids order numerically
+- **WHEN** one stream holds twelve events with ids `1760000000000-0` to `1760000000000-11`
+- **THEN** the workspace receives them in sequence order, `-2` before `-10`
+
+#### Scenario: Candidate ids carry the stream
+- **WHEN** the cycle reads an entry with id `1760000000000-0` from `interoception.out`
+- **THEN** the workspace receives it with the id `interoception.out:1760000000000-0`
 
 ### Requirement: Conscious-access rate adapts to arousal and salience
 When `[cycle.access_rate].enabled` is true, the cycle SHALL compute, on every tick before deciding whether the tick is an experiential broadcast, an access drive in [0, 1] equal to the larger of a tonic part (the affect module's arousal above its resting baseline, normalised to [0, 1]) and a phasic part (the highest salience among this tick's module reports above a floor, normalised to [0, 1], held as a peak that decays exponentially in subjective time). The effective experiential rate for the tick SHALL be `resting + (processing − resting) × drive`, where `resting` is the configured experiential rate and `processing` is the processing rate. Events whose source is `cycle` or `workspace` SHALL NOT contribute to the phasic part.
@@ -389,3 +401,47 @@ The cycle entrypoint SHALL boot by running an ordered list of phase functions ov
 #### Scenario: An undeclared context field
 - **WHEN** a phase sets a boot-context attribute that is not a declared field
 - **THEN** it raises
+
+### Requirement: Every module's alert-level events are categorical alerts
+An event a module publishes at its alert level SHALL carry `alert` true in its payload, and an event whose intensity a module chooses between its baseline and its alert level SHALL carry `alert` set to whether the alert level was chosen, so that the access rate's phasic input counts every categorical alert the paper defines.
+
+#### Scenario: A drive crossing is an alert
+- **WHEN** the affect module publishes a `affect.drive` crossing at its alert level
+- **THEN** the payload has `alert` true and the access rate's phasic input counts it
+
+#### Scenario: A successful sleep is not an alert
+- **WHEN** the sleep module completes a sleep in which every phase succeeded
+- **THEN** `sleep.sleep.completed` is published at the baseline level with `alert` false
+
+### Requirement: Context age is entity time since publication
+Each workspace broadcast SHALL carry its publication time on the entity clock, and a module's broadcast context SHALL report its age as the entity time elapsed since that publication, falling back to the time of receipt only when the broadcast carries no publication time, and never negative. Every module that keeps a broadcast context SHALL measure it on the shared entity clock.
+
+#### Scenario: Age counts from publication
+- **WHEN** a broadcast published at entity time 10.0 is adopted and the module forms a prediction at entity time 12.5
+- **THEN** the context age is 2.5 seconds
+
+#### Scenario: Audition uses the entity clock
+- **WHEN** Audition is built at boot
+- **THEN** its broadcast context measures age on the shared entity clock
+
+### Requirement: The null context differs from the held context only where other sources contributed
+When the vision, audition or interoception module forms a prediction, it SHALL build its broadcast context and the null context of the information-gain measure from one reading of the clock. The null context SHALL equal the held context in the age and the two flags; in every component that sums per-event contributions it SHALL hold the kept sources' current share plus the mean, over the contexts the processor has adopted so far, of the other sources' share; and in the coalition-level components it SHALL hold their means over the same contexts. When every adopted context is the same, the null context SHALL equal the held context and the reported gain SHALL be zero.
+
+#### Scenario: Only other sources' contributions are replaced
+- **WHEN** a processor has adopted three broadcasts whose members come from several sources and builds its context and null context on a clock that advances on every reading
+- **THEN** the null context's additive components equal the kept sources' current share plus the mean of the other sources' share, its components 0 to 3 equal their means over the three contexts, and its components 20 to 22 equal the held context's
+
+#### Scenario: A context that carries nothing gives zero gain
+- **WHEN** the vision or interoception module adopts broadcasts of identical content before each report
+- **THEN** each report's `context_gain` is exactly 0 and its `null_prediction_error` equals its `prediction_error`
+
+### Requirement: Reports carry the paired evaluations behind the gain
+Each report of the vision module, audition's acoustic path and the interoception module that carries a `context_gain` SHALL also carry `null_prediction_error`, the error of the prediction formed with the null context, and `mean_prediction_error`, the running mean error the gain is divided by, so that `context_gain` equals their difference from `prediction_error` over the mean. When `context_gain` is null both SHALL be null. A reading the interoception module skips as non-finite SHALL report no gain and SHALL NOT enter the running mean, and it SHALL leave no prediction behind, so the next reading also reports no gain and makes no update.
+
+#### Scenario: The gain is recoverable from the paired evaluations
+- **WHEN** the vision module reports after adopting two different broadcasts
+- **THEN** `context_gain` equals `(null_prediction_error - prediction_error) / mean_prediction_error`
+
+#### Scenario: A skipped reading reports no gain
+- **WHEN** the interoception module's forward model receives a non-finite feature vector after scoring a prediction formed with a context
+- **THEN** it returns an error of 0 and holds no null error, so no gain is published for that reading, the running mean error is unchanged, and the next reading publishes no gain either

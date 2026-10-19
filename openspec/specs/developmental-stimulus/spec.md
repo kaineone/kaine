@@ -294,3 +294,166 @@ On the first unviable verdict the owner SHALL publish `development.viability` (w
 #### Scenario: Paused time does not count
 - **WHEN** 60 h of entity-clock time pass but the cycle was paused for all except 1 h of it
 - **THEN** the rules see 1 h of lived time and no unviable verdict is published
+
+### Requirement: Developmental phase progress persists across restarts
+The developmental readout SHALL save its awake-time clock, its count of consecutive passing withdrawals, its history of frequency pull, whether the heartbeat entrainment marker has ever been met, and any viability verdict, keyed to the entity, after every scored withdrawal and at least once per minute of awake time, and SHALL restore them when it is constructed for the same entity. Progress saved for another entity SHALL be ignored.
+
+#### Scenario: A restart continues the developmental phase
+- **WHEN** a readout has accumulated two hours of awake time and two consecutive passes, and a new readout is constructed for the same entity
+- **THEN** the new readout starts from two hours of awake time and two consecutive passes
+
+#### Scenario: Another entity starts fresh
+- **WHEN** a readout is constructed for a different entity than the saved progress belongs to
+- **THEN** it starts from zero awake time and zero passes
+
+### Requirement: The self-rhythm identity persists across plain restarts
+The developmental readout SHALL store the self-rhythm identity in `self_rhythm_identity.json` beside its readout file. On a boot that is not a revive, the readout SHALL adopt a valid stored identity into the self-rhythm before it builds the key for its progress and baseline files. On a revive boot the identity restored from the bundle SHALL be kept and SHALL replace the stored one. On every start the readout SHALL write the identity it uses. A missing, unreadable or malformed file SHALL leave the current identity in place, and a malformed file SHALL be logged and rewritten. Progress saved under a different key SHALL still be ignored.
+
+#### Scenario: A plain restart keeps the developmental progress
+- **WHEN** a readout for an entity with a self-rhythm has saved 7200 s of awake time and two consecutive passes, and a new readout is constructed on the same state directory with a freshly built self-rhythm that drew a new identity
+- **THEN** the new readout adopts the stored identity and starts from 7200 s of awake time and two consecutive passes
+
+#### Scenario: A revive keeps the bundle's identity
+- **WHEN** the state directory stores identity A and the readout is constructed on a revive boot whose self-rhythm holds identity B
+- **THEN** the readout keys its files with identity B and the stored file holds B afterwards
+
+#### Scenario: Another entity's progress is still ignored
+- **WHEN** the saved progress carries a key for a different seed or identity than the one the readout uses
+- **THEN** the readout starts from zero awake time and zero passes
+
+#### Scenario: A malformed identity file is replaced
+- **WHEN** `self_rhythm_identity.json` does not hold a valid identity
+- **THEN** the readout keeps the self-rhythm's current identity, logs a warning and rewrites the file
+
+### Requirement: Decommission removes the stored self-rhythm identity
+Decommission SHALL back up and then delete `self_rhythm_identity.json` with the other developmental-phase files, so a later entity in the same state tree never adopts it.
+
+#### Scenario: Decommission lists the identity file
+- **WHEN** decommission builds its locations for a tree whose lifecycle directory holds `self_rhythm_identity.json`
+- **THEN** the developmental location backs it up and deletes it
+
+### Requirement: The developmental soundscape carries a pre-rendered maternal voice
+When `[perception_feed.stimulus_source.voice].enabled` is true (the default), the stimulus-source audio SHALL mix a maternal voice into the soundscape from pre-rendered utterances shipped with the package and listed in a manifest, and SHALL NOT synthesize speech at runtime. Every take SHALL be upsampled by two to the stream rate, low-pass filtered with the soundscape's `lowpass_hz` filter, scaled to unit RMS, and played at `level_db` above the soundscape's RMS over its first 60 s of stimulus time for the run seed, times a seeded per-utterance gain of up to `jitter_db` either way. The output headroom SHALL grow by the voice's RMS level rather than its worst-case peak (so the heartbeat-and-noise bed keeps nearly its voice-free level, 2.4 dB lower with the defaults), and samples above the former full-headroom point SHALL pass a smooth tanh soft limiter that is the identity below its knee, has a continuous slope at the knee, and stays below int16 full scale; with the defaults it acts on about 0.25% of speech samples. When the voice is disabled, every audio block SHALL be byte-identical to the stream without the voice. The voice parameters SHALL NOT enter the stimulus-source parameter digest.
+
+#### Scenario: Disabled voice leaves the audio unchanged
+- **WHEN** the voice is disabled
+- **THEN** every block of the stimulus-source audio equals, byte for byte, the block the stream produced before the voice existed
+
+#### Scenario: The bed keeps nearly its level
+- **WHEN** the voice is enabled with the defaults and nobody speaks
+- **THEN** the soundscape's median absolute sample is within 3 dB of the voice-free stream's, and no voiced sample reaches int16 full scale
+
+#### Scenario: The voice stays below the intrauterine cutoff
+- **WHEN** a talking slot is rendered with `lowpass_hz` = 500
+- **THEN** the voice layer's power above 1,000 Hz is at least 40 dB below its power below 500 Hz
+
+### Requirement: Maternal speech follows the maternal state and a growing repertoire
+Stimulus time SHALL be cut into slots of `slot_seconds`. Slot `s` SHALL hold speech when a keyed draw on `(seed, s)` is below `episode_probability` times the maternal arousal at the slot's start. A talking slot SHALL start within its first 2 s and hold whole utterances separated by seeded pauses in `[pause_min_seconds, pause_max_seconds]`, never running past the slot's end. Its first utterance SHALL be the first item, the repeated passage, with probability `repeat_share`; every other choice SHALL be uniform over the unlocked items, and the take uniform over the item's takes. The unlocked count SHALL be `min(N, initial_unlocked + floor(T_awake / unlock_seconds))`, with `T_awake` the awake time the colour ramp uses, evaluated when the slot is first rendered and fixed for that slot. The plan of a slot SHALL be a pure function of the seed, the slot index and that count. The voice SHALL keep playing while the entity sleeps.
+
+#### Scenario: The same seed and awake time give the same audio
+- **WHEN** two streams with the same seed render the same blocks with the same awake-time readings
+- **THEN** their PCM is identical, and a stream with another seed differs
+
+#### Scenario: Locked items are never heard
+- **WHEN** awake time is below `unlock_seconds`
+- **THEN** only the first `initial_unlocked` items are chosen, and after `k` more multiples of `unlock_seconds` the first `initial_unlocked + k` items are
+
+#### Scenario: Calm maternal state means less speech
+- **WHEN** slots are compared across maternal arousal
+- **THEN** the share of talking slots rises with arousal, and no slot talks when `episode_probability` is 0
+
+#### Scenario: Sleep pauses unlocking while speech continues
+- **WHEN** awake time stops advancing while stimulus time runs on
+- **THEN** talking slots keep occurring and no further item unlocks
+
+### Requirement: A missing or corrupt maternal-voice file fails loudly
+At load, the repertoire SHALL verify every manifest entry's sha256, decode it, and check its sample rate, channel count and frame count against the manifest. A missing manifest, a missing or altered file, a decode failure, a mismatch, or PyAV being absent SHALL raise `PerceptionUnavailableError` naming the problem, as SHALL a malformed manifest entry (a missing or mistyped id, takes list, file, sha256 or frame count, or a file path that is absolute or leaves the directory), and boot SHALL NOT start the stimulus-source audio without the voice when the voice is enabled.
+
+#### Scenario: An altered file stops the load
+- **WHEN** one take's bytes differ from its manifest sha256
+- **THEN** loading raises `PerceptionUnavailableError` naming that file
+
+#### Scenario: A missing file stops the load
+- **WHEN** a take listed in the manifest is absent
+- **THEN** loading raises `PerceptionUnavailableError` naming that file
+
+### Requirement: The stimulus source clock continues across restarts
+The stimulus source clock SHALL resume each boot from its own elapsed time, persisted in the stage file as `stimulus_source_seconds`, so a restart neither repeats nor skips stimulus the entity has had. The gate runner SHALL record the clock's reading on every gate tick, sleep included, and on its final write at shutdown. Time while the process is stopped SHALL NOT advance the stimulus clock. A stage file without `stimulus_source_seconds` SHALL fall back to the awake-time offset. The colour schedule and the voice repertoire SHALL keep following awake time.
+
+#### Scenario: A plain restart after sleep
+- **WHEN** a developing entity has 3600 s of stimulus time and 3500 s of awake time, the difference spent asleep, and it shuts down cleanly and restarts
+- **THEN** the stimulus source clock resumes at 3600 s, not 3500 s
+
+#### Scenario: Downtime does not advance the mother
+- **WHEN** the process is stopped for 12 hours between two boots
+- **THEN** the stimulus source clock resumes at the time recorded at shutdown
+
+#### Scenario: A stage from before this change
+- **WHEN** the stage file has `lived_seconds` but no `stimulus_source_seconds`
+- **THEN** the stimulus source clock resumes at `lived_seconds`, as before
+
+### Requirement: The stimulus-source audio passes a hearing band that widens in the order of fetal hearing
+When `[perception_feed.stimulus_source.hearing].enabled` is true (the default), every stimulus-source audio block SHALL be the soundscape plus the maternal voice, filtered by a band-pass whose edges depend only on the awake time, then scaled, limited and quantized as before. The edges SHALL follow the tone grid 100, 250, 500, 1000 and 3000 Hz of Hepper and Shahidullah (1994): each edge lies at the geometric mean of the outermost tested tone heard and the next tested tone not heard, and there is no edge on a side with no unheard tested tone. With `W` = `maturation_seconds` and awake time `T`, the band SHALL be 353.6 to 707.1 Hz for `T < W/4`, 158.1 to 707.1 Hz for `W/4 <= T < W/2`, a low-pass at 707.1 Hz for `W/2 <= T < 3W/4`, a low-pass at 1732.1 Hz for `3W/4 <= T < W`, and open from `T >= W` on; a non-finite or negative `T` SHALL give the first band. The filter SHALL be a 1,025-tap Hamming-windowed sinc design, a band-pass with unity gain at the band's geometric centre, a low-pass with unity DC gain, or the unit impulse at the centre tap when open, so every stage delays by 512 samples, convolved over the unfiltered mix of the preceding blocks and the current one (blocks before index 0 are silent), so a block SHALL be a pure function of the seed, the block index, the awake time and the voice plan, whatever blocks were rendered before. When the band is enabled the maternal voice SHALL load with its low-pass at 3,000 Hz; the bed SHALL keep `lowpass_hz`. When the band is disabled, every audio block SHALL be byte-identical to the stream without it. The hearing parameters SHALL NOT enter the stimulus-source parameter digest.
+
+#### Scenario: Disabled band leaves the audio unchanged
+- **WHEN** `enabled` is false, with or without the maternal voice
+- **THEN** every block equals, byte for byte, the block the stream produced before the band existed
+
+#### Scenario: The band starts at 500 Hz and widens down first, then up
+- **WHEN** blocks are rendered at awake times in each of the five stages
+- **THEN** the power below the stage's low edge divided by √2 and above its high edge times √2, where the stage has those edges, is at least 40 dB below the in-band power, the low edge moves twice and goes before the high edge moves, and the 45 to 55 Hz heartbeat thud is at least 40 dB down in the first two stages and within 1 dB of the band-off stream from the third on
+
+#### Scenario: A block does not depend on the blocks rendered before it
+- **WHEN** one stream renders block `k` first and another renders blocks `k - 10` to `k` in order, with the same seed and awake time
+- **THEN** both produce the same bytes for block `k`
+
+#### Scenario: A restart resumes the band
+- **WHEN** a stream is rebuilt with an awake-time provider that resumes from the stage file's lived seconds
+- **THEN** its band edges equal the edges before the restart at the same awake time
+
+### Requirement: The colour ramp spans the developmental phase
+The shipped configuration SHALL set `colour_ramp_seconds` to the hearing band's `maturation_seconds` (86,400 s, the paper's Table A1), so that colour saturation keeps rising across the developmental phase. The `StimulusSourceParams` default SHALL stay 3,600 s so the parameter digest of the defaults is unchanged.
+
+#### Scenario: Colour still rises late in the phase
+- **WHEN** the shipped configuration is loaded
+- **THEN** the colour saturation at 12 awake hours is below its value at 24 awake hours by at least 0.05 of full saturation
+
+### Requirement: A withdrawal waits for a scorable window
+Besides the existing probe bounds, a drive-withdrawal probe SHALL NOT start until `entrainment_window_seconds` has passed since the readout owner started or since the last end of a pause (sleep or freeze). A perturbation probe SHALL keep its existing bounds only.
+
+#### Scenario: An early withdrawal waits
+- **WHEN** a withdrawal falls due 84 s after boot with an entrainment window of 300 s
+- **THEN** it starts at the first readout step at least 300 s after boot, and its phase-locking value is defined
+
+#### Scenario: A thaw restarts the wait
+- **WHEN** a pause ends while a withdrawal is due
+- **THEN** the withdrawal waits the entrainment window from the end of the pause
+
+### Requirement: Probe draws and the latest markers persist across restarts
+The readout owner SHALL record in `development_progress.json` the withdrawal and perturbation jitter counters, the latest entrain-then-autonomy marker and the latest self-sustain marker (each true, false or null), alongside the existing fields, and SHALL restore them, for the same entity key, before it schedules its first probes.
+
+A file without these fields SHALL load as before, with these values:
+- both counters 0;
+- the self-sustain marker unknown;
+- the entrain-then-autonomy marker true when the restored consecutive-pass count reaches `entrainment_replications`, and unknown otherwise.
+
+A restart SHALL neither reset nor repeat a pass run.
+
+#### Scenario: A restart continues the probe draws
+- **WHEN** an owner has drawn jitter for several probes and a new owner starts on the same state for the same entity
+- **THEN** the new owner's first draws continue the sequence instead of repeating the first boot's
+
+#### Scenario: A restart keeps a pass run
+- **WHEN** two consecutive withdrawals have passed and the owner restarts
+- **THEN** the restored count is 2, the readout carries the latest markers before any new withdrawal, and one more passing withdrawal makes the marker true
+
+#### Scenario: An older progress file migrates
+- **WHEN** a progress file without the new fields records 3 consecutive passes with 3 replications required
+- **THEN** the counters start at 0, the entrainment marker is true and the self-sustain marker is unknown
+
+### Requirement: The period-variability floor lies below fetal values
+The maturation gate's period-variability floor `hrv_variability_floor` SHALL default to 0.02, below every fetal five-minute heart-rate coefficient of variation reported by Moraes et al. (2012). It therefore checks for rigidity rather than marking maturation.
+
+#### Scenario: An entrained rhythm passes the floor
+- **WHEN** the readout reports a period variability of 0.06 and every other C1 condition holds
+- **THEN** C1 passes

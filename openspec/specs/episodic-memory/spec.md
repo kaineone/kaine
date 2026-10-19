@@ -211,3 +211,253 @@ Every episodic memory store SHALL carry a stamp naming the embedding space its v
 #### Scenario: A store from before stamping
 - **WHEN** the episodic memory module starts on a 384-dimension store with points and no stamp, using MiniLM-L6-v2
 - **THEN** it stamps the store as MiniLM-L6-v2, logs that it did, and starts
+
+### Requirement: Recent points rank a non-finite timestamp as zero
+`MemoryStorage.recent_points()` SHALL rank a point whose payload timestamp is
+missing, unparseable, NaN or infinite as if its timestamp were 0.0, on the
+in-memory, sqlite-vec and Qdrant backends alike.
+
+#### Scenario: Non-finite timestamps rank as the oldest
+- **WHEN** a collection holds points with finite positive timestamps and
+  points with NaN, positive infinite and negative infinite timestamps
+- **THEN** `recent_points()` returns the finite points first, newest first,
+  on every backend
+
+### Requirement: Associative replay co-replays related traces of different periods
+After a sleep's downscaling, the episodic memory module's `associate()` SHALL co-replay at most `n_pair` pairs (paper A.10, Table A1: `n_pair = 5`, `sim_min = 0.5`, `sim_dup = 0.95`). Each pair SHALL join a persisted trace of the replayed set `Q` with a persisted trace stored before the wake window `W` (its `born_sleep` is below the sleep index the downscaling counted as `W`), whose cosine similarity `sim` satisfies `sim_min <= sim < sim_dup`. The pairs SHALL be taken most similar first across all of `Q`. A trace of `W` SHALL never be the older member, and a short-term entry SHALL never be a member. `associate()` SHALL report each co-replayed pair's two point ids and its new weight, and no text.
+
+#### Scenario: A related older trace is linked
+- **WHEN** `Q` holds a trace whose embedding has cosine 0.8 with a trace stored in an earlier wake
+- **THEN** `associate()` reports that pair with weight 0.5
+
+#### Scenario: Near-duplicates and unrelated traces are not linked
+- **WHEN** the only older traces have cosine 0.97 and 0.3 with every trace of `Q`
+- **THEN** `associate()` reports no pair and stores no link
+
+#### Scenario: Traces of the same wake are not linked
+- **WHEN** a trace of `Q` has cosine 0.8 only with another trace stored in the same wake
+- **THEN** `associate()` reports no pair
+
+#### Scenario: At most n_pair pairs, most similar first
+- **WHEN** seven older traces lie in the band with a trace of `Q`
+- **THEN** `associate()` reports the five with the highest similarity, in decreasing order of similarity
+
+### Requirement: Link weights follow co-replay and downscaling
+A link's weight `w` SHALL be 0 before its first co-replay, and each co-replay SHALL set it to `(1 + w) / 2`. The link SHALL be stored with a `log_base` on the same log gain as trace strengths, so that a downscaling multiplies `w` by the factor that multiplies an unreplayed trace's strength `h_i`. The weight SHALL never exceed 1.
+
+#### Scenario: A second co-replay halves the remaining distance
+- **WHEN** a pair is co-replayed in two consecutive sleeps whose downscalings stored no traces
+- **THEN** its weight is 0.5 after the first and 0.75 after the second
+
+#### Scenario: Downscaling scales a link like a trace
+- **WHEN** a sleep downscales by the factor `f` and does not co-replay a linked pair of weight `w`
+- **THEN** the link's weight afterwards is `f * w`
+
+### Requirement: Each trace keeps at most n_link links
+After the co-replays of a sleep, every trace with more than `n_link` links (Table A1: 8) SHALL lose its weakest links, lower weight first and older co-replay first among equals, until it has `n_link`.
+
+#### Scenario: The weakest link goes first
+- **WHEN** a co-replay gives a trace its ninth link and `n_link` is 8
+- **THEN** the trace's weakest link is deleted and the trace keeps eight
+
+### Requirement: A trace with at least n_sch links forms a schema node
+When a sleep changes the links of a trace that then has at least `n_sch` links (Table A1: 3), the module SHALL store a schema node for it whose embedding is the mean of the trace's and its partners' embeddings and whose strength is the mean weight of the trace's links, stored as a `log_base` on the same log gain. When the trace has fewer than `n_sch` links, or is deleted, its node SHALL be deleted.
+
+#### Scenario: The third link forms a node
+- **WHEN** a trace gains its third link
+- **THEN** a schema node exists whose embedding is the centroid of the four embeddings and whose strength is the mean of the three link weights
+
+#### Scenario: Losing a link below n_sch removes the node
+- **WHEN** a trace with a schema node and three links loses one
+- **THEN** its schema node is deleted
+
+### Requirement: Recall returns linked partners and matches schema nodes
+`recall()` on a persisted collection SHALL rank the schema nodes whose trace belongs to that collection together with its traces, by strength times cosine similarity with the cue, and return the `k` best with similarity above 0. A returned schema node SHALL carry the text of its trace, `schema_node: true` and its member ids in its payload. After the ranked results, recall SHALL also return each returned trace's link partners that are not already returned, in decreasing order of link weight. Recall SHALL change no strength and no weight.
+
+#### Scenario: Recall of one member returns the other
+- **WHEN** traces A and B are linked and a cue similar only to A recalls with `k = 1`
+- **THEN** the results hold A first and then B
+
+#### Scenario: Recall matches a schema node
+- **WHEN** a cue lies closest to a schema node's centroid and the node's strength times similarity is the highest
+- **THEN** the node is the first result, with `schema_node: true` in its payload
+
+### Requirement: Links and nodes count in the store size and are pruned as traces are
+Link and node records SHALL count in the store size `S` that the budget `B` bounds. Pruning SHALL run after associative replay in the sleep that co-replays: it SHALL delete every trace, link and node whose strength or weight is below the floor `h_min`, then, while `S > B`, the weakest record outside `Q` among traces, links and nodes, oldest first among equals. A deleted trace SHALL take its links with it, and the nodes of its partners SHALL be recomputed or deleted. Total trace strength SHALL count traces only.
+
+#### Scenario: A deleted trace takes its links
+- **WHEN** pruning deletes a linked trace at the floor
+- **THEN** its links are deleted in the same pruning and `S` falls by their sizes too
+
+#### Scenario: A link below the floor is pruned
+- **WHEN** downscalings bring a link's weight below `h_min`
+- **THEN** the next pruning deletes the link and keeps both traces
+
+#### Scenario: Link records count toward the budget
+- **WHEN** traces and links together exceed the budget
+- **THEN** pruning deletes the weakest records until `S <= B`, and the reported store bytes include the link and node records
+
+### Requirement: Links and nodes persist through preservation and revive
+Links and schema nodes SHALL be stored in the persisted collections `<prefix>links` and `<prefix>schemas`, created on the first co-replay, holding vectors of the store's embedding space under its stamp. `export_state()` SHALL include them and `import_state()` SHALL restore them with the trace collections, so that a revived entity has the same links, weights and nodes relative to its restored log gain. Decommission SHALL back up and delete them with the trace collections.
+
+#### Scenario: Links survive a revive
+- **WHEN** a store with links and a schema node is exported and imported into a fresh store
+- **THEN** recall of a member returns its partner and every link weight and node strength equals its value before the export
+
+#### Scenario: A store without associations exports as before
+- **WHEN** a store has never co-replayed a pair
+- **THEN** no association collection exists and `export_state()` holds only the trace collections
+
+### Requirement: Persisted traces carry a strength
+Each trace in the episodic memory module's persisted collections SHALL carry a strength
+$h_i\in(0,1]$, stored as `log_base` in its payload with
+$h_i=\exp(\texttt{log\_base}_i+L)$, where $L$ is the store's log gain kept in
+a meta record beside the embedding-space stamp with the sleep count, the total
+strength and the entity time of the last sleep. A trace SHALL be persisted at
+strength 1 with `born_sleep` set to the current sleep count and `entity_time`
+set to its storage time on the entity clock. `entity_time` SHALL continue
+across restarts. A caller's payload SHALL NOT set `log_base`, `born_sleep` or
+`entity_time`. `payload["timestamp"]` SHALL stay wall-clock time. A trace is
+below the floor when $h_i<h_{\min}$; no such trace SHALL exist while the entity is awake.
+
+#### Scenario: A persisted trace starts at full strength
+- **WHEN** a trace is persisted
+- **THEN** its strength is 1, its `born_sleep` is the current sleep count, it
+  carries an `entity_time`, and reserved keys in the caller's payload are
+  ignored
+
+#### Scenario: Storage times continue across a restart
+- **WHEN** the episodic memory module restarts in the middle of a wake and stores another trace
+- **THEN** that trace's `entity_time` is later than every trace stored earlier
+  in the same wake
+
+### Requirement: Sleep downscales strengths and protects replayed traces
+`EpisodicMemoryCore.downscale(protect)` SHALL count $N_{\rm new}$, the persisted traces
+with `born_sleep` equal to the sleep count, and SHALL multiply the strength of
+every persisted trace outside `protect` by
+$\varrho^{N_{\rm new}/N_{\rm day}}$, where $\varrho$ is
+`[episodic_memory.strength].retention_per_day` and $N_{\rm day}$ is
+`[episodic_memory.strength].traces_per_day`, default 288,000 (86400 x f0 with the
+paper's f0 = 10/3). The traces in `protect` SHALL keep
+their strength. It SHALL NOT change any vector. It SHALL write the new meta
+before it writes the protected traces, so a crash between the two can only
+remove strength. It SHALL return `n_new`, `factor`, `protected`,
+`total_before`, `total_after`, `pruned_floor`, `pruned_budget` and
+`store_bytes`.
+
+#### Scenario: One day of storage keeps the retention fraction
+- **WHEN** $N_{\rm day}$ traces were stored since the last sleep and nothing is
+  replayed
+- **THEN** every older trace keeps the fraction $\varrho$ of its strength
+
+#### Scenario: A sleep after an empty wake changes nothing
+- **WHEN** no trace was stored since the last sleep
+- **THEN** the factor is 1 and no strength changes
+
+#### Scenario: Protected traces keep their strength
+- **WHEN** a sleep protects some traces
+- **THEN** their strengths are unchanged, the ratios among the other traces are
+  unchanged, and the total strength falls
+
+### Requirement: Recall ranks by strength times similarity
+Recall from a persisted collection SHALL return the requested number of
+traces with cosine similarity above 0, in decreasing order of
+strength times similarity, exactly relative to the backend's cosine order, and
+SHALL change no strength. Each result SHALL report `similarity`, `strength`
+and `score`, the product. Short-term traces SHALL rank by similarity alone.
+On sqlite-vec the search SHALL filter by collection inside the vector index
+and SHALL page past the extension's limit of 4096 rows.
+
+#### Scenario: The stronger of two equally similar traces ranks first
+- **WHEN** two traces have the same similarity to a cue and different strengths
+- **THEN** the stronger one ranks first
+
+#### Scenario: Top-k matches brute force
+- **WHEN** recall runs on any backend
+- **THEN** the results equal a brute-force ranking by strength times similarity
+
+#### Scenario: sqlite-vec with other collections and more than 4096 rows
+- **WHEN** other collections hold rows nearer the cue and the target collection
+  needs more than 4096 rows to be searched
+- **THEN** recall still returns the requested number of traces from the target
+  collection, in the right order
+
+### Requirement: Sleep prunes at the floor and to the storage budget
+After the downscaling, in the same call, the episodic memory module SHALL delete every persisted
+trace with $h_i<h_{\min}$ (`[episodic_memory.strength].prune_floor`), and then, while
+the stores' size $S$ exceeds `[episodic_memory].storage_budget_bytes`, the trace outside
+the protected set with the lowest strength, the oldest by `entity_time` first
+among equal strengths, stopping when $S$ fits or only protected traces remain.
+$S$ SHALL be the sum over persisted traces of `size_bytes`, the record's
+float32 embedding plus its serialized text, payload and affect, kept in the
+meta record. No trace SHALL be deleted at any other time. The sleep summary
+SHALL carry `memory_pruned_floor`, `memory_pruned_budget` and
+`memory_store_bytes`, and the research log SHALL keep them.
+
+#### Scenario: A trace below the floor is pruned in the sleep that weakened it
+- **WHEN** a downscaling takes a trace below the floor
+- **THEN** that trace is deleted in the same sleep and no remaining trace is
+  below the floor
+
+#### Scenario: The budget prunes the weakest, oldest first
+- **WHEN** the stores exceed the budget after a sleep's downscaling
+- **THEN** the weakest traces are deleted, the oldest first among equal
+  strengths, until the stores fit
+
+#### Scenario: Replayed traces are exempt
+- **WHEN** the budget is smaller than the replayed traces alone
+- **THEN** every other trace is deleted and the replayed ones remain
+
+#### Scenario: Nothing is deleted while awake
+- **WHEN** the stores exceed the budget between two sleeps
+- **THEN** no trace is deleted until the next sleep
+
+#### Scenario: A preserved bundle is unaffected by later pruning
+- **WHEN** a store is captured and then pruned
+- **THEN** the captured bundle still holds every trace and restores them
+
+### Requirement: Store size and imports stay consistent with what is stored
+The episodic memory module SHALL recompute the stores' size from a scan at initialize and at the
+start of every downscaling, and SHALL change it, the total strength and the
+pruned counts only after a deletion has succeeded, writing the meta after each
+successful deletion. A preservation import SHALL mark the meta as pending
+before it replaces any collection and clear the mark only when the imported
+meta is written; while the mark is set, downscaling SHALL refuse to run and
+initialize SHALL log an error. A strength SHALL be `exp(min(0, log_base + L))`,
+and a non-finite sum SHALL be a storage error.
+
+#### Scenario: A failed deletion does not cause over-pruning
+- **WHEN** a deletion fails part way through pruning, or the process stops
+  there, and the episodic memory module is started again
+- **THEN** the stored size equals a scan and the next sleep prunes only what
+  the budget requires
+
+#### Scenario: An interrupted import blocks sleep
+- **WHEN** an import fails after it began replacing collections
+- **THEN** every later sleep is blocked and counted in the sleep summary and
+  on the dashboard health board until a later import succeeds or the operator
+  runs `python -m kaine.lifecycle.episodic_memory_recover --confirm-keep-current-store`
+
+#### Scenario: Disk growth stays bounded while blocked
+- **WHEN** an import is pending and the stores exceed twice the budget
+- **THEN** new traces are refused, each refusal is logged and counted, and no
+  welfare event is raised
+
+### Requirement: Strength survives migration and preservation
+At initialize the episodic memory module SHALL backfill, idempotently, every persisted point
+without `log_base` to strength 1 with `born_sleep = -1`, and SHALL write a
+missing meta before the backfill. It SHALL refuse a store without the meta
+whose points already carry `log_base`. A preservation capture SHALL carry the
+meta, and a restore SHALL write it after the collections. A restore of a bundle
+without the meta and without `log_base` SHALL backfill it, and a restore of a
+bundle without the meta whose points carry `log_base` SHALL fail. Decommission
+SHALL delete the meta with the embedding-space stamp.
+
+#### Scenario: A legacy store is migrated once
+- **WHEN** a store from before this change is initialized twice
+- **THEN** every trace has strength 1 after the first initialize and the second
+  changes nothing
+
+#### Scenario: Preservation round trip keeps strengths
+- **WHEN** a store with downscaled traces is exported and imported
+- **THEN** every trace has the same strength and the meta is the same

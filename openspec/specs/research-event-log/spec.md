@@ -267,3 +267,128 @@ The diagnostics privacy filter SHALL remove, at every nesting depth, every field
 #### Scenario: Small and reviewed lists survive
 - **WHEN** a payload carries `scores` with 5 numbers and `saliences` with 40 numbers
 - **THEN** both are kept
+
+### Requirement: The research log carries the planned test's fields
+The curated research log SHALL record, for each predictive processor report, its `alert` flag and, where the processor conditions on the broadcast, its `context_gain` and `context_age_s`; it SHALL record Audition's `audition.perception` reports with their numeric fields; and it SHALL record each broadcast's `access_threshold`. It SHALL NOT record the playlist item title.
+
+#### Scenario: An acoustic report is logged with its information gain
+- **WHEN** Audition publishes `audition.perception` with `context_gain` 0.12, `alert` false and an `item` title
+- **THEN** the research record has `context_gain` 0.12 and `alert` false and no `item`
+
+#### Scenario: A broadcast record carries the access threshold
+- **WHEN** a broadcast with metadata `access_threshold` 0.35 is recorded
+- **THEN** the workspace record has `access_threshold` 0.35
+
+### Requirement: The research log carries the paired evaluations
+The curated research log SHALL copy `null_prediction_error` and `mean_prediction_error` from `vision.report`, `interoception.report` and `audition.perception`, and the post-run range sweep SHALL require both to be non-negative.
+
+#### Scenario: A processor report is logged with its paired evaluations
+- **WHEN** the interoception module publishes a report with `context_gain` -0.05, `null_prediction_error` 0.5 and `mean_prediction_error` 0.8
+- **THEN** the research record carries all three values
+
+### Requirement: The workspace record names the arm
+The research log's workspace record SHALL copy `arm` from the broadcast metadata when present, so the records of each run say which arm of the planned ablation produced them.
+
+#### Scenario: A matched broadcast is recorded with its arm
+- **WHEN** a broadcast with metadata `arm` "matched" is recorded
+- **THEN** the workspace record has `arm` "matched"
+
+### Requirement: The curated log records sensor advisories with an exact allowlist
+The curated research event log SHALL record `welfare.blind_sensor`, `welfare.blind_sensor_cleared`, `welfare.sensor_silent` and `welfare.sensor_silent_cleared` events from `welfare.out`. A record SHALL carry the `processor` label only when it is one of the known processor labels. A blind-sensor record SHALL carry only the numeric fields `undefined_samples`, `undefined_seconds`, `blind_sensor_samples`, `blind_sensor_duration_s` and `blind_sensor_count`, and a silent-sensor record only `silent_seconds`, `sensor_silent_duration_s` and `sensor_silent_count`, each only when it is an int or float and not a boolean. Every other payload field SHALL be dropped.
+
+#### Scenario: Stray fields and unknown labels are dropped
+- **WHEN** a `welfare.blind_sensor_cleared` event carries an unknown processor label, a boolean `undefined_samples` and a content field
+- **THEN** its record has no `processor`, no `undefined_samples` and no content field, and keeps the numeric `blind_sensor_count`
+
+### Requirement: Reports name the broadcast that preceded their prediction
+The vision module (`vision.report`), the audition module (`audition.perception`) and the interoception module (`interoception.report`) SHALL put on every report `prediction_broadcast_tick`, the tick index of the latest broadcast the processor had received, accessed or inhibited, when it formed the prediction the report scores, and `prediction_context_age_s`, the age in entity seconds of the context that prediction used, read when the prediction was formed. Both SHALL be null when the report scores no prediction (the first report, or the first after a skipped reading), and `prediction_context_age_s` SHALL be null when the processor held no context when forming the prediction. The curated research log SHALL copy both fields, and the range sweep SHALL bound both below by 0. The contrast at threshold groups reports by the broadcast whose receipt preceded the formation of their prediction and bins them by the age of the context they used (paper Appendix A.8).
+
+#### Scenario: An inhibited broadcast arrives between two reports
+- **WHEN** a processor forms a prediction after receiving accessed broadcast 7, then receives inhibited broadcast 8, then reports
+- **THEN** the report carries `prediction_broadcast_tick` 7 and the context age read when the prediction was formed, and the next report carries `prediction_broadcast_tick` 8
+
+#### Scenario: A skipped reading
+- **WHEN** a processor skips a non-finite reading
+- **THEN** the next report carries `prediction_broadcast_tick` and `prediction_context_age_s` null
+
+### Requirement: The research log identifies tone events and broadcast members
+The curated research log SHALL put on each `audition.emotion` record the bus entry id of the event (`entry_id`) and copy `tone_error_ratio`, `tone_rule`, `classified` and `alert`, and SHALL put `entry_id` on each member of a `workspace.broadcast` record. A tone event is accessed content when it is a member of a broadcast that is not inhibited and its score in the broadcast's score table reaches the access threshold (paper A.1); with these fields the tone analysis decides that from the log, and it refuses a broadcast in which two members share an entry id, since the cycle keys scores by entry id alone. The range sweep SHALL bound `tone_error_ratio` on `audition.emotion` below by 0.
+
+#### Scenario: A tone event is accessed
+- **WHEN** a broadcast that is not inhibited has as a member the tone event with entry id `5-0` and its score reaches the access threshold
+- **THEN** the broadcast record's member carries `entry_id` `5-0` and the `audition.emotion` record carries the same `entry_id`
+
+### Requirement: Tone records carry the stream-qualified id
+The research log's `audition.emotion` record SHALL carry in `entry_id` the event's stream-qualified id `<stream>:<entry_id>`, the id the cycle gives the event as a workspace candidate and the `entry_id` of the event as a member of a `workspace.broadcast` record. This replaces the bare bus entry id that change `tone-analysis-inputs` put there.
+
+#### Scenario: A tone event's id matches its member id
+- **WHEN** the research log records an `audition.emotion` event read from `audition.out` with bus id `5-0`
+- **THEN** the record's `entry_id` is `audition.out:5-0`
+
+### Requirement: The research log carries the affect module's goal, emotion and regulation fields
+The curated research log SHALL record, from the affect module's real payloads, `affect.goal` with `action`, `id`, `drive`, `reason`, `priority` and `likelihood`; `affect.emotion` with `state`, `coping_available`, `obstruction`, `goal_significance_method` and `reappraised` besides its earlier fields; `affect.state` with `reset` and `alert`; and `affect.regulation` with `tier`, `action`, `intensity`, `episode_s`, `size`, `bias`, `decay_s`, `emotion_before` and `emotion_after`. The regulation payload's `source` SHALL be recorded as `target_source`, and the record's `source` SHALL stay the publishing module. A goal's `description` SHALL NOT be recorded.
+
+#### Scenario: A goal end keeps its id, drive and reason
+- **WHEN** the affect module publishes `affect.goal` with `action` `abandoned`, `id` `g1`, `description` `relieve boredom`, `drive` `boredom` and `reason` `stalled`
+- **THEN** the research record has `action`, `id`, `drive` and `reason` with those values and no `description`
+
+#### Scenario: A tier-1 regulation event is logged
+- **WHEN** the affect module publishes `affect.regulation` with `tier` 1 and `source` `vision`
+- **THEN** a research record is written with `tier` 1, `target_source` `vision` and `source` `affect`
+
+### Requirement: The broadcast record carries the regulation bias and the feedback gains
+The research log's `workspace.broadcast` record SHALL copy the metadata's `regulation_bias` as `source` and `factor`, and its `workspace_feedback` as `arm`, `gains` and, for each episode, `kind`, `conflicting`, `toward`, `away` and `delta`. It SHALL NOT copy the feedback's `sequence_prediction`.
+
+#### Scenario: Feedback metadata without the sequence prediction
+- **WHEN** a broadcast's metadata carries `workspace_feedback` with `gains`, one conflict episode and a 24-element `sequence_prediction`
+- **THEN** the record's `workspace_feedback` has the gains and the episode and no `sequence_prediction`
+
+### Requirement: The sleep record carries the link and node pruning counts
+The research log's `sleep.sleep.completed` record SHALL keep `memory_links_pruned` and `memory_nodes_pruned`.
+
+#### Scenario: Link counts survive
+- **WHEN** a sleep completes with `memory_links_pruned` 3 and `memory_nodes_pruned` 1
+- **THEN** the research record has both counts
+
+### Requirement: Processor reports carry the change ratio
+The research log SHALL keep `normalised_change` on `vision.report` and `audition.perception` when the payload carries it.
+
+#### Scenario: The vision change ratio survives
+- **WHEN** the vision module publishes `vision.report` with `normalised_change` 1.4
+- **THEN** the research record has `normalised_change` 1.4
+
+### Requirement: The research record of affect state keeps the valence-target terms
+The research event observer SHALL copy into every `affect.state` record the valence-target terms the affect module publishes (`vision_error_fast`, `vision_error_slow`, `vision_progress`, `audition_error_fast`, `audition_error_slow`, `audition_progress`, `signed_progress`, `learning_progress`, `wellness`, `wellness_fast`, `wellness_slow`, `wellness_change`, `pleasantness`, `valence_target`), null values included. The post-run log range check SHALL declare their bounds: error means non-negative; `learning_progress`, `wellness`, `wellness_fast` and `wellness_slow` in [0, 1]; the progress terms, `wellness_change`, `pleasantness` and `valence_target` in [-1, 1].
+
+#### Scenario: A periodic affect state record keeps the terms
+- **WHEN** the observer builds a record from a periodic `affect.state` event published by the affect module
+- **THEN** every payload key, the valence-target terms included, is in the record with the payload's value
+
+### Requirement: The research record of affect state keeps the windowed progress terms
+The research event observer SHALL copy `vision_learning_progress`, `audition_learning_progress` and `signed_learning_progress` into every `affect.state` record, null values included, and the post-run log range check SHALL declare them in [-1, 1].
+
+#### Scenario: A periodic affect state record keeps the terms
+- **WHEN** the observer builds a record from an `affect.state` event that carries the windowed progress terms
+- **THEN** the record has each of them with the payload's value
+
+### Requirement: The run manifest marks the learning-progress estimator
+The run manifest SHALL carry `learning_progress_scheme`, 2 for runs whose `affect.state` field `learning_progress` is the windowed estimator. A manifest without the field marks scheme 1, the fast and slow time-decayed means.
+
+#### Scenario: A new run's manifest
+- **WHEN** a run context is minted and its manifest written
+- **THEN** the manifest has `learning_progress_scheme` equal to 2
+
+### Requirement: The research log records only its own run
+When the evaluation sidecar builds the curated research observer, the observer SHALL start each curated stream after the newest entry present when the observer starts, so entries a previous run published to the persisted streams are never recorded under the current run, and every entry published after the observer started is recorded. A stream that is empty at start SHALL be read from its head. When the newest-entry lookup fails, the observer SHALL start at the current millisecond and SHALL NOT read from the head.
+
+#### Scenario: A restart does not replay the previous run
+- **WHEN** the curated streams hold entries from a previous run and the observer starts
+- **THEN** none of those entries is written to the log
+
+#### Scenario: Entries after start are recorded
+- **WHEN** an entry is published to a curated stream after the observer started
+- **THEN** it is written to the log
+
+#### Scenario: A failed lookup does not replay
+- **WHEN** the newest-entry lookup raises at start
+- **THEN** entries published before start are not written and entries published after start are

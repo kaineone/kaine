@@ -11,8 +11,8 @@ it receives, SHALL publish a `sequence.report` event to its `sequence.out`
 stream. The event SHALL carry `temporal_context` (a list of floats from
 the CfC hidden state), `anomaly_score` (float `>= 0`),
 `habituation_score` (float in `[0.0, 1.0]`), `rumination_detected`
-(bool), `time_since_last_interaction_s` (float, `inf` if no interaction
-yet), and `feature_vector` (the deterministic featurization input).
+(bool), `time_since_last_interaction_s` (a finite float, or `null` if no
+interaction yet), and `feature_vector` (the deterministic featurization input).
 Salience SHALL be elevated when `rumination_detected` is true or
 `anomaly_score` exceeds a configured alert threshold.
 
@@ -95,25 +95,6 @@ in `[0.0, 1.0]`.
   and the threshold is 4
 - **THEN** `rumination_detected == True`
 
-### Requirement: time_since_last_interaction subscribes to user-input streams
-The sequence module SHALL subscribe to a configurable set of streams known to carry user input (default `audition.out`) in addition to `workspace.broadcast`. Only an interaction SHALL reset the interaction clock: a speech-path event (`audition.transcription` with non-empty text, or `audition.emotion`) whose `source_label` is an operator source. The operator sources SHALL be one shared list, the same list the action selection module and the social cognition module use. Every other event on those streams, including `audition.perception`, `audition.prosody` and speech heard from a perception feed, SHALL NOT reset it. The time of the most recent interaction SHALL be the basis for `time_since_last_interaction_s`; if no interaction has occurred, the reported value SHALL be `inf`.
-
-#### Scenario: No interactions yields infinity
-- **WHEN** the sequence module has just initialized and no user-input events have arrived
-- **THEN** the next `sequence.report` has `time_since_last_interaction_s == math.inf`
-
-#### Scenario: Interaction resets the clock
-- **WHEN** an `audition.emotion` event with `source_label` `live_mic` arrives on a configured user-input stream
-- **THEN** the next `sequence.report`'s `time_since_last_interaction_s` is the elapsed seconds since that event arrived
-
-#### Scenario: Perception does not count as interaction
-- **WHEN** only `audition.perception` events arrive, from any source
-- **THEN** `time_since_last_interaction_s` keeps growing from the last interaction, or stays `inf` if there has been none
-
-#### Scenario: Speech from a perception feed does not count
-- **WHEN** an `audition.emotion` event with `source_label` `playlist` arrives
-- **THEN** the interaction clock is not reset
-
 ### Requirement: The default user-input stream resolves to a real producer
 
 The sequence module's in-code default user-input stream SHALL be the stream the audition module publishes to (`audition.out`), so that when configuration omits `user_input_streams` the sequence module still reads a real producer stream rather than a mistyped or retired one.
@@ -182,3 +163,29 @@ The featurizer SHALL produce a 24-dimension vector under a numbered layout. Layo
 #### Scenario: Unknown layout
 - **WHEN** the sequence module is restored from a snapshot that records layout 99
 - **THEN** the restore raises an error naming the layout
+
+### Requirement: Time since the last interaction survives a restart as lived time
+The sequence module SHALL save the time since the last interaction (or that none has occurred) and, on restore, SHALL report time since the last interaction continuing from the saved value, so time the entity was not running is not counted. A snapshot that records only an interaction timestamp SHALL be restored no later than the current entity time.
+
+#### Scenario: A restart does not reset the time alone to zero
+- **WHEN** the sequence module is saved 500 s after the last interaction and restored into a new run whose entity clock starts at 0
+- **THEN** its next report gives a time since the last interaction of about 500 s
+
+### Requirement: time_since_last_interaction subscribes to user-input streams and is null before any interaction
+The sequence module SHALL subscribe to a configurable set of streams known to carry user input (default `audition.out`) in addition to `workspace.broadcast`. Only an interaction SHALL reset the interaction clock: a speech-path event (`audition.transcription` with non-empty text, or `audition.emotion`) whose `source_label` is an operator source. The operator sources SHALL be the fixed `OPERATOR_SOURCES` set in `kaine.bus.schema`, which is also the default list of the action selection and social cognition modules; the sequence module SHALL NOT read `[social_cognition].operator_sources`. Every other event on those streams, including `audition.perception`, `audition.prosody` and speech heard from a perception feed, SHALL NOT reset it. The time of the most recent interaction SHALL be the basis for `time_since_last_interaction_s`; if no interaction has occurred, the reported value SHALL be `null` (Python `None`), never a non-finite float.
+
+#### Scenario: No interactions yields null
+- **WHEN** the sequence module has just initialized and no user-input events have arrived
+- **THEN** the next `sequence.report` has `time_since_last_interaction_s` equal to `None`, and the payload serializes with `json.dumps(..., allow_nan=False)`
+
+#### Scenario: Interaction resets the clock
+- **WHEN** an `audition.emotion` event with `source_label` `live_mic` arrives on a configured user-input stream
+- **THEN** the next `sequence.report`'s `time_since_last_interaction_s` is the elapsed seconds since that event arrived
+
+#### Scenario: Perception does not count as interaction
+- **WHEN** only `audition.perception` events arrive, from any source
+- **THEN** `time_since_last_interaction_s` keeps growing from the last interaction, or stays `null` if there has been none
+
+#### Scenario: Speech from a perception feed does not count
+- **WHEN** an `audition.emotion` event with `source_label` `playlist` arrives
+- **THEN** the interaction clock is not reset

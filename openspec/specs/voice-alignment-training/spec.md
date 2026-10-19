@@ -171,8 +171,8 @@ cycle.
   var is set but `unsloth` is not installed
 - **THEN** `train()` returns a TrainingResult with `accepted=False`
   and `reason` naming the `training` extras group, and the sleep
-  cycle's other phases (memory consolidation, belief revision,
-  affect reset, temporal recalibration) still complete
+  cycle's other phases (light consolidation, deep consolidation,
+  associative replay, affective reset) still complete
 
 ### Requirement: TrainingResult populates voice-tracking fields
 The returned `TrainingResult` SHALL include the fields the

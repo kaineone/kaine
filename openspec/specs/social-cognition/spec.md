@@ -22,7 +22,7 @@ backed store (with an in-memory backend for tests).
 - **THEN** the agent model is recovered with its interaction count intact
 
 ### Requirement: Agent profile fork/merge persistence
-The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `SocialCognitionMergeStrategy` (beside `EpisodicMemoryMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"social_cognition"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
+The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `SocialCognitionMergeStrategy` (beside `EpisodicMemoryMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"social_cognition"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. A behavioural-summary entry that is missing or null on one side is absent, not 0: an entry defined on both sides takes the count-weighted average, an entry defined on one side takes that side's value, an entry defined on neither side stays absent, and when the sides that hold a value have no interactions their plain mean is used. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
 
 #### Scenario: Fork/merge round-trip preserves interaction count
 - **WHEN** an agent profile is updated in a forked instance and the fork is merged
@@ -38,6 +38,10 @@ The social cognition module SHALL implement `serialize()` / `deserialize()` on `
 - **WHEN** an `AgentStore` is serialized and deserialized
 - **THEN** every agent profile (id, histogram, interaction_count, familiarity) is
   recovered without loss
+
+#### Scenario: A fork without a defined error does not pull the average toward 0
+- **WHEN** two forks of the same agent are merged and only one holds a `mean_prediction_error`, of 0.6, while the other's is missing or null
+- **THEN** the merged profile's `mean_prediction_error` is 0.6, and when neither fork holds one the merged profile has none
 
 ### Requirement: Familiarity is published for downstream coupling
 The social cognition module SHALL publish an `social_cognition.agent_model` event on each update carrying
@@ -138,3 +142,10 @@ The social cognition module SHALL capture every agent profile it holds (in its s
 #### Scenario: Profiles not touched since boot
 - **WHEN** the social cognition module is preserved holding profiles that were stored before this boot and not read since
 - **THEN** those profiles are in the bundle and are restored on revive
+
+### Requirement: An observation without a defined error leaves the error average alone
+When an `audition.emotion` event carries a null `prediction_error`, the social cognition module SHALL fold the observation into the agent model without updating `mean_prediction_error`, and the placeholder fold of an `audition.transcription` event SHALL likewise leave it unchanged, so the average is never seeded or pulled toward a made-up 0. Every other part of the fold SHALL be unchanged.
+
+#### Scenario: A null error does not seed the average
+- **WHEN** the social cognition module folds an emotion event with a null `prediction_error` and then a transcription event for a new agent
+- **THEN** the agent's interaction count is 2 and its behavioral summary has no `mean_prediction_error`, and a later emotion event with an error of 0.3 sets it to 0.3
