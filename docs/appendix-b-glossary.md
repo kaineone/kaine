@@ -266,7 +266,7 @@ The framework in which each processor maintains a generative model of its domain
 
 ### Priority
 
-A candidate's priority is `clip(intensity x novelty x goal)` to `[0, 1]`. The goal factor is held at one in the first configuration (`[workspace].salience_goal_factor = "static"`). [Arousal](#arousal) turns the priority into the [score](#score).
+A candidate's priority is `clip(intensity x novelty x goal)` to `[0, 1]`. In the first configuration the goal factor is the interest factor (`[workspace].salience_goal_factor = "interest"`): curiosity raises each perceptual source's priority in proportion to that source's learning progress; it is one for every other source. [Arousal](#arousal) turns the priority into the [score](#score).
 
 ---
 

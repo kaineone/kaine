@@ -7,6 +7,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | gate-c1-reachability | 5/5 (100%) | The period-variability floor drops to 0.02, below fetal values; a withdrawal waits for a scorable window after boot or thaw; probe draws and the latest markers persist so a restart neither resets nor repeats a pass run. |
+| interest-goal-factor | 6/6 (100%) | Curiosity directs attention: the goal factor raises each perceptual source's priority in proportion to interest and that source's learning progress, on in the first configuration. |
 | curiosity-interest | 7/7 (100%) | Curiosity is heterostatic interest that learning progress raises, with no relief and no goal, and boredom, met also by learning progress, carries the cost of an unchanging scene. |
 | welfare-crossing-deprivation | 5/5 (100%) | The affect welfare record scores drive crossings by the credit rule, so a stalled goal leaves its crossing open, and gives each drive's share of awake time at or above threshold. |
 | developmental-sensory-maturation | 5/5 (100%) | The stimulus-source audio passes a hearing band that widens over awake time in the order fetal hearing matures, from 500 Hz down to 100 Hz and then up to 3000 Hz, and the colour ramp spans the developmental phase, so the stimulus keeps offering learnable structure (paper §7, A.7, Table A1). |
@@ -143,6 +144,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 117 active changes, 271 archived changes and 105 capability specs.
+The roadmap contains 118 active changes, 271 archived changes and 105 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

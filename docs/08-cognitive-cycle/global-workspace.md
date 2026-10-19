@@ -76,7 +76,18 @@ With the shipped values, resting arousal (0.3) gives `T = 0.44` and `g = 0`, so 
 
 ### The goal factor
 
-`[workspace].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note. The alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant affect module's drive `d` with value `v` and returns
+`[workspace].salience_goal_factor` selects the goal factor. The shipped value, `"static"`, holds it at 1, and the boot logs an informational note.
+
+The first-configuration profile selects `"interest"` (paper 3.5, A.1). Curiosity directs attention toward the source being learned, in proportion to its learning progress (Gottlieb et al. 2013; Poli et al. 2020):
+
+```
+G(e) = 1 + interest_gain × curiosity × lp+(src(e))
+lp+(m) = max(0, lp_m − lp_0) / (1 − lp_0)
+```
+
+Here `lp_m` is module `m`'s own learning progress from the latest `affect.state` (`vision_learning_progress`, `audition_learning_progress`), `lp_0` is `[affect].learning_progress_floor`, and `interest_gain` (`gamma_I`, 0.5, calibrated) is `[workspace].interest_gain`. `G` is exactly 1 with no curiosity and for every source without learning progress (affect, sequence, interoception, language). It may exceed 1; only the priority is clipped. With full interest and a source's `lp+` of 0.5, the factor lifts that source's 0.7 alerts to the think bar at the tonic arousal a dominant drive sets (0.40 to 0.43). A processor whose errors are falling reports below its running mean, so without this factor it sits at its graded intensity floor. The factor emits no events, so nothing paces thought on a timer: thought follows the progressing source's own surprising reports and fades as the niche is learned. Every `config/studies/workspace_mediation_*.toml` sets the goal factor back to `"static"`, so the study arms rank by intensity and novelty alone.
+
+The other alternative, `"drive_relevance"`, is built and off by default because it changes what reaches access. It reads the dominant affect module's drive `d` with value `v` and returns
 
 ```
 G(e) = 1 − v × (1 − relevance(e)) × 0.5
@@ -84,9 +95,9 @@ G(e) = 1 − v × (1 − relevance(e)) × 0.5
 
 where `relevance(e)` is 1 when the event's source relieves `d` and 0 otherwise, and `G = 1` when no drive is positive.
 
-Each module class declares the drives its events relieve in `relieves_drives`. At boot `kaine/boot/wiring.py` builds the drive-to-source table from the registered modules' declarations, adds the action selection module (restlessness), and injects the table into the scorer, so the workspace never imports a module. A tag that is not one of the four drives (`curiosity`, `boredom`, `social_drive`, `restlessness`) fails the boot.
+Each module class declares the drives its events relieve in `relieves_drives`. At boot `kaine/boot/wiring.py` builds the drive-to-source table from the registered modules' declarations, adds the action selection module (restlessness), and injects the table into the drive-relevance scorer, so the workspace never imports a module. A tag that is not one of the four drives (`curiosity`, `boredom`, `social_drive`, `restlessness`) fails the boot.
 
-Both live factors read affect and drives through an `AffectStateProvider` (`kaine/cycle/affect_state.py`), which the cycle refreshes each tick from the `affect.state` events it already collects. Scoring is a function of the event and that snapshot, with no wall-clock reads and no random numbers.
+The live factors read affect, drives and per-source learning progress through an `AffectStateProvider` (`kaine/cycle/affect_state.py`), which the cycle refreshes each tick from the `affect.state` events it already collects. Scoring is a function of the event and that snapshot, with no wall-clock reads and no random numbers.
 
 ## Coalition and access
 
@@ -309,7 +320,8 @@ Selection keys live in `config/kaine.toml`; the `[action_selection]` values belo
 | `[workspace].publication_threshold` | float | 0.35 | The access threshold `θ` |
 | `[workspace].novelty_window` | int | 32 | Novelty window `W`, in scored candidates |
 | `[workspace].salience_affect_factor` | string | `"state_modulator"` | Arousal level and contrast gain; `"static"` is the negative control |
-| `[workspace].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"drive_relevance"` enables the drive-relevance scorer |
+| `[workspace].salience_goal_factor` | string | `"static"` | Goal factor held at 1; `"interest"` (the first-configuration profile) raises learning sources; `"drive_relevance"` enables the drive-relevance scorer |
+| `[workspace].interest_gain` | float | 0.5 | `gamma_I` of the interest goal factor |
 | `[workspace].arousal_contrast_gain` | float | 8.0 | Contrast gain at arousal 1; 0 disables the contrast |
 | `[workspace].arm` | string | `"competitive"` | Arm of the planned test: `"competitive"`, `"matched"` or `"pooled"` |
 | `[workspace.feedback].enabled` | bool | `false` | Switch for workspace feedback |
