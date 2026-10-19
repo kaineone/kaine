@@ -37,11 +37,12 @@ with the workspace and the action selection module as scaffolding.
 
 The remaining nine modules, plus the oscillatory and embodiment layers, add
 memory, a self-model, a world model, social cognition, effectors, embodiment and a
-spoken voice. They are **built, tested and gated off** until the base result is
-positive, and they stay in the tree, held for activation. The
+spoken voice. They are built and tested, and each stays off until its turn in
+the research order. The base result has to be positive first. The
 [module-addition study](docs/15-experiments/ignition-study.md) then grows an
 entity one held module at a time, in a fixed order, and compares each step with
-the one before it.
+the one before it, so a change in what the entity does can be traced to the
+module that was added.
 
 ## Observing the entity, and the base test
 
