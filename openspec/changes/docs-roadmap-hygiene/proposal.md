@@ -5,7 +5,7 @@ but had never been archived, so the capability specs under `openspec/specs/`
 lagged the merged code by weeks. Four of the completed changes carried deltas
 that no longer matched the current specs, one design-only change had no
 `skip_specs` marker, and `openspec validate --all` failed on main. The
-k1-jev-decision-model row and the records index still described a hiatus
+k1-jev-decision-model row and the records index gave an out-of-date status
 instead of naming the real blocker, and the module pages had no text for the
 organ replay harness or for the planned action path.
 
