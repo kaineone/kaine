@@ -10,4 +10,4 @@
 
 ## 3. Study (after 2)
 
-- [ ] 3.1 A study branch with the world model and an attached effector or body, from the preserved seed.
+- [ ] 3.1 A study branch with the world model, the light effector and the pan-tilt camera body together, from the preserved seed, so both action streams condition the transition.
