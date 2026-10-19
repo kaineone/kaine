@@ -14,7 +14,8 @@ Subcommands:
   a JSONL result file.
 
 * score -- read a result file and print per-variant rates plus a paired
-  bootstrap decision on whether V2 or V3 may be adopted.
+  bootstrap decision on whether V2 or V3 may be adopted. V12-V1 is reported for
+  comparison but does not enter the adoption rule.
 
 Case and result files hold decrypted organ prompts and generated texts. They
 belong in a private scratch directory, never in the repository. Run it from a
@@ -63,7 +64,7 @@ from kaine.security import crypto
 MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
-VARIANTS = ("V0", "V1", "V2", "V3", "V123", "raw")
+VARIANTS = ("V0", "V1", "V2", "V3", "V12", "V123", "raw")
 
 
 def require_loopback(url: str) -> None:
@@ -151,6 +152,8 @@ def apply_variant(name: str, system: str, prompt: str) -> tuple[str, str]:
         return (drop_self_category(system), prompt)
     if name == "V3":
         return (system, prose_awareness(prompt))
+    if name == "V12":
+        return (drop_self_category(system), drop_situation(prompt))
     if name == "V123":
         system = drop_self_category(system)
         prompt = drop_situation(prompt)
@@ -370,6 +373,10 @@ def decide(results: list[dict], n_boot: int = 2000) -> dict:
         "V123-V1": {
             "any_meta": paired_diff(results, "any_meta", "V123", "V1", n_boot),
             "grounded": paired_diff(results, "grounded", "V123", "V1", n_boot),
+        },
+        "V12-V1": {
+            "any_meta": paired_diff(results, "any_meta", "V12", "V1", n_boot),
+            "grounded": paired_diff(results, "grounded", "V12", "V1", n_boot),
         },
         "raw-V0": {
             "any_meta": paired_diff(results, "any_meta", "raw", "V0", n_boot),
@@ -711,7 +718,7 @@ def _score_cmd(args: argparse.Namespace) -> None:
 
     print()
     print(
-        "Primary outcome: any-meta rate. Grounding guard: grounded rate. Differences are paired by case (mean over seeds per case, then the mean over cases) with a 95% interval from a cluster bootstrap over cases. V2 (and separately V3) is adopted when its any-meta difference from V0 has an upper 95% bound below 0 and its grounded difference from V0 is above -5 points, and V123 minus V1 also has an any-meta upper bound below 0 and a grounded difference above -5 points. raw is exploratory and never adopted."
+        "Primary outcome: any-meta rate. Grounding guard: grounded rate. Differences are paired by case (mean over seeds per case, then the mean over cases) with a 95% interval from a cluster bootstrap over cases. V2 (and separately V3) is adopted when its any-meta difference from V0 has an upper 95% bound below 0 and its grounded difference from V0 is above -5 points, and V123 minus V1 also has an any-meta upper bound below 0 and a grounded difference above -5 points. V12-V1 is reported for comparison but does not enter the adoption rule. raw is exploratory and never adopted."
     )
 
     decision = decide(results, n_boot=args.bootstrap)
@@ -723,7 +730,7 @@ def _score_cmd(args: argparse.Namespace) -> None:
             return "N/A"
         return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
 
-    for label in ("V2-V0", "V3-V0", "V123-V1", "raw-V0", "V1-V0"):
+    for label in ("V2-V0", "V3-V0", "V123-V1", "V12-V1", "raw-V0", "V1-V0"):
         comp = details[label]
         print(f"{label}:")
         print(f"  any-meta:  {fmt(comp['any_meta'])}")

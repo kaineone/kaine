@@ -94,6 +94,25 @@ def test_prose_awareness_leaves_other_sections_byte_identical():
     assert result.startswith("## How I feel and what I notice\n")
 
 
+def test_apply_variant_v12_composes_v1_and_v2():
+    system = "I am this entity. My thoughts come from what I feel and notice."
+    prompt = (
+        "## What I know about my situation\n"
+        "I am in a quiet room.\n"
+        "\n"
+        "## How I feel and what I notice\n"
+        "- A voice I hear sounds neutral.\n"
+        "- The rhythm of things feels steady.\n"
+        "\n"
+        "## My thought\n"
+        "Listen."
+    )
+    assert organ_replay.apply_variant("V12", system, prompt) == (
+        organ_replay.drop_self_category(system),
+        organ_replay.drop_situation(prompt),
+    )
+
+
 def test_apply_variant_v123_composes_transforms():
     system = "I am this entity. My thoughts come from what I feel and notice."
     prompt = (
@@ -388,6 +407,7 @@ def test_decide_adopts_v2_when_meta_drops_and_grounding_held():
             results.append(_synthetic_result(case, "V1", seed, True, True))
             results.append(_synthetic_result(case, "V2", seed, False, True))
             results.append(_synthetic_result(case, "V3", seed, False, True))
+            results.append(_synthetic_result(case, "V12", seed, False, True))
             results.append(_synthetic_result(case, "V123", seed, False, True))
     decision = organ_replay.decide(results, n_boot=2000)
     assert decision["V2"] is True
@@ -404,6 +424,7 @@ def test_decide_rejects_v2_when_grounding_drops_too_far():
                 _synthetic_result(case, "V2", seed, False, v2_grounded)
             )
             results.append(_synthetic_result(case, "V3", seed, False, True))
+            results.append(_synthetic_result(case, "V12", seed, False, True))
             results.append(_synthetic_result(case, "V123", seed, False, True))
     decision = organ_replay.decide(results, n_boot=2000)
     assert decision["V2"] is False
