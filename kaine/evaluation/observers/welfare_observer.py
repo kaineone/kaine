@@ -34,12 +34,14 @@ cycle-layer autonomous welfare-protective monitor can act on ALL four categories
 
 The observer also writes an ``affect_welfare`` record to its JSONL log every
 ``affect_summary_interval_s`` of unfrozen time and when it stops: the share of
-awake time with valence below ``-negative_valence_bar`` and, per drive, the
-share of drive crossings ended without the entity's own response among the
-crossings ended (a stalled or cap-dropped goal leaves its crossing open, and a
-sleep reset counts as neither), with that rate per awake hour, and the share of
-awake time the drive spends at or above its threshold (paper 6.2). It holds
-numbers only and is not published on the bus.
+awake time with valence below ``-negative_valence_bar`` and, per deficit
+(boredom, social drive, restlessness), the share of drive crossings ended
+without the entity's own response among the crossings ended (a stalled or
+cap-dropped goal leaves its crossing open, and a sleep reset counts as
+neither), with that rate per awake hour, and the share of awake time the drive
+spends at or above its threshold; for curiosity, heterostatic interest, the
+share of awake time at or above its threshold as an interest share (paper 6.2,
+A.4). It holds numbers only and is not published on the bus.
 
 CONTENT-FREE EMITTER (not strictly read-only): this observer follows several bus
 streams and, on a gray-zone detection, emits a *derived, content-free* welfare
@@ -147,28 +149,36 @@ _AFFECT_SAMPLE_GAP_CAP_S = 5.0
 _AFFECT_WELFARE_RECORD = "affect_welfare"
 # Fixed drive table: the only drive names that may appear in record keys.
 _WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
+# The homeostatic deficits: their time at or above threshold is time without relief.
+_DEFICIT_DRIVES = ("boredom", "social_drive", "restlessness")
+# Heterostatic interest (paper A.4): time at or above threshold is a progress niche.
+_INTEREST_DRIVES = ("curiosity",)
 
 
 class AffectWelfareTally:
     """Accumulate content-free affect welfare measures for one ``affect_welfare`` record.
 
-    Tracks three paper-6.2 quantities from the affect module stream:
+    Tracks three paper-6.2 quantities and one paper-A.4 quantity from the affect
+    module stream:
 
     1. The share of awake time (measured between ``affect.state`` timestamps,
        capped at ``max_gap_s``) whose valence is strictly below
        ``-negative_valence_bar``.
-    2. Per drive in the fixed table, the share of crossing ends credited to
-       anything but the entity's own response (the A.4 credit rule, read from
+    2. Per drive in the three-deficit table, the share of crossing ends credited
+       to anything but the entity's own response (the A.4 credit rule, read from
        increases of ``drive_ends`` between consecutive ``affect.state`` events;
        the first event sets the baseline; a fall re-baselines), so a stalled
        or cap-dropped goal leaves its crossing open and a sleep reset counts as
        neither. Response-independent outcomes are those that define
        helplessness (Maier and Seligman 2016). The same count is also reported
        as uncontrolled ends per awake hour.
-    3. Per drive in the fixed table, the share of awake time the drive spends
-       at or above its threshold (from ``drive_above`` of the event that begins
-       each interval), the time without relief, since passivity is the default
-       response to prolonged aversive events (Maier and Seligman 2016).
+    3. Per drive in the three-deficit table, the share of awake time the drive
+       spends at or above its threshold (from ``drive_above`` of the event that
+       begins each interval), the time without relief, since passivity is the
+       default response to prolonged aversive events (Maier and Seligman 2016).
+    4. Curiosity's share of awake time at or above its threshold, an interest
+       share, since curiosity is heterostatic interest raised by learning
+       progress (paper A.4; Oudeyer and Kaplan 2007).
 
     Sleep intervals announced by the sleep module are excluded from awake time.
     Because each interval takes the state of the sample that began it, a sample
@@ -261,7 +271,7 @@ class AffectWelfareTally:
                             self._above_seconds[drive] += gap
                     self._changed = True
         if isinstance(drive_ends, dict):
-            for drive in _WELFARE_DRIVES:
+            for drive in _DEFICIT_DRIVES:
                 entry = drive_ends.get(drive)
                 if isinstance(entry, dict):
                     own_raw = entry.get("own")
@@ -308,7 +318,7 @@ class AffectWelfareTally:
         else:
             result["negative_valence_share"] = None
 
-        for drive in _WELFARE_DRIVES:
+        for drive in _DEFICIT_DRIVES:
             own, other = self._ends[drive]
             total = own + other
             if total > 0:
@@ -328,6 +338,15 @@ class AffectWelfareTally:
                 )
             else:
                 result[f"{drive}_deprivation_share"] = None
+
+        for drive in _INTEREST_DRIVES:
+            drive_seconds = self._drive_seconds[drive]
+            if drive_seconds > 0.0:
+                result[f"{drive}_interest_share"] = (
+                    self._above_seconds[drive] / drive_seconds
+                )
+            else:
+                result[f"{drive}_interest_share"] = None
         return result
 
 

@@ -63,14 +63,14 @@ async def test_module_latch_persistence_no_duplicate_goal(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0])
 
-    affect.drives.curiosity.value = 0.80
+    affect.drives.boredom.value = 0.80
     await affect._tick()
-    curiosity_goal = affect.goals.active_for_drive("curiosity")
-    assert curiosity_goal is not None
-    affect.goals.abandon(curiosity_goal.id)
+    boredom_goal = affect.goals.active_for_drive("boredom")
+    assert boredom_goal is not None
+    affect.goals.abandon(boredom_goal.id)
 
     state = affect.serialize()
-    assert state["drive_fired"]["curiosity"] is True
+    assert state["drive_fired"]["boredom"] is True
 
     before_drive = len(await _affect_drive_events(bus))
     before_goal_added = len(await _affect_goal_added_events(bus))
@@ -78,7 +78,7 @@ async def test_module_latch_persistence_no_duplicate_goal(bus):
     t2 = [100.0]
     affect2 = Affect(bus, clock=lambda: t2[0])
     affect2.deserialize(state)
-    affect2.drives.curiosity.value = 0.80
+    affect2.drives.boredom.value = 0.80
     await affect2._tick()
     t2[0] += 1.0
     await affect2._tick()
@@ -87,7 +87,7 @@ async def test_module_latch_persistence_no_duplicate_goal(bus):
     after_goal_added = len(await _affect_goal_added_events(bus))
     assert after_drive == before_drive
     assert after_goal_added == before_goal_added
-    assert affect2.goals.active_for_drive("curiosity") is None
+    assert affect2.goals.active_for_drive("boredom") is None
 
 
 @pytest.mark.asyncio
@@ -125,6 +125,7 @@ async def test_old_state_without_latches_infers_from_values(bus):
 @pytest.mark.asyncio
 async def test_non_bool_latch_values_fallback(bus):
     state = {
+        "curiosity_scheme": 2,
         "drive_fired": {
             "curiosity": "yes",
             "boredom": 1,
@@ -150,6 +151,7 @@ async def test_non_bool_latch_values_fallback(bus):
 @pytest.mark.asyncio
 async def test_saved_clear_latch_honoured(bus):
     state = {
+        "curiosity_scheme": 2,
         "drive_fired": {
             "curiosity": False,
             "boredom": False,

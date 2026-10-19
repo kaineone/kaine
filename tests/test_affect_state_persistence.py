@@ -82,7 +82,9 @@ async def test_restore_does_not_relieve_boredom(bus):
     """Without the saved rates the slow rate restarts at its floor and boredom falls below its re-arm band within seconds."""
     t = [0.0]
     affect = Affect(bus, publish_interval_s=999.0, clock=lambda: t[0])
-    await _feed_vision(affect, t, duration=600)
+    # A constant error carries no learning progress, which would now relieve boredom
+    # as the entity's own (paper A.4), so only the restored alert rates are tested.
+    await _feed_vision(affect, t, duration=600, error_start=0.5, error_end=0.5)
 
     affect.drives.boredom.value = 0.9
     await affect._tick()

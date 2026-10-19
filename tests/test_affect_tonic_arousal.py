@@ -57,8 +57,9 @@ async def test_arousal_target_values(bus):
     _set_drives(affect, curiosity=0.0, boredom=0.9, social_drive=0.0, restlessness=0.0)
     assert affect._arousal_target() == pytest.approx(0.3 + 0.2 * 0.7 * 0.9)
 
+    # Curiosity is heterostatic and no longer contributes to tonic arousal.
     _set_drives(affect, curiosity=0.7, boredom=0.5, social_drive=0.0, restlessness=0.0)
-    assert affect._arousal_target() == pytest.approx(0.3 + 0.2 * 0.7 * 0.7)
+    assert affect._arousal_target() == pytest.approx(0.3 + 0.2 * 0.7 * 0.5)
 
     affect_gain, _ = _make(bus, drive_arousal_gain=0.5)
     _set_drives(affect_gain, curiosity=0.0, boredom=0.0, social_drive=0.0, restlessness=1.0)

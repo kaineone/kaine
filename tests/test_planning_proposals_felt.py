@@ -26,7 +26,7 @@ def test_drive_event_summarized_as_felt_with_no_digits():
     assert kind == "felt"
     assert not any(ch.isdigit() for ch in about)
     assert "value=" not in about
-    assert "urge to know more" in about
+    assert "absorbed in what I am learning" in about
 
 
 def test_drive_event_at_moderate_value_is_moderate_phrase():

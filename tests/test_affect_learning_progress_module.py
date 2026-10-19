@@ -80,7 +80,7 @@ async def test_window_parameter_validation(bus, span, bin_s):
         Affect(bus, learning_progress_span_s=span, learning_progress_bin_s=bin_s)
 
 
-async def test_curiosity_relief_follows_windows(bus):
+async def test_curiosity_builds_with_learning_progress(bus):
     tf = [0.0]
     tc = [0.0]
     fall = Affect(
@@ -113,7 +113,7 @@ async def test_curiosity_relief_follows_windows(bus):
     assert fall._progress()[1] < 0.05
     assert fall._progress()[0] > 0.0
     assert const._progress()[0] == pytest.approx(0.0)
-    assert fall._drives.curiosity.value < const._drives.curiosity.value - 0.05
+    assert fall._drives.curiosity.value > const._drives.curiosity.value + 0.05
 
 
 async def test_progress_matches_fresh_windowed_estimator(bus):

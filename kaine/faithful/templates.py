@@ -25,7 +25,7 @@ FELT_DRIVE_PHRASES: dict[str, tuple[str, str]] = {
     ),
     "curiosity": (
         "I feel curious.",
-        "I feel a strong urge to know more.",
+        "I feel absorbed in what I am learning.",
     ),
     "boredom": (
         "I feel bored.",

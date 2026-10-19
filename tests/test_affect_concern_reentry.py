@@ -329,29 +329,29 @@ async def test_stall_clears_pending(bus):
 async def test_sleep_reset_clears_pending(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], drives=_static())
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.value = 0.75
 
     await affect._tick(own_update=True)
     t[0] = 1.0
     await affect._tick(own_update=True)
-    assert len(_reentries(await _drive_events(bus), "curiosity")) == 1
-    old_goal_id = affect.goals.active_for_drive("curiosity").id
+    assert len(_reentries(await _drive_events(bus), "boredom")) == 1
+    old_goal_id = affect.goals.active_for_drive("boredom").id
     assert old_goal_id in affect._concern_pending
 
     await affect.affective_reset()
     assert affect._concern_pending == {}
     assert affect._reentry_due == {}
 
-    affect.drives.curiosity.value = 0.75
+    affect.drives.boredom.value = 0.75
     t[0] = 2.0
     await affect._tick(own_update=True)
-    new_goal_id = affect.goals.active_for_drive("curiosity").id
+    new_goal_id = affect.goals.active_for_drive("boredom").id
     assert new_goal_id != old_goal_id
     assert new_goal_id in affect._concern_pending
 
     t[0] = 3.0
     await affect._tick(own_update=True)
-    reentries = _reentries(await _drive_events(bus), "curiosity")
+    reentries = _reentries(await _drive_events(bus), "boredom")
     assert len(reentries) == 2
     assert set(affect._concern_pending.keys()) == {new_goal_id}
 

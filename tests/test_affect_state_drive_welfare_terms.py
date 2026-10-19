@@ -68,7 +68,7 @@ async def test_threshold_is_inclusive(bus):
 async def test_periodic_state_carries_end_counts(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], publish_interval_s=1.0)
-    c = affect.drives.curiosity
+    c = affect.drives.restlessness
     c.value = 0.9
     assert c.consume_crossing()
     c.relieve_rate(1.0, 100.0, own=True)
@@ -84,10 +84,10 @@ async def test_periodic_state_carries_end_counts(bus):
     await affect._maybe_publish_state()
     payload = await _last_state_payload(bus)
     expected = {
-        "curiosity": {"own": 1, "other": 0},
+        "restlessness": {"own": 1, "other": 0},
         "boredom": {"own": 0, "other": 1},
+        "curiosity": {"own": 0, "other": 0},
         "social_drive": {"own": 0, "other": 0},
-        "restlessness": {"own": 0, "other": 0},
     }
     assert payload["drive_ends"] == expected
     for counts in payload["drive_ends"].values():
@@ -98,7 +98,7 @@ async def test_periodic_state_carries_end_counts(bus):
 async def test_reset_state_keeps_counts_and_clears_flags(bus):
     t = [0.0]
     affect = Affect(bus, clock=lambda: t[0], publish_interval_s=1.0)
-    c = affect.drives.curiosity
+    c = affect.drives.restlessness
     c.value = 0.9
     assert c.consume_crossing()
     c.relieve_rate(1.0, 100.0, own=True)
@@ -108,7 +108,7 @@ async def test_reset_state_keeps_counts_and_clears_flags(bus):
     resets = [ev.payload for _, ev in entries if ev.type == "affect.state" and ev.payload.get("reset")]
     assert resets
     payload = resets[-1]
-    assert payload["drive_ends"]["curiosity"] == {"own": 1, "other": 0}
+    assert payload["drive_ends"]["restlessness"] == {"own": 1, "other": 0}
     assert all(v is False for v in payload["drive_above"].values())
 
 
