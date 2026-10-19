@@ -236,7 +236,11 @@ class SidecarRegistry:
             sink = self._make_sink_at(
                 rcfg.log_dir, "research_events", rcfg.retention_days
             )
-            self._observers.append(ResearchEventObserver(self._bus, sink))
+            # A restarted cycle must not re-record the previous run's events
+            # from the persisted streams.
+            self._observers.append(
+                ResearchEventObserver(self._bus, sink, start_at_tail=True)
+            )
         if rcfg.raw_archive.enabled:
             # LOCAL-ONLY, never export-eligible — path is outside data/evaluation/.
             sink = self._make_sink_at(

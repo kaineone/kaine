@@ -15,5 +15,5 @@ After the plain restart in the ninth test boot, the research event log re-record
 
 ## Impact
 
-- `kaine/evaluation/observers/research_event_observer.py`, `kaine/evaluation/registry.py`, `tests/test_research_event_log.py`.
+- `kaine/evaluation/observers/research_event_observer.py`, `kaine/evaluation/registry.py`, `docs/17-research-data/participation.md`, new `tests/test_research_log_from_boot.py`.
 - Behaviour: a restarted entity's research log no longer repeats the previous run's records. A first boot is unchanged.

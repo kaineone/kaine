@@ -575,6 +575,12 @@ class ResearchEventObserver(StreamSubscriberObserver):
     Multi-cursor poll loop over the curated streams via
     ``StreamSubscriberObserver`` plus an inner ``WorkspaceSubscriberObserver``
     for ``workspace.broadcast`` metadata. Writes to a single ``AsyncJsonlSink``.
+
+    Args:
+        start_at_tail: If true, each curated stream starts after its newest
+            entry at the moment ``start()`` runs, so only this run's events are
+            recorded. The evaluation sidecar sets it; the default keeps the
+            backlog read.
     """
 
     name = "research_event_log"
@@ -587,21 +593,45 @@ class ResearchEventObserver(StreamSubscriberObserver):
         *,
         poll_interval_s: float = 0.5,
         privacy_filter: PrivacyFilter | None = None,
+        start_at_tail: bool = False,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
         self._sink = sink
         self._privacy = privacy_filter or PrivacyFilter()
+        self._start_at_tail = start_at_tail
         self._workspace = _WorkspaceMetadataObserver(bus, sink, self._privacy)
 
     # --- Lifecycle (also drives the inner workspace observer) ------------
 
     async def start(self) -> None:
+        if self._start_at_tail and not self._cursors:
+            self._cursors = {}
+            for stream in self.streams:
+                self._cursors[stream] = await self._tail_cursor(stream)
         await super().start()
         await self._workspace.start()
 
     async def stop(self) -> None:
         await self._workspace.stop()
         await super().stop()
+
+    async def _tail_cursor(self, stream: str) -> str:
+        """Return the newest entry id for ``stream``, or ``"0"`` when unknown.
+
+        Falls back to reading from the head when the bus cannot report a tail
+        id or the lookup fails.
+        """
+        if not hasattr(self._bus, "last_entry_id"):
+            return "0"
+        try:
+            return await self._bus.last_entry_id(stream)
+        except Exception:
+            log.warning(
+                "research observer tail lookup failed for %s; reading from the head",
+                stream,
+                exc_info=True,
+            )
+            return "0"
 
     # --- Record construction --------------------------------------------
 
