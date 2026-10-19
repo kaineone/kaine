@@ -193,11 +193,11 @@ async def test_default_personas_state_no_rules():
         assert "don't" not in lower
         assert "never" not in lower
         assert "must" not in lower
-        assert persona.startswith("I am this entity.")
+        assert "I am this entity" not in persona
 
 
 async def test_template_version_and_stop():
-    assert PERSONA_TEMPLATE_VERSION == "4"
+    assert PERSONA_TEMPLATE_VERSION == "5"
     assert OWN_TURN_STOP == ("\n#",)
 
 
