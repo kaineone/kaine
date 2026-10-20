@@ -3,6 +3,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import importlib.util
 import json
 import os
@@ -473,7 +474,7 @@ def test_run_respects_concurrency(tmp_path, monkeypatch):
         async def complete(self, request):
             FakeChatClient._inflight += 1
             FakeChatClient._max = max(
-                FakeChatClient._max, FakeChatClient._inflight
+                FakeChatClient._inflight, FakeChatClient._max
             )
             await asyncio.sleep(0.01)
             FakeChatClient._inflight -= 1
@@ -846,3 +847,96 @@ def test_score_default_rule_output_unchanged(tmp_path, monkeypatch, capsys):
     assert "Primary outcome:" in out
     assert "adopt V2:" in out
     assert "adopt V3:" in out
+
+
+def test_run_uses_per_case_sampling_seed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        organ_replay.organ_window_state, "organ_unloaded", lambda: False
+    )
+    monkeypatch.setattr(organ_replay, "refuse_inside_git_worktree", lambda p: None)
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(organ_replay.httpx, "AsyncClient", FakeAsyncClient)
+
+    recorded_seeds = []
+
+    class FakeResponse:
+        text = "ok."
+        finish_reason = "stop"
+        completion_tokens = 1
+        raw = {}
+
+    class FakeChatClient:
+        def __init__(self, url, timeout_s=120.0):
+            pass
+
+        async def complete(self, request):
+            recorded_seeds.append(request.seed)
+            return FakeResponse()
+
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(organ_replay, "OpenAIChatClient", FakeChatClient)
+
+    cases_path = tmp_path / "cases.jsonl"
+    out_path = tmp_path / "out.jsonl"
+    cases = [
+        {"case_id": "cA", "mode": "internal", "system": "s", "prompt": "pA"},
+        {"case_id": "cB", "mode": "internal", "system": "s", "prompt": "pB"},
+    ]
+    with cases_path.open("w", encoding="utf-8") as f:
+        for case in cases:
+            f.write(json.dumps(case, ensure_ascii=False) + "\n")
+
+    args = argparse.Namespace(
+        cases=str(cases_path),
+        variants="V5",
+        seeds=2,
+        temperature=0.7,
+        concurrency=1,
+        url="http://127.0.0.1:1/v1",
+        out=str(out_path),
+        limit=None,
+    )
+
+    asyncio.run(organ_replay._run_cmd(args))
+    first_seeds = recorded_seeds.copy()
+    assert len(first_seeds) == 4
+    assert len(set(first_seeds)) == 4
+
+    rows = [
+        json.loads(line)
+        for line in out_path.read_text(encoding="utf-8").strip().splitlines()
+    ]
+    assert len(rows) == 4
+    for row in rows:
+        assert row["seed"] in (1000, 1001)
+        expected = int.from_bytes(
+            hashlib.sha256(f"{row['case_id']}:{row['seed']}".encode()).digest()[
+                :4
+            ],
+            "big",
+        ) & 0x7FFFFFFF
+        assert row["sampling_seed"] == expected
+
+    # Resuming skips rows already written.
+    recorded_seeds.clear()
+    asyncio.run(organ_replay._run_cmd(args))
+    assert recorded_seeds == []
+    assert (
+        len(out_path.read_text(encoding="utf-8").strip().splitlines()) == 4
+    )
+
+    # Determinism: fresh run with the same inputs yields the same seeds.
+    out_path.unlink()
+    recorded_seeds.clear()
+    asyncio.run(organ_replay._run_cmd(args))
+    assert recorded_seeds == first_seeds

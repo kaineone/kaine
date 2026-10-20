@@ -590,6 +590,14 @@ def _load_cases(path: Path) -> list[dict]:
 
 
 async def _run_cmd(args: argparse.Namespace) -> None:
+    import hashlib
+
+    def _derive_sampling_seed(case_id: str, seed: int) -> int:
+        # Derive a per-case, per-replicate sampling seed from the stored seed.
+        return int.from_bytes(
+            hashlib.sha256(f"{case_id}:{seed}".encode()).digest()[:4], "big"
+        ) & 0x7FFFFFFF
+
     if organ_window_state.organ_unloaded():
         print(
             "organ window state says the organ is unloaded here; run from a directory without state/sleep/organ_window.json",
@@ -647,10 +655,13 @@ async def _run_cmd(args: argparse.Namespace) -> None:
         if (case_id, variant, seed) in existing:
             return
 
+        sampling_seed = _derive_sampling_seed(case_id, seed)
+
         row: dict = {
             "case_id": case_id,
             "variant": variant,
             "seed": seed,
+            "sampling_seed": sampling_seed,
             "mode": mode,
             "prompt": prompt,
             "system": system,
@@ -665,7 +676,7 @@ async def _run_cmd(args: argparse.Namespace) -> None:
                             "prompt": f"{system}\n\n{prompt}" if system else prompt,
                             "n_predict": max_tokens,
                             "temperature": temperature,
-                            "seed": seed,
+                            "seed": sampling_seed,
                             "stop": list(OWN_TURN_STOP),
                             "dry_multiplier": 0.8,
                             "dry_base": 1.75,
@@ -690,7 +701,7 @@ async def _run_cmd(args: argparse.Namespace) -> None:
                         )
                     else:
                         request = build_chat_request(
-                            mode, system if system else None, prompt, seed, temperature
+                            mode, system if system else None, prompt, sampling_seed, temperature
                         )
                         resp = await chat_client.complete(request)
                         if resp.raw.get("organ_resting"):
