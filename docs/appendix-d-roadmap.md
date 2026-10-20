@@ -6,7 +6,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| lp-max-pooling | 5/6 (83%) | Pool learning progress as the largest per-processor value and restart audition's bins at each hearing band step (paper A.4); the floor's recalibration under the new pooling is recorded and left for the paper. |
+| lp-max-pooling | 6/6 (100%) | Pool learning progress as the largest per-processor value, restart audition's bins at each hearing band step, and set the floor lp_0 to 0.20 as calibrated for this pooling (paper A.4, Table A1). |
+| replay-guard-test-wait | 4/4 (100%) | Make the effectors replay-guard tests wait for the state they assert instead of sleeping a fixed time, which failed under CI load. |
 | hearing-stage-published | 4/4 (100%) | Log and publish each stage the developmental hearing band enters, read from the same awake time the audio uses, so operators and analyses can see which band the entity hears; the band itself is unchanged. |
 | cycle-slip-start-to-start | 4/4 (100%) | Measure the cycle's slip from tick start to tick start, so the work after a tick and the oversleep of the pacing wait show; the pacing itself is unchanged. |
 | sleep-index-restored | 4/4 (100%) | Restore the sleep module's sleep index after a restart from its resume-checkpoint state and stage.json, so sleep events and corpus file names continue the count instead of repeating it. |
@@ -69,6 +70,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 43 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 44 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
