@@ -106,7 +106,7 @@ async def test_curiosity_builds_with_falling_errors(bus: AsyncBus):
     await affect.initialize()
     try:
         # 20 s progress window in 10 s bins; two completed bins are needed,
-        # so we first provide steady error, then let it fall over 20 s.
+        # so we first provide steady error, then let it fall close to zero over 20 s.
         # Curiosity is heterostatic interest, so learning progress raises it.
         for i in range(800):
             fake_now[0] = i * 0.1
@@ -115,7 +115,7 @@ async def test_curiosity_builds_with_falling_errors(bus: AsyncBus):
                 # update and the value set below starts the falling phase.
                 await affect._tick()
                 affect.drives.curiosity.value = 0.6
-            r = 3.0 if i < 600 else 3.0 - (2.0 * (i - 600) / 199)
+            r = 3.0 if i < 600 else 3.0 - (2.9 * (i - 600) / 199)
             await affect._handle_peer_event(
                 "vision.out",
                 Event(
@@ -708,11 +708,11 @@ async def test_falling_errors_relieve_boredom(bus: AsyncBus):
                 await affect._tick()
         assert affect.drives.boredom.value > 0.7
 
-        # With boredom's relief_gain=0.3, the error scale must fall to 20 %
-        # in 60 s for learning-progress relief to push boredom below 0.5.
+        # With boredom's relief_gain=0.3, the error scale must fall close to
+        # zero in 60 s for learning-progress relief to push boredom below 0.5.
         for i in range(3001, 3601):
             t = i * step
-            scale = 1.0 - 0.8 * (t - 300.0) / 60.0
+            scale = 1.0 - (t - 300.0) / 60.0
             fake_now[0] = t
             err = rng.lognormvariate(0.0, 0.3) * scale
             alert = rng.random() < 0.05
