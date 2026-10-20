@@ -35,12 +35,17 @@ After the phases the sleep module runs the sleep-time intent audit. A base-form 
 | Fatigue | `interoception.out`, `interoception.fatigue` | `crossed == true` |
 | Maintenance request | `interoception.out`, `interoception.regulation` | `action == "request_maintenance"` |
 | Emotion-regulation request | `affect.out`, `affect.regulation` | `action == "request_maintenance"` (tier 3 of the affect module's emotion regulation) |
+| Developmental rest | `affect.out`, `affect.rest_request` | `reason == "stimulus_spent"`: in the developmental phase a boredom goal stalled with no learning progress or alert excess throughout the stall (see [Developmental rest](#developmental-rest)) |
 | Interval backstop | `RestScheduler.is_due()` | `interval_seconds` of entity time since the last completed sleep, or since boot (one entity hour by default) |
 | Requested rest | `action_selection.out`, `intent.rest` | At least `requested_rest_min_interval_s` of entity time since the last sleep ended, and no sleep running |
 
-The fatigue, maintenance and emotion-regulation triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
+The fatigue, maintenance, emotion-regulation and developmental-rest triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`. A maintenance poll checks `is_due()` regardless. `is_due()` is true once the effective deadline has passed, or once the original deadline plus `max_deferral_seconds` has passed. `try_defer()` pushes the effective deadline back by `per_defer_seconds`, up to that cap; nothing in the running system calls it outside tests.
 
 Rest requests come from the planning module through the action selection module's `PlanningProposalSource` (`origin = "planning"`), so they arise only when the planning module is enabled. The sleep module answers each with a `sleep.rest_request` event at intensity 0.0, so the answer never competes for the workspace.
+
+### Developmental rest
+
+(Paper 3.5.) A developing entity has no effector, so when its stimulus is spent it cannot meet boredom by acting. When a boredom goal stalls with no learning progress or alert excess throughout the stall, the affect module publishes `affect.rest_request`, and the sleep module starts a sleep with trigger `developmental_rest`. That sleep runs its phases and then stays asleep until `developmental_rest_s` (1,260 s, 21 minutes) of entity time has passed since it began, the mean length of a quiescent episode (state 1F) in mature fetuses (Pillai and James 1990); then it ends with the affective reset like every sleep. A cancel or shutdown during the hold still runs the reset. Its `sleep.sleep.started` event carries `trigger: "developmental_rest"`, and its `sleep.sleep.completed` summary carries `trigger` and `rest_seconds`. During the rest the cycle runs on, the perceptual feed pauses except the developmental stimulus, and forward-model adaptation is suspended, as in every sleep. Every other sleep ends with its phases, and its events are unchanged. After maturation the affect module publishes no rest request.
 
 ## Pipeline
 
@@ -88,6 +93,7 @@ The full reference is in [Perception feed and sleep](../appendix-a-configuration
 | `max_deferral_seconds` | float `>= 0` | `600.0` | Most the backstop can be deferred past its original deadline |
 | `per_defer_seconds` | float `> 0` | `60.0` | Deferral added per `try_defer()` |
 | `requested_rest_min_interval_s` | float `> 0` | `1800.0` | Minimum time from the end of a sleep before a rest request is accepted |
+| `developmental_rest_s` | float `> 0` | `1260.0` | Length of a developmental rest in entity seconds (paper Table A1 `Delta_rest`) |
 | `baseline_salience` | float `[0, 1]` | `0.5` | Intensity of routine sleep events |
 | `alert_salience` | float `[0, 1]` | `0.8` | Intensity of a completed event after a failed phase |
 

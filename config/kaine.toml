@@ -1317,6 +1317,11 @@ baseline_salience = 0.5
 alert_salience = 0.8
 # Minimum entity-time seconds between a sleep's end and a planning module-requested rest; bounds rest requests from an exploring planning module.
 requested_rest_min_interval_s = 1800.0
+# Developmental rest (paper 3.5, Table A1 Delta_rest): in the developmental phase a boredom goal that
+# stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts this
+# many entity seconds, the mean length of a quiescent episode (state 1F) in mature fetuses (Pillai and
+# James 1990). Other sleeps end with their phases.
+developmental_rest_s = 1260.0
 
 [sleep.consolidation]
 # Whether the sleep module subscribes to interoception.fatigue and triggers on threshold crossing.
