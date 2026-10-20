@@ -95,6 +95,10 @@ Put it in the same place, restart the dashboard, and sign in again. A browser se
 
 The console at `/` is mounted only when `[dashboard].conversation_enabled` is true; with the shipped config `/` redirects to diagnostics. It is a single screen that does not scroll, with the Presence visualizer, collapsible diagnostic and evaluation sections, and the Health and services sidebar, and it shows no message content. Most sections start closed and slide in from the left rail when you open them; the welfare and divergence sections open and flash when a relevant event arrives.
 
+The page title and the line under the wordmark show the entity's name. At start the dashboard reads it from the self-model file (`[self_model].persistence_path`, by default `state/self_model/self_model.json`, decrypted when state encryption is on), and when that file holds no name, from a `name` field in `state/identity/entity.json` if one is there. While it runs it takes each new name from the self-model's `self_model.document` events on `self_model.out`. With no name anywhere, for example when the self-model module is off and has never run, the console shows "KAINE". Reload the page to see a name that arrived after it opened.
+
+The status chip starts from the sleep state the dashboard last read on `sleep.out` (it reads the newest `sleep.sleep.started` or `sleep.sleep.completed` when it starts), so a page opened during a sleep shows "sleeping" as soon as the cycle reports running.
+
 ### Diagnostics
 
 `/diagnostics/` is the deep technical view: live charts, run identity, health, and controls. It is reachable from the left-rail "Diagnostics" link on every page.
