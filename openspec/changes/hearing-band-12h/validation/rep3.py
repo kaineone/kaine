@@ -3,7 +3,9 @@
 """Replicated passes (three in a row) per condition from runval.py output files: rep3.py NAME [NAME...] reads NAME.out.json."""
 import json, sys
 for k in sys.argv[1:]:
-    d = json.load(open(f"{k}.out.json")); C = d["spec"]["conds"]; M = d["markers"]
+    with open(f"{k}.out.json") as fh:
+        d = json.load(fh)
+    C = d["spec"]["conds"]; M = d["markers"]
     print("==", k)
     for i, c in enumerate(C):
         ms = [(t, row[i]) for t, row in M if row[i] is not None]

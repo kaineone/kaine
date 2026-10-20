@@ -25,7 +25,8 @@ vdir = repo + "/openspec/changes/archive/2026-10-03-self-rhythm-earned-entrainme
 sys.path.insert(0, vdir)
 import proto_r
 proto_r.Clock.stimulus_source_seconds = getattr(proto_r.Clock, f"{old}_seconds")
-spec = json.load(open(spec_path))
+with open(spec_path) as fh:
+    spec = json.load(fh)
 rows = proto_r.run(spec["conds"], spec["hours"], **spec.get("kw", {}))
 with open(out, "w") as fh:
     json.dump(dict(spec=spec, rows=rows, withdrawals=proto_r.run.withdrawals, markers=proto_r.run.markers), fh)
