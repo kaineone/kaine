@@ -171,12 +171,18 @@ class ConversationState:
         elif trigger is None and self._sleep_start_seen:
             # The sleep module sets fatigue_triggered at the first fatigue sleep and never
             # clears it, so True cannot tell fatigue from the backstop for later sleeps.
-            if payload.get("fatigue_triggered") is True:
+            # An aborted completion carries no flag at all, so the trigger stays unknown.
+            fatigue = payload.get("fatigue_triggered")
+            if fatigue is True:
                 trigger = "fatigue_or_backstop"
-            else:
+            elif fatigue is False:
                 trigger = "backstop"
 
-        started_at = self.sleep.get("started_at") if isinstance(self.sleep, dict) else None
+        started_at = (
+            self.sleep.get("started_at")
+            if self._sleep_start_seen and isinstance(self.sleep, dict)
+            else None
+        )
         total_ms = _finite(payload.get("total_elapsed_ms"))
         duration_s = total_ms / 1000.0 if total_ms is not None else None
 

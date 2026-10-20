@@ -278,6 +278,52 @@ def test_aborted_completion_flag():
     assert state.sleep_snapshot()["sleep"]["aborted"] is True
 
 
+def test_aborted_completion_after_untriggered_start_has_no_trigger():
+    state = ConversationState()
+    state.observe(_sleep_event("sleep.sleep.started", {}))
+    state.observe(
+        _sleep_event("sleep.sleep.completed", {"aborted": True, "reason": "stop"})
+    )
+    sleep = state.sleep_snapshot()["sleep"]
+    assert sleep["trigger"] is None
+    assert sleep["aborted"] is True
+
+
+def test_aborted_developmental_rest_keeps_its_trigger():
+    state = ConversationState()
+    state.observe(_sleep_event("sleep.sleep.started", {"trigger": "developmental_rest"}))
+    state.observe(
+        _sleep_event(
+            "sleep.sleep.completed",
+            {
+                "aborted": True,
+                "reason": "stop",
+                "trigger": "developmental_rest",
+                "rest_seconds": 1260.0,
+            },
+        )
+    )
+    sleep = state.sleep_snapshot()["sleep"]
+    assert sleep["trigger"] == "developmental_rest"
+    assert sleep["aborted"] is True
+
+
+def test_false_fatigue_flag_after_untriggered_start_is_backstop():
+    state = ConversationState()
+    state.observe(_sleep_event("sleep.sleep.started", {}))
+    state.observe(_sleep_event("sleep.sleep.completed", {"fatigue_triggered": False}))
+    assert state.sleep_snapshot()["sleep"]["trigger"] == "backstop"
+
+
+def test_completion_without_seen_start_does_not_reuse_previous_start_time():
+    state = ConversationState()
+    state.observe(_sleep_event("sleep.sleep.started", {"started_at": 1000.0}))
+    state.observe(_sleep_event("sleep.sleep.completed", {"fatigue_triggered": False}))
+    assert state.sleep_snapshot()["sleep"]["started_at"] == 1000.0
+    state.observe(_sleep_event("sleep.sleep.completed", {"fatigue_triggered": False}))
+    assert state.sleep_snapshot()["sleep"]["started_at"] is None
+
+
 def test_while_asleep_snapshot_is_asleep():
     state = ConversationState()
     state.observe(
