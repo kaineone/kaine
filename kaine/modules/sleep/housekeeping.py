@@ -382,6 +382,12 @@ class Housekeeper:
         resolved = Path(path).resolve(strict=False)
         return resolved in self._current_log_backups()
 
+    def _mounted_archive(self) -> Path | None:
+        """The archive directory when it is set and exists (mounted), else None."""
+        if self._archive is None or not os.path.isdir(self._archive):
+            return None
+        return self._archive
+
     def check_allowed(self, path: Path) -> Path:
         """Validate that ``path`` may be moved, deleted, or counted.
 
@@ -493,7 +499,7 @@ class Housekeeper:
         deleted_files = 0
         deleted_bytes = 0
         skipped_unexported = 0
-        archive = self._archive
+        archive = self._mounted_archive()
         remaining = before
         budget = self._config.disk_budget_bytes
         stopped: str | None = None
@@ -579,7 +585,7 @@ class Housekeeper:
             "deleted_files": deleted_files,
             "deleted_bytes": deleted_bytes,
             "stopped": stopped,
-            "archive": self._archive is not None,
+            "archive": archive is not None,
             "elapsed_s": self._clock() - start,
             "pressure": pressure,
             "terms": {
@@ -605,7 +611,7 @@ class Housekeeper:
         """
         reclaimed_files = 0
         reclaimed_bytes = 0
-        archive = self._archive
+        archive = self._mounted_archive()
 
         for path in self.candidates():
             if free_bytes() >= target_free:
