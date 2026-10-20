@@ -1276,6 +1276,8 @@ class Affect(BaseModule):
                 "drives": self._drives.to_dict(),
                 "drive_above": self._drives.above_to_dict(),
                 "drive_ends": self._drives.outcomes_to_dict(),
+                "drive_reset_ends": self._drives.reset_ends_to_dict(),
+                "drive_open": self._drives.open_to_dict(),
                 "emotion": self._last_emotion.value,
                 **self._valence_terms(),
             },
@@ -1611,6 +1613,8 @@ class Affect(BaseModule):
                 "drives": self._drives.to_dict(),
                 "drive_above": self._drives.above_to_dict(),
                 "drive_ends": self._drives.outcomes_to_dict(),
+                "drive_reset_ends": self._drives.reset_ends_to_dict(),
+                "drive_open": self._drives.open_to_dict(),
                 "emotion": self._last_emotion.value,
                 "reset": True,
                 "alert": True,
@@ -1676,6 +1680,7 @@ class Affect(BaseModule):
             "baseline": self._baseline.to_dict(),
             "drives": self._drives.to_dict(),
             "drive_outcomes": self._drives.outcomes_to_dict(),
+            "drive_reset_ends": self._drives.reset_ends_to_dict(),
             # Persist the crossing latch so a revive does not re-fire a drive
             # that already fired.
             "drive_fired": self._drives.fired_to_dict(),
@@ -1753,6 +1758,7 @@ class Affect(BaseModule):
             self._drives.load_fired(state.get("drive_fired"))
         if "drive_outcomes" in state:
             self._drives.load_outcomes(state["drive_outcomes"])
+        self._drives.load_reset_ends(state.get("drive_reset_ends"))
         if "last_emotion" in state:
             try:
                 self._last_emotion = CategoricalEmotion(state["last_emotion"])

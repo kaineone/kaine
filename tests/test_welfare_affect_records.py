@@ -348,6 +348,8 @@ def test_tally_content_free_and_fixed_keys():
         fixed.add(f"{drive}_uncontrolled_share")
         fixed.add(f"{drive}_uncontrolled_per_awake_hour")
         fixed.add(f"{drive}_deprivation_share")
+        fixed.add(f"{drive}_sleep_reset_ends")
+        fixed.add(f"{drive}_open_crossings")
     fixed.add("curiosity_interest_share")
     assert set(snap.keys()) == fixed
     for k, v in snap.items():
