@@ -310,14 +310,15 @@ async def test_exclusion_is_load_bearing_latency_would_differ():
     bus_b = ScriptedBus(_scripted_streams())
     cycle_b = _build_cycle(bus_b, deterministic=True, clock=_SlowClock())
 
-    res_a = await cycle_a.tick()
-    res_b = await cycle_b.tick()
+    res_a = [await cycle_a.tick() for _ in range(2)]
+    res_b = [await cycle_b.tick() for _ in range(2)]
     # Cognitive identity holds...
     assert _normalize_broadcast(bus_a.workspace_broadcasts[0]) == _normalize_broadcast(
         bus_b.workspace_broadcasts[0]
     )
-    # ...even though the EXCLUDED latency differs.
-    assert res_a.slip_ms != res_b.slip_ms
+    # ...even though the EXCLUDED latency differs (compare the second tick,
+    # because the first tick has no predecessor and therefore no slip).
+    assert res_a[1].slip_ms != res_b[1].slip_ms
 
 
 # --------------------------------------------------------------------------

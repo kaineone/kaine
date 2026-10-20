@@ -107,8 +107,9 @@ async def test_unsustainable_target_surfaces_shortfall_not_silently_capped(make_
     assert stats["target_rate_hz"] == pytest.approx(5.0)
     assert stats["achieved_rate_hz"] == pytest.approx(2.0, rel=1e-2)
     assert stats["achieved_rate_hz"] < stats["target_rate_hz"]
-    # Slip recorded (≈ 500 - 200 = 300 ms per tick).
-    assert stats["mean_slip_ms"] == pytest.approx(300.0, rel=1e-2)
+    # First tick has no predecessor, so it reports slip 0; the remaining 7
+    # ticks each carry ~300 ms of slip.
+    assert stats["mean_slip_ms"] == pytest.approx(300.0 * 7 / 8, rel=1e-2)
     assert stats["max_slip_ms"] == pytest.approx(300.0, rel=1e-2)
 
 

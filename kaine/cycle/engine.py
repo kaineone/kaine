@@ -235,6 +235,11 @@ class CognitiveCycle:
         self._recent_target_ms: deque[float] = deque(maxlen=self._PACING_WINDOW_TICKS)
         self._recent_slip_ms: deque[float] = deque(maxlen=self._PACING_WINDOW_TICKS)
         self._overrun_ticks: int = 0
+        # Slip measured from the start of one tick to the start of the next:
+        # how far that interval exceeded the previous tick's budget (includes
+        # post-tick work and the pacing wait's oversleep).
+        self._prev_tick_start: Optional[float] = None
+        self._prev_target_ms: Optional[float] = None
 
         # interoception.regulation consumer state.
         self._interoception_out_cursor: str = "0"
@@ -447,6 +452,10 @@ class CognitiveCycle:
         self._paused.clear()
         self._paused_at = self._entity_clock.now()
         self._refresh_unawake()
+        # A pause freezes the entity: discard the previous tick start so the
+        # next tick after resume does not report slip for the frozen interval.
+        self._prev_tick_start = None
+        self._prev_target_ms = None
 
     async def resume(self) -> None:
         if self._paused.is_set():
@@ -459,6 +468,10 @@ class CognitiveCycle:
         self._paused.set()
         await self.hooks.fire("resume")
         self._refresh_unawake()
+        # A pause freezes the entity: discard the previous tick start so the
+        # first tick after resume does not report slip for the frozen interval.
+        self._prev_tick_start = None
+        self._prev_target_ms = None
 
     def paused_subjective_seconds(self) -> float:
         """Return subjective seconds spent paused, including a pause in progress.
@@ -526,6 +539,18 @@ class CognitiveCycle:
         else:
             target_ms = self._target_tick_period * 1000.0
         start = self._entity_clock.wall()
+        # Slip measured from the start of one tick to the start of the next:
+        # how far that interval exceeded the previous tick's budget (includes
+        # post-tick work and the pacing wait's oversleep).
+        if self._prev_tick_start is not None and self._prev_target_ms is not None:
+            slip_ms = max(
+                0.0,
+                (start - self._prev_tick_start) * 1000.0 - self._prev_target_ms,
+            )
+        else:
+            slip_ms = 0.0
+        self._prev_tick_start = start
+        self._prev_target_ms = target_ms
 
         events: list[tuple[str, Event]] = []
         gathered: list[tuple[str, str, Event]] = []
@@ -691,15 +716,14 @@ class CognitiveCycle:
 
         end = self._entity_clock.wall()
         wall_ms = (end - start) * 1000.0
-        slip_ms = max(0.0, wall_ms - target_ms)
 
         # Record the tick into the rolling pacing window for the honest report.
-        # An overrun (slip > 0) means the cycle could not hold the target rate
-        # this tick — counted so the shortfall is visible and never silent.
+        # An overrun (wall_ms > target_ms) means the tick body exceeded its own
+        # budget this tick, counted so the shortfall is visible and never silent.
         self._recent_wall_ms.append(wall_ms)
         self._recent_target_ms.append(target_ms)
         self._recent_slip_ms.append(slip_ms)
-        if slip_ms > 0.0:
+        if wall_ms > target_ms:
             self._overrun_ticks += 1
 
         await self._publish_latency(

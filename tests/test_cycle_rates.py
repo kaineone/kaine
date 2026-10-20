@@ -59,9 +59,10 @@ async def test_slip_recorded_when_tick_overruns(cycle_with_fakes):
         return WorkspaceSnapshot(tick_index=context["tick_index"])
 
     cycle._workspace.select = slow_select  # type: ignore[assignment]
-    result = await cycle.tick()
-    assert result.wall_duration_ms >= 350.0
-    assert result.slip_ms >= 150.0
+    results = [await cycle.tick() for _ in range(2)]
+    assert results[0].wall_duration_ms >= 350.0
+    assert results[0].slip_ms == 0.0
+    assert results[1].slip_ms >= 150.0
 
 
 @pytest.mark.asyncio
