@@ -111,6 +111,7 @@ def test_emotion2vec_cpu_casts_model_to_float32_after_dtype_race(monkeypatch: py
             device: str,
             hub: str,
             disable_update: bool,
+            disable_pbar: bool,
             fp16: bool = False,
             bf16: bool = False,
         ) -> None:
@@ -145,6 +146,7 @@ def test_emotion2vec_cpu_load_fails_when_float_cast_blocked(monkeypatch: pytest.
             device: str,
             hub: str,
             disable_update: bool,
+            disable_pbar: bool,
             fp16: bool = False,
             bf16: bool = False,
         ) -> None:

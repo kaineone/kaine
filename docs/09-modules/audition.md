@@ -213,7 +213,7 @@ Limits:
 
 ## Emotion classification
 
-`Emotion2vecClassifier` wraps `funasr.AutoModel` for `emotion2vec/emotion2vec_plus_base` (about 90 M parameters). It loads lazily on the first classification and degrades to a neutral stub if `funasr` is missing. Audio is passed as `io.BytesIO`, with an in-memory float32 array as a fallback, so nothing is written to disk. Labels are normalized to the seven-class set.
+`Emotion2vecClassifier` wraps `funasr.AutoModel` for `emotion2vec/emotion2vec_plus_base` (about 90 M parameters). It loads lazily on the first classification and degrades to a neutral stub if `funasr` is missing. Audio is passed as `io.BytesIO`, with an in-memory float32 array as a fallback, so nothing is written to disk. Labels are normalized to the seven-class set. The model is built with `disable_pbar=True`, because funasr otherwise writes a tqdm progress bar to the log on every call.
 
 ## Prosody extraction
 

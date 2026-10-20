@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -93,3 +94,38 @@ async def test_fake_shutdown():
 
 def test_fake_model_id_default():
     assert FakeEmotionClassifier().model_id == "fake/emotion"
+
+
+@pytest.mark.asyncio
+async def test_emotion2vec_disables_funasr_progress_bar(monkeypatch):
+    captured = {}
+
+    class FakeAutoModel:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def generate(self, *, input, granularity, extract_embedding):
+            return [{"labels": ["/happy/"], "scores": [0.9]}]
+
+    monkeypatch.setitem(sys.modules, "funasr", SimpleNamespace(AutoModel=FakeAutoModel))
+    await Emotion2vecClassifier().classify(b"\x00", sample_rate=16000)
+    assert captured["disable_pbar"] is True
+    assert captured["disable_update"] is True
+    assert "model" in captured
+    assert "device" in captured
+    assert "hub" in captured
+
+
+@pytest.mark.asyncio
+async def test_emotion2vec_output_unchanged_with_progress_bar_off(monkeypatch):
+    class FakeAutoModel:
+        def __init__(self, **kwargs):
+            pass
+
+        def generate(self, *, input, granularity, extract_embedding):
+            return [{"labels": ["/happy/"], "scores": [0.9]}]
+
+    monkeypatch.setitem(sys.modules, "funasr", SimpleNamespace(AutoModel=FakeAutoModel))
+    result = await Emotion2vecClassifier().classify(b"\x00", sample_rate=16000)
+    assert result.category == "happy"
+    assert result.confidence == pytest.approx(0.9)
