@@ -1053,6 +1053,7 @@ class Housekeeper:
                         os.unlink(temp_name, dir_fd=dir_fd)
 
                     digest = hashlib.sha256()
+                    copied_size = 0
                     temp_fd = os.open(
                         temp_name,
                         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -1065,6 +1066,7 @@ class Housekeeper:
                             if not chunk:
                                 break
                             digest.update(chunk)
+                            copied_size += len(chunk)
                             view = memoryview(chunk)
                             while view:
                                 written = os.write(temp_fd, view)
@@ -1149,11 +1151,11 @@ class Housekeeper:
                             os.close(dest_fd)
 
                         if (
-                            dest_st.st_size == before.st_size
+                            dest_st.st_size == copied_size
                             and dest_digest == src_digest
                         ):
                             action = "unlink_source"
-                        elif dest_st.st_size < before.st_size:
+                        elif dest_st.st_size < copied_size:
                             prefix_fd = os.open(
                                 temp_name,
                                 os.O_RDONLY | os.O_NOFOLLOW,

@@ -285,7 +285,15 @@ class AwakeFloor:
             max_reserve: int | None = None
             for label in list(self._suspending_volumes):
                 path = self._volumes[label]
-                usage = self._disk_usage(path)
+                try:
+                    usage = self._disk_usage(path)
+                except OSError:
+                    # A volume that cannot be read now keeps the record suspended.
+                    log.warning(
+                        "housekeeping floor: cannot read volume %s for resume", label, exc_info=True
+                    )
+                    all_clear = False
+                    break
                 r = self.reserve(usage.total)
                 target = self.target(usage.total)
                 if usage.free < target:
