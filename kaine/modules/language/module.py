@@ -863,6 +863,8 @@ class Language(BaseModule):
         about_kind: Optional[str] = None,
         about_values: Optional[dict[str, Any]] = None,
     ) -> str:
+        from kaine.modules.language.identity_leak import identity_leak
+
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest accessed coalition.
         snap = snapshot if snapshot is not None else self._latest_snapshot
@@ -1003,6 +1005,11 @@ class Language(BaseModule):
             extra["heard_turn"] = logged_heard_turn
         if cut_reason is not None:
             extra["text_cut"] = {"reason": cut_reason, "generated_chars": len(response.text)}
+        try:
+            if identity_leak(text, ctx.prompt):
+                extra["identity_leak"] = True
+        except Exception:
+            log.exception("identity leak classifier failed; the record is left unmarked")
         try:
             self._intent_log.append(
                 mode=mode,
