@@ -775,8 +775,10 @@ fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
 # The relative fall of the fast against the slow error mean is the error dynamics behind valence.
 slow_time_constant_s = 100.0
-# Learning-progress floor: progress below this is treated as zero.
-learning_progress_floor = 0.05
+# Learning-progress floor lp_0 (paper A.4, Table A1): progress below this is treated as zero.
+# Calibrated for max pooling: a frozen forward model, with the vision noise fitted to the tenth
+# test boot, ends about as rarely relieved as it did under mean pooling at 0.05.
+learning_progress_floor = 0.20
 # Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
 # are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
 # error from the older to the newer half of the last learning_progress_span_s (the whole history

@@ -6,7 +6,7 @@ In the tenth test boot vision ran out of material after about two hours, while a
 
 - The pooled `lp` is the largest windowed learning progress over the sources with a defined value, 0.0 if none. `lp+ = max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` is unchanged in form, and the error dynamics `g` stay a mean.
 - The affect module reads `development.out`. On a `development.hearing_stage` event (published by the stimulus source, #569) whose stage is higher than the last stage it knows, it drops audition's windowed estimator, which restarts from audition's next report. The first stage read is stored without a restart, an equal or lower stage changes nothing, and malformed payloads are ignored. The last known stage persists in the snapshot under `hearing_stage`.
-- `learning_progress_floor` stays 0.05, the Table A1 value. Its calibration was reproduced and re-run under the new pooling (`calibration.md`). The result, 0.15, differs from Table A1 and is left for the paper to settle.
+- `learning_progress_floor` becomes 0.20, the value the paper now gives (A.4, Table A1): its calibration was reproduced and re-run under the new pooling, and with the vision noise fitted to the tenth boot the frozen-control criterion is met at 0.20 (`calibration.md`).
 
 ## Capabilities
 

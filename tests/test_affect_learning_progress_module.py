@@ -104,7 +104,9 @@ async def test_curiosity_builds_with_learning_progress(bus):
     for _ in range(2400):
         tf[0] += 2.0
         tc[0] += 2.0
-        err = 1.0 - 0.4 * tf[0] / 4800.0
+        # A slow exponential fall: too slow for the fast and slow means (g stays
+        # small) but large over the window's halves, so lp clears the 0.20 floor.
+        err = math.exp(-tf[0] / 2400.0)
         await fall._handle_peer_event("vision.out", _vision(err))
         await const._handle_peer_event("vision.out", _vision(1.0))
         await fall._tick()

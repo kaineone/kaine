@@ -43,4 +43,4 @@ At 0.15 audition's own progress in h4 (0.06 to 0.24) is above the floor in 63 pe
 
 ## Status
 
-The recalibrated floor (0.15) differs from Table A1 (0.05), and at that floor max pooling no longer keeps boredom under threshold in the hours the change was meant to help. This change keeps the Table A1 value; the floor is left for the paper to settle.
+The paper adopted 0.20 (predictive-workspace-paper #50, A.4 and Table A1): the frozen-control criterion under max pooling, with the vision proxy refitted to the tenth boot. `learning_progress_floor` is 0.20 in `config/kaine.toml`, in the affect module's default and in the boot wiring's fallback. Against the tenth boot's logged values, that floor relieves boredom less in h3 to h5 than 0.05 would (the table above shows 0.15); the paper accepts that cost so the floor rejects a converged processor's noise.

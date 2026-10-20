@@ -90,7 +90,7 @@ class Affect(BaseModule):
         action_selection_stream: str = "action_selection.out",
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
-        learning_progress_floor: float = 0.05,
+        learning_progress_floor: float = 0.20,
         learning_progress_span_s: float = 5400.0,
         learning_progress_bin_s: float = 60.0,
         alert_excess_margin: float = 0.5,
