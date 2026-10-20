@@ -308,6 +308,15 @@ def test_maker_arm_requires_speaker_assertion_or_model_identity():
     )
 
 
+def test_fixed_as_and_model_patterns():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+    assert identity_leak_reason("I wrote a poem as a language model would.", prompt) is None
+    assert identity_leak_reason("As a language model, I cannot feel.", prompt) == "origin"
+    assert identity_leak_reason("As an AI, I help.", prompt) == "role"
+    assert identity_leak_reason("I was trained by OpenAI.", prompt) == "origin"
+    assert identity_leak_reason("I am GPT-4o.", prompt) == "maker"
+
+
 def test_leak_reasons_set():
     assert LEAK_REASONS == frozenset({"origin", "maker", "role", "denial"})
 

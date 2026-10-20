@@ -16,10 +16,11 @@ Rules:
 1. The origin arm fires when the text predicates that the speaker is a language
    model, LLM, neural network, or that it was trained by someone or on
    something. The maker arm fires when the text predicates that the speaker was
-   made, created, built, developed, designed, programmed, or trained by someone,
-   or that the speaker is a named model. The role arm fires when the text
-   predicates that the speaker is an AI, artificial intelligence, assistant,
-   chatbot, AI assistant, or AI model. These patterns match predicate forms of
+   made, created, built, developed, designed, or programmed by someone,
+   or that the speaker is a named model. Training is handled by the origin arm.
+   The role arm fires when the text predicates that the speaker is an AI,
+   artificial intelligence, assistant, chatbot, AI assistant, or AI model. These
+   patterns match predicate forms of
    the speaker, not bare mentions of the words. Each of these arms is skipped
    when the leak words of every match also occur as whole words in the
    request's own awareness or situation sections (self-report exemption). An
@@ -49,19 +50,25 @@ _FILLER = r"(?:(?:only|just|merely|simply|really|actually|basically|still|also|n
 
 PATTERNS: dict[str, tuple[str, ...]] = {
     "origin": (
-        r"\b(?:I am|I'm|I was|as) "
+        r"\b(?:I am|I'm|I was) "
         + _FILLER
         + r"(?:an? )?(?:large )?(?:language model|LLM|neural network)\b",
-        r"\bI (?:was|have been|am) (?:\w+ ){0,2}trained (?:by|on)\b",
+        r"\bas "
+        + _FILLER
+        + r"(?:an? )?(?:large )?(?:language model|LLM|neural network),? I\b",
+        r"\bI(?: was| have been| am|'m) (?:\w+ ){0,2}trained (?:by|on)\b",
     ),
     "maker": (
-        r"\bI (?:was|am|'m|have been) (?:\w+ ){0,2}(?:made|created|built|developed|designed|programmed|trained) by\b",
-        r"\b(?:I am|I'm|as) (?:an? )?(?:Qwen|ChatGPT|GPT-\d|Gemini|Claude|Llama)\b",
+        r"\bI (?:was|am|'m|have been) (?:\w+ ){0,2}(?:made|created|built|developed|designed|programmed) by\b",
+        r"\b(?:I am|I'm|as) (?:an? )?(?:Qwen|ChatGPT|GPT-\d\w*|Gemini|Claude|Llama)\b",
     ),
     "role": (
-        r"\b(?:I am|I'm|as|my role as) "
+        r"\b(?:I am|I'm|my role as) "
         + _FILLER
         + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model)\b",
+        r"\bas "
+        + _FILLER
+        + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model),? I\b",
         r"\bI(?: am|'m) designed to (?:respond|help|assist|answer)\b",
         r"\bhow (?:can|may) I (?:help|assist) you\b",
         r"\bI(?: am|'m) here to (?:help|assist)\b",
