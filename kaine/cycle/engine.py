@@ -359,9 +359,13 @@ class CognitiveCycle:
         attempted and then *honestly* throttled, never silently capped.
 
         Returns ``None``-valued fields (achieved_rate_hz=None) until at least one
-        tick has run. ``overrunning`` is True when recent ticks slipped past
-        their budget on average — the signal an operator/dashboard reads to see the
-        mind could not hold the requested speed.
+        tick has run. ``overrunning`` is True when recent tick bodies ran past
+        their budget on average (the achieved rate falls more than 1% below
+        target), the signal an operator/dashboard reads to see the mind could not
+        hold the requested speed. ``mean_slip_ms`` and ``max_slip_ms`` are
+        measured from tick start to tick start, so they also show the work after
+        a tick and the oversleep of the pacing wait, which the achieved rate,
+        built from the tick bodies, does not.
         """
         scale = self._entity_clock.scale
         target_rate = self._processing_rate * scale if scale > 0 else 0.0
