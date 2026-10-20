@@ -3,9 +3,10 @@
 """Sleep-time ignition audit: pure functions over event lists.
 
 Change ``sleep-ignition-audit``. Everything here is a PURE classification over
-lists of already-collected event records: no bus, no I/O, no imports beyond
-the stdlib/dataclasses, so the audit core is trivially testable and the sleep module
-wiring stays thin.
+lists of already-collected event records: no bus, no I/O, and no imports
+beyond the stdlib and the shared external-input type list
+(``kaine.faithful.external_input``), so the audit core is trivially testable
+and the sleep module wiring stays thin.
 
 Realization-to-intent linking uses the language module's intent log. A
 realization payload from ``language.external`` or ``language.internal`` carries
