@@ -19,4 +19,4 @@ The welfare record counted a deficit's crossings only when they ended, by the en
 ## Impact
 
 - `kaine/modules/affect/drives.py`, `kaine/modules/affect/module.py`, `kaine/evaluation/observers/welfare_observer.py`, `kaine/evaluation/observers/research_event_observer.py`, `docs/09-modules/affect.md`, `docs/17-research-data/README.md`, tests.
-- Behaviour: none for the entity. Two keys more in `affect.state` and the snapshot, two keys more per deficit in the welfare record.
+- Behaviour: none for the entity. Two keys more in `affect.state`, one (`drive_reset_ends`) in the snapshot (the open flags come from the persisted crossing latches), and two keys more per deficit in the welfare record.
