@@ -158,7 +158,7 @@ _INTEREST_DRIVES = ("curiosity",)
 class AffectWelfareTally:
     """Accumulate content-free affect welfare measures for one ``affect_welfare`` record.
 
-    Tracks three paper-6.2 quantities and one paper-A.4 quantity from the affect
+    Tracks five paper-6.2 quantities and one paper-A.4 quantity from the affect
     module stream:
 
     1. The share of awake time (measured between ``affect.state`` timestamps,
@@ -176,7 +176,11 @@ class AffectWelfareTally:
        spends at or above its threshold (from ``drive_above`` of the event that
        begins each interval), the time without relief, since passivity is the
        default response to prolonged aversive events (Maier and Seligman 2016).
-    4. Curiosity's share of awake time at or above its threshold, an interest
+    4. Per drive in the three-deficit table, the crossings ended by the sleep
+       reset (increases of ``drive_reset_ends``, counted like ``drive_ends``).
+    5. Per drive in the three-deficit table, whether a crossing is still open
+       at the record (the latest ``drive_open`` flag, 1 or 0, None before any).
+    6. Curiosity's share of awake time at or above its threshold, an interest
        share, since curiosity is heterostatic interest raised by learning
        progress (paper A.4; Oudeyer and Kaplan 2007).
 
@@ -199,6 +203,15 @@ class AffectWelfareTally:
         }
         self._last_ends: dict[str, tuple[int, int] | None] = {
             drive: None for drive in _WELFARE_DRIVES
+        }
+        self._reset_ends: dict[str, int] = {
+            drive: 0 for drive in _DEFICIT_DRIVES
+        }
+        self._last_reset_ends: dict[str, int | None] = {
+            drive: None for drive in _DEFICIT_DRIVES
+        }
+        self._open: dict[str, bool | None] = {
+            drive: None for drive in _DEFICIT_DRIVES
         }
         self._drive_seconds: dict[str, float] = {
             drive: 0.0 for drive in _WELFARE_DRIVES
@@ -246,6 +259,8 @@ class AffectWelfareTally:
         valence: float,
         drive_above: object = None,
         drive_ends: object = None,
+        drive_reset_ends: object = None,
+        drive_open: object = None,
     ) -> None:
         if not math.isfinite(ts) or not math.isfinite(valence):
             return
@@ -297,6 +312,28 @@ class AffectWelfareTally:
                                 self._last_ends[drive] = (own_raw, other_raw)
                             else:
                                 self._last_ends[drive] = (own_raw, other_raw)
+        if isinstance(drive_reset_ends, dict):
+            for drive in _DEFICIT_DRIVES:
+                value = drive_reset_ends.get(drive)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    last = self._last_reset_ends[drive]
+                    if last is None:
+                        self._last_reset_ends[drive] = value
+                    else:
+                        if value >= last:
+                            if value > last:
+                                self._reset_ends[drive] += value - last
+                                self._changed = True
+                            self._last_reset_ends[drive] = value
+                        else:
+                            self._last_reset_ends[drive] = value
+        if isinstance(drive_open, dict):
+            for drive in _DEFICIT_DRIVES:
+                v = drive_open.get(drive)
+                if isinstance(v, bool):
+                    if self._open[drive] != v:
+                        self._changed = True
+                    self._open[drive] = v
         self._current = (float(ts), float(valence), above)
         self._prune_sleep_intervals()
 
@@ -304,10 +341,10 @@ class AffectWelfareTally:
     def changed(self) -> bool:
         return self._changed
 
-    def snapshot(self) -> dict[str, float | None]:
+    def snapshot(self) -> dict[str, float | int | None]:
         """Return a content-free snapshot and clear the ``changed`` flag."""
         self._changed = False
-        result: dict[str, float | None] = {
+        result: dict[str, float | int | None] = {
             "awake_seconds": self._awake_seconds,
             "negative_valence_bar": self._negative_valence_bar,
         }
@@ -338,6 +375,13 @@ class AffectWelfareTally:
                 )
             else:
                 result[f"{drive}_deprivation_share"] = None
+            result[f"{drive}_sleep_reset_ends"] = self._reset_ends[drive]
+            if self._open[drive] is True:
+                result[f"{drive}_open_crossings"] = 1
+            elif self._open[drive] is False:
+                result[f"{drive}_open_crossings"] = 0
+            else:
+                result[f"{drive}_open_crossings"] = None
 
         for drive in _INTEREST_DRIVES:
             drive_seconds = self._drive_seconds[drive]
@@ -906,6 +950,8 @@ class WelfareObserver(StreamSubscriberObserver):
                     float(raw_valence),
                     payload.get("drive_above"),
                     payload.get("drive_ends"),
+                    payload.get("drive_reset_ends"),
+                    payload.get("drive_open"),
                 )
             return
 

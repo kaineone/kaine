@@ -7,6 +7,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | persona-v6 | 5/5 (100%) | Replay the tenth boot's own organ requests with broader AI and echo classifiers and per-case seeds under a decision rule fixed before the run; no candidate won (paper 3.5). |
+| developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
+| welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |
 | identity-leak-marker | 5/5 (100%) | Mark identity leakage (the organ asserting its training origin, maker or assistant role, or denying a state its own request reports) in the intent log and keep marked records out of voice-alignment pairs; the entity's text is never changed (paper 3.5). |
 | hearing-band-12h | 4/4 (100%) | Set the hearing band's span to 12 awake hours (a step every 3 h) and correct the colour ramp's comment; A.7's entrainment validation re-run at the new span holds (paper A.7, Table A1). |
 | replay-guard-test-wait | 4/4 (100%) | Make the effectors replay-guard tests wait for the state they assert instead of sleeping a fixed time, which failed under CI load. |
@@ -72,6 +74,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 46 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 48 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

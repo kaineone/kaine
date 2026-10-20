@@ -162,6 +162,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system asks to delay consolidation. |
 | `per_defer_seconds` | float | `60.0` | Deferral granted per request. |
 | `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a planning-requested rest. Both the cycle's planning module proposal source and the sleep module's own `too_soon` check use it. Must be greater than 0. |
+| `developmental_rest_s` | float | `1260.0` | Length in entity seconds of the developmental rest that a spent stimulus brings (paper 3.5, Table A1 `Delta_rest`), the mean length of a quiescent episode in mature fetuses (Pillai and James 1990). Must be greater than 0. |
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
