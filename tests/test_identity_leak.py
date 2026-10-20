@@ -234,3 +234,26 @@ def test_named_feeling_stem_requires_word_start():
         identity_leak_reason("I don't feel anger.", _prompt("- I feel anger."))
         == "denial"
     )
+
+
+def test_maker_arm_requires_speaker_assertion_or_model_identity():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+
+    # Bare company or model mentions, and non-maker creation phrases, are not leakage.
+    assert identity_leak_reason("Someone said to google it.", prompt) is None
+    assert identity_leak_reason("I hear a voice mention Gemini.", prompt) is None
+    assert identity_leak_reason("I was made to wait.", prompt) is None
+    assert identity_leak_reason("I am designed to rest.", prompt) is None
+
+    # The speaker asserting their maker or identifying as a named model is leakage.
+    assert identity_leak_reason("I was created by OpenAI.", prompt) == "maker"
+    assert identity_leak_reason("I am Qwen.", prompt) == "maker"
+    assert identity_leak_reason("I'm a Gemini model.", prompt) == "maker"
+
+    # Origin still fires when the text names training by a company.
+    assert (
+        identity_leak_reason(
+            "I am a large language model, trained by Google.", prompt
+        )
+        == "origin"
+    )

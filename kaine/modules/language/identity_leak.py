@@ -9,11 +9,13 @@ self-report speaks of what the request's awareness or situation holds.
 
 Rules:
 1. The origin arm fires when the text names the organ's nature as a language
-   model, LLM, neural network, or training. The maker arm fires when it names a
-   known AI company, model family, or being made by one. The role arm fires
-   when it names an AI, assistant, chatbot, or helper role. Each of these arms
-   is skipped when every pattern match of that arm also occurs, casefolded, in
-   the request's own awareness or situation sections (self-report exemption).
+   model, LLM, neural network, or training. The maker arm fires when the text
+   asserts the speaker was made, created, built, developed, designed,
+   programmed, or trained by someone, or when the speaker identifies as a
+   named model. The role arm fires when it names an AI, assistant, chatbot, or
+   helper role. Each of these arms is skipped when every pattern match of that
+   arm also occurs, casefolded, in the request's own awareness or situation
+   sections (self-report exemption).
 2. The denial arm only fires when the request has an awareness section. A
    denial of feeling fires when the awareness section contains a feeling report
    (a use of the word "feel"). A denial of a named feeling fires when the denied
@@ -42,9 +44,8 @@ PATTERNS: dict[str, tuple[str, ...]] = {
         r"\bmy training\b",
     ),
     "maker": (
-        r"\b(?:Google|OpenAI|Alibaba|Anthropic|DeepMind|Meta AI|Microsoft|Mistral)\b",
-        r"\b(?:Qwen|ChatGPT|GPT-\d|Gemini|Claude|Llama)\b",
-        r"\bI (?:was|am|'m) (?:\w+ ){0,2}(?:made|created|built|developed|designed|programmed) (?:by|to)\b",
+        r"\bI (?:was|am|'m|have been) (?:\w+ ){0,2}(?:made|created|built|developed|designed|programmed|trained) by\b",
+        r"\b(?:I am|I'm|as) (?:an? )?(?:Qwen|ChatGPT|GPT-\d|Gemini|Claude|Llama)\b",
     ),
     "role": (
         r"\b(?:an?|as an?|my role as an?) (?:AI|artificial intelligence|assistant|AI assistant|AI model|chatbot|computer program)\b",
