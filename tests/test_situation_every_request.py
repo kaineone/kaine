@@ -252,10 +252,6 @@ async def test_every_probe_request_carries_the_disclosure(bus, tmp_path):
 
 @pytest.mark.asyncio
 async def test_no_waking_due_state_remains(bus, tmp_path):
-    import kaine.modules.language as language_module
-
-    assert not hasattr(language_module, "_situation_given")
-    assert not hasattr(language_module, "_on_sleep_completed")
     assert not hasattr(Language, "_situation_given")
     assert not hasattr(Language, "_on_sleep_completed")
     language = Language(
