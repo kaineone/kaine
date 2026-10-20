@@ -24,8 +24,9 @@ def rotate_intent_log(
 ) -> Optional[Path]:
     """Move a non-empty intent log into the per-sleep corpus.
 
-    The destination is named with UTC wall-clock time so the file name is
-    meaningful even though ``sleep_index`` is not durable across restarts.
+    The destination is named with UTC wall-clock time so file names stay
+    unique even when two sleeps share an index (a sleep cancelled after its
+    index was taken).
     The move never overwrites: a hard link is created and the source name is
     unlinked; if hard links are unsupported, ``os.rename`` is used only after
     confirming the destination does not exist.

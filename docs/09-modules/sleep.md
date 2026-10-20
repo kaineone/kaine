@@ -128,7 +128,9 @@ At the start of phase 4, on every sleep, the pair builder scans the intent-expre
 | `usable_pairs` | Records with both fields present and different |
 | `divergence_rate` | `usable_pairs / records_scanned` |
 | `divergence_magnitude` | Mean cosine distance over the kept pairs with the shared semantic embedder (`kaine.text_embedding`); null when no embedder is available |
-| `sleep_index` | Number of this sleep since boot |
+| `sleep_index` | Number of this sleep in the entity's life |
+
+The sleep index also names the corpus files (`sleep-<UTC time>-<index>.jsonl`) and tags `sleep.ignition_audit`. It survives a restart: the module saves it in its resume-checkpoint state as `sleep_index`, and at start it also reads the cumulative `sleep_count` of `state/lifecycle/stage.json`, keeping the larger value.
 
 The metric is computed whether or not training runs and is persisted to `state/sleep/consolidation_divergence.json`. A scan that fails or finds no records keeps the earlier record in place (`record_kept: true`). The welfare-gated decommission check described in [Preservation and the safety net](../11-preservation.md) reads it against `consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold`.
 
