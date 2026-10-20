@@ -1680,10 +1680,14 @@ class Sleep(BaseModule):
                 log.exception("sleep: sleep pipeline aborted")
             else:
                 log.warning("sleep: sleep pipeline cancelled (%s)", type(exc).__name__)
+            payload: dict[str, Any] = {"aborted": True, "reason": type(exc).__name__}
+            if trigger == "developmental_rest":
+                payload["trigger"] = "developmental_rest"
+                payload["rest_seconds"] = self._developmental_rest_s
             publish = asyncio.ensure_future(
                 self.publish(
                     "sleep.sleep.completed",
-                    {"aborted": True, "reason": type(exc).__name__},
+                    payload,
                     salience=self._baseline_salience,
                 )
             )

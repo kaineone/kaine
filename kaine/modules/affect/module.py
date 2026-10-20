@@ -950,13 +950,13 @@ class Affect(BaseModule):
         self._check_response_windows(now)
         await self._publish_goal_events(payloads)
 
-        for request in self._rest_requests:
+        requests, self._rest_requests = self._rest_requests, []
+        for request in requests:
             await self.publish(
                 "affect.rest_request",
                 request,
                 salience=self._baseline_salience,
             )
-        self._rest_requests.clear()
 
         # Sustained concern (paper A.4): an active goal's drive event recurs at the drive's
         # value on own updates until a broadcast accesses it. It is not an alert, and its
