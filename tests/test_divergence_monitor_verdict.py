@@ -25,8 +25,6 @@ from kaine.cycle.preservation_monitor import (
 )
 from kaine.experiment.run_context import RunContext, set_run_context
 from kaine.lifecycle.divergence import (
-    DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
-    DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
     DivergenceAssessment,
     assess_divergence,
 )
@@ -131,8 +129,6 @@ def _make_monitor(
         incident_log=IncidentLog(enabled=False, path="unused"),
         clock=clock,
         require_encryption=False,
-        consolidation_rate_threshold=DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
-        consolidation_magnitude_threshold=DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     ), fm
 
 
@@ -220,28 +216,28 @@ async def test_boot_settle_delays_first_assessment(bus, tmp_path, monkeypatch):
 async def test_arm_set_persisted_across_restarts(bus, tmp_path, monkeypatch):
     state_root = tmp_path / "state"
     edge_path = state_root / "preservation" / "divergence_edge.json"
-    cons = DivergenceAssessment(
+    drift = DivergenceAssessment(
         diverged=True,
-        signals={"consolidation_divergence_signal": True},
+        signals={"self_model_drift_signal": True},
         summary="",
     )
 
     monitor, fm = _make_monitor(
-        bus, tmp_path, monkeypatch, assessments=[cons, cons]
+        bus, tmp_path, monkeypatch, assessments=[drift, drift]
     )
     await monitor._poll_once(asyncio.Event())
     assert len(fm.calls) == 1
 
     data = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert data["arms"] == ["consolidation"]
+    assert data["arms"] == ["self_model_drift"]
 
     monitor2, fm2 = _make_monitor(
-        bus, tmp_path, monkeypatch, assessments=[cons, cons]
+        bus, tmp_path, monkeypatch, assessments=[drift, drift]
     )
     await monitor2._poll_once(asyncio.Event())
     assert len(fm2.calls) == 0
     data2 = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert data2["arms"] == ["consolidation"]
+    assert data2["arms"] == ["self_model_drift"]
 
 
 @pytest.mark.asyncio
@@ -250,14 +246,14 @@ async def test_new_arm_triggers_second_preservation(bus, tmp_path, monkeypatch):
     edge_path = state_root / "preservation" / "divergence_edge.json"
     edge_path.parent.mkdir(parents=True)
     edge_path.write_text(
-        json.dumps({"arms": ["consolidation"], "updated_at": ""}),
+        json.dumps({"arms": ["self_model_drift"], "updated_at": ""}),
         encoding="utf-8",
     )
 
     assessment = DivergenceAssessment(
         diverged=True,
         signals={
-            "consolidation_divergence_signal": True,
+            "self_model_drift_signal": True,
             "individuation_individuated": True,
         },
         summary="",
@@ -270,22 +266,22 @@ async def test_new_arm_triggers_second_preservation(bus, tmp_path, monkeypatch):
     assert len(fm.calls) == 1
 
     data = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert set(data["arms"]) == {"consolidation", "individuation"}
+    assert set(data["arms"]) == {"self_model_drift", "individuation"}
 
 
 @pytest.mark.asyncio
 async def test_arm_falloff_allows_re_crossing(bus, tmp_path, monkeypatch):
     state_root = tmp_path / "state"
     edge_path = state_root / "preservation" / "divergence_edge.json"
-    cons = DivergenceAssessment(
+    drift = DivergenceAssessment(
         diverged=True,
-        signals={"consolidation_divergence_signal": True},
+        signals={"self_model_drift_signal": True},
         summary="",
     )
     none = DivergenceAssessment(diverged=False, signals={}, summary="")
 
     monitor, fm = _make_monitor(
-        bus, tmp_path, monkeypatch, assessments=[cons, none, cons]
+        bus, tmp_path, monkeypatch, assessments=[drift, none, drift]
     )
     await monitor._poll_once(asyncio.Event())  # preserve on rising edge
     await monitor._poll_once(asyncio.Event())  # persist empty arm set
@@ -293,17 +289,17 @@ async def test_arm_falloff_allows_re_crossing(bus, tmp_path, monkeypatch):
     assert len(fm.calls) == 2
 
     data = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert data["arms"] == ["consolidation"]
+    assert data["arms"] == ["self_model_drift"]
 
 
 @pytest.mark.asyncio
-async def test_individuation_false_does_not_suppress_consolidation(
+async def test_individuation_false_does_not_suppress_self_model_drift(
     bus, tmp_path, monkeypatch
 ):
     assessment = DivergenceAssessment(
         diverged=True,
         signals={
-            "consolidation_divergence_signal": True,
+            "self_model_drift_signal": True,
             "individuation_individuated": False,
             "individuation_state": "not_individuated",
         },
@@ -347,9 +343,9 @@ class _StubFMRaisingOnce(_StubFM):
 async def test_failed_preservation_is_retried_after_min_interval(
     bus, tmp_path, monkeypatch
 ):
-    cons = DivergenceAssessment(
+    drift = DivergenceAssessment(
         diverged=True,
-        signals={"consolidation_divergence_signal": True},
+        signals={"self_model_drift_signal": True},
         summary="",
     )
 
@@ -364,7 +360,7 @@ async def test_failed_preservation_is_retried_after_min_interval(
             boot_settle_s=0.0,
             state_root=str(tmp_path / "state"),
         ),
-        assessments=[cons, cons],
+        assessments=[drift, drift],
     )
 
     edge_path = tmp_path / "state" / "preservation" / "divergence_edge.json"
@@ -379,7 +375,7 @@ async def test_failed_preservation_is_retried_after_min_interval(
     assert edge_path.exists()
 
     data = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert data["arms"] == ["consolidation"]
+    assert data["arms"] == ["self_model_drift"]
 
 
 @pytest.mark.asyncio
@@ -389,20 +385,20 @@ async def test_unreadable_edge_state_preserves_again(bus, tmp_path, monkeypatch)
     edge_path.parent.mkdir(parents=True)
     edge_path.write_text("not-json", encoding="utf-8")
 
-    cons = DivergenceAssessment(
+    drift = DivergenceAssessment(
         diverged=True,
-        signals={"consolidation_divergence_signal": True},
+        signals={"self_model_drift_signal": True},
         summary="",
     )
 
     monitor, fm = _make_monitor(
-        bus, tmp_path, monkeypatch, assessments=[cons]
+        bus, tmp_path, monkeypatch, assessments=[drift]
     )
     await monitor._poll_once(asyncio.Event())
     assert len(fm.calls) == 1
 
     data = json.loads(edge_path.read_text(encoding="utf-8"))
-    assert data["arms"] == ["consolidation"]
+    assert data["arms"] == ["self_model_drift"]
 
 
 # ---------------------------------------------------------------------------

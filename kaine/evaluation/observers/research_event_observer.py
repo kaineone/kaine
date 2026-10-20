@@ -317,21 +317,6 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "memory_nodes_pruned",
         }
     ),
-    # Organ-level consolidation divergence (content-free aggregates only):
-    # breadth (rate) + depth (magnitude) of how the entity's conditioned output
-    # diverged from its bare language organ this sleep. NO utterance text — the
-    # prompt/chosen/rejected stay in the deny-patterned intent log. `embedder`
-    # is the embedder-kind disclosure tag (or null when magnitude is null).
-    "sleep.consolidation_divergence": frozenset(
-        {
-            "records_scanned",
-            "usable_pairs",
-            "divergence_rate",
-            "divergence_magnitude",
-            "embedder",
-            "sleep_index",
-        }
-    ),
     # sleep-ignition-audit: content-free numeric allowlist only. The entry_id
     # lists, event types and salience values ride the sleep_snapshots payload
     # (via the PhaseResult metadata on sleep.sleep.completed); the research

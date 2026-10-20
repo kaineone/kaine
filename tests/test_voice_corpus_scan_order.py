@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import kaine.modules.sleep.module as sleep_module
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.research.submission import DENY_PATTERNS
@@ -19,7 +20,6 @@ from tests.test_voice_corpus_protection import (
     _plaintext_encryptor,  # noqa: F401
     _voice_alignment_opt_in,  # noqa: F401
     intent_record_paths,
-    read_consolidation_divergence,
 )
 
 
@@ -129,8 +129,10 @@ def test_within_single_file_last_lines_are_scanned_first(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
-async def test_sleep_emission_uses_intent_record_paths(bus, tmp_path: Path) -> None:
-    """The divergence emission reaches corpus files when the live log is absent."""
+async def test_voice_alignment_uses_intent_record_paths(bus, tmp_path: Path, monkeypatch) -> None:
+    """Voice alignment passes rotated-corpus paths to the pair builder."""
+    monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
+    monkeypatch.setattr(sleep_module, "TRAINING_SOURCES", frozenset({"none"}))
     h = _make_sleep(bus, tmp_path, intent_records=None)
     corpus_dir = h._voice_config.intent_log_path.parent / "intent_log"
     corpus_dir.mkdir()
@@ -141,13 +143,20 @@ async def test_sleep_emission_uses_intent_record_paths(bus, tmp_path: Path) -> N
     )
     assert not h._voice_config.intent_log_path.exists()
 
-    divergence_path = tmp_path / "consolidation_divergence.json"
-    h._consolidation_divergence_path = divergence_path
+    calls = []
+    original = h._builder.build_with_counts
+    def wrapper(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+    h._builder.build_with_counts = wrapper
 
-    await h._emit_consolidation_divergence()
-    rec = read_consolidation_divergence(divergence_path)
-    assert rec is not None
-    assert rec["records_scanned"] > 0
+    await h._run_voice_alignment()
+
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    paths = args[0]
+    assert paths == intent_record_paths(h._voice_config.intent_log_path, corpus_dir)
+    assert kwargs.get("max_pairs") == h._voice_config.max_samples
 
 
 def test_intent_log_is_a_research_submission_deny_pattern() -> None:

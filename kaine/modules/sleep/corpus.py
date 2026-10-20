@@ -94,7 +94,7 @@ def rotate_intent_log(
 
 
 def intent_record_paths(log_path: Path, corpus_dir: Path) -> list[Path]:
-    """Return the chronological evidence stream for consolidation divergence.
+    """Return the chronological intent-record files the voice-alignment pair builder scans.
 
     Corpus files named ``sleep-*.jsonl`` are returned oldest first, sorted by
     modification time (``st_mtime_ns``) then name. The live ``log_path`` is
