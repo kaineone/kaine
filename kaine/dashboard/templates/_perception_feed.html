@@ -48,15 +48,15 @@
       <h3>stimulus source</h3>
       {% set ss = pf.stimulus_source or {} %}
       <dl class="kv">
-        <dt>seed</dt><dd>{{ d.seed if d.seed is not none else "—" }}</dd>
+        <dt>seed</dt><dd>{{ d.seed if d.seed is not none else "n/a" }}</dd>
         <dt>heartbeat</dt>
-        <dd>{% if ss.get("heartbeat_bpm") is not none %}{{ ss.heartbeat_bpm }} bpm base, drift {{ ss.heartbeat_drift }}{% else %}—{% endif %}</dd>
+        <dd>{% if ss.get("heartbeat_bpm") is not none %}{{ ss.heartbeat_bpm }} bpm base, drift {{ ss.heartbeat_drift }}{% else %}n/a{% endif %}</dd>
         <dt>colour saturation</dt>
-        <dd>{% if ss.get("colour_ramp_seconds") is not none %}ramp time constant {{ ss.colour_ramp_seconds }} s, hue gain {{ ss.colour_hue_gain }}{% else %}—{% endif %}</dd>
+        <dd>{% if ss.get("colour_ramp_seconds") is not none %}ramp time constant {{ ss.colour_ramp_seconds }} s, hue gain {{ ss.colour_hue_gain }}{% else %}n/a{% endif %}</dd>
         <dt>maternal voice</dt>
-        <dd>{% if ss.get("maternal_voice_enabled") is true %}on{% elif ss.get("maternal_voice_enabled") is false %}off{% else %}—{% endif %}</dd>
+        <dd>{% if ss.get("maternal_voice_enabled") is true %}on{% elif ss.get("maternal_voice_enabled") is false %}off{% else %}n/a{% endif %}</dd>
         <dt>hearing band</dt>
-        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}—{% else %}widens over {{ ss.hearing_maturation_seconds }} s · now <span id="feed-hearing-stage">—</span>{% endif %}</dd>
+        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}n/a{% else %}widens over {{ ss.hearing_maturation_seconds }} s · now <span id="feed-hearing-stage">n/a</span>{% endif %}</dd>
       </dl>
     {% endif %}
   {% else %}
