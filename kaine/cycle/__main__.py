@@ -914,6 +914,15 @@ async def _write_runtime_state(
             payload["kaine_version"] = ctx.kaine_version
     except Exception:
         log.debug("could not read run context for runtime.json", exc_info=True)
+    # Backend load failures are recorded in THIS process; the dashboard runs in
+    # another process (its own container when deployed), so it reads the cycle's
+    # records from here. Content-free: module, backend, fallback, reason, time.
+    try:
+        from kaine.backend_state import backend_failures_snapshot
+
+        payload["backend_failures"] = backend_failures_snapshot()
+    except Exception:
+        log.debug("could not read backend failures for runtime.json", exc_info=True)
     # The atomic write+replace is blocking disk I/O on a once-a-second loop;
     # run it off the event loop so it never stalls the cognitive cycle.
     await asyncio.to_thread(write_json_atomic, runtime_path, payload)

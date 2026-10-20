@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -667,3 +668,85 @@ def module_states(
             row["capturing"] = bool(video_active)
         rows.append(row)
     return rows
+
+
+_BACKEND_STR_MAX = 80
+_BACKEND_REASON_MAX = 200
+
+
+def _backend_name(value: Any) -> str | None:
+    return value[:_BACKEND_STR_MAX] if isinstance(value, str) else None
+
+
+def _clean_backend_failure(raw: Any) -> dict[str, Any] | None:
+    """Keep only the allowlisted, length-bounded fields of one failure record."""
+    if not isinstance(raw, dict):
+        return None
+    ts = raw.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or not math.isfinite(ts):
+        ts = None
+    reason = raw.get("reason")
+    return {
+        "module": _backend_name(raw.get("module")),
+        "backend": _backend_name(raw.get("backend")),
+        "fallback": _backend_name(raw.get("fallback")),
+        "reason": reason[:_BACKEND_REASON_MAX] if isinstance(reason, str) else "",
+        "ts": ts,
+    }
+
+
+def backends_block(cycle_runtime_path: Path) -> dict[str, Any]:
+    """Runtime-backend load failures, as reported by the cycle process.
+
+    The cycle records failures in its own process and writes them to
+    ``runtime.json`` as ``backend_failures``. ``source`` says where the answer
+    comes from: ``cycle`` (the file carries the list), ``cycle_not_running``
+    (no runtime file) or ``not_reported`` (unreadable file or no such key, e.g. a
+    cycle from before the field existed). Failures recorded in this (dashboard)
+    process are added. ``ok`` is False when any failure is listed, True when the
+    cycle reported an empty list, otherwise None (not known). Never raises.
+    """
+    source = "not_reported"
+    listed: list[Any] = []
+    try:
+        if not Path(cycle_runtime_path).exists():
+            source = "cycle_not_running"
+        else:
+            data = json.loads(Path(cycle_runtime_path).read_text())
+            if isinstance(data, dict) and isinstance(data.get("backend_failures"), list):
+                source = "cycle"
+                listed = data["backend_failures"]
+    except Exception:
+        log.debug("could not read backend failures from runtime.json", exc_info=True)
+        source = "not_reported"
+        listed = []
+    failures: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+
+    def _add(raw: Any) -> None:
+        item = _clean_backend_failure(raw)
+        if item is None:
+            return
+        key = (item["module"], item["backend"], item["fallback"], item["reason"])
+        if key in seen:
+            return
+        seen.add(key)
+        failures.append(item)
+
+    for raw in listed:
+        _add(raw)
+    try:
+        from kaine.backend_state import backend_failures_snapshot
+
+        for raw in backend_failures_snapshot():
+            _add(raw)
+    except Exception:
+        log.debug("could not read in-process backend failures", exc_info=True)
+    ok: bool | None
+    if failures:
+        ok = False
+    elif source == "cycle":
+        ok = True
+    else:
+        ok = None
+    return {"ok": ok, "source": source, "failures": failures}

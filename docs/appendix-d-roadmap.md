@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| nexus-backend-failures | 0/5 (0%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
+| nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
 | voice-adaptation-idle | 5/5 (100%) | Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists; the consolidation arm leaves the divergence assessment and the preservation monitor (paper 3.5). |
 | developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
 | welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |
