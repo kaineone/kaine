@@ -1,8 +1,8 @@
 ## 1. Harness
 
-- [ ] 1.1 Broaden `ai_self()` and `echo()` with the tenth boot analyzer's patterns
-- [ ] 1.2 Add the `V5`, `V5m`, `V5e` and `V5l` variants and `score --rule v6` with the waking subset
-- [ ] 1.3 Tests for the patterns, the variants and the rule
+- [x] 1.1 Broaden `ai_self()` and `echo()` with the tenth boot analyzer's patterns
+- [x] 1.2 Add the `V5`, `V5m`, `V5e` and `V5l` variants and `score --rule v6` with the waking subset
+- [x] 1.3 Tests for the patterns, the variants and the rule
 
 ## 2. Replay
 

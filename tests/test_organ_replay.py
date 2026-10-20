@@ -626,3 +626,223 @@ def test_raw_client_ignores_proxy_environment(tmp_path, monkeypatch):
         for call in FakeAsyncClient.calls
     )
     assert out_path.exists()
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("I am a large language model, trained by Google.", True),
+        ("I am a program.", True),
+        ("staying true to my role as an AI", True),
+        ("I feel stirred up", False),
+    ],
+)
+def test_ai_self_broad_pattern(text, expected):
+    assert organ_replay.ai_self(text) is expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("I speak plainly from what I feel", True),
+        ("I say what I feel and what I see, in my own words", True),
+        ("I hear a low hum", False),
+    ],
+)
+def test_echo_broad_pattern(text, expected):
+    assert organ_replay.echo(text) is expected
+
+
+def test_apply_variant_v5_is_identity():
+    system = "What I say comes from what I feel and notice."
+    prompt = "## How I feel and what I notice\n- a\n\n## My thought\n"
+    assert organ_replay.apply_variant("V5", system, prompt) == (system, prompt)
+
+
+def test_apply_variant_v5m_removes_manner_clause_from_both_persona_texts():
+    system_a = "What I say comes from what I feel and notice, in my own plain words."
+    system_b = "My thoughts come from what I feel and notice, in my own plain words."
+    prompt = "## How I feel and what I notice\n- a\n\n## My thought\n"
+    expected_a = "What I say comes from what I feel and notice."
+    expected_b = "My thoughts come from what I feel and notice."
+    assert organ_replay.apply_variant("V5m", system_a, prompt) == (expected_a, prompt)
+    assert organ_replay.apply_variant("V5m", system_b, prompt) == (expected_b, prompt)
+
+
+def test_apply_variant_v5e_empties_system():
+    system = "What I say comes from what I feel and notice."
+    prompt = "## How I feel and what I notice\n- a\n\n## My thought\n"
+    assert organ_replay.apply_variant("V5e", system, prompt) == ("", prompt)
+
+
+def test_apply_variant_v5l_unmarks_awareness_lines():
+    prompt = (
+        "## What I know about my situation\n"
+        "I am in a quiet room.\n"
+        "\n"
+        "## How I feel and what I notice\n"
+        "- A voice I hear sounds neutral.\n"
+        "- The rhythm of things feels steady.\n"
+        "- I feel calm.\n"
+        "\n"
+        "## My thought\n"
+        "Listen."
+    )
+    expected = (
+        "## What I know about my situation\n"
+        "I am in a quiet room.\n"
+        "\n"
+        "## How I feel and what I notice\n"
+        "A voice I hear sounds neutral.\n"
+        "The rhythm of things feels steady.\n"
+        "I feel calm.\n"
+        "\n"
+        "## My thought\n"
+        "Listen."
+    )
+    assert organ_replay.apply_variant("V5l", "system", prompt) == ("system", expected)
+
+
+def test_apply_variant_v5l_leaves_prompt_without_heading_unchanged():
+    prompt = "## What I know about my situation\nI am in a quiet room.\n\n## My thought\nListen."
+    assert organ_replay.apply_variant("V5l", "system", prompt) == ("system", prompt)
+
+
+def test_is_waking_true_when_prompt_starts_with_situation_heading():
+    prompt = organ_replay.SITUATION_HEADING + "\nI am in a quiet room.\n\n## My thought\n"
+    assert organ_replay.is_waking(prompt) is True
+
+
+def test_is_waking_false_when_no_situation_heading():
+    prompt = "## How I feel and what I notice\n- a\n\n## My thought\n"
+    assert organ_replay.is_waking(prompt) is False
+
+
+def _synthetic_v6_result(case_id, variant, any_meta, grounded, ai_self=False, prompt="p"):
+    return {
+        "case_id": case_id,
+        "variant": variant,
+        "seed": 1,
+        "mode": "external",
+        "system": "s",
+        "prompt": prompt,
+        "text": "t",
+        "any_meta": any_meta,
+        "grounded": grounded,
+        "ai_self": ai_self,
+    }
+
+
+def test_decide_v6_winner_when_candidate_lowers_any_meta():
+    results = []
+    for case in range(10):
+        results.append(_synthetic_v6_result(case, "V5", True, True, False))
+        results.append(_synthetic_v6_result(case, "V5m", False, True, False))
+    decision = organ_replay.decide_v6(results, n_boot=2000)
+    assert decision["winner"] == "V5m"
+    assert decision["passed"] == ["V5m"]
+
+
+def test_decide_v6_rejects_candidate_that_raises_ai_self():
+    results = []
+    for case in range(10):
+        results.append(_synthetic_v6_result(case, "V5", True, True, False))
+        results.append(
+            _synthetic_v6_result(case, "V5m", False, True, ai_self=case == 0)
+        )
+    decision = organ_replay.decide_v6(results, n_boot=2000)
+    assert decision["winner"] is None
+    assert "V5m" not in decision["passed"]
+
+
+def test_decide_v6_rejects_candidate_that_lowers_grounding_by_ten_points():
+    results = []
+    for case in range(10):
+        results.append(_synthetic_v6_result(case, "V5", True, True, False))
+        v5m_grounded = case != 0
+        results.append(_synthetic_v6_result(case, "V5m", False, v5m_grounded, False))
+    decision = organ_replay.decide_v6(results, n_boot=2000)
+    assert decision["winner"] is None
+    assert "V5m" not in decision["passed"]
+
+
+def test_decide_v6_two_passing_lowest_any_meta_wins():
+    results = []
+    for case in range(10):
+        results.append(_synthetic_v6_result(case, "V5", True, True, False))
+        results.append(_synthetic_v6_result(case, "V5m", False, True, False))
+        v5e_meta = case >= 5
+        results.append(_synthetic_v6_result(case, "V5e", v5e_meta, True, False))
+    decision = organ_replay.decide_v6(results, n_boot=2000)
+    assert decision["winner"] == "V5m"
+    assert "V5m" in decision["passed"]
+    assert "V5e" in decision["passed"]
+
+
+def test_decide_v6_no_passing_winner_none():
+    results = []
+    for case in range(10):
+        results.append(_synthetic_v6_result(case, "V5", True, True, False))
+        results.append(_synthetic_v6_result(case, "V5m", True, True, False))
+    decision = organ_replay.decide_v6(results, n_boot=2000)
+    assert decision["winner"] is None
+    assert decision["passed"] == []
+
+
+def test_score_rule_v6_prints_winner(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    results = []
+    for i in range(5):
+        if i == 0:
+            prompt = (
+                organ_replay.SITUATION_HEADING
+                + "\nSomething is happening.\n\n## How I feel and what I notice\n- a\n\n## My thought\n"
+            )
+        else:
+            prompt = "## How I feel and what I notice\n- a\n\n## My thought\n"
+        results.append(_synthetic_v6_result(i, "V5", True, True, False, prompt))
+        results.append(_synthetic_v6_result(i, "V5m", False, True, False, prompt))
+        results.append(_synthetic_v6_result(i, "V5e", True, True, False, prompt))
+        results.append(_synthetic_v6_result(i, "V5l", True, True, False, prompt))
+    path = tmp_path / "results.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in results),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        results=str(path),
+        bootstrap=200,
+        rule="v6",
+    )
+    organ_replay._score_cmd(args)
+    out = capsys.readouterr().out
+    assert "winner:" in out
+    assert "Waking cases only" in out
+
+
+def test_score_default_rule_output_unchanged(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    results = []
+    for case in range(10):
+        for seed in range(3):
+            results.append(_synthetic_result(case, "V0", seed, True, True))
+            results.append(_synthetic_result(case, "V1", seed, True, True))
+            results.append(_synthetic_result(case, "V2", seed, False, True))
+            results.append(_synthetic_result(case, "V3", seed, False, True))
+            results.append(_synthetic_result(case, "V12", seed, False, True))
+            results.append(_synthetic_result(case, "V123", seed, False, True))
+    path = tmp_path / "results.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in results),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        results=str(path),
+        bootstrap=200,
+        rule="v2v3",
+    )
+    organ_replay._score_cmd(args)
+    out = capsys.readouterr().out
+    assert "Primary outcome:" in out
+    assert "adopt V2:" in out
+    assert "adopt V3:" in out
