@@ -73,6 +73,20 @@ async def _wait_for(bus: AsyncBus, stream: str, *, timeout_s: float = 2.0):
     return await bus.read(stream, last_id="0")
 
 
+async def _wait_until(predicate, *, timeout_s: float = 5.0, interval_s: float = 0.02) -> bool:
+    """Wait until a synchronous predicate returns a truthy value, or timeout.
+
+    Returns True if the predicate became truthy before the deadline, otherwise
+    False. Callers assert on the result or on the resulting state.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(interval_s)
+    return False
+
+
 @pytest.fixture
 async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
@@ -414,7 +428,9 @@ async def test_replayed_intent_rejected(bus: AsyncBus, tmp_path: Path):
         await _publish_act_intent(
             bus, "file_write", {"name": "once.txt", "content": "first"}, seq=7
         )
-        await asyncio.sleep(0.15)
+        await _wait_until(
+            lambda: any(r.get("provenance_rejected") for r in _read_audit(tmp_path))
+        )
         records = _read_audit(tmp_path)
         successes = [r for r in records if r.get("success") and not r.get("provenance_rejected")]
         replays = [r for r in records if r.get("provenance_rejected")]
@@ -468,7 +484,9 @@ async def test_replay_guard_survives_light_restart(bus: AsyncBus, tmp_path: Path
 
         # Re-deliver the IDENTICAL signed (run_id=test-run, seq=3) intent.
         await _publish_act_intent(bus, "file_write", {"name": "r.txt", "content": "a"}, seq=3)
-        await asyncio.sleep(0.2)
+        await _wait_until(
+            lambda: any(r.get("provenance_rejected") for r in _read_audit(tmp_path))
+        )
         records = _read_audit(tmp_path)
         successes = [r for r in records if r.get("success") and not r.get("provenance_rejected")]
         replays = [r for r in records if r.get("provenance_rejected")]
@@ -504,7 +522,9 @@ async def test_replay_guard_memory_is_bounded(bus: AsyncBus, tmp_path: Path):
             await _publish_act_intent(
                 bus, "file_write", {"name": f"n{seq}.txt", "content": "x"}, seq=seq
             )
-        await asyncio.sleep(0.2)
+        await _wait_until(
+            lambda: p._replay_high_water.get("test-run") == 5
+        )
         # One run_id → one dict entry regardless of how many intents were realized.
         assert list(p._replay_high_water.keys()) == ["test-run"]
         assert p._replay_high_water["test-run"] == 5
@@ -512,7 +532,9 @@ async def test_replay_guard_memory_is_bounded(bus: AsyncBus, tmp_path: Path):
         await _publish_act_intent(
             bus, "file_write", {"name": "stale.txt", "content": "x"}, seq=2
         )
-        await asyncio.sleep(0.2)
+        await _wait_until(
+            lambda: any(r.get("provenance_rejected") for r in _read_audit(tmp_path))
+        )
         assert not (tmp_path / "sb" / "stale.txt").exists()
         replays = [r for r in _read_audit(tmp_path) if r.get("provenance_rejected")]
         assert replays and "replay" in (replays[-1].get("error") or "").lower()

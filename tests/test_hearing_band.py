@@ -79,13 +79,15 @@ def test_schedule_shape():
 
 
 def test_from_section_defaults_and_validation():
+    assert HearingBandParams().maturation_seconds == 43200.0
+
     default = HearingBandParams.from_section(None)
     assert default.enabled is True
-    assert default.maturation_seconds == 86400.0
+    assert default.maturation_seconds == 43200.0
 
     empty = HearingBandParams.from_section({})
     assert empty.enabled is True
-    assert empty.maturation_seconds == 86400.0
+    assert empty.maturation_seconds == 43200.0
 
     configured = HearingBandParams.from_section(
         {"enabled": False, "maturation_seconds": 3600}
