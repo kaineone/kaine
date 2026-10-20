@@ -245,8 +245,7 @@ class Sleep(BaseModule):
 
     @property
     def sleep_count(self) -> int:
-        """Read-only seam for the maturation gate: number of completed sleep
-        cycles since boot. The gate only reads this value; it never writes it."""
+        """Number of sleeps this entity has run (the sleep_index), restored across restarts from the resume checkpoint and stage.json."""
         return self._sleep_count
 
     @property
@@ -265,6 +264,21 @@ class Sleep(BaseModule):
 
     async def initialize(self) -> None:
         await super().initialize()
+        # The sleep index names corpus files and tags sleep events, so it must not restart at 0.
+        try:
+            from kaine.lifecycle.stage import read_stage
+            stage_state = read_stage()
+        except Exception:
+            log.warning(
+                "sleep: failed to read stage state for sleep index; continuing with %d",
+                self._sleep_count,
+                exc_info=True,
+            )
+        else:
+            if stage_state is not None and stage_state.sleep_count > self._sleep_count:
+                self._sleep_count = stage_state.sleep_count
+            if self._sleep_count > 0:
+                log.info("sleep: sleep index resumes at %d", self._sleep_count)
         self._sleep_pending = False
         self._sleep_task = None
         # M1 — interval-based maintenance poll: RestScheduler.is_due() is
@@ -1100,7 +1114,10 @@ class Sleep(BaseModule):
         logged warning + ``{"error": <ExcTypeName>}`` — the sleep must never
         fail because auditing failed. Boundary: The sleep module never imports
         ``kaine.evaluation``; only ``kaine.modules.sleep.ignition_audit``.
+        Realizations are linked to their intents through the intent log's
+        record_id to intent_entry_id join.
         """
+        from kaine.modules.sleep.corpus import intent_record_links
         from kaine.modules.sleep.ignition_audit import classify_realizations
 
         try:
@@ -1158,12 +1175,31 @@ class Sleep(BaseModule):
                     if _in_window(entry_id):
                         broadcasts.append(snap)
             self._broadcast_cursor = cursor
+            try:
+                corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+                link_paths = (
+                    await asyncio.to_thread(
+                        intent_record_paths,
+                        self._voice_config.intent_log_path,
+                        corpus_dir,
+                    )
+                )[-2:]
+                record_links = await asyncio.to_thread(
+                    intent_record_links, link_paths
+                )
+            except Exception:
+                log.warning(
+                    "sleep: ignition audit could not read intent-log links (continuing unlinked)",
+                    exc_info=True,
+                )
+                record_links = {}
             report = classify_realizations(
                 broadcasts,
                 intents,
                 realizations,
                 proposal_outcomes=proposal_outcomes,
                 sleep_index=self._sleep_count,
+                record_links=record_links,
             )
             payload = report.as_payload()
         except Exception as exc:
@@ -1514,6 +1550,8 @@ class Sleep(BaseModule):
             # Kept for backward compatibility with pre-change readers/tests.
             "original_due_at": self._scheduler.original_due_at,
             "effective_due_at": self._scheduler.effective_due_at,
+            # Persisted sleep index so filenames and audit tags do not restart at 0.
+            "sleep_index": self._sleep_count,
             # Process-independent schedule: time remaining until sleep.
             "schedule": self._scheduler.export_remaining(),
         }
@@ -1541,6 +1579,12 @@ class Sleep(BaseModule):
                 )
         else:
             log.info("sleep: snapshot has no schedule; starting a fresh interval")
+        if "sleep_index" in state:
+            value = state["sleep_index"]
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                self._sleep_count = max(self._sleep_count, value)
+            else:
+                log.warning("sleep: malformed sleep_index in snapshot; keeping %d", self._sleep_count)
 
     async def _run_pipeline(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """M2: guarantee ``sleep.sleep.completed`` is published.

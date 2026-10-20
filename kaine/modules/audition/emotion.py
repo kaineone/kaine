@@ -177,7 +177,8 @@ class Emotion2vecClassifier:
             self._funasr_available = True
 
         def _load_sync():
-            kwargs = {"disable_update": True}
+            # funasr otherwise writes a tqdm progress bar to stderr on every generate() call
+            kwargs = {"disable_update": True, "disable_pbar": True}
             if not self._device.startswith("cuda"):
                 kwargs["fp16"] = False
                 kwargs["bf16"] = False
