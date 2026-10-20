@@ -35,8 +35,6 @@ def _sleep(bus, tmp_path, **kwargs):
     return Sleep(
         bus,
         voice_alignment_config=_voice_config(tmp_path),
-        consolidation_divergence_path=tmp_path / "sleep" / "consolidation_divergence.json",
-        consolidation_embedder=None,
         fatigue_triggered=False,
         **kwargs,
     )
@@ -84,9 +82,8 @@ async def test_initialize_restores_sleep_index_from_stage(bus, tmp_path):
     await sleep.initialize()
     try:
         assert sleep._sleep_count == 4
-        _, metric = await sleep._emit_consolidation_divergence()
-        sleep_index = metric.get("sleep_index") if isinstance(metric, dict) else metric.sleep_index
-        assert sleep_index == 5
+        await sleep._run_voice_alignment()
+        assert sleep._sleep_count == 5
     finally:
         await sleep.shutdown()
 

@@ -29,14 +29,6 @@
       <dt>last p-value</dt><dd>{{ entity_care.signals.individuation_last_p_value if entity_care.signals.individuation_last_p_value is not none else "—" }}</dd>
       <dt>last effect size H</dt><dd>{{ "%.3f"|format(entity_care.signals.individuation_last_effect_size_h) if entity_care.signals.individuation_last_effect_size_h is not none else "—" }}</dd>
       <dt>last inconclusive reason</dt><dd>{{ entity_care.signals.individuation_last_inconclusive_reason if entity_care.signals.individuation_last_inconclusive_reason is not none else "—" }}</dd>
-      {# Organ-level consolidation divergence: the cheap, continuous companion
-         to the permutation test. Numeric / content-free — rate (breadth) and
-         magnitude (depth) of how the conditioned output diverges from the bare
-         language organ each sleep. #}
-      <dt>consolidation divergence found</dt><dd>{{ "yes" if entity_care.signals.consolidation_divergence_found else "no" }}</dd>
-      <dt>consolidation divergence rate</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_rate) if entity_care.signals.consolidation_divergence_rate is not none else "—" }}</dd>
-      <dt>consolidation divergence magnitude</dt><dd>{{ "%.3f"|format(entity_care.signals.consolidation_divergence_magnitude) if entity_care.signals.consolidation_divergence_magnitude is not none else "—" }}</dd>
-      <dt>consolidation divergence over threshold</dt><dd>{{ "yes" if entity_care.signals.consolidation_divergence_signal else "no" }}</dd>
       <dt>self-model drift count</dt><dd>{{ entity_care.signals.self_model_drift_count }}</dd>
       <dt>identity-history length</dt><dd>{{ entity_care.signals.self_model_identity_history_len }}</dd>
       <dt>voice adapters present</dt><dd>{{ "yes" if entity_care.signals.sleep_adapters_present else "no" }}</dd>

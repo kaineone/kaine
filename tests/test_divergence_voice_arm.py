@@ -11,6 +11,7 @@ from kaine.lifecycle.divergence import (
     VoicePaths,
     assess_divergence,
     default_voice_paths,
+    distinctiveness_threshold_from_config,
     voice_paths_for,
 )
 from kaine.modules.sleep.voice_measures import FUNCTION_WORDS, style_profile
@@ -44,17 +45,18 @@ def test_silent_entity_not_diverged_abstains(tmp_path):
     assert result.signals["voice_has_spoken"] is False
 
 
-def test_silent_entity_with_consolidation_over_threshold_is_diverged(tmp_path):
+def test_silent_entity_with_consolidation_record_abstains_and_ignores_record(tmp_path):
     root = _state(tmp_path)
     sleep = root / "sleep"
     sleep.mkdir(parents=True, exist_ok=True)
     (sleep / "consolidation_divergence.json").write_text(
-        json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.0}),
+        json.dumps({"divergence_rate": 1.0, "divergence_magnitude": 0.6}),
         encoding="utf-8",
     )
     result = assess_divergence(state_root=root)
-    assert result.diverged
+    assert not result.diverged
     assert result.signals["voice_vote"] == "abstain"
+    assert not any(k.startswith("consolidation") for k in result.signals)
 
 
 def test_spoken_no_measures_file_is_diverged(tmp_path):
@@ -163,9 +165,9 @@ def test_voice_arm_is_its_own_preservation_edge():
 
     both = DivergenceAssessment(
         diverged=True,
-        signals={"consolidation_divergence_signal": True, "voice_vote": "diverged"},
+        signals={"self_model_drift_signal": True, "voice_vote": "diverged"},
     )
-    assert _active_arms(both) == frozenset({"consolidation", "voice"})
+    assert _active_arms(both) == frozenset({"self_model_drift", "voice"})
     abstain = DivergenceAssessment(diverged=False, signals={"voice_vote": "abstain"})
     assert _active_arms(abstain) == frozenset()
 
@@ -183,10 +185,8 @@ def test_non_finite_or_negative_threshold_falls_back_to_protective_zero(tmp_path
 
 @pytest.mark.parametrize("bad", ["nan", "inf", -1.0, "lots"])
 def test_config_threshold_reader_never_silences_the_arm(bad):
-    from kaine.lifecycle.divergence import voice_alignment_thresholds_from_config
-
     cfg = {"sleep": {"voice_alignment": {"distinctiveness_threshold": bad}}}
-    assert voice_alignment_thresholds_from_config(cfg)[2] == 0.0
+    assert distinctiveness_threshold_from_config(cfg) == 0.0
 
 
 @pytest.mark.parametrize("bad", ["nan", "inf", -1.0, "lots"])

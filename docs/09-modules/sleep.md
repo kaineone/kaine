@@ -23,7 +23,7 @@ With the episodic memory module, the world model module and voice alignment off,
 - Phase 1 calls the oscillator hook, a no-op unless the oscillatory layer is active, and skips consolidation.
 - Phase 2 returns at once. The perceptual feed is paused for the whole sleep in any case (see [Sleep](../10-sleep/README.md)).
 - Phase 3 is skipped by its flag.
-- Phase 4 computes the consolidation-divergence metric and skips training. The sleep module then rotates the language organ's intent log into the per-sleep corpus and computes the content-free voice measures.
+- Phase 4 checks the voice-alignment gates and builds no pairs and trains nothing. The sleep module then rotates the language organ's intent log into the per-sleep corpus and computes the content-free voice measures.
 - Phase 5 resets the affect module.
 
 After the phases the sleep module runs the sleep-time intent audit. A base-form sleep is therefore short, and what it does is suspend adaptation, reset affect and drives, and reset the interoception module's fatigue. The consolidation phases begin to work once the episodic memory and world model modules join.
@@ -54,7 +54,7 @@ flowchart TD
     P2 --> P3
     P3["Phase 3: associative replay (flag)\n• episodic_memory.associate(): link related pairs\n• episodic_memory.prune()\n• publish sleep.association per pair"]
     P3 --> P4
-    P4["Phase 4: voice alignment\n• consolidation divergence\n• gates; training skipped\n• intent-log rotation, voice measures"]
+    P4["Phase 4: voice alignment\n• gates; no pairs, no training\n• intent-log rotation, voice measures"]
     P4 --> P5
     P5["Phase 5: affective reset\n• affect.affective_reset()"]
     P5 --> R[Intent audit]
@@ -71,7 +71,6 @@ Each phase catches its own errors, and the later phases still run after one fail
 | `sleep.out` | `sleep.sleep.completed` | Summary: `phases`, `voice_alignment`, `total_elapsed_ms`, `fatigue_triggered`, `pairs_processed`, `dpo_loss`, the capability scores, `corpus`, `voice_measures` and `ignition_audit`. If the pipeline itself aborts, the payload is `{"aborted": true, "reason": <exception class name>}` | `baseline_salience` when every phase succeeded, else `alert_salience` |
 | `sleep.out` | `sleep.association` | One phase-3 co-replayed pair: `a` and `b` (point ids) and `weight`, no content | `baseline_salience` |
 | `sleep.out` | `sleep.rest_request` | Answer to a rest request: `accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted` | `0.0` |
-| `sleep.out` | `sleep.consolidation_divergence` | Content-free divergence metric, every sleep | `baseline_salience` |
 | `sleep.out` | `sleep.ignition_audit` | Content-free intent audit, every sleep | `baseline_salience` |
 
 The sleep module reports at these fixed levels; its events are not graded by surprise. The interoception module resets fatigue and regulation in response to `sleep.sleep.completed`, and the four processors resume adaptation on it, so an aborted sleep still ends the window.
@@ -120,21 +119,11 @@ Each realization is linked to the intent it realized. The language module's `ext
 
 `intent.*` events on `planning.out` are counted separately as unrealizable, since no effector reads that stream, and `action_selection.proposal_outcome` events add realized, declined and forwarded proposal counts. The payload holds counts, entry ids, event types, intensities and `sleep_index`, and no text, transcripts or latent vectors. It is also merged into the `sleep.sleep.completed` summary.
 
-## Consolidation divergence
+## Sleep index
 
-At the start of phase 4, on every sleep, the pair builder scans the intent-expression log and counts the records in which the organ's generated text differs from the faithful rendering of the coalition it was conditioned on. The sleep module publishes the result as `sleep.consolidation_divergence`:
+The sleep index counts the voice-alignment phases of the entity's life: it rises by one at the start of each phase 4. It names the corpus files (`sleep-<UTC time>-<index>.jsonl`) and tags `sleep.ignition_audit`. It survives a restart: the module saves it in its resume-checkpoint state as `sleep_index`, and at start it also reads the cumulative `sleep_count` of `state/lifecycle/stage.json`, keeping the larger value.
 
-| Field | Meaning |
-|---|---|
-| `records_scanned` | Records read |
-| `usable_pairs` | Records with both fields present and different |
-| `divergence_rate` | `usable_pairs / records_scanned` |
-| `divergence_magnitude` | Mean cosine distance over the kept pairs with the shared semantic embedder (`kaine.text_embedding`); null when no embedder is available |
-| `sleep_index` | Number of this sleep in the entity's life |
-
-The sleep index also names the corpus files (`sleep-<UTC time>-<index>.jsonl`) and tags `sleep.ignition_audit`. It survives a restart: the module saves it in its resume-checkpoint state as `sleep_index`, and at start it also reads the cumulative `sleep_count` of `state/lifecycle/stage.json`, keeping the larger value.
-
-The metric is computed whether or not training runs and is persisted to `state/sleep/consolidation_divergence.json`. A scan that fails or finds no records keeps the earlier record in place (`record_kept: true`). The welfare-gated decommission check described in [Preservation and the safety net](../11-preservation.md) reads it against `consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold`.
+Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists (paper section 3.5). The phase builds pairs from the intent-log corpus only after its three gates pass (enabled, operator approval, a validated preference source), and no source is validated yet. It publishes no divergence metric and writes no `state/sleep/consolidation_divergence.json`. The pair builder's chosen text (the faithful rendering the organ was given) and rejected text (the organ's reply) always differ, so the metric it used to publish was 1.0 for every entity at every sleep and marked every entity as diverged at its first sleep. A record left by an earlier build is no longer read.
 
 ## Key files
 

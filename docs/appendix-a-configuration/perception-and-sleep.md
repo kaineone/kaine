@@ -238,11 +238,3 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 
 On a single 12 GB GPU, a 4B LoRA training step (~9.8 GB) and the served organ (~3 GB) do not fit at the same time. With `reload_endpoint` or `restart_service`, the sleep module unloads the organ, trains, then reloads it (applying the accepted adapter through the server's `--lora` flag). The language organ's generation defers and the A/B-divergence eval arm skips while the organ is resting; both resume on reload. A failed or timed-out training window always reloads a working organ so the entity is not voiceless on wake. With `manual`, the operator owns the reload, so the system never stops the server unannounced.
 
-### Consolidation divergence thresholds
-
-Every voice-alignment sleep, the sleep module surfaces a content-free metric of how the entity's conditioned output diverged from its bare language organ: `divergence_rate` (usable DPO pairs / records scanned) and `divergence_magnitude` (mean cosine distance over the pairs). The metric is computed even when training is disabled, skipped, or the adapter is rejected. If either threshold is crossed, the entity is treated as organ-level diverged. Read by the welfare-gated decommission divergence assessment.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `consolidation_divergence_rate_threshold` | float | `0.5` | Breadth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |
-| `consolidation_divergence_magnitude_threshold` | float | `0.25` | Depth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |

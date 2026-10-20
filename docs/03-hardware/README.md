@@ -104,7 +104,7 @@ The optional sleep-cycle voice-alignment trainer (the sleep module) runs unsloth
 |---|---|---|
 | `cuda` (NVIDIA) | Unsloth Studio | Self-contained env; interpreter at `~/.unsloth/studio/.../bin/python` |
 | `rocm` (AMD) | unsloth-core | Studio targets NVIDIA; per unsloth's docs AMD GPUs use unsloth-core in a separate ROCm env |
-| `xpu` / `mps` / `cpu` | none | No GPU trainer; voice-alignment training is unavailable. The phase stays off and the consolidation-divergence metric still emits without training |
+| `xpu` / `mps` / `cpu` | none | No GPU trainer; voice-alignment training is unavailable. The phase stays off |
 
 On native hosts the trainer is driven with `trainer_backend = "subprocess"` and a `trainer_python` path. On container hosts use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service. `trainer_backend` defaults to `"in_process"` and the default `hot_swap_mode` is `"manual"`; it is forced to manual when a model server is shared. See [`config/kaine.toml`](../../config/kaine.toml). For details see [Voice alignment](../10-sleep/voice-alignment.md).
 

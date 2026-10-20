@@ -15,7 +15,6 @@ extra and opt in.
 """
 from __future__ import annotations
 
-import json
 import logging
 import math
 import os
@@ -23,8 +22,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
-
-from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
@@ -42,50 +39,6 @@ class DPOPair:
     rejected: str
     metadata: dict[str, Any] = field(default_factory=dict)
     system: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class ConsolidationDivergence:
-    """Content-free organ-level divergence metric for one sleep.
-
-    A *usable pair* exists iff the entity's conditioned output
-    (``faithful_rendering``) diverged from its bare-organ generation
-    (``generated_text``) on a lived utterance — the DPO ``chosen != rejected``
-    filter. So this is the A/B divergence signal materialized as the training
-    data the consolidation phase already builds, surfaced instead of discarded.
-
-    Aggregate NUMBERS only — never the prompt/chosen/rejected utterance text
-    (that lives in the deny-patterned intent log).
-
-    * ``records_scanned`` — denominator: log records examined.
-    * ``usable_pairs`` — numerator: records where the entity diverged.
-    * ``divergence_rate`` — ``usable_pairs / max(1, records_scanned)`` (breadth).
-    * ``divergence_magnitude`` — mean cosine distance over the kept pairs'
-      (chosen, rejected) embeddings (depth); ``None`` when the semantic embedder
-      is unavailable (honest degradation, like the A/B meter's embedder-kind
-      disclosure).
-    * ``embedder`` — the embedder kind tag, or ``None`` when magnitude is null.
-    """
-
-    records_scanned: int
-    usable_pairs: int
-    divergence_rate: float
-    divergence_magnitude: Optional[float] = None
-    embedder: Optional[str] = None
-
-    def as_payload(self) -> dict[str, Any]:
-        """The content-free dict published on the bus / written to state."""
-        return {
-            "records_scanned": int(self.records_scanned),
-            "usable_pairs": int(self.usable_pairs),
-            "divergence_rate": float(self.divergence_rate),
-            "divergence_magnitude": (
-                None
-                if self.divergence_magnitude is None
-                else float(self.divergence_magnitude)
-            ),
-            "embedder": self.embedder,
-        }
 
 
 @dataclass(frozen=True)
@@ -220,80 +173,6 @@ class TrainingResult:
 
 OPERATOR_APPROVED_ENV = "KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED"
 
-#: Where the sleep module persists the latest consolidation-divergence metric so the
-#: core lifecycle ``assess_divergence`` can read it WITHOUT importing the sleep module's
-#: bus or ``kaine.evaluation`` (the boundary-neutral seam: a written record).
-CONSOLIDATION_DIVERGENCE_STATE = Path("state/sleep/consolidation_divergence.json")
-
-
-def write_consolidation_divergence(
-    metric: ConsolidationDivergence,
-    *,
-    sleep_index: Optional[int] = None,
-    path: Path = CONSOLIDATION_DIVERGENCE_STATE,
-) -> None:
-    """Persist the latest content-free consolidation-divergence metric.
-
-    Aggregate numbers + a sleep index/timestamp only — never utterance text.
-    Guarded: a write failure logs and is swallowed (the metric is also on the
-    bus / research log; the state file is the convenience read for
-    ``assess_divergence``). Mirrors the AES-256-GCM at-rest envelope used by the
-    rest of ``state/`` when state encryption is enabled.
-    """
-    path = resolve(path)
-    payload = metric.as_payload()
-    payload["sleep_index"] = None if sleep_index is None else int(sleep_index)
-    payload["ts"] = time.time()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        text = json.dumps(payload)
-        try:
-            from kaine.security.crypto import get_state_encryptor
-
-            path.write_bytes(
-                get_state_encryptor().encrypt_text(text).encode("utf-8")
-            )
-        except Exception:
-            # Crypto unavailable (e.g. minimal install) — write plaintext JSON.
-            path.write_text(text, encoding="utf-8")
-    except Exception:
-        log.warning(
-            "consolidation divergence: state write failed", exc_info=True
-        )
-
-
-def read_consolidation_divergence(
-    path: Path = CONSOLIDATION_DIVERGENCE_STATE,
-) -> Optional[dict[str, Any]]:
-    """Read the latest persisted consolidation-divergence metric, or None.
-
-    Pure + guarded — any error (missing file, bad JSON, decrypt failure) yields
-    ``None`` rather than raising, so the lifecycle assessment never breaks on a
-    fresh install. Transparently decrypts via the active state encryptor.
-    """
-    path = resolve(path)
-    try:
-        if not path.is_file():
-            return None
-        raw = path.read_bytes()
-        if not raw.strip():
-            return None
-        try:
-            from kaine.security.crypto import get_state_encryptor
-
-            text = get_state_encryptor().maybe_decrypt(raw).decode("utf-8")
-        except Exception:
-            text = raw.decode("utf-8")
-        data = json.loads(text)
-        if not isinstance(data, dict):
-            return None
-        return data
-    except Exception:
-        log.debug(
-            "consolidation divergence: state read failed", exc_info=True
-        )
-        return None
-
 
 def operator_approved() -> bool:
     """True iff the operator-approval env var is set to '1'."""
@@ -335,15 +214,14 @@ class DPOPairBuilder:
     ) -> tuple[list[DPOPair], int, int]:
         """Build DPO pairs AND report ``(pairs, records_scanned, usable_pairs)``.
 
-        ``records_scanned`` is the consolidation-divergence denominator, so the
-        scan walks the WHOLE log (up to ``max_records_scanned``) for an honest
+        The scan walks the WHOLE log (up to ``max_records_scanned``) for an honest
         rate even when only ``max_pairs`` pairs are kept for training. A record
         is scanned iff it is a non-empty, valid-JSON line; a usable pair exists
         iff the conditioned output diverged from the bare-organ output.
-        ``usable_pairs`` counts EVERY divergent record (the numerator), even past
-        ``max_pairs`` — only the returned ``pairs`` list is capped at
-        ``max_pairs`` (the training budget). The two coincide whenever the log
-        holds no more than ``max_pairs`` divergent records.
+        ``usable_pairs`` counts EVERY record where the conditioned output differs
+        from the bare-organ output, even past ``max_pairs`` — only the returned
+        ``pairs`` list is capped at ``max_pairs`` (the training budget). The two
+        coincide whenever the log holds no more than ``max_pairs`` such records.
 
         ``path`` may be a single file or a sequence of files. The sequence is
         expected to be chronological (oldest file first), and is scanned NEWEST
@@ -412,61 +290,6 @@ class DPOPairBuilder:
         # The scan ran newest first; hand the kept pairs back in log order.
         pairs.reverse()
         return pairs, scanned, usable
-
-
-async def consolidation_magnitude(
-    pairs: list[DPOPair], *, embedder: Any
-) -> tuple[Optional[float], Optional[str]]:
-    """Mean cosine DISTANCE over the kept pairs' (chosen, rejected) embeddings.
-
-    Returns ``(magnitude, embedder_kind)``. The *depth* of organ-level
-    divergence, measured on the SAME scale as the A/B meter (``1 - cosine``),
-    averaged over the pairs. Pure aggregate — only the scalar leaves; the
-    utterance text never does.
-
-    Honest degradation: when ``embedder`` is ``None``, fails to ``load()``, or
-    raises while embedding, returns ``(None, None)`` so the metric reports a
-    null magnitude rather than a fabricated number — mirroring the A/B meter's
-    embedder-kind disclosure. With no pairs the magnitude is ``0.0`` (no
-    divergence to measure).
-
-    The embedder is duck-typed (``load`` + ``embed``) and supplied by the
-    caller; this keeps the sleep module importing the boundary-neutral
-    :mod:`kaine.text_embedding`, never ``kaine.evaluation``.
-    """
-    if embedder is None:
-        return None, None
-    if not pairs:
-        return 0.0, getattr(embedder, "kind", "unknown")
-    # Reuse the boundary-neutral cosine — same definition the A/B meter uses.
-    from kaine.text_embedding import cosine_similarity
-
-    try:
-        loader = getattr(embedder, "load", None)
-        if loader is not None:
-            await loader()
-        distances: list[float] = []
-        for pair in pairs:
-            a = await embedder.embed(pair.chosen)
-            b = await embedder.embed(pair.rejected)
-            if not a or not b:
-                # Empty arm ⇒ maximal divergence (the A/B meter's convention).
-                distances.append(1.0)
-                continue
-            distances.append(1.0 - cosine_similarity(a, b))
-    except Exception:
-        log.warning(
-            "consolidation magnitude: embedder failed; reporting null magnitude",
-            exc_info=True,
-        )
-        return None, None
-    if not distances:
-        return 0.0, getattr(embedder, "kind", "unknown")
-    magnitude = sum(distances) / len(distances)
-    return float(magnitude), getattr(embedder, "kind", "unknown")
-
-
-
 
 
 class FakeTrainer:

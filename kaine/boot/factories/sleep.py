@@ -26,9 +26,6 @@ from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.storage import resolve, trainer_jobs_dir
-from kaine.text_embedding import (
-    Embedder,
-)
 
 log = logging.getLogger(__name__)
 
@@ -177,7 +174,6 @@ def make_sleep(
     world_model: Optional[BaseModule] = None,
     kaine_config: Optional[dict[str, Any]] = None,
     entity_clock: Optional[EntityClock] = None,
-    embedder: Optional[Embedder] = None,
 ) -> BaseModule:
     from kaine.modules.sleep.module import Sleep
 
@@ -275,13 +271,6 @@ def make_sleep(
         kwargs["voice_alignment_config"] = voice_config
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
-    # Semantic embedder for the consolidation-divergence MAGNITUDE, on the same
-    # scale as the A/B meter. Lives in the boundary-neutral kaine.text_embedding
-    # (the sleep module never imports kaine.evaluation). Lazy: the heavy model only loads
-    # the first sleep that actually builds pairs; absent the dep, magnitude
-    # degrades to null and rate/counts still emit.
-    if embedder is not None:
-        kwargs["consolidation_embedder"] = embedder
     # When the operator has opted in (config + env var) AND the
     # `[training]` extras importable, wire the real Unsloth-backed
     # trainer. Otherwise FakeTrainer ships the "no backend" reason.
