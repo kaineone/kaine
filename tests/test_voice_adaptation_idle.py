@@ -169,7 +169,7 @@ async def test_disabled_voice_alignment_builds_no_pairs(bus, tmp_path, monkeypat
     calls = _spy_build(sleep)
     before = sleep._sleep_count
     voice_result, phase = await sleep._run_voice_alignment()
-    assert sleep._sleep_count == before + 1
+    assert sleep._sleep_count == before
     assert voice_result.accepted is False
     assert voice_result.samples_used == 0
     assert phase.success is True
@@ -190,7 +190,7 @@ async def test_enabled_approved_without_validated_source_builds_no_pairs(
     calls = _spy_build(sleep)
     before = sleep._sleep_count
     voice_result, phase = await sleep._run_voice_alignment()
-    assert sleep._sleep_count == before + 1
+    assert sleep._sleep_count == before
     assert voice_result.accepted is False
     assert voice_result.samples_used == 0
     assert phase.success is True
@@ -223,7 +223,7 @@ async def test_enabled_approved_with_validated_source_calls_builder_and_trains(
     sleep._train_on_pairs = _spy_train
     before = sleep._sleep_count
     voice_result, phase = await sleep._run_voice_alignment()
-    assert sleep._sleep_count == before + 1
+    assert sleep._sleep_count == before
     assert len(calls) == 1
     args, kwargs = calls[0]
     paths = args[0]
@@ -257,7 +257,7 @@ async def test_builder_exception_yields_empty_pairs_and_phase_succeeds(
     sleep._builder.build_with_counts = boom
     before = sleep._sleep_count
     voice_result, phase = await sleep._run_voice_alignment()
-    assert sleep._sleep_count == before + 1
+    assert sleep._sleep_count == before
     assert voice_result.accepted is False
     assert "no usable DPO pairs" in voice_result.reason
     assert voice_result.samples_used == 0

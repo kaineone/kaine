@@ -82,8 +82,12 @@ async def test_initialize_restores_sleep_index_from_stage(bus, tmp_path):
     await sleep.initialize()
     try:
         assert sleep._sleep_count == 4
-        await sleep._run_voice_alignment()
+        await sleep.enter_sleep()
         assert sleep._sleep_count == 5
+        entries = await bus.read("sleep.out", count=50)
+        started = [e for _, e in entries if e.type == "sleep.sleep.started"]
+        assert len(started) == 1
+        assert started[0].payload["sleep_index"] == 5
     finally:
         await sleep.shutdown()
 

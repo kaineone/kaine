@@ -188,10 +188,15 @@ def make_sleep(
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
-    retired = {"planning_step_burst"}
+    retired = {"planning_step_burst", "consolidation_embedder_enabled"}
     _require_keys(section, allowed | retired)
     _warn_retired_keys(section, retired, "[sleep]")
     voice_cfg_section = section.get("voice_alignment") or {}
+    _warn_retired_keys(
+        voice_cfg_section,
+        {"consolidation_divergence_rate_threshold", "consolidation_divergence_magnitude_threshold"},
+        "[sleep.voice_alignment]",
+    )
     voice_config: Optional[VoiceAlignmentConfig] = voice_alignment_config_from_section(
         voice_cfg_section, kaine_config
     )

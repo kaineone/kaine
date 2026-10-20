@@ -165,7 +165,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
-The retired key `planning_step_burst` is ignored with a warning if present, so older local configs still boot.
+The retired keys `planning_step_burst` and `consolidation_embedder_enabled` are ignored with a warning if present, so older local configs still boot.
 
 ### Consolidation phases
 
@@ -201,6 +201,8 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
 | `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/language/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
 | `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any entity that has spoken counts as diverged by the voice arm. Must be at least 0. |
+
+The retired keys `consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold` are ignored with a warning if present. Voice adaptation computes no organ-level divergence until a validated preference source exists (paper section 3.5), so there is no consolidation arm for them to set.
 
 #### Training knobs
 

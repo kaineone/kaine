@@ -153,7 +153,7 @@ def _seed_fork(fork_root: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_two_sleeps_keep_divergence_across_rotation(bus, tmp_path):
+async def test_two_sleeps_scan_rotated_corpus_files(bus, tmp_path):
     """Two sleeps with a rotation in between keep the corpus scan counts stable."""
     intent_records = [
         {

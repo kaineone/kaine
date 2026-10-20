@@ -67,7 +67,7 @@ Each phase catches its own errors, and the later phases still run after one fail
 
 | Stream | Event type | Description | Intensity |
 |---|---|---|---|
-| `sleep.out` | `sleep.sleep.started` | Start of the pipeline; carries `started_at`, and `trigger: "requested"` for a requested rest | `baseline_salience` |
+| `sleep.out` | `sleep.sleep.started` | Start of the pipeline; carries `started_at`, `sleep_index` and, for a requested rest, `trigger: "requested"` | `baseline_salience` |
 | `sleep.out` | `sleep.sleep.completed` | Summary: `phases`, `voice_alignment`, `total_elapsed_ms`, `fatigue_triggered`, `pairs_processed`, `dpo_loss`, the capability scores, `corpus`, `voice_measures` and `ignition_audit`. If the pipeline itself aborts, the payload is `{"aborted": true, "reason": <exception class name>}` | `baseline_salience` when every phase succeeded, else `alert_salience` |
 | `sleep.out` | `sleep.association` | One phase-3 co-replayed pair: `a` and `b` (point ids) and `weight`, no content | `baseline_salience` |
 | `sleep.out` | `sleep.rest_request` | Answer to a rest request: `accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted` | `0.0` |
@@ -121,7 +121,7 @@ Each realization is linked to the intent it realized. The language module's `ext
 
 ## Sleep index
 
-The sleep index counts the voice-alignment phases of the entity's life: it rises by one at the start of each phase 4. It names the corpus files (`sleep-<UTC time>-<index>.jsonl`) and tags `sleep.ignition_audit`. It survives a restart: the module saves it in its resume-checkpoint state as `sleep_index`, and at start it also reads the cumulative `sleep_count` of `state/lifecycle/stage.json`, keeping the larger value.
+The sleep index counts the sleeps of the entity's life: it rises by one at the start of each sleep, and `sleep.sleep.started` carries it as `sleep_index`, which the language module records with each utterance. It names the corpus files (`sleep-<UTC time>-<index>.jsonl`) and tags `sleep.ignition_audit`. It survives a restart: the module saves it in its resume-checkpoint state as `sleep_index`, and at start it also reads the cumulative `sleep_count` of `state/lifecycle/stage.json`, keeping the larger value.
 
 Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists (paper section 3.5). The phase builds pairs from the intent-log corpus only after its three gates pass (enabled, operator approval, a validated preference source), and no source is validated yet. It publishes no divergence metric and writes no `state/sleep/consolidation_divergence.json`. The pair builder's chosen text (the faithful rendering the organ was given) and rejected text (the organ's reply) always differ, so the metric it used to publish was 1.0 for every entity at every sleep and marked every entity as diverged at its first sleep. A record left by an earlier build is no longer read.
 

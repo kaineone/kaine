@@ -760,11 +760,16 @@ class Sleep(BaseModule):
         # subjective.
         # infrastructural: real time, not subjective
         start = time.monotonic()
+        self._sleep_count += 1
         await self.publish(
             "sleep.sleep.started",
-            # infrastructural: real time. "trigger" is present only for a
-            # requested rest, so ordinary sleeps publish exactly as before.
-            {"started_at": time.time(), **({"trigger": trigger} if trigger else {})},
+            # infrastructural: real time. Every sleep carries its sleep_index;
+            # "trigger" is present only for a sleep started by a request.
+            {
+                "started_at": time.time(),
+                "sleep_index": self._sleep_count,
+                **({"trigger": trigger} if trigger else {}),
+            },
             salience=self._baseline_salience,
         )
         if trigger == "requested" and self._pending_rest is not None:
@@ -1199,7 +1204,7 @@ class Sleep(BaseModule):
                 "audit_error": type(exc).__name__,
             }
         # Content-free bus event on sleep.out. An intermediate publish must
-        # never propagate (same catch-and-continue as the divergence metric).
+        # never propagate (catch, log and continue, as for every intermediate publish).
         try:
             await self.publish(
                 "sleep.ignition_audit",
@@ -1215,7 +1220,6 @@ class Sleep(BaseModule):
 
     async def _run_voice_alignment(self) -> tuple[TrainingResult, PhaseResult]:
         start_ms = time.monotonic() * 1000.0
-        self._sleep_count += 1
 
         def _meta(extra: dict[str, Any]) -> dict[str, Any]:
             return dict(extra)
