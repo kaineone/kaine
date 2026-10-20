@@ -116,6 +116,8 @@ Every sleep, the sleep module publishes `sleep.ignition_audit` for the window si
 | `drive_triggered` | The coalition holds `affect.drive` |
 | `self_initiated` | None of the above |
 
+Each realization is linked to the intent it realized. The language module's `external_speech` and `internal_speech` payloads carry the `record_id` of the intent-log record written for that utterance, and that record holds `intent_entry_id`, the `entry_id` of the intent. The audit reads this join from the two newest intent-log files (the corpus file rotated in this sleep, or the newest one if nothing was rotated, and the live log). A payload `entry_id`, where an event carries one, is used directly. A requested `sleep.sleep.started` carries neither, so it is linked to the last `intent.rest` of the window. A speech or action realization with no link counts as `self_initiated` and adds no entry id, so one intent's coalition is never applied to another intent's utterance. If the intent log cannot be read, the audit runs unlinked and logs a warning.
+
 `intent.*` events on `planning.out` are counted separately as unrealizable, since no effector reads that stream, and `action_selection.proposal_outcome` events add realized, declined and forwarded proposal counts. The payload holds counts, entry ids, event types, intensities and `sleep_index`, and no text, transcripts or latent vectors. It is also merged into the `sleep.sleep.completed` summary.
 
 ## Consolidation divergence

@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +113,45 @@ def intent_record_paths(log_path: Path, corpus_dir: Path) -> list[Path]:
     if log_path.exists():
         paths.append(log_path)
     return paths
+
+
+def intent_record_links(paths: Sequence[Path]) -> dict[str, str]:
+    """Return a map from language module ``record_id`` to ``intent_entry_id``.
+
+    Reads the supplied intent-log paths (plaintext JSONL or AES envelopes) in
+    order using ``iter_records``. Unreadable lines, non-dict records,
+    records missing either field, and missing files are skipped. A path that
+    raises ``OSError`` while being read is logged and skipped so the function
+    never aborts because of one bad file. This is the join the ignition audit
+    uses to link a realized utterance to the intent it realized.
+    """
+    from kaine.persistence.encrypted_jsonl import iter_records
+
+    links: dict[str, str] = {}
+    for path in paths:
+        try:
+            for line in iter_records(path):
+                if line.unreadable:
+                    continue
+                record = line.record
+                if not isinstance(record, dict):
+                    continue
+                record_id = record.get("record_id")
+                intent_entry_id = record.get("intent_entry_id")
+                if (
+                    isinstance(record_id, str)
+                    and isinstance(intent_entry_id, str)
+                    and record_id
+                    and intent_entry_id
+                ):
+                    links[record_id] = intent_entry_id
+        except OSError:
+            log.warning(
+                "intent_record_links: could not read %s (skipping)",
+                path,
+                exc_info=True,
+            )
+    return links
 
 
 def corpus_size_bytes(corpus_dir: Path) -> int:
