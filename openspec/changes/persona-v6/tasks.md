@@ -6,8 +6,8 @@
 
 ## 2. Replay
 
-- [ ] 2.1 Extract the tenth boot's requests, replay 3 seeds of each variant, score with the v6 rule
+- [x] 2.1 Extract the tenth boot's requests, replay 3 seeds of each variant, score with the v6 rule
 
 ## 3. Persona
 
-- [ ] 3.1 Adopt the winner as persona template version 6, or record that none won
+- [x] 3.1 Adopt the winner as persona template version 6, or record that none won (none won; `results.md`)
