@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import kaine.modules.sleep.housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     FileSkipped,
     Housekeeper,
@@ -27,10 +28,11 @@ def _tmp_archive_counts_as_mounted(monkeypatch):
 
     The real mount check is covered in tests/test_housekeeping_review2.py.
     """
-    real_ismount = os.path.ismount
+    real_check = housekeeping_module._is_mounted_volume
     monkeypatch.setattr(
-        "kaine.modules.sleep.housekeeping.os.path.ismount",
-        lambda p: True if "archive" in str(p) else real_ismount(p),
+        housekeeping_module,
+        "_is_mounted_volume",
+        lambda archive, roots: os.path.isdir(archive) if "archive" in str(archive) else real_check(archive, roots),
     )
 
 
@@ -58,10 +60,12 @@ def _archive_config(tmp_path, **kwargs):
 def test_config_defaults():
     cfg = HousekeepingConfig()
     assert cfg.enabled is True
-    assert cfg.disk_budget_bytes == 10 * 1024**3
+    # The disk budget is a share of the volume unless set explicitly.
+    assert cfg.disk_budget_bytes is None
+    assert cfg.disk_budget_share == 0.5
     assert cfg.memory_budget_bytes == 1024**3
     assert cfg.time_allowance_s == 60.0
-    assert cfg.archive_dir == ""
+    assert cfg.archive_dir == "/app/archive"
 
 
 def test_config_from_section_empty():

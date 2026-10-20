@@ -181,6 +181,19 @@ def make_sleep(
 ) -> BaseModule:
     from kaine.modules.sleep.module import Sleep
 
+    def _format_bytes(value: float | int) -> str:
+        if value < 0:
+            value = 0.0
+        units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
+        size = float(value)
+        idx = 0
+        while size >= 1024 and idx < len(units) - 1:
+            size /= 1024
+            idx += 1
+        if idx == 0:
+            return f"{int(size)} B"
+        return f"{size:.2f} {units[idx]}"
+
     allowed = {
         "interval_seconds",
         "max_deferral_seconds",
@@ -335,9 +348,32 @@ def make_sleep(
         # housekeeping report and scales awake fatigue build-up.
         kwargs["housekeeping_pressure"] = shared_pressure()
 
-        if not hk_config.archive_dir:
+        housekeeper = kwargs["housekeeper"]
+        if housekeeper._mounted_archive() is None:
+            archive_path = hk_config.archive_dir or "(unset)"
+            growth_text = "unknown"
+            budget_text = "unknown"
+            days_text = "an unknown time"
+            try:
+                budget = housekeeper.effective_disk_budget()
+                growth = housekeeper.growth_bytes_per_day()
+                days = housekeeper.days_until_budget()
+                budget_text = _format_bytes(budget)
+                if growth is not None:
+                    growth_text = _format_bytes(growth)
+                if days is not None:
+                    if days <= 0:
+                        days_text = "already reached"
+                    else:
+                        days_text = f"about {int(round(days))} days"
+            except Exception as exc:
+                log.debug("sleep housekeeping projection failed: %s", exc, exc_info=True)
             log.warning(
-                "sleep housekeeping is enabled without an archive volume ([sleep.housekeeping].archive_dir is empty): study records never leave the host and the housekeeping pressure grows with them; mount an archive volume and set archive_dir (docs/09-modules/sleep.md, Housekeeping)"
+                "sleep housekeeping: no archive volume is mounted at %s, so study records stay on the host; at the current growth of %s a day the disk budget of %s is reached in %s (bind a drive at /app/archive to export them; docs/09-modules/sleep.md, Housekeeping)",
+                archive_path,
+                growth_text,
+                budget_text,
+                days_text,
             )
 
     sleep_params = inspect.signature(Sleep).parameters

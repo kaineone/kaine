@@ -14,7 +14,6 @@ import kaine.storage
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.housekeeping_floor import AwakeFloor, FloorConfig, data_volumes
-from kaine.dashboard.health.probes import DEGRADED, NOT_CONFIGURED, UP
 from kaine.persistence.study_record_gate import StudyRecordGate
 
 
@@ -322,61 +321,6 @@ def test_make_sleep_empty_archive_dir_logs_warning(bus, caplog) -> None:
 
     with caplog.at_level("WARNING"):
         make_sleep(bus, {"housekeeping": {"enabled": True, "archive_dir": ""}})
-    assert "sleep housekeeping is enabled without an archive volume" in caplog.text
+    assert "sleep housekeeping: no archive volume is mounted at (unset)" in caplog.text
 
 
-def test_dashboard_housekeeping_archive_probe(tmp_path, monkeypatch) -> None:
-    from kaine.dashboard.health.config import build_dependency_specs
-
-    base = {
-        "redis_cfg": {},
-        "qdrant_cfg": {},
-        "qdrant_secret_key": None,
-        "redis_password": None,
-        "language_cfg": {},
-        "audition_cfg": {},
-        "vocal_cfg": {},
-        "planning_cfg": {},
-    }
-
-    # Disabled.
-    specs = build_dependency_specs(
-        **base, sleep_cfg={"housekeeping": {"enabled": False}}
-    )
-    assert asyncio.run(specs[-1].probe()) == (NOT_CONFIGURED, "housekeeping disabled")
-
-    # Empty archive_dir.
-    specs = build_dependency_specs(
-        **base, sleep_cfg={"housekeeping": {"enabled": True, "archive_dir": ""}}
-    )
-    assert asyncio.run(specs[-1].probe()) == (
-        DEGRADED,
-        "housekeeping is enabled without an archive volume: study records never leave the host and the housekeeping pressure grows; set [sleep.housekeeping].archive_dir to a mounted volume",
-    )
-
-    # Missing directory.
-    specs = build_dependency_specs(
-        **base,
-        sleep_cfg={"housekeeping": {"enabled": True, "archive_dir": str(tmp_path / "nope")}},
-    )
-    assert asyncio.run(specs[-1].probe()) == (
-        DEGRADED,
-        "archive_dir is not a mounted volume",
-    )
-
-    # Same filesystem as data (ismount patched to False so the st_dev check runs).
-    same_dir = tmp_path / "archive"
-    same_dir.mkdir()
-    monkeypatch.setattr("os.path.ismount", lambda p: False)
-    specs = build_dependency_specs(
-        **base,
-        sleep_cfg={"housekeeping": {"enabled": True, "archive_dir": str(same_dir)}},
-    )
-    assert asyncio.run(specs[-1].probe()) == (
-        DEGRADED,
-        "archive_dir is not a mounted volume",
-    )
-
-    # Mounted directory.
-    monkeypatch.setattr("os.path.ismount", lambda p: True)
-    assert asyncio.run(specs[-1].probe()) == (UP, "archive volume mounted")

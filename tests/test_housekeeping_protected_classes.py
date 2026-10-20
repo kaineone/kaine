@@ -26,6 +26,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import kaine.modules.sleep.housekeeping as housekeeping_module
 import kaine.storage
 from kaine.cycle.housekeeping_floor import AwakeFloor
 from kaine.housekeeping_pressure import HousekeepingPressure
@@ -44,10 +45,11 @@ def _tmp_archive_counts_as_mounted(monkeypatch):
 
     The real mount check is covered in tests/test_housekeeping_review2.py.
     """
-    real_ismount = os.path.ismount
+    real_check = housekeeping_module._is_mounted_volume
     monkeypatch.setattr(
-        "kaine.modules.sleep.housekeeping.os.path.ismount",
-        lambda p: True if "archive" in str(p) else real_ismount(p),
+        housekeeping_module,
+        "_is_mounted_volume",
+        lambda archive, roots: os.path.isdir(archive) if "archive" in str(archive) else real_check(archive, roots),
     )
 
 
@@ -266,6 +268,9 @@ def test_no_public_deletion_bypass_exists():
     assert public == sorted(
         [
             "check_allowed",
+            "days_until_budget",
+            "effective_disk_budget",
+            "growth_bytes_per_day",
             "disk_bytes",
             "disk_excess",
             "candidates",

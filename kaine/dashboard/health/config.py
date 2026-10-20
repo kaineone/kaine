@@ -57,10 +57,7 @@ def build_dependency_specs(
     vocal_cfg: dict[str, Any],
     planning_cfg: dict[str, Any],
     state_encryption_cfg: dict[str, Any] | None = None,
-    sleep_cfg: dict[str, Any] | None = None,
 ) -> list[DependencySpec]:
-    from .probes import DEGRADED, NOT_CONFIGURED, UP
-
     redis_host = str(redis_cfg.get("host", "127.0.0.1"))
     redis_port = int(redis_cfg.get("port", 6379))
 
@@ -211,32 +208,6 @@ def build_dependency_specs(
             )
         )
 
-    async def _housekeeping_archive_probe() -> tuple[str, str]:
-        if sleep_cfg is None:
-            return NOT_CONFIGURED, "housekeeping disabled"
-        hk = sleep_cfg.get("housekeeping") or {}
-        if not hk.get("enabled", True):
-            return NOT_CONFIGURED, "housekeeping disabled"
-        archive_dir = str(hk.get("archive_dir", "")).strip()
-        if not archive_dir:
-            return (
-                DEGRADED,
-                "housekeeping is enabled without an archive volume: study records never leave the host and the housekeeping pressure grows; set [sleep.housekeeping].archive_dir to a mounted volume",
-            )
-        archive_path = resolve(Path(archive_dir))
-        if not archive_path.exists():
-            return DEGRADED, "archive_dir is not a mounted volume"
-        if os.path.ismount(archive_path):
-            return UP, "archive volume mounted"
-        try:
-            data_dev = os.stat(resolve("data")).st_dev
-            archive_dev = os.stat(archive_path).st_dev
-        except OSError:
-            return DEGRADED, "archive_dir is not a mounted volume"
-        if archive_dev != data_dev:
-            return UP, "archive volume mounted"
-        return DEGRADED, "archive_dir is not a mounted volume"
-
     return [
         DependencySpec(
             name="Redis",
@@ -282,12 +253,6 @@ def build_dependency_specs(
             probe=lambda _sec=state_encryption_cfg or {}: probe_state_encryption(
                 section=_sec
             ),
-        ),
-        DependencySpec(
-            name="Housekeeping archive",
-            role="Sleep housekeeping",
-            module="sleep",
-            probe=_housekeeping_archive_probe,
         ),
     ]
 
@@ -347,7 +312,6 @@ def load_health_prober(
         vocal_cfg=cfg.get("vocal") or {},
         planning_cfg=cfg.get("planning") or {},
         state_encryption_cfg=state_enc_cfg,
-        sleep_cfg=cfg.get("sleep") or {},
     )
 
     research_submission_cfg = dict(cfg.get("research_submission") or {})

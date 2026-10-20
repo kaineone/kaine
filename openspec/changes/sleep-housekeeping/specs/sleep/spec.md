@@ -37,12 +37,16 @@ Before removing a local study record, housekeeping SHALL refuse that file, keepi
 - **THEN** the export is refused, the local record stays and the pass goes on with the next file
 
 ### Requirement: Exports leave no data behind
-Housekeeping SHALL export a study record only when the archive is a mounted volume (a mount point, or a filesystem other than every root's), and only when the record is dated before yesterday. It SHALL remove the local copy only when the source's size, modification time and inode, read through the descriptor it was copied from and by path, are unchanged since the copy; otherwise it SHALL repeat the export once and then keep the file. A shorter archive copy that is a prefix of the source SHALL be replaced. A file that vanishes, becomes a link or has more than one hard link SHALL be skipped without stopping the pass. Host memory SHALL count only bus entries acknowledged by every consumer group and older than the restart replay window; with neither in the bus the memory term SHALL be 0 and reported as not measured.
+Housekeeping SHALL export a study record only when the archive (default `/app/archive`) is a mount point on a device other than every root's, and only when the record is dated before yesterday. Without such an archive, boot SHALL log one operator notice with the projected days until the disk budget is reached at the mean daily growth of the last seven complete days. The disk budget SHALL be `disk_budget_share` (default 0.5, strictly between 0 and 1, validated at boot) of the size of the volume holding the study records, the smallest if they span several, unless `disk_budget_bytes` sets it explicitly. It SHALL remove the local copy only when the source's size, modification time and inode, read through the descriptor it was copied from and by path, are unchanged since the copy; otherwise it SHALL repeat the export once and then keep the file. A shorter archive copy that is a prefix of the source SHALL be replaced. A file that vanishes, becomes a link or has more than one hard link SHALL be skipped without stopping the pass. Host memory SHALL count only bus entries acknowledged by every consumer group and older than the restart replay window; with neither in the bus the memory term SHALL be 0 and reported as not measured.
 
 #### Scenario: A late append
 - **WHEN** a sink appends to a record after it was copied and before the local copy is removed
 - **THEN** the appended bytes end up in the archive copy or stay in the local file
 
 #### Scenario: An unmounted archive
-- **WHEN** `archive_dir` is a plain directory on the same filesystem as the study records
-- **THEN** no record is exported and the report says the archive is not mounted
+- **WHEN** `/app/archive` is a plain directory, or a mount point on the same device as the study records
+- **THEN** no record is exported, the report says the archive is not mounted, and boot logs the projected days until the budget
+
+#### Scenario: The budget follows the volume
+- **WHEN** the study records live on a 400 GB volume and `disk_budget_bytes` is not set
+- **THEN** the disk budget is 200 GB

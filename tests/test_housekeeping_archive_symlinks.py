@@ -10,6 +10,7 @@ import stat
 
 import pytest
 
+import kaine.modules.sleep.housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     ArchiveRefused,
     FileSkipped,
@@ -27,10 +28,11 @@ def _tmp_archive_counts_as_mounted(monkeypatch):
 
     The real mount check is covered in tests/test_housekeeping_review2.py.
     """
-    real_ismount = os.path.ismount
+    real_check = housekeeping_module._is_mounted_volume
     monkeypatch.setattr(
-        "kaine.modules.sleep.housekeeping.os.path.ismount",
-        lambda p: True if "archive" in str(p) else real_ismount(p),
+        housekeeping_module,
+        "_is_mounted_volume",
+        lambda archive, roots: os.path.isdir(archive) if "archive" in str(archive) else real_check(archive, roots),
     )
 
 

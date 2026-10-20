@@ -24,6 +24,7 @@ import logging.handlers
 import math
 import os
 import re
+import shutil
 import stat
 import time
 from collections.abc import Mapping
@@ -307,6 +308,8 @@ def _open_archive_dir(archive: Path, rel_dir: PurePath) -> int:
                 os.close(current)
 
 
+
+
 def _same_file(a: Path, b: Path) -> bool:
     """Return whether the files ``a`` and ``b`` refer to are the same inode.
 
@@ -319,6 +322,28 @@ def _same_file(a: Path, b: Path) -> bool:
     except OSError:
         return False
     return (a_stat.st_dev, a_stat.st_ino) == (b_stat.st_dev, b_stat.st_ino)
+
+
+def _is_mounted_volume(archive: Path, roots: Sequence[Path]) -> bool:
+    """Return True only when ``archive`` is a mounted directory on a
+    different device from every existing root.
+    """
+    if not os.path.isdir(archive) or not os.path.ismount(archive):
+        return False
+    try:
+        archive_dev = os.stat(archive).st_dev
+    except OSError:
+        return False
+    for root in roots:
+        if not root.exists():
+            continue
+        try:
+            root_dev = os.stat(root).st_dev
+        except OSError:
+            continue
+        if root_dev == archive_dev:
+            return False
+    return True
 
 
 def _unlink_regular(path: Path) -> int:
@@ -349,10 +374,11 @@ class HousekeepingConfig:
     """Configuration for the sleep housekeeping step."""
 
     enabled: bool = True
-    disk_budget_bytes: int = DEFAULT_DISK_BUDGET_BYTES
+    disk_budget_bytes: int | None = None
+    disk_budget_share: float = 0.5
     memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES
     time_allowance_s: float = DEFAULT_TIME_ALLOWANCE_S
-    archive_dir: str = ""
+    archive_dir: str = "/app/archive"
 
     @classmethod
     def from_section(cls, section: dict | None) -> HousekeepingConfig:
@@ -370,6 +396,7 @@ class HousekeepingConfig:
         allowed_keys = {
             "enabled",
             "disk_budget_bytes",
+            "disk_budget_share",
             "memory_budget_bytes",
             "time_allowance_s",
             "archive_dir",
@@ -390,19 +417,42 @@ class HousekeepingConfig:
                 )
             kwargs["enabled"] = value
 
-        for key in ("disk_budget_bytes", "memory_budget_bytes"):
-            if key in section:
-                value = section[key]
-                if type(value) is not int or value <= 0:
-                    raise ValueError(
-                        f"[sleep.housekeeping] {key} must be a positive int: {value!r}"
-                    )
-                kwargs[key] = value
+        if "disk_budget_bytes" in section:
+            value = section["disk_budget_bytes"]
+            if type(value) is not int or isinstance(value, bool) or value <= 0:
+                raise ValueError(
+                    f"[sleep.housekeeping] disk_budget_bytes must be a positive int: {value!r}"
+                )
+            kwargs["disk_budget_bytes"] = value
+
+        if "disk_budget_share" in section:
+            value = section["disk_budget_share"]
+            if (
+                type(value) not in (int, float)
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+                or value <= 0
+                or value >= 1
+            ):
+                raise ValueError(
+                    f"[sleep.housekeeping] disk_budget_share must be a finite "
+                    f"number strictly between 0 and 1: {value!r}"
+                )
+            kwargs["disk_budget_share"] = float(value)
+
+        if "memory_budget_bytes" in section:
+            value = section["memory_budget_bytes"]
+            if type(value) is not int or value <= 0:
+                raise ValueError(
+                    f"[sleep.housekeeping] memory_budget_bytes must be a positive int: {value!r}"
+                )
+            kwargs["memory_budget_bytes"] = value
 
         if "time_allowance_s" in section:
             value = section["time_allowance_s"]
             if (
                 type(value) not in (int, float)
+                or isinstance(value, bool)
                 or not math.isfinite(value)
                 or value <= 0
             ):
@@ -438,6 +488,7 @@ class Housekeeper:
         clock: Callable[[], float] = time.monotonic,
         today: Callable[[], str] | None = None,
         archive_mounted: Callable[[Path], bool] | None = None,
+        disk_usage: Callable[[Path], Any] = shutil.disk_usage,
     ) -> None:
         if roots is None:
             roots = [resolve(r) for r in ALLOWED_ROOTS]
@@ -458,7 +509,7 @@ class Housekeeper:
         self._clock = clock
         self._today = today if today is not None else self._default_today
         self._archive_mounted = archive_mounted
-        self._archive_mount_warned = False
+        self._disk_usage = disk_usage
 
         if config.archive_dir:
             self._archive = Path(resolve(config.archive_dir)).expanduser().resolve()
@@ -515,35 +566,100 @@ class Housekeeper:
         if self._archive is None or not os.path.isdir(self._archive):
             return None
 
-        mounted = False
         if self._archive_mounted is not None:
             mounted = self._archive_mounted(self._archive)
-        elif os.path.ismount(self._archive):
-            mounted = True
         else:
-            archive_dev = os.stat(self._archive).st_dev
-            mounted = True
-            for root in self._roots:
-                if not root.exists():
-                    continue
-                try:
-                    root_dev = os.stat(root).st_dev
-                except OSError:
-                    continue
-                if root_dev == archive_dev:
-                    mounted = False
-                    break
+            mounted = _is_mounted_volume(self._archive, self._roots)
 
         if mounted:
             return self._archive
-
-        if not self._archive_mount_warned:
-            logger.warning(
-                "sleep housekeeping: archive_dir is not a mounted volume; "
-                "no study record is exported"
-            )
-            self._archive_mount_warned = True
         return None
+
+    def effective_disk_budget(self) -> int:
+        """Return the disk budget in bytes.
+
+        Uses the explicit ``disk_budget_bytes`` override when set,
+        otherwise a share of the smallest total volume among the roots.
+        """
+        config = self._config
+        if config.disk_budget_bytes is not None:
+            return config.disk_budget_bytes
+
+        totals: list[int] = []
+        for root in self._roots:
+            path = root
+            while True:
+                try:
+                    usage = self._disk_usage(path)
+                    totals.append(usage.total)
+                    break
+                except OSError:
+                    parent = path.parent
+                    if parent == path:
+                        break
+                    path = parent
+
+        if not totals:
+            try:
+                totals.append(self._disk_usage(resolve(".")).total)
+            except OSError:
+                return 1
+
+        total = min(totals)
+        budget = int(config.disk_budget_share * total)
+        return max(1, budget)
+
+    def growth_bytes_per_day(self) -> float | None:
+        """Mean daily study-record growth over the last seven complete days.
+
+        Files are grouped by the ISO date embedded in their name. The mean
+        is taken over the dates that have at least one file.
+        Returns ``None`` when no dated file exists in that window.
+        """
+        today_str = self._today()
+        try:
+            today = datetime.date.fromisoformat(today_str)
+        except ValueError:
+            return None
+        yesterday = today - datetime.timedelta(days=1)
+        window_start = today - datetime.timedelta(days=7)
+
+        daily_sizes: dict[datetime.date, int] = {}
+        for root in self._roots:
+            if not root.is_dir():
+                continue
+            for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+                for name in filenames:
+                    match = DAILY_FILENAME_RE.match(name)
+                    if not match:
+                        continue
+                    try:
+                        date = datetime.date.fromisoformat(match.group("date"))
+                    except ValueError:
+                        continue
+                    if not (window_start <= date <= yesterday):
+                        continue
+                    path = Path(dirpath) / name
+                    if os.path.islink(path):
+                        continue
+                    try:
+                        daily_sizes[date] = daily_sizes.get(date, 0) + path.stat().st_size
+                    except OSError:
+                        continue
+        if not daily_sizes:
+            return None
+
+        return sum(daily_sizes.values()) / len(daily_sizes)
+
+    def days_until_budget(self) -> float | None:
+        """Estimated days until the effective disk budget is reached."""
+        growth = self.growth_bytes_per_day()
+        if growth is None or growth == 0:
+            return None
+        remaining = self.effective_disk_budget() - self.disk_bytes()
+        if remaining <= 0:
+            return 0.0
+        return remaining / growth
 
     def check_allowed(self, path: Path) -> Path:
         """Validate that ``path`` may be moved, deleted, or counted.
@@ -612,7 +728,8 @@ class Housekeeper:
 
     def disk_excess(self) -> float:
         """Return the disk term of the housekeeping pressure right now."""
-        return max(0.0, self.disk_bytes() / self._config.disk_budget_bytes - 1.0)
+        budget = self.effective_disk_budget()
+        return max(0.0, self.disk_bytes() / budget - 1.0)
 
     def candidates(self) -> list[Path]:
         """Return the reclaimable files, oldest first by modification time.
@@ -672,7 +789,7 @@ class Housekeeper:
             skipped_unexported = 0
             archive = self._mounted_archive()
             remaining = before
-            budget = self._config.disk_budget_bytes
+            budget = self.effective_disk_budget()
             stopped: str | None = None
 
             if remaining <= budget:
@@ -729,8 +846,8 @@ class Housekeeper:
             after = self.disk_bytes()
 
             disk_term = 0.0
-            if self._config.disk_budget_bytes > 0:
-                disk_term = max(0.0, after / self._config.disk_budget_bytes - 1.0)
+            if budget > 0:
+                disk_term = max(0.0, after / budget - 1.0)
             memory_term = 0.0
             episodic_term = 0.0
             if (
@@ -747,7 +864,8 @@ class Housekeeper:
                 "enabled": True,
                 "disk_bytes_before": before,
                 "disk_bytes_after": after,
-                "disk_budget_bytes": self._config.disk_budget_bytes,
+                "disk_budget_bytes": budget,
+                "disk_budget_explicit": self._config.disk_budget_bytes is not None,
                 "memory_bytes": None,
                 "memory_measured": False,
                 "memory_budget_bytes": self._config.memory_budget_bytes,

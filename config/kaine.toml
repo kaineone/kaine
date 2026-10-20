@@ -1338,21 +1338,24 @@ associative_replay = false
 # Sleep housekeeping (paper 3.5 and A.5). Every sleep, last before the affective reset, reclaims
 # regenerable or spent data oldest first: rotated backups of the process log (written with
 # --log-file) are deleted, and closed daily study-record files (dated before yesterday) in the
-# configured study-sink directories are exported to archive_dir under a SHA-256 check and only
+# configured study-sink directories are exported to the archive under a SHA-256 check and only
 # then removed. Unexported study records are never deleted. It stops when the disk bytes are
-# within disk_budget_bytes or time_allowance_s (Delta_hk) has passed; whatever is left carries
+# within the disk budget or time_allowance_s (Delta_hk) has passed; whatever is left carries
 # over. Host memory counts only bus entries acknowledged by every consumer group and older than
 # the restart replay window; the bus has neither, so the memory term is 0. Awake, fatigue builds
 # at nu_act (1 + P^hk). Nothing under state/ is ever touched. The budgets and the reserve are
 # operator settings (Table A1); these defaults are conservative, not a recommendation.
-# archive_dir must be a mounted volume (a mount point, or another filesystem than the study
-# records), outside the study-sink directories and state/. Empty (the default) means no archive:
-# study records never leave the host, P^hk grows with them, and boot and the dashboard warn.
+# The disk budget is disk_budget_share of the volume holding the study records (the smallest, if
+# they span several), so the pressure tracks real scarcity; set disk_budget_bytes to override it.
+# The archive is used only when archive_dir is a mount point on another device than the study
+# records (bind a drive at /app/archive with a compose overlay, see docs/09-modules/sleep.md);
+# otherwise study records stay on the host and boot logs the projected days until the budget.
 enabled = true
-disk_budget_bytes = 10737418240    # 10 GiB of regenerable data and study records on the host
+disk_budget_share = 0.5            # B^hk for disk: half the study-record volume; (0, 1)
+# disk_budget_bytes = 10737418240  # optional explicit B^hk for disk, overrides the share
 memory_budget_bytes = 1073741824   # 1 GiB; reserved, the bus holds no entry the paper counts
 time_allowance_s = 60.0            # Delta_hk, seconds per sleep
-archive_dir = ""                   # e.g. "/archive", a volume the operator mounts
+archive_dir = "/app/archive"       # used only if it is a mounted volume on another device
 # The awake floor (A.5): every floor_period_s while awake it checks the free space of every volume
 # a study sink writes to, and of state/, against R^hk = max(reserve_bytes, reserve_share x volume
 # size). Below R^hk it reclaims regenerable data on that volume oldest first until free space
