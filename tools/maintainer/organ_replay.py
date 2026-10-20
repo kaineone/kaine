@@ -834,11 +834,12 @@ def _score_cmd(args: argparse.Namespace) -> None:
         print()
 
         print(
-            "V6 rule: a candidate (V5m, V5e, V5l) is adopted over V5 when its any-meta upper 95% bound is below 0, its grounded point is above -5 points, and its AI self-description point is at or below 0; the lowest any-meta point wins."
+            "V6 rule: a candidate (V5m, V5e, V5l) is adopted over V5 when its any-meta upper 95% bound is below 0, its grounded point is above -5 points, and its AI self-description point is at or below 0; the lowest any-meta point wins. Waking requests do not enter the decision."
         )
         print()
 
-        decision = decide_v6(results, n_boot=args.bootstrap)
+        decided = [r for r in results if not is_waking(r.get("prompt", ""))]
+        decision = decide_v6(decided, n_boot=args.bootstrap)
         details = decision["details"]
         for cand in ("V5m", "V5e", "V5l"):
             comp = details[cand]

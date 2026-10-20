@@ -14,13 +14,13 @@ The tenth boot's intent log gave 1,508 cases (1,377 thoughts, 131 utterances, 10
 
 Percent of texts; grounded is the percent of texts sharing a modality with their awareness block. V5 reproduces the live boot's rates.
 
-Paired differences from V5 (point, 95 percent interval), in points:
+Paired differences from V5 over the non-waking cases (point, 95 percent interval), in points:
 
 | Candidate | Any meta | Grounded | AI self-description | Passes |
 | --- | --- | --- | --- | --- |
-| V5m | -4.1 (-5.5 to -2.7) | -0.1 (-1.7 to 1.5) | +0.1 (-0.1 to 0.3) | no: AI self-description above 0 |
-| V5e | +6.9 (5.3 to 8.4) | -3.4 (-5.1 to -1.6) | +0.5 (0.3 to 0.8) | no |
-| V5l | -13.0 (-14.5 to -11.6) | +0.9 (-0.8 to 2.7) | +0.2 (0.0 to 0.4) | no: AI self-description above 0 |
+| V5m | -4.2 (-5.5 to -2.9) | -0.1 (-1.8 to 1.6) | +0.1 (-0.1 to 0.3) | no: AI self-description above 0 |
+| V5e | +7.0 (5.4 to 8.5) | -3.4 (-5.2 to -1.5) | +0.5 (0.3 to 0.8) | no |
+| V5l | -13.2 (-14.6 to -11.7) | +0.8 (-1.0 to 2.6) | +0.2 (0.0 to 0.4) | no: AI self-description above 0 |
 
 Winner: none. Under the rule fixed before the run the persona stays at version 5. V5l removes nearly all list-form texts and cuts meta-commentary from 22.7 to 9.7 percent, but its AI self-description count rises from 7 to 16 texts in 4,524 (0.2 to 0.4 percent). The rule allows no rise, so adopting it would need a decision outside the rule.
 
