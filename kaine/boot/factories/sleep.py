@@ -307,6 +307,8 @@ def make_sleep(
 
     hk_config = HousekeepingConfig.from_section(section.get("housekeeping"))
     if hk_config.enabled:
+        from kaine.housekeeping_pressure import shared_pressure
+
         episodic_cfg = (kaine_config or {}).get("episodic_memory") or {}
         raw_budget = episodic_cfg.get("storage_budget_bytes")
         episodic_budget_bytes: Optional[int] = None
@@ -322,6 +324,9 @@ def make_sleep(
             memory_reader=lambda: bus_memory_bytes(bus.client),
             episodic_budget_bytes=episodic_budget_bytes,
         )
+        # Paper A.5: the shared pressure holder is updated from each sleep's
+        # housekeeping report and scales awake fatigue build-up.
+        kwargs["housekeeping_pressure"] = shared_pressure()
 
     sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:

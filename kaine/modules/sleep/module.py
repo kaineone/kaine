@@ -137,10 +137,15 @@ class Sleep(BaseModule):
         organ_gguf_path: Optional[Path] = None,
         # sleep housekeeping, paper 3.5 and A.5; None runs none
         housekeeper: Optional[Any] = None,
+        # Shared housekeeping pressure holder (paper A.5): each successful
+        # housekeeping report sets the pressure that scales awake fatigue
+        # build-up at nu_act (1 + P^hk). None leaves fatigue unchanged.
+        housekeeping_pressure: Optional[Any] = None,
     ) -> None:
         super().__init__(bus)
         self._organ_gguf_path = organ_gguf_path
         self._housekeeper = housekeeper
+        self._housekeeping_pressure = housekeeping_pressure
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
@@ -988,6 +993,10 @@ class Sleep(BaseModule):
                     housekeeping_report = await self._housekeeper.run(
                         episodic_store_bytes=store_bytes
                     )
+                    if self._housekeeping_pressure is not None:
+                        # Paper A.5: each successful housekeeping report sets
+                        # the pressure that scales awake fatigue build-up.
+                        self._housekeeping_pressure.set_from_sleep(housekeeping_report)
                 except Exception:
                     log.warning("sleep: housekeeping failed (continuing)", exc_info=True)
                     housekeeping_report = {"failed": True}

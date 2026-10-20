@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| sleep-housekeeping | 5/6 (83%) | Every sleep runs housekeeping last before the affective reset: closed study-record files move oldest first to an operator-mounted archive within a disk budget and a time allowance, and the sleep summary reports the pressure P^hk (paper 3.5, A.5); fatigue integration, the awake floor and regenerable data wait on the paper. |
+| sleep-housekeeping | 7/7 (100%) | Every sleep runs housekeeping last before the affective reset: process-log backups are deleted and study records exported to an operator archive under a checksum, oldest first within budgets; awake fatigue builds at nu_act (1 + P^hk), and an awake floor keeps free space above a reserve, suspending the study record with a gap marker when it must (paper 3.5, A.5). |
 | replay-guard-test-wait | 4/4 (100%) | Make the effectors replay-guard tests wait for the state they assert instead of sleeping a fixed time, which failed under CI load. |
 | hearing-stage-published | 4/4 (100%) | Log and publish each stage the developmental hearing band enters, read from the same awake time the audio uses, so operators and analyses can see which band the entity hears; the band itself is unchanged. |
 | cycle-slip-start-to-start | 4/4 (100%) | Measure the cycle's slip from tick start to tick start, so the work after a tick and the oversleep of the pacing wait show; the pacing itself is unchanged. |

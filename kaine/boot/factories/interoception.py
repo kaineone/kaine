@@ -69,6 +69,13 @@ def make_interoception(
     if feedback is not None:
         kw["workspace_feedback"] = feedback
     kw.update(_check_injections("interoception", injections, {"forward_model"}))
+    # Paper A.5: awake fatigue builds at nu_act (1 + P^hk). Wire the shared
+    # housekeeping pressure through the same keyword path as the other
+    # arguments, unless the caller's injections already set it.
+    if "housekeeping_pressure" not in kw:
+        from kaine.housekeeping_pressure import shared_pressure
+
+        kw["housekeeping_pressure"] = shared_pressure().value
 
     if kw.get("self_rhythm_enabled"):
         kw.pop("self_rhythm_enabled")

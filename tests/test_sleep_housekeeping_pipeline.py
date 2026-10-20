@@ -149,10 +149,9 @@ async def test_cancel_during_phase_one_skips_housekeeper(bus, tmp_path):
     task = asyncio.create_task(sleep.enter_sleep())
     await asyncio.sleep(0.2)
     task.cancel()
-    try:
+    # The cancel reaches the sleep in phase 1, so housekeeping never runs.
+    with pytest.raises(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
     assert housekeeper.ran == 0
     await sleep.shutdown()
 
