@@ -76,7 +76,7 @@ Geometry is taken from `[vision]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the hearing band's `maturation_seconds`, so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
+| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the developmental phase's awake-time floor (`[developmental_stage].min_lived_seconds`), so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
 
 #### `[perception_feed.stimulus_source.audio]`
 
@@ -91,7 +91,7 @@ The hearing band filters the whole stimulus-source audio, the soundscape and the
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Apply the hearing band. `false` gives the audio without the band byte for byte. |
-| `maturation_seconds` | float | `86400` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). |
+| `maturation_seconds` | float | `43200` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). The 12 h default puts a step every 3 h, since offline each low step gives two to four hours of learning progress (paper A.7). |
 
 #### `[perception_feed.stimulus_source.readout]`
 
@@ -162,6 +162,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `max_deferral_seconds` | float | `600.0` | Maximum total deferral allowed when the system asks to delay consolidation. |
 | `per_defer_seconds` | float | `60.0` | Deferral granted per request. |
 | `requested_rest_min_interval_s` | float | `1800.0` | Minimum entity-time seconds between a sleep's end and a planning-requested rest. Both the cycle's planning module proposal source and the sleep module's own `too_soon` check use it. Must be greater than 0. |
+| `developmental_rest_s` | float | `1260.0` | Length in entity seconds of the developmental rest that a spent stimulus brings (paper 3.5, Table A1 `Delta_rest`), the mean length of a quiescent episode in mature fetuses (Pillai and James 1990). Must be greater than 0. |
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 

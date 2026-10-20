@@ -82,6 +82,7 @@ class Drive:
     # success and failure counts for coping potential (paper A.4).
     own_ends: int = field(default=0, init=False)
     other_ends: int = field(default=0, init=False)
+    reset_ends: int = field(default=0, init=False)  # crossings ended by the sleep reset, paper 6.2
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.relief_gain) or not (0.0 <= self.relief_gain <= 1.0):
@@ -189,6 +190,12 @@ class Drive:
     def reset(self) -> None:
         self.value = 0.0
         self._has_fired = False
+
+    def sleep_reset(self) -> None:
+        """Count a latched deficit crossing as ended by sleep, then clear the latch (paper 6.2)."""
+        if self._has_fired and not self.heterostatic:
+            self.reset_ends += 1
+        self.reset()
 
 
 @dataclass
@@ -320,7 +327,7 @@ class DriveSet:
     def reset_deficits(self) -> None:
         """The sleep reset, paper A.4 item 4; interest carries through sleep like the learning-progress bins it reads."""
         for d in self.deficits():
-            d.reset()
+            d.sleep_reset()
 
     def above_to_dict(self) -> dict[str, bool]:
         """Return whether each drive is at or above its threshold, for the welfare records (paper 6.2)."""
@@ -329,6 +336,14 @@ class DriveSet:
 
     def outcomes_to_dict(self) -> dict[str, dict[str, int]]:
         return {d.name: {"own": d.own_ends, "other": d.other_ends} for d in self.all()}
+
+    def reset_ends_to_dict(self) -> dict[str, int]:
+        """How many of each deficit's crossings were still open when sleep reset them (paper 6.2)."""
+        return {d.name: d.reset_ends for d in self.deficits()}
+
+    def open_to_dict(self) -> dict[str, bool]:
+        """Whether each deficit's crossing is still open (its hysteresis latch is set), paper 6.2."""
+        return {d.name: bool(d._has_fired) for d in self.deficits()}
 
     def load_outcomes(self, data: Any) -> None:
         """Restore each drive's own and other end counters.
@@ -348,6 +363,19 @@ class DriveSet:
                 value = entry.get(key)
                 if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
                     setattr(drive, target, value)
+
+    def load_reset_ends(self, data: Any) -> None:
+        """Restore each deficit's sleep-reset end counter.
+
+        Unknown names, non-dict data, non-integer values, booleans, negative
+        integers and the heterostatic curiosity drive are ignored.
+        """
+        if not isinstance(data, dict):
+            return
+        for d in self.deficits():
+            value = data.get(d.name)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                d.reset_ends = value
 
     def fired_to_dict(self) -> dict[str, bool]:
         """Return the crossing latch state for each drive.

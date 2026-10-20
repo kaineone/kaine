@@ -1136,8 +1136,9 @@ luminance_contrast = 0.10       # low contrast
 luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
 maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
 colour_ramp_seconds = 86400     # awake seconds, the time constant of colour's rise from grey; equals the
-                                # hearing band's maturation_seconds, so colour keeps rising across the phase
-                                # (Table A1; newborn colour vision is still limited, Adams et al. 1994)
+                                # phase's awake-time floor ([developmental_stage].min_lived_seconds, Table A1
+                                # Delta_awake), so colour keeps rising across the phase (paper A.7; newborn
+                                # colour vision is still limited, Adams et al. 1994)
 
 [perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
@@ -1167,12 +1168,14 @@ pause_max_seconds = 1.5         # maximum pause between utterances
 # at 354-707 Hz (500 Hz alone) and over maturation_seconds takes four equal
 # steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins and, with no unheard tone
 # below, the low edge goes (low-pass at 707 Hz, the heartbeat thud heard); 1000 Hz
-# joins (low-pass at 1732 Hz); 3000 Hz joins and the band is open. With it on,
+# joins (low-pass at 1732 Hz); 3000 Hz joins and the band is open. The shipped
+# 12 h span puts a step every 3 h, since offline each low step gives two to four
+# hours of learning progress (paper A.7). With it on,
 # the voice loads with its low-pass at 3000 Hz; the bed keeps lowpass_hz.
 # enabled = false gives the audio without the band byte for byte.
 [perception_feed.stimulus_source.hearing]
 enabled = true
-maturation_seconds = 86400.0    # awake seconds over which the band widens (Table A1)
+maturation_seconds = 43200.0    # awake seconds over which the band widens (Table A1 Delta_hear, 12 h)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so
@@ -1320,6 +1323,11 @@ baseline_salience = 0.5
 alert_salience = 0.8
 # Minimum entity-time seconds between a sleep's end and a planning module-requested rest; bounds rest requests from an exploring planning module.
 requested_rest_min_interval_s = 1800.0
+# Developmental rest (paper 3.5, Table A1 Delta_rest): in the developmental phase a boredom goal that
+# stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts this
+# many entity seconds, the mean length of a quiescent episode (state 1F) in mature fetuses (Pillai and
+# James 1990). Other sleeps end with their phases.
+developmental_rest_s = 1260.0
 
 [sleep.consolidation]
 # Whether the sleep module subscribes to interoception.fatigue and triggers on threshold crossing.
