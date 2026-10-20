@@ -23,22 +23,16 @@ Two distinct "divergences" exist in the codebase; this uses the right one:
   irreversible. Unreadable individuation state counts toward divergence, failing
   toward protection.
 
-* **Consolidation divergence** (``state/sleep/consolidation_divergence.json``)
-  is the cheap, continuous organ-level companion to the permutation test:
-  every voice-alignment sleep, the sleep module surfaces the breadth (``divergence_rate``)
-  and depth (``divergence_magnitude``) of how often / how far the entity's
-  conditioned output diverged from its bare language organ. When the latest
-  rate or magnitude crosses a configured threshold it marks organ-level
-  divergence — a graded signal alongside the permutation test and the self-model module's drift.
-  drift. We read it from the written record (no ``kaine.evaluation`` /
-  ``kaine.modules.sleep`` import — the boundary-neutral seam).
+* There is no organ-level consolidation divergence arm. Voice adaptation
+  builds no preference pairs and computes no organ-level divergence until a
+  validated preference source exists (paper section 3.5), so a
+  ``state/sleep/consolidation_divergence.json`` left by an earlier build is
+  not read.
 
 Secondary identity heuristics raise confidence and catch entities that were
 never individuation-tested: the self-model module's ``drift_count > 0`` with a non-empty
 ``identity_history`` (``state/self_model/self_model.json``), and the presence of
-trained voice adapters (``state/sleep/adapters/``) — the latter retained only
-as a weaker secondary signal now that the graded consolidation metric is the
-primary organ-level measure.
+trained voice adapters (``state/sleep/adapters/``), a weaker secondary signal.
 
 All reads are pure and guarded — this function never raises. When nothing can
 be found, ``diverged`` is ``False`` but the summary says the assessment could
@@ -70,56 +64,21 @@ from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
 
-#: Conservative shipped thresholds for the graded consolidation-divergence
-#: signal. Either crossing marks organ-level divergence. Operator-calibrated
-#: via ``[sleep.voice_alignment]`` in kaine.toml (the principled, always-
-#: computed signal the threshold-calibration work targets).
-DEFAULT_CONSOLIDATION_RATE_THRESHOLD = 0.5
-DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD = 0.25
-
 #: Maximum age in seconds for a non-significant scored individuation report to
 #: be considered current. Older reports, or reports whose conditioning digest
 #: no longer matches the entity, become stale.
 DEFAULT_MAX_REPORT_AGE_S = 14 * 86400.0
 
 
-def consolidation_thresholds_from_config(
+def distinctiveness_threshold_from_config(
     config: dict[str, Any] | None,
-) -> tuple[float, float]:
-    """Read ``(rate, magnitude)`` consolidation thresholds from a kaine config.
+) -> float:
+    """Read the welfare-protective voice-distinctiveness threshold from a kaine config.
 
-    Looks under ``[sleep.voice_alignment]`` for
-    ``consolidation_divergence_rate_threshold`` /
-    ``consolidation_divergence_magnitude_threshold``. Falls back to the shipped
-    conservative defaults on any missing key or bad value. Pure + guarded.
+    Looks under ``[sleep.voice_alignment]`` for ``distinctiveness_threshold``.
+    Falls back to 0.0 on a missing section or key, a bad value, NaN, infinity,
+    or a negative value. Pure + guarded.
     """
-    rate = DEFAULT_CONSOLIDATION_RATE_THRESHOLD
-    mag = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD
-    try:
-        section = ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
-        rate = float(section.get("consolidation_divergence_rate_threshold", rate))
-        mag = float(
-            section.get("consolidation_divergence_magnitude_threshold", mag)
-        )
-    except Exception:
-        return (
-            DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
-            DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
-        )
-    return rate, mag
-
-
-def voice_alignment_thresholds_from_config(
-    config: dict[str, Any] | None,
-) -> tuple[float, float, float]:
-    """Read ``(rate, magnitude, distinctiveness)`` thresholds from a kaine config.
-
-    Extends :func:`consolidation_thresholds_from_config` with the welfare-
-    protective distinctiveness threshold under
-    ``[sleep.voice_alignment].distinctiveness_threshold``. Falls back to 0.0 on
-    any bad value. Pure + guarded.
-    """
-    rate, mag = consolidation_thresholds_from_config(config)
     distinct = 0.0
     try:
         section = ((config or {}).get("sleep") or {}).get("voice_alignment") or {}
@@ -130,7 +89,7 @@ def voice_alignment_thresholds_from_config(
             distinct = 0.0
     except Exception:
         distinct = 0.0
-    return rate, mag, distinct
+    return distinct
 
 
 def adapter_dir_for(config: dict | None, state_root: Path) -> Path:
@@ -262,39 +221,6 @@ def _read_self_model(self_model_path: Path) -> dict[str, Any] | None:
         }
     except Exception:
         log.debug("assess_divergence: reading self_model failed", exc_info=True)
-        return None
-
-
-def _read_consolidation_divergence(path: Path) -> dict[str, Any] | None:
-    """Read the latest consolidation-divergence metric the sleep module persisted, or None.
-
-    Pure + guarded — any error (missing file, bad JSON, decrypt failure) yields
-    None rather than raising, so a fresh entity (no sleep yet) simply has no
-    consolidation signal. Transparently decrypts via the active state encryptor.
-    Only the numeric aggregates are returned; the record never contained any
-    utterance text.
-    """
-    try:
-        if not path.is_file():
-            return None
-        raw = path.read_bytes()
-        if not raw.strip():
-            return None
-        try:
-            from kaine.security.crypto import get_state_encryptor
-
-            text = get_state_encryptor().maybe_decrypt(raw).decode("utf-8")
-        except Exception:
-            text = raw.decode("utf-8")
-        data = json.loads(text)
-        if not isinstance(data, dict):
-            return None
-        return data
-    except Exception:
-        log.debug(
-            "assess_divergence: reading consolidation divergence failed",
-            exc_info=True,
-        )
         return None
 
 
@@ -508,8 +434,6 @@ def _read_voice_measures_latest(measures_latest: Path) -> dict[str, Any] | None:
 def assess_divergence(
     *,
     state_root: Path = Path("state"),
-    consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
-    consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
     distinctiveness_threshold: float = 0.0,
     now: datetime | None = None,
     max_report_age_s: float = DEFAULT_MAX_REPORT_AGE_S,
@@ -523,15 +447,9 @@ def assess_divergence(
     state_root:
         Root of the on-disk entity state (default ``state``). Tests point this
         at a tmp dir.
-    consolidation_rate_threshold, consolidation_magnitude_threshold:
-        The graded consolidation-divergence thresholds. The latest
-        ``state/sleep/consolidation_divergence.json`` record marks organ-level
-        divergence when its ``divergence_rate`` >= the rate threshold OR its
-        (non-null) ``divergence_magnitude`` >= the magnitude threshold. Shipped
-        conservative; operator-calibrated.
     distinctiveness_threshold:
         Welfare-protective voice-distinctiveness threshold, 0.0 until calibrated
-        (read by callers with :func:`voice_alignment_thresholds_from_config`).
+        (read by callers with :func:`distinctiveness_threshold_from_config`).
         An entity that has spoken is diverged by the voice arm when its
         distinctiveness is at or above this threshold, or when it is missing,
         unreadable or not finite. An entity that has never spoken abstains.
@@ -568,34 +486,6 @@ def assess_divergence(
     )
     individuated = bool(ind["individuated"])
     latest = ind.get("latest")
-
-    # --- Primary (organ-level): consolidation divergence ------------------
-    # The cheap, continuous companion to the permutation test: the sleep module surfaces
-    # the breadth (rate) and depth (magnitude) of how the entity's conditioned
-    # output diverges from its bare language organ, every sleep.
-    consolidation = _read_consolidation_divergence(
-        state_root / "sleep" / "consolidation_divergence.json"
-    )
-    cons_rate = None
-    cons_magnitude = None
-    if consolidation is not None:
-        rate_raw = consolidation.get("divergence_rate")
-        mag_raw = consolidation.get("divergence_magnitude")
-        try:
-            cons_rate = None if rate_raw is None else float(rate_raw)
-        except (TypeError, ValueError):
-            cons_rate = None
-        try:
-            cons_magnitude = None if mag_raw is None else float(mag_raw)
-        except (TypeError, ValueError):
-            cons_magnitude = None
-    consolidation_diverged = bool(
-        (cons_rate is not None and cons_rate >= consolidation_rate_threshold)
-        or (
-            cons_magnitude is not None
-            and cons_magnitude >= consolidation_magnitude_threshold
-        )
-    )
 
     # --- Voice-distinctiveness arm (welfare-protective, uncalibrated) -----
     # D8/D13: an entity that has spoken is diverged when its distinctiveness is
@@ -648,13 +538,11 @@ def assess_divergence(
     # --- Weaker secondary: trained voice adapters -------------------------
     # An accepted adapter still implies PAST divergence, but it is a coarse,
     # downstream boolean (flips only after training succeeds AND passes the
-    # capability + abliteration gates). The graded consolidation metric above
-    # is the primary organ-level measure; this is kept as a weaker signal.
+    # capability + abliteration gates), so it is kept as a weaker signal.
     adapters_present = _adapters_present(adapters_dir)
 
     diverged = bool(
         individuated
-        or consolidation_diverged
         or (voice_vote is True)
         or self_model_drift
         or adapters_present
@@ -672,12 +560,6 @@ def assess_divergence(
         "individuation_last_alpha_k": latest.get("alpha_k") if latest else None,
         "individuation_last_report_ts": latest.get("ts") if latest else None,
         "individuation_last_inconclusive_reason": latest.get("inconclusive_reason") if latest else None,
-        "consolidation_divergence_found": consolidation is not None,
-        "consolidation_divergence_rate": cons_rate,
-        "consolidation_divergence_magnitude": cons_magnitude,
-        "consolidation_divergence_signal": consolidation_diverged,
-        "consolidation_rate_threshold": float(consolidation_rate_threshold),
-        "consolidation_magnitude_threshold": float(consolidation_magnitude_threshold),
         "voice_has_spoken": voice_has_spoken,
         "voice_distinctiveness": voice_distinctiveness,
         "voice_distinctiveness_threshold": float(distinctiveness_threshold),
@@ -709,11 +591,6 @@ def assess_divergence(
                     "its individuation state could not be read, which counts as "
                     "individuated so that it stays protected"
                 )
-        if consolidation_diverged:
-            reasons.append(
-                "the organ-level consolidation divergence crossed its threshold "
-                f"(rate={cons_rate}, magnitude={cons_magnitude})"
-            )
         if voice_vote is True:
             if voice_reason == "voice_paths_unreadable":
                 reasons.append(
@@ -759,17 +636,12 @@ def assess_divergence(
             "unsure and choose the stricter decommission path."
         )
     elif ind["state"] in ("none", "no_reference"):
-        if (
-            self_model is None
-            and consolidation is None
-            and not adapters_present
-        ):
+        if self_model is None and not adapters_present:
             summary = (
                 "COULD NOT CONFIRM: no individuation measurement, Self-model "
-                "self-model, consolidation record or voice adapters were found, "
-                "so individuation could not be assessed. Treat the entity as "
-                "mature if you are unsure and choose the stricter decommission "
-                "path."
+                "self-model or voice adapters were found, so individuation "
+                "could not be assessed. Treat the entity as mature if you are "
+                "unsure and choose the stricter decommission path."
             )
         else:
             summary = (

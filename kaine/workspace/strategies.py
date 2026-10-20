@@ -187,7 +187,7 @@ class InterestGoalScorer:
         learning_progress_getter: Callable[[], Mapping[str, float]],
         *,
         gain: float = 0.5,
-        floor: float = 0.05,
+        floor: float = 0.20,
     ) -> None:
         if not math.isfinite(gain) or gain < 0.0:
             raise ValueError("gain must be finite and >= 0")
