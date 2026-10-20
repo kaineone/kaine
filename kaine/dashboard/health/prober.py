@@ -281,7 +281,12 @@ class HealthProber:
         return blocks.supervisor_block(self.supervisor_control_path, self.supervisor_escalation_path)
 
     def _module_states(self) -> list[dict[str, Any]]:
-        return blocks.module_states(self.cycle_runtime_path, self.modules_enabled)
+        feed_mode = str((self.perception_feed_cfg or {}).get("mode", "off")).lower()
+        return blocks.module_states(
+            self.cycle_runtime_path,
+            self.modules_enabled,
+            feed_mode=feed_mode,
+        )
 
     # ---- probe scheduling -------------------------------------------------
 
