@@ -46,7 +46,6 @@ class FakeBus:
 @pytest.mark.asyncio
 async def test_reclaim_regenerable_device_filter_for_log_backup(tmp_path, monkeypatch):
     """Device filter skips candidates on a different st_dev; None disables it."""
-    import kaine.modules.sleep.housekeeping as hk
 
     prev_root = kaine.storage.data_root()
     kaine.storage.set_data_root(tmp_path)
@@ -65,7 +64,7 @@ async def test_reclaim_regenerable_device_filter_for_log_backup(tmp_path, monkey
                 fields[2] = st.st_dev + 1000
             return os_module.stat_result(fields)
 
-        monkeypatch.setattr(hk.os, "stat", fake_stat)
+        monkeypatch.setattr(os_module, "stat", fake_stat)
 
         config = HousekeepingConfig(disk_budget_bytes=1)
         housekeeper = Housekeeper(config)
@@ -74,7 +73,7 @@ async def test_reclaim_regenerable_device_filter_for_log_backup(tmp_path, monkey
         monkeypatch.setattr(
             housekeeper, "candidates", lambda: iter([same_dev, other_dev])
         )
-        monkeypatch.setattr(housekeeper, "check_allowed", lambda path: Path(path))
+        monkeypatch.setattr(housekeeper, "check_allowed", Path)
         monkeypatch.setattr(housekeeper, "_is_log_backup", lambda path: True)
 
         deleted = []
@@ -143,7 +142,6 @@ async def test_check_once_passes_device(tmp_path):
 @pytest.mark.asyncio
 async def test_second_volume_recorded_while_suspended(tmp_path, monkeypatch):
     """A second low volume is recorded while suspended; resume waits for all."""
-    import kaine.cycle.housekeeping_floor as floor_module
 
     data_path = tmp_path / "data"
     state_path = tmp_path / "state"
@@ -161,7 +159,7 @@ async def test_second_volume_recorded_while_suspended(tmp_path, monkeypatch):
             fields[2] = 2
         return os_module.stat_result(fields)
 
-    monkeypatch.setattr(floor_module.os, "stat", fake_stat)
+    monkeypatch.setattr(os_module, "stat", fake_stat)
 
     R = 100
     total = 1000

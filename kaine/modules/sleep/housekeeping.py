@@ -131,6 +131,8 @@ def _open_archive_dir(archive: Path, rel_dir: PurePath) -> int:
     preceding directory. Missing directories are created with mode 0o700.
     A symlink anywhere in the path raises ``ArchiveRefused``.
     """
+    import contextlib
+
     if rel_dir.is_absolute():
         raise ArchiveRefused(
             f"archive relative directory must be relative: {rel_dir}"
@@ -177,15 +179,11 @@ def _open_archive_dir(archive: Path, rel_dir: PurePath) -> int:
         ) from exc
     finally:
         for fd in opened:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
         if current >= 0:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(current)
-            except OSError:
-                pass
 
 
 def _same_file(a: Path, b: Path) -> bool:

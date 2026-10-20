@@ -111,7 +111,8 @@ def test_open_archive_dir_refuses_symlinked_component(rooted):
     (archive / "evaluation").mkdir()
     os.symlink(outside, archive / "evaluation" / "research_events")
     with pytest.raises(ArchiveRefused):
-        _open_archive_dir(archive, PurePath("evaluation/research_events"))
+        fd = _open_archive_dir(archive, PurePath("evaluation/research_events"))
+        os.close(fd)
 
 
 def test_normal_export_via_dirfd_verifies_and_removes_local(rooted):

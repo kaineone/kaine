@@ -1,3 +1,4 @@
+
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
@@ -16,6 +17,7 @@ then run, and every protected file must keep its SHA-256 and mtime.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 from dataclasses import dataclass
@@ -224,10 +226,9 @@ async def test_awake_floor_leaves_protected_files_untouched(protected_env):
         gate=gate,
         disk_usage=fake_disk_usage,
     )
-    try:
+    # A refusal is acceptable here; what matters is that nothing protected changes.
+    with contextlib.suppress(HousekeepingRefused):
         await floor.check_once()
-    except HousekeepingRefused:
-        pass
 
     _assert_protected_untouched(protected_env)
 
