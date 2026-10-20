@@ -1,11 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Sleep-time ignition audit — pure functions over event lists.
+"""Sleep-time ignition audit: pure functions over event lists.
 
 Change ``sleep-ignition-audit``. Everything here is a PURE classification over
-lists of already-collected event records: no bus, no I/O, no imports beyond
-the stdlib/dataclasses, so the audit core is trivially testable and the sleep module
-wiring stays thin.
+lists of already-collected event records: no bus, no I/O, and no imports
+beyond the stdlib and the shared external-input type list
+(``kaine.faithful.external_input``), so the audit core is trivially testable
+and the sleep module wiring stays thin.
+
+Realization-to-intent linking uses the language module's intent log. A
+realization payload from ``language.external`` or ``language.internal`` carries
+``record_id``; the caller provides a mapping from that ``record_id`` to the
+intent ``entry_id`` it realized. Only a requested sleep still falls back to the
+most recent ``intent.rest``; speak, think, and act realizations are not
+attributed to another intent when the link is missing.
 
 Taxonomy:
 
@@ -17,8 +25,8 @@ Taxonomy:
   ``effectors.action`` (effectors.out), and ``sleep.sleep.started`` with
   ``trigger == "requested"`` (a realized rest); ``realization_failed`` is
   excluded;
-* ``intent.*`` on ``planning.out`` is unrealizable — no effector reads
-  ``planning.out`` — and is counted separately, never as executed;
+* ``intent.*`` on ``planning.out`` is unrealizable (no effector reads
+  ``planning.out``) and is counted separately, never as executed;
 * planning-originated intents (``origin == "planning"``) are classified
   ``planning_initiated`` before the input/drive/self rules;
 * ``action_selection.proposal_outcome`` events contribute ``planning_proposals_realized``,
@@ -28,7 +36,7 @@ Taxonomy:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
 
@@ -40,7 +48,7 @@ DRIVE_TYPE = "affect.drive"
 # Realization markers (a realized ignition). realization_failed is NOT here.
 # NOTE: when the vocal module is enabled an utterance may appear as BOTH external_speech
 # and vocal.synthesized (counted twice in realized_total; acceptable while the vocal module
-# ships disabled in the first configuration — revisit if the vocal module is enabled).
+# ships disabled in the first configuration; revisit if the vocal module is enabled).
 REALIZATION_TYPES = frozenset(
     {"external_speech", "internal_speech", "vocal.synthesized", "effectors.action"}
 )
@@ -49,13 +57,13 @@ INTENT_SPEAK = "intent.speak"
 INTENT_THINK = "intent.think"
 INTENT_ACT = "intent.act"
 INTENT_REST = "intent.rest"
-# No effector reads planning.out — act intents published there are unrealizable
+# No effector reads planning.out: act intents published there are unrealizable
 # wiring signals, never executed actions.
 UNREALIZABLE_STREAM = "planning.out"
 
 
 def _member_type(member: Dict[str, Any]) -> Optional[str]:
-    """A coalition member's ignition type — ``type`` first, ``source`` back."""
+    """A coalition member's ignition type: ``type`` first, ``source`` back."""
     return member.get("type") or member.get("source")
 
 
@@ -89,7 +97,7 @@ def _realization_kind(event_type: str, payload: Dict[str, Any]) -> Optional[str]
 class IgnitionAuditReport:
     """Content-free result of one sleep's ignition audit.
 
-    Only counts, entry_ids, event types, salience values and the sleep_index —
+    Only counts, entry_ids, event types, salience values and the sleep_index,
     never text, transcripts, or latent vectors.
     """
 
@@ -139,6 +147,8 @@ def classify_realizations(
     realizations: List[Dict[str, Any]],
     proposal_outcomes: List[Dict[str, Any]] = (),
     sleep_index: int = 0,
+    *,
+    record_links: Optional[Mapping[str, str]] = None,
 ) -> IgnitionAuditReport:
     """Classify realized action selection module intents into ignition categories.
 
@@ -147,26 +157,34 @@ def classify_realizations(
     ``source``, ``type``, ``salience``). ``intents`` and ``realizations`` are
     event records ``{"stream", "type", "payload"}`` in stream order.
     ``proposal_outcomes`` are ``action_selection.proposal_outcome`` records with
-    ``realized`` bool and optional ``reason``.
+    ``realized`` bool and optional ``reason``. ``record_links`` maps a language
+    module ``record_id`` to the ``intent_entry_id`` of the intent that record
+    realized.
 
     A successful realization (external_speech / internal_speech /
     vocal.synthesized with success=True / effectors.action / sleep.sleep.started
     with trigger="requested", excluding realization_failed and
-    vocal.synthesized with success=False) is linked to the most recent prior
-    intent of the matching kind: via the realization payload's ``entry_id``
-    when present, else the most recent intent of that kind. The intent's
-    ``entry_id`` is then matched against broadcast coalition members:
+    vocal.synthesized with success=False) is linked to its intent. The link is
+    the realization payload's ``entry_id`` if present, otherwise
+    ``record_links[payload["record_id"]]`` when a mapping is provided. Only a
+    requested sleep falls back to the most recent ``intent.rest``; speak, think,
+    and act realizations are left unlinked rather than attributed to another
+    intent. The intent's ``entry_id`` is then matched against broadcast coalition
+    members:
     The planning-module-originated intents (``origin == "planning"``) win first as
     ``planning_initiated``; otherwise input-triggered if the resolved member's
     source/type is an external-input type, or such a type was anywhere in the
     winning coalition of the triggering broadcast; drive-triggered if
-    ``affect.drive`` is in the coalition path; else self-initiated. A missing
-    link classifies as self-initiated — the honest default; never guess.
-    ``intent.*`` records on ``planning.out`` are counted separately as unrealizable
-    and never counted among executed actions. ``action_selection.proposal_outcome``
-    events contribute ``planning_proposals_realized``, ``planning_proposals_declined``
-    and ``planning_proposals_forwarded`` counts; a ``forwarded`` rest outcome
-    counts only as forwarded, because the sleep module decides it.
+    ``affect.drive`` is in the coalition path; else self-initiated. When the
+    link is missing for speak, think, or act, the category is self-initiated,
+    the honest default; never guess. A realization whose link is known but whose
+    intent is not present in this window is still classified by its link against
+    the window's broadcasts. ``intent.*`` records on ``planning.out`` are counted
+    separately as unrealizable and never counted among executed actions.
+    ``action_selection.proposal_outcome`` events contribute
+    ``planning_proposals_realized``, ``planning_proposals_declined`` and
+    ``planning_proposals_forwarded`` counts; a ``forwarded`` rest outcome counts
+    only as forwarded, because the sleep module decides it.
     """
     coalitions: List[List[Dict[str, Any]]] = []
     for snap in broadcasts:
@@ -181,7 +199,7 @@ def classify_realizations(
         event_type = rec.get("type", "")
         payload = rec.get("payload") or {}
         if event_type.startswith("intent.") and rec.get("stream") == UNREALIZABLE_STREAM:
-            # Wiring signal only — no effector reads planning.out.
+            # Wiring signal only: no effector reads planning.out.
             unrealizable += 1
             continue
         kind = _intent_kind(event_type)
@@ -202,7 +220,7 @@ def classify_realizations(
             if any(m.get("entry_id") == entry_id for m in members):
                 coalitions_with_entry.append(members)
         if not coalitions_with_entry:
-            # Honest default — never guess.
+            # Honest default, never guess.
             return "self"
         for members in coalitions_with_entry:
             for m in members:
@@ -238,23 +256,29 @@ def classify_realizations(
         kind = _realization_kind(event_type, payload)
         if kind is None:
             continue
-        entry_id = payload.get("entry_id")
-        intent = intent_by_entry.get(entry_id) if entry_id is not None else None
-        # An intent linked by entry_id is known exactly; the last-of-kind
-        # fallback is a guess, and a guess never attributes provenance.
+
+        link = payload.get("entry_id")
+        if link is None and record_links is not None:
+            record_id = payload.get("record_id")
+            if record_id is not None and record_id in record_links:
+                link = record_links[record_id]
+
+        intent = intent_by_entry.get(link) if link is not None else None
         linked_exactly = intent is not None
-        if intent is None:
+        if intent is None and kind == "rest":
             intent = last_by_kind.get(kind)
+
         intent_payload = (intent or {}).get("payload") or {}
-        intent_entry = intent_payload.get("entry_id")
-        if intent_entry is None:
-            intent_entry = entry_id
+        if intent is not None:
+            intent_entry = intent_payload.get("entry_id")
+        else:
+            intent_entry = link
 
         # Provenance is attributed only from evidence: the realization's own
-        # origin (the language module copies it from the intent it realized), an intent
-        # linked exactly by entry_id, or a requested sleep's intent.rest.
-        # A speech realization is never marked planning-module-initiated merely because
-        # the last intent of that kind in the window had origin "planning".
+        # origin (the language module copies it from the intent it realized), an
+        # intent linked exactly by entry_id, or a requested sleep's intent.rest.
+        # A speech realization is never marked planning-module-initiated merely
+        # because the last intent of that kind in the window had origin "planning".
         if payload.get("origin") == "planning":
             category = "planning"
         elif linked_exactly and intent_payload.get("origin") == "planning":
@@ -266,7 +290,10 @@ def classify_realizations(
         ):
             category = "planning"
         else:
-            category = _classify(intent_entry)
+            if intent_entry is None:
+                category = "self"
+            else:
+                category = _classify(intent_entry)
         report.realized_total += 1
         report.event_types.append(event_type)
         salience = intent_payload.get("salience")

@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| ignition-audit-record-link | 4/4 (100%) | Link each utterance in the sleep-time intent audit to the intent it realized through the intent log's record id, instead of to the last intent of the window, so drive-led speech is counted as drive-triggered. |
 | docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
 | docs-roadmap-hygiene | 6/6 (100%) | Archive every completed change, refresh the deltas that conflict with the current specs, state the k1-jev-decision-model blocker plainly, and document the organ replay harness and the planned action path. |
 | organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
@@ -64,6 +65,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 38 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 39 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
