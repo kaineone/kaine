@@ -144,7 +144,7 @@ async def test_progress_matches_fresh_windowed_estimator(bus):
 
     v = win_v.value(t[0])
     a = win_a.value(t[0])
-    lp = (v + a) / 2.0 if v is not None and a is not None else 0.0
+    lp = max(v, a) if v is not None and a is not None else 0.0
     floor = affect._learning_progress_floor
     expected = max(0.0, lp - floor) / (1.0 - floor)
     assert affect._progress()[0] == pytest.approx(expected)

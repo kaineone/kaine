@@ -780,7 +780,8 @@ learning_progress_floor = 0.05
 # Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
 # are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
 # error from the older to the newer half of the last learning_progress_span_s (the whole history
-# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
+# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The pooled value is
+# the largest over sources, and audition's bins restart at each hearing-band step. The span covers the
 # forward models' learning curves and must be an even whole number of bins (subjective s).
 learning_progress_span_s = 5400.0
 learning_progress_bin_s = 60.0
