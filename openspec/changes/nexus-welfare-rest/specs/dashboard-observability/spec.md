@@ -12,7 +12,7 @@ The health snapshot's `welfare` block SHALL carry `affect_welfare`: the newest `
 - **THEN** the panel shows that record with a note that it predates the observer's latest start
 
 ### Requirement: The welfare board shows the sleep trigger, the rest and rest requests
-The dashboard SHALL follow `sleep.sleep.started`, `sleep.sleep.completed` and `affect.rest_request` through a bridge observer and, when the app starts, SHALL read the newest of them from the last 2000 entries of `sleep.out` and `affect.out`. `GET /diagnostics/sleep.json` SHALL return whether the entity sleeps, the current or last sleep's trigger, start time, duration, developmental rest length and abort flag, and the last rest request's reason, drive, stall length and time. The trigger SHALL be the one the sleep module states (`developmental_rest`, `requested`); otherwise `fatigue` when the completion carries `fatigue_triggered` true, `backstop` when the dashboard saw the sleep's start without a trigger and the completion does not say fatigue, and null when it cannot tell. Labels read from the bus SHALL be kept only when they are lower-case identifiers of at most 40 characters.
+The dashboard SHALL follow `sleep.sleep.started`, `sleep.sleep.completed` and `affect.rest_request` through a bridge observer and, when the app starts, SHALL read the newest of them from the last 2000 entries of `sleep.out` and `affect.out`. `GET /diagnostics/sleep.json` SHALL return whether the entity sleeps, the current or last sleep's trigger, start time, duration, developmental rest length and abort flag, and the last rest request's reason, drive, stall length and time. The trigger SHALL be the one the sleep module states (`developmental_rest` on the completion, or `developmental_rest` or `requested` on the start). For a sleep whose start the dashboard saw without a trigger, it SHALL be `backstop` when the completion carries `fatigue_triggered` false and `fatigue_or_backstop` when it carries true, since that flag stays true after the first fatigue sleep. Otherwise it SHALL be null. Labels read from the bus SHALL be kept only when they are lower-case identifiers of at most 40 characters.
 
 #### Scenario: A developmental rest
 - **WHEN** `sleep.sleep.started` carries `trigger` "developmental_rest" and the completion carries `rest_seconds` 1260
@@ -21,6 +21,10 @@ The dashboard SHALL follow `sleep.sleep.started`, `sleep.sleep.completed` and `a
 #### Scenario: An interval sleep
 - **WHEN** a sleep starts without a trigger and completes with `fatigue_triggered` false
 - **THEN** sleep.json reports the trigger "backstop"
+
+#### Scenario: A sleep after an earlier fatigue sleep
+- **WHEN** a sleep starts without a trigger and completes with `fatigue_triggered` true
+- **THEN** sleep.json reports the trigger "fatigue_or_backstop"
 
 #### Scenario: A spent stimulus
 - **WHEN** `affect.rest_request` arrives with reason "stimulus_spent", drive "boredom" and `stall_s` 612

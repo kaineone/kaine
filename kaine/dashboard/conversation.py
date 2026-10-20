@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import re
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from kaine import legacy_aliases
@@ -23,6 +25,22 @@ log = logging.getLogger(__name__)
 
 LANGUAGE_EXTERNAL_STREAM = "language.external"
 SLEEP_STREAM = "sleep.out"
+
+_LABEL_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+
+
+def _label(value: Any) -> str | None:
+    if isinstance(value, str) and _LABEL_RE.fullmatch(value):
+        return value
+    return None
+
+
+def _finite(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return float(value)
+    return None
 
 
 def _entry_order(entry_id: Any) -> tuple[int, int]:
@@ -105,23 +123,93 @@ def _templates() -> Jinja2Templates:
 
 
 class ConversationState:
-    """Holds entity-name + sleep-status mutable state for the conversation
-    surface. Updated from the bridge via lightweight observers."""
+    """Holds entity-name, sleep-status and sleep/rest diagnostics state.
+    Updated from the bridge via lightweight observers."""
 
     def __init__(self) -> None:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
+        self.sleep: dict[str, Any] | None = None
+        self.rest_request: dict[str, Any] | None = None
+        self._sleep_start_seen: bool = False
+        self._sleep_start_trigger: str | None = None
 
     def observe(self, event: Event) -> None:
-        """Update name or sleep state from an event. Ignores malformed payloads."""
+        """Update name, sleep state, or sleep/rest diagnostics from an event."""
         if event.type == "self_model.document":
             if isinstance(event.payload, dict):
                 self.update_from_self_model({"name": event.payload.get("name")})
-        elif event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
+        elif event.type == "sleep.sleep.started":
             self.update_from_sleep(event.type)
+            self._on_sleep_started(event)
+        elif event.type == "sleep.sleep.completed":
+            self.update_from_sleep(event.type)
+            self._on_sleep_completed(event)
+        elif event.type == "affect.rest_request":
+            self._on_rest_request(event)
 
-    async def backfill(self, bus: Any, *, scan: int = 500) -> None:
-        """Read recent self-model and sleep events and apply the newest match."""
+    def _on_sleep_started(self, event: Event) -> None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        trigger = _label(payload.get("trigger"))
+        self._sleep_start_seen = True
+        self._sleep_start_trigger = trigger
+        self.sleep = {
+            "asleep": True,
+            "trigger": trigger,
+            "started_at": _finite(payload.get("started_at")),
+            "duration_s": None,
+            "rest_seconds": None,
+            "aborted": False,
+            "completed_at": None,
+        }
+
+    def _on_sleep_completed(self, event: Event) -> None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        trigger: str | None = _label(payload.get("trigger"))
+        if trigger is None and self._sleep_start_seen and self._sleep_start_trigger is not None:
+            trigger = self._sleep_start_trigger
+        elif trigger is None and self._sleep_start_seen:
+            # The sleep module sets fatigue_triggered at the first fatigue sleep and never
+            # clears it, so True cannot tell fatigue from the backstop for later sleeps.
+            if payload.get("fatigue_triggered") is True:
+                trigger = "fatigue_or_backstop"
+            else:
+                trigger = "backstop"
+
+        started_at = self.sleep.get("started_at") if isinstance(self.sleep, dict) else None
+        total_ms = _finite(payload.get("total_elapsed_ms"))
+        duration_s = total_ms / 1000.0 if total_ms is not None else None
+
+        self.sleep = {
+            "asleep": False,
+            "trigger": trigger,
+            "started_at": started_at,
+            "duration_s": duration_s,
+            "rest_seconds": _finite(payload.get("rest_seconds")),
+            "aborted": payload.get("aborted") is True,
+            "completed_at": event.timestamp.isoformat(),
+        }
+        self._sleep_start_seen = False
+        self._sleep_start_trigger = None
+
+    def _on_rest_request(self, event: Event) -> None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        self.rest_request = {
+            "reason": _label(payload.get("reason")),
+            "drive": _label(payload.get("drive")),
+            "stall_s": _finite(payload.get("stall_s")),
+            "at": event.timestamp.isoformat(),
+        }
+
+    def sleep_snapshot(self) -> dict[str, Any]:
+        return {
+            "sleeping": self.sleeping,
+            "sleep": dict(self.sleep) if self.sleep else None,
+            "rest_request": dict(self.rest_request) if self.rest_request else None,
+        }
+
+    async def backfill(self, bus: Any, *, scan: int = 2000) -> None:
+        """Read recent self-model, sleep and affect events and apply the newest matches."""
         try:
             entries = await bus.recent("self_model.out", count=scan)
         except Exception:
@@ -137,8 +225,33 @@ class ConversationState:
         except Exception:
             log.debug("conversation backfill failed for sleep.out", exc_info=True)
         else:
-            for entry_id, event in entries:
+            newest_idx: int | None = None
+            for i, (entry_id, event) in enumerate(entries):
                 if event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
+                    newest_idx = i
+                    break
+
+            if newest_idx is not None:
+                newest_event = entries[newest_idx][1]
+                if newest_event.type == "sleep.sleep.started":
+                    self.observe(newest_event)
+                else:
+                    start_idx: int | None = None
+                    for j in range(newest_idx + 1, len(entries)):
+                        if entries[j][1].type == "sleep.sleep.started":
+                            start_idx = j
+                            break
+                    if start_idx is not None:
+                        self.observe(entries[start_idx][1])
+                    self.observe(newest_event)
+
+        try:
+            entries = await bus.recent("affect.out", count=scan)
+        except Exception:
+            log.debug("conversation backfill failed for affect.out", exc_info=True)
+        else:
+            for entry_id, event in entries:
+                if event.type == "affect.rest_request":
                     self.observe(event)
                     break
 
@@ -204,5 +317,18 @@ def build_conversation_router(
         # win so the banner and the diagnostics panels agree.
         context.update(diag)
         return templates.TemplateResponse(request, "console.html", context)
+
+    return router
+
+
+def build_sleep_router(state: ConversationState) -> APIRouter:
+    router = APIRouter()
+
+    @router.get("/diagnostics/sleep.json")
+    async def sleep_diagnostics():
+        return JSONResponse(
+            state.sleep_snapshot(),
+            headers={"Cache-Control": "no-store"},
+        )
 
     return router
