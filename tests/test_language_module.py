@@ -849,8 +849,8 @@ async def test_sleep_index_read_from_sleep_out(bus: AsyncBus, tmp_path: Path):
         await bus.publish(
             Event(
                 source="sleep",
-                type="sleep.consolidation_divergence",
-                payload={"sleep_index": 3, "records_scanned": 0},
+                type="sleep.ignition_audit",
+                payload={"sleep_index": 3, "realized_total": 0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
             )
@@ -876,8 +876,8 @@ async def test_sleep_index_backfilled_at_initialize_takes_the_latest(bus: AsyncB
         await bus.publish(
             Event(
                 source="sleep",
-                type="sleep.consolidation_divergence",
-                payload={"sleep_index": idx, "records_scanned": 0},
+                type="sleep.ignition_audit",
+                payload={"sleep_index": idx, "realized_total": 0},
                 salience=0.5,
                 timestamp=datetime.now(timezone.utc),
             )

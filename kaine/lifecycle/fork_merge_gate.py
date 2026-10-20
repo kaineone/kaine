@@ -99,6 +99,7 @@ class ForkMergeVerdict:
 def assess_fork(
     *,
     fork_state_root: Path | str,
+    config: dict[str, Any] | None = None,
 ) -> DivergenceAssessment:
     """Assess a fork's individuation against its maturation-state baseline.
 
@@ -106,9 +107,71 @@ def assess_fork(
     pointed at the fork's own materialized state root, so the same verdict that
     drives the live preservation trigger and the decommission gate decides
     whether a fork has individuated. The fork's own ``state/individuation/`` is
-    read. Pure + guarded.
+    read. The optional *config* argument supplies the parent entity's configured
+    intent-log paths and distinctiveness threshold, which are re-rooted under
+    the fork's own state directory. If *config* is omitted, the default state
+    layout under *fork_state_root* is used. Pure + guarded.
     """
-    return assess_divergence(state_root=Path(fork_state_root))
+    from kaine.lifecycle.divergence import (
+        adapter_dir_for,
+        distinctiveness_threshold_from_config,
+    )
+
+    root = Path(fork_state_root)
+    return assess_divergence(
+        state_root=root,
+        voice_paths=_fork_voice_paths(config, root),
+        distinctiveness_threshold=distinctiveness_threshold_from_config(config),
+        adapter_output_dir=adapter_dir_for(config, root),
+    )
+
+
+def _fork_voice_paths(config: dict[str, Any] | None, root: Path):
+    from kaine.lifecycle.divergence import (
+        VoicePaths,
+        default_voice_paths,
+        voice_paths_for,
+    )
+    from kaine.storage import resolve
+
+    default = default_voice_paths(root)
+    try:
+        cfg = config or {}
+        language_value = (cfg.get("language") or {}).get("intent_log_path")
+        sleep_value = (
+            ((cfg.get("sleep") or {}).get("voice_alignment") or {})
+            .get("intent_log_path")
+        )
+
+        def _resolve(value: Any) -> Path:
+            if not value:
+                return default.intent_logs[0]
+            stripped = str(value).strip()
+            if stripped == "state/language/intent_expression.jsonl":
+                return default.intent_logs[0]
+            p = Path(stripped)
+            if p.is_absolute():
+                return p.resolve()
+            if p.parts[:1] == ("state",):
+                return (root / p.relative_to("state")).resolve()
+            return resolve(p)
+
+        language_path = _resolve(language_value)
+        sleep_path = _resolve(sleep_value)
+
+        logs: list[Path] = [language_path]
+        if sleep_path not in logs:
+            logs.append(sleep_path)
+        return VoicePaths(
+            intent_logs=tuple(logs),
+            measures_latest=sleep_path.parent / "voice_measures_latest.json",
+        )
+    except Exception as exc:
+        log.warning(
+            "fork_merge_gate: fork voice paths unreadable (%s); using defaults",
+            type(exc).__name__,
+        )
+        return voice_paths_for(config, root)
 
 
 def gated_merge(
