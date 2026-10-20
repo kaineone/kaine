@@ -404,3 +404,18 @@ async def test_report_contains_no_filenames(tmp_path):
     report = await hk.run()
     dumped = json.dumps(report, sort_keys=True)
     assert "research_events" not in dumped
+
+
+@pytest.mark.asyncio
+async def test_symlink_named_like_a_daily_file_is_skipped(tmp_path):
+    cfg = _archive_config(tmp_path, disk_budget_bytes=100)
+    hk = Housekeeper(cfg, today=lambda: "2026-10-20")
+    root = hk._roots[0]
+    real = _write_file(root / "research_events" / "research_events-2026-10-18.jsonl")
+    target = _write_file(tmp_path / "state" / "episodic_memory" / "store.jsonl")
+    link = root / "research_events" / "research_events-2026-10-17.jsonl"
+    os.symlink(target, link)
+    assert hk.candidates() == [real]
+    report = await hk.run()
+    assert report["moved_files"] == 1
+    assert link.is_symlink() and target.exists()

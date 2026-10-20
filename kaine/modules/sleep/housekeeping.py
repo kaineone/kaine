@@ -233,7 +233,12 @@ class Housekeeper:
                     date = match.group("date")
                     if date >= today:
                         continue
-                    found.append((date, Path(dirpath) / name))
+                    candidate = Path(dirpath) / name
+                    # A symlink or non-regular file is never a candidate, so
+                    # one planted name cannot stop the whole pass.
+                    if os.path.islink(candidate) or not candidate.is_file():
+                        continue
+                    found.append((date, candidate))
         found.sort(key=lambda item: (item[0], str(item[1])))
         return [path for _date, path in found]
 
