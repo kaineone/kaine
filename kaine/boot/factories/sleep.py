@@ -184,6 +184,7 @@ def make_sleep(
         "baseline_salience",
         "alert_salience",
         "requested_rest_min_interval_s",
+        "developmental_rest_s",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
     }
@@ -235,6 +236,18 @@ def make_sleep(
                 "[sleep].requested_rest_min_interval_s must be a number greater than 0"
             )
         kwargs["requested_rest_min_interval_s"] = float(raw_interval)
+    if "developmental_rest_s" in section:
+        raw_dev = section["developmental_rest_s"]
+        if (
+            isinstance(raw_dev, bool)
+            or not isinstance(raw_dev, (int, float))
+            or not math.isfinite(raw_dev)
+            or raw_dev <= 0
+        ):
+            raise ValueError(
+                "[sleep].developmental_rest_s must be a number greater than 0"
+            )
+        kwargs["developmental_rest_s"] = float(raw_dev)
     # [sleep.consolidation] sub-table: fatigue_triggered, replay_window_s.
     # interval_seconds remains the max-interval safety net.
     consolidation = section.get("consolidation") or {}

@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import math
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -121,6 +122,9 @@ class Sleep(BaseModule):
         # Minimum entity-time seconds between a sleep's end and a planning-module-requested
         # rest; bounds rest requests from an exploring planning module.
         requested_rest_min_interval_s: float = 1800.0,
+        # Developmental-phase rest duration, Delta_rest from paper section 3.5
+        # and Table A1: 1260 s is the mean length of a quiescent episode (state 1F).
+        developmental_rest_s: float = 1260.0,
         # Path to the organ GGUF served by the language module. Used to identify the correct
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
@@ -185,6 +189,14 @@ class Sleep(BaseModule):
         self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
         # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
+        if (
+            isinstance(developmental_rest_s, bool)
+            or not isinstance(developmental_rest_s, (int, float))
+            or developmental_rest_s <= 0
+            or not math.isfinite(developmental_rest_s)
+        ):
+            raise ValueError("developmental_rest_s must be a finite number greater than 0")
+        self._developmental_rest_s = float(developmental_rest_s)
         self._entity_clock = entity_clock
         self._action_selection_cursor: str = "0"
         # Seed from boot time so a fresh boot or module restart cannot bypass
@@ -444,6 +456,15 @@ class Sleep(BaseModule):
                                     "triggering affect-driven maintenance"
                                 )
                                 await self._start_maintenance_sleep()
+                            elif (
+                                event.type == "affect.rest_request"
+                                and event.payload.get("reason") == "stimulus_spent"
+                            ):
+                                log.info(
+                                    "sleep: affect.rest_request (stimulus spent), "
+                                    "starting a developmental rest"
+                                )
+                                await self._start_developmental_rest()
 
                     if idle:
                         await asyncio.sleep(0.05)
@@ -472,6 +493,25 @@ class Sleep(BaseModule):
                 self._fatigue_triggered_enter_sleep(),
                 name="sleep-fatigue-sleep",
             )
+
+    async def _start_developmental_rest(self) -> None:
+        """Guarded start of a developmental rest on a spent stimulus."""
+        if not self._sleep_lock.locked() and not self._sleep_pending:
+            self._sleep_pending = True
+            self._sleep_task = asyncio.create_task(
+                self._developmental_rest_enter_sleep(),
+                name="sleep-developmental-rest",
+            )
+
+    async def _developmental_rest_enter_sleep(self) -> None:
+        try:
+            await self.enter_sleep(trigger="developmental_rest")
+        except SleepBusyError:
+            log.debug("sleep: developmental rest skipped, sleep already running")
+        except Exception:
+            log.exception("sleep: developmental rest enter_sleep failed")
+        finally:
+            self._sleep_pending = False
 
     async def _action_selection_consumer_loop(self) -> None:
         """Background loop: watch action_selection.out for rest requests.
@@ -752,6 +792,29 @@ class Sleep(BaseModule):
         task.add_done_callback(self._shielded_tasks.discard)
         return await asyncio.shield(task)
 
+    def _rest_clock_now(self) -> float:
+        """Return the current rest-hold clock time.
+
+        Uses the injected entity clock when available so developmental rests
+        can be tested with a fake clock; otherwise falls back to real time.
+        """
+        if self._entity_clock is not None:
+            return self._entity_clock.now()
+        return time.monotonic()
+
+    async def _hold_developmental_rest(self, started: float) -> None:
+        """Hold the developmental rest for the configured duration."""
+        log.info(
+            "sleep: developmental rest holds until %.0f s after it began",
+            self._developmental_rest_s,
+        )
+        while not self._stopped.is_set():
+            remaining = self._developmental_rest_s - (self._rest_clock_now() - started)
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(1.0, remaining))
+        log.info("sleep: developmental rest hold ended")
+
     async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
         # Pipeline latency + the started_at/last_sleep_at marks measure REAL
         # infrastructure wall-time (how long the sleep work actually took / when
@@ -761,6 +824,7 @@ class Sleep(BaseModule):
         # infrastructural: real time, not subjective
         start = time.monotonic()
         self._sleep_count += 1
+        rest_started = self._rest_clock_now()
         await self.publish(
             "sleep.sleep.started",
             # infrastructural: real time. Every sleep carries its sleep_index;
@@ -954,6 +1018,9 @@ class Sleep(BaseModule):
                         "sleep: failed to write measurement_failed marker",
                         exc_info=True,
                     )
+
+            if trigger == "developmental_rest":
+                await self._hold_developmental_rest(rest_started)
         finally:
             # Sleep ends with the affective reset on every path (paper §3.5),
             # including an exception or a cancel in phases 1 to 4.
@@ -1055,6 +1122,9 @@ class Sleep(BaseModule):
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
+        if trigger == "developmental_rest":
+            summary["trigger"] = "developmental_rest"
+            summary["rest_seconds"] = self._developmental_rest_s
         # Publishing sleep.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (interoception._sleep_event_loop handles this event).
         await self.publish("sleep.sleep.completed", summary, salience=salience)
@@ -1515,10 +1585,14 @@ class Sleep(BaseModule):
                 log.exception("sleep: sleep pipeline aborted")
             else:
                 log.warning("sleep: sleep pipeline cancelled (%s)", type(exc).__name__)
+            payload: dict[str, Any] = {"aborted": True, "reason": type(exc).__name__}
+            if trigger == "developmental_rest":
+                payload["trigger"] = "developmental_rest"
+                payload["rest_seconds"] = self._developmental_rest_s
             publish = asyncio.ensure_future(
                 self.publish(
                     "sleep.sleep.completed",
-                    {"aborted": True, "reason": type(exc).__name__},
+                    payload,
                     salience=self._baseline_salience,
                 )
             )
