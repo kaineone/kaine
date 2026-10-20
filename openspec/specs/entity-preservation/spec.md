@@ -414,3 +414,103 @@ proceed when an old and a new name both exist for one item.
 #### Scenario: An old and a new name both exist
 - **WHEN** a state tree holds both `mnemos/` and `episodic_memory/`
 - **THEN** the migration fails the boot and moves nothing
+
+### Requirement: Developmental phase progress travels with the entity
+A preservation bundle SHALL carry the developmental progress and readout files that sit beside the stage file, and a revive SHALL restore them beside the stage file it writes, so an entity revived into a fresh state root keeps its awake time and readout progress. The viability verdict file SHALL NOT be bundled.
+
+#### Scenario: Revive restores developmental-phase progress
+- **WHEN** an entity in its developmental phase with `development_progress.json` beside its stage file is preserved and revived into an empty state root
+- **THEN** the revived state root holds the same `development_progress.json`
+
+#### Scenario: No developmental-phase files, no developmental-phase member
+- **WHEN** an entity with no development files is preserved
+- **THEN** the bundle has no `development/` member and revive restores nothing for it
+
+### Requirement: The state rename refuses before moving when it cannot write a destination
+Before its first step, the boot-time state rename SHALL check that it can write every directory its steps write into, checking the nearest existing ancestor of a directory it will create. When the old side of a move holds data and the new side is an empty mount point, the refusal SHALL say that the new side is a mount point, and this check SHALL take precedence over the write check. When a directory is not writable, the start SHALL stop with the rename-refused exit code and a message that names the directory, its owner and its mode, and SHALL move nothing.
+
+#### Scenario: A root-owned destination directory
+- **WHEN** the state tree has a `sleep/` directory owned by root and not writable by the cycle's user, and the old sleep module directory holds files
+- **THEN** the start stops with the rename-refused exit code, the message names `sleep/`, its owner and mode, and no file has moved
+
+#### Scenario: Data on the old side, an empty mount point on the new side
+- **WHEN** `voice_align_jobs` under the old sleep module directory holds a file and `sleep/voice_align_jobs` is an empty mount point
+- **THEN** the refusal says that `sleep/voice_align_jobs` is a mount point a move cannot land on
+
+### Requirement: Revive at start and the research preflight use the configured encryption
+The cycle SHALL install the configured state encryptor before it plans a revive or evaluates the research gate. A revive at start SHALL read an encrypted bundle with the configured key, and SHALL stop with the revive-refused exit code, without a traceback, when the key cannot decrypt it. The research gate's preflight preserve and revive round trip SHALL use the configured encryptor, so that when encryption is required the round trip writes and reads an encrypted bundle.
+
+#### Scenario: Reviving an encrypted bundle
+- **WHEN** the cycle starts with `--revive` on a bundle written with encryption on, and the same key is set
+- **THEN** the bundle decrypts, the revive plan builds and the entity runs as the preserved individual
+
+#### Scenario: The preflight under required encryption
+- **WHEN** a research boot runs with `[preservation].require_encryption = true` and a key set
+- **THEN** the preflight bundle is encrypted and the gate's revive decrypts it before the gate passes
+
+### Requirement: A divergence preservation names the arm that triggered it
+When the divergence monitor preserves the entity on a rising edge, the reason it passes to `preserve_live` and the `reason` of its `preservation.preserved` and `preservation.failed` records SHALL be the new arms of that edge, sorted and joined with `+`. When the verdict is diverged with no named arm, the reason SHALL be `diverged`. The monitor SHALL NOT record the reason `individuation` unless the individuation arm is among the new arms.
+
+#### Scenario: The voice arm fires alone
+- **WHEN** the verdict gains only the `voice` arm and the monitor preserves the entity
+- **THEN** `preserve_live` receives the reason `voice` and the `preservation.preserved` record has `reason` `voice`
+
+#### Scenario: Two arms fire in one poll
+- **WHEN** the verdict gains the `voice` and `consolidation` arms in the same poll
+- **THEN** the reason is `consolidation+voice`
+
+#### Scenario: A failed preservation names the arm
+- **WHEN** the verdict gains the `consolidation` arm and `preserve_live` raises
+- **THEN** the `preservation.failed` record has `reason` `consolidation`
+
+### Requirement: A rolling resume checkpoint holds module state across plain restarts
+The cycle SHALL keep exactly one resume checkpoint per state tree, at `checkpoint/checkpoint.json` beside the stage file. The checkpoint SHALL hold each enabled module's `serialize()` state and the entity identity, SHALL be written through the process-wide state encryptor, and SHALL replace the previous checkpoint atomically. It SHALL leave out the self-model, episodic memory, social cognition and world model modules, whose own stores persist them, and the bus cursors of the interoception, embodiment and sequence modules. The cycle SHALL write it after every 60 s of awake entity time and once at a clean shutdown, and SHALL NOT write it periodically while the cycle is frozen or asleep, nor at shutdown while the sleep module is asleep. The checkpoint SHALL carry the self-model module's drift count, which its own file does not hold. A module whose `serialize()` fails SHALL be left out of that write with a warning naming it, and SHALL start fresh after a restart. The cycle SHALL NOT write the shutdown checkpoint when the cognitive cycle ended with an error.
+
+#### Scenario: Many writes leave one checkpoint
+- **WHEN** the checkpoint has been written many times
+- **THEN** the checkpoint directory holds exactly one checkpoint file
+
+#### Scenario: The checkpoint is encrypted when encryption is configured
+- **WHEN** `[security.state_encryption]` is enabled with a key and the checkpoint is written
+- **THEN** the file on disk is an encryption envelope and contains no plaintext module state
+
+#### Scenario: Shutdown writes a checkpoint
+- **WHEN** the cycle shuts down cleanly while awake
+- **THEN** one checkpoint holding the module state at shutdown is on disk
+
+#### Scenario: No periodic write while frozen or asleep
+- **WHEN** 60 s of entity time pass with the cycle frozen or asleep
+- **THEN** no periodic checkpoint is written
+
+### Requirement: A plain start resumes module state from a matching checkpoint
+On a start without `--revive`, after the modules initialise and before the cognitive cycle starts, the cycle SHALL restore each checkpointed module that is enabled now through its `deserialize()`, but only when the checkpoint's entity id equals the state tree's entity id. The restore SHALL NOT record `revived_from`, set developmental files aside or change the identity. A missing checkpoint SHALL leave the modules fresh. An unreadable, undecryptable, malformed or other-entity checkpoint SHALL be ignored with one warning and the modules SHALL start fresh. A module absent from the checkpoint SHALL start fresh, and a checkpointed module not enabled now SHALL be skipped.
+
+#### Scenario: A restart restores the same module state
+- **WHEN** an entity with an adapted self-rhythm recovery time, raised affect drives and an active goal writes a checkpoint and a new process starts on the same state tree
+- **THEN** the self-rhythm's log recovery time, the drive values and outcome counts and the goal ledger equal the values before the restart
+
+#### Scenario: Another entity's checkpoint is ignored
+- **WHEN** the checkpoint's entity id differs from the state tree's
+- **THEN** one warning is logged and every module keeps its fresh state
+
+#### Scenario: A corrupt checkpoint is ignored
+- **WHEN** the checkpoint file cannot be decrypted or parsed
+- **THEN** one warning is logged and every module keeps its fresh state
+
+### Requirement: A revive wins over any checkpoint
+A start with `--revive` SHALL NOT read the resume checkpoint. Before the revive starts, the cycle SHALL write a revive record and rename any checkpoint aside, and SHALL stop the start when it cannot. Once the revive has landed, the cycle SHALL write a fresh checkpoint of the revived state. A plain start SHALL ignore a checkpoint older than the revive record.
+
+#### Scenario: A revive refused part way leaves no checkpoint to restore
+- **WHEN** a revive changes some modules and is then refused
+- **THEN** the old checkpoint is renamed aside and the next plain start restores nothing from it
+
+#### Scenario: A stale checkpoint never overrides a revive
+- **WHEN** a state tree holds a checkpoint and the entity is revived from a bundle, and the process then stops before its first periodic write
+- **THEN** the next plain start restores the revived state, not the stale checkpoint
+
+### Requirement: Decommission removes the resume checkpoint
+Decommission SHALL back up and then delete the resume checkpoint directory with the other entity state.
+
+#### Scenario: The checkpoint is backed up and deleted
+- **WHEN** an entity with a resume checkpoint is decommissioned
+- **THEN** the checkpoint is in the backup bundle and absent from the state tree

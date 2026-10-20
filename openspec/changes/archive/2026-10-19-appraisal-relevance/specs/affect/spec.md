@@ -1,6 +1,12 @@
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: Goal significance is scored against the entity's dominant drive
+**Reason**: Replaced by "Goal relevance is scored in [0, 1] against the entity's dominant drive": content that serves neither the dominant drive nor a goal now scores 0.0 (irrelevant) instead of a negative, obstructive score.
+**Migration**: None; the check keeps its name and inputs and its scores now lie in `[0, 1]`.
+
+## ADDED Requirements
+
+### Requirement: Goal relevance is scored in [0, 1] against the entity's dominant drive
 The affect module's goal-significance appraisal check SHALL score the selected events against the entity's dominant drive (the highest-valued affect drive, ties broken by name), using the drive-to-source table built from each registered module's `relieves_drives` declaration and injected by the boot wiring and re-injected when the affect module is restarted. With dominant drive value `v > 0` and `f` the salience-weighted share of selected events whose source relieves that drive (`0` for an empty coalition or a zero total), the drive score SHALL be `v × f`. With no drive above zero, the drive score SHALL be `0.0`. When the goal ledger holds active goals, the check SHALL return the larger of the drive score and the ledger `relevance` (the ledger relevance alone when no table was injected); otherwise it SHALL return the drive score, or `0.0` when no table was injected. The score SHALL lie in `[0, 1]`: content that serves neither the drive nor a goal is irrelevant, not obstructive. No constant offset SHALL be applied.
 
 #### Scenario: Content serving a pressing need is goal-conducive

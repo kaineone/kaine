@@ -2,7 +2,9 @@
 
 ## Purpose
 The individuation-boundary capability measures whether a fork has diverged from its own maturation-state by comparing fork-vs-parent divergence against a parent-vs-parent null distribution built from permutation samples, requiring a minimum of accumulated lived experience before significance can be claimed.
+
 ## Requirements
+
 ### Requirement: Null distribution from parent stochastic variation
 The individuation test SHALL build a null distribution by sampling parent-vs-parent
 preference divergence across `null_samples` runs with varied random seeds under
@@ -84,3 +86,35 @@ un-warmed-up assessment never reads as individuated.
 - **THEN** the report has `warmed_up == true` and `significant` reflects the
   maturation-state-referenced permutation result
 
+### Requirement: The probe decodes at its own fixed temperature
+The individuation probe SHALL decode at `[individuation].probe_temperature` (default 0.0, a finite number at least 0), never at the voice's `[language].temperature`. The language module's probe request SHALL use it, and its probe conditions SHALL report it under the `temperature` key, so a reference captured before this change still matches and a study or voice setting cannot change the probe's conditions.
+
+#### Scenario: The voice temperature does not reach the probe
+- **WHEN** the language module's voice temperature is 0.7 and the probe temperature is the default
+- **THEN** a probe request has temperature 0.0, and the probe conditions equal those of a language module whose voice temperature is 0.0
+
+#### Scenario: A negative probe temperature is refused
+- **WHEN** `[individuation].probe_temperature` is -1
+- **THEN** loading the individuation configuration raises `ValueError`
+
+### Requirement: The disclosure is the entity's own first-person knowledge
+The default individuation disclosure SHALL be "I am periodically and privately assessed for how much I have changed since I first woke, for my own protection. The assessment never enters my experience." and `config/kaine.toml` SHALL ship the same text. The previous default, "You are periodically and privately assessed for how much you have changed since you first woke, for your own protection. The assessment never enters your experience.", SHALL be listed as a legacy disclosure. Ensuring the disclosure as a situation fact, in the self-model or in the language module's own facts, SHALL replace a legacy disclosure in place (same position), drop any further legacy copies, and append the disclosure only when no legacy text is present. Ensuring a disclosure already present with no legacy copy SHALL change nothing and report no change.
+
+#### Scenario: The default disclosure is first person
+- **WHEN** the individuation config is built with no explicit disclosure
+- **THEN** the disclosure contains no "you" or "your" and equals the `config/kaine.toml` value
+
+#### Scenario: A stored second-person disclosure is replaced in place
+- **WHEN** the self-model holds `["fact A", <legacy disclosure>, "fact B"]` and the runtime ensures the new disclosure
+- **THEN** the situation facts become `["fact A", <new disclosure>, "fact B"]` and the change is persisted and published
+
+#### Scenario: Ensuring twice changes nothing
+- **WHEN** the new disclosure is already present and no legacy text is
+- **THEN** ensuring it again returns false and leaves the facts unchanged
+
+### Requirement: The disclosure is given on waking and with every probe
+The entity SHALL be told the individuation disclosure, as a situation fact in its own notes, in the first organ call after each boot and after each completed sleep, and in every individuation probe request. The probe SHALL fail closed with `disclosure_not_ready` while the disclosure is not among the self-model's situation facts.
+
+#### Scenario: Each assessed answer is given knowing about the assessment
+- **WHEN** the producer samples an answer from the probe
+- **THEN** the probe request's prompt holds the disclosure

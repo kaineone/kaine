@@ -108,3 +108,44 @@ normalized names.
 #### Scenario: A study with an old table passes the allowlist
 - **WHEN** a study sets `[syneidesis]`
 - **THEN** it is accepted as `[workspace]` and the allowlist check passes
+
+### Requirement: A study configuration is applied last
+The loader SHALL apply an optional study configuration `config/studies/<name>.toml`, selected by `KAINE_STUDY` (or an explicit argument), after the operator configuration, so a study's settings hold for the run whatever the operator's local file says. A selected study whose file is missing or whose name is not a slug SHALL be refused with `ProfileError`, and a study file SHALL set only the `[language]`, `[workspace]`, `[experiment]` and `[individuation]` tables; any other table SHALL be refused with `ProfileError`. The run context and the run manifest SHALL record the study's name in `study` (null when none is selected). With no study selected the merged configuration SHALL be unchanged. The repository SHALL ship one study configuration per arm of the workspace-mediation test, `workspace_mediation_competitive`, `workspace_mediation_matched` and `workspace_mediation_pooled`, each setting `[language].temperature = 0.0` and its `[workspace].arm`.
+
+#### Scenario: A study wins over the operator
+- **WHEN** the operator file sets `[language].temperature = 0.9` and `KAINE_STUDY=workspace_mediation_pooled`
+- **THEN** the merged configuration has temperature 0.0 and arm "pooled"
+
+#### Scenario: A study may set only its allowed tables
+- **WHEN** the selected study file contains a `[modules]`, `[preservation]` or `[oscillator]` table
+- **THEN** loading raises `ProfileError`
+
+#### Scenario: The manifest names the study
+- **WHEN** a run starts with `KAINE_STUDY=workspace_mediation_matched`
+- **THEN** its run manifest has `study` "workspace_mediation_matched"
+
+#### Scenario: The module-addition study is not overridden by an ambient study
+- **WHEN** the module-addition study runner starts a step while `KAINE_STUDY` is set in its environment
+- **THEN** the step's child process runs without `KAINE_STUDY`
+
+### Requirement: Studies may set the tone rule
+A study configuration SHALL be allowed to set `[audition].tone_rule` and no other `[audition]` key; any other key in a study's `[audition]` table SHALL raise `ProfileError`. The repository SHALL ship `workspace_mediation_pilot_tone` (role pilot) and `workspace_mediation_tone` (role test), which run the on arm with `tone_rule = "error_ratio"`. The boot gate SHALL refuse a workspace-mediation study whose tone rule is not `error_ratio` for the two tone studies or not `categorical` for every other study.
+
+#### Scenario: A study sets another Audition key
+- **WHEN** a study file sets `[audition].alert_salience`
+- **THEN** loading the configuration raises `ProfileError`
+
+#### Scenario: An arm run with the variant's rule
+- **WHEN** the operator config sets `tone_rule = "error_ratio"` and the study is `workspace_mediation_competitive`
+- **THEN** the boot gate refuses the run
+
+### Requirement: The old module profile name resolves as a deprecated alias
+The module profile that defines the first configuration SHALL be named `first_configuration`, and the runtime loader SHALL apply it when no profile is selected. The name `thesis_test`, given as `--profile`, as `KAINE_PROFILE` or as the `profile` argument of the config loader, SHALL resolve to `first_configuration` and SHALL log one warning that names the replacement and the last release that reads the old name (`ALIAS_LAST_RELEASE`). No file named `thesis_test.toml` SHALL ship.
+
+#### Scenario: A pinned old profile name
+- **WHEN** the cycle starts with `KAINE_PROFILE=thesis_test`
+- **THEN** the `first_configuration` profile is applied, the merged configuration equals the one `KAINE_PROFILE=first_configuration` produces, and one deprecation warning naming `first_configuration` is logged
+
+#### Scenario: No profile selected
+- **WHEN** the runtime configuration is loaded with no `--profile` and no `KAINE_PROFILE`
+- **THEN** the `first_configuration` profile is applied

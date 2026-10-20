@@ -11,25 +11,25 @@ Design only: not scheduled. Nothing is built until the start condition below hol
 
 ### What is missing
 
-- **No gripper body.** The only adapter is the stub (`kaine/modules/embodiment/adapters/stub.py`), and no stage of `MOTOR_STAGES` names an arm joint or a grip.
-- **No grasp.** No module represents a target to reach, a grip to form or a grasp's outcome.
-- **The provided target-resolver** of the `interact` primitive resolves what the entity acts on outside its own learning (`control_surface.py:24-29`), which the paper must either justify as a scaffold or replace with the gaze of `active-vision`.
+- No gripper body. The only adapter is the stub (`kaine/modules/embodiment/adapters/stub.py`), and no stage of `MOTOR_STAGES` names an arm joint or a grip.
+- No grasp. No module represents a target to reach, a grip to form or a grasp's outcome.
+- The provided target-resolver of the `interact` primitive resolves what the entity acts on outside its own learning (`control_surface.py:24-29`), which the paper must either justify as a scaffold or replace with the gaze of `active-vision`.
 
 ## What Changes
 
 A design, settled first in the paper and then in code.
 
-1. **Grasping as a composition (paper §4, §10).** The target reaches the workspace through vision; the decision to act is the act outcome of `act-intent-derivation`; which act serves the preferred outcome is a proposal of `planning-act-proposals`; the target is fixated by `active-vision`; reach and grip are degrees of freedom of the arm body learned under `embodiment-motor-contingency`; the grasp's outcome is predicted by `world-model-action-outcomes`.
-2. **The arm body's stages.** Recommended: the arm declares freeze-then-free stages in which reaching precedes grip, after the infant course from prereaching to reaching (von Hofsten 1984; Thelen et al. 1993) and Bernstein's freezing of degrees of freedom. Open for the paper change.
-3. **The target.** Recommended: the reach target is the current overt gaze of `active-vision`, which retires the provided target-resolver. Open for the paper change.
-4. **The device bound.** The gripper declares a force and travel limit as part of the device bound of `act-intent-derivation`.
-5. **The study step (paper §6.5).** A grasping branch after the embodiment and perceptual-locus branches.
+1. Grasping as a composition (paper §4, §10). The target reaches the workspace through vision; the decision to act is the act outcome of `act-intent-derivation`; which act serves the preferred outcome is a proposal of `planning-act-proposals`; the target is fixated by `active-vision`; reach and grip are degrees of freedom of the arm body learned under `embodiment-motor-contingency`; the grasp's outcome is predicted by `world-model-action-outcomes`.
+2. The arm body's stages. Recommended: the arm declares freeze-then-free stages in which reaching precedes grip, after the infant course from prereaching to reaching (von Hofsten 1984; Thelen et al. 1993) and Bernstein's freezing of degrees of freedom. Open for the paper change.
+3. The target. Recommended: the reach target is the current overt gaze of `active-vision`, which retires the provided target-resolver. Open for the paper change.
+4. The device bound. The gripper declares a force and travel limit as part of the device bound of `act-intent-derivation`.
+5. The study step (paper §6.5). A grasping branch after the embodiment and perceptual-locus branches.
 
 ## Dependencies and start condition
 
-- **Gate.** The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage.
-- **Dependencies.** All five earlier action-path changes merged and their study branches run: `act-intent-derivation`, `planning-act-proposals`, `embodiment-motor-contingency`, `active-vision`, `world-model-action-outcomes`.
-- **Start condition.** All hold, and an arm with a gripper is attached with the operator's approval under the embodiment module's two-layer gate.
+- Gate: The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage.
+- Dependencies: All five earlier action-path changes merged and their study branches run: `act-intent-derivation`, `planning-act-proposals`, `embodiment-motor-contingency`, `active-vision`, `world-model-action-outcomes`.
+- Start condition: All hold, and an arm with a gripper is attached with the operator's approval under the embodiment module's two-layer gate.
 
 ## Paper sections it depends on
 

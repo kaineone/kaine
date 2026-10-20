@@ -48,3 +48,25 @@ The test suite SHALL give every test its own data root and SHALL prevent tests f
 #### Scenario: A test writes into a real data root
 - **WHEN** a test creates or removes a file under a watched real data root
 - **THEN** that test fails and names the changed directory
+
+### Requirement: Tests are isolated from the operator's local overlay
+A test SHALL NOT read the maintainer's git-ignored `config/kaine.operator.toml`, unless the test exists to exercise the overlay and supplies its own. A test whose skip condition checks for a file SHALL load that file from the same location it checked.
+
+#### Scenario: An overlay that enables state encryption does not fail the CLI tests
+- **WHEN** the repository has a `config/kaine.operator.toml` that enables state encryption with no key available, and the research CLI tests run
+- **THEN** they pass as they do on a host with no overlay
+
+#### Scenario: A provisioned encoder test loads what it checked
+- **WHEN** the real encoder weights exist under the real data root and the real-weight encoder test runs
+- **THEN** it loads the weights from that data root rather than from the per-test one
+
+### Requirement: A hang guard in a test is a deadlock bound
+A timeout that a test wraps around an operation to catch a hang SHALL be a named deadlock bound, generous enough that the operation's normal cost in a long-running test process cannot reach it. A test SHALL NOT use such a timeout as a speed bound. The suite SHALL pass when run serially in one process as well as in parallel.
+
+#### Scenario: Unload after JAX-heavy tests
+- **WHEN** the whole suite runs serially in one process and a reversible-unload test runs after the active-inference and world-model tests
+- **THEN** its unload and close waits complete within the deadlock bound and the test passes
+
+#### Scenario: A real hang still fails
+- **WHEN** an unload or close never completes
+- **THEN** the test fails at the deadlock bound

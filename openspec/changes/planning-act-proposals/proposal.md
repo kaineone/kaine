@@ -12,24 +12,24 @@ Design only: not scheduled. Nothing is built until the start condition below hol
 
 ### What is missing
 
-- **The action space is fixed at four actions.** `ACTION_SPACE = ("no_op", "request_think", "request_speak", "request_maintenance")` (`kaine/modules/planning/generative_model.py:66-71`; spec `planning-active-inference`, "Explicit v1 action space", which requires exactly four action dimensions).
-- **Proposals map to think, speak and rest only** (`kaine/modules/planning/module.py:59-63`), and the proposal wrapper treats any other kind as disabled (`kaine/workspace/planning_proposals.py:394-396`). No act proposal can be made or realized.
-- **No observation modality carries an act's consequence.** The model's modalities mirror its perceptual factors and the entity's own last action (`generative_model.py:14-31`); nothing says whether an act reached its intended outcome.
+- The action space is fixed at four actions. `ACTION_SPACE = ("no_op", "request_think", "request_speak", "request_maintenance")` (`kaine/modules/planning/generative_model.py:66-71`; spec `planning-active-inference`, "Explicit v1 action space", which requires exactly four action dimensions).
+- Proposals map to think, speak and rest only (`kaine/modules/planning/module.py:59-63`), and the proposal wrapper treats any other kind as disabled (`kaine/workspace/planning_proposals.py:394-396`). No act proposal can be made or realized.
+- No observation modality carries an act's consequence. The model's modalities mirror its perceptual factors and the entity's own last action (`generative_model.py:14-31`); nothing says whether an act reached its intended outcome.
 
 ## What Changes
 
 A design, settled first in the paper and then in code.
 
-1. **Act actions from the effector's declaration (paper §4).** The action space grows by the declared actions of each attached, whitelisted effector, so the model never offers an act the operator has not permitted. Each added action adds a policy, and the complexity envelope and its 200 ms latency bound (spec `planning-active-inference`, "EFE planning is bounded") limit how many can be added.
-2. **Act proposals (paper §4, A.6).** A chosen act action becomes a content-free `planning.proposal` of kind `act`, naming the effector and action. The action-selection module realizes it under the act guard and refractory interval of `act-intent-derivation`, signed, with `origin: "planning"`, and records its outcome as for every other proposal.
-3. **The act's outcome as an observation.** Recommended: the consequence is observed through the workspace as the rest of the planning module's input is, for the light through the vision module's report, so preferences over outcomes (the C vector) can make an act's pragmatic value differ from its epistemic value. Whether a dedicated outcome modality is needed is open for the paper change.
-4. **The benchmark (paper §6.4).** Whether the active-inference benchmark gains an act variant before the live study uses act proposals. Open for the paper change.
+1. Act actions from the effector's declaration (paper §4). The action space grows by the declared actions of each attached, whitelisted effector, so the model never offers an act the operator has not permitted. Each added action adds a policy, and the complexity envelope and its 200 ms latency bound (spec `planning-active-inference`, "EFE planning is bounded") limit how many can be added.
+2. Act proposals (paper §4, A.6). A chosen act action becomes a content-free `planning.proposal` of kind `act`, naming the effector and action. The action-selection module realizes it under the act guard and refractory interval of `act-intent-derivation`, signed, with `origin: "planning"`, and records its outcome as for every other proposal.
+3. The act's outcome as an observation. Recommended: the consequence is observed through the workspace as the rest of the planning module's input is, for the light through the vision module's report, so preferences over outcomes (the C vector) can make an act's pragmatic value differ from its epistemic value. Whether a dedicated outcome modality is needed is open for the paper change.
+4. The benchmark (paper §6.4). Whether the active-inference benchmark gains an act variant before the live study uses act proposals. Open for the paper change.
 
 ## Dependencies and start condition
 
-- **Gate.** The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage. The planning module joins in that first round (branch 3), so it is already in the study by then.
-- **Dependencies.** `act-intent-derivation` merged, because a proposal of kind `act` needs the act guard, bar and device effector it realizes through, and its light branch run in the study.
-- **Start condition.** Both hold.
+- Gate: The module-addition study has completed its first round (`module-ignition-study` task 2.5) and reached the §6.5 hardware stage. The planning module joins in that first round (branch 3), so it is already in the study by then.
+- Dependencies: `act-intent-derivation` merged, because a proposal of kind `act` needs the act guard, bar and device effector it realizes through, and its light branch run in the study.
+- Start condition: Both hold.
 
 ## Paper sections it depends on
 

@@ -22,7 +22,7 @@ loss.
 - **THEN** the model weights are left unchanged and the module does not crash
 
 ### Requirement: Fatigue accumulator triggers maintenance
-The interoception module SHALL maintain a fatigue accumulator that integrates **unexpected** prediction error over waking time and decays continuously. Unexpected error is the error beyond each channel's learned expected band (see "Learned expected prediction error per interoceptive channel"). While a hard-threshold breach is live, the accumulator SHALL integrate the raw prediction error at full weight. During the developmental warm-up, the existing dampening against the warming baseline SHALL apply to the accumulator input. When the accumulator crosses `fatigue_maintenance_threshold`, the interoception module SHALL publish a `interoception.fatigue` event carrying the current value, the threshold and a `crossed` flag. The accumulator SHALL reset to baseline at the end of an offline-maintenance cycle.
+The interoception module SHALL maintain a fatigue accumulator that integrates **unexpected** prediction error over waking time and decays continuously. Unexpected error is the error beyond each channel's learned expected band (see "Learned expected prediction error per interoceptive channel"). While a hard-threshold breach is live, the accumulator SHALL integrate the raw prediction error at full weight. During the developmental warm-up, the accumulator input SHALL be damped by subtracting the warming baseline, the mean of the accumulator's own recent inputs (unexpected error, or raw error while a hard threshold is breached) before the current tick, floored at zero. When the accumulator crosses `fatigue_maintenance_threshold`, the interoception module SHALL publish a `interoception.fatigue` event carrying the current value, the threshold and a `crossed` flag. The accumulator SHALL reset to baseline at the end of an offline-maintenance cycle.
 
 #### Scenario: Crossing the threshold emits interoception.fatigue
 - **WHEN** sustained unexpected prediction error drives the accumulator above `fatigue_maintenance_threshold`
@@ -47,6 +47,10 @@ The interoception module SHALL maintain a fatigue accumulator that integrates **
 #### Scenario: Maintenance resets fatigue
 - **WHEN** an offline-maintenance cycle completes
 - **THEN** the fatigue accumulator returns to its baseline value
+
+#### Scenario: The warm-up baseline is the accumulator's own recent input
+- **WHEN** during warm-up the unexpected error steps far above its own recent mean while staying below the mean raw prediction error
+- **THEN** the accumulator input is the excess over the recent unexpected-error mean, not zero
 
 ### Requirement: Advisory homeostatic regulation
 The interoception module SHALL publish a `interoception.regulation` event whose `action` is one of `reduce_rate`, `shed_module` or `request_maintenance` when its regulation input stays above `regulation_threshold` for `regulation_sustain_window_s`. The regulation input SHALL be the unexpected prediction error, or the raw prediction error while a hard-threshold breach is live. These events SHALL be advisory: the interoception module SHALL NOT itself mutate the cycle rate or unregister any module.
@@ -117,3 +121,43 @@ Further requirements:
 #### Scenario: A forward model without residuals
 - **WHEN** the configured forward model has no `last_residuals`
 - **THEN** the interoception module computes the unexpected error from the scalar prediction error as a single channel
+
+### Requirement: Interoception's reservoir receives the elapsed time
+The interoception module SHALL advance its continuous-time reservoir with a timespan equal to the subjective seconds since its previous read divided by its read interval, clipped to `[0, 10]` and equal to 1.0 on the first read. A forward model supplied by a plugin SHALL receive a timespan only if it declares that it accepts one.
+
+#### Scenario: Steady cadence keeps the unit timespan
+- **WHEN** the interoception module reads exactly once per read interval
+- **THEN** each reservoir step uses a timespan of 1.0
+
+#### Scenario: A delayed read lengthens the timespan
+- **WHEN** a read arrives three read intervals after the previous one
+- **THEN** that reservoir step uses a timespan of 3.0
+
+### Requirement: Interoception's eighth feature is VRAM utilisation
+The interoception module's interoceptive feature vector SHALL carry, in slot 7, the highest GPU memory utilisation divided by 100, clamped to `[0, 1]`, and the interoception module's snapshot SHALL record `feature_layout = 2`. A snapshot without a feature layout SHALL restore with layout 1, in which slot 7 stays 0.0.
+
+#### Scenario: VRAM enters the forward model
+- **WHEN** the host reports 60 percent VRAM on its busiest GPU
+- **THEN** slot 7 of the interoception module's feature vector is 0.6
+
+#### Scenario: A preserved entity keeps its layout
+- **WHEN** the interoception module restores a snapshot that has no feature layout
+- **THEN** slot 7 of its feature vector stays 0.0
+
+### Requirement: A skipped interoceptive reading publishes no error
+A reading the interoception module's forward model skips as non-finite, and the first reading after it, which has no prediction to be scored against, SHALL publish `prediction_error` as null on `interoception.report` and SHALL stay out of the interoception module's running error window. The very first reading's error of 0 is defined (paper A.5) and SHALL enter the window. The welfare observer and the preservation monitor SHALL treat a null `prediction_error` as no sample: it SHALL neither feed nor reset a sustained-distress episode.
+
+#### Scenario: A skipped reading and the next publish no error
+- **WHEN** the interoception module reads a non-finite feature vector and then two finite ones
+- **THEN** the first two reports carry a null `prediction_error` and leave the running error window unchanged, and the third carries a float error that enters the window
+
+#### Scenario: A null error does not end a distress episode
+- **WHEN** a distress-level `interoception.report` is followed by reports with a null `prediction_error`
+- **THEN** the sustained-distress episode keeps running and crosses once its duration has elapsed, while a report with a real error below the threshold still ends it
+
+### Requirement: A reading without a defined error teaches no unexpected error
+When the forward model reports that its last reading has no defined error (`last_error_defined` is false: a reading skipped as non-finite, or the first reading after one), the interoception module SHALL report an `unexpected_error` of 0 for that reading and SHALL leave its expected-error estimates unchanged. This SHALL hold for a forward model that exposes per-channel residuals and for one that does not.
+
+#### Scenario: A scalar-only model's skipped reading teaches nothing
+- **WHEN** a forward model without `last_residuals` reports a reading without a defined error after fifty defined ones
+- **THEN** that reading's `interoception.report` carries a null `prediction_error` and an `unexpected_error` of 0, and the expected and spread estimates are unchanged

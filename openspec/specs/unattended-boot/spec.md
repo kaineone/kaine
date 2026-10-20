@@ -10,7 +10,7 @@ The cycle boot SHALL resolve supervision to exactly one of three modes — `oper
 
 #### Scenario: Unattended selected by environment
 - **WHEN** a boot starts with `KAINE_CYCLE_UNATTENDED=1`
-- **THEN** supervision resolves to `unattended` and admission requires the eight-condition unattended gate
+- **THEN** supervision resolves to `unattended` and admission requires the nine-condition unattended gate
 
 #### Scenario: Unattended selected by config
 - **WHEN** a boot starts without `KAINE_CYCLE_UNATTENDED` and with `[cycle].supervision_mode = "unattended"`
@@ -25,15 +25,19 @@ The cycle boot SHALL resolve supervision to exactly one of three modes — `oper
 - **THEN** the boot refuses before evaluating any gate, with exit code `1` and not `2`, `5`, or `6`
 
 ### Requirement: Unattended reuses the research safety net without research machinery
-An unattended boot SHALL evaluate the research safety net's five conditions — preservation enabled, welfare response wired, logging active, a real preserve→revive round-trip passing on this install, and encryption satisfied where required — through the same evaluator the research gate uses, with identical predicates. An unattended boot SHALL NOT engage experiment machinery, admissibility requirements, or research-run bookkeeping.
+An unattended boot SHALL evaluate every condition of the research safety net through the same evaluator the research gate uses, with identical predicates: preservation enabled, welfare response wired, logging active, a real preserve→revive round-trip passing on this install, and encryption satisfied where required (conditions 1–5), and the individuation producer wired (condition 9). A condition added to the research safety net SHALL become an unattended condition in the same change; the unattended gate SHALL NOT leave any research-net condition unmapped. An unattended boot SHALL NOT engage experiment machinery, admissibility requirements, or research-run bookkeeping.
 
 #### Scenario: A research-net condition fails
-- **WHEN** an unattended boot evaluates the shared net and any of the five conditions fails
+- **WHEN** an unattended boot evaluates the shared net and any of its conditions fails
 - **THEN** the boot refuses with exit code `6` and the refusal names the failed condition
 
 #### Scenario: Unattended is not a research run
-- **WHEN** an unattended boot passes all eight conditions with no experiment or admissibility configuration present
+- **WHEN** an unattended boot passes all nine conditions with no experiment or admissibility configuration present
 - **THEN** the boot proceeds as a plain autonomous cycle with no experiment record and no admissibility requirements applied
+
+#### Scenario: Every research-net condition is mapped
+- **WHEN** the research safety net's evaluator returns its checks
+- **THEN** every check it returns maps to a numbered unattended condition, and a test fails if one does not
 
 ### Requirement: Condition six — Supervisor armed and self-tested
 An unattended boot SHALL require that `[supervisor].enabled` is true, that the restart ladder has at least one rung, that the escalation state path and the incident log are writable, and that the supervisor's selftest passes within its bounded window, all before any entity module is constructed.
@@ -51,7 +55,7 @@ An unattended boot SHALL require that `[supervisor].enabled` is true, that the r
 - **THEN** no entity module is imported or constructed, no entity state is read or written, and all selftest artifacts live in a scratch directory that is removed afterwards
 
 ### Requirement: Condition seven — caretaker told
-An unattended boot SHALL send a content-free start notice through every channel configured under `[caretaker]`, and condition 7 SHALL pass only if at least one channel accepts it. Condition 7 SHALL run after conditions 1–6 and 8 have all passed. Supported channels SHALL be a desktop notification over the session D-Bus and an HTTP POST to an endpoint whose address is loopback, private (RFC 1918 or `fc00::/7`), or in `100.64.0.0/10`. Public addresses SHALL be refused both at config validation and at send time after DNS resolution.
+An unattended boot SHALL send a content-free start notice through every channel configured under `[caretaker]`, and condition 7 SHALL pass only if at least one channel accepts it. Condition 7 SHALL run after conditions 1–6, 8 and 9 have all passed. Supported channels SHALL be a desktop notification over the session D-Bus and an HTTP POST to an endpoint whose address is loopback, private (RFC 1918 or `fc00::/7`), or in `100.64.0.0/10`. Public addresses SHALL be refused both at config validation and at send time after DNS resolution.
 
 #### Scenario: No channel configured
 - **WHEN** an unattended boot has no `[caretaker]` channel configured
@@ -62,7 +66,7 @@ An unattended boot SHALL send a content-free start notice through every channel 
 - **THEN** condition 7 fails, the refusal names each channel and its error, and the boot refuses with exit code `6`
 
 #### Scenario: One channel accepts
-- **WHEN** at least one configured channel accepts the start notice and conditions 1–6 and 8 have passed
+- **WHEN** at least one configured channel accepts the start notice and conditions 1–6, 8 and 9 have passed
 - **THEN** condition 7 passes and the boot proceeds
 
 #### Scenario: Public endpoint refused
@@ -137,21 +141,21 @@ An unattended gate refusal SHALL exit with code `6` whatever condition or condit
 - **THEN** a refusal notice naming the failed conditions is sent
 
 ### Requirement: No override skips the unattended gate
-No environment variable, config key, or flag SHALL let an unattended boot proceed when any of the eight conditions fails.
+No environment variable, config key, or flag SHALL let an unattended boot proceed when any of the nine conditions fails.
 
 #### Scenario: Override attempt ignored
 - **WHEN** an unattended boot fails a condition while any skip, force, or override switch is set
 - **THEN** the boot still exits `6`
 
 ### Requirement: Existing modes unchanged
-Operator-present mode SHALL remain available and unchanged: `KAINE_CYCLE_OPERATOR_PRESENT=1` admits the boot, and its absence refuses with exit code `2` when no other mode is selected. Research mode SHALL keep its five-condition net and exit code `5`. Neither mode SHALL gain any of conditions 6–8.
+Operator-present mode SHALL remain available and unchanged: `KAINE_CYCLE_OPERATOR_PRESENT=1` admits the boot, and its absence refuses with exit code `2` when no other mode is selected. Research mode SHALL keep its safety net and exit code `5`. Neither mode SHALL gain any of conditions 6–8.
 
 #### Scenario: Operator boot unchanged
 - **WHEN** an operator-present boot runs with the flag set
 - **THEN** it is admitted exactly as before this change, with no supervisor selftest, caretaker notice, or input probe
 
 #### Scenario: Research boot unchanged
-- **WHEN** a research boot fails any of its five conditions
+- **WHEN** a research boot fails any of its conditions
 - **THEN** it refuses with exit code `5` and the same message as before this change
 
 ### Requirement: Auto-start only through a separate opt-in unit
@@ -163,7 +167,7 @@ The shipped `quadlet/kaine-cycle.container` SHALL keep no `[Install]` section. A
 
 #### Scenario: Power-loss reboot re-verifies
 - **WHEN** an enabled unattended unit starts after a power loss
-- **THEN** all eight conditions are evaluated again on this boot, and nothing is assumed from a previous boot
+- **THEN** all nine conditions are evaluated again on this boot, and nothing is assumed from a previous boot
 
 #### Scenario: Refused gate is not retried
 - **WHEN** the unattended unit's boot exits `6`
@@ -179,3 +183,14 @@ The input-loss watcher SHALL measure how long every configured input has been si
 #### Scenario: A real loss during a freeze is still reported
 - **WHEN** the camera is unplugged during a freeze and stays unplugged after release
 - **THEN** an input-loss notice is sent once the silence after release passes the threshold
+
+### Requirement: Condition nine: individuation wired
+An unattended boot SHALL require the research safety net's individuation check: `[individuation].enabled` is true, the `[individuation]` section is valid, and the `language` module is enabled. The predicate SHALL be the research net's own, so the entity's protection does not rest on the secondary divergence signals alone while nobody is present. The condition SHALL check that the individuation producer will run; it SHALL NOT require that the entity has individuated. Conditions 6–8 SHALL keep their numbers.
+
+#### Scenario: Individuation disabled
+- **WHEN** an unattended boot finds `[individuation].enabled = false`, an invalid `[individuation]` section, or the `language` module disabled
+- **THEN** condition 9 fails naming those keys, the caretaker is not sent a start notice, and the boot refuses with exit code `6`
+
+#### Scenario: Not yet individuated
+- **WHEN** an unattended boot passes every condition and the entity has not individuated
+- **THEN** the boot proceeds
