@@ -17,6 +17,7 @@ deleted. Host-memory reclamation is out of scope.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import hashlib
 import logging
 import logging.handlers
@@ -25,6 +26,7 @@ import os
 import re
 import stat
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any, Awaitable, Callable, Sequence
@@ -41,6 +43,19 @@ DEFAULT_MEMORY_BUDGET_BYTES = 1024**3
 DEFAULT_TIME_ALLOWANCE_S = 60.0
 DAILY_FILENAME_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.jsonl$")
 
+_PASS_LOCK = asyncio.Lock()
+
+
+def housekeeping_lock() -> asyncio.Lock:
+    """The lock held for an entire housekeeping pass."""
+    return _PASS_LOCK
+
+
+def _yesterday(today: str) -> str:
+    """Return the ISO date immediately preceding ``today``."""
+    d = datetime.date.fromisoformat(today)
+    return (d - datetime.timedelta(days=1)).isoformat()
+
 
 def _sha256_fd(fd: int) -> str:
     """Return the SHA-256 hex digest of ``fd``, read in 1 MiB chunks.
@@ -53,6 +68,19 @@ def _sha256_fd(fd: int) -> str:
         if not chunk:
             break
         digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_prefix_fd(fd: int, n: int) -> str:
+    """Return the SHA-256 hex digest of the first ``n`` bytes of ``fd``."""
+    digest = hashlib.sha256()
+    remaining = n
+    while remaining > 0:
+        chunk = os.read(fd, min(1024 * 1024, remaining))
+        if not chunk:
+            break
+        digest.update(chunk)
+        remaining -= len(chunk)
     return digest.hexdigest()
 
 
@@ -89,6 +117,99 @@ def rotated_log_backups() -> list[Path]:
                 continue
             found.append(candidate)
     return found
+
+
+def study_record_roots(kaine_config: Mapping[str, Any] | None) -> list[Path]:
+    """Return the configured study-record sink roots.
+
+    The order is the configuration order: evaluation logs and
+    trajectory directory (with their defaults), then the research event
+    log directories. Roots that lie under, equal to, or contain the
+    protected root are dropped with a warning. A root that lies inside
+    another kept root is also dropped.
+    """
+    if kaine_config is None:
+        return [resolve(r).resolve(strict=False) for r in ALLOWED_ROOTS]
+
+    protected = resolve(PROTECTED_ROOT).resolve(strict=False)
+
+    def _nested_string(cfg: Any, *keys: str) -> str | None:
+        cur = cfg
+        for k in keys:
+            if not isinstance(cur, dict):
+                return None
+            cur = cur.get(k)
+        return cur if isinstance(cur, str) and cur else None
+
+    candidates: list[tuple[str, str]] = [
+        (
+            "evaluation.paths.evaluation_logs",
+            _nested_string(kaine_config, "evaluation", "paths", "evaluation_logs")
+            or "data/evaluation",
+        ),
+        (
+            "evaluation.paths.trajectory_dir",
+            _nested_string(kaine_config, "evaluation", "paths", "trajectory_dir")
+            or "data/workspace_trajectory",
+        ),
+        (
+            "research_event_log.log_dir",
+            _nested_string(kaine_config, "research_event_log", "log_dir"),
+        ),
+        (
+            "research_event_log.external_utterances.log_dir",
+            _nested_string(
+                kaine_config,
+                "research_event_log",
+                "external_utterances",
+                "log_dir",
+            ),
+        ),
+        (
+            "research_event_log.dashboard_record.log_dir",
+            _nested_string(
+                kaine_config,
+                "research_event_log",
+                "dashboard_record",
+                "log_dir",
+            ),
+        ),
+        (
+            "research_event_log.raw_archive.archive_dir",
+            _nested_string(
+                kaine_config,
+                "research_event_log",
+                "raw_archive",
+                "archive_dir",
+            ),
+        ),
+    ]
+
+    kept: list[Path] = []
+    for key, value in candidates:
+        if value is None:
+            continue
+        path = resolve(value).resolve(strict=False)
+        if (
+            path == protected
+            or path.is_relative_to(protected)
+            or protected.is_relative_to(path)
+        ):
+            logger.warning(
+                "study sink %s under %s/ is watched but never reclaimed",
+                key,
+                PROTECTED_ROOT,
+            )
+            continue
+        if any(path == k or path.is_relative_to(k) for k in kept):
+            continue
+        kept.append(path)
+
+    return kept
+
+
+class FileSkipped(OSError):
+    """The path is no longer eligible because of a benign race."""
 
 
 class HousekeepingRefused(ValueError):
@@ -203,19 +324,23 @@ def _same_file(a: Path, b: Path) -> bool:
 def _unlink_regular(path: Path) -> int:
     """Unlink a regular file and return its size.
 
-    Symlinks and non-regular files raise ``HousekeepingRefused``.
+    A vanished path, a symlink, or a non-regular file is treated as a
+    skipped race rather than a refusal.
     """
     try:
         st = os.lstat(path)
+    except FileNotFoundError as exc:
+        raise FileSkipped(f"file vanished before deletion: {path}") from exc
     except OSError as exc:
-        raise HousekeepingRefused(
-            f"cannot stat file for deletion: {path}: {exc}"
-        ) from exc
+        raise FileSkipped(f"cannot stat file for deletion: {path}: {exc}") from exc
     if stat.S_ISLNK(st.st_mode):
-        raise HousekeepingRefused(f"symlinks are not allowed: {path}")
+        raise FileSkipped(f"symlinks are not allowed: {path}")
     if not stat.S_ISREG(st.st_mode):
-        raise HousekeepingRefused(f"not a regular file: {path}")
-    os.unlink(path)
+        raise FileSkipped(f"not a regular file: {path}")
+    try:
+        os.unlink(path)
+    except FileNotFoundError as exc:
+        raise FileSkipped(f"file vanished during deletion: {path}") from exc
     return st.st_size
 
 
@@ -312,6 +437,7 @@ class Housekeeper:
         log_backups: Callable[[], list[Path]] | None = None,
         clock: Callable[[], float] = time.monotonic,
         today: Callable[[], str] | None = None,
+        archive_mounted: Callable[[Path], bool] | None = None,
     ) -> None:
         if roots is None:
             roots = [resolve(r) for r in ALLOWED_ROOTS]
@@ -322,16 +448,20 @@ class Housekeeper:
         self._protected = Path(protected).resolve(strict=False)
 
         self._config = config
-        self._memory_reader = memory_reader
+        # ``memory_reader`` is reserved and ignored: host-memory reclamation
+        # is out of scope for this module.
+        self._memory_reader = None
         self._episodic_budget_bytes = episodic_budget_bytes
         self._log_backups = (
             log_backups if log_backups is not None else rotated_log_backups
         )
         self._clock = clock
         self._today = today if today is not None else self._default_today
+        self._archive_mounted = archive_mounted
+        self._archive_mount_warned = False
 
         if config.archive_dir:
-            self._archive = Path(config.archive_dir).expanduser().resolve()
+            self._archive = Path(resolve(config.archive_dir)).expanduser().resolve()
             for root in self._roots:
                 if self._archive == root or self._archive.is_relative_to(root):
                     raise HousekeepingRefused(
@@ -381,26 +511,65 @@ class Housekeeper:
         return resolved in self._current_log_backups()
 
     def _mounted_archive(self) -> Path | None:
-        """The archive directory when it is set and exists (mounted), else None."""
+        """The archive directory when it is a mounted volume, else None."""
         if self._archive is None or not os.path.isdir(self._archive):
             return None
-        return self._archive
+
+        mounted = False
+        if self._archive_mounted is not None:
+            mounted = self._archive_mounted(self._archive)
+        elif os.path.ismount(self._archive):
+            mounted = True
+        else:
+            archive_dev = os.stat(self._archive).st_dev
+            mounted = True
+            for root in self._roots:
+                if not root.exists():
+                    continue
+                try:
+                    root_dev = os.stat(root).st_dev
+                except OSError:
+                    continue
+                if root_dev == archive_dev:
+                    mounted = False
+                    break
+
+        if mounted:
+            return self._archive
+
+        if not self._archive_mount_warned:
+            logger.warning(
+                "sleep housekeeping: archive_dir is not a mounted volume; "
+                "no study record is exported"
+            )
+            self._archive_mount_warned = True
+        return None
 
     def check_allowed(self, path: Path) -> Path:
         """Validate that ``path`` may be moved, deleted, or counted.
 
-        Refuse symlinks (checked on the path as given, before resolving),
-        non-regular files, files outside the allowed roots that are not
-        current process-log backups, and any file that resolves inside
-        the protected root.
+        Symlinks, non-regular files, files with multiple hard links, and
+        vanished paths raise ``FileSkipped``. Files outside the allowed
+        roots that are not current log backups, and any file inside the
+        protected root, raise ``HousekeepingRefused``.
         """
-        if os.path.islink(path):
-            raise HousekeepingRefused(f"symlinks are not allowed: {path}")
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError as exc:
+            raise FileSkipped(f"file vanished before housekeeping: {path}") from exc
+        except OSError as exc:
+            raise FileSkipped(
+                f"cannot stat file for housekeeping: {path}: {exc}"
+            ) from exc
+
+        if stat.S_ISLNK(st.st_mode):
+            raise FileSkipped(f"symlinks are not allowed: {path}")
+        if not stat.S_ISREG(st.st_mode):
+            raise FileSkipped(f"not a regular file: {path}")
+        if st.st_nlink > 1:
+            raise FileSkipped(f"hard links are not allowed: {path}")
 
         resolved = Path(path).resolve(strict=False)
-        if not resolved.is_file():
-            raise HousekeepingRefused(f"not a regular file: {resolved}")
-
         inside_root = any(resolved.is_relative_to(root) for root in self._roots)
         if not inside_root and resolved not in self._current_log_backups():
             raise HousekeepingRefused(f"file is outside allowed roots: {resolved}")
@@ -449,11 +618,13 @@ class Housekeeper:
         """Return the reclaimable files, oldest first by modification time.
 
         These are the current process-log backups and the closed daily
-        study-record files (dated before today). Files whose names do not
-        match the daily pattern and files dated today or in the future
-        are excluded. Ties are broken by path string.
+        study-record files dated strictly before yesterday. Files whose
+        names do not match the daily pattern and files dated yesterday,
+        today, or in the future are excluded. Ties are broken by path
+        string.
         """
         today = self._today()
+        yesterday = _yesterday(today)
         found: list[Path] = []
         for root in self._roots:
             if not root.exists():
@@ -464,7 +635,7 @@ class Housekeeper:
                     if not match:
                         continue
                     date = match.group("date")
-                    if date >= today:
+                    if date >= yesterday:
                         continue
                     candidate = Path(dirpath) / name
                     # A symlink or non-regular file is never a candidate, so
@@ -473,6 +644,7 @@ class Housekeeper:
                         continue
                     found.append(candidate)
         found.extend(self._current_log_backups())
+
         def _mtime(p: Path) -> float:
             try:
                 return p.stat().st_mtime
@@ -486,115 +658,123 @@ class Housekeeper:
         self, *, episodic_store_bytes: int | None = None
     ) -> dict[str, Any]:
         """Run one housekeeping pass and return a content-free report."""
-        start = self._clock()
-        before = self.disk_bytes()
+        async with housekeeping_lock():
+            start = self._clock()
+            before = self.disk_bytes()
 
-        if not self._config.enabled:
-            return {"enabled": False}
+            if not self._config.enabled:
+                return {"enabled": False}
 
-        moved_files = 0
-        moved_bytes = 0
-        deleted_files = 0
-        deleted_bytes = 0
-        skipped_unexported = 0
-        archive = self._mounted_archive()
-        remaining = before
-        budget = self._config.disk_budget_bytes
-        stopped: str | None = None
+            moved_files = 0
+            moved_bytes = 0
+            deleted_files = 0
+            deleted_bytes = 0
+            skipped_unexported = 0
+            archive = self._mounted_archive()
+            remaining = before
+            budget = self._config.disk_budget_bytes
+            stopped: str | None = None
 
-        if remaining <= budget:
-            stopped = "within_budget"
-        else:
-            for path in self.candidates():
-                if self._clock() - start >= self._config.time_allowance_s:
-                    stopped = "time"
-                    break
-                if remaining <= budget:
-                    stopped = "within_budget"
-                    break
-                try:
-                    src = self.check_allowed(path)
-                    if self._is_log_backup(src):
-                        size = await asyncio.to_thread(self._delete, src)
-                        deleted_files += 1
-                        deleted_bytes += size
-                    elif archive is None:
-                        # Unexported study records are never deleted.
-                        skipped_unexported += 1
-                        continue
-                    else:
-                        root = next(
-                            r for r in self._roots if src.is_relative_to(r)
+            if remaining <= budget:
+                stopped = "within_budget"
+            else:
+                for path in self.candidates():
+                    if self._clock() - start >= self._config.time_allowance_s:
+                        stopped = "time"
+                        break
+                    if remaining <= budget:
+                        stopped = "within_budget"
+                        break
+                    try:
+                        src = self.check_allowed(path)
+                        if self._is_log_backup(src):
+                            size = await asyncio.to_thread(self._delete, src)
+                            deleted_files += 1
+                            deleted_bytes += size
+                        elif archive is None:
+                            # Unexported study records are never deleted.
+                            skipped_unexported += 1
+                            continue
+                        else:
+                            root = next(
+                                r for r in self._roots if src.is_relative_to(r)
+                            )
+                            size = await self._export_to_archive(src, root, archive)
+                            moved_files += 1
+                            moved_bytes += size
+                    except ArchiveRefused as exc:
+                        logger.warning(
+                            "Housekeeping archive refusal for %s: %s", path, exc
                         )
-                        size = await self._export_to_archive(src, root, archive)
-                        moved_files += 1
-                        moved_bytes += size
-                except ArchiveRefused as exc:
-                    logger.warning(
-                        "Housekeeping archive refusal for %s: %s", path, exc
-                    )
-                    continue
-                except HousekeepingRefused:
-                    raise
-                except OSError as exc:
-                    logger.warning("Housekeeping skipped %s: %s", path, exc)
-                    continue
-                remaining -= size
+                        continue
+                    except HousekeepingRefused:
+                        raise
+                    except OSError as exc:
+                        logger.info(
+                            "skipped, changed during housekeeping: %s: %s",
+                            path,
+                            exc,
+                        )
+                        continue
+                    remaining -= size
 
-            if stopped is None:
-                if remaining <= budget:
-                    stopped = "within_budget"
-                elif archive is None and skipped_unexported > 0:
-                    stopped = "no_archive"
-                else:
-                    stopped = "no_candidates"
+                if stopped is None:
+                    if remaining <= budget:
+                        stopped = "within_budget"
+                    elif archive is None and skipped_unexported > 0:
+                        stopped = "no_archive"
+                    else:
+                        stopped = "no_candidates"
 
-        after = self.disk_bytes()
-        mem = await self._read_memory()
+            after = self.disk_bytes()
 
-        disk_term = 0.0
-        if self._config.disk_budget_bytes > 0:
-            disk_term = max(0.0, after / self._config.disk_budget_bytes - 1.0)
-        memory_term = 0.0
-        if mem is not None and self._config.memory_budget_bytes > 0:
-            memory_term = max(0.0, mem / self._config.memory_budget_bytes - 1.0)
-        episodic_term = 0.0
-        if (
-            episodic_store_bytes is not None
-            and self._episodic_budget_bytes is not None
-            and self._episodic_budget_bytes > 0
-        ):
-            episodic_term = max(
-                0.0, episodic_store_bytes / self._episodic_budget_bytes - 1.0
-            )
-        pressure = disk_term + memory_term + episodic_term
+            disk_term = 0.0
+            if self._config.disk_budget_bytes > 0:
+                disk_term = max(0.0, after / self._config.disk_budget_bytes - 1.0)
+            memory_term = 0.0
+            episodic_term = 0.0
+            if (
+                episodic_store_bytes is not None
+                and self._episodic_budget_bytes is not None
+                and self._episodic_budget_bytes > 0
+            ):
+                episodic_term = max(
+                    0.0, episodic_store_bytes / self._episodic_budget_bytes - 1.0
+                )
+            pressure = disk_term + memory_term + episodic_term
 
-        return {
-            "enabled": True,
-            "disk_bytes_before": before,
-            "disk_bytes_after": after,
-            "disk_budget_bytes": self._config.disk_budget_bytes,
-            "memory_bytes": mem,
-            "memory_budget_bytes": self._config.memory_budget_bytes,
-            "episodic_store_bytes": episodic_store_bytes,
-            "episodic_budget_bytes": self._episodic_budget_bytes,
-            "moved_files": moved_files,
-            "moved_bytes": moved_bytes,
-            "deleted_files": deleted_files,
-            "deleted_bytes": deleted_bytes,
-            "stopped": stopped,
-            "archive": archive is not None,
-            "elapsed_s": self._clock() - start,
-            "pressure": pressure,
-            "terms": {
-                "disk": disk_term,
-                "memory": memory_term,
-                "episodic": episodic_term,
-            },
-        }
+            return {
+                "enabled": True,
+                "disk_bytes_before": before,
+                "disk_bytes_after": after,
+                "disk_budget_bytes": self._config.disk_budget_bytes,
+                "memory_bytes": None,
+                "memory_measured": False,
+                "memory_budget_bytes": self._config.memory_budget_bytes,
+                "episodic_store_bytes": episodic_store_bytes,
+                "episodic_budget_bytes": self._episodic_budget_bytes,
+                "moved_files": moved_files,
+                "moved_bytes": moved_bytes,
+                "deleted_files": deleted_files,
+                "deleted_bytes": deleted_bytes,
+                "stopped": stopped,
+                "archive": archive is not None,
+                "archive_mounted": archive is not None,
+                "elapsed_s": self._clock() - start,
+                "pressure": pressure,
+                "terms": {
+                    "disk": disk_term,
+                    "memory": memory_term,
+                    "episodic": episodic_term,
+                },
+            }
 
     async def reclaim_regenerable(
-        self, *, free_bytes: Callable[[], int], target_free: int, device: int | None = None
+        self,
+        *,
+        free_bytes: Callable[[], int],
+        target_free: int,
+        device: int | None = None,
     ) -> dict[str, int]:
         """Reclaim spent data for the awake floor, oldest first.
 
@@ -607,52 +787,61 @@ class Housekeeper:
         When ``device`` is given, only candidates on that filesystem
         are considered.
         """
-        reclaimed_files = 0
-        reclaimed_bytes = 0
-        archive = self._mounted_archive()
+        async with housekeeping_lock():
+            reclaimed_files = 0
+            reclaimed_bytes = 0
+            archive = self._mounted_archive()
 
-        for path in self.candidates():
-            if free_bytes() >= target_free:
-                break
-            if device is not None:
+            for path in self.candidates():
+                if free_bytes() >= target_free:
+                    break
+                if device is not None:
+                    try:
+                        if os.stat(path).st_dev != device:
+                            continue
+                    except OSError as exc:
+                        logger.info(
+                            "skipped, changed during housekeeping: %s: %s",
+                            path,
+                            exc,
+                        )
+                        continue
                 try:
-                    if os.stat(path).st_dev != device:
-                        continue
-                except OSError as exc:
-                    logger.warning("Housekeeping skipped %s: %s", path, exc)
-                    continue
-            try:
-                src = self.check_allowed(path)
-                if self._is_log_backup(src):
-                    size = await asyncio.to_thread(self._delete, src)
-                else:
-                    if archive is None:
-                        continue
-                    root = next(
-                        r for r in self._roots if src.is_relative_to(r)
+                    src = self.check_allowed(path)
+                    if self._is_log_backup(src):
+                        size = await asyncio.to_thread(self._delete, src)
+                    else:
+                        if archive is None:
+                            continue
+                        root = next(
+                            r for r in self._roots if src.is_relative_to(r)
+                        )
+                        if not await asyncio.to_thread(
+                            self._archive_copy_verified, src, root, archive
+                        ):
+                            continue
+                        size = await asyncio.to_thread(self._delete, src)
+                except ArchiveRefused as exc:
+                    logger.warning(
+                        "Housekeeping archive refusal for %s: %s", path, exc
                     )
-                    if not await asyncio.to_thread(
-                        self._archive_copy_verified, src, root, archive
-                    ):
-                        continue
-                    size = await asyncio.to_thread(self._delete, src)
-            except ArchiveRefused as exc:
-                logger.warning(
-                    "Housekeeping archive refusal for %s: %s", path, exc
-                )
-                continue
-            except HousekeepingRefused:
-                raise
-            except OSError as exc:
-                logger.warning("Housekeeping skipped %s: %s", path, exc)
-                continue
-            reclaimed_files += 1
-            reclaimed_bytes += size
+                    continue
+                except HousekeepingRefused:
+                    raise
+                except OSError as exc:
+                    logger.info(
+                        "skipped, changed during housekeeping: %s: %s",
+                        path,
+                        exc,
+                    )
+                    continue
+                reclaimed_files += 1
+                reclaimed_bytes += size
 
-        return {
-            "reclaimed_files": reclaimed_files,
-            "reclaimed_bytes": reclaimed_bytes,
-        }
+            return {
+                "reclaimed_files": reclaimed_files,
+                "reclaimed_bytes": reclaimed_bytes,
+            }
 
     async def _read_memory(self) -> int | None:
         if self._memory_reader is None:
@@ -694,78 +883,58 @@ class Housekeeper:
     async def _export_to_archive(self, src: Path, root: Path, archive: Path) -> int:
         """Copy ``src`` to the archive, verify the checksum, remove the source.
 
-        When the destination already exists with the same SHA-256, the
-        local file is a verified-exported copy and is simply removed. A
-        destination with different bytes raises ``OSError`` and the local
-        file is kept. Returns the number of bytes exported.
+        The source descriptor is opened first and held until the source is
+        removed or the export is abandoned. The source digest is computed
+        from the bytes that are copied. If the source changes after the
+        copy but before the unlink, the export is retried once with a fresh
+        descriptor; a second change raises ``OSError``. An existing
+        destination that is a strict prefix of the source is treated as a
+        stale partial export and is overwritten. Any other destination
+        mismatch raises ``OSError``. A leftover temporary file is removed
+        before raising.
         """
         rel = src.relative_to(root)
         dest = archive / root.name / rel
 
         def _copy_and_remove() -> int:
-            src_digest = _sha256(src)
-            src_stat = os.lstat(src)
-
-            _check_archive_path(archive, dest)
-            if _same_file(dest, src):
-                raise ArchiveRefused(
-                    f"archive destination is the same file as the source: {dest}"
-                )
-
-            dir_fd = _open_archive_dir(
-                archive, dest.relative_to(archive).parent
-            )
+            src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
             try:
-                # Existing destination: a regular file with the same digest
-                # can replace the local copy.
-                try:
-                    dest_st = os.lstat(dest.name, dir_fd=dir_fd)
-                except FileNotFoundError:
-                    dest_st = None
+                before = os.fstat(src_fd)
+            except Exception:
+                os.close(src_fd)
+                raise
 
-                if dest_st is not None:
-                    if not stat.S_ISREG(dest_st.st_mode):
-                        raise ArchiveRefused(
-                            f"archive destination is not a regular file: {dest}"
-                        )
-                    if (dest_st.st_dev, dest_st.st_ino) == (
-                        src_stat.st_dev,
-                        src_stat.st_ino,
-                    ):
-                        raise ArchiveRefused(
-                            f"archive destination is the same file as the source: {dest}"
-                        )
-                    dest_fd = os.open(
-                        dest.name,
-                        os.O_RDONLY | os.O_NOFOLLOW,
-                        dir_fd=dir_fd,
+            dir_fd = -1
+            try:
+                _check_archive_path(archive, dest)
+                if _same_file(dest, src):
+                    raise ArchiveRefused(
+                        f"archive destination is the same file as the source: {dest}"
                     )
-                    try:
-                        if _sha256_fd(dest_fd) == src_digest:
-                            return _unlink_regular(src)
-                    finally:
-                        os.close(dest_fd)
-                    raise OSError(f"archive copy differs: {dest}")
 
-                # Remove a leftover temporary file, but refuse anything else.
+                dir_fd = _open_archive_dir(
+                    archive, dest.relative_to(archive).parent
+                )
                 temp_name = dest.name + ".part"
-                try:
-                    temp_st = os.lstat(temp_name, dir_fd=dir_fd)
-                except FileNotFoundError:
-                    temp_st = None
 
-                if temp_st is not None:
-                    if not stat.S_ISREG(temp_st.st_mode):
+                for attempt in range(2):
+                    try:
+                        temp_st = os.lstat(temp_name, dir_fd=dir_fd)
+                    except FileNotFoundError:
+                        temp_st = None
+                    except OSError as exc:
                         raise ArchiveRefused(
-                            f"temporary archive file is not regular: {dest}"
-                        )
-                    os.unlink(temp_name, dir_fd=dir_fd)
+                            f"cannot inspect temporary archive file: {dest}: {exc}"
+                        ) from exc
 
-                # Create and copy the temporary file through the directory
-                # descriptor so no archive path component is re-traversed by
-                # name after the up-front check.
-                src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
-                try:
+                    if temp_st is not None:
+                        if not stat.S_ISREG(temp_st.st_mode):
+                            raise ArchiveRefused(
+                                f"temporary archive file is not regular: {dest}"
+                            )
+                        os.unlink(temp_name, dir_fd=dir_fd)
+
+                    digest = hashlib.sha256()
                     temp_fd = os.open(
                         temp_name,
                         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -777,87 +946,215 @@ class Housekeeper:
                             chunk = os.read(src_fd, 1024 * 1024)
                             if not chunk:
                                 break
+                            digest.update(chunk)
                             view = memoryview(chunk)
                             while view:
                                 written = os.write(temp_fd, view)
                                 view = view[written:]
                         os.fsync(temp_fd)
+                    except Exception:
+                        try:
+                            os.unlink(temp_name, dir_fd=dir_fd)
+                        except FileNotFoundError:
+                            pass
+                        raise
                     finally:
                         os.close(temp_fd)
-                finally:
-                    os.close(src_fd)
 
-                # Re-open the temp descriptor to apply source metadata.
-                temp_fd = os.open(
-                    temp_name,
-                    os.O_RDONLY | os.O_NOFOLLOW,
-                    dir_fd=dir_fd,
-                )
-                try:
-                    os.fchmod(temp_fd, src_stat.st_mode)
-                    os.utime(
-                        temp_fd,
-                        ns=(src_stat.st_atime_ns, src_stat.st_mtime_ns),
+                    src_digest = digest.hexdigest()
+
+                    temp_fd = os.open(
+                        temp_name,
+                        os.O_RDONLY | os.O_NOFOLLOW,
+                        dir_fd=dir_fd,
                     )
-                finally:
-                    os.close(temp_fd)
-
-                # Verify the temp file checksum before atomically replacing
-                # the destination.
-                temp_fd = os.open(
-                    temp_name,
-                    os.O_RDONLY | os.O_NOFOLLOW,
-                    dir_fd=dir_fd,
-                )
-                try:
-                    if _sha256_fd(temp_fd) != src_digest:
-                        os.unlink(temp_name, dir_fd=dir_fd)
-                        raise OSError(
-                            f"checksum mismatch after copying {src} to {dest}"
+                    try:
+                        os.fchmod(temp_fd, before.st_mode)
+                        os.utime(
+                            temp_fd,
+                            ns=(before.st_atime_ns, before.st_mtime_ns),
                         )
-                finally:
-                    os.close(temp_fd)
+                    finally:
+                        os.close(temp_fd)
 
-                os.replace(
-                    temp_name, dest.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd
-                )
-                os.fsync(dir_fd)
-
-                # Re-verify the destination after the replace.
-                try:
-                    dest_st = os.lstat(dest.name, dir_fd=dir_fd)
-                except OSError as exc:
-                    raise ArchiveRefused(
-                        f"cannot re-verify archive destination: {dest}: {exc}"
-                    ) from exc
-                if not stat.S_ISREG(dest_st.st_mode):
-                    raise ArchiveRefused(
-                        f"archive destination is not a regular file after move: {dest}"
+                    temp_fd = os.open(
+                        temp_name,
+                        os.O_RDONLY | os.O_NOFOLLOW,
+                        dir_fd=dir_fd,
                     )
-                if (dest_st.st_dev, dest_st.st_ino) == (
-                    src_stat.st_dev,
-                    src_stat.st_ino,
-                ):
-                    raise ArchiveRefused(
-                        f"archive destination is the same file as the source: {dest}"
-                    )
+                    try:
+                        if _sha256_fd(temp_fd) != src_digest:
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise OSError(
+                                f"checksum mismatch after copying {src} to {dest}"
+                            )
+                    finally:
+                        os.close(temp_fd)
 
-                dest_fd = os.open(
-                    dest.name,
-                    os.O_RDONLY | os.O_NOFOLLOW,
-                    dir_fd=dir_fd,
-                )
-                try:
-                    if _sha256_fd(dest_fd) != src_digest:
-                        raise ArchiveRefused(
-                            f"archive copy checksum changed after move: {dest}"
+                    try:
+                        dest_st = os.lstat(dest.name, dir_fd=dir_fd)
+                    except FileNotFoundError:
+                        dest_st = None
+
+                    if dest_st is not None:
+                        if not stat.S_ISREG(dest_st.st_mode):
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise ArchiveRefused(
+                                f"archive destination is not a regular file: {dest}"
+                            )
+                        if (dest_st.st_dev, dest_st.st_ino) == (
+                            before.st_dev,
+                            before.st_ino,
+                        ):
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise ArchiveRefused(
+                                f"archive destination is the same file as the source: {dest}"
+                            )
+
+                        dest_fd = os.open(
+                            dest.name,
+                            os.O_RDONLY | os.O_NOFOLLOW,
+                            dir_fd=dir_fd,
                         )
-                finally:
-                    os.close(dest_fd)
+                        try:
+                            dest_digest = _sha256_fd(dest_fd)
+                        finally:
+                            os.close(dest_fd)
 
-                return _unlink_regular(src)
+                        if (
+                            dest_st.st_size == before.st_size
+                            and dest_digest == src_digest
+                        ):
+                            action = "unlink_source"
+                        elif dest_st.st_size < before.st_size:
+                            prefix_fd = os.open(
+                                temp_name,
+                                os.O_RDONLY | os.O_NOFOLLOW,
+                                dir_fd=dir_fd,
+                            )
+                            try:
+                                prefix_digest = _sha256_prefix_fd(
+                                    prefix_fd, dest_st.st_size
+                                )
+                            finally:
+                                os.close(prefix_fd)
+                            if prefix_digest == dest_digest:
+                                action = "replace"
+                            else:
+                                try:
+                                    os.unlink(temp_name, dir_fd=dir_fd)
+                                except FileNotFoundError:
+                                    pass
+                                raise OSError(f"archive copy differs: {dest}")
+                        else:
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise OSError(f"archive copy differs: {dest}")
+                    else:
+                        action = "replace"
+
+                    if action == "replace":
+                        os.replace(
+                            temp_name,
+                            dest.name,
+                            src_dir_fd=dir_fd,
+                            dst_dir_fd=dir_fd,
+                        )
+                        os.fsync(dir_fd)
+
+                        try:
+                            dest_st = os.lstat(dest.name, dir_fd=dir_fd)
+                        except OSError as exc:
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise ArchiveRefused(
+                                f"cannot re-verify archive destination: {dest}: {exc}"
+                            ) from exc
+                        if not stat.S_ISREG(dest_st.st_mode):
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise ArchiveRefused(
+                                f"archive destination is not a regular file after move: {dest}"
+                            )
+                        if (dest_st.st_dev, dest_st.st_ino) == (
+                            before.st_dev,
+                            before.st_ino,
+                        ):
+                            try:
+                                os.unlink(temp_name, dir_fd=dir_fd)
+                            except FileNotFoundError:
+                                pass
+                            raise ArchiveRefused(
+                                f"archive destination is the same file as the source: {dest}"
+                            )
+
+                        dest_fd = os.open(
+                            dest.name,
+                            os.O_RDONLY | os.O_NOFOLLOW,
+                            dir_fd=dir_fd,
+                        )
+                        try:
+                            if _sha256_fd(dest_fd) != src_digest:
+                                raise ArchiveRefused(
+                                    f"archive copy checksum changed after move: {dest}"
+                                )
+                        finally:
+                            os.close(dest_fd)
+                    else:
+                        # Equal digest: the temporary file is not needed.
+                        try:
+                            os.unlink(temp_name, dir_fd=dir_fd)
+                        except FileNotFoundError:
+                            pass
+
+                    now_fd = os.fstat(src_fd)
+                    try:
+                        now_path = os.lstat(src)
+                    except FileNotFoundError:
+                        changed = True
+                    else:
+                        changed = (
+                            now_fd.st_size != before.st_size
+                            or now_fd.st_mtime_ns != before.st_mtime_ns
+                            or now_fd.st_ino != before.st_ino
+                            or now_path.st_size != before.st_size
+                            or now_path.st_mtime_ns != before.st_mtime_ns
+                            or now_path.st_ino != before.st_ino
+                        )
+
+                    if changed:
+                        try:
+                            os.unlink(temp_name, dir_fd=dir_fd)
+                        except FileNotFoundError:
+                            pass
+                        if attempt == 0:
+                            os.close(src_fd)
+                            src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
+                            before = os.fstat(src_fd)
+                            continue
+                        raise OSError("source changed during export")
+
+                    return _unlink_regular(src)
             finally:
-                os.close(dir_fd)
+                if src_fd >= 0:
+                    os.close(src_fd)
+                if dir_fd >= 0:
+                    os.close(dir_fd)
 
         return await asyncio.to_thread(_copy_and_remove)
 

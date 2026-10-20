@@ -20,6 +20,20 @@ from kaine.modules.sleep.housekeeping import (
 )
 from kaine.storage import data_root, set_data_root
 
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
+
 _STUDY_BYTES = b'{"event": "test"}\n'
 
 
@@ -43,7 +57,7 @@ def _make_housekeeper(tmp_path):
     return Housekeeper(
         HousekeepingConfig(disk_budget_bytes=1, archive_dir=str(tmp_path / "archive")),
         log_backups=lambda: [],
-        today=lambda: "2026-10-20",
+        today=lambda: "2026-10-21",
     )
 
 

@@ -1307,28 +1307,34 @@ def _start_housekeeping_floor(
         return None
     from kaine.cycle.housekeeping_floor import AwakeFloor, FloorConfig, data_volumes
     from kaine.housekeeping_pressure import shared_pressure
-    from kaine.modules.sleep.housekeeping import Housekeeper, HousekeepingConfig, bus_memory_bytes
+    from kaine.modules.sleep.housekeeping import (
+        Housekeeper,
+        HousekeepingConfig,
+        bus_memory_bytes,
+        study_record_roots,
+    )
     from kaine.persistence.study_record_gate import study_record_gate
 
-    try:
-        hk_config = HousekeepingConfig.from_section(section)
-        if not hk_config.enabled:
-            return None
-        floor_cfg = FloorConfig.from_section(section)
-        floor = AwakeFloor(
-            Housekeeper(hk_config, memory_reader=lambda: bus_memory_bytes(bus.client)),
-            shared_pressure(),
-            volumes=data_volumes(),
-            reserve_bytes=floor_cfg.reserve_bytes,
-            reserve_share=floor_cfg.reserve_share,
-            period_s=floor_cfg.floor_period_s,
-            is_asleep=is_asleep,
-            gate=study_record_gate(),
-            bus=bus,
-        )
-    except ValueError:
-        log.warning("housekeeping floor config invalid, awake floor not started", exc_info=True)
+    hk_config = HousekeepingConfig.from_section(section)
+    if not hk_config.enabled:
         return None
+    floor_cfg = FloorConfig.from_section(section)
+    floor = AwakeFloor(
+        Housekeeper(
+            hk_config,
+            roots=study_record_roots(kaine_config),
+            memory_reader=lambda: bus_memory_bytes(bus.client),
+        ),
+        shared_pressure(),
+        volumes=data_volumes(kaine_config),
+        reserve_bytes=floor_cfg.reserve_bytes,
+        reserve_share=floor_cfg.reserve_share,
+        period_s=floor_cfg.floor_period_s,
+        is_asleep=is_asleep,
+        gate=study_record_gate(),
+        bus=bus,
+    )
+    floor.validate_volumes()
     return asyncio.create_task(floor.run(stop_event), name="cycle.housekeeping_floor")
 
 

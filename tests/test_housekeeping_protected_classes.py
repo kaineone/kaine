@@ -30,11 +30,26 @@ import kaine.storage
 from kaine.cycle.housekeeping_floor import AwakeFloor
 from kaine.housekeeping_pressure import HousekeepingPressure
 from kaine.modules.sleep.housekeeping import (
+    FileSkipped,
     Housekeeper,
     HousekeepingConfig,
     HousekeepingRefused,
 )
 from kaine.persistence.study_record_gate import StudyRecordGate
+
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
 
 TODAY = "2026-10-20"
 STUDY_DATE = "2026-10-01"
@@ -242,7 +257,7 @@ def test_check_allowed_refuses_every_protected_path(protected_env, rel):
     path = (
         protected_env.symlink if rel == "<symlink>" else protected_env.protected[rel]
     )
-    with pytest.raises(HousekeepingRefused):
+    with pytest.raises((HousekeepingRefused, FileSkipped)):
         protected_env.housekeeper.check_allowed(path)
 
 

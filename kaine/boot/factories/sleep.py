@@ -303,10 +303,16 @@ def make_sleep(
         Housekeeper,
         HousekeepingConfig,
         bus_memory_bytes,
+        study_record_roots,
     )
 
     hk_config = HousekeepingConfig.from_section(section.get("housekeeping"))
     if hk_config.enabled:
+        from kaine.cycle.housekeeping_floor import FloorConfig
+
+        # Validate the floor config so a bad value fails boot early.
+        FloorConfig.from_section(section.get("housekeeping"))
+
         from kaine.housekeeping_pressure import shared_pressure
 
         episodic_cfg = (kaine_config or {}).get("episodic_memory") or {}
@@ -321,12 +327,18 @@ def make_sleep(
             episodic_budget_bytes = raw_budget
         kwargs["housekeeper"] = Housekeeper(
             hk_config,
+            roots=study_record_roots(kaine_config or {}),
             memory_reader=lambda: bus_memory_bytes(bus.client),
             episodic_budget_bytes=episodic_budget_bytes,
         )
         # Paper A.5: the shared pressure holder is updated from each sleep's
         # housekeeping report and scales awake fatigue build-up.
         kwargs["housekeeping_pressure"] = shared_pressure()
+
+        if not hk_config.archive_dir:
+            log.warning(
+                "sleep housekeeping is enabled without an archive volume ([sleep.housekeeping].archive_dir is empty): study records never leave the host and the housekeeping pressure grows with them; mount an archive volume and set archive_dir (docs/09-modules/sleep.md, Housekeeping)"
+            )
 
     sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:

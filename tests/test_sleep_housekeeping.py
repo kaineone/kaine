@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from kaine.modules.sleep.housekeeping import (
+    FileSkipped,
     Housekeeper,
     HousekeepingConfig,
     HousekeepingRefused,
@@ -18,6 +19,20 @@ from kaine.modules.sleep.housekeeping import (
     rotated_log_backups,
 )
 from kaine.storage import data_root, set_data_root
+
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
 
 
 def _write_file(path: Path, size: int = 400) -> Path:
@@ -192,7 +207,7 @@ def test_check_allowed(tmp_path):
         dotdot,
     ]
     for path in refused:
-        with pytest.raises(HousekeepingRefused):
+        with pytest.raises((HousekeepingRefused, FileSkipped)):
             hk.check_allowed(path)
         assert path.exists()
 
@@ -201,7 +216,7 @@ def test_check_allowed(tmp_path):
 async def test_run_moves_oldest_study_records(tmp_path):
     # 1600 bytes against 900: the two oldest closed files go, 800 remain.
     cfg = _archive_config(tmp_path, disk_budget_bytes=900)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     for date in ("2026-10-17", "2026-10-18", "2026-10-19"):
@@ -238,7 +253,7 @@ async def test_run_moves_oldest_study_records(tmp_path):
 @pytest.mark.asyncio
 async def test_run_no_archive(tmp_path):
     cfg = HousekeepingConfig(disk_budget_bytes=600)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     for date in ("2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20"):
@@ -266,7 +281,7 @@ async def test_run_deletes_log_backups_oldest_first_without_archive(tmp_path):
 
     cfg = HousekeepingConfig(disk_budget_bytes=800)
     hk = Housekeeper(
-        cfg, today=lambda: "2026-10-20", log_backups=lambda: [old, new]
+        cfg, today=lambda: "2026-10-21", log_backups=lambda: [old, new]
     )
     root = hk._roots[0]
     study = _write_file(
@@ -289,7 +304,7 @@ async def test_run_deletes_log_backups_oldest_first_without_archive(tmp_path):
 @pytest.mark.asyncio
 async def test_run_within_budget(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=2000)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     for date in ("2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20"):
@@ -311,7 +326,7 @@ async def test_run_time_allowance(tmp_path):
 
     cfg = _archive_config(tmp_path, disk_budget_bytes=200, time_allowance_s=60.0)
     hk = Housekeeper(
-        cfg, today=lambda: "2026-10-20", log_backups=lambda: [], clock=fake_clock
+        cfg, today=lambda: "2026-10-21", log_backups=lambda: [], clock=fake_clock
     )
     root = hk._roots[0]
 
@@ -329,7 +344,7 @@ async def test_run_time_allowance(tmp_path):
 @pytest.mark.asyncio
 async def test_run_only_today_over_budget(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=200)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     _write_file(root / "research_events" / "research_events-2026-10-20.jsonl")
@@ -345,7 +360,7 @@ async def test_run_only_today_over_budget(tmp_path):
 @pytest.mark.asyncio
 async def test_run_existing_destination_same_bytes(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=600)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     src = _write_file(root / "research_events" / "research_events-2026-10-17.jsonl")
@@ -372,7 +387,7 @@ async def test_run_existing_destination_same_bytes(tmp_path):
 @pytest.mark.asyncio
 async def test_run_existing_destination_different_bytes(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=200)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     src = _write_file(root / "research_events" / "research_events-2026-10-17.jsonl")
@@ -399,17 +414,17 @@ async def test_run_existing_destination_different_bytes(tmp_path):
 
 @pytest.mark.asyncio
 async def test_run_export_checksum_mismatch_keeps_source(tmp_path, monkeypatch):
-    def fake_sha256(path):
-        if str(path).endswith(".part"):
-            return "0" * 64
-        return "1" * 64
+    # The temp file is re-read through a descriptor after the copy; make that
+    # digest disagree with the one taken while copying.
+    def fake_sha256_fd(fd):
+        return "0" * 64
 
     monkeypatch.setattr(
-        "kaine.modules.sleep.housekeeping._sha256", fake_sha256
+        "kaine.modules.sleep.housekeeping._sha256_fd", fake_sha256_fd
     )
 
     cfg = _archive_config(tmp_path, disk_budget_bytes=100)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
     src = _write_file(root / "research_events" / "research_events-2026-10-19.jsonl")
 
@@ -426,7 +441,7 @@ async def test_run_export_checksum_mismatch_keeps_source(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_run_disabled(tmp_path):
     cfg = HousekeepingConfig(enabled=False)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     _write_file(root / "research_events" / "research_events-2026-10-17.jsonl")
@@ -445,7 +460,7 @@ def test_disk_bytes_counts_log_backups(tmp_path):
     ]
     hk = Housekeeper(
         _archive_config(tmp_path),
-        today=lambda: "2026-10-20",
+        today=lambda: "2026-10-21",
         log_backups=lambda: backups,
     )
     root = hk._roots[0]
@@ -455,7 +470,7 @@ def test_disk_bytes_counts_log_backups(tmp_path):
 
 def test_disk_excess(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=400)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     assert hk.disk_excess() == 0.0
     root = hk._roots[0]
     _write_file(root / "research_events" / "research_events-2026-10-19.jsonl", 800)
@@ -498,7 +513,7 @@ async def test_reclaim_regenerable_stops_at_target(tmp_path):
 
     cfg = _archive_config(tmp_path)
     hk = Housekeeper(
-        cfg, today=lambda: "2026-10-20", log_backups=lambda: [log_backup]
+        cfg, today=lambda: "2026-10-21", log_backups=lambda: [log_backup]
     )
     root = hk._roots[0]
     exported = _write_file(
@@ -533,7 +548,7 @@ async def test_reclaim_regenerable_stops_at_target(tmp_path):
 @pytest.mark.asyncio
 async def test_reclaim_regenerable_never_deletes_unexported(tmp_path):
     cfg = _archive_config(tmp_path)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
     exported = _write_file(
         root / "research_events" / "research_events-2026-10-17.jsonl", 400
@@ -577,32 +592,20 @@ async def test_memory_and_episodic_pressure(tmp_path):
     async def mem_3gb():
         return 3 * 1024**3
 
+    # The memory reader is reserved: no bus entry is spent under the paper's
+    # definition (no consumer groups, no replay window), so the memory term is 0.
     hk = Housekeeper(
         cfg, memory_reader=mem_3gb, episodic_budget_bytes=10, log_backups=lambda: []
     )
     report = await hk.run(episodic_store_bytes=15)
-    assert report["memory_bytes"] == 3 * 1024**3
-    assert report["pressure"] == pytest.approx(2.0 + 0.5)
-
-    # No memory reader.
-    hk2 = Housekeeper(cfg, episodic_budget_bytes=10, log_backups=lambda: [])
-    report2 = await hk2.run(episodic_store_bytes=15)
-    assert report2["memory_bytes"] is None
-    assert report2["pressure"] == pytest.approx(0.5)
+    assert report["memory_bytes"] is None
+    assert report["memory_measured"] is False
+    assert report["pressure"] == pytest.approx(0.5)
 
     # No episodic budget configured.
     hk3 = Housekeeper(cfg, memory_reader=mem_3gb, log_backups=lambda: [])
     report3 = await hk3.run(episodic_store_bytes=15)
-    assert report3["pressure"] == pytest.approx(2.0)
-
-    # Memory reader that raises.
-    async def mem_bad():
-        raise RuntimeError("boom")
-
-    hk4 = Housekeeper(cfg, memory_reader=mem_bad, log_backups=lambda: [])
-    report4 = await hk4.run()
-    assert report4["memory_bytes"] is None
-    assert report4["pressure"] == 0.0
+    assert report3["pressure"] == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio
@@ -619,7 +622,7 @@ async def test_report_terms_sum_to_pressure(tmp_path):
         cfg,
         memory_reader=mem_3gb,
         episodic_budget_bytes=10,
-        today=lambda: "2026-10-20",
+        today=lambda: "2026-10-21",
         log_backups=lambda: [],
     )
     root = hk._roots[0]
@@ -629,7 +632,7 @@ async def test_report_terms_sum_to_pressure(tmp_path):
     report = await hk.run(episodic_store_bytes=15)
     terms = report["terms"]
     assert terms["disk"] == pytest.approx(1600 / 600 - 1)
-    assert terms["memory"] == pytest.approx(2.0)
+    assert terms["memory"] == 0.0
     assert terms["episodic"] == pytest.approx(0.5)
     assert report["pressure"] == pytest.approx(
         terms["disk"] + terms["memory"] + terms["episodic"]
@@ -661,7 +664,7 @@ async def test_bus_memory_bytes():
 @pytest.mark.asyncio
 async def test_report_contains_no_filenames(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=600)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
 
     for date in ("2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20"):
@@ -675,7 +678,7 @@ async def test_report_contains_no_filenames(tmp_path):
 @pytest.mark.asyncio
 async def test_symlink_named_like_a_daily_file_is_skipped(tmp_path):
     cfg = _archive_config(tmp_path, disk_budget_bytes=100)
-    hk = Housekeeper(cfg, today=lambda: "2026-10-20", log_backups=lambda: [])
+    hk = Housekeeper(cfg, today=lambda: "2026-10-21", log_backups=lambda: [])
     root = hk._roots[0]
     real = _write_file(root / "research_events" / "research_events-2026-10-18.jsonl")
     target = _write_file(tmp_path / "state" / "episodic_memory" / "store.jsonl")

@@ -11,6 +11,20 @@ import pytest
 import kaine.storage
 from kaine.modules.sleep.housekeeping import Housekeeper, HousekeepingConfig
 
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -43,7 +57,7 @@ async def test_missing_archive_counts_as_unmounted_and_log_backup_deleted(tmp_pa
     hk = Housekeeper(
         config,
         log_backups=lambda: [backup],
-        today=lambda: "2026-10-20",
+        today=lambda: "2026-10-21",
     )
 
     report = await hk.run()
@@ -67,7 +81,7 @@ async def test_reclaim_regenerable_missing_archive_keeps_study_file(tmp_path):
         disk_budget_bytes=1,
         archive_dir=str(tmp_path / "missing"),
     )
-    hk = Housekeeper(config, log_backups=lambda: [], today=lambda: "2026-10-20")
+    hk = Housekeeper(config, log_backups=lambda: [], today=lambda: "2026-10-21")
 
     result = await hk.reclaim_regenerable(free_bytes=lambda: 0, target_free=1)
 
@@ -88,7 +102,7 @@ async def test_export_creates_archive_directories_with_mode_700(tmp_path):
         disk_budget_bytes=1,
         archive_dir=str(archive_dir),
     )
-    hk = Housekeeper(config, log_backups=lambda: [], today=lambda: "2026-10-20")
+    hk = Housekeeper(config, log_backups=lambda: [], today=lambda: "2026-10-21")
 
     old_umask = os.umask(0o022)
     try:

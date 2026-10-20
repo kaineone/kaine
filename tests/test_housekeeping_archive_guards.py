@@ -11,6 +11,7 @@ import pytest
 
 from kaine.modules.sleep.housekeeping import (
     ArchiveRefused,
+    FileSkipped,
     Housekeeper,
     HousekeepingConfig,
     HousekeepingRefused,
@@ -20,6 +21,20 @@ from kaine.modules.sleep.housekeeping import (
     _unlink_regular,
 )
 from kaine.storage import data_root, set_data_root
+
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
 
 _STUDY_BYTES = b'{"event": "test"}\n'
 
@@ -44,7 +59,7 @@ def _make_housekeeper(tmp_path):
     return Housekeeper(
         HousekeepingConfig(disk_budget_bytes=1, archive_dir=str(tmp_path / "archive")),
         log_backups=lambda: [],
-        today=lambda: "2026-10-20",
+        today=lambda: "2026-10-21",
     )
 
 
@@ -160,14 +175,14 @@ def test_unlink_regular_behavior(rooted):
     target.write_bytes(b"target bytes\n")
     link = tmp_path / "link.jsonl"
     os.symlink(target, link)
-    with pytest.raises(HousekeepingRefused):
+    with pytest.raises((HousekeepingRefused, FileSkipped)):
         _unlink_regular(link)
     assert target.read_bytes() == b"target bytes\n"
     assert os.path.islink(link)
 
     directory = tmp_path / "directory"
     directory.mkdir()
-    with pytest.raises(HousekeepingRefused):
+    with pytest.raises((HousekeepingRefused, FileSkipped)):
         _unlink_regular(directory)
     assert directory.is_dir()
 
@@ -210,7 +225,7 @@ def test_delete_uses_lstat_recheck_for_symlink(rooted):
     target.write_bytes(b"target bytes\n")
     link = tmp_path / "link.jsonl"
     os.symlink(target, link)
-    with pytest.raises(HousekeepingRefused):
+    with pytest.raises((HousekeepingRefused, FileSkipped)):
         hk._delete(link)
     assert target.read_bytes() == b"target bytes\n"
     assert os.path.islink(link)

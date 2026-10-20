@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import fakeredis.aioredis
 import pytest
@@ -38,8 +37,9 @@ def test_from_section_reads_its_three_keys() -> None:
 
 
 def test_from_section_accepts_ints_for_the_float_fields() -> None:
-    cfg = FloorConfig.from_section({"reserve_share": 0, "floor_period_s": 5})
-    assert cfg.reserve_share == 0.0
+    # reserve_share lies in (0, 1), so only floor_period_s can be an int here.
+    cfg = FloorConfig.from_section({"reserve_share": 0.25, "floor_period_s": 5})
+    assert cfg.reserve_share == 0.25
     assert cfg.floor_period_s == 5.0
 
 
@@ -82,7 +82,10 @@ def test_data_volumes_resolve_under_the_data_root(tmp_path) -> None:  # noqa: AN
         volumes = data_volumes()
     finally:
         kaine.storage.set_data_root(previous)
-    assert volumes == {"data": tmp_path / "data", "state": tmp_path / "state"}
+    # With no config, the default study-sink directories and state/ are watched.
+    assert volumes["evaluation"] == tmp_path / "data" / "evaluation"
+    assert volumes["trajectory"] == tmp_path / "data" / "workspace_trajectory"
+    assert volumes["state"] == tmp_path / "state"
 
 
 def test_sleep_module_off_starts_nothing() -> None:
@@ -106,18 +109,17 @@ def test_housekeeping_disabled_starts_nothing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bad_reserve_share_logs_and_returns_none(caplog) -> None:  # noqa: ANN001
+async def test_bad_reserve_share_fails_boot() -> None:
+    # A bad floor value fails boot instead of silently disabling the floor.
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=fakeredis.aioredis.FakeRedis(decode_responses=True))
     try:
-        with caplog.at_level(logging.WARNING):
-            task = _start_housekeeping_floor(
+        with pytest.raises(ValueError, match="reserve_share"):
+            _start_housekeeping_floor(
                 {"modules": {"sleep": True}, "sleep": {"housekeeping": {"reserve_share": 1.5}}},
                 bus,
                 asyncio.Event(),
                 is_asleep=lambda: True,
             )
-        assert task is None
-        assert "reserve_share" in caplog.text
     finally:
         await bus.close()
 

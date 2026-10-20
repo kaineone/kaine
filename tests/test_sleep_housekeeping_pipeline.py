@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,20 @@ from kaine.modules.sleep.housekeeping import (
     HousekeepingRefused,
     bus_memory_bytes,
 )
+
+
+@pytest.fixture(autouse=True)
+def _tmp_archive_counts_as_mounted(monkeypatch):
+    """A tmp archive shares the test's filesystem; treat it as a mounted volume here.
+
+    The real mount check is covered in tests/test_housekeeping_review2.py.
+    """
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        "kaine.modules.sleep.housekeeping.os.path.ismount",
+        lambda p: True if "archive" in str(p) else real_ismount(p),
+    )
+
 
 pytestmark = pytest.mark.asyncio
 

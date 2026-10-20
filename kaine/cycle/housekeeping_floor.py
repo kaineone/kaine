@@ -11,6 +11,9 @@ enough space; each action is logged as an operator event (paper A.5,
 revised). The floor only calls the housekeeper's reclaim method, which
 enforces the allowlist that protects memory stores, the world model,
 self-model and identity, voice adapters and preservations.
+
+When 2R does not fit the volume, the floor reclaims to the midpoint
+between R and the volume size so that reclaim has a reachable target.
 """
 
 from __future__ import annotations
@@ -54,20 +57,24 @@ class FloorConfig:
         if not isinstance(section, dict):
             raise ValueError(f"[sleep.housekeeping] must be a table; got {section!r}")
         reserve_bytes = section.get("reserve_bytes", cls.reserve_bytes)
-        if isinstance(reserve_bytes, bool) or not isinstance(reserve_bytes, int) or reserve_bytes < 0:
+        if (
+            isinstance(reserve_bytes, bool)
+            or not isinstance(reserve_bytes, int)
+            or reserve_bytes <= 0
+        ):
             raise ValueError(
-                f"[sleep.housekeeping] reserve_bytes must be an int >= 0; got {reserve_bytes!r}"
+                f"[sleep.housekeeping] reserve_bytes must be an int > 0; got {reserve_bytes!r}"
             )
         reserve_share = section.get("reserve_share", cls.reserve_share)
         if (
             isinstance(reserve_share, bool)
             or not isinstance(reserve_share, (int, float))
             or not math.isfinite(reserve_share)
-            or reserve_share < 0.0
+            or reserve_share <= 0.0
             or reserve_share >= 1.0
         ):
             raise ValueError(
-                f"[sleep.housekeeping] reserve_share must be a finite number in [0, 1); got {reserve_share!r}"
+                f"[sleep.housekeeping] reserve_share must be a finite number in (0, 1); got {reserve_share!r}"
             )
         floor_period_s = section.get("floor_period_s", cls.floor_period_s)
         if (
@@ -86,9 +93,40 @@ class FloorConfig:
         )
 
 
-def data_volumes() -> dict[str, Path]:
-    """Return the data volumes the floor watches, keyed by label."""
-    return {"data": kaine.storage.resolve("data"), "state": kaine.storage.resolve("state")}
+def data_volumes(kaine_config: Mapping[str, Any] | None = None) -> dict[str, Path]:
+    """Return the data volumes the floor watches, keyed by label.
+
+    Includes the directories every study sink writes to: evaluation logs,
+    trajectory workspace, research event logs, external utterance logs,
+    dashboard records, raw bus archives and the state root. Defaults are
+    used when a section is absent. Volumes that live on the same filesystem
+    are still checked once.
+    """
+    if kaine_config is None:
+        kaine_config = {}
+    volumes: dict[str, Path] = {}
+    eval_paths = (kaine_config.get("evaluation") or {}).get("paths") or {}
+    volumes["evaluation"] = kaine.storage.resolve(
+        str(eval_paths.get("evaluation_logs", "data/evaluation"))
+    )
+    volumes["trajectory"] = kaine.storage.resolve(
+        str(eval_paths.get("trajectory_dir", "data/workspace_trajectory"))
+    )
+    rel = kaine_config.get("research_event_log") or {}
+    if rel.get("log_dir"):
+        volumes["research_events"] = kaine.storage.resolve(str(rel["log_dir"]))
+    ext = rel.get("external_utterances") or {}
+    if ext.get("log_dir"):
+        volumes["external_utterances"] = kaine.storage.resolve(str(ext["log_dir"]))
+    dash = rel.get("dashboard_record") or {}
+    if dash.get("log_dir"):
+        volumes["dashboard_record"] = kaine.storage.resolve(str(dash["log_dir"]))
+    raw = rel.get("raw_archive") or {}
+    raw_dir = raw.get("archive_dir")
+    if raw_dir:
+        volumes["raw_bus_archive"] = kaine.storage.resolve(str(raw_dir))
+    volumes["state"] = kaine.storage.resolve("state")
+    return volumes
 
 
 class AwakeFloor:
@@ -140,12 +178,38 @@ class AwakeFloor:
         """Return the reserve for a volume: the larger of the fixed size and the configured share."""
         return max(self._reserve_bytes, int(self._reserve_share * total))
 
+    def target(self, total: int) -> int:
+        """Reachable free-space target for a volume.
+
+        The paper's target is 2R. When 2R does not fit on the volume, fall
+        back to the midpoint between R and the volume size so reclaiming has
+        a definite stopping point.
+        """
+        r = self.reserve(total)
+        return min(2 * r, (total + r) // 2)
+
+    def validate_volumes(self) -> None:
+        """Raise ValueError if any existing volume can never satisfy its reserve."""
+        for label, path in self._volumes.items():
+            try:
+                usage = self._disk_usage(path)
+            except OSError:
+                continue
+            r = self.reserve(usage.total)
+            if r >= usage.total:
+                raise ValueError(
+                    f"volume {label!r} at {path} has size {usage.total} "
+                    f"but reserve is {r}"
+                )
+
     async def check_once(self) -> list[dict[str, Any]]:
         """Check each volume once and return the actions taken.
 
-        Actions are also logged as operator events and published on the bus
-        when one is available. A publish failure is logged and does not stop
-        the floor.
+        The floor reclaims to the paper's 2R target whenever 2R fits the
+        volume; otherwise it reclaims to the midpoint between R and the
+        volume size. Actions are also logged as operator events and
+        published on the bus when one is available. A publish failure is
+        logged and does not stop the floor.
         """
         if self._is_asleep():
             return []
@@ -167,47 +231,54 @@ class AwakeFloor:
         actions: list[dict[str, Any]] = []
 
         for label, path, dev in unique_volumes:
-            usage = self._disk_usage(path)
-            r = self.reserve(usage.total)
-            if usage.free >= r:
-                continue
+            if self._is_asleep():
+                break
+            try:
+                usage = self._disk_usage(path)
+                r = self.reserve(usage.total)
+                if usage.free >= r:
+                    continue
 
-            free_before = usage.free
-            result = await self._housekeeper.reclaim_regenerable(
-                free_bytes=lambda: self._disk_usage(path).free,
-                target_free=2 * r,
-                device=dev,
-            )
-            free_after = self._disk_usage(path).free
-            reclaim_action = {
-                "action": "reclaim",
-                "volume": label,
-                "free_bytes_before": free_before,
-                "free_bytes_after": free_after,
-                "reserve_bytes": r,
-                "reclaimed_files": result.get("reclaimed_files", 0),
-                "reclaimed_bytes": result.get("reclaimed_bytes", 0),
-            }
-            actions.append(reclaim_action)
-            await self._log_and_publish(reclaim_action)
+                target = self.target(usage.total)
+                free_before = usage.free
+                result = await self._housekeeper.reclaim_regenerable(
+                    free_bytes=lambda: self._disk_usage(path).free,
+                    target_free=target,
+                    device=dev,
+                )
+                free_after = self._disk_usage(path).free
+                reclaim_action = {
+                    "action": "reclaim",
+                    "volume": label,
+                    "free_bytes_before": free_before,
+                    "free_bytes_after": free_after,
+                    "reserve_bytes": r,
+                    "target_free_bytes": target,
+                    "reclaimed_files": result.get("reclaimed_files", 0),
+                    "reclaimed_bytes": result.get("reclaimed_bytes", 0),
+                }
+                actions.append(reclaim_action)
+                await self._log_and_publish(reclaim_action)
 
-            self._pressure.note_floor_disk_excess(self._housekeeper.disk_excess())
+                self._pressure.note_floor_disk_excess(self._housekeeper.disk_excess())
 
-            if free_after < r:
-                already_suspended = self._gate.suspended
-                self._suspending_volumes.add(label)
-                if not already_suspended:
-                    self._gate.suspend()
-                    suspend_action = {
-                        "action": "suspend",
-                        "volume": label,
-                        "free_bytes": free_after,
-                        "reserve_bytes": r,
-                    }
-                    actions.append(suspend_action)
-                    await self._log_and_publish(suspend_action)
+                if free_after < r:
+                    already_suspended = self._gate.suspended
+                    self._suspending_volumes.add(label)
+                    if not already_suspended:
+                        self._gate.suspend()
+                        suspend_action = {
+                            "action": "suspend",
+                            "volume": label,
+                            "free_bytes": free_after,
+                            "reserve_bytes": r,
+                        }
+                        actions.append(suspend_action)
+                        await self._log_and_publish(suspend_action)
+            except Exception:
+                log.exception("housekeeping floor: reclaim failed for volume %s", label)
 
-        # Resume the study record once every suspending volume is back at 2R.
+        # Resume the study record once every suspending volume is back at its target.
         if self._gate.suspended and self._suspending_volumes:
             all_clear = True
             min_free: int | None = None
@@ -216,7 +287,8 @@ class AwakeFloor:
                 path = self._volumes[label]
                 usage = self._disk_usage(path)
                 r = self.reserve(usage.total)
-                if usage.free < 2 * r:
+                target = self.target(usage.total)
+                if usage.free < target:
                     all_clear = False
                     break
                 if min_free is None or usage.free < min_free:
