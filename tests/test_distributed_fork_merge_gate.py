@@ -118,7 +118,7 @@ def test_welfare_signal_alone_marks_individuation(tmp_path):
     assert verdict.fork_preserved is True
 
 
-def test_assess_fork_reads_consolidation_divergence(tmp_path):
+def test_assess_fork_ignores_legacy_consolidation_divergence(tmp_path):
     # The consolidation-divergence arm is removed, so this legacy record alone
     # no longer marks a fork diverged through the SAME divergence gate.
     state_root = tmp_path / "fork_state"

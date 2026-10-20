@@ -140,7 +140,7 @@ def test_adapter_dir_uses_organ_window_state_dir():
     assert result == Path("/r") / _state_dir(organ_dir_key) / "adapters"
 
 
-def test_divergence_source_uses_divergence_state_dir():
+def test_divergence_source_no_longer_reads_legacy_record():
     """The legacy divergence record remains known; divergence.py no longer reads it."""
     source = Path(_divergence_mod.__file__).read_text(encoding="utf-8")
     assert _DIVERGENCE_ENTRY["old"].endswith("/consolidation_divergence.json")
