@@ -1268,16 +1268,27 @@ def _start_stimulus_source_presence(
 
     ``build_registry`` installs the shared stimulus source clock only for
     ``[perception_feed].mode = "stimulus_source"``; any other mode starts nothing.
+    If the audition module is enabled, also starts the hearing stage watch.
     """
     clock = (kaine_config.get("perception_feed") or {}).get("_shared_stimulus_source_clock")
     if clock is None:
         return None
+    from kaine.cycle.hearing_stage_watch import HearingStageWatch
     from kaine.cycle.stimulus_source_presence import StimulusSourcePresencePublisher
 
-    return asyncio.create_task(
-        StimulusSourcePresencePublisher(bus, clock).run(stop_event),
-        name="cycle.stimulus_source_presence",
-    )
+    publisher = StimulusSourcePresencePublisher(bus, clock)
+    watch = HearingStageWatch.from_config(kaine_config, bus)
+
+    async def _run() -> None:
+        if watch is not None:
+            await asyncio.gather(
+                publisher.run(stop_event),
+                watch.run(stop_event),
+            )
+        else:
+            await publisher.run(stop_event)
+
+    return asyncio.create_task(_run(), name="cycle.stimulus_source_presence")
 
 
 async def _revive_or_refuse(revive, registry) -> int | None:
