@@ -8,6 +8,7 @@ import pytest
 
 from kaine.boot.perception_feed import _stimulus_source_params
 from kaine.lifecycle.stage import stimulus_source_params_digest
+from kaine.modules.audition.hearing_band import HearingBandParams
 from kaine.modules.stimulus_source_signal import StimulusSourceParams, colour_saturation
 
 
@@ -36,4 +37,23 @@ def test_dataclass_default_and_digest_unchanged() -> None:
     assert (
         stimulus_source_params_digest(default_params)
         == "e21261c7333394e2a22ab7f39b7e142502adb38110aa9e7e207d4158ab58396b"
+    )
+
+
+def test_shipped_spans_follow_table_a1() -> None:
+    config_path = Path(__file__).resolve().parents[1] / "config" / "kaine.toml"
+    with config_path.open("rb") as f:
+        cfg = tomllib.load(f)
+
+    hearing_cfg = cfg["perception_feed"]["stimulus_source"]["hearing"]
+    assert hearing_cfg["maturation_seconds"] == 43200.0
+    assert (
+        HearingBandParams.from_section(hearing_cfg).maturation_seconds
+        == 43200.0
+    )
+
+    params = _stimulus_source_params(cfg["perception_feed"])
+    assert params.colour_ramp_seconds == 86400.0
+    assert params.colour_ramp_seconds == float(
+        cfg["developmental_stage"]["min_lived_seconds"]
     )
