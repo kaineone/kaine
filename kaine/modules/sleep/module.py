@@ -1100,7 +1100,10 @@ class Sleep(BaseModule):
         logged warning + ``{"error": <ExcTypeName>}`` — the sleep must never
         fail because auditing failed. Boundary: The sleep module never imports
         ``kaine.evaluation``; only ``kaine.modules.sleep.ignition_audit``.
+        Realizations are linked to their intents through the intent log's
+        record_id to intent_entry_id join.
         """
+        from kaine.modules.sleep.corpus import intent_record_links
         from kaine.modules.sleep.ignition_audit import classify_realizations
 
         try:
@@ -1158,12 +1161,31 @@ class Sleep(BaseModule):
                     if _in_window(entry_id):
                         broadcasts.append(snap)
             self._broadcast_cursor = cursor
+            try:
+                corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
+                link_paths = (
+                    await asyncio.to_thread(
+                        intent_record_paths,
+                        self._voice_config.intent_log_path,
+                        corpus_dir,
+                    )
+                )[-2:]
+                record_links = await asyncio.to_thread(
+                    intent_record_links, link_paths
+                )
+            except Exception:
+                log.warning(
+                    "sleep: ignition audit could not read intent-log links (continuing unlinked)",
+                    exc_info=True,
+                )
+                record_links = {}
             report = classify_realizations(
                 broadcasts,
                 intents,
                 realizations,
                 proposal_outcomes=proposal_outcomes,
                 sleep_index=self._sleep_count,
+                record_links=record_links,
             )
             payload = report.as_payload()
         except Exception as exc:
