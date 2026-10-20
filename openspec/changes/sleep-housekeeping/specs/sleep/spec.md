@@ -28,3 +28,10 @@ While the entity is awake and housekeeping is enabled, the cycle SHALL check eve
 #### Scenario: The disk stays full
 - **WHEN** reclaiming leaves free space below `R^hk`
 - **THEN** the study record is suspended with a gap marker, and it resumes with an end marker once free space is back at `2 R^hk`
+
+### Requirement: The archive side follows no links
+Before removing a local study record, housekeeping SHALL refuse that file, keeping the local copy, when the archive destination or any path component between the archive root and it is a symlink, when the destination resolves outside the archive, when it is the same file as the source, or when a non-regular file sits at the temporary name. It SHALL create the temporary file exclusively without following links, read every digest through a descriptor that does not follow links, re-verify the destination's digest after the rename and before the removal, sync the destination directory, and re-check with `lstat` that every file it removes is a regular file.
+
+#### Scenario: The destination is a link to the source
+- **WHEN** the archive destination of a closed study record is a symlink to that record
+- **THEN** the export is refused, the local record stays and the pass goes on with the next file

@@ -24,6 +24,7 @@ import math
 import os
 import re
 import shutil
+import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,12 +46,15 @@ DAILY_FILENAME_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.json
 def _sha256(path: Path) -> str:
     """Return the SHA-256 hex digest of ``path``, read in 1 MiB chunks."""
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
         while True:
-            chunk = handle.read(1024 * 1024)
+            chunk = os.read(fd, 1024 * 1024)
             if not chunk:
                 break
             digest.update(chunk)
+    finally:
+        os.close(fd)
     return digest.hexdigest()
 
 
@@ -82,6 +86,64 @@ def rotated_log_backups() -> list[Path]:
 
 class HousekeepingRefused(ValueError):
     """The requested housekeeping operation cannot proceed safely."""
+
+
+class ArchiveRefused(HousekeepingRefused):
+    """Archive-side refusal for a single file: skip it and continue."""
+
+
+def _check_archive_path(archive: Path, dest: Path) -> None:
+    """Refuse when ``dest`` is unsafe relative to ``archive``."""
+    if not dest.is_relative_to(archive):
+        raise ArchiveRefused(
+            f"archive destination is not under the archive: {dest}"
+        )
+    archive_resolved = archive.resolve(strict=False)
+    dest_resolved = dest.resolve(strict=False)
+    if not dest_resolved.is_relative_to(archive_resolved):
+        raise ArchiveRefused(
+            f"archive destination resolves outside the archive: {dest}"
+        )
+    rel = dest.relative_to(archive)
+    for i in range(1, len(rel.parts) + 1):
+        part = archive.joinpath(*rel.parts[:i])
+        try:
+            st = os.lstat(part)
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(st.st_mode):
+            raise ArchiveRefused(
+                f"archive destination contains a symlink: {part}"
+            )
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """Return whether ``a`` and ``b`` are the same inode."""
+    try:
+        a_stat = os.stat(a)
+        b_stat = os.stat(b)
+    except OSError:
+        return False
+    return (a_stat.st_dev, a_stat.st_ino) == (b_stat.st_dev, b_stat.st_ino)
+
+
+def _unlink_regular(path: Path) -> int:
+    """Unlink a regular file and return its size.
+
+    Symlinks and non-regular files raise ``HousekeepingRefused``.
+    """
+    try:
+        st = os.lstat(path)
+    except OSError as exc:
+        raise HousekeepingRefused(
+            f"cannot stat file for deletion: {path}: {exc}"
+        ) from exc
+    if stat.S_ISLNK(st.st_mode):
+        raise HousekeepingRefused(f"symlinks are not allowed: {path}")
+    if not stat.S_ISREG(st.st_mode):
+        raise HousekeepingRefused(f"not a regular file: {path}")
+    os.unlink(path)
+    return st.st_size
 
 
 @dataclass(frozen=True)
@@ -388,6 +450,11 @@ class Housekeeper:
                         size = await self._export_to_archive(src, root, archive)
                         moved_files += 1
                         moved_bytes += size
+                except ArchiveRefused as exc:
+                    logger.warning(
+                        "Housekeeping archive refusal for %s: %s", path, exc
+                    )
+                    continue
                 except HousekeepingRefused:
                     raise
                 except OSError as exc:
@@ -448,7 +515,7 @@ class Housekeeper:
         }
 
     async def reclaim_regenerable(
-        self, *, free_bytes: Callable[[], int], target_free: int
+        self, *, free_bytes: Callable[[], int], target_free: int, device: int | None = None
     ) -> dict[str, int]:
         """Reclaim spent data for the awake floor, oldest first.
 
@@ -457,6 +524,9 @@ class Housekeeper:
         anything and never deleting a study-record file without a
         verified archive copy, until ``free_bytes()`` reaches
         ``target_free``.
+
+        When ``device`` is given, only candidates on that filesystem
+        are considered.
         """
         reclaimed_files = 0
         reclaimed_bytes = 0
@@ -465,6 +535,13 @@ class Housekeeper:
         for path in self.candidates():
             if free_bytes() >= target_free:
                 break
+            if device is not None:
+                try:
+                    if os.stat(path).st_dev != device:
+                        continue
+                except OSError as exc:
+                    logger.warning("Housekeeping skipped %s: %s", path, exc)
+                    continue
             try:
                 src = self.check_allowed(path)
                 if self._is_log_backup(src):
@@ -480,6 +557,11 @@ class Housekeeper:
                     ):
                         continue
                     size = await asyncio.to_thread(self._delete, src)
+            except ArchiveRefused as exc:
+                logger.warning(
+                    "Housekeeping archive refusal for %s: %s", path, exc
+                )
+                continue
             except HousekeepingRefused:
                 raise
             except OSError as exc:
@@ -507,16 +589,26 @@ class Housekeeper:
     @staticmethod
     def _delete(path: Path) -> int:
         """Unlink ``path`` and return its size in bytes."""
-        size = path.stat().st_size
-        path.unlink()
-        return size
+        return _unlink_regular(path)
 
     @staticmethod
     def _archive_copy_verified(src: Path, root: Path, archive: Path) -> bool:
         """Return whether the archive holds a copy of ``src`` with the
         same SHA-256."""
         dest = archive / root.name / src.relative_to(root)
-        if not dest.is_file():
+        try:
+            _check_archive_path(archive, dest)
+        except ArchiveRefused:
+            return False
+        if not os.path.lexists(dest):
+            return False
+        try:
+            st = os.lstat(dest)
+        except OSError:
+            return False
+        if not stat.S_ISREG(st.st_mode):
+            return False
+        if _same_file(dest, src):
             return False
         return _sha256(dest) == _sha256(src)
 
@@ -532,29 +624,105 @@ class Housekeeper:
         dest = archive / root.name / rel
 
         def _copy_and_remove() -> int:
-            size = src.stat().st_size
-            if dest.exists():
-                if _sha256(dest) == _sha256(src):
-                    src.unlink()
-                    return size
-                raise OSError(f"archive copy differs: {dest}")
+            src_digest = _sha256(src)
+
+            _check_archive_path(archive, dest)
+            if _same_file(dest, src):
+                raise ArchiveRefused(
+                    f"archive destination is the same file as the source: {dest}"
+                )
+
+            if os.path.lexists(dest):
+                try:
+                    dest_st = os.lstat(dest)
+                except OSError as exc:
+                    raise ArchiveRefused(
+                        f"cannot stat archive destination: {dest}: {exc}"
+                    ) from exc
+                if stat.S_ISREG(dest_st.st_mode):
+                    if _sha256(dest) == src_digest:
+                        return _unlink_regular(src)
+                    raise OSError(f"archive copy differs: {dest}")
+                raise ArchiveRefused(
+                    f"archive destination is not a regular file: {dest}"
+                )
 
             dest.parent.mkdir(parents=True, exist_ok=True)
+            _check_archive_path(archive, dest)
+
             temp = dest.with_suffix(dest.suffix + ".part")
-            shutil.copy2(src, temp)
-            fd = os.open(temp, os.O_RDWR)
+            if os.path.lexists(temp):
+                try:
+                    temp_st = os.lstat(temp)
+                except OSError as exc:
+                    raise ArchiveRefused(
+                        f"cannot stat temporary archive file: {temp}: {exc}"
+                    ) from exc
+                if stat.S_ISREG(temp_st.st_mode):
+                    _unlink_regular(temp)
+                else:
+                    raise ArchiveRefused(
+                        f"temporary archive file is not regular: {temp}"
+                    )
+
+            src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
             try:
-                os.fsync(fd)
+                temp_fd = os.open(
+                    temp,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                )
+                try:
+                    while True:
+                        chunk = os.read(src_fd, 1024 * 1024)
+                        if not chunk:
+                            break
+                        view = memoryview(chunk)
+                        while view:
+                            written = os.write(temp_fd, view)
+                            view = view[written:]
+                    os.fsync(temp_fd)
+                finally:
+                    os.close(temp_fd)
             finally:
-                os.close(fd)
-            if _sha256(temp) != _sha256(src):
-                os.unlink(temp)
+                os.close(src_fd)
+
+            shutil.copystat(src, temp, follow_symlinks=False)
+            if _sha256(temp) != src_digest:
+                _unlink_regular(temp)
                 raise OSError(
                     f"checksum mismatch after copying {src} to {temp}"
                 )
+
             os.replace(temp, dest)
-            src.unlink()
-            return size
+
+            dir_fd = os.open(dest.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+
+            _check_archive_path(archive, dest)
+            try:
+                dest_st = os.lstat(dest)
+            except OSError as exc:
+                raise ArchiveRefused(
+                    f"cannot re-verify archive destination: {dest}: {exc}"
+                ) from exc
+            if not stat.S_ISREG(dest_st.st_mode):
+                raise ArchiveRefused(
+                    f"archive destination is not a regular file after move: {dest}"
+                )
+            if _same_file(dest, src):
+                raise ArchiveRefused(
+                    f"archive destination is the same file as the source: {dest}"
+                )
+            if _sha256(dest) != src_digest:
+                raise ArchiveRefused(
+                    f"archive copy checksum changed after move: {dest}"
+                )
+
+            return _unlink_regular(src)
 
         return await asyncio.to_thread(_copy_and_remove)
 

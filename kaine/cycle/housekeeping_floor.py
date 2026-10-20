@@ -152,7 +152,7 @@ class AwakeFloor:
 
         # Deduplicate volumes that live on the same filesystem.
         seen_devices: set[int] = set()
-        unique_volumes: list[tuple[str, Path]] = []
+        unique_volumes: list[tuple[str, Path, int]] = []
         for label, path in self._volumes.items():
             try:
                 dev = os.stat(path).st_dev
@@ -162,11 +162,11 @@ class AwakeFloor:
             if dev in seen_devices:
                 continue
             seen_devices.add(dev)
-            unique_volumes.append((label, path))
+            unique_volumes.append((label, path, dev))
 
         actions: list[dict[str, Any]] = []
 
-        for label, path in unique_volumes:
+        for label, path, dev in unique_volumes:
             usage = self._disk_usage(path)
             r = self.reserve(usage.total)
             if usage.free >= r:
@@ -176,6 +176,7 @@ class AwakeFloor:
             result = await self._housekeeper.reclaim_regenerable(
                 free_bytes=lambda: self._disk_usage(path).free,
                 target_free=2 * r,
+                device=dev,
             )
             free_after = self._disk_usage(path).free
             reclaim_action = {
@@ -192,17 +193,19 @@ class AwakeFloor:
 
             self._pressure.note_floor_disk_excess(self._housekeeper.disk_excess())
 
-            if free_after < r and not self._gate.suspended:
-                self._gate.suspend()
+            if free_after < r:
+                already_suspended = self._gate.suspended
                 self._suspending_volumes.add(label)
-                suspend_action = {
-                    "action": "suspend",
-                    "volume": label,
-                    "free_bytes": free_after,
-                    "reserve_bytes": r,
-                }
-                actions.append(suspend_action)
-                await self._log_and_publish(suspend_action)
+                if not already_suspended:
+                    self._gate.suspend()
+                    suspend_action = {
+                        "action": "suspend",
+                        "volume": label,
+                        "free_bytes": free_after,
+                        "reserve_bytes": r,
+                    }
+                    actions.append(suspend_action)
+                    await self._log_and_publish(suspend_action)
 
         # Resume the study record once every suspending volume is back at 2R.
         if self._gate.suspended and self._suspending_volumes:

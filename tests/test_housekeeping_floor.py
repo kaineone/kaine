@@ -29,7 +29,7 @@ class FakeHousekeeper:
         self.calls = []
         self._excess = 0.0
 
-    async def reclaim_regenerable(self, *, free_bytes, target_free):
+    async def reclaim_regenerable(self, *, free_bytes, target_free, device=None):
         self.calls.append({"free_before": free_bytes(), "target_free": target_free})
         self.usage.free += self.free_per_call
         return {"reclaimed_files": 1, "reclaimed_bytes": self.free_per_call}
