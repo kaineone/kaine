@@ -41,7 +41,7 @@ class HearingStageWatch:
         self._params = params
         self._period_s = period_s
         self._last_stage: int | None = None
-        self._pending_payload: dict[str, Any] | None = None
+        self._pending: list[dict[str, Any]] = []
 
     def _format_band(self, edges: tuple[float | None, float | None]) -> str:
         low, high = edges
@@ -85,13 +85,13 @@ class HearingStageWatch:
                 payload = None
 
             if payload is not None:
-                self._pending_payload = payload
+                self._pending.append(payload)
 
-            if self._pending_payload is not None:
+            while self._pending:
                 event = Event(
                     source=DEVELOPMENT_SOURCE,
                     type=HEARING_STAGE_TYPE,
-                    payload=self._pending_payload,
+                    payload=self._pending[0],
                     salience=0.05,
                     timestamp=datetime.now(timezone.utc),
                 )
@@ -101,11 +101,11 @@ class HearingStageWatch:
                     raise
                 except Exception:
                     log.warning("hearing stage publish failed", exc_info=True)
+                    break
                 else:
-                    if self._pending_payload["stage"] == 4:
-                        self._pending_payload = None
+                    self._pending.pop(0)
+                    if event.payload["stage"] == 4 and not self._pending:
                         return
-                    self._pending_payload = None
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._period_s)

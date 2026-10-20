@@ -302,3 +302,39 @@ async def test_run_retries_a_failed_publish(
     assert "hearing stage publish failed" in caplog.text
     stages = [event.payload["stage"] for event in bus.events]
     assert stages == [0, 4]
+
+
+@pytest.mark.asyncio
+async def test_run_keeps_a_failed_stage_when_the_next_one_arrives() -> None:
+    W = 3600.0
+    params = HearingBandParams(enabled=True, maturation_seconds=W)
+
+    class _FailOnceBus:
+        def __init__(self) -> None:
+            self.events: list[Event] = []
+            self._calls = 0
+
+        async def publish(self, event: Event) -> str:
+            self._calls += 1
+            if self._calls == 1:
+                raise RuntimeError("bus down")
+            self.events.append(event)
+            return "1-0"
+
+    bus = _FailOnceBus()
+    calls = 0
+
+    def awake() -> float:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return 0.0
+        return W
+
+    watch = HearingStageWatch(bus, awake, params, period_s=0.01)
+    stop = asyncio.Event()
+    await asyncio.wait_for(watch.run(stop), timeout=2.0)
+
+    stages = [event.payload["stage"] for event in bus.events]
+    assert stages == [0, 4]
+    assert bus.events[1].payload["previous_stage"] == 0
