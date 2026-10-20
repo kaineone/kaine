@@ -153,16 +153,18 @@ async def test_error_dynamics_stays_a_mean(bus):
     await affect._handle_peer_event("audition.out", _audition(1.0))
     for _ in range(240):
         t[0] += 1.0
-        err = 0.5 if t[0] > 120.0 else 1.0
-        await affect._handle_peer_event("vision.out", _vision(err))
-        await affect._handle_peer_event("audition.out", _audition(err))
+        vision_err = 0.5 if t[0] > 120.0 else 1.0
+        await affect._handle_peer_event("vision.out", _vision(vision_err))
+        await affect._handle_peer_event("audition.out", _audition(1.0))
         await affect._tick()
 
     g_v = affect._source_error_terms("vision")[2]
     g_a = affect._source_error_terms("audition")[2]
     assert g_v is not None
     assert g_a is not None
+    assert abs(g_a - g_v) > 0.05
     assert affect._progress()[1] == pytest.approx((g_v + g_a) / 2.0)
+    assert affect._progress()[1] != pytest.approx(max(g_v, g_a))
 
 
 async def test_band_step_restarts_audition_only(bus):
