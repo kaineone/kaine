@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| sleep-trigger-per-sleep | 0/5 (0%) | Each sleep records the trigger that started it (paper 3.5) |
+| sleep-trigger-per-sleep | 5/5 (100%) | Each sleep records the trigger that started it (paper 3.5) |
 | voice-adaptation-idle | 5/5 (100%) | Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists; the consolidation arm leaves the divergence assessment and the preservation monitor (paper 3.5). |
 | developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
 | welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |

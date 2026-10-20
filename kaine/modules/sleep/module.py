@@ -186,7 +186,6 @@ class Sleep(BaseModule):
         # Fatigue trigger state
         self._interoception_cursor: str = "0"
         self._affect_cursor: str = "0"
-        self._fatigue_triggered_sleep: bool = False  # did fatigue fire this cycle?
         # The planning and action selection modules' rest-request handling
         self._requested_rest_min_interval_s: float = requested_rest_min_interval_s
         if (
@@ -423,16 +422,18 @@ class Sleep(BaseModule):
                             if not (fatigue_trigger or regulation_trigger):
                                 continue
                             if fatigue_trigger:
+                                trigger = "fatigue"
                                 log.info(
                                     "sleep: interoception.fatigue crossed=true — "
                                     "triggering fatigue-driven maintenance"
                                 )
                             else:
+                                trigger = "maintenance_request"
                                 log.info(
                                     "sleep: interoception.regulation request_maintenance "
                                     "— triggering regulation-driven maintenance"
                                 )
-                            await self._start_maintenance_sleep()
+                            await self._start_maintenance_sleep(trigger)
 
                     affect_entries, affect_last_scanned = await self._bus.read_entries(
                         "affect.out",
@@ -455,7 +456,7 @@ class Sleep(BaseModule):
                                     "sleep: affect.regulation request_maintenance, "
                                     "triggering affect-driven maintenance"
                                 )
-                                await self._start_maintenance_sleep()
+                                await self._start_maintenance_sleep("affect_regulation")
                             elif (
                                 event.type == "affect.rest_request"
                                 and event.payload.get("reason") == "stimulus_spent"
@@ -476,11 +477,13 @@ class Sleep(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _start_maintenance_sleep(self) -> None:
-        """Guarded start of a fatigue-triggered maintenance sleep.
+    async def _start_maintenance_sleep(self, trigger: Optional[str] = None) -> None:
+        """Guarded start of an event-driven maintenance sleep.
 
         Shared helper so the lock/pending guard is identical for every
-        event-driven trigger site.
+        event-driven trigger site. ``trigger`` names what started the sleep
+        and travels with it as a local value down to ``enter_sleep``, so a
+        trigger that loses the guard cannot change the running sleep's record.
         """
         # L3: hold the task reference (no GC mid-sleep)
         # and guard with a pending flag so a second
@@ -490,7 +493,7 @@ class Sleep(BaseModule):
         if not self._sleep_lock.locked() and not self._sleep_pending:
             self._sleep_pending = True
             self._sleep_task = asyncio.create_task(
-                self._fatigue_triggered_enter_sleep(),
+                self._fatigue_triggered_enter_sleep(trigger),
                 name="sleep-fatigue-sleep",
             )
 
@@ -548,21 +551,22 @@ class Sleep(BaseModule):
         except asyncio.CancelledError:
             raise
 
-    async def _fatigue_triggered_enter_sleep_inner(self) -> None:
-        """Fire a maintenance cycle in response to interoception.fatigue threshold crossing."""
+    async def _fatigue_triggered_enter_sleep_inner(self, trigger: Optional[str] = None) -> None:
+        """Fire a maintenance cycle for an event-driven trigger.
+
+        ``trigger`` is passed on to ``enter_sleep`` and recorded by that
+        sleep alone.
+        """
         try:
-            self._fatigue_triggered_sleep = True
-            await self.enter_sleep()
+            await self.enter_sleep(trigger=trigger)
         except SleepBusyError:
             log.debug("sleep: fatigue trigger: already sleeping")
         except Exception:
             log.exception("sleep: fatigue-triggered sleep failed")
         finally:
             # L3 — clear the trigger wrapper's in-flight annotation
-            # (_sleep_pending) once the sleep settles, so a later fatigue
-            # crossing may fire again; _fatigue_triggered_sleep stays a
-            # debug annotation only and is NOT cleared here (or by the
-            # loser/SleepBusyError branch) — it records the last trigger.
+            # (_sleep_pending) once the sleep settles, so a later trigger
+            # may fire again. No trigger state outlives the sleep.
             self._sleep_pending = False
 
     async def _publish_rest_request(
@@ -827,12 +831,12 @@ class Sleep(BaseModule):
         rest_started = self._rest_clock_now()
         await self.publish(
             "sleep.sleep.started",
-            # infrastructural: real time. Every sleep carries its sleep_index;
-            # "trigger" is present only for a sleep started by a request.
+            # infrastructural: real time. Every sleep carries its sleep_index
+            # and the trigger that started it (None for a direct call).
             {
                 "started_at": time.time(),
                 "sleep_index": self._sleep_count,
-                **({"trigger": trigger} if trigger else {}),
+                "trigger": trigger,
             },
             salience=self._baseline_salience,
         )
@@ -1063,8 +1067,9 @@ class Sleep(BaseModule):
             "mean_intent_expression_similarity_after": (
                 voice_result.mean_intent_expression_similarity_after
             ),
-            # Whether this cycle was fatigue-triggered
-            "fatigue_triggered": self._fatigue_triggered_sleep,
+            # The trigger that started this sleep, and whether it was fatigue
+            "trigger": trigger,
+            "fatigue_triggered": trigger == "fatigue",
         }
         # The counts the paper says each sleep records, at top level so the
         # research log can keep them.
@@ -1123,7 +1128,6 @@ class Sleep(BaseModule):
         except Exception:
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
         if trigger == "developmental_rest":
-            summary["trigger"] = "developmental_rest"
             summary["rest_seconds"] = self._developmental_rest_s
         # Publishing sleep.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (interoception._sleep_event_loop handles this event).
@@ -1585,9 +1589,12 @@ class Sleep(BaseModule):
                 log.exception("sleep: sleep pipeline aborted")
             else:
                 log.warning("sleep: sleep pipeline cancelled (%s)", type(exc).__name__)
-            payload: dict[str, Any] = {"aborted": True, "reason": type(exc).__name__}
+            payload: dict[str, Any] = {
+                "aborted": True,
+                "reason": type(exc).__name__,
+                "trigger": trigger,
+            }
             if trigger == "developmental_rest":
-                payload["trigger"] = "developmental_rest"
                 payload["rest_seconds"] = self._developmental_rest_s
             publish = asyncio.ensure_future(
                 self.publish(
@@ -1605,25 +1612,24 @@ class Sleep(BaseModule):
                 log.exception("sleep: aborted-sleep completed publish also failed")
             raise
 
-    async def _fatigue_triggered_enter_sleep(self) -> None:
-        """L3 — wrapper owning the trigger bookkeeping.
+    async def _fatigue_triggered_enter_sleep(self, trigger: Optional[str] = None) -> None:
+        """L3 — wrapper owning the pending-guard bookkeeping.
 
-        Clears ONLY the pending guard here. The ``_fatigue_triggered_sleep``
-        annotation flag is owned by the inner method and is never cleared
-        by a losing (SleepBusyError) branch, so the running sleep's
-        summary cannot be mis-annotated by a double trigger. The task
+        Clears ONLY the pending guard here. The trigger is a local value
+        passed to ``enter_sleep``, so a losing (SleepBusyError) branch
+        cannot change the running sleep's recorded trigger. The task
         reference is held on ``self._sleep_task`` so the sleep is never
         garbage-collected mid-run.
         """
         try:
-            await self._fatigue_triggered_enter_sleep_inner()
+            await self._fatigue_triggered_enter_sleep_inner(trigger)
         finally:
             self._sleep_pending = False
 
     async def _interval_triggered_enter_sleep(self) -> None:
-        """Interval-based maintenance cycle (M1) — no fatigue annotation."""
+        """Interval-based maintenance cycle (M1), recorded as the backstop."""
         try:
-            await self.enter_sleep()
+            await self.enter_sleep(trigger="backstop")
         except SleepBusyError:
             # A sleep is already in progress — the interval net's job is done
             # for this period; the running sleep covers the maintenance.
