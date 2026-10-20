@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| nexus-welfare-rest | 0/5 (0%) | Show the affect welfare record per drive in the welfare board, and each sleep's trigger, the developmental rest's length and the affect module's rest requests. |
 | nexus-entity-name | 5/5 (100%) | Show the entity's name on the console, read from the self-model file and its `self_model.document` events, and start the status chip from the server's sleep state. |
 | developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
 | welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |
@@ -74,6 +75,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 48 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 49 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
