@@ -268,5 +268,6 @@ async def test_no_waking_due_state_remains(bus, tmp_path):
     try:
         assert not hasattr(language, "_situation_given")
         assert not hasattr(language, "_on_sleep_completed")
+        assert not hasattr(language, "_initialized_at")
     finally:
         await language.shutdown()

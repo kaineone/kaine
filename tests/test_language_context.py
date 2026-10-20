@@ -99,7 +99,7 @@ def test_default_personas_are_first_person_and_forbidden_word_free():
         assert persona.startswith("I am this entity.")
 
 
-def test_default_personas_name_no_category():
+def test_default_personas_carry_the_self_category():
     for persona in (DEFAULT_PERSONA_EXTERNAL, DEFAULT_PERSONA_INTERNAL):
         assert persona.startswith("I am this entity.")
         assert re.search(r"\bI am (?:a|an)\b", persona) is None
