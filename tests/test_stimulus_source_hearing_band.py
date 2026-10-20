@@ -23,6 +23,8 @@ from kaine.modules.audition.maternal_voice import (
 )
 from kaine.modules.stimulus_source_signal import StimulusSourceParams
 
+_W = HearingBandParams().maturation_seconds
+
 
 @pytest.fixture(scope="module")
 def schedule():
@@ -109,7 +111,7 @@ def test_disabled_band_is_byte_identical_golden(voice_500, schedule, params):
 
 
 def test_band_is_deterministic_and_seed_keyed(voice_3000, schedule, params):
-    a = 50000.0
+    a = 0.6 * _W
     s1 = _make_stream(
         schedule, params, voice=voice_3000, hearing=HearingBandParams()
     )
@@ -196,7 +198,8 @@ def test_block_independent_of_render_history(
 
 
 def test_restart_resumes_band(schedule, params):
-    offset = 50000.0
+    t2 = 0.625 * _W
+    offset = t2 - 10.0
     stream_a = _make_stream(
         schedule,
         params,
@@ -209,19 +212,19 @@ def test_restart_resumes_band(schedule, params):
         schedule,
         params,
         hearing=HearingBandParams(),
-        awake=lambda: 50010.0,
+        awake=lambda: t2,
     )
     bytes_b = stream_b.pcm_at(1234, awake_seconds=None)
 
     assert bytes_a == bytes_b
-    assert band_edges(50010.0, HearingBandParams()) == HEARING_BAND_STAGES[2]
+    assert band_edges(t2, HearingBandParams()) == HEARING_BAND_STAGES[2]
 
 
 def test_spectrum_follows_moving_edges(schedule, params):
     stream = _make_stream(schedule, params, hearing=HearingBandParams())
     stage0_below_300 = None
     for s in range(5):
-        a = s * 21600.0 + 600.0 if s < 4 else 86400.0 + 600.0
+        a = s * (_W / 4) + 600.0 if s < 4 else _W + 600.0
         k0 = int(a / 0.03)
         chunks = b"".join(
             stream.pcm_at(k, awake_seconds=a)
@@ -274,7 +277,7 @@ def test_heartbeat_thud_heard_from_stage_two(schedule, params):
         return float(np.sum(pwr[mask]))
 
     for s in range(5):
-        a = s * 21600.0 + 600.0 if s < 4 else 86400.0 + 600.0
+        a = s * (_W / 4) + 600.0 if s < 4 else _W + 600.0
         k0 = int(a / 0.03)
         on_chunks = b"".join(
             on.pcm_at(k, awake_seconds=a) for k in range(k0, k0 + 2000)
@@ -294,7 +297,7 @@ def test_heartbeat_thud_heard_from_stage_two(schedule, params):
 def test_open_band_is_the_band_off_stream_delayed(schedule, params):
     on = _make_stream(schedule, params, hearing=HearingBandParams())
     off = _make_stream(schedule, params, hearing=None)
-    awake = 86400.0 + 600.0
+    awake = _W + 600.0
     k0 = 3000000
 
     on_chunks = b"".join(
@@ -359,7 +362,7 @@ def test_band_reaches_voice_formants_late(
         schedule, params, voice=layer4, hearing=HearingBandParams()
     )
     chunks4 = b"".join(
-        stream4.pcm_at(start_block + i, awake_seconds=86400.0 + 600.0)
+        stream4.pcm_at(start_block + i, awake_seconds=_W + 600.0)
         for i in range(1000)
     )
 
