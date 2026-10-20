@@ -76,7 +76,7 @@ Geometry is taken from `[vision]`.
 | `luminance_contrast` | float | `0.10` | Low contrast. |
 | `luminance_pulse_depth` | float | `0.35` | How strongly the field pulses with the heartbeat. |
 | `maternal_state_hue_gain` | float | `0.6` | How strongly the maternal state colours the field. |
-| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the hearing band's `maturation_seconds`, so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
+| `colour_ramp_seconds` | float | `86400` | Time constant, in awake seconds of the developmental phase, of the colour's rise from grey (saturation is `1 - exp(-t / colour_ramp_seconds)`). It equals the developmental phase's awake-time floor (`[developmental_stage].min_lived_seconds`), so colour keeps rising across the phase; newborn colour vision is still limited (Adams, Courage and Mercer 1994). The code default without a config value stays `3600`, which keeps the parameter digest of the defaults unchanged. |
 
 #### `[perception_feed.stimulus_source.audio]`
 
@@ -91,7 +91,7 @@ The hearing band filters the whole stimulus-source audio, the soundscape and the
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Apply the hearing band. `false` gives the audio without the band byte for byte. |
-| `maturation_seconds` | float | `86400` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). |
+| `maturation_seconds` | float | `43200` | Awake seconds over which the band widens, in four equal steps (60 to 2,592,000). The 12 h default puts a step every 3 h, since offline each low step gives two to four hours of learning progress (paper A.7). |
 
 #### `[perception_feed.stimulus_source.readout]`
 

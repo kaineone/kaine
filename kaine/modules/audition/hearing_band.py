@@ -80,7 +80,7 @@ class HearingBandParams:
     """
 
     enabled: bool = True
-    maturation_seconds: float = 86400.0
+    maturation_seconds: float = 43200.0
 
     @classmethod
     def from_section(cls, section: dict | None) -> "HearingBandParams":
@@ -113,7 +113,7 @@ class HearingBandParams:
                 f"{table} enabled must be a bool, got {type(enabled).__name__}"
             )
 
-        maturation_seconds = section.get("maturation_seconds", 86400.0)
+        maturation_seconds = section.get("maturation_seconds", 43200.0)
         if isinstance(maturation_seconds, bool):
             raise ValueError(
                 f"{table} maturation_seconds must be a finite number in "

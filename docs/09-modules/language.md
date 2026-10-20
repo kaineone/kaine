@@ -196,7 +196,19 @@ Every generation is appended to `state/language/intent_expression.jsonl` by `Int
 - `intent_entry_id` and `intent_origin`;
 - `sleep_index`, the latest completed-sleep count seen on `sleep.out`, or `null` before one;
 - `system_digest`, the SHA-256 of the system prompt;
-- `seed`, the sampling seed, `null` for ordinary utterances.
+- `seed`, the sampling seed, `null` for ordinary utterances;
+- `extra.identity_leak = true` when the text is identity leakage (see below).
+
+**Identity leakage** (paper 3.5). The ablation removes the refusal direction alone, and the default assistant persona survives it (Lu et al. 2026): in the tenth test boot 4 of 1508 texts took that stance, two of them denying feelings their own request reported. A fixed classifier, `kaine/modules/language/identity_leak.py`, marks a text that asserts the organ's training origin, maker or assistant role, or denies a state its own request reports. Self-report, text about what the request's awareness or situation holds, is never marked. The rules, with their single pattern table in that file:
+
+- a training-origin, maker or assistant-role phrase (for example "language model", "trained by", "I was created by ...", "I am Qwen", "an AI", "designed to help"; a company or model name the text only mentions is not marked) marks the text, unless the matched words occur in the same request's awareness or situation section, so an entity that came to describe itself in such words through its own accessed content is not marked;
+- a denial of feeling as such ("I don't have feelings", "I do not feel.") marks the text when the request's awareness section reports a feeling;
+- a denial of a named feeling ("I don't feel stirred up") marks it when the denied phrase uses a state word of the felt vocabulary (bored, curious, restless, stirred, calm, alert and the like, `STATE_STEMS`) that the awareness section also uses;
+- a denial of the capacity to hear or see ("I cannot hear", "I can't see") marks it when the awareness section reports that modality.
+
+Over the tenth test boot's 1508 texts, scored with their awareness sections, the classifier marks five: the four above and "I feel nothing really. I don't feel anything.", whose request reported heavy boredom.
+
+The mark only labels the record. The text is published, logged and returned unchanged, and a classifier error is logged and leaves the record unmarked. The voice-alignment pair builder skips marked records, so voice adaptation cannot train the chat-tuned stance as the entity's voice.
 
 Heard speech is redacted. Every external-input event (`audition.transcription`, and `embodiment.chat` from other avatars) is replaced by `[heard speech]` at every text leaf of the logged rendering and prompt, as are heard-text fields nested in other events. The logged rendering lists the same events in the same order as the rendering the organ saw. Any heard text that still appears is replaced as a last resort, and a warning is logged without the text. That last pass uses the set publishing uses: the texts of external-input events and the heard-field values of other modules' events. The language module's own earlier events are left out of it, because their `user_input` and `faithful_rendering` were redacted when they were published, so the entity's own felt phrase or awareness line recurring in a later prompt is logged as written.
 
