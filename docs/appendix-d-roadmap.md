@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| sleep-housekeeping | 5/6 (83%) | Every sleep runs housekeeping last before the affective reset: closed study-record files move oldest first to an operator-mounted archive within a disk budget and a time allowance, and the sleep summary reports the pressure P^hk (paper 3.5, A.5); fatigue integration, the awake floor and regenerable data wait on the paper. |
 | hearing-stage-published | 4/4 (100%) | Log and publish each stage the developmental hearing band enters, read from the same awake time the audio uses, so operators and analyses can see which band the entity hears; the band itself is unchanged. |
 | cycle-slip-start-to-start | 4/4 (100%) | Measure the cycle's slip from tick start to tick start, so the work after a tick and the oversleep of the pacing wait show; the pacing itself is unchanged. |
 | sleep-index-restored | 4/4 (100%) | Restore the sleep module's sleep index after a restart from its resume-checkpoint state and stage.json, so sleep events and corpus file names continue the count instead of repeating it. |
@@ -68,6 +69,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 42 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 43 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

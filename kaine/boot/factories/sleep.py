@@ -190,6 +190,7 @@ def make_sleep(
         "requested_rest_min_interval_s",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
+        "housekeeping",  # nested sub-table
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
     retired = {"planning_step_burst"}
@@ -296,6 +297,32 @@ def make_sleep(
         runner = _make_organ_window_runner(voice_config, kaine_config or {})
         if runner is not None:
             kwargs["organ_window_runner"] = runner
+
+    # [sleep.housekeeping] sub-table: disk/memory budgets, archive directory.
+    from kaine.modules.sleep.housekeeping import (
+        Housekeeper,
+        HousekeepingConfig,
+        bus_memory_bytes,
+    )
+
+    hk_config = HousekeepingConfig.from_section(section.get("housekeeping"))
+    if hk_config.enabled:
+        episodic_cfg = (kaine_config or {}).get("episodic_memory") or {}
+        raw_budget = episodic_cfg.get("storage_budget_bytes")
+        episodic_budget_bytes: Optional[int] = None
+        if (
+            episodic_memory is not None
+            and isinstance(raw_budget, int)
+            and not isinstance(raw_budget, bool)
+            and raw_budget > 0
+        ):
+            episodic_budget_bytes = raw_budget
+        kwargs["housekeeper"] = Housekeeper(
+            hk_config,
+            memory_reader=lambda: bus_memory_bytes(bus.client),
+            episodic_budget_bytes=episodic_budget_bytes,
+        )
+
     sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:
         kwargs[parameter_for_config_key("episodic_memory", sleep_params)] = episodic_memory

@@ -177,6 +177,18 @@ The retired key `planning_step_burst` is ignored with a warning if present, so o
 
 The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[episodic_memory.strength]`.
 
+### Housekeeping
+
+`[sleep.housekeeping]` sets sleep housekeeping (paper 3.5, A.5, Table A1; see the [sleep module](../09-modules/sleep.md#housekeeping)). The budgets are operator settings; the defaults are conservative, not a recommendation.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Run housekeeping last in every sleep. `false` gives the sleep summary without the `housekeeping` key, as before. |
+| `disk_budget_bytes` | integer `> 0` | `10737418240` | `B^hk` for disk: bytes of study records under `data/evaluation` and `data/workspace_trajectory` kept on the host. |
+| `memory_budget_bytes` | integer `> 0` | `1073741824` | `B^hk` for host memory: the bus's memory use. Counted in the pressure only. |
+| `time_allowance_s` | float `> 0` | `60.0` | `Delta_hk`: seconds housekeeping may spend per sleep. |
+| `archive_dir` | string | `""` | The archive volume the operator mounts. Empty: nothing is moved. It must lie outside `data/evaluation`, `data/workspace_trajectory` and `state/`, or boot fails. |
+
 ### Voice alignment
 
 `[sleep.voice_alignment]` fine-tunes the language organ during the sleep cycle with DPO + QLoRA. It ships disabled and has a two-layer gate.

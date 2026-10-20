@@ -1331,6 +1331,23 @@ replay_window_s = 5.0
 # Ships off; the first configuration idles the consolidation phases.
 associative_replay = false
 
+[sleep.housekeeping]
+# Sleep housekeeping (paper 3.5 and A.5): every sleep, last before the affective reset, moves the
+# oldest closed daily study-record files (data/evaluation, which holds the research event log, and
+# data/workspace_trajectory) to archive_dir until their bytes are within disk_budget_bytes or
+# time_allowance_s (Delta_hk) has passed; whatever is left carries over to the next sleep. Each
+# file is copied and checked before it leaves the host. Host memory is the bus's memory use
+# against memory_budget_bytes; nothing is reclaimed there and the bus keeps its count trimming.
+# The report in sleep.sleep.completed carries the pressure P^hk. Nothing under state/ is ever
+# touched. The budgets are operator settings (Table A1); these defaults are conservative, not a
+# recommendation. An empty archive_dir means no archive volume is mounted: housekeeping then only
+# measures. The archive must lie outside data/evaluation, data/workspace_trajectory and state/.
+enabled = true
+disk_budget_bytes = 10737418240    # 10 GiB of study records on the host
+memory_budget_bytes = 1073741824   # 1 GiB of bus memory
+time_allowance_s = 60.0            # Delta_hk, seconds per sleep
+archive_dir = ""
+
 [sleep.voice_alignment]
 # Master gate. Even with `enabled = true`, the env var
 # KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1 must also be set or the
