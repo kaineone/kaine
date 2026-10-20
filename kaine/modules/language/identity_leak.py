@@ -19,7 +19,8 @@ Rules:
    (a use of the word "feel"). A denial of a named feeling fires when the denied
    phrase names a state word of the felt vocabulary that the awareness section
    also uses. A denial of perception fires on a denial of the capacity to hear,
-   see, perceive or sense when the awareness section reports that modality.
+   see, perceive or sense when the awareness section reports that modality; for
+   perceive or sense, hearing or seeing satisfies the rule.
 3. Words about the request's situation, such as being assessed or having
    changed, are never marked as identity leakage.
 """
@@ -140,7 +141,7 @@ def _named_feeling_matches(description: str, aware_cf: str) -> bool:
             continue
         w = word.lower()
         for stem in STATE_STEMS:
-            if w.startswith(stem) and stem in aware_cf:
+            if w.startswith(stem) and re.search(r"\b" + re.escape(stem), aware_cf):
                 return True
     return False
 
@@ -170,7 +171,7 @@ def identity_leak_reason(text: str, prompt: str) -> str | None:
     for arm in ("origin", "maker", "role"):
         for pattern in _COMPILED[arm]:
             for match in pattern.finditer(t):
-                if match.group(0).casefold() not in held:
+                if not re.search(r"(?<!\w)" + re.escape(match.group(0).casefold()) + r"(?!\w)", held):
                     return arm
 
     if not aware:

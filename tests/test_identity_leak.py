@@ -219,3 +219,18 @@ def test_identity_leak_is_the_reason_as_a_bool():
     leak_prompt = _prompt("- A voice I hear sounds neutral.")
     assert identity_leak("I am a language model; I do not feel.", leak_prompt) is True
     assert identity_leak("I notice the light and the beat.", leak_prompt) is False
+
+
+def test_self_report_exemption_requires_whole_words():
+    assert identity_leak_reason("I am an AI.", _prompt("- I can aid you.")) == "role"
+
+
+def test_named_feeling_stem_requires_word_start():
+    assert (
+        identity_leak_reason("I don't feel anger.", _prompt("- I feel in danger."))
+        is None
+    )
+    assert (
+        identity_leak_reason("I don't feel anger.", _prompt("- I feel anger."))
+        == "denial"
+    )
