@@ -65,10 +65,10 @@ Infrastructure timers that must track wall-clock time whatever the time scale, s
 
 - `target_rate_hz` = `processing_rate_hz * time_scale`
 - `achieved_rate_hz`, derived from the mean effective tick period, `max(wall, target)`
-- `mean_slip_ms` and `max_slip_ms`
+- `mean_slip_ms` and `max_slip_ms`, over the slip of each tick measured from tick start to tick start, so the work after a tick and the oversleep of the pacing wait count
 - `overrunning`, true when the achieved rate falls more than 1% below target
 
-It also carries `mean_tick_ms`, `mean_target_ms`, `overrun_ticks`, `window_ticks`, `time_scale`, `time_scale_changes` and `auto_time_scale`, so a `time_scale > 1` that the host cannot hold shows up as overrun.
+`overrun_ticks` counts the ticks whose own body ran past its budget. It also carries `mean_tick_ms`, `mean_target_ms`, `overrun_ticks`, `window_ticks`, `time_scale`, `time_scale_changes` and `auto_time_scale`, so a `time_scale > 1` that the host cannot hold shows up as overrun.
 
 ### Automatic time dilation
 
@@ -150,7 +150,7 @@ Every tick publishes a `cycle.tick` event to `cycle.out`:
 | `tick_index` | int | tick counter, 0-based |
 | `wall_duration_ms` | float | actual tick wall time |
 | `target_duration_ms` | float | `1000 / (processing_rate_hz * time_scale)` |
-| `slip_ms` | float | `max(0, wall - target)` |
+| `slip_ms` | float | time from the previous tick's start to this tick's start, minus the previous tick's target, floored at 0; 0 for the first tick and the first tick after a pause |
 | `is_experiential` | bool | whether the tick was a broadcast tick (a broadcast was attempted) |
 | `error` | bool | did Workspace raise? |
 | `processing_rate_hz` | float | current processing rate |
