@@ -4,9 +4,9 @@
 
 ## 2. Harness
 
-- [ ] 2.1 Add the `N0` to `N4` arms, the user turn, and the `provoke` subcommand to `organ_replay.py`
-- [ ] 2.2 Add the identity metrics and `score --rule self-facts`
-- [ ] 2.3 Tests for the arms, the provocation set, the metrics and the rule
+- [x] 2.1 Add the `N0` to `N4` arms, the user turn, and the `provoke` subcommand to `organ_replay.py`
+- [x] 2.2 Add the identity metrics and `score --rule self-facts`
+- [x] 2.3 Tests for the arms, the provocation set, the metrics and the rule
 
 ## 3. Replay
 
