@@ -207,8 +207,8 @@ async def test_developmental_rest_cancel_runs_affective_reset_and_aborts(bus: As
     task = asyncio.create_task(sleep.enter_sleep(trigger="developmental_rest"))
     await asyncio.sleep(0.3)
     task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
 
     # The abort path publishes sleep.sleep.completed with aborted true.
     payload = None

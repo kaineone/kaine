@@ -137,10 +137,8 @@ async def test_aborted_developmental_rest_includes_trigger_and_rest_seconds(
     await _wait_for_started(bus, trigger="developmental_rest")
     await asyncio.sleep(0.05)
     task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
 
     payload = await _wait_for_aborted_completed(bus)
     assert payload["aborted"] is True
@@ -163,10 +161,8 @@ async def test_aborted_ordinary_sleep_has_no_trigger_or_rest_seconds(
     await _wait_for_started(bus)
     await asyncio.sleep(0.05)
     task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
 
     payload = await _wait_for_aborted_completed(bus)
     assert payload["aborted"] is True
@@ -214,6 +210,11 @@ async def test_affect_rest_request_publish_failure_does_not_requeue(bus):
 
     affect.publish = wrapped_publish
 
+    # The wrapper raises only on the first rest-request publish; collecting the
+    # failures lets the except document that this is the expected, intentional
+    # failure, and the count is asserted below.
+    failures: list[RestRequestPublishFailure] = []
+
     for _ in range(605):
         lp[0] = 0.0
         nb[0] = 0.0
@@ -221,8 +222,8 @@ async def test_affect_rest_request_publish_failure_does_not_requeue(bus):
         t[0] += 1.0
         try:
             await affect._tick()
-        except RestRequestPublishFailure:
-            pass
+        except RestRequestPublishFailure as exc:
+            failures.append(exc)
 
     for _ in range(100):
         lp[0] = 0.0
@@ -231,8 +232,13 @@ async def test_affect_rest_request_publish_failure_does_not_requeue(bus):
         t[0] += 1.0
         try:
             await affect._tick()
-        except RestRequestPublishFailure:
-            pass
+        except RestRequestPublishFailure as exc:
+            failures.append(exc)
+
+    # The intentional failure must surface exactly once across both loops: the
+    # failed publish is not retried, and no later tick raises again.
+    assert len(failures) == 1
+    assert rest_request_calls == 1
 
     events = await _read_events(bus)
     rests = _rest_requests(events)

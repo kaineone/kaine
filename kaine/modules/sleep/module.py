@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import math
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -212,9 +213,7 @@ class Sleep(BaseModule):
             isinstance(developmental_rest_s, bool)
             or not isinstance(developmental_rest_s, (int, float))
             or developmental_rest_s <= 0
-            or developmental_rest_s == float("inf")
-            or developmental_rest_s == float("-inf")
-            or developmental_rest_s != developmental_rest_s
+            or not math.isfinite(developmental_rest_s)
         ):
             raise ValueError("developmental_rest_s must be a finite number greater than 0")
         self._developmental_rest_s = float(developmental_rest_s)
