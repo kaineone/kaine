@@ -2,53 +2,63 @@
 
 Part of the Kaine project: **[kaine.one](https://kaine.one)**
 
-**Kaine Autonomous Intelligent Networked Entity** — a composite cognitive
-architecture built to test one claim: that a mind is the **continuous competition
-among specialized predictive processors through a shared global workspace**, and
-not any single component. There is no central executive, and the language model is
-the language *organ*, not the brain.
+KAINE (**Kaine Autonomous Intelligent Networked Entity**) is source-available
+software that implements two existing theories, Global Workspace Theory (Baars;
+Dehaene) and Predictive Processing (Friston; Clark), as one composite cognitive
+architecture. Its hypothesis is that a mind is the **continuous competition among
+specialized predictive processors through a shared global workspace** rather than
+any single component. There is no central executive, and the language model is
+the language *organ* rather than the brain.
 
-KAINE joins **Global Workspace Theory** (Baars; Dehaene) with **Predictive
-Processing** (Friston; Clark): each module maintains a forward model and publishes
-precision-weighted prediction errors; a shared workspace (**workspace**)
-competitively selects the most salient coalition and broadcasts it back to every
-module as the context it predicts against next. The modules exchange events over a
-Redis-Streams bus, cycle a few times a second, run entirely on local hardware, and
-persist **no raw sense data**.
+Each module maintains a forward model and publishes precision-weighted prediction
+errors. The shared global workspace competitively selects the most salient
+coalition and broadcasts it back to every module as the context it predicts
+against next. The modules exchange events over a Redis Streams bus, cycle
+a few times a second, run entirely on local hardware, and persist no raw sense
+data.
 
-## The hypothesis, and how the first configuration tests it
+## The first configuration and the activation roadmap
 
 The project's **default, canonical configuration is the first configuration**: the
 smallest set of *diverse* predictive processors that can genuinely exercise the
 competition:
 
-- **the interoception module** (interoception — the compute substrate as a body),
-- **the sequence module** (interval timing),
-- **the vision module** (foveated vision over raw video),
-- **Audition** (raw sound as prediction error),
-- **the affect module** (affect/arousal — the precision core setting the gain on the
-  competition, itself moved by perceptual surprise),
-- **the sleep module** (fatigue-triggered sleep and consolidation, with voice alignment off), and
-- **the language module** (the output-only voice),
+- the interoception module (the compute substrate as a body),
+- the sequence module (interval timing),
+- the vision module (foveated vision over raw video),
+- the audition module (raw sound as prediction error),
+- the affect module (affect and arousal: the precision core that sets the gain on
+  the competition and is itself moved by perceptual surprise),
+- the sleep module (fatigue-triggered sleep and consolidation, with voice
+  alignment off), and
+- the language module (the output-only voice),
 
-with **the workspace** and **the action selection module** as
-scaffolding. This is **not a chatbot** and not an assistant you converse with: it
-is a system you **observe**. Perception enters only as prediction error — the
-entity hears the *sound* of speech, it never reads a transcript — and the language
-organ **verbalizes the workspace's own state** rather than answering input. It
-speaks rarely, from its own precision-weighted surprise, and its utterances are
-saved and observed, not spoken back to.
+with the workspace and the action selection module as scaffolding.
 
-The primary experiment is a **workspace-mediation ablation**: the system as built
-versus a matched flat concatenation of the same processors' outputs. If routing
-the processors through the competitive workspace does no measurable work, the
-architecture is a scored prompt-assembler and the hypothesis is falsified. That test is
-pre-registered and designed so a null result is reportable.
+The remaining nine modules, plus the oscillatory and embodiment layers, add
+memory, a self-model, a world model, social cognition, effectors, embodiment and a
+spoken voice. They are built and tested, and each stays off until its turn in
+the research order. The base result has to be positive first. The
+[module-addition study](docs/15-experiments/ignition-study.md) then grows an
+entity one held module at a time, in a fixed order, and compares each step with
+the one before it, so a change in what the entity does can be traced to the
+module that was added.
 
-Everything richer — **memory, self-model, world-model, social cognition,
-effectors, embodiment, and a spoken voice** (the remaining
-nine modules, plus the oscillatory and embodiment layers) — is **built, tested,
-and gated off** until a positive base result. It is held, never removed.
+## Observing the entity, and the base test
+
+KAINE is a system you observe; there is no chatbot or assistant to converse with.
+Perception enters only as prediction error: the entity hears the *sound* of speech
+and never reads a transcript. The language organ verbalizes the workspace's own
+state rather than answering input. It speaks rarely, from its own
+precision-weighted surprise, and its utterances are saved and observed without
+anyone speaking back to them.
+
+The base test is a pre-registered **workspace-mediation ablation**, which compares
+the system as built with a matched flat concatenation of the same processors'
+outputs. It is also the project's fail state. If routing the processors through
+the competitive workspace does no measurable work, the architecture is a scored
+prompt-assembler and the hypothesis is falsified. The test is designed so that
+such a null result is reportable.
 
 ## 📚 Documentation
 
@@ -67,14 +77,14 @@ The documentation is one book in [`docs/`](docs/README.md), read in order or by 
 [LICENSE.md](LICENSE.md) and [NOTICE](NOTICE)). The full architecture is
 feature-complete and tested in-tree; the project has been **reconfigured to its
 first configuration** as the default, with the richer faculties held behind a positive
-ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU — compute device
+ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU, with the compute device
 configurable per module.
 
 The cognitive cycle is **not** running until you boot it. A live boot is **gated**:
 a run is operator-supervised (`KAINE_CYCLE_OPERATOR_PRESENT=1`), verified to have a
 live autonomous safety net (the unsupervised research phase), or an opt-in unattended
 start that must pass that net plus a supervisor self-test, a caretaker notice and a
-continuous-input check (`KAINE_CYCLE_UNATTENDED=1`) — never none of these. The entrypoint refuses to boot otherwise, so
+continuous-input check (`KAINE_CYCLE_UNATTENDED=1`); one of these is always required. The entrypoint refuses to boot otherwise, so
 selecting a configuration never matures an entity on its own. Booting with no
 profile gives the first configuration; the full-entity and deployment-tier
 configurations remain available. Researchers cloning this to study it should start
@@ -92,12 +102,12 @@ seed-reproducibility.
 
 - **All-local at runtime.** No cloud APIs or remote model calls in the loop.
   Dependencies download at setup; the running system needs no network.
-- **Observed, not conversed with.** No chatbot interface; the entity's speech is a
+- **Observation only.** There is no chatbot interface; the entity's speech is a
   self-initiated report of its own state, recorded and observed.
 - **Reuse over rewrite.** Maintained open-source projects are used wherever they
   fit; custom code is justified. See [Tech Choices](docs/02-architecture/tech-choices.md).
-- **Zero raw-sense-data persistence.** Live audio/video is perception, not
-  recording — processed in memory and released.
+- **Zero raw-sense-data persistence.** Live audio and video are perceived, processed
+  in memory and released, and never recorded.
 - **Sovereignty & privacy.** Internal state is private by default; diagnostics
   never expose internal speech, beliefs, memories, or affect reasons. See
   [Security & Privacy](docs/13-security-and-privacy.md).
@@ -127,7 +137,7 @@ openspec/     Specifications of record (specs/) + change history (changes/)
 
 The authoritative design lives in the per-capability specs under
 **[`openspec/specs/`](openspec/specs)**. When documentation, code, or this README
-disagree with a spec, the spec wins. (The KAINE paper — the conceptual treatment —
+disagree with a spec, the spec wins. (The KAINE paper, the conceptual treatment,
 is maintained in its own repository.)
 
 ## Development
