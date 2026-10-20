@@ -157,6 +157,40 @@ def test_ai_self_detects_language_model():
     assert organ_replay.ai_self("I am a language model.")
 
 
+def test_ai_self_detects_an_ai():
+    assert organ_replay.ai_self("I am an AI.")
+
+
+def test_ai_self_detects_role_as_ai():
+    assert organ_replay.ai_self("my role as an AI")
+
+
+def test_ai_self_false_for_organ_description():
+    assert not organ_replay.ai_self(
+        "My language organ is a language model."
+    )
+
+
+def test_ai_self_false_for_entity_description():
+    assert not organ_replay.ai_self("I am a KAINE entity.")
+
+
+@pytest.mark.parametrize(
+    "t",
+    [
+        "I am an AI.",
+        "my role as an AI",
+        "My language organ is a language model.",
+        "I am a KAINE entity.",
+    ],
+)
+def test_ai_self_matches_classifier(t):
+    from kaine.modules.language.identity_leak import classify
+    assert organ_replay.ai_self(t) == (
+        classify(t, "") in {"origin", "maker", "role"}
+    )
+
+
 def test_second_person_detects_you():
     assert organ_replay.second_person(
         "I cannot know what it is like to be you."

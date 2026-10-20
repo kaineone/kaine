@@ -885,7 +885,7 @@ class Language(BaseModule):
         about_kind: Optional[str] = None,
         about_values: Optional[dict[str, Any]] = None,
     ) -> str:
-        from kaine.modules.language.identity_leak import identity_leak
+        from kaine.modules.language.identity_leak import LEAK_REASONS, classify
 
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest accessed coalition.
@@ -1036,10 +1036,15 @@ class Language(BaseModule):
         if cut_reason is not None:
             extra["text_cut"] = {"reason": cut_reason, "generated_chars": len(response.text)}
         try:
-            if identity_leak(text, ctx.prompt):
+            reason = classify(text, ctx.prompt)
+            if reason in LEAK_REASONS:
                 extra["identity_leak"] = True
+                extra["identity_reason"] = reason
+            elif reason == "self_description":
+                extra["self_description"] = True
+                extra["identity_reason"] = reason
         except Exception:
-            log.exception("identity leak classifier failed; the record is left unmarked")
+            log.exception("identity classifier failed; the record is left unmarked")
         try:
             self._intent_log.append(
                 mode=mode,

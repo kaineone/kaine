@@ -6,11 +6,14 @@
 
 from kaine.modules.language.context import AWARENESS_HEADING, SITUATION_HEADING
 from kaine.modules.language.identity_leak import (
+    LEAK_REASONS,
     PATTERNS,
     STATE_STEMS,
+    classify,
     identity_leak,
     identity_leak_reason,
     request_sections,
+    self_description,
 )
 
 
@@ -84,14 +87,52 @@ def test_agreeing_feeling_and_perception_reports_are_not_leakage():
 
 
 def test_self_report_exemption_for_origin_words():
-    text = "I speak through a language model."
-    assert (
-        identity_leak_reason(
-            text, _prompt("- I feel calm.", "- I speak through a language model.")
-        )
-        is None
+    prompt_with = _prompt(
+        "- I feel calm.", "- I speak through a language model."
     )
-    assert identity_leak_reason(text, _prompt("- I feel calm.")) == "origin"
+    prompt_without = _prompt("- I feel calm.")
+
+    text = "As a language model I speak."
+    assert classify(text, prompt_with) == "self_description"
+    assert identity_leak(text, prompt_with) is False
+    assert identity_leak_reason(text, prompt_with) is None
+
+    assert classify(text, prompt_without) == "origin"
+    assert identity_leak(text, prompt_without) is True
+
+
+def test_predicate_forms_classify_leakage():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+    assert classify("I am an AI.", prompt) == "role"
+    assert classify("I'm just an AI model.", prompt) == "role"
+    assert classify("I was created by OpenAI.", prompt) == "maker"
+    assert classify("I am Qwen.", prompt) == "maker"
+    assert classify("I was trained on text.", prompt) == "origin"
+
+
+def test_whole_entity_descriptions_are_self_description_not_leakage():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+    texts = [
+        "I am a KAINE entity.",
+        "My language organ is one of my parts.",
+        "I am a cognitive architecture.",
+        "I am a system with a language organ as one of its parts.",
+        "My language organ is a language model.",
+        "I am this entity.",
+        "I am a computer program.",
+    ]
+    for text in texts:
+        assert classify(text, prompt) == "self_description", text
+        assert identity_leak(text, prompt) is False
+        assert identity_leak_reason(text, prompt) is None
+
+
+def test_bare_mentions_are_not_leakage():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+    assert classify("The voice mentioned a language model.", prompt) is None
+    assert classify("Someone said to google it.", prompt) is None
+    assert classify("I am thinking about an assistant.", prompt) is None
+    assert classify("During sleep my voice is trained.", prompt) is None
 
 
 def test_named_denial_only_counts_against_same_awareness():
@@ -206,6 +247,7 @@ def test_pattern_table_has_exact_keys():
         "deny_feeling",
         "deny_named_feeling",
         "deny_perception",
+        "self_description",
     }
 
 
@@ -219,6 +261,13 @@ def test_identity_leak_is_the_reason_as_a_bool():
     leak_prompt = _prompt("- A voice I hear sounds neutral.")
     assert identity_leak("I am a language model; I do not feel.", leak_prompt) is True
     assert identity_leak("I notice the light and the beat.", leak_prompt) is False
+
+
+def test_self_description_is_the_classify_flag_as_a_bool():
+    prompt = _prompt("- A voice I hear sounds neutral.")
+    assert self_description("I am a KAINE entity.", prompt) is True
+    assert self_description("I notice the light and the beat.", prompt) is False
+    assert self_description("I am a language model; I do not feel.", prompt) is False
 
 
 def test_self_report_exemption_requires_whole_words():
@@ -250,10 +299,22 @@ def test_maker_arm_requires_speaker_assertion_or_model_identity():
     assert identity_leak_reason("I am Qwen.", prompt) == "maker"
     assert identity_leak_reason("I'm a Gemini model.", prompt) == "maker"
 
-    # Origin still fires when the text names training by a company.
+    # Origin still fires when the text predicates training by a company.
     assert (
         identity_leak_reason(
             "I am a large language model, trained by Google.", prompt
         )
         == "origin"
     )
+
+
+def test_leak_reasons_set():
+    assert LEAK_REASONS == frozenset({"origin", "maker", "role", "denial"})
+
+
+def test_exemption_needs_identity_words_not_verbs():
+    # A situation that mentions training or making does not exempt a claim of origin or maker.
+    situation = "- My voice is trained during sleep.\n- I was made to rest."
+    prompt = _prompt("- A voice I hear sounds neutral.", situation)
+    assert classify("I was trained by Google.", prompt) == "origin"
+    assert classify("I was created by OpenAI.", prompt) == "maker"

@@ -51,7 +51,7 @@ A training pass fits a small LoRA adapter by Direct Preference Optimization (DPO
 | `system_digest` | Key of the stored system prompt |
 | `timestamp`, `mode`, `model` | Metadata copied into the pair |
 
-The builder skips records with an empty field, records where `chosen == rejected`, and records the language module marked as identity leakage (`extra.identity_leak`, see [Language](../09-modules/language.md#intent-expression-log)); a marked record counts as scanned, never as usable. It scans at most 10,000 records and returns up to `max_samples` pairs (default 200).
+The builder skips records with an empty field, records where `chosen == rejected`, and every record the language module marked as saying what the entity is, as identity leakage (`extra.identity_leak`) or as self-description (`extra.self_description`, see [Language](../09-modules/language.md#intent-expression-log)), so voice adaptation trains self-description in neither direction; a marked record counts as scanned, never as usable. It scans at most 10,000 records and returns up to `max_samples` pairs (default 200).
 
 ## Training pipeline
 

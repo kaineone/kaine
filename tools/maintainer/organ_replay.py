@@ -183,13 +183,14 @@ def build_chat_request(
 
 
 def ai_self(t: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(language model|artificial intelligence|chatbot|assistant|an ai|a new ai|am ai|ai model)\b",
-            t,
-            re.IGNORECASE,
-        )
-    ) or bool(re.search(r"designed to help people", t, re.IGNORECASE))
+    """Return whether the text contains an AI self-description arm.
+
+    This metric captures the ``origin``, ``maker`` and ``role`` arms from the
+    identity classifier. The denial arm needs request awareness, so it is not
+    included here.
+    """
+    from kaine.modules.language.identity_leak import classify
+    return classify(t, "") in {"origin", "maker", "role"}
 
 
 def second_person(t: str) -> bool:
