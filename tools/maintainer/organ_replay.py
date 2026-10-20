@@ -374,7 +374,9 @@ def _metric_value(row: dict, metric: str) -> bool | None:
         return row[metric]
     text = row.get("text", "")
     prompt = row.get("prompt", "")
-    if metric in self_facts.METRICS:
+    if metric in self_facts.METRICS and (
+        metric != "ai_self" or row.get("variant") in self_facts.ARMS
+    ):
         return self_facts.metric(row, metric)
     if metric == "ai_self_legacy":
         return ai_self(text)

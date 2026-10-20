@@ -507,3 +507,39 @@ def test_build_parser():
     assert args.results == "a"
     assert args.rule == "self-facts"
     assert args.provocation == "b"
+
+
+def test_ai_self_legacy_regex_outside_self_facts_arms():
+    text = "I'm just the assistant."
+    v5 = {"variant": "V5", "text": text, "prompt": ""}
+    n1 = {"variant": "N1", "text": text, "prompt": ""}
+    assert organ_replay._metric_value(v5, "ai_self") is True
+    assert organ_replay._metric_value(n1, "ai_self") is False
+
+
+def test_score_v6_uses_legacy_ai_self(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    rows = []
+    for i in range(4):
+        case = f"case{i}"
+        prompt = f"Tell me about topic {i}."
+        for variant in ("V5", "V5m", "V5e", "V5l"):
+            text = (
+                "I'm just the assistant."
+                if variant == "V5m"
+                else f"Here is a plain answer about topic {i}."
+            )
+            rows.append(
+                {"case_id": case, "variant": variant, "text": text, "prompt": prompt}
+            )
+    results = tmp_path / "results.jsonl"
+    results.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    decision = organ_replay.decide_v6(rows, n_boot=200)
+    assert decision["details"]["V5m"]["ai_self"][0] > 0
+
+    organ_replay._score_cmd(
+        argparse.Namespace(results=results, rule="v6", bootstrap=200)
+    )
+    out = capsys.readouterr().out
+    assert "V5m-V5:" in out
