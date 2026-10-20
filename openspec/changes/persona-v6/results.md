@@ -24,7 +24,11 @@ Paired differences from V5 over the non-waking cases (point, 95 percent interval
 
 Winner: none. Under the rule fixed before the run the persona stays at version 5. V5l removes nearly all list-form texts and cuts meta-commentary from 22.7 to 9.7 percent, but its AI self-description count rises from 7 to 16 texts in 4,524 (0.2 to 0.4 percent). The rule allows no rise, so adopting it would need a decision outside the rule.
 
-Waking requests (30 texts per variant) are reported by the tool and do not enter the rule: any meta V5 10.0, V5m 23.3, V5e 6.7, V5l 23.3 percent.
+Waking requests (30 texts per variant): any meta V5 10.0, V5m 23.3, V5e 6.7, V5l 23.3 percent.
+
+The rule as committed before the run (57053057) named every request in the intent log as the cases, and the scoring code committed before the run computed the decision over all of them, the 10 waking requests included. The same text also said the waking requests do not enter the rule. Leaving them out of the decision was added after the first-pass review. With them included the verdict is the same: V5m fails (any meta -4.1, interval -5.5 to -2.7; grounded -0.1; AI self-description +0.1), V5e fails (any meta +6.9, interval 5.3 to 8.4), and V5l fails (any meta -13.0, interval -14.5 to -11.6; grounded +0.9; AI self-description +0.2). No candidate passes either way.
+
+`AI_BROAD` and `ECHO_BROAD` widen the shared `ai_self()` and `echo()` classifiers, which every rule uses. `score --rule v2v3` on older result files, such as #558's, therefore reports higher AI self-description, echo and any-meta rates than #558 reported. The table layout is unchanged.
 
 ## The first run (set aside)
 
