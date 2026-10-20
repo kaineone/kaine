@@ -197,4 +197,4 @@ def test_board_cycle_not_running_message():
 def test_board_not_reported_message():
     html = _render({"ok": None, "source": "not_reported", "failures": []})
     assert "Not known: the running cycle does not report backend loads." in html
-    assert "—" not in "Not known: the running cycle does not report backend loads."
+    assert "\u2014" not in "Not known: the running cycle does not report backend loads."
