@@ -20,13 +20,6 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.sleep import TrainingResult
 from kaine.modules.sleep.corpus import intent_record_paths
-from kaine.modules.sleep.module import Sleep
-from kaine.modules.sleep.voice_alignment import (
-    OPERATOR_APPROVED_ENV,
-    DPOPairBuilder,
-    FakeTrainer,
-    VoiceAlignmentConfig,
-)
 
 
 class _FakeEpisodicMemory:
@@ -86,21 +79,21 @@ def _make_sleep(
     intent_records: list[dict] | None,
     enabled: bool = True,
     trainer=None,
-) -> Sleep:
+) -> sleep_module.Sleep:
     log_path = tmp_path / "intent.jsonl"
     if intent_records is not None:
         _write_jsonl(log_path, intent_records)
-    config = VoiceAlignmentConfig(
+    config = voice_alignment_module.VoiceAlignmentConfig(
         intent_log_path=log_path,
         adapter_output_dir=tmp_path / "adapters",
         enabled=enabled,
         preference_source="none",
     )
-    return Sleep(
+    return sleep_module.Sleep(
         bus,
         episodic_memory=_FakeEpisodicMemory(),
         affect=_FakeAffect(),
-        trainer=trainer or FakeTrainer(),
+        trainer=trainer or voice_alignment_module.FakeTrainer(),
         voice_alignment_config=config,
     )
 
@@ -120,7 +113,7 @@ class _RecordingTrainer:
         )
 
 
-def _spy_build(sleep: Sleep):
+def _spy_build(sleep: sleep_module.Sleep):
     calls = []
     original = sleep._builder.build_with_counts
     def wrapper(*args, **kwargs):
@@ -133,7 +126,7 @@ def _spy_build(sleep: Sleep):
 def test_build_with_counts_exact_rate(tmp_path: Path):
     p = tmp_path / "log.jsonl"
     _write_jsonl(p, _MIXED)
-    pairs, scanned, usable = DPOPairBuilder().build_with_counts(p, max_pairs=100)
+    pairs, scanned, usable = voice_alignment_module.DPOPairBuilder().build_with_counts(p, max_pairs=100)
     assert scanned == 5
     assert usable == 2
     assert len(pairs) == 2
@@ -149,14 +142,14 @@ def test_usable_counts_full_numerator_past_max_pairs(tmp_path: Path):
             for i in range(6)
         ],
     )
-    pairs, scanned, usable = DPOPairBuilder().build_with_counts(p, max_pairs=2)
+    pairs, scanned, usable = voice_alignment_module.DPOPairBuilder().build_with_counts(p, max_pairs=2)
     assert len(pairs) == 2
     assert scanned == 6
     assert usable == 6
 
 
 def test_build_missing_file_zero_counts(tmp_path: Path):
-    pairs, scanned, usable = DPOPairBuilder().build_with_counts(
+    pairs, scanned, usable = voice_alignment_module.DPOPairBuilder().build_with_counts(
         tmp_path / "missing.jsonl", max_pairs=10
     )
     assert (pairs, scanned, usable) == ([], 0, 0)
@@ -164,7 +157,7 @@ def test_build_missing_file_zero_counts(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_disabled_voice_alignment_builds_no_pairs(bus, tmp_path, monkeypatch):
-    monkeypatch.delenv(OPERATOR_APPROVED_ENV, raising=False)
+    monkeypatch.delenv(voice_alignment_module.OPERATOR_APPROVED_ENV, raising=False)
     sleep = _make_sleep(bus, tmp_path, intent_records=_divergent_records(20), enabled=False)
     calls = _spy_build(sleep)
     before = sleep._sleep_count
@@ -185,7 +178,7 @@ async def test_disabled_voice_alignment_builds_no_pairs(bus, tmp_path, monkeypat
 async def test_enabled_approved_without_validated_source_builds_no_pairs(
     bus, tmp_path, monkeypatch,
 ):
-    monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
+    monkeypatch.setenv(voice_alignment_module.OPERATOR_APPROVED_ENV, "1")
     sleep = _make_sleep(bus, tmp_path, intent_records=_divergent_records(20), enabled=True)
     calls = _spy_build(sleep)
     before = sleep._sleep_count
@@ -206,7 +199,7 @@ async def test_enabled_approved_without_validated_source_builds_no_pairs(
 async def test_enabled_approved_with_validated_source_calls_builder_and_trains(
     bus, tmp_path, monkeypatch,
 ):
-    monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
+    monkeypatch.setenv(voice_alignment_module.OPERATOR_APPROVED_ENV, "1")
     monkeypatch.setattr(sleep_module, "TRAINING_SOURCES", frozenset({"none"}))
     trainer = _RecordingTrainer()
     sleep = _make_sleep(
@@ -247,7 +240,7 @@ async def test_enabled_approved_with_validated_source_calls_builder_and_trains(
 async def test_builder_exception_yields_empty_pairs_and_phase_succeeds(
     bus, tmp_path, monkeypatch,
 ):
-    monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
+    monkeypatch.setenv(voice_alignment_module.OPERATOR_APPROVED_ENV, "1")
     monkeypatch.setattr(sleep_module, "TRAINING_SOURCES", frozenset({"none"}))
     sleep = _make_sleep(bus, tmp_path, intent_records=_divergent_records(20), enabled=True)
 
