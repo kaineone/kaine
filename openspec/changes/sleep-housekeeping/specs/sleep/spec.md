@@ -19,7 +19,7 @@ Housekeeping, in sleep and in the awake floor, SHALL act only on regular files t
 - **THEN** it refuses with an error and the file is untouched
 
 ### Requirement: The awake floor keeps free space above a reserve
-While the entity is awake and housekeeping is enabled, the cycle SHALL check every `floor_period_s` the free space of the `data` and `state` volumes, once per filesystem, against `R^hk = max(reserve_bytes, reserve_share x volume size)` (paper A.5). Below `R^hk` it SHALL reclaim regenerable data oldest first, never exporting and never deleting an unexported study record, until free space reaches `2 R^hk`, and SHALL then add the disk's excess over its budget to the pressure until the next sleep. If free space is still below `R^hk` it SHALL suspend the study record: each study-record sink SHALL write one gap-start marker and drop entries until the floor resumes the record once free space is back at `2 R^hk`, then write a gap-end marker with the count dropped. Each action SHALL be logged and published on `housekeeping.out` with labels and byte counts only.
+While the entity is awake and housekeeping is enabled, the cycle SHALL check every `floor_period_s` the free space of every volume a study sink writes to and of `state/`, once per filesystem, against `R^hk = max(reserve_bytes, reserve_share x volume size)` (paper A.5). Below `R^hk` it SHALL reclaim regenerable data on that volume, oldest first, never exporting and never deleting an unexported study record, until free space reaches the target `min(2 R^hk, (volume size + R^hk) / 2)`, and SHALL then count the disk's excess over its budget in the pressure until the next sleep, the disk term becoming the larger of the last sleep's term and this measurement so each byte counts once. If free space is still below `R^hk` it SHALL suspend the study record: each study-record sink SHALL write one gap-start marker and drop entries until the floor resumes the record once every volume that caused the suspension is back at its target, then write a gap-end marker with the count dropped. A failure on one volume SHALL NOT stop the other checks or the resume check. Each action SHALL be logged and published on `housekeeping.out` with labels and byte counts only. A floor value outside its range, or a reserve at least the size of a watched volume, SHALL fail boot.
 
 #### Scenario: Reclaim is enough
 - **WHEN** a volume falls below its reserve and deleting log backups brings it above `R^hk`
@@ -35,3 +35,14 @@ Before removing a local study record, housekeeping SHALL refuse that file, keepi
 #### Scenario: The destination is a link to the source
 - **WHEN** the archive destination of a closed study record is a symlink to that record
 - **THEN** the export is refused, the local record stays and the pass goes on with the next file
+
+### Requirement: Exports leave no data behind
+Housekeeping SHALL export a study record only when the archive is a mounted volume (a mount point, or a filesystem other than every root's), and only when the record is dated before yesterday. It SHALL remove the local copy only when the source's size, modification time and inode, read through the descriptor it was copied from and by path, are unchanged since the copy; otherwise it SHALL repeat the export once and then keep the file. A shorter archive copy that is a prefix of the source SHALL be replaced. A file that vanishes, becomes a link or has more than one hard link SHALL be skipped without stopping the pass. Host memory SHALL count only bus entries acknowledged by every consumer group and older than the restart replay window; with neither in the bus the memory term SHALL be 0 and reported as not measured.
+
+#### Scenario: A late append
+- **WHEN** a sink appends to a record after it was copied and before the local copy is removed
+- **THEN** the appended bytes end up in the archive copy or stay in the local file
+
+#### Scenario: An unmounted archive
+- **WHEN** `archive_dir` is a plain directory on the same filesystem as the study records
+- **THEN** no record is exported and the report says the archive is not mounted

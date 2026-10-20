@@ -269,14 +269,21 @@ def test_study_record_roots_drops_state_and_nested(tmp_path):
 @pytest.mark.asyncio
 async def test_lock_held_during_run(tmp_path, monkeypatch):
     hk_inst = _make_hk(tmp_path)
+    # Over budget, so the pass lists its candidates while it holds the lock.
+    study = tmp_path / "data" / "evaluation" / "research_events" / "research_events-2026-10-01.jsonl"
+    study.parent.mkdir(parents=True, exist_ok=True)
+    study.write_text("x\n")
     original_candidates = Housekeeper.candidates
+    seen = []
 
     def asserting_candidates(self):
-        assert housekeeping_lock().locked()
+        seen.append(housekeeping_lock().locked())
         return original_candidates(self)
 
     monkeypatch.setattr(Housekeeper, "candidates", asserting_candidates)
     await hk_inst.run()
+    assert seen == [True]
+    assert not housekeeping_lock().locked()
 
 
 @pytest.mark.asyncio

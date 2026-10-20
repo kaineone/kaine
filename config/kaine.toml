@@ -1337,24 +1337,29 @@ associative_replay = false
 [sleep.housekeeping]
 # Sleep housekeeping (paper 3.5 and A.5). Every sleep, last before the affective reset, reclaims
 # regenerable or spent data oldest first: rotated backups of the process log (written with
-# --log-file) are deleted, and closed daily study-record files under data/evaluation (which holds
-# the research event log) and data/workspace_trajectory are exported to archive_dir under a
-# SHA-256 check and only then removed. Unexported study records are never deleted. It stops when
-# the disk bytes are within disk_budget_bytes or time_allowance_s (Delta_hk) has passed; whatever
-# is left carries over. Host memory is the bus's memory use against memory_budget_bytes, counted
-# but not reclaimed. Awake, fatigue builds at nu_act (1 + P^hk). Nothing under state/ is ever
-# touched. The budgets and the reserve are operator settings (Table A1); these defaults are
-# conservative, not a recommendation. An empty archive_dir means no archive volume is mounted; the
-# archive must lie outside data/evaluation, data/workspace_trajectory and state/.
+# --log-file) are deleted, and closed daily study-record files (dated before yesterday) in the
+# configured study-sink directories are exported to archive_dir under a SHA-256 check and only
+# then removed. Unexported study records are never deleted. It stops when the disk bytes are
+# within disk_budget_bytes or time_allowance_s (Delta_hk) has passed; whatever is left carries
+# over. Host memory counts only bus entries acknowledged by every consumer group and older than
+# the restart replay window; the bus has neither, so the memory term is 0. Awake, fatigue builds
+# at nu_act (1 + P^hk). Nothing under state/ is ever touched. The budgets and the reserve are
+# operator settings (Table A1); these defaults are conservative, not a recommendation.
+# archive_dir must be a mounted volume (a mount point, or another filesystem than the study
+# records), outside the study-sink directories and state/. Empty (the default) means no archive:
+# study records never leave the host, P^hk grows with them, and boot and the dashboard warn.
 enabled = true
 disk_budget_bytes = 10737418240    # 10 GiB of regenerable data and study records on the host
-memory_budget_bytes = 1073741824   # 1 GiB of bus memory
+memory_budget_bytes = 1073741824   # 1 GiB; reserved, the bus holds no entry the paper counts
 time_allowance_s = 60.0            # Delta_hk, seconds per sleep
-archive_dir = ""
-# The awake floor (A.5): every floor_period_s while awake it checks the free space of the data and
-# state volumes against R^hk = max(reserve_bytes, reserve_share x volume size). Below R^hk it
-# reclaims regenerable data oldest first until free space reaches 2 R^hk; if free space is still
-# below R^hk it suspends the study record with a gap marker until free space is back at 2 R^hk.
+archive_dir = ""                   # e.g. "/archive", a volume the operator mounts
+# The awake floor (A.5): every floor_period_s while awake it checks the free space of every volume
+# a study sink writes to, and of state/, against R^hk = max(reserve_bytes, reserve_share x volume
+# size). Below R^hk it reclaims regenerable data on that volume oldest first until free space
+# reaches 2 R^hk (halfway between R^hk and the volume size where 2 R^hk does not fit); if free
+# space is still below R^hk it suspends the study record with a gap marker until free space is
+# back at that target. reserve_share in (0, 1); bad values, or a reserve at least a volume's
+# size, fail boot.
 reserve_bytes = 5368709120         # 5 GiB
 reserve_share = 0.05               # 5% of the volume
 floor_period_s = 60.0

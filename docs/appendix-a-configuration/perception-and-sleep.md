@@ -185,11 +185,11 @@ The former `downscale_factor` key is refused at boot. The sleep module now downs
 |---|---|---|---|
 | `enabled` | boolean | `true` | Run housekeeping last in every sleep. `false` gives the sleep summary without the `housekeeping` key, as before. |
 | `disk_budget_bytes` | integer `> 0` | `10737418240` | `B^hk` for disk: bytes of study records under `data/evaluation` and `data/workspace_trajectory` and of process-log backups kept on the host. |
-| `memory_budget_bytes` | integer `> 0` | `1073741824` | `B^hk` for host memory: the bus's memory use. Counted in the pressure only. |
+| `memory_budget_bytes` | integer `> 0` | `1073741824` | `B^hk` for host memory. Reserved: the paper counts there only bus entries acknowledged by every consumer group and older than the restart replay window, and the bus has neither, so the memory term is 0. |
 | `time_allowance_s` | float `> 0` | `60.0` | `Delta_hk`: seconds housekeeping may spend per sleep. |
-| `archive_dir` | string | `""` | The archive volume the operator mounts. Empty: no study record is exported, so none leaves the host; log backups are still deleted. It must lie outside `data/evaluation`, `data/workspace_trajectory` and `state/`, or boot fails. |
-| `reserve_bytes` | integer `>= 0` | `5368709120` | The awake floor's fixed reserve. `R^hk` is the larger of this and `reserve_share` of the volume. |
-| `reserve_share` | float `[0, 1)` | `0.05` | The awake floor's reserve as a share of each data volume. |
+| `archive_dir` | string | `""` | The archive volume the operator mounts. Empty: no study record is exported, so none leaves the host and the pressure grows; boot and the dashboard warn. It must be a mounted volume (a mount point, or another filesystem than the study records); a plain directory on the same disk exports nothing. It must lie outside `data/evaluation`, `data/workspace_trajectory` and `state/`, or boot fails. |
+| `reserve_bytes` | integer `> 0` | `5368709120` | The awake floor's fixed reserve. `R^hk` is the larger of this and `reserve_share` of the volume. |
+| `reserve_share` | float `(0, 1)` | `0.05` | The awake floor's reserve as a share of each data volume. Bad values, or a reserve at least a volume's size, fail boot. |
 | `floor_period_s` | float `> 0` | `60.0` | Seconds between the awake floor's free-space checks. |
 
 ### Voice alignment
