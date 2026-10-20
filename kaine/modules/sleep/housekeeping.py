@@ -23,11 +23,10 @@ import logging.handlers
 import math
 import os
 import re
-import shutil
 import stat
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Awaitable, Callable, Sequence
 
 from kaine.config import require_known_keys
@@ -43,19 +42,27 @@ DEFAULT_TIME_ALLOWANCE_S = 60.0
 DAILY_FILENAME_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.jsonl$")
 
 
+def _sha256_fd(fd: int) -> str:
+    """Return the SHA-256 hex digest of ``fd``, read in 1 MiB chunks.
+
+    The descriptor is read to EOF and is not closed.
+    """
+    digest = hashlib.sha256()
+    while True:
+        chunk = os.read(fd, 1024 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _sha256(path: Path) -> str:
     """Return the SHA-256 hex digest of ``path``, read in 1 MiB chunks."""
-    digest = hashlib.sha256()
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     try:
-        while True:
-            chunk = os.read(fd, 1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
+        return _sha256_fd(fd)
     finally:
         os.close(fd)
-    return digest.hexdigest()
 
 
 def rotated_log_backups() -> list[Path]:
@@ -117,8 +124,76 @@ def _check_archive_path(archive: Path, dest: Path) -> None:
             )
 
 
+def _open_archive_dir(archive: Path, rel_dir: PurePath) -> int:
+    """Open ``rel_dir`` under ``archive`` without following symlinks.
+
+    Each path component is opened relative to the descriptor of the
+    preceding directory. Missing directories are created with mode 0o700.
+    A symlink anywhere in the path raises ``ArchiveRefused``.
+    """
+    if rel_dir.is_absolute():
+        raise ArchiveRefused(
+            f"archive relative directory must be relative: {rel_dir}"
+        )
+
+    opened: list[int] = []
+    current = -1
+    try:
+        current = os.open(archive, os.O_RDONLY | os.O_DIRECTORY)
+        for part in rel_dir.parts:
+            if part in (".", ".."):
+                raise ArchiveRefused(
+                    f"invalid archive directory component: {part}"
+                )
+            try:
+                nxt = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=current,
+                )
+            except FileNotFoundError:
+                try:
+                    os.mkdir(part, 0o700, dir_fd=current)
+                except FileExistsError:
+                    nxt = os.open(
+                        part,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                        dir_fd=current,
+                    )
+                else:
+                    nxt = os.open(
+                        part,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                        dir_fd=current,
+                    )
+            opened.append(current)
+            current = nxt
+        ret = current
+        current = -1
+        return ret
+    except OSError as exc:
+        raise ArchiveRefused(
+            f"cannot open archive directory: {archive / rel_dir}: {exc}"
+        ) from exc
+    finally:
+        for fd in opened:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if current >= 0:
+            try:
+                os.close(current)
+            except OSError:
+                pass
+
+
 def _same_file(a: Path, b: Path) -> bool:
-    """Return whether ``a`` and ``b`` are the same inode."""
+    """Return whether the files ``a`` and ``b`` refer to are the same inode.
+
+    Links are followed, which is what the export needs to catch a
+    destination that refers to the source.
+    """
     try:
         a_stat = os.stat(a)
         b_stat = os.stat(b)
@@ -625,6 +700,7 @@ class Housekeeper:
 
         def _copy_and_remove() -> int:
             src_digest = _sha256(src)
+            src_stat = os.lstat(src)
 
             _check_archive_path(archive, dest)
             if _same_file(dest, src):
@@ -632,97 +708,152 @@ class Housekeeper:
                     f"archive destination is the same file as the source: {dest}"
                 )
 
-            if os.path.lexists(dest):
-                try:
-                    dest_st = os.lstat(dest)
-                except OSError as exc:
-                    raise ArchiveRefused(
-                        f"cannot stat archive destination: {dest}: {exc}"
-                    ) from exc
-                if stat.S_ISREG(dest_st.st_mode):
-                    if _sha256(dest) == src_digest:
-                        return _unlink_regular(src)
-                    raise OSError(f"archive copy differs: {dest}")
-                raise ArchiveRefused(
-                    f"archive destination is not a regular file: {dest}"
-                )
-
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            _check_archive_path(archive, dest)
-
-            temp = dest.with_suffix(dest.suffix + ".part")
-            if os.path.lexists(temp):
-                try:
-                    temp_st = os.lstat(temp)
-                except OSError as exc:
-                    raise ArchiveRefused(
-                        f"cannot stat temporary archive file: {temp}: {exc}"
-                    ) from exc
-                if stat.S_ISREG(temp_st.st_mode):
-                    _unlink_regular(temp)
-                else:
-                    raise ArchiveRefused(
-                        f"temporary archive file is not regular: {temp}"
-                    )
-
-            src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
+            dir_fd = _open_archive_dir(
+                archive, dest.relative_to(archive).parent
+            )
             try:
+                # Existing destination: a regular file with the same digest
+                # can replace the local copy.
+                try:
+                    dest_st = os.lstat(dest.name, dir_fd=dir_fd)
+                except FileNotFoundError:
+                    dest_st = None
+
+                if dest_st is not None:
+                    if not stat.S_ISREG(dest_st.st_mode):
+                        raise ArchiveRefused(
+                            f"archive destination is not a regular file: {dest}"
+                        )
+                    if (dest_st.st_dev, dest_st.st_ino) == (
+                        src_stat.st_dev,
+                        src_stat.st_ino,
+                    ):
+                        raise ArchiveRefused(
+                            f"archive destination is the same file as the source: {dest}"
+                        )
+                    dest_fd = os.open(
+                        dest.name,
+                        os.O_RDONLY | os.O_NOFOLLOW,
+                        dir_fd=dir_fd,
+                    )
+                    try:
+                        if _sha256_fd(dest_fd) == src_digest:
+                            return _unlink_regular(src)
+                    finally:
+                        os.close(dest_fd)
+                    raise OSError(f"archive copy differs: {dest}")
+
+                # Remove a leftover temporary file, but refuse anything else.
+                temp_name = dest.name + ".part"
+                try:
+                    temp_st = os.lstat(temp_name, dir_fd=dir_fd)
+                except FileNotFoundError:
+                    temp_st = None
+
+                if temp_st is not None:
+                    if not stat.S_ISREG(temp_st.st_mode):
+                        raise ArchiveRefused(
+                            f"temporary archive file is not regular: {dest}"
+                        )
+                    os.unlink(temp_name, dir_fd=dir_fd)
+
+                # Create and copy the temporary file through the directory
+                # descriptor so no archive path component is re-traversed by
+                # name after the up-front check.
+                src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
+                try:
+                    temp_fd = os.open(
+                        temp_name,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                        0o600,
+                        dir_fd=dir_fd,
+                    )
+                    try:
+                        while True:
+                            chunk = os.read(src_fd, 1024 * 1024)
+                            if not chunk:
+                                break
+                            view = memoryview(chunk)
+                            while view:
+                                written = os.write(temp_fd, view)
+                                view = view[written:]
+                        os.fsync(temp_fd)
+                    finally:
+                        os.close(temp_fd)
+                finally:
+                    os.close(src_fd)
+
+                # Re-open the temp descriptor to apply source metadata.
                 temp_fd = os.open(
-                    temp,
-                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                    0o600,
+                    temp_name,
+                    os.O_RDONLY | os.O_NOFOLLOW,
+                    dir_fd=dir_fd,
                 )
                 try:
-                    while True:
-                        chunk = os.read(src_fd, 1024 * 1024)
-                        if not chunk:
-                            break
-                        view = memoryview(chunk)
-                        while view:
-                            written = os.write(temp_fd, view)
-                            view = view[written:]
-                    os.fsync(temp_fd)
+                    os.fchmod(temp_fd, src_stat.st_mode)
+                    os.utime(
+                        temp_fd,
+                        ns=(src_stat.st_atime_ns, src_stat.st_mtime_ns),
+                    )
                 finally:
                     os.close(temp_fd)
-            finally:
-                os.close(src_fd)
 
-            shutil.copystat(src, temp, follow_symlinks=False)
-            if _sha256(temp) != src_digest:
-                _unlink_regular(temp)
-                raise OSError(
-                    f"checksum mismatch after copying {src} to {temp}"
+                # Verify the temp file checksum before atomically replacing
+                # the destination.
+                temp_fd = os.open(
+                    temp_name,
+                    os.O_RDONLY | os.O_NOFOLLOW,
+                    dir_fd=dir_fd,
                 )
+                try:
+                    if _sha256_fd(temp_fd) != src_digest:
+                        os.unlink(temp_name, dir_fd=dir_fd)
+                        raise OSError(
+                            f"checksum mismatch after copying {src} to {dest}"
+                        )
+                finally:
+                    os.close(temp_fd)
 
-            os.replace(temp, dest)
-
-            dir_fd = os.open(dest.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
+                os.replace(
+                    temp_name, dest.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd
+                )
                 os.fsync(dir_fd)
+
+                # Re-verify the destination after the replace.
+                try:
+                    dest_st = os.lstat(dest.name, dir_fd=dir_fd)
+                except OSError as exc:
+                    raise ArchiveRefused(
+                        f"cannot re-verify archive destination: {dest}: {exc}"
+                    ) from exc
+                if not stat.S_ISREG(dest_st.st_mode):
+                    raise ArchiveRefused(
+                        f"archive destination is not a regular file after move: {dest}"
+                    )
+                if (dest_st.st_dev, dest_st.st_ino) == (
+                    src_stat.st_dev,
+                    src_stat.st_ino,
+                ):
+                    raise ArchiveRefused(
+                        f"archive destination is the same file as the source: {dest}"
+                    )
+
+                dest_fd = os.open(
+                    dest.name,
+                    os.O_RDONLY | os.O_NOFOLLOW,
+                    dir_fd=dir_fd,
+                )
+                try:
+                    if _sha256_fd(dest_fd) != src_digest:
+                        raise ArchiveRefused(
+                            f"archive copy checksum changed after move: {dest}"
+                        )
+                finally:
+                    os.close(dest_fd)
+
+                return _unlink_regular(src)
             finally:
                 os.close(dir_fd)
-
-            _check_archive_path(archive, dest)
-            try:
-                dest_st = os.lstat(dest)
-            except OSError as exc:
-                raise ArchiveRefused(
-                    f"cannot re-verify archive destination: {dest}: {exc}"
-                ) from exc
-            if not stat.S_ISREG(dest_st.st_mode):
-                raise ArchiveRefused(
-                    f"archive destination is not a regular file after move: {dest}"
-                )
-            if _same_file(dest, src):
-                raise ArchiveRefused(
-                    f"archive destination is the same file as the source: {dest}"
-                )
-            if _sha256(dest) != src_digest:
-                raise ArchiveRefused(
-                    f"archive copy checksum changed after move: {dest}"
-                )
-
-            return _unlink_regular(src)
 
         return await asyncio.to_thread(_copy_and_remove)
 

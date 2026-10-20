@@ -35,6 +35,8 @@ def _set_data_root(tmp_path):
 
 
 def _archive_config(tmp_path, **kwargs):
+    # The archive is a volume the operator mounts, so it exists before any export.
+    (tmp_path / "archive").mkdir(exist_ok=True)
     return HousekeepingConfig(archive_dir=str(tmp_path / "archive"), **kwargs)
 
 

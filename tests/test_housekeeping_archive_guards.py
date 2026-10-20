@@ -39,6 +39,8 @@ def _digest(data: bytes) -> str:
 
 
 def _make_housekeeper(tmp_path):
+    # The archive is a volume the operator mounts, so it exists before any export.
+    (tmp_path / "archive").mkdir(exist_ok=True)
     return Housekeeper(
         HousekeepingConfig(disk_budget_bytes=1, archive_dir=str(tmp_path / "archive")),
         log_backups=lambda: [],
@@ -110,7 +112,7 @@ def test_export_refuses_same_file_hard_link(rooted):
     assert src.read_bytes() == _STUDY_BYTES
 
 
-def test_export_refuses_part_symlink_bypassing_lexists(rooted, monkeypatch):
+def test_export_refuses_part_symlink_bypassing_the_precheck(rooted, monkeypatch):
     tmp_path = rooted
     hk = _make_housekeeper(tmp_path)
     src = _study_file(tmp_path)
@@ -122,16 +124,19 @@ def test_export_refuses_part_symlink_bypassing_lexists(rooted, monkeypatch):
     outside.write_bytes(b"outside bytes\n")
     temp = dest.with_suffix(dest.suffix + ".part")
     os.symlink(outside, temp)
-    real_lexists = os.path.lexists
+    real_lstat = os.lstat
 
-    def fake_lexists(path):
-        if os.fspath(path) == os.fspath(temp):
-            return False
-        return real_lexists(path)
+    def fake_lstat(path, *args, dir_fd=None, **kwargs):
+        # Hide the planted link from the pre-check (by name under the
+        # destination directory descriptor, or by full path), so only the
+        # exclusive, no-follow open of the temp file can stop the copy.
+        if os.fspath(path) in (temp.name, os.fspath(temp)):
+            raise FileNotFoundError(path)
+        if dir_fd is None:
+            return real_lstat(path, *args, **kwargs)
+        return real_lstat(path, *args, dir_fd=dir_fd, **kwargs)
 
-    monkeypatch.setattr(
-        "kaine.modules.sleep.housekeeping.os.path.lexists", fake_lexists
-    )
+    monkeypatch.setattr("kaine.modules.sleep.housekeeping.os.lstat", fake_lstat)
     with pytest.raises((OSError, ArchiveRefused)):
         asyncio.run(hk._export_to_archive(src, root, archive))
     assert outside.read_bytes() == b"outside bytes\n"
@@ -183,8 +188,11 @@ def test_export_refuses_corrupted_replace_reverification(rooted, monkeypatch):
 
     def corrupting_replace(src_path, dst_path, *, src_dir_fd=None, dst_dir_fd=None):
         real_replace(src_path, dst_path, src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd)
-        with open(dst_path, "wb") as f:
-            f.write(b"corrupted bytes\n")
+        fd = os.open(dst_path, os.O_WRONLY | os.O_TRUNC, dir_fd=dst_dir_fd)
+        try:
+            os.write(fd, b"corrupted bytes\n")
+        finally:
+            os.close(fd)
 
     monkeypatch.setattr(
         "kaine.modules.sleep.housekeeping.os.replace", corrupting_replace

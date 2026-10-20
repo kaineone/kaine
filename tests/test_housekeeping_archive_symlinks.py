@@ -37,6 +37,8 @@ def _digest(data: bytes) -> str:
 
 
 def _make_housekeeper(tmp_path):
+    # The archive is a volume the operator mounts, so it exists before any export.
+    (tmp_path / "archive").mkdir(exist_ok=True)
     return Housekeeper(
         HousekeepingConfig(disk_budget_bytes=1, archive_dir=str(tmp_path / "archive")),
         log_backups=lambda: [],

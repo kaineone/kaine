@@ -167,6 +167,7 @@ async def test_real_housekeeper_archives_closed_files(bus, tmp_path):
         (events_dir / "events-2024-01-01.jsonl").write_text("old1\n")
         (events_dir / "events-2024-01-02.jsonl").write_text("old2\n")
 
+        (tmp_path / "archive").mkdir(exist_ok=True)
         hk_config = HousekeepingConfig(
             enabled=True,
             disk_budget_bytes=1,
