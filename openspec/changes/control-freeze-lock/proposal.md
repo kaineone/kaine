@@ -16,5 +16,5 @@ The cycle-control file control.json holds a freeze stack written by two processe
 
 ## Impact
 
-- control-freeze-lock0
-- Behaviour: control-freeze-lock1
+- the atomic JSON writer (state_io.write_json_atomic), kaine/dashboard/cycle_control.py, the cycle's control writer, tests.
+- Behaviour: none, except that a concurrent update can no longer drop a freeze.
