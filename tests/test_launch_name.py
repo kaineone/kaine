@@ -938,7 +938,7 @@ def test_lineage_names_round_trip_on_disk(tmp_path):
     child = fork_identity(root)
     path = tmp_path / "e.json"
     save_identity(child, path)
-    assert json.loads(path.read_text())["lineage_names"] == {root.entity_id: "Kaine Nova"}
+    assert json.loads(path.read_text())["lineage_names"] == [[root.entity_id, "Kaine Nova"]]
     assert load_identity(path) == child
 
 
@@ -949,17 +949,56 @@ def test_an_unnamed_parent_adds_no_lineage_entry():
 
 
 def test_lineage_names_are_validated():
-    base = {**_FIVE, "lineage": ["ent-" + "b" * 32]}
-    ok = {**base, "lineage_names": {"ent-" + "b" * 32: "Kaine Nova"}}
-    assert EntityIdentity.from_dict(ok).lineage_names
+    b_id, c_id = "ent-" + "b" * 32, "ent-" + "c" * 32
+    base = {**_FIVE, "lineage": [b_id]}
+    assert EntityIdentity.from_dict({**base, "lineage_names": [[b_id, "Kaine Nova"]]}).lineage_names
     for bad in (
-        {"ent-" + "b" * 32: "bad\nname"},
-        {"ent-" + "c" * 32: "Kaine Nova"},  # not in the lineage
-        {},
-        {"ent-" + "b" * 32: 5},
+        [[b_id, "bad\nname"]],
+        [[c_id, "Kaine Nova"]],  # not in the lineage
+        [],
+        [[b_id, 5]],
+        [[b_id, "Kaine Nova"], [b_id, "Kaine Zed"]],  # duplicate
+        {b_id: "Kaine Nova"},  # the old mapping form
     ):
         with pytest.raises(IdentityError):
             EntityIdentity.from_dict({**base, "lineage_names": bad})
+
+
+def test_lineage_names_keep_lineage_order_across_a_reload(tmp_path):
+    # ids whose sorted order is the opposite of the lineage order
+    z, a = "ent-" + "f" * 32, "ent-" + "0" * 32
+    ident = EntityIdentity(
+        entity_id="ent-" + "5" * 32,
+        lineage=(z, a),
+        minted_at=1.0,
+        name="Kaine Nova",
+        lineage_names=((z, "Kaine Zed"), (a, "Kaine Aurora")),
+    )
+    path = tmp_path / "e.json"
+    save_identity(ident, path)
+    loaded = load_identity(path)
+    assert loaded == ident
+    assert [p[0] for p in loaded.lineage_names] == [z, a]
+
+
+def test_lineage_names_in_the_wrong_order_are_rejected():
+    z, a = "ent-" + "f" * 32, "ent-" + "0" * 32
+    base = {**_FIVE, "lineage": [z, a]}
+    with pytest.raises(IdentityError):
+        EntityIdentity.from_dict({**base, "lineage_names": [[a, "Kaine Aurora"], [z, "Kaine Zed"]]})
+    with pytest.raises(IdentityError):
+        EntityIdentity(
+            entity_id="ent-" + "5" * 32, lineage=(z, a), lineage_names=((a, "Kaine A"), (z, "Kaine Z"))
+        )
+
+
+def test_fork_of_an_unnamed_parent_records_its_known_name():
+    parent = mint_identity()
+    child = fork_identity(parent, avoid_names=["Kaine Nova"], parent_known_name="Kaine Nova")
+    assert child.lineage_names == ((parent.entity_id, "Kaine Nova"),)
+    assert child.name != "Kaine Nova"
+    bad = fork_identity(parent, parent_known_name="bad\nname")
+    assert bad.lineage_names == ()
 
 
 def test_sidecar_stays_entity_id_and_lineage_only(tmp_path):
@@ -1054,3 +1093,49 @@ def test_a_parent_without_lineage_names_still_excludes_its_own_name(monkeypatch)
     assert parent.lineage_names == ()
     for seed in range(20):
         assert fork_identity(parent, rng=random.Random(seed)).name == "Kaine Nova"
+
+
+def test_unnamed_parent_fork_via_manager_records_the_document_name(tmp_path):
+    stub = type(
+        "S",
+        (),
+        {
+            "name": "self_model",
+            "serialize": lambda self: {"model": SelfModelDocument(name="Kaine Nova").to_json()},
+            "deserialize": lambda self, s: None,
+        },
+    )()
+    reg = type("R", (), {"all_modules": lambda self: [stub]})()
+    parent_identity = mint_identity()
+    fm = ForkManager(tmp_path / "forks", identity_source=lambda: parent_identity)
+    parent = fm.snapshot(reg)
+    child = EntityIdentity.from_dict(fm.fork(parent.id).metadata["identity"])
+    assert child.lineage_names == ((parent_identity.entity_id, "Kaine Nova"),)
+
+
+def test_decommission_covers_the_identity_lock_file(tmp_path):
+    from kaine.lifecycle.decommission import capture_backup, delete_entity_state
+    from kaine.lifecycle.divergence import DivergenceAssessment
+
+    state_root = tmp_path / "state"
+    ident = EntityIdentity(entity_id="ent-" + "7" * 32, minted_at=1.0, name="Kaine Nova")
+    save_identity(ident, state_root / "identity" / "entity.json")
+    lock = state_root / "identity" / "entity.json.lock"
+    assert lock.exists()  # created by the locked save
+    result = capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},
+        out_root=tmp_path / "backups",
+        entity_name="test",
+        assessment=DivergenceAssessment(diverged=True, signals={}),
+    )
+    assert result.ok
+    names = {p.name for p in (result.backup_path / "locations" / "identity").rglob("*") if p.is_file()}
+    assert {"entity.json", "entity.json.lock"} <= names
+    delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg={"episodic_memory": {"backend": "inmemory"}, "social_cognition": {"backend": "inmemory"}},
+    )
+    assert not lock.exists()
+    assert not (state_root / "identity" / "entity.json").exists()

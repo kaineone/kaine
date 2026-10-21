@@ -130,6 +130,8 @@ class EntityIdentity:
                 and _valid_name(p[1])
                 for p in self.lineage_names
             )
+            or [p[0] for p in self.lineage_names]
+            != [x for x in self.lineage if x in {p[0] for p in self.lineage_names}]
             or len({p[0] for p in self.lineage_names}) != len(self.lineage_names)
         ):
             raise IdentityError(f"invalid lineage_names: {self.lineage_names!r}")
@@ -152,7 +154,9 @@ class EntityIdentity:
         if self.name is not None:
             out["name"] = self.name
         if self.lineage_names:
-            out["lineage_names"] = {eid: nm for eid, nm in self.lineage_names}
+            # An ordered list of [entity_id, name] pairs in lineage order; a JSON
+            # object would be re-sorted by key on save and lose the order.
+            out["lineage_names"] = [[eid, nm] for eid, nm in self.lineage_names]
         return out
 
     @classmethod
@@ -166,14 +170,18 @@ class EntityIdentity:
             raise IdentityError(
                 f"identity dict has unexpected keys: {keys ^ required}"
             )
-        names_raw = raw.get("lineage_names", {})
-        if not isinstance(names_raw, Mapping) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in names_raw.items()
+        names_raw = raw.get("lineage_names", [])
+        if not isinstance(names_raw, (list, tuple)) or not all(
+            isinstance(p, (list, tuple))
+            and len(p) == 2
+            and isinstance(p[0], str)
+            and isinstance(p[1], str)
+            for p in names_raw
         ):
-            raise IdentityError("lineage_names must map entity ids to names")
+            raise IdentityError("lineage_names must be a list of [entity_id, name] pairs")
         if "lineage_names" in raw and not names_raw:
             raise IdentityError("lineage_names must not be empty when present")
-        lineage_names = tuple(names_raw.items())
+        lineage_names = tuple((p[0], p[1]) for p in names_raw)
         name = raw.get("name")
         if "name" in raw and not isinstance(name, str):
             raise IdentityError("name must be a string when present")
@@ -367,13 +375,15 @@ def fork_identity(
     now: Callable[[], float] = time.time,
     rng: random.Random | None = None,
     avoid_names: Iterable[str] = (),
+    parent_known_name: str | None = None,
 ) -> EntityIdentity:
     """Create a fork identity: new minted ID, lineage extended by the parent.
 
     The fork is a new entity and gets its own newly drawn name, never the
     parent's, never one named in the parent's ``lineage_names`` and never one of ``avoid_names`` (for an unnamed parent, the name in
     its self-model document). The parent's name is not copied into ``name``; it
-    is recorded in ``lineage_names`` next to the parent's ID when known, and the
+    is recorded in ``lineage_names`` next to the parent's ID when known (for an unnamed
+    parent, ``parent_known_name``, the name in its self-model state), and the
     earlier ancestors' entries are kept.
     """
     from kaine.modules.self_model.document import generate_launch_name
@@ -383,8 +393,9 @@ def fork_identity(
     if parent.name:
         avoid.add(parent.name)
     names = parent.lineage_names
-    if parent.name:
-        names = names + ((parent.entity_id, parent.name),)
+    recorded = parent.name or (parent_known_name if _valid_name(parent_known_name) else None)
+    if recorded:
+        names = names + ((parent.entity_id, recorded),)
     return EntityIdentity(
         entity_id="ent-" + uuid.uuid4().hex,
         lineage=parent.lineage + (parent.entity_id,),

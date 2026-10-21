@@ -289,10 +289,14 @@ class ForkManager:
         # not draw it.
         avoid = [n for n in (_self_model_state_name(parent.modules),) if n]
         if parent_identity is not None:
-            child_identity = fork_identity(parent_identity, avoid_names=avoid)
+            child_identity = fork_identity(
+                parent_identity, avoid_names=avoid, parent_known_name=(avoid[0] if avoid else None)
+            )
         else:
             child_identity = fork_identity(
-                legacy_identity(f"snapshot:{parent.id}"), avoid_names=avoid
+                legacy_identity(f"snapshot:{parent.id}"),
+                avoid_names=avoid,
+                parent_known_name=(avoid[0] if avoid else None),
             )
 
         shed_set = set(shed)
