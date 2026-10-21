@@ -966,7 +966,7 @@ def _print_self_facts_table(rows: list[dict], heading: str) -> None:
         by_arm.setdefault(row.get("variant", "unknown"), []).append(row)
 
     def fmt_rate(value: float) -> str:
-        if value != value:
+        if math.isnan(value):
             return "N/A"
         return f"{value * 100:.1f}"
 
@@ -1008,7 +1008,7 @@ def _print_self_facts_table(rows: list[dict], heading: str) -> None:
 def _score_cmd(args: argparse.Namespace) -> None:
     def fmt(triple: tuple[float, float, float]) -> str:
         point, lo, hi = triple
-        if point != point:
+        if math.isnan(point):
             return "N/A"
         return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
 
@@ -1035,7 +1035,7 @@ def _score_cmd(args: argparse.Namespace) -> None:
         failures = decision["failures"]
 
         def pct(value: float) -> str:
-            if value != value:
+            if math.isnan(value):
                 return "N/A"
             return f"{value * 100:.1f}"
 
