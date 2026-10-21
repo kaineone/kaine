@@ -4,7 +4,9 @@ Sustained distress has two detectors with separate, equal config keys, and the p
 
 ## What Changes
 
-- One sustained-distress episode adds one count to the repeat window, whichever detector reports it first.\n- The two detectors read their thresholds and windows from one config source. The old duplicate key is still accepted with a warning when it agrees, and refused at boot when it disagrees.\n- The repeat window's length and threshold are unchanged.
+- One sustained-distress episode adds one count to the repeat window, whichever detector reports it first.
+- The two detectors read their thresholds and windows from one config source. The old duplicate key is still accepted with a warning when it agrees, and refused at boot when it disagrees.
+- The repeat window's length and threshold are unchanged.
 
 ## Capabilities
 
