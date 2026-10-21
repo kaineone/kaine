@@ -61,7 +61,7 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | Store or file | Contents | Protection |
 |---|---|---|
 | `state/self_model/self_model.json` | Name, values, norms, identity history | App-layer AES-256-GCM |
-| `state/identity/entity.json` | Entity id and lineage | Deliberately plaintext so it can be located before any key is available |
+| `state/identity/entity.json` | Entity id, lineage and launch name | Deliberately plaintext so it can be located before any key is available |
 | `state/forks/<id>/snapshot.json` | Fork/merge bundle: every module's serialized numeric state, including encrypted world model weights | App-layer AES-256-GCM; key must transfer out-of-band for cross-host use |
 | `data/evaluation/<observer>/` | Sidecar observer JSONL (PLV series, welfare counts, etc.) | App-layer AES-256-GCM per line |
 | `state/world_model/world_model.ckpt` | World-model weights | App-layer AES-256-GCM |

@@ -98,9 +98,9 @@ async def test_interoception_fatigue_triggers_maintenance(bus: AsyncBus, tmp_pat
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -136,9 +136,9 @@ async def test_interoception_regulation_request_maintenance_triggers(bus: AsyncB
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -174,9 +174,9 @@ async def test_interoception_regulation_other_action_does_not_trigger(bus: Async
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -207,9 +207,9 @@ async def test_interoception_fatigue_not_crossed_does_not_trigger(bus: AsyncBus,
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -241,9 +241,9 @@ async def test_affect_regulation_request_maintenance_triggers(bus: AsyncBus, tmp
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -279,9 +279,9 @@ async def test_affect_regulation_other_tier_does_not_trigger(bus: AsyncBus, tmp_
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 
@@ -320,9 +320,9 @@ async def test_affect_request_ignored_when_fatigue_trigger_off(bus: AsyncBus, tm
     sleep_fired = asyncio.Event()
     original_run = sleep._run_pipeline
 
-    async def _mock_run():
+    async def _mock_run(trigger=None):
         sleep_fired.set()
-        return await original_run()
+        return await original_run(trigger=trigger)
 
     sleep._run_pipeline = _mock_run
 

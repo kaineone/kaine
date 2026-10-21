@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,27 @@ _COUNT_FIELDS = {
     "replay_overload": "replay_overload_count",
     "sustained_interoceptive_distress": "sustained_interoceptive_distress_count",
 }
+
+
+# Mirrors ``_DEFICIT_DRIVES`` and ``_INTEREST_DRIVES`` in
+# ``kaine/evaluation/observers/welfare_observer.py``; this boundary-neutral
+# module may not import them, and a test pins these constants equal.
+AFFECT_DEFICIT_DRIVES: tuple[str, ...] = ("boredom", "social_drive", "restlessness")
+AFFECT_INTEREST_DRIVES: tuple[str, ...] = ("curiosity",)
+
+AFFECT_WELFARE_KEYS: tuple[str, ...] = tuple(
+    [
+        "awake_seconds",
+        "negative_valence_bar",
+        "negative_valence_share",
+    ]
+    + [f"{drive}_uncontrolled_share" for drive in AFFECT_DEFICIT_DRIVES]
+    + [f"{drive}_uncontrolled_per_awake_hour" for drive in AFFECT_DEFICIT_DRIVES]
+    + [f"{drive}_deprivation_share" for drive in AFFECT_DEFICIT_DRIVES]
+    + [f"{drive}_sleep_reset_ends" for drive in AFFECT_DEFICIT_DRIVES]
+    + [f"{drive}_open_crossings" for drive in AFFECT_DEFICIT_DRIVES]
+    + [f"{drive}_interest_share" for drive in AFFECT_INTEREST_DRIVES]
+)
 
 
 def _get_encryptor() -> Any:
@@ -210,3 +232,62 @@ def welfare_counts_from_jsonl(logs_root: Path) -> dict[str, Any]:
     }
     counts["source"] = "jsonl"
     return counts | advisory_state
+
+
+def affect_welfare_from_jsonl(logs_root: Path) -> dict[str, Any] | None:
+    """Newest ``affect_welfare`` record from the welfare rollup.
+
+    Walks welfare rollup files newest first and each file's lines last to
+    first, tracking whether a reset advisory has been passed. Returns the
+    first ``affect_welfare`` record found, reduced to ``ts``, ``current_run``,
+    and the numeric measures in ``AFFECT_WELFARE_KEYS``. Returns None when the
+    directory is missing, no record exists, or anything raises.
+    """
+    try:
+        welfare_dir = Path(logs_root) / "welfare"
+        if not welfare_dir.exists():
+            return None
+
+        encryptor = _get_encryptor()
+        files = sorted(welfare_dir.glob("welfare-*.jsonl"), reverse=True)
+        reset_seen = False
+
+        for jsonl in files:
+            try:
+                text = jsonl.read_text(encoding="utf-8")
+            except Exception:
+                log.debug("skipped welfare rollup %s", jsonl, exc_info=True)
+                continue
+            for raw_line in reversed(text.splitlines()):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                entry = _decode_line(line, encryptor)
+                if not isinstance(entry, dict):
+                    continue
+
+                if entry.get("advisory") == ADVISORY_RESET:
+                    reset_seen = True
+                    continue
+
+                if entry.get("record") != "affect_welfare":
+                    continue
+
+                result: dict[str, Any] = {}
+                ts = entry.get("ts")
+                result["ts"] = ts if isinstance(ts, str) else None
+                result["current_run"] = not reset_seen
+
+                for key in AFFECT_WELFARE_KEYS:
+                    value = entry.get(key)
+                    if _is_number(value) and math.isfinite(value):
+                        result[key] = value
+                    else:
+                        result[key] = None
+
+                return result
+
+        return None
+    except Exception:
+        log.debug("affect_welfare_from_jsonl failed", exc_info=True)
+        return None

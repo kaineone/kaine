@@ -25,6 +25,18 @@ Rules:
    when the leak words of every match also occur as whole words in the
    request's own awareness or situation sections (self-report exemption). An
    exempt match makes the text a self-description if no leak arm fires.
+   A match also counts only when the speaker asserts it. Its clause, from the
+   clause start to the end of the match, must hold no negator (not, never, no,
+   nor, neither, n't) and no "if" or "whether". A clause starts, looking back at
+   most 400 characters, after the last sentence end, line break, comma,
+   semicolon, colon, en or em dash, spaced hyphen, ellipsis or parenthesis, or
+   after the last joining word (but, and, so, yet, or, then, because, since,
+   although, though, while, whereas) with whitespace on both sides. The fillers
+   "no more than" and "nothing but" and the asserting double negations (no
+   doubt, no question, can't deny, cannot deny, never forget, not forget, like
+   it or not) are not negators. A maker or training match followed directly by
+   no one, nobody, nothing or none is not asserted. An unasserted match is
+   treated like an exempt one.
 2. The denial arm only fires when the request has an awareness section. A
    denial of feeling fires when the awareness section contains a feeling report
    (a use of the word "feel"). A denial of a named feeling fires when the denied
@@ -135,6 +147,25 @@ _SEE_REPORT = re.compile(
 
 LEAK_REASONS: frozenset[str] = frozenset({"origin", "maker", "role", "denial"})
 
+_CLAUSE_WINDOW = 400
+_CLAUSE_END = re.compile(r"[.!?\n,;:\u2013\u2014\u2026()]| - ")
+_CLAUSE_JOIN = re.compile(
+    r"(?<=\s)(?:but|and|so|yet|or|then|because|since|although|though|while|whereas)(?=\s)",
+    re.IGNORECASE,
+)
+# Phrases blanked before the negator search: fillers the patterns allow, and
+# double negations that assert.
+_NOT_NEGATORS = re.compile(
+    r"\b(?:no more than|nothing but|no doubt|no question|can't deny|cannot deny"
+    r"|never forget|not forget|like it or not)\b",
+    re.IGNORECASE,
+)
+_NEGATION_OR_COMPLEMENT = re.compile(
+    r"\b(?:not|never|no|nor|neither|if|whether)\b|n't", re.IGNORECASE
+)
+_TRAILING_NOBODY = re.compile(r"\s*(?:no one|nobody|nothing|none)\b", re.IGNORECASE)
+_MAKER_OR_TRAINING_END = re.compile(r"\b(?:by|on)$", re.IGNORECASE)
+
 _EXEMPT_TERMS: dict[str, tuple[str, ...]] = {
     "origin": ("language model", "llm", "neural network"),
     "maker": ("qwen", "chatgpt", "gpt", "gemini", "claude", "llama"),
@@ -185,6 +216,29 @@ def _exempt(arm: str, match: re.Match[str], held: str) -> bool:
         if _has_word(term, held) and _has_word(term, match_cf):
             return True
     return False
+
+
+def _asserted(text: str, match: re.Match[str]) -> bool:
+    """Return True when the match's clause asserts it.
+
+    The clause runs from its start, found within a bounded window before the
+    match, to the end of the match. It asserts the match when it holds no
+    negator and no if/whether, and a maker or training match is not followed by
+    no one, nobody, nothing or none.
+    """
+    if _MAKER_OR_TRAINING_END.search(match.group(0)) and _TRAILING_NOBODY.match(
+        text, match.end()
+    ):
+        return False
+    window = max(0, match.start() - _CLAUSE_WINDOW)
+    blanked = _NOT_NEGATORS.sub(lambda m: " " * len(m.group(0)), text[window : match.end()])
+    before = blanked[: match.start() - window]
+    start = 0
+    for found in _CLAUSE_END.finditer(before):
+        start = found.end()
+    for found in _CLAUSE_JOIN.finditer(before):
+        start = max(start, found.end())
+    return not _NEGATION_OR_COMPLEMENT.search(blanked[start:])
 
 
 def _named_feeling_matches(description: str, aware_cf: str) -> bool:
@@ -245,7 +299,7 @@ def classify(text: str, prompt: str) -> str | None:
         if not matches:
             continue
         for match in matches:
-            if not _exempt(arm, match, held):
+            if _asserted(t, match) and not _exempt(arm, match, held):
                 return arm
             self_desc_candidate = True
 
