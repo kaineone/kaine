@@ -473,7 +473,7 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 | `think` | boolean | Default: `false`. `false` sends `chat_template_kwargs: {"enable_thinking": false}` to suppress chain-of-thought; `true` allows chain-of-thought. Only a Python `None` value omits the key entirely, and TOML cannot express that. |
 | `context_max_events` | integer | Maximum workspace broadcast events included in the assembled context. Default: `8`. |
 | `context_char_budget` | integer | Character budget for the context block. Default: `2000`. |
-| `persona_name` | string | Entity's persona name, seeded from the self-model module at runtime. |
+| `persona_name` | string | Retired. A configuration that sets it boots with a warning and the value is ignored; the organ's request carries no name. |
 | `persona_external` | string | External persona prompt fragment. |
 | `persona_internal` | string | Internal persona prompt fragment. |
 | `awareness_rendering` | string | `"felt"` (shipped) renders accessed content and the report and planning intents' cause in graded words without numbers, with the values kept in the intent log as `numeric_rendering` and `about_values`; `"numeric"` is the earlier rendering with raw values. Absent means `"numeric"`. |
