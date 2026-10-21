@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| floor-missing-sink-once | 0/2 (0%) | The awake floor warns once per missing volume, not every check |
+| floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
 | duplicate-method-guard | 3/3 (100%) | The duplicate-name guard also checks methods in classes and nested functions |
 | nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |

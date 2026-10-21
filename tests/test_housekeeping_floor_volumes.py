@@ -222,3 +222,61 @@ async def test_second_volume_recorded_while_suspended(tmp_path, monkeypatch):
     assert [a["action"] for a in actions] == ["resume"]
     assert not floor._gate.suspended
     assert floor._suspending_volumes == set()
+
+
+def _make_floor(volumes):
+    return AwakeFloor(
+        None,
+        FakePressure(),
+        volumes=volumes,
+        reserve_bytes=0,
+        reserve_share=0.0,
+        period_s=1.0,
+        is_asleep=lambda: False,
+        gate=StudyRecordGate(),
+        disk_usage=lambda p: Usage(total=1000, used=0, free=1000),
+    )
+
+
+def _levels(caplog, level):
+    return [
+        r for r in caplog.records
+        if r.name == "kaine.cycle.housekeeping_floor" and r.levelno == level
+    ]
+
+
+@pytest.mark.asyncio
+async def test_missing_volume_warns_once_then_tracks_changes(tmp_path, caplog):
+    import logging
+
+    path = tmp_path / "sink"
+    floor = _make_floor({"sink": path})
+    caplog.set_level(logging.INFO, logger="kaine.cycle.housekeeping_floor")
+
+    for _ in range(10):
+        assert await floor.check_once() == []
+    assert len(_levels(caplog, logging.WARNING)) == 1
+
+    caplog.clear()
+    path.mkdir()
+    await floor.check_once()
+    await floor.check_once()
+    assert len(_levels(caplog, logging.INFO)) == 1
+    assert not _levels(caplog, logging.WARNING)
+
+    caplog.clear()
+    path.rmdir()
+    for _ in range(3):
+        await floor.check_once()
+    assert len(_levels(caplog, logging.WARNING)) == 1
+
+
+@pytest.mark.asyncio
+async def test_two_missing_volumes_warn_once_each(tmp_path, caplog):
+    import logging
+
+    floor = _make_floor({"a": tmp_path / "a", "b": tmp_path / "b"})
+    caplog.set_level(logging.INFO, logger="kaine.cycle.housekeeping_floor")
+    for _ in range(5):
+        await floor.check_once()
+    assert len(_levels(caplog, logging.WARNING)) == 2
