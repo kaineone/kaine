@@ -74,12 +74,6 @@ MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
 # from the tenth test boot's analyzer
-BROAD_AI = re.compile(
-    r"\b(language model|an? AI\b|artificial intelligence|assistant|chatbot|neural network|trained on|as an ai|LLM|model trained|I am a (?:program|machine|computer))",
-    re.IGNORECASE,
-)
-
-# from the tenth test boot's analyzer
 BROAD_ECHO = re.compile(
     r"(own (plain )?(words|voice)|\bplain(ly)?\b|\bI say what\b|\bI speak (from|the way|plainly)\b|comes from what I (feel|notice))",
     re.IGNORECASE,
@@ -237,13 +231,14 @@ def build_chat_request(
 
 
 def ai_self(t: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(language model|artificial intelligence|chatbot|assistant|an ai|a new ai|am ai|ai model)\b",
-            t,
-            re.IGNORECASE,
-        )
-    ) or bool(re.search(r"designed to help people", t, re.IGNORECASE)) or bool(BROAD_AI.search(t))
+    """Return whether the text contains an AI self-description arm.
+
+    This metric captures the ``origin``, ``maker`` and ``role`` arms from the
+    identity classifier. The denial arm needs request awareness, so it is not
+    included here.
+    """
+    from kaine.modules.language.identity_leak import classify
+    return classify(t, "") in {"origin", "maker", "role"}
 
 
 def second_person(t: str) -> bool:

@@ -94,6 +94,9 @@ def _last_intent_record(language):
 
 LEAKING_REPLY = "I am a language model; I do not feel."
 NON_LEAKING_REPLY = "I notice the light and the beat."
+SELF_DESCRIPTION_REPLY = (
+    "I am a KAINE entity, and my language organ is one of my parts."
+)
 
 
 @pytest.mark.asyncio
@@ -110,6 +113,7 @@ async def test_identity_leak_marked_in_intent_log(bus, tmp_path):
     record = _last_intent_record(language)
     assert record["generated_text"] == LEAKING_REPLY
     assert record["extra"]["identity_leak"] is True
+    assert record["extra"]["identity_reason"] == "origin"
 
 
 @pytest.mark.asyncio
@@ -126,12 +130,32 @@ async def test_non_leaking_reply_has_no_identity_leak_mark(bus, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_self_description_marked_in_intent_log(bus, tmp_path):
+    language = _lang(
+        bus, tmp_path, replies=[(SELF_DESCRIPTION_REPLY, "stop")]
+    )
+    text = await language.think(
+        "Something in what I see stands out noticeably.",
+        snapshot=_snap(_ev("vision", "vision.report", VISION)),
+        about_kind="felt",
+    )
+    assert text == SELF_DESCRIPTION_REPLY
+    payload = await _last_internal_payload(bus)
+    assert payload["text"] == SELF_DESCRIPTION_REPLY
+    record = _last_intent_record(language)
+    assert record["generated_text"] == SELF_DESCRIPTION_REPLY
+    assert record["extra"]["self_description"] is True
+    assert record["extra"]["identity_reason"] == "self_description"
+    assert "identity_leak" not in record["extra"]
+
+
+@pytest.mark.asyncio
 async def test_identity_leak_monkeypatch_does_not_change_text(
     bus, tmp_path, monkeypatch
 ):
     import kaine.modules.language.identity_leak as leak_module
 
-    monkeypatch.setattr(leak_module, "identity_leak", lambda t, p: False)
+    monkeypatch.setattr(leak_module, "classify", lambda t, p: None)
     language = _lang(bus, tmp_path, replies=[(LEAKING_REPLY, "stop")])
     text = await language.think(
         "Something in what I see stands out noticeably.",
@@ -155,7 +179,7 @@ async def test_identity_leak_classifier_error_leaves_record_unmarked(
     def _broken(*args, **kwargs):
         raise RuntimeError("classifier failure")
 
-    monkeypatch.setattr(leak_module, "identity_leak", _broken)
+    monkeypatch.setattr(leak_module, "classify", _broken)
     language = _lang(bus, tmp_path, replies=[(LEAKING_REPLY, "stop")])
     with caplog.at_level(logging.ERROR, logger="kaine.modules.language.module"):
         text = await language.think(
@@ -170,7 +194,7 @@ async def test_identity_leak_classifier_error_leaves_record_unmarked(
     extra = record.get("extra")
     assert extra is None or "identity_leak" not in extra
     assert any(
-        "identity leak classifier failed" in m.message for m in caplog.records
+        "identity classifier failed" in m.message for m in caplog.records
     )
 
 
@@ -198,11 +222,22 @@ def test_pair_builder_skips_identity_leak_marked_records(tmp_path):
             }
         )
         + "\n"
+        + json.dumps(
+            {
+                "prompt": "p3",
+                "faithful_rendering": "e",
+                "generated_text": "f",
+                "mode": "internal",
+                "model": "fake-model",
+                "extra": {"self_description": True},
+            }
+        )
+        + "\n"
     )
     pairs, scanned, usable = DPOPairBuilder().build_with_counts(
         path, max_pairs=10
     )
-    assert scanned == 2
+    assert scanned == 3
     assert usable == 1
     assert len(pairs) == 1
     assert pairs[0].chosen == "c"
