@@ -65,7 +65,7 @@ def test_persona_from_populated_self_model():
         self_model={"name": "Kaine", "values": ["honesty", "curiosity"]},
         mode="external",
     )
-    assert "Kaine" in ctx.system
+    assert "Kaine" not in ctx.system
     assert "honesty" in ctx.system and "curiosity" in ctx.system
 
 
@@ -73,7 +73,7 @@ def test_minimal_persona_on_empty_self_model():
     ctx = ContextAssembler().assemble(about="hi", snapshot=None, self_model={}, mode="external")
     assert ctx.system
     assert "my own plain words" in ctx.system
-    assert "My name is" not in ctx.system  # no name clause when none known
+    assert "My name is" not in ctx.system
 
 
 def test_internal_and_external_framing_differ():

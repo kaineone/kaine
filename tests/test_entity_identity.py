@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -148,7 +149,8 @@ def test_entity_identity_to_dict_lineage_is_list():
     d = child.to_dict()
     assert isinstance(d["lineage"], list)
     assert d["lineage"] == [root.entity_id]
-    assert set(d.keys()) == {"entity_id", "lineage", "origin", "minted_at", "legacy_source"}
+    assert set(d.keys()) == {"entity_id", "lineage", "origin", "minted_at", "legacy_source", "name"}
+    assert set(root.to_dict().keys()) == {"entity_id", "lineage", "origin", "minted_at", "legacy_source"}
 
 
 def test_from_dict_round_trip():
@@ -390,7 +392,10 @@ def test_resolve_spawn_identity_existing_identity(tmp_path):
     save_identity(existing, path)
 
     result = resolve_spawn_identity(tmp_path, now=lambda: 2.0)
-    assert result == existing
+    # An existing identity keeps every field; boot only adds the missing name.
+    assert result.name is not None
+    assert replace(result, name=None) == existing
+    assert resolve_spawn_identity(tmp_path, now=lambda: 3.0) == result
 
 
 def test_history_none_counts_as_lived(tmp_path):

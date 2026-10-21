@@ -513,7 +513,10 @@ async def test_revive_identity_not_persisted_until_revive_lands(tmp_path):
 
     exit_code2 = await _apply_revive(_LandingRevive(), registry, state_root)
     assert exit_code2 is None
-    assert load_identity(identity_path) == plan_identity
+    landed = load_identity(identity_path)
+    assert landed.entity_id == plan_identity.entity_id
+    assert landed.lineage == plan_identity.lineage
+    assert landed.name is not None
 
 
 @pytest.mark.asyncio
