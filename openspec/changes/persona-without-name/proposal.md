@@ -19,3 +19,4 @@ The self-facts replay (#586) tested giving the language organ the entity's launc
 
 - `kaine/modules/language/context.py`, `kaine/modules/language/module.py`, `kaine/boot/factories/language.py`, `docs/09-modules/language.md`, `docs/appendix-a-configuration/modules.md`, tests.
 - Behaviour: with the self-model enabled, or with `persona_name` set, the organ's system text loses its opening name sentence. Otherwise the request is unchanged.
+- Probe conditions: the persona digest changes only for a config that set `persona_name`. The version bump makes every stored individuation reference report `conditions_changed` at its next look, the designed path for a changed persona, as with the earlier bumps.

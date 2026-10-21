@@ -81,3 +81,39 @@ async def test_default_persona_digest_keeps_null_name_slot(bus, tmp_path):
 
 def test_persona_template_version():
     assert PERSONA_TEMPLATE_VERSION == "7"
+
+
+@pytest.mark.asyncio
+async def test_cached_bus_self_model_has_no_name_key(bus, tmp_path):
+    import asyncio
+    from datetime import datetime, timezone
+
+    from kaine.bus import Event
+    from kaine.modules.language import IntentExpressionLog, Language
+
+    await bus.publish(
+        Event(
+            source="self_model",
+            type="self_model.document",
+            payload={"name": NAME, "values": ["honesty"], "behavioral_norms": []},
+            salience=0.4,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+    language = Language(
+        bus,
+        chat_client=FakeChatClient(),
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
+        model_id="fake-model",
+    )
+    await language.initialize()
+    try:
+        for _ in range(100):
+            if language._bus_self_model is not None:
+                break
+            await asyncio.sleep(0.02)
+        assert language._bus_self_model is not None
+        assert "name" not in language._bus_self_model
+        assert "name" not in language.probe_self_model()
+    finally:
+        await language.shutdown()

@@ -339,7 +339,6 @@ class Language(BaseModule):
                 for _entry_id, ev in entries:
                     if ev.type == SELF_MODEL_SELF_MODEL_TYPE:
                         self._bus_self_model = {
-                            "name": ev.payload.get("name"),
                             "values": list(ev.payload.get("values", []) or []),
                             "behavioral_norms": list(ev.payload.get("behavioral_norms", []) or []),
                             "situation_facts": list(ev.payload.get("situation_facts", []) or []),
