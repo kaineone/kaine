@@ -158,7 +158,7 @@ class ConversationState:
             "trigger": trigger,
             "started_at": _finite(payload.get("started_at")),
             "duration_s": None,
-            "rest_seconds": None,
+            "rest_seconds": _finite(payload.get("rest_seconds")),
             "aborted": False,
             "completed_at": None,
         }

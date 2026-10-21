@@ -262,10 +262,6 @@ class Affect(BaseModule):
         # Goal id -> accumulated Delta L to apply to the next appraisal.
         self._held_obstruction: dict[str, float] = {}
         self._last_obstruction = 0.0
-        # Latest entity time at which boredom had lp+ > 0 or alert excess > 0 (paper 3.5).
-        self._boredom_engaged_at: float | None = None
-        # Queued affect.rest_request payloads found during a tick, published at the end.
-        self._rest_requests: list[dict[str, Any]] = []
 
         # Goal id -> entity time its drive event next re-enters (paper A.4); transient.
         self._reentry_due: dict[str, float] = {}
@@ -779,27 +775,6 @@ class Affect(BaseModule):
             if drive.value >= drive.threshold:
                 since = self._goal_above_since.setdefault(goal.id, now)
                 if now - since >= self._goal_stall_s:
-                    if goal.drive == "boredom" and (
-                        self._boredom_engaged_at is None
-                        or self._boredom_engaged_at < since
-                    ):
-                        developing = False
-                        if self._development_probe is not None:
-                            try:
-                                developing = self._development_probe()
-                            except Exception:
-                                log.warning(
-                                    "affect stall check: development probe failed, treating entity as developing"
-                                )
-                                developing = True
-                        if developing:
-                            self._rest_requests.append(
-                                {
-                                    "reason": "stimulus_spent",
-                                    "drive": "boredom",
-                                    "stall_s": float(now - since),
-                                }
-                            )
                     payload = self._end_goal(goal.id, "abandoned", "stalled")
                     if payload is not None:
                         payloads.append(payload)
@@ -915,8 +890,6 @@ class Affect(BaseModule):
         self._alert_fast *= math.exp(-dt / fast_tau)
         self._alert_slow *= math.exp(-dt / slow_tau)
         nb = self._alert_excess()
-        if lp > 0.0 or nb > 0.0:
-            self._boredom_engaged_at = now
 
         # Arousal drifts toward the drive-raised target; dominance drifts toward baseline; valence relaxes below.
         target = DimensionalState(
@@ -975,14 +948,6 @@ class Affect(BaseModule):
         payloads += self._check_stalls(now)
         self._check_response_windows(now)
         await self._publish_goal_events(payloads)
-
-        requests, self._rest_requests = self._rest_requests, []
-        for request in requests:
-            await self.publish(
-                "affect.rest_request",
-                request,
-                salience=self._baseline_salience,
-            )
 
         # Sustained concern (paper A.4): an active goal's drive event recurs at the drive's
         # value on own updates until a broadcast accesses it. It is not an alert, and its
@@ -1765,9 +1730,6 @@ class Affect(BaseModule):
             # above threshold (the stall clock of paper A.4). Stored as durations
             # because the entity clock restarts with each process.
             "goal_above_elapsed": goal_above_elapsed,
-            # Elapsed entity seconds since boredom last had learning progress or alert excess.
-            # Stored as a duration because the entity clock restarts with each process.
-            "boredom_engaged_elapsed": None if self._boredom_engaged_at is None else max(0.0, now - self._boredom_engaged_at),
             # Perceptual alert rates r_f and r_s (alerts per entity second; paper A.4 boredom alert excess).
             "alert_rates": {"fast": self._alert_fast, "slow": self._alert_slow},
             # Scalar error statistics, not sense data, so they satisfy the zero raw-sense-data persistence rule.
@@ -1947,24 +1909,6 @@ class Affect(BaseModule):
         raw_seen = state.get("interaction_seen")
         if isinstance(raw_seen, bool):
             self._interaction_seen = raw_seen
-
-        # Restore the boredom engagement clock. A missing key or a malformed value
-        # is treated as engagement at restore time, so an older snapshot never
-        # requests rest on evidence it does not hold.
-        if "boredom_engaged_elapsed" not in state:
-            self._boredom_engaged_at = self._clock()
-        else:
-            raw_boredom_engaged = state["boredom_engaged_elapsed"]
-            if raw_boredom_engaged is None:
-                self._boredom_engaged_at = None
-            elif isinstance(raw_boredom_engaged, bool):
-                self._boredom_engaged_at = self._clock()
-            else:
-                elapsed = _finite_number(raw_boredom_engaged)
-                if elapsed is not None and elapsed >= 0.0:
-                    self._boredom_engaged_at = self._clock() - elapsed
-                else:
-                    self._boredom_engaged_at = self._clock()
 
         # Migration (paper A.4): state saved before curiosity became heterostatic interest
         # holds it as a deficit, whose value, latch and end counts say nothing about

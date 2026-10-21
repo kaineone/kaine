@@ -70,20 +70,20 @@ function expectHidden(sandbox, id, expected) {
 
 var scenarios = [
   {
-    name: "completed developmental rest",
+    name: "completed state-cycle rest",
     payload: {
       sleeping: false,
       sleep: {
-        asleep: false, trigger: "developmental_rest", started_at: 1000,
-        duration_s: 1265, rest_seconds: 1260, aborted: false, completed_at: null
+        asleep: false, trigger: "state_cycle", started_at: 1000,
+        duration_s: 1415, rest_seconds: 1410, aborted: false, completed_at: null
       },
       rest_request: null
     },
     check: function (s) {
       expectEqual(s, "sleep-state", "awake");
-      expectEqual(s, "sleep-trigger", "developmental rest");
-      expectEqual(s, "sleep-duration", "21 min 5 s");
-      expectEqual(s, "sleep-rest-length", "21 min 0 s");
+      expectEqual(s, "sleep-trigger", "state-cycle rest");
+      expectEqual(s, "sleep-duration", "23 min 35 s");
+      expectEqual(s, "sleep-rest-length", "23 min 30 s");
       expectHidden(s, "sleep-aborted", true);
     }
   },

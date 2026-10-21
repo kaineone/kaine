@@ -141,7 +141,7 @@ A goal ends in one of four ways:
 |---|---|---|
 | Completed | The drive falls below 0.9 of its threshold and the credit rule counts the fall as the entity's own response | The goal ends as completed and the completed count rises |
 | Abandoned (another's response) | The drive falls below the re-arm band but the credit rule counts the fall as another's response | The goal ends as abandoned and the abandoned count rises |
-| Abandoned (stalled) | The drive stays at or above its threshold for `goal_stall_s` (600 entity s) without a dip below the threshold restarting the timer | The goal ends as abandoned and the abandoned count rises; for a boredom goal of a developing entity on a spent stimulus, the module also requests a developmental rest (below) |
+| Abandoned (stalled) | The drive stays at or above its threshold for `goal_stall_s` (600 entity s) without a dip below the threshold restarting the timer | The goal ends as abandoned and the abandoned count rises; a stalled boredom goal starts no rest (below) |
 | Abandoned (cap) | Active goals exceed `goal_cap` (3) and this goal has the lowest priority, with ties broken by earliest creation | The goal ends as abandoned and the abandoned count rises |
 
 Goals added through `add_goal` count toward the cap. When a drive goal is active, the ledger is active and the token-overlap term is computed alongside the drive term; the appraisal method is then `drive_relevance_v1+token_overlap_v1`. With no goal active the appraisal is as before.
@@ -150,7 +150,7 @@ While a drive goal is active, every non-rest intent opens a response window of `
 
 Coping is checked whenever the goal score is nonzero, negative included, and is unavailable only at exactly 0. The term that supplies `r` also supplies `p` for coping; on a tie between the drive term and ledger relevance the drive term supplies `p`.
 
-(Paper 3.5.) The module records the latest entity time at which an update had `LP > 0` or alert excess `N > 0`. When a boredom goal is abandoned as stalled and that time lies before the start of the stall, or there is none, and the development probe says the entity is developing, the stimulus is spent: the module publishes `affect.rest_request` on `affect.out` at `baseline_salience` with `{"reason": "stimulus_spent", "drive": "boredom", "stall_s"}`, and the [sleep module](sleep.md#developmental-rest) rests the entity for 21 minutes. A probe that raises counts as developing; with no probe (staging off) no request is published. The time since the latest engagement persists in the snapshot as `boredom_engaged_elapsed`; a snapshot without it counts as engaged at the restore.
+(Paper 3.5.) A stalled boredom goal is abandoned as stalled and starts no rest. Quiescence arises from the fetal state cycle and stimulation ends it, and no study shows a spent stimulus bringing it on, so the [sleep module](sleep.md#the-developmental-state-cycle) times the developmental rest by that cycle and the affect module publishes no `affect.rest_request`. An affect snapshot from before this change carries a `boredom_engaged_elapsed` field; it is ignored on restore.
 
 Every lifecycle change publishes `affect.goal`: `added` carries `drive` and `likelihood`; `completed` and `abandoned` carry `drive` and `reason`, with reasons `own_response`, `without_response`, `stalled` and `cap`; `cleared` carries `drive` and the reason `sleep_reset` (see [Sleep reset](#sleep-reset)).
 
