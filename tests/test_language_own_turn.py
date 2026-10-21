@@ -197,7 +197,7 @@ async def test_default_personas_state_no_rules():
 
 
 async def test_template_version_and_stop():
-    assert PERSONA_TEMPLATE_VERSION == "6"
+    assert PERSONA_TEMPLATE_VERSION == "7"
     assert OWN_TURN_STOP == ("\n#",)
 
 
