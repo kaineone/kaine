@@ -5,8 +5,7 @@
 
 The implementation lives in the boundary-neutral :mod:`kaine.text_embedding`
 so a core module (which must NOT import ``kaine.evaluation``) can reuse the
-same embedder + cosine — e.g. the sleep module computing its consolidation-divergence
-magnitude on the same scale as the A/B meter. This module re-exports it
+same embedder and cosine on the same scale as the A/B meter. This module re-exports it
 unchanged so every evaluation import site stays put.
 """
 from __future__ import annotations

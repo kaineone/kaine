@@ -227,12 +227,6 @@ class Language(BaseModule):
         self._latest_snapshot: Optional[WorkspaceSnapshot] = None
         # Situation facts held by the language module when no self-model carries them.
         self._own_situation_facts: list[str] = []
-        # The situation facts last given to the organ in this waking; None means
-        # none given since the module initialized or since the last completed sleep.
-        self._situation_given: Optional[tuple[str, ...]] = None
-        # When the module last initialized; sleeps completed before it do not
-        # start a new waking.
-        self._initialized_at: Optional[datetime] = None
         # Whether a self-model is expected for this entity.
         self._expects_self_model = True
         self._baseline_salience = float(baseline_salience)
@@ -314,10 +308,6 @@ class Language(BaseModule):
         except Exception:
             return self._with_own_facts({})
 
-    def _on_sleep_completed(self) -> None:
-        """A completed sleep starts a new waking, so the situation is given again at the next organ call."""
-        self._situation_given = None
-
     async def _self_model_cache_loop(self) -> None:
         """Cache the latest self-model snapshot published on self_model.out.
 
@@ -396,15 +386,6 @@ class Language(BaseModule):
                         # The latest value, not the largest: a restarted sleep module
                         # counts from zero again, and the record must say so.
                         self._sleep_index = idx
-                    if (
-                        ev.type == "sleep.sleep.completed"
-                        and self._initialized_at is not None
-                        and ev.timestamp >= self._initialized_at
-                    ):
-                        # The cursor normally starts at the tail, but a failed tail
-                        # read starts it at the head, so older completions are
-                        # skipped by time.
-                        self._on_sleep_completed()
             else:
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
@@ -457,9 +438,6 @@ class Language(BaseModule):
         return self._intent_log
 
     async def initialize(self) -> None:
-        # A re-initialized module is a new waking.
-        self._situation_given = None
-        self._initialized_at = datetime.now(timezone.utc)
         # Seek to the latest intent entry so we only realize intents formed
         # after boot, mirroring Audio Out's dedicated-loop cursor seeding.
         try:
@@ -937,16 +915,10 @@ class Language(BaseModule):
             about_kind not in ("felt", "event") or about.strip() in heard_texts
         )
 
-        # Situation facts are given in the first organ call of each waking
-        # (after boot or a completed sleep) and when the facts change. Repeating
-        # them in every prompt made the disclosure a standing topic of the
-        # entity's thought. The individuation probe builds its own request and
-        # always carries them.
+        # Situation facts are given in every organ call (paper 3.5). The individuation probe builds its own request and always carries them.
         self_model = self._self_model()
         situation = tuple(str(f) for f in (self_model.get("situation_facts") or []))
-        give_situation = bool(situation) and situation != self._situation_given
-        if not give_situation:
-            self_model = {k: v for k, v in self_model.items() if k != "situation_facts"}
+        give_situation = bool(situation)
         ctx = self._assembler.assemble(
             about=about,
             snapshot=snap,
@@ -973,8 +945,6 @@ class Language(BaseModule):
             dry=self._dry,
         )
         response = await self._chat_client.complete(request)
-        if give_situation:
-            self._situation_given = situation
 
         # A loop or a cap-cut fragment ends at a sentence boundary (paper 3.5); the
         # cut text is what is logged, published and returned.

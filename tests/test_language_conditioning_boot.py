@@ -182,7 +182,9 @@ async def test_wire_language_self_model_noop_without_self_model(bus, tmp_path):
 
     req = language.chat_client.requests[-1]
     assert req.system  # non-empty minimal invariant
-    assert req.system.startswith("What I say comes from what I feel and notice")
+    assert req.system.startswith(
+        "I am this entity. What I say comes from what I feel and notice"
+    )
 
 
 @pytest.mark.asyncio
