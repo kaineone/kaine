@@ -100,15 +100,24 @@ def test_factory_rejects_non_string_preference_source(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_preference_source_none_skips_training_but_emits_divergence(
+async def test_preference_source_none_skips_training_and_builds_no_pairs(
     bus: AsyncBus, tmp_path: Path, monkeypatch,
 ):
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     trainer = _RecordingTrainer()
     cfg = voice_alignment_config_from_section(_section(tmp_path))
     sleep = Sleep(bus, trainer=trainer, voice_alignment_config=cfg)
+
+    build_calls = []
+    real_build = sleep._builder.build_with_counts
+    def wrapper(*args, **kwargs):
+        build_calls.append((args, kwargs))
+        return real_build(*args, **kwargs)
+    sleep._builder.build_with_counts = wrapper
+
     summary = await sleep.enter_sleep()
 
+    assert build_calls == []
     assert trainer.calls == []
     voice = summary["voice_alignment"]
     assert "no validated preference source" in voice["reason"]
@@ -118,16 +127,9 @@ async def test_preference_source_none_skips_training_but_emits_divergence(
     assert summary["adapter_accepted"] is False
     assert summary["pairs_processed"] == 0
 
-    # Divergence metric is still emitted unconditionally, now inside the
-    # voice_alignment phase metadata.
     phase = _voice_alignment_phase(summary)
-    assert "consolidation_divergence" in phase["metadata"]
-    cd = phase["metadata"]["consolidation_divergence"]
-    assert cd["records_scanned"] == 1
-    assert cd["usable_pairs"] == 1
-    assert cd["divergence_rate"] == 1.0
+    assert "consolidation_divergence" not in phase["metadata"]
 
-    # The bus event also carries the metric inside the phase metadata.
     entries = await bus.read("sleep.out", count=10)
     payloads = [
         event.payload
@@ -136,9 +138,9 @@ async def test_preference_source_none_skips_training_but_emits_divergence(
     ]
     assert len(payloads) == 1
     phase = _voice_alignment_phase(payloads[0])
-    assert "consolidation_divergence" in phase["metadata"]
-    cd = phase["metadata"]["consolidation_divergence"]
-    assert cd["usable_pairs"] == 1
+    assert "consolidation_divergence" not in phase["metadata"]
+
+    assert not any(e.type == "sleep.consolidation_divergence" for _, e in entries)
 
 
 @pytest.mark.asyncio

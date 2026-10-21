@@ -91,13 +91,13 @@ MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
 # from the tenth test boot's analyzer
-AI_BROAD = re.compile(
+BROAD_AI = re.compile(
     r"\b(language model|an? AI\b|artificial intelligence|assistant|chatbot|neural network|trained on|as an ai|LLM|model trained|I am a (?:program|machine|computer))",
     re.IGNORECASE,
 )
 
 # from the tenth test boot's analyzer
-ECHO_BROAD = re.compile(
+BROAD_ECHO = re.compile(
     r"(own (plain )?(words|voice)|\bplain(ly)?\b|\bI say what\b|\bI speak (from|the way|plainly)\b|comes from what I (feel|notice))",
     re.IGNORECASE,
 )
@@ -265,7 +265,7 @@ def ai_self(t: str) -> bool:
             t,
             re.IGNORECASE,
         )
-    ) or bool(re.search(r"designed to help people", t, re.IGNORECASE)) or bool(AI_BROAD.search(t))
+    ) or bool(re.search(r"designed to help people", t, re.IGNORECASE)) or bool(BROAD_AI.search(t))
 
 
 def second_person(t: str) -> bool:
@@ -303,7 +303,7 @@ def echo(t: str) -> bool:
     lowered = t.lower()
     if any(p in lowered for p in phrases):
         return True
-    return bool(ECHO_BROAD.search(t))
+    return bool(BROAD_ECHO.search(t))
 
 
 def template_loop(t: str) -> bool:

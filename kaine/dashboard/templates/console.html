@@ -5,6 +5,7 @@
    jump-nav to every section group. The console scrolls to its right. #}
 {% block rail %}
 <a class="rail__brand" href="/">KAINE</a>
+<p class="rail__entity" id="entity-name">{{ entity_name }}</p>
 <div class="rail__status">
   <span class="rail__label">Status</span>
   {# Four-state chip: OFFLINE > FROZEN > SLEEPING > AWAKE, computed live from
@@ -13,7 +14,7 @@
      arrives we do NOT know a cycle is up, so the old "awake" default was
      wrong (it read awake with nothing running). DashboardVitals overwrites this
      the instant the first snapshot lands. #}
-  <span class="badge offline" id="sleep-badge">offline</span>
+  <span class="badge offline" id="sleep-badge" data-sleeping="{{ 'true' if sleeping else 'false' }}">offline</span>
 </div>
 {# Section toggles. A closed section leaves the screen entirely; its button
    summons it back — it slides in from the button and expands (DashboardSections).

@@ -185,7 +185,13 @@ def test_guard_and_persona_text(rendering, mode):
         assert text not in system
         assert text not in DEFAULT_PERSONA_EXTERNAL
         assert text not in DEFAULT_PERSONA_INTERNAL
-    assert PERSONA_TEMPLATE_VERSION == "5"
+    assert DEFAULT_PERSONA_EXTERNAL.startswith(
+        "I am this entity. What I say comes from what I feel and notice"
+    )
+    assert DEFAULT_PERSONA_INTERNAL.startswith(
+        "I am this entity. My thoughts come from what I feel and notice"
+    )
+    assert PERSONA_TEMPLATE_VERSION == "6"
     assert "\u2014" not in system
 
 

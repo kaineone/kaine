@@ -1488,6 +1488,10 @@
   }
 
   function init() {
+    var sleepBadge = document.getElementById("sleep-badge");
+    if (sleepBadge && sleepBadge.dataset.sleeping === "true") {
+      chip.sleeping = true;
+    }
     attachStream();
     poll();
   }

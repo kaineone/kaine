@@ -90,7 +90,7 @@ class Affect(BaseModule):
         action_selection_stream: str = "action_selection.out",
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
-        learning_progress_floor: float = 0.05,
+        learning_progress_floor: float = 0.20,
         learning_progress_span_s: float = 5400.0,
         learning_progress_bin_s: float = 60.0,
         alert_excess_margin: float = 0.5,
@@ -300,6 +300,9 @@ class Affect(BaseModule):
         # These streams are read UNCONDITIONALLY (arousal is pre-attentive; a
         # startle does not require the emotion-coupling path to be enabled).
         self._vision_stream = "vision.out"
+        self._development_stream = "development.out"
+        self._hearing_stage_type = "development.hearing_stage"
+        self._hearing_stage: int | None = None
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
         # Gain on the normalised-surprise → arousal nudge (per alert event). The
         # per-event contribution is capped so arousal BUILDS over sustained surprise
@@ -370,7 +373,7 @@ class Affect(BaseModule):
         A source's value is the relative fall of its mean error from the older to
         the newer half of the last ``learning_progress_span_s`` (paper A.4; Oudeyer,
         Kaplan and Hafner 2007; Baranes and Oudeyer 2013), None while undefined.
-        The pooled ``lp`` is the mean of the defined values, 0.0 if none.
+        The pooled ``lp`` is the largest of the defined values, 0.0 if none.
         """
         per_source: dict[str, float | None] = {}
         values: list[float] = []
@@ -381,7 +384,29 @@ class Affect(BaseModule):
                 values.append(v)
         if not values:
             return per_source, 0.0
-        return per_source, sum(values) / len(values)
+        return per_source, max(values)
+
+    def _on_hearing_stage(self, payload: Mapping[str, Any]) -> None:
+        """Handle a hearing-stage step from the development stream.
+
+        Audition's learning-progress bins restart on each rising band step
+        (paper A.4, "for audition restarting at each band step of A.7").
+        """
+        stage = payload.get("stage")
+        if not isinstance(stage, int) or isinstance(stage, bool) or not (0 <= stage <= 4):
+            return
+        if self._hearing_stage is None:
+            self._hearing_stage = stage
+            return
+        if stage > self._hearing_stage:
+            if "audition" in self._lp_windows:
+                del self._lp_windows["audition"]
+                log.info(
+                    "affect: hearing band stage %d (was %d); audition learning-progress bins restart",
+                    stage,
+                    self._hearing_stage,
+                )
+            self._hearing_stage = stage
 
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
@@ -551,6 +576,7 @@ class Affect(BaseModule):
             self._sequence_stream,
             self._episodic_memory_stream,
             self._action_selection_stream,
+            self._development_stream,
         ]
         # Perception→arousal streams are read unconditionally (vision.out always;
         # audition.out carries both perception and, when coupling is on, emotion).
@@ -1361,6 +1387,7 @@ class Affect(BaseModule):
                     self._sequence_stream,
                     self._episodic_memory_stream,
                     self._action_selection_stream,
+                    self._development_stream,
                     self._vision_stream,              # perception→arousal (always)
                     self._audition_emotion_stream,   # perception + emotion (always)
                 ]
@@ -1403,6 +1430,11 @@ class Affect(BaseModule):
         return eid in self._drive_entry_ids
 
     async def _handle_peer_event(self, stream: str, event: Event) -> None:
+        if stream == self._development_stream:
+            if event.type == self._hearing_stage_type:
+                self._on_hearing_stage(event.payload or {})
+            return
+
         # Perception→arousal coupling: ALL perceptual reports update the
         # pooled prediction-error trackers, whose learning progress builds curiosity and
         # relieves boredom; alerts additionally relieve boredom and arouse the entity.
@@ -1722,6 +1754,7 @@ class Affect(BaseModule):
             # Curiosity's meaning (interest), so an older deficit-era state can be migrated.
             "curiosity_scheme": _CURIOSITY_SCHEME,
             "last_emotion": self._last_emotion.value,
+            "hearing_stage": self._hearing_stage,
             # Coupling: only numeric familiarity values — zero raw-sense-data
             # persistence; agent ids are opaque strings from the social cognition module.
             "familiarity_cache": dict(self._familiarity_cache),
@@ -1802,6 +1835,13 @@ class Affect(BaseModule):
                 self._last_emotion = CategoricalEmotion(state["last_emotion"])
             except ValueError:
                 self._last_emotion = CategoricalEmotion.NEUTRAL
+        raw_hearing_stage = state.get("hearing_stage")
+        if (
+            isinstance(raw_hearing_stage, int)
+            and not isinstance(raw_hearing_stage, bool)
+            and 0 <= raw_hearing_stage <= 4
+        ):
+            self._hearing_stage = raw_hearing_stage
         if "familiarity_cache" in state:
             raw = state["familiarity_cache"]
             if isinstance(raw, dict):

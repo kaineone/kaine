@@ -411,3 +411,15 @@ def pytest_sessionstart(session):
 
     if os.environ.get("KAINE_REQUIRE_SQLITE_VEC") == "1":
         import sqlite_vec  # noqa: F401  (raises ImportError: the extra is required here)
+
+
+@pytest.fixture(autouse=True)
+def _reset_housekeeping_globals():
+    """No test leaves the process-wide study-record gate suspended or the housekeeping
+    pressure raised (paper A.5)."""
+    yield
+    from kaine.housekeeping_pressure import shared_pressure
+    from kaine.persistence.study_record_gate import study_record_gate
+
+    study_record_gate().resume()
+    shared_pressure().reset()
