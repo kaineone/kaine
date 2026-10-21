@@ -223,6 +223,12 @@ body {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.header-entity {
+  font-size: var(--fs-xs);
+  color: var(--haze);
+  margin: 0 0 0.25rem;
+  overflow-wrap: anywhere;
+}
 .rail__status {
   display: flex;
   flex-direction: column;
