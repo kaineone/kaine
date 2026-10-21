@@ -230,7 +230,7 @@ class DPOPairBuilder:
         under evaluation. The returned ``pairs`` are in chronological order.
         Missing files are skipped.
 
-        Records marked as identity leakage are scanned but never become pairs.
+        Records marked as identity leakage or self-description are scanned but never become pairs.
         """
         paths: list[Path]
         if isinstance(path, (str, Path)):
@@ -260,7 +260,10 @@ class DPOPairBuilder:
                 record = line.record
                 scanned += 1
                 extra = record.get("extra")
-                if isinstance(extra, dict) and extra.get("identity_leak") is True:
+                if isinstance(extra, dict) and (
+                    extra.get("identity_leak") is True
+                    or extra.get("self_description") is True
+                ):
                     continue
                 chosen = (record.get("faithful_rendering") or "").strip()
                 rejected = (record.get("generated_text") or "").strip()

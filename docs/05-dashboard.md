@@ -95,6 +95,10 @@ Put it in the same place, restart the dashboard, and sign in again. A browser se
 
 The console at `/` is mounted only when `[dashboard].conversation_enabled` is true; with the shipped config `/` redirects to diagnostics. It is a single screen that does not scroll, with the Presence visualizer, collapsible diagnostic and evaluation sections, and the Health and services sidebar, and it shows no message content. Most sections start closed and slide in from the left rail when you open them; the welfare and divergence sections open and flash when a relevant event arrives.
 
+The page title and the line under the wordmark show the entity's name. At start the dashboard reads it from the self-model file (`[self_model].persistence_path`, by default `state/self_model/self_model.json`, decrypted when state encryption is on), and when that file holds no name, from a `name` field in `state/identity/entity.json` if one is there. While it runs it takes each new name from the self-model's `self_model.document` events on `self_model.out`. With no name anywhere, for example when the self-model module is off and has never run, the console shows "KAINE". Reload the page to see a name that arrived after it opened.
+
+The status chip starts from the sleep state the dashboard last read on `sleep.out` (it reads the newest `sleep.sleep.started` or `sleep.sleep.completed` when it starts), so a page opened during a sleep shows "sleeping" as soon as the cycle reports running.
+
 ### Diagnostics
 
 `/diagnostics/` is the deep technical view: live charts, run identity, health, and controls. It is reachable from the left-rail "Diagnostics" link on every page.
@@ -162,6 +166,26 @@ The preservation panel lists each action of the preservation monitors, a diverge
 Each line shows operational fields only: monitor, transition, reason, action, and preservation or snapshot ids. A failed preservation is shown in the critical colour and needs the operator's attention. See [Preservation](11-preservation.md) for the full behaviour.
 
 The entity-care panel shows the welfare gray-zone counters and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
+
+## Affect welfare record
+
+The affect welfare panel shows the newest `affect_welfare` record the welfare observer wrote to its rollup under `data/evaluation/welfare/`. The observer writes one every 300 s of unfrozen time when it has read new affect events, and each record is cumulative since the observer started. The panel shows the record's time, the awake time it covers and the share of that time with valence below the negative-valence bar. For boredom, the social drive and restlessness it shows:
+
+| Column | Meaning |
+|---|---|
+| uncontrolled ends | The share of the drive's ended crossings that ended without the entity's own response. |
+| per awake hour | Those uncontrolled ends per hour awake. |
+| time above threshold | The share of awake time the drive spent at or above its threshold. |
+| ended by sleep reset | Crossings the affective reset at the end of a sleep closed. These count as neither own nor uncontrolled ends. |
+| crossing open now | Whether a crossing was still open when the record was written. |
+
+For curiosity it shows the interest share, the share of awake time at or above its threshold. When the newest record comes from before the observer's latest start, the panel says so. See [the welfare observer](17-research-data/README.md#welfareobserver) for how each measure is counted.
+
+## Sleep and rest
+
+The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a developmental rest, the rest's length. The trigger is the one the sleep module states where it states one: `developmental rest` (a spent stimulus in the developmental phase, a 1,260 s rest) or `requested`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
+
+Below it the panel shows the last `affect.rest_request`: the reason (`stimulus spent`), the drive, how long its goal had stalled, and the time. When the dashboard starts it reads the newest sleep events and rest request from the last 2,000 entries of `sleep.out` and `affect.out`, so a request older than that shows only after the next one.
 
 ## Live charts and pacing
 
