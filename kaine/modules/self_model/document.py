@@ -64,7 +64,7 @@ _SURNAMES = _load_surnames()
 
 
 def generate_launch_name(
-    *, rng: random.Random | None = None, exclude: "str | Iterable[str] | None" = None
+    *, rng: random.Random | None = None, exclude: str | Iterable[str] | None = None
 ) -> str:
     """``Kaine <Surname>`` with a surname picked at launch. Injectable RNG for
     deterministic tests. ``exclude`` is a full name to avoid (a fork's parent's

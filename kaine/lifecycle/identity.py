@@ -355,7 +355,8 @@ def _save_identity_locked(
         try:
             tmp.unlink()
         except FileNotFoundError:
-            pass
+            # Expected after a successful os.replace(): the temp file is gone.
+            log.debug("identity temp file %s already gone", tmp)
 
 
 def mint_identity(*, now: Callable[[], float] = time.time) -> EntityIdentity:
