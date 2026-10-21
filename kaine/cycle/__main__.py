@@ -1348,6 +1348,53 @@ def _start_stimulus_source_presence(
     return asyncio.create_task(_run(), name="cycle.stimulus_source_presence")
 
 
+def _start_housekeeping_floor(
+    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event, is_asleep: Callable[[], bool]
+) -> "asyncio.Task[None] | None":
+    """Start the awake floor of sleep housekeeping when the sleep module and housekeeping are enabled.
+
+    The floor runs outside the entity's state: it keeps each data volume's
+    free space above the configured reserve (paper 3.5, A.5) and suspends the
+    study record when reclaim cannot free enough space. It needs the
+    housekeeper, so it starts only when the sleep module is enabled and
+    housekeeping is not disabled.
+    """
+    section = kaine_config.get("sleep", {}).get("housekeeping")
+    if not kaine_config.get("modules", {}).get("sleep"):
+        return None
+    from kaine.cycle.housekeeping_floor import AwakeFloor, FloorConfig, data_volumes
+    from kaine.housekeeping_pressure import shared_pressure
+    from kaine.modules.sleep.housekeeping import (
+        Housekeeper,
+        HousekeepingConfig,
+        bus_memory_bytes,
+        study_record_roots,
+    )
+    from kaine.persistence.study_record_gate import study_record_gate
+
+    hk_config = HousekeepingConfig.from_section(section)
+    if not hk_config.enabled:
+        return None
+    floor_cfg = FloorConfig.from_section(section)
+    floor = AwakeFloor(
+        Housekeeper(
+            hk_config,
+            roots=study_record_roots(kaine_config),
+            memory_reader=lambda: bus_memory_bytes(bus.client),
+        ),
+        shared_pressure(),
+        volumes=data_volumes(kaine_config),
+        reserve_bytes=floor_cfg.reserve_bytes,
+        reserve_share=floor_cfg.reserve_share,
+        period_s=floor_cfg.floor_period_s,
+        is_asleep=is_asleep,
+        gate=study_record_gate(),
+        bus=bus,
+    )
+    floor.validate_volumes()
+    return asyncio.create_task(floor.run(stop_event), name="cycle.housekeeping_floor")
+
+
 async def _revive_or_refuse(revive, registry) -> int | None:
     """Apply a revive plan to the registry, or shut the modules down on refusal.
 
@@ -2690,6 +2737,7 @@ async def _phase_development(ctx: BootContext) -> int | None:
     # maturation gate reads to detect stimulus source loss. development.out is not a module
     # stream, so presence never enters the workspace.
     ctx.stimulus_source_presence_task = _start_stimulus_source_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
+    ctx.housekeeping_floor_task = _start_housekeeping_floor(ctx.kaine_config, ctx.bus, ctx.stop_event, is_asleep=lambda: ctx.cycle.is_asleep)
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
     ctx.development_task = None
@@ -2907,6 +2955,15 @@ async def _shutdown(ctx: BootContext) -> None:
             log.debug("stimulus source presence task cancelled at shutdown")
         except Exception:
             log.exception("stimulus source presence task shutdown failed")
+    if ctx.housekeeping_floor_task is not None:
+        ctx.housekeeping_floor_task.cancel()
+        try:
+            await ctx.housekeeping_floor_task
+        except asyncio.CancelledError:
+            # Expected: we just cancelled it.
+            log.debug("housekeeping floor task cancelled at shutdown")
+        except Exception:
+            log.exception("housekeeping floor task shutdown failed")
     if ctx.input_watch_task is not None:
         ctx.input_watch_task.cancel()
         try:

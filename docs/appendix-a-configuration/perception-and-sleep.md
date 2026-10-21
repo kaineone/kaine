@@ -178,6 +178,22 @@ The retired keys `planning_step_burst` and `consolidation_embedder_enabled` are 
 
 The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[episodic_memory.strength]`.
 
+### Housekeeping
+
+`[sleep.housekeeping]` sets sleep housekeeping (paper 3.5, A.5, Table A1; see the [sleep module](../09-modules/sleep.md#housekeeping)). The budgets are operator settings; the defaults are conservative, not a recommendation.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Run housekeeping last in every sleep. `false` gives the sleep summary without the `housekeeping` key, as before. |
+| `disk_budget_share` | float `(0, 1)` | `0.5` | `B^hk` for disk as a share of the volume holding the study records (the smallest, if they span several), so the pressure tracks how scarce the disk really is. Outside (0, 1) fails boot. |
+| `disk_budget_bytes` | integer `> 0` | unset | Optional explicit `B^hk` for disk; when set it overrides `disk_budget_share`. |
+| `memory_budget_bytes` | integer `> 0` | `1073741824` | `B^hk` for host memory. Reserved: the paper counts there only bus entries acknowledged by every consumer group and older than the restart replay window, and the bus has neither, so the memory term is 0. |
+| `time_allowance_s` | float `> 0` | `60.0` | `Delta_hk`: seconds housekeeping may spend per sleep. |
+| `archive_dir` | string | `"/app/archive"` | The archive volume. It is used only when it is a mount point on another device than the study records, so no edit is needed: bind a drive at `/app/archive` and exports start; without one, study records stay on the host and boot logs the projected days until the disk budget is reached. Empty also means no archive. It must lie outside the study-sink directories and `state/`. |
+| `reserve_bytes` | integer `> 0` | `5368709120` | The awake floor's fixed reserve. `R^hk` is the larger of this and `reserve_share` of the volume. |
+| `reserve_share` | float `(0, 1)` | `0.05` | The awake floor's reserve as a share of each data volume. Bad values, or a reserve at least a volume's size, fail boot. |
+| `floor_period_s` | float `> 0` | `60.0` | Seconds between the awake floor's free-space checks. |
+
 ### Voice alignment
 
 `[sleep.voice_alignment]` fine-tunes the language organ during the sleep cycle with DPO + QLoRA. It ships disabled and has a two-layer gate.
