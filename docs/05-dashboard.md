@@ -144,9 +144,22 @@ The rows that appear depend on the configured backends:
 
 See the module chapters for backend details: [audition](09-modules/audition.md), [vocal](09-modules/vocal.md), and [planning](09-modules/planning.md).
 
-Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing` (a perception sensor is live). Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
+Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing`. The vision and audition modules read `🔴 capturing` while the live camera or microphone runs, and `capturing (<feed>)` while the running cycle feeds them from a seeded, playlist, screen or stimulus-source feed. Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
 
 The unauthenticated endpoint `/diagnostics/health.json` returns the same health data as JSON.
+
+## Development panel
+
+The development panel appears while the entity is in the developmental phase or the hearing band reports a stage. It reads `/diagnostics/maturation.json` every 5 s, which takes the gate's status and the hearing stage from `state/cycle/runtime.json`. It shows:
+
+- the stage, awake time and sleep count;
+- the world the gate judges against (`perceptual` or `embodied`);
+- the consolidation passes when consolidation is required, and "consolidation: not required" when the gate's `conditions.c2_consolidation_required` is false (no sleep module or no world model module);
+- each readiness marker as met (✓), unmet (✗) or not applicable (–), with its readout value where there is one;
+- the gate decision and, with operator acknowledgement on, the acknowledgement control;
+- the hearing band's stage, for example "stage 1 of 4, 158.1 to 707.1 Hz", "below 707.1 Hz" once the lower edge is gone, or "open" at stage 4.
+
+In stimulus-source mode the perception feed panel lists the configured stimulus: the base heartbeat rate and its drift, the colour ramp's time constant and hue gain, whether the maternal voice is on, and the hearing band's span with its current stage. They are the configured values. The heartbeat drifts around its base rate with the simulated maternal state, and the panel does not show the rate of the moment. See [developmental phase](06-operation/development.md) for what each one does.
 
 ## Run identity and supervision
 

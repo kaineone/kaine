@@ -1,13 +1,17 @@
 {# Developmental stage panel.
-   Shows the entity's development/maturation stage, evidence and any hold.
+   Shows the entity's development/maturation stage, evidence, any hold,
+   the hearing stage, the world, and the gate's conditions.
    NEVER contains sensory content; only stage labels and counts. #}
 <section id="development-panel" class="panel" role="region" aria-labelledby="dev-heading" hidden>
   <h2 id="dev-heading">development</h2>
   <div id="dev-stage" class="development__stage"></div>
+  <p id="dev-world" class="development__world" hidden>world: <span id="dev-world-value"></span></p>
+  <p id="dev-hearing" class="development__hearing" hidden>hearing: <span id="dev-hearing-value"></span></p>
   <ul class="development__evidence">
     <li>lived: <span id="dev-lived"></span> h</li>
     <li>sleeps: <span id="dev-sleeps"></span></li>
-    <li>consolidation passes: <span id="dev-passes"></span></li>
+    <li id="dev-passes-row">consolidation passes: <span id="dev-passes"></span></li>
+    <li id="dev-consolidation-not-required" hidden>consolidation: not required</li>
   </ul>
   <div id="dev-readiness" class="development__readiness"></div>
   <div id="dev-decision" class="development__decision"></div>

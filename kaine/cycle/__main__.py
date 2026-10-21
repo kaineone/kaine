@@ -836,6 +836,7 @@ async def _write_runtime_state(
     staging_enabled: bool = False,
     gate_status: dict | None = None,
     revived_from: str | None = None,
+    hearing_stage: dict | None = None,
 ) -> None:
     runtime_path = resolve(RUNTIME_PATH)
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
@@ -904,6 +905,9 @@ async def _write_runtime_state(
             payload["developmental_stage"].update(gate_status)
     if revived_from is not None:
         payload["revived_from"] = revived_from
+    # The hearing band's current stage from the hearing-stage watch, content-free.
+    if hearing_stage is not None:
+        payload["hearing_stage"] = dict(hearing_stage)
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -1300,7 +1304,7 @@ def _start_development_owner(
 
 
 def _start_stimulus_source_presence(
-    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event
+    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event, *, on_watch: Callable[[Any], None] | None = None
 ) -> "asyncio.Task[None] | None":
     """Start the local stimulus source's presence publisher when a stimulus source clock is installed.
 
@@ -1316,6 +1320,8 @@ def _start_stimulus_source_presence(
 
     publisher = StimulusSourcePresencePublisher(bus, clock)
     watch = HearingStageWatch.from_config(kaine_config, bus)
+    if watch is not None and on_watch is not None:
+        on_watch(watch)
 
     async def _run() -> None:
         if watch is not None:
@@ -2768,7 +2774,10 @@ async def _phase_development(ctx: BootContext) -> int | None:
     # on development.out (the same contract an external provider uses), which the
     # maturation gate reads to detect stimulus source loss. development.out is not a module
     # stream, so presence never enters the workspace.
-    ctx.stimulus_source_presence_task = _start_stimulus_source_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
+    ctx.stimulus_source_presence_task = _start_stimulus_source_presence(
+        ctx.kaine_config, ctx.bus, ctx.stop_event,
+        on_watch=lambda watch: setattr(ctx, "hearing_stage_watch", watch),
+    )
     ctx.housekeeping_floor_task = _start_housekeeping_floor(ctx.kaine_config, ctx.bus, ctx.stop_event, is_asleep=lambda: ctx.cycle.is_asleep)
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
@@ -2960,6 +2969,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             gate_status=ctx.gate_runner.status if ctx.staging_enabled else None,
             staging_enabled=ctx.staging_enabled,
             revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+            hearing_stage=ctx.hearing_stage_watch.current if ctx.hearing_stage_watch is not None else None,
         )
         try:
             await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)

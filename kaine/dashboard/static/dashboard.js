@@ -1438,7 +1438,10 @@
       var cls = "module-cell ";
       var state;
       if (!m.enabled) { cls += "off"; state = "disabled"; }
-      else if (m.capturing) { cls += "capturing"; state = "🔴 capturing"; }
+      else if (m.capturing) {
+        cls += "capturing";
+        state = (m.feed && m.feed !== "live") ? "capturing (" + m.feed + ")" : "🔴 capturing";
+      }
       else if (m.initialized && recentlyActive) { cls += "on active"; state = "active"; }
       else if (m.initialized) { cls += "on"; state = "running"; }
       else if (recentlyActive) { cls += "on active"; state = "active"; }

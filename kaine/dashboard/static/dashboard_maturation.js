@@ -17,6 +17,13 @@
   var ACK_CONFIRM_ID = "dev-ack-confirm";
   var ACK_CANCEL_ID = "dev-ack-cancel";
   var ACK_MSG_ID = "dev-ack-msg";
+  var WORLD_ID = "dev-world";
+  var WORLD_VALUE_ID = "dev-world-value";
+  var HEARING_ID = "dev-hearing";
+  var HEARING_VALUE_ID = "dev-hearing-value";
+  var FEED_HEARING_ID = "feed-hearing-stage";
+  var PASSES_ROW_ID = "dev-passes-row";
+  var CONSOLIDATION_NOT_REQUIRED_ID = "dev-consolidation-not-required";
   var STATUS_URL = "/diagnostics/maturation.json";
   var ACK_URL = "/diagnostics/maturation/ack";
   var POLL_MS = 5000;
@@ -30,6 +37,23 @@
     if (el) {
       el.textContent = text == null ? "" : String(text);
     }
+  }
+
+  function formatBand(low, high) {
+    if (typeof low === "number" && typeof high === "number") {
+      return low.toFixed(1) + " to " + high.toFixed(1) + " Hz";
+    }
+    if (low === null && typeof high === "number") {
+      return "below " + high.toFixed(1) + " Hz";
+    }
+    return "open";
+  }
+
+  function formatHearing(hearing) {
+    if (!hearing || typeof hearing.stage !== "number") {
+      return "";
+    }
+    return "stage " + hearing.stage + " of 4, " + formatBand(hearing.low_hz, hearing.high_hz);
   }
 
   function renderReadiness(readiness, readout) {
@@ -50,6 +74,11 @@
           label = label + " (" + String(readout[name]) + ")";
         }
         lines.push("✗ " + label);
+      });
+    }
+    if (readiness && Array.isArray(readiness.not_applicable)) {
+      readiness.not_applicable.forEach(function (name) {
+        lines.push("\u2013 " + String(name) + " (not applicable)");
       });
     }
     setText(READINESS_ID, lines.join("\n"));
@@ -73,17 +102,71 @@
     setText(DECISION_ID, text);
   }
 
+  function updateConsolidation(development) {
+    var passesRow = byId(PASSES_ROW_ID);
+    var notRequiredRow = byId(CONSOLIDATION_NOT_REQUIRED_ID);
+    var conditions = development && development.conditions;
+    if (conditions && typeof conditions === "object" && conditions.c2_consolidation_required === false) {
+      setText(PASSES_ID, "");
+      if (passesRow) {
+        passesRow.hidden = true;
+      }
+      if (notRequiredRow) {
+        notRequiredRow.hidden = false;
+      }
+    } else {
+      setText(PASSES_ID, development ? development.consolidation_passes : "");
+      if (passesRow) {
+        passesRow.hidden = false;
+      }
+      if (notRequiredRow) {
+        notRequiredRow.hidden = true;
+      }
+    }
+  }
+
   function render(data) {
     var panel = byId(PANEL_ID);
     if (!panel) {
       return;
     }
     var development = data && data.development;
-    if (!development) {
+    var hearing = data && data.hearing;
+
+    if (!development && !hearing) {
       panel.hidden = true;
       return;
     }
     panel.hidden = false;
+
+    var hearingText = formatHearing(hearing);
+    var hearingRow = byId(HEARING_ID);
+    if (hearingRow) {
+      hearingRow.hidden = !hearingText;
+    }
+    setText(HEARING_VALUE_ID, hearingText);
+    setText(FEED_HEARING_ID, hearingText || "not reported");
+
+    var worldRow = byId(WORLD_ID);
+    if (worldRow) {
+      if (development && typeof development.world === "string" && development.world !== "") {
+        worldRow.hidden = false;
+        setText(WORLD_VALUE_ID, development.world);
+      } else {
+        worldRow.hidden = true;
+        setText(WORLD_VALUE_ID, "");
+      }
+    }
+
+    if (!development) {
+      setText(STAGE_ID, "");
+      setText(LIVED_ID, "");
+      setText(SLEEPS_ID, "");
+      updateConsolidation(null);
+      renderReadiness(null, null);
+      renderDecision(null);
+      return;
+    }
 
     setText(STAGE_ID, development.stage);
     var lived = development.lived_seconds;
@@ -93,7 +176,7 @@
       setText(LIVED_ID, "");
     }
     setText(SLEEPS_ID, development.sleep_count);
-    setText(PASSES_ID, development.consolidation_passes);
+    updateConsolidation(development);
 
     renderReadiness(development.readiness, development.readout);
     renderDecision(development.decision);
@@ -224,5 +307,7 @@
     refresh: refresh,
     attachAck: attachAck,
     render: render,
+    formatBand: formatBand,
+    formatHearing: formatHearing,
   };
 })();
