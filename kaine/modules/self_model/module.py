@@ -88,6 +88,10 @@ class SelfModel(BaseModule):
         # decided after the revive lands and arrives through adopt_identity_name.
         # Until then the module neither mints nor keeps a name, and writes nothing.
         name_pending: bool = False,
+        # True for a throwaway instance built by a preflight check. It still mints
+        # a name so the check exercises the same path, but never logs it, so the
+        # log does not read as if the entity had been renamed.
+        preflight: bool = False,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -107,6 +111,7 @@ class SelfModel(BaseModule):
             log.warning("ignoring an invalid identity name %r", identity_name)
             identity_name = None
         self._identity_name = identity_name or None
+        self._preflight = bool(preflight)
         self._name_pending = bool(name_pending) and self._identity_name is None
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
@@ -180,7 +185,10 @@ class SelfModel(BaseModule):
                     save_atomic(self._persistence_path, self._model)
                 except Exception:
                     log.warning("failed to persist identity name", exc_info=True)
-                log.info("self-model adopted identity name: %s", self._model.name)
+            if self._preflight:
+                log.info("self-model preflight check: launch name generation ok")
+            else:
+                log.info("self-model name adopted from identity: %s", self._model.name)
         # Without an identity name, assign a launch name on first boot (Kaine + a
         # surname). Persisted, so it's stable across restarts.
         elif not self._model.name and not self._name_pending:
@@ -189,7 +197,10 @@ class SelfModel(BaseModule):
                 save_atomic(self._persistence_path, self._model)
             except Exception:
                 log.warning("failed to persist launch name", exc_info=True)
-            log.info("self-model assigned launch name: %s", self._model.name)
+            if self._preflight:
+                log.info("self-model preflight check: launch name generation ok")
+            else:
+                log.info("self-model name minted: %s", self._model.name)
 
         # Apply operator seed (first boot only) before any observation.
         if self._inference.enabled:
