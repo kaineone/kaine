@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| distress-episode-once | 0/4 (0%) | one sustained-distress episode counts once, and both detectors read one config source |
 | preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
 | floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
@@ -93,6 +94,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 67 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 68 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
