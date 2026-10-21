@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from kaine.experiment.run_context import get_run_context
+from kaine.persistence.study_record_gate import StudyRecordGate, study_record_gate
 from kaine.storage import resolve
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ class AsyncJsonlSink:
         flush_interval_s: float = 0.5,
         queue_maxsize: int = 4096,
         retention_prefixes: Iterable[str] = (),
+        study_record: bool = False,
+        gate: StudyRecordGate | None = None,
     ) -> None:
         self._dir = resolve(dir_path)
         self._name = str(name)
@@ -71,6 +74,12 @@ class AsyncJsonlSink:
         # only advances when a context exists, so it is inert outside a run.
         self._seq = 0
         self._retention_prefixes = tuple(retention_prefixes)
+        self._study_record = bool(study_record)
+        self._gate: StudyRecordGate | None = None
+        if self._study_record:
+            self._gate = gate if gate is not None else study_record_gate()
+        self._suspension_start_emitted = False
+        self._suspended_dropped = 0
 
     @property
     def directory(self) -> Path:
@@ -125,26 +134,53 @@ class AsyncJsonlSink:
         self._seq += 1
         return stamped
 
+    def _admit(self, entry: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return the entries that should be written for ``entry``.
+
+        For a study-record sink, suspension inserts ``record_gap`` markers:
+        a ``start`` marker on the first write while suspended, then nothing
+        while counting dropped entries, and an ``end`` marker (with the count)
+        plus the new entry on the first write after resumption. Markers are
+        ordinary records, so they are stamped and encrypted like any other.
+        """
+        if not self._study_record:
+            return [entry]
+        now = datetime.now(timezone.utc).isoformat()
+        if self._gate is not None and self._gate.suspended:
+            if not self._suspension_start_emitted:
+                self._suspension_start_emitted = True
+                self._suspended_dropped = 1
+                return [{"record_gap": "start", "ts": now}]
+            self._suspended_dropped += 1
+            return []
+        if self._suspension_start_emitted:
+            dropped = self._suspended_dropped
+            self._suspended_dropped = 0
+            self._suspension_start_emitted = False
+            return [{"record_gap": "end", "ts": now, "dropped": dropped}, entry]
+        return [entry]
+
     def enqueue(self, entry: dict[str, Any]) -> None:
         """Non-blocking sync enqueue — the queue semantics of :meth:`write`,
         callable from a synchronous hot-path callback running inside the event
         loop (``asyncio.Queue.put_nowait`` is loop-safe). Returns immediately and
         drops the oldest entry under backpressure."""
-        entry = self._stamp(entry)
-        try:
-            self._queue.put_nowait(entry)
-        except asyncio.QueueFull:
-            self._dropped_count += 1
-            # Drop oldest, push newest — observers care more about recent state.
+        for admitted in self._admit(entry):
+            admitted = self._stamp(admitted)
             try:
-                self._queue.get_nowait()
-                self._queue.put_nowait(entry)
-            except (asyncio.QueueEmpty, asyncio.QueueFull):
-                # Benign best-effort drop: a concurrent drain emptied or refilled
-                # the queue between the calls above. Losing one record under
-                # backpressure is acceptable (the entry was already counted as
-                # dropped), so swallow the race rather than raise into the caller.
-                pass
+                self._queue.put_nowait(admitted)
+            except asyncio.QueueFull:
+                self._dropped_count += 1
+                # Drop oldest, push newest — observers care more about recent state.
+                try:
+                    self._queue.get_nowait()
+                    self._queue.put_nowait(admitted)
+                except (asyncio.QueueEmpty, asyncio.QueueFull):
+                    # Benign best-effort drop: a concurrent drain emptied or refilled
+                    # the queue between the calls above. Losing one record under
+                    # backpressure is acceptable (the entry was already counted as
+                    # dropped), so swallow the race rather than raise into the caller.
+                    pass
 
     async def write(self, entry: dict[str, Any]) -> None:
         """Returns immediately. Drops oldest if queue is full."""
@@ -152,10 +188,11 @@ class AsyncJsonlSink:
 
     def write_sync(self, entry: dict[str, Any]) -> None:
         """For test code only — bypasses the async path."""
-        entry = self._stamp(entry)
-        path = self._target_path()
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(self._encode_line(entry) + "\n")
+        for admitted in self._admit(entry):
+            admitted = self._stamp(admitted)
+            path = self._target_path()
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(self._encode_line(admitted) + "\n")
 
     def _encode_line(self, entry: dict[str, Any]) -> str:
         """Serialize one record to a JSONL line, AES-256-GCM-encrypting it when

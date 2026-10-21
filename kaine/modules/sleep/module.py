@@ -129,9 +129,17 @@ class Sleep(BaseModule):
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
         organ_gguf_path: Optional[Path] = None,
+        # sleep housekeeping, paper 3.5 and A.5; None runs none
+        housekeeper: Optional[Any] = None,
+        # Shared housekeeping pressure holder (paper A.5): each successful
+        # housekeeping report sets the pressure that scales awake fatigue
+        # build-up at nu_act (1 + P^hk). None leaves fatigue unchanged.
+        housekeeping_pressure: Optional[Any] = None,
     ) -> None:
         super().__init__(bus)
         self._organ_gguf_path = organ_gguf_path
+        self._housekeeper = housekeeper
+        self._housekeeping_pressure = housekeeping_pressure
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
@@ -844,6 +852,7 @@ class Sleep(BaseModule):
                 True, "accepted", pending["origin"], pending.get("proposal_id")
             )
         phase_results: list[PhaseResult] = []
+        housekeeping_report: Optional[dict[str, Any]] = None
 
         try:
             # --- Phase 1: Light Consolidation ---
@@ -1021,6 +1030,34 @@ class Sleep(BaseModule):
 
             if trigger == "developmental_rest":
                 await self._hold_developmental_rest(rest_started)
+
+            if self._housekeeper is not None:
+                store_bytes: Optional[int] = None
+                for r in phase_results:
+                    if getattr(r, "phase", None) == "deep_consolidation":
+                        downscale = (getattr(r, "metadata", None) or {}).get("downscale")
+                        if isinstance(downscale, dict):
+                            found = downscale.get("store_bytes")
+                            if isinstance(found, int) and not isinstance(found, bool):
+                                store_bytes = found
+                        break
+                try:
+                    housekeeping_report = await self._housekeeper.run(
+                        episodic_store_bytes=store_bytes
+                    )
+                    if self._housekeeping_pressure is not None:
+                        # Paper A.5: each successful housekeeping report sets
+                        # the pressure that scales awake fatigue build-up.
+                        self._housekeeping_pressure.set_from_sleep(housekeeping_report)
+                except Exception:
+                    log.warning("sleep: housekeeping failed (continuing)", exc_info=True)
+                    housekeeping_report = {"failed": True}
+                log.info(
+                    "sleep: housekeeping report: stopped=%s moved_files=%s pressure=%s",
+                    housekeeping_report.get("stopped"),
+                    housekeeping_report.get("moved_files"),
+                    housekeeping_report.get("pressure"),
+                )
         finally:
             # Sleep ends with the affective reset on every path (paper §3.5),
             # including an exception or a cancel in phases 1 to 4.
@@ -1110,6 +1147,8 @@ class Sleep(BaseModule):
             summary["memory_nodes_pruned"] = prune_meta.get("nodes_pruned")
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
+        if self._housekeeper is not None:
+            summary["housekeeping"] = housekeeping_report
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
         summary["alert"] = not all_succeeded
