@@ -261,36 +261,6 @@ class ConversationState:
                     self.observe(event)
                     break
 
-    def observe(self, event: Event) -> None:
-        """Update name or sleep state from an event. Ignores malformed payloads."""
-        if event.type == "self_model.document":
-            if isinstance(event.payload, dict):
-                self.update_from_self_model({"name": event.payload.get("name")})
-        elif event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
-            self.update_from_sleep(event.type)
-
-    async def backfill(self, bus: Any, *, scan: int = 500) -> None:
-        """Read recent self-model and sleep events and apply the newest match."""
-        try:
-            entries = await bus.recent("self_model.out", count=scan)
-        except Exception:
-            log.debug("conversation backfill failed for self_model.out", exc_info=True)
-        else:
-            for entry_id, event in entries:
-                if event.type == "self_model.document":
-                    self.observe(event)
-                    break
-
-        try:
-            entries = await bus.recent("sleep.out", count=scan)
-        except Exception:
-            log.debug("conversation backfill failed for sleep.out", exc_info=True)
-        else:
-            for entry_id, event in entries:
-                if event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
-                    self.observe(event)
-                    break
-
     def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")
         if isinstance(name, str) and name.strip():
