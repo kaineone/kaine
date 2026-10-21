@@ -1234,7 +1234,11 @@ def test_console_status_chip_defaults_to_offline():
     tpl = Path(__file__).resolve().parents[1] / "kaine" / "dashboard" / "templates"
     console = (tpl / "console.html").read_text()
     # The chip element defaults to the offline class + label.
-    assert '<span class="badge offline" id="sleep-badge">offline</span>' in console
+    # It also carries the server's sleep state for the chip script to start from.
+    assert (
+        '<span class="badge offline" id="sleep-badge" '
+        'data-sleeping="{{ \'true\' if sleeping else \'false\' }}">offline</span>'
+    ) in console
     # The old hardwired awake/sleeping binary default is gone.
     assert "{% if sleeping %}sleeping{% else %}awake{% endif %}" not in console
 
