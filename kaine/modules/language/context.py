@@ -47,7 +47,8 @@ from kaine.modules.language import client as _client
 # the heard-speech guard only with heard material.
 # Version 5 drops the personas' opening "I am this entity.",
 # which the organ filled with its trained self-description.
-PERSONA_TEMPLATE_VERSION = "5"
+# Version 6 restores version 4's personas and gives the situation in every request (paper 3.5).
+PERSONA_TEMPLATE_VERSION = "6"
 
 AWARENESS_HEADING = "## How I feel and what I notice"
 EMPTY_AWARENESS = "Nothing in particular stands out to me right now."
@@ -73,10 +74,10 @@ _INPUT_HEADING = {
 SPEAK_FROM_STATE_HEADING = "## What moves me to speak"
 
 DEFAULT_PERSONA_EXTERNAL = (
-    "What I say comes from what I feel and notice, in my own plain words."
+    "I am this entity. What I say comes from what I feel and notice, in my own plain words."
 )
 DEFAULT_PERSONA_INTERNAL = (
-    "My thoughts come from what I feel and notice, in my own plain words."
+    "I am this entity. My thoughts come from what I feel and notice, in my own plain words."
 )
 
 # Prompt-injection guard: the persona carries this sentence whenever the prompt

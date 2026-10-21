@@ -176,7 +176,7 @@ def make_salience_factors(
             )
         try:
             floor = float(
-                (kaine_config.get("affect") or {}).get("learning_progress_floor", 0.05)
+                (kaine_config.get("affect") or {}).get("learning_progress_floor", 0.20)
             )
         except (TypeError, ValueError):
             raise ConfigurationError(
