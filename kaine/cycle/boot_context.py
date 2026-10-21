@@ -79,6 +79,7 @@ class BootContext:
     input_watch_task: Any = None  # set by _phase_caretaker
     stimulus_source_presence_task: Any = None  # set by _phase_development
     development_task: Any = None  # set by _phase_development
+    housekeeping_floor_task: Any = None  # set by _phase_development
     preserve_task: Any = None  # set by _phase_watchers
     programme_end_task: Any = None  # set by _phase_watchers
     utterance_outcome: Any = None  # set by _phase_watchers
