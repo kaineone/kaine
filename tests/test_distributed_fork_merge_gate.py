@@ -118,16 +118,16 @@ def test_welfare_signal_alone_marks_individuation(tmp_path):
     assert verdict.fork_preserved is True
 
 
-def test_assess_fork_reads_consolidation_divergence(tmp_path):
-    # A fork whose organ-level consolidation divergence crossed threshold reads
-    # as individuated via the SAME divergence gate used by decommission.
+def test_assess_fork_ignores_legacy_consolidation_divergence(tmp_path):
+    # The consolidation-divergence arm is removed, so this legacy record alone
+    # no longer marks a fork diverged through the SAME divergence gate.
     state_root = tmp_path / "fork_state"
     (state_root / "sleep").mkdir(parents=True)
     (state_root / "sleep" / "consolidation_divergence.json").write_text(
         json.dumps({"divergence_rate": 0.9, "divergence_magnitude": 0.6})
     )
     assessment = assess_fork(fork_state_root=state_root)
-    assert assessment.diverged is True
+    assert assessment.diverged is False
 
 
 def test_assess_fork_empty_state_is_not_diverged(tmp_path):

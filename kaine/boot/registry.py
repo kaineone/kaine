@@ -348,7 +348,6 @@ def construct_module(
             world_model=world_model,
             kaine_config=kaine_config,
             entity_clock=entity_clock,
-            embedder=shared_embedder(registry, kaine_config),
         )
 
     factory = SIMPLE_FACTORIES[name]

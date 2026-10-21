@@ -9,8 +9,8 @@ monitors that carry that duty of care, constructed by ``cycle/__main__.py``
 alongside the supervisor and the freeze-watch loop:
 
 * :class:`DivergenceMonitor` — preserves the LIVE entity whenever the shared
-  divergence verdict gains a new arm (individuation latch, consolidation,
-  the self-model module's drift or adapters). The arm set is persisted, so a restart with
+  divergence verdict gains a new arm (individuation latch, voice
+  distinctiveness, the self-model module's drift or adapters). The arm set is persisted, so a restart with
   unchanged evidence does not re-preserve. Read-only on the entity; never
   deletes; rate-limited.
 
@@ -56,8 +56,6 @@ from kaine.cycle.incident_log import IncidentLog, scrub_paths
 from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.experiment.run_context import get_run_context
 from kaine.lifecycle.divergence import (
-    DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
-    DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
     VoicePaths,
     assess_divergence,
 )
@@ -100,7 +98,8 @@ class DivergenceMonitorConfig:
     Ships ``enabled = false`` (consistent with the all-off first-boot posture).
     The monitor preserves the entity when the shared verdict in
     ``kaine/lifecycle/divergence.py`` gains a divergence arm that was not yet
-    observed (individuation latch, consolidation, self-model drift or adapters).
+    observed (individuation latch, voice distinctiveness, self-model drift or
+    adapters).
     ``min_interval_s`` rate-limits preservation so a single sustained crossing
     preserves once, not every poll. ``boot_settle_s`` delays the first real
     assessment so entity state can finish loading.
@@ -412,8 +411,6 @@ def _active_arms(assessment) -> frozenset[str]:
     signals = assessment.signals or {}
     if signals.get("individuation_individuated"):
         arms.add("individuation")
-    if signals.get("consolidation_divergence_signal"):
-        arms.add("consolidation")
     if signals.get("self_model_drift_signal"):
         arms.add("self_model_drift")
     if signals.get("sleep_adapters_present"):
@@ -444,9 +441,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         # When set, preserve_live refuses to write an unencrypted bundle
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
-        consolidation_rate_threshold: float = DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
         distinctiveness_threshold: float = 0.0,
-        consolidation_magnitude_threshold: float = DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
         voice_paths: VoicePaths | None = None,
         adapter_output_dir: Path | None = None,
     ) -> None:
@@ -460,9 +455,7 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         self._fork_manager = fork_manager
         self._config = config
         self._require_encryption = bool(require_encryption)
-        self._consolidation_rate_threshold = consolidation_rate_threshold
         self._distinctiveness_threshold = float(distinctiveness_threshold)
-        self._consolidation_magnitude_threshold = consolidation_magnitude_threshold
         self._voice_paths = voice_paths
         self._adapter_output_dir = adapter_output_dir
         # Boot settle: no assessment until boot_settle_s after construction,
@@ -523,8 +516,6 @@ class DivergenceMonitor(_BaseSafetyMonitor):
         assessment = await asyncio.to_thread(
             assess_divergence,
             state_root=resolve(self._config.state_root),
-            consolidation_rate_threshold=self._consolidation_rate_threshold,
-            consolidation_magnitude_threshold=self._consolidation_magnitude_threshold,
             distinctiveness_threshold=self._distinctiveness_threshold,
             adapter_output_dir=self._adapter_output_dir,
             voice_paths=self._voice_paths,
