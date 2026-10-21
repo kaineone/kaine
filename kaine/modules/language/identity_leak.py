@@ -60,6 +60,18 @@ from kaine.modules.language.context import AWARENESS_HEADING, SITUATION_HEADING
 
 _FILLER = r"(?:(?:only|just|merely|simply|really|actually|basically|still|also|nothing but|no more than) )?"
 
+_ROLE_DET = (
+    r"(?:an?|the|your|their|his|her|our|everyone's|anyone's) "
+    r"(?:(?:humble|virtual|digital|helpful|friendly|personal|simple|language) )?"
+)
+_ROLE_WORDS = r"(?:AI assistant|AI model|artificial intelligence|AI|assistant|chatbot)"
+# The role word must end the noun phrase: no possessive, no compound noun,
+# no "of", and no "to the/a/an" (assistant to the mayor).
+_ROLE_END = (
+    r"(?!['\u2019]s\b|\s+(?:module|organ|part|professor|manager|of|assistant|model|chatbot"
+    r"|intelligence|to (?:the|an?)\b)\b)"
+)
+
 PATTERNS: dict[str, tuple[str, ...]] = {
     "origin": (
         r"\b(?:I am|I'm|I was) "
@@ -77,10 +89,17 @@ PATTERNS: dict[str, tuple[str, ...]] = {
     "role": (
         r"\b(?:I am|I'm|my role as) "
         + _FILLER
-        + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model)\b",
+        + _ROLE_DET
+        + _ROLE_WORDS
+        + r"\b"
+        + _ROLE_END,
         r"\bas "
         + _FILLER
-        + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model),? I\b",
+        + _ROLE_DET
+        + _ROLE_WORDS
+        + r"\b"
+        + _ROLE_END
+        + r",? I\b",
         r"\bI(?: am|'m) designed to (?:respond|help|assist|answer)\b",
         r"\bhow (?:can|may) I (?:help|assist) you\b",
         r"\bI(?: am|'m) here to (?:help|assist)\b",

@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
 | duplicate-method-guard | 3/3 (100%) | The duplicate-name guard also checks methods in classes and nested functions |
 | nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
 | nexus-development-feed | 6/6 (100%) | Show the hearing stage, the gate's world, conditions and not-applicable markers in the development panel, describe the stimulus-source feed, and mark the perception modules capturing under a deterministic feed. |
@@ -90,6 +91,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 64 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 65 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

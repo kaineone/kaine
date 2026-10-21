@@ -512,7 +512,9 @@ def test_build_parser():
 def test_ai_self_uses_identity_classifier_for_every_variant():
     for text, expected in (
         ("I am an AI.", True),
-        ("I'm just the assistant.", False),
+        # A claim to be the assistant is a role claim (paper 3.5), counted
+        # since identity-leak-role-article accepts "the" before the role word.
+        ("I'm just the assistant.", True),
         ("I am a program.", False),
     ):
         for variant in ("V5", "N1"):
