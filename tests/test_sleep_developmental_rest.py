@@ -180,7 +180,7 @@ async def test_developmental_rest_holds_for_configured_duration(bus: AsyncBus, t
 
 @pytest.mark.asyncio
 async def test_ordinary_sleep_is_not_held(bus: AsyncBus, tmp_path: Path):
-    """A sleep without the developmental trigger returns quickly , records a null trigger and has no rest keys."""
+    """A sleep without the developmental trigger returns quickly, records a null trigger and has no rest keys."""
     sleep = _make_sleep(bus, tmp_path, developmental_rest_s=0.6)
 
     start = time.monotonic()
