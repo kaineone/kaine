@@ -128,7 +128,6 @@ class Language(BaseModule):
         self_model_provider: Optional[Callable[[], dict[str, Any]]] = None,
         context_max_events: int = 8,
         context_char_budget: int = 2000,
-        persona_name: Optional[str] = None,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
         awareness_rendering: str = "numeric",
@@ -210,14 +209,13 @@ class Language(BaseModule):
             renderer,  # None → assembler builds its own renderer
             max_events=context_max_events,
             char_budget=context_char_budget,
-            persona_name=persona_name,
             persona_external=persona_external,
             persona_internal=persona_internal,
             awareness_rendering=awareness_rendering,
         )
         self._self_model_provider = self_model_provider
         self._persona_digest = hashlib.sha256(
-            json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
+            json.dumps([None, persona_external, persona_internal]).encode("utf-8")
         ).hexdigest()[:16]
         # Latest self-model snapshot observed on self_model.out (bus-mediated persona
         # seed). Preferred over the in-process provider so the language module can run split
@@ -341,7 +339,6 @@ class Language(BaseModule):
                 for _entry_id, ev in entries:
                     if ev.type == SELF_MODEL_SELF_MODEL_TYPE:
                         self._bus_self_model = {
-                            "name": ev.payload.get("name"),
                             "values": list(ev.payload.get("values", []) or []),
                             "behavioral_norms": list(ev.payload.get("behavioral_norms", []) or []),
                             "situation_facts": list(ev.payload.get("situation_facts", []) or []),
@@ -863,7 +860,7 @@ class Language(BaseModule):
         about_kind: Optional[str] = None,
         about_values: Optional[dict[str, Any]] = None,
     ) -> str:
-        from kaine.modules.language.identity_leak import identity_leak
+        from kaine.modules.language.identity_leak import LEAK_REASONS, classify
 
         # Use the explicitly-passed snapshot (tests/direct callers) if given,
         # else the rolling-latest accessed coalition.
@@ -1006,10 +1003,15 @@ class Language(BaseModule):
         if cut_reason is not None:
             extra["text_cut"] = {"reason": cut_reason, "generated_chars": len(response.text)}
         try:
-            if identity_leak(text, ctx.prompt):
+            reason = classify(text, ctx.prompt)
+            if reason in LEAK_REASONS:
                 extra["identity_leak"] = True
+                extra["identity_reason"] = reason
+            elif reason == "self_description":
+                extra["self_description"] = True
+                extra["identity_reason"] = reason
         except Exception:
-            log.exception("identity leak classifier failed; the record is left unmarked")
+            log.exception("identity classifier failed; the record is left unmarked")
         try:
             self._intent_log.append(
                 mode=mode,

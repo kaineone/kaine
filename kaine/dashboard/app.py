@@ -30,6 +30,7 @@ from kaine.dashboard.config import DashboardConfig
 from kaine.dashboard.conversation import (
     ConversationState,
     build_conversation_router,
+    build_sleep_router,
 )
 from kaine.dashboard.csrf import DashboardCSRFMiddleware
 from kaine.dashboard.cycle_control import build_cycle_control_router, control_snapshot
@@ -216,6 +217,7 @@ def create_app(
         # Health endpoint is always unauthenticated so container probes keep
         # working regardless of the privileged-read gate.
         app.include_router(build_health_router(health_prober))
+        app.include_router(build_sleep_router(state), dependencies=read_dep)
         app.include_router(build_perception_router(), dependencies=state_change_dep)
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
         app.include_router(build_caretaker_router(), dependencies=state_change_dep)

@@ -10,15 +10,35 @@ observation; it prescribes nothing.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import tempfile
+import unicodedata
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+
+log = logging.getLogger(__name__)
+
+MAX_NAME_LENGTH = 64
+
+
+def is_valid_name(name: object) -> bool:
+    """A name is a non-blank single-line string of at most 64 characters, with no
+    leading or trailing whitespace and no control, format (bidi), surrogate,
+    private-use or unassigned character (any Unicode category starting with "C")."""
+    return (
+        isinstance(name, str)
+        and 0 < len(name) <= MAX_NAME_LENGTH
+        and name == name.strip()
+        and all(not unicodedata.category(c).startswith("C") for c in name)
+        and len(name.splitlines()) == 1
+    )
+
 
 # First name shared by this lineage of entities; the surname individuates each
-# launch. The entity may rename itself later — this is only the starting point.
+# launch. The name is drawn once at first boot and kept for life.
 DEFAULT_FIRST_NAME = "Kaine"
 
 # A tribute to Second Life's "last name" lineage: the surnames residents chose
@@ -43,19 +63,28 @@ def _load_surnames() -> tuple[str, ...]:
 _SURNAMES = _load_surnames()
 
 
-def generate_launch_name(*, rng: random.Random | None = None) -> str:
+def generate_launch_name(
+    *, rng: random.Random | None = None, exclude: str | Iterable[str] | None = None
+) -> str:
     """``Kaine <Surname>`` with a surname picked at launch. Injectable RNG for
-    deterministic tests."""
+    deterministic tests. ``exclude`` is a full name to avoid (a fork's parent's
+    name); when every surname would produce it, the name is returned anyway."""
     r = rng or random
-    return f"{DEFAULT_FIRST_NAME} {r.choice(_SURNAMES)}"
+    avoid = {exclude} if isinstance(exclude, str) else set(exclude or ())
+    candidates = [
+        n for n in (f"{DEFAULT_FIRST_NAME} {s}" for s in _SURNAMES) if n not in avoid
+    ]
+    if not candidates:
+        return f"{DEFAULT_FIRST_NAME} {r.choice(_SURNAMES)}"
+    return r.choice(candidates)
 
 
 @dataclass(frozen=True)
 class SelfModelDocument:
-    # The entity's name. Empty until assigned. A first name + a surname chosen
-    # at first launch (see generate_launch_name); the long-term intent is that
-    # an entity renames ITSELF once it has a sense of identity, at which point
-    # this is overwritten from its own expressed preference.
+    # The entity's name. Empty until assigned. A first name + a surname drawn
+    # once at first boot (see generate_launch_name) and kept for life. The
+    # identity file (state/identity/entity.json) is the record of the name; this
+    # field mirrors it.
     name: str = ""
     values: list[str] = field(default_factory=list)
     behavioral_norms: list[str] = field(default_factory=list)
@@ -84,8 +113,12 @@ class SelfModelDocument:
     @classmethod
     def from_json(cls, text: str) -> "SelfModelDocument":
         data = json.loads(text)
+        name = str(data.get("name", ""))
+        if name and not is_valid_name(name):
+            log.warning("self-model document holds an invalid name %r; treating it as no name", name)
+            name = ""
         return cls(
-            name=str(data.get("name", "")),
+            name=name,
             values=list(data.get("values", [])),
             behavioral_norms=list(data.get("behavioral_norms", [])),
             capability_map=dict(data.get("capability_map", {})),

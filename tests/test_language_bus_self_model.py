@@ -81,7 +81,7 @@ async def test_language_boots_against_bus_mediated_self_model(bus: AsyncBus, tmp
         ok = await _wait_for(lambda: language._bus_self_model is not None)
         assert ok
         model = language._self_model()
-        assert model["name"] == "Kaine Umarov"
+        assert "name" not in model
         assert "curiosity" in model["values"]
         assert model["behavioral_norms"] == ["be kind"]
     finally:
@@ -95,10 +95,10 @@ async def test_language_picks_up_snapshot_published_after_boot(bus: AsyncBus, tm
     try:
         # Nothing yet → minimal persona.
         assert language._self_model() == {}
-        await _publish_self_model(bus, name="Kaine Later")
+        await _publish_self_model(bus, values=["later"])
         ok = await _wait_for(lambda: language._bus_self_model is not None)
         assert ok
-        assert language._self_model()["name"] == "Kaine Later"
+        assert language._self_model()["values"] == ["later"]
     finally:
         await language.shutdown()
 
@@ -108,15 +108,15 @@ async def test_bus_snapshot_overrides_in_process_provider(bus: AsyncBus, tmp_pat
     # If a legacy provider is injected, a bus snapshot still wins (the bus is the
     # canonical, split-host-safe source).
     language = _make_language(bus, tmp_path)
-    language.set_self_model_provider(lambda: {"name": "Legacy", "values": []})
-    assert language._self_model()["name"] == "Legacy"
+    language.set_self_model_provider(lambda: {"values": ["legacy"]})
+    assert language._self_model()["values"] == ["legacy"]
     await language.initialize()
     try:
-        await _publish_self_model(bus, name="Kaine Bus")
+        await _publish_self_model(bus, values=["bus"])
         ok = await _wait_for(
-            lambda: (language._bus_self_model or {}).get("name") == "Kaine Bus"
+            lambda: (language._bus_self_model or {}).get("values") == ["bus"]
         )
         assert ok
-        assert language._self_model()["name"] == "Kaine Bus"
+        assert language._self_model()["values"] == ["bus"]
     finally:
         await language.shutdown()

@@ -48,7 +48,8 @@ from kaine.modules.language import client as _client
 # Version 5 drops the personas' opening "I am this entity.",
 # which the organ filled with its trained self-description.
 # Version 6 restores version 4's personas and gives the situation in every request (paper 3.5).
-PERSONA_TEMPLATE_VERSION = "6"
+# Version 7 drops the name line: the organ is not told the entity's name.
+PERSONA_TEMPLATE_VERSION = "7"
 
 AWARENESS_HEADING = "## How I feel and what I notice"
 EMPTY_AWARENESS = "Nothing in particular stands out to me right now."
@@ -163,13 +164,6 @@ def _sanitize_line(text: str) -> str:
     text = "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
     text = text.replace("#", "\uff03")
     return _defang(text)
-
-
-def _name_from(self_model: dict[str, Any]) -> Optional[str]:
-    # The self-model has no name today; this reads a future top-level `name`
-    # field if one is added. The operator-facing name comes from `persona_name`.
-    name = (self_model or {}).get("name")
-    return str(name) if name else None
 
 
 def _identity_clause(self_model: dict[str, Any]) -> Optional[str]:
@@ -362,7 +356,6 @@ class ContextAssembler:
         *,
         max_events: int = 8,
         char_budget: int = 2000,
-        persona_name: Optional[str] = None,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
         awareness_rendering: str = "numeric",
@@ -382,7 +375,6 @@ class ContextAssembler:
             self._renderer = FaithfulRenderer(empty_snapshot_text=EMPTY_AWARENESS)
         self._max_events = max(1, int(max_events))
         self._char_budget = int(char_budget)
-        self._persona_name = persona_name
         self._persona_external = persona_external
         self._persona_internal = persona_internal
         self._redact = (
@@ -594,9 +586,6 @@ class ContextAssembler:
         else:
             base = self._persona_external or DEFAULT_PERSONA_EXTERNAL
         parts: list[str] = []
-        name = self._persona_name or _name_from(self_model)
-        if name:
-            parts.append(f"My name is {_sanitize_line(name)}.")
         parts.append(base)
         identity = _identity_clause(self_model)
         if identity:

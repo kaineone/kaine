@@ -93,7 +93,7 @@
         <span class="mname">{{ m.name }}</span>
         <span class="mstate">
           {%- if not m.enabled -%}disabled
-          {%- elif m.capturing -%}🔴 capturing
+          {%- elif m.capturing -%}{% if not m.feed or m.feed == "live" %}🔴 capturing{% else %}capturing ({{ m.feed }}){% endif %}
           {%- elif m.initialized -%}running
           {%- else -%}idle{%- endif -%}
         </span>

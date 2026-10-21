@@ -144,11 +144,24 @@ The rows that appear depend on the configured backends:
 
 See the module chapters for backend details: [audition](09-modules/audition.md), [vocal](09-modules/vocal.md), and [planning](09-modules/planning.md).
 
-Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing` (a perception sensor is live). Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
+Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing`. The vision and audition modules read `🔴 capturing` while the live camera or microphone runs, and `capturing (<feed>)` while the running cycle feeds them from a seeded, playlist, screen or stimulus-source feed. Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
 
 Between the dependencies and the modules grid, the backend load row lists each module whose configured runtime backend could not load in the cycle, with the lighter backend used instead or a note that the module was disabled. The cycle writes these records into `state/cycle/runtime.json` as `backend_failures`, because the dashboard runs in a separate process (in the compose deployment, a separate container) and cannot see the cycle's in-process registry. When there is no runtime file, or the running cycle predates the field, the row says the state is not known instead of reporting success.
 
 The unauthenticated endpoint `/diagnostics/health.json` returns the same health data as JSON.
+
+## Development panel
+
+The development panel appears while the entity is in the developmental phase or the hearing band reports a stage. It reads `/diagnostics/maturation.json` every 5 s, which takes the gate's status and the hearing stage from `state/cycle/runtime.json`. It shows:
+
+- the stage, awake time and sleep count;
+- the world the gate judges against (`perceptual` or `embodied`);
+- the consolidation passes when consolidation is required, and "consolidation: not required" when the gate's `conditions.c2_consolidation_required` is false (no sleep module or no world model module);
+- each readiness marker as met (✓), unmet (✗) or not applicable (–), with its readout value where there is one;
+- the gate decision and, with operator acknowledgement on, the acknowledgement control;
+- the hearing band's stage, for example "stage 1 of 4, 158.1 to 707.1 Hz", "below 707.1 Hz" once the lower edge is gone, or "open" at stage 4.
+
+In stimulus-source mode the perception feed panel lists the configured stimulus: the base heartbeat rate and its drift, the colour ramp's time constant and hue gain, whether the maternal voice is on, and the hearing band's span with its current stage. They are the configured values. The heartbeat drifts around its base rate with the simulated maternal state, and the panel does not show the rate of the moment. See [developmental phase](06-operation/development.md) for what each one does.
 
 ## Run identity and supervision
 
@@ -168,6 +181,26 @@ The preservation panel lists each action of the preservation monitors, a diverge
 Each line shows operational fields only: monitor, transition, reason, action, and preservation or snapshot ids. A failed preservation is shown in the critical colour and needs the operator's attention. See [Preservation](11-preservation.md) for the full behaviour.
 
 The entity-care panel shows the welfare gray-zone counters and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
+
+## Affect welfare record
+
+The affect welfare panel shows the newest `affect_welfare` record the welfare observer wrote to its rollup under `data/evaluation/welfare/`. The observer writes one every 300 s of unfrozen time when it has read new affect events, and each record is cumulative since the observer started. The panel shows the record's time, the awake time it covers and the share of that time with valence below the negative-valence bar. For boredom, the social drive and restlessness it shows:
+
+| Column | Meaning |
+|---|---|
+| uncontrolled ends | The share of the drive's ended crossings that ended without the entity's own response. |
+| per awake hour | Those uncontrolled ends per hour awake. |
+| time above threshold | The share of awake time the drive spent at or above its threshold. |
+| ended by sleep reset | Crossings the affective reset at the end of a sleep closed. These count as neither own nor uncontrolled ends. |
+| crossing open now | Whether a crossing was still open when the record was written. |
+
+For curiosity it shows the interest share, the share of awake time at or above its threshold. When the newest record comes from before the observer's latest start, the panel says so. See [the welfare observer](17-research-data/README.md#welfareobserver) for how each measure is counted.
+
+## Sleep and rest
+
+The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a developmental rest, the rest's length. The trigger is the one the sleep module states where it states one: `developmental rest` (a spent stimulus in the developmental phase, a 1,260 s rest) or `requested`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
+
+Below it the panel shows the last `affect.rest_request`: the reason (`stimulus spent`), the drive, how long its goal had stalled, and the time. When the dashboard starts it reads the newest sleep events and rest request from the last 2,000 entries of `sleep.out` and `affect.out`, so a request older than that shows only after the next one.
 
 ## Live charts and pacing
 

@@ -108,17 +108,23 @@ def preservation_block(
 
 
 def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
-    """Read-only welfare counters for the entity-care panel.
+    """Read-only welfare counters plus the newest affect welfare record.
 
-    Numeric only: the four §5.5 gray-zone counts plus blind-sensor and
-    sensor-silent advisory state from the evaluation JSONL rollup (the dashboard
-    process holds no live sidecar registry). Never raises; a missing rollup
-    yields a ``source: none`` block.
+    Numeric only: the four §5.5 gray-zone counts, blind-sensor and
+    sensor-silent advisory state, and the most recent ``affect_welfare``
+    record from the evaluation JSONL rollup (the dashboard process holds no
+    live sidecar registry). Never raises; a missing rollup yields a
+    ``source: none`` block with ``affect_welfare: null``.
     """
     try:
-        from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+        from kaine.experiment.welfare_counts import (
+            affect_welfare_from_jsonl,
+            welfare_counts_from_jsonl,
+        )
 
-        return welfare_counts_from_jsonl(evaluation_logs_path)
+        counts = welfare_counts_from_jsonl(evaluation_logs_path)
+        counts["affect_welfare"] = affect_welfare_from_jsonl(evaluation_logs_path)
+        return counts
     except Exception:
         log.debug("welfare_block failed", exc_info=True)
         return {
@@ -131,6 +137,7 @@ def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
             "sensor_silent_advisories": None,
             "silent_sensors": [],
             "source": "none",
+            "affect_welfare": None,
         }
 
 
@@ -362,6 +369,43 @@ def perception_feed_block(
     never a rendered frame. Reuses the same descriptor the run manifest
     records. Never raises; reports defaults on any error.
     """
+    def _stimulus_source_summary(feed: dict[str, Any]) -> dict[str, Any]:
+        summary: dict[str, Any] = {}
+
+        try:
+            from kaine.boot.perception_feed import _stimulus_source_params
+            params = _stimulus_source_params(feed)
+            summary["heartbeat_bpm"] = float(params.heartbeat_bpm)
+            summary["heartbeat_drift"] = float(params.heartbeat_drift)
+            summary["colour_ramp_seconds"] = float(params.colour_ramp_seconds)
+            summary["colour_hue_gain"] = float(params.maternal_state_hue_gain)
+        except Exception:
+            log.debug("stimulus_source params read failed", exc_info=True)
+            summary["heartbeat_bpm"] = None
+            summary["heartbeat_drift"] = None
+            summary["colour_ramp_seconds"] = None
+            summary["colour_hue_gain"] = None
+
+        try:
+            from kaine.boot.perception_feed import _maternal_voice_params
+            voice = _maternal_voice_params(feed)
+            summary["maternal_voice_enabled"] = bool(voice.enabled)
+        except Exception:
+            log.debug("maternal_voice params read failed", exc_info=True)
+            summary["maternal_voice_enabled"] = None
+
+        try:
+            from kaine.boot.perception_feed import _hearing_band_params
+            hearing = _hearing_band_params(feed)
+            summary["hearing_enabled"] = bool(hearing.enabled)
+            summary["hearing_maturation_seconds"] = float(hearing.maturation_seconds)
+        except Exception:
+            log.debug("hearing_band params read failed", exc_info=True)
+            summary["hearing_enabled"] = None
+            summary["hearing_maturation_seconds"] = None
+
+        return summary
+
     try:
         from kaine.boot import gather_perception_feed_descriptor
 
@@ -381,7 +425,7 @@ def perception_feed_block(
         descriptor = gather_perception_feed_descriptor(cfg)
         mode = descriptor.get("mode", "off")
         reproducible = mode in ("seeded", "playlist", "stimulus_source")
-        return {
+        result = {
             "mode": mode,
             "reproducible": reproducible,
             "descriptor": descriptor,
@@ -398,6 +442,9 @@ def perception_feed_block(
                 )
             ),
         }
+        if mode == "stimulus_source":
+            result["stimulus_source"] = _stimulus_source_summary(cfg["perception_feed"])
+        return result
     except Exception:
         log.debug("perception_feed_block failed", exc_info=True)
         return {
@@ -628,13 +675,15 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
 
 
 def module_states(
-    cycle_runtime_path: Path, modules_enabled: dict[str, bool]
+    cycle_runtime_path: Path,
+    modules_enabled: dict[str, bool],
+    feed_mode: str | None = None,
 ) -> list[dict[str, Any]]:
     """Per-module live state from runtime.json + perception state.
 
     Reports ``enabled`` (config), ``initialized`` (present in the running
     cycle's module list), and, for the perception modules, whether the
-    sensor is actively capturing.
+    sensor is actively capturing or a deterministic feed is configured.
     """
     running_modules: list[str] = []
     cycle_running = False
@@ -654,6 +703,8 @@ def module_states(
         audio_active = False
         video_active = False
 
+    deterministic = feed_mode in ("seeded", "playlist", "screen", "stimulus_source")
+
     rows: list[dict[str, Any]] = []
     for module, enabled in sorted(modules_enabled.items()):
         initialized = cycle_running and module in running_modules
@@ -663,9 +714,19 @@ def module_states(
             "initialized": bool(initialized),
         }
         if module == "audition":
-            row["capturing"] = bool(audio_active)
+            row["capturing"] = bool(audio_active) or (deterministic and initialized)
+            row["feed"] = (
+                feed_mode
+                if (deterministic and initialized)
+                else ("live" if audio_active else None)
+            )
         elif module == "vision":
-            row["capturing"] = bool(video_active)
+            row["capturing"] = bool(video_active) or (deterministic and initialized)
+            row["feed"] = (
+                feed_mode
+                if (deterministic and initialized)
+                else ("live" if video_active else None)
+            )
         rows.append(row)
     return rows
 

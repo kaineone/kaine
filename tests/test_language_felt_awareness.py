@@ -191,7 +191,7 @@ def test_guard_and_persona_text(rendering, mode):
     assert DEFAULT_PERSONA_INTERNAL.startswith(
         "I am this entity. My thoughts come from what I feel and notice"
     )
-    assert PERSONA_TEMPLATE_VERSION == "6"
+    assert PERSONA_TEMPLATE_VERSION == "7"
     assert "\u2014" not in system
 
 

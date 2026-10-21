@@ -1,0 +1,49 @@
+{# Read-only affect welfare record. `welfare` is the health snapshot's welfare
+   block; `welfare.affect_welfare` is null or a dict of numbers and a
+   timestamp. This panel is numeric only: no cognitive text is shown. #}
+{% macro pct(v) -%}{% if v is none %}n/a{% else %}{{ "%.1f"|format(v * 100) }}%{% endif %}{%- endmacro %}
+{% macro num(v, digits) -%}{% if v is none %}n/a{% else %}{{ ("%." ~ digits ~ "f")|format(v) }}{% endif %}{%- endmacro %}
+<section id="affect-welfare" class="panel" data-readonly="true">
+  <h2>affect welfare record (read-only)</h2>
+  {% if welfare and welfare.affect_welfare %}
+    {% set aw = welfare.affect_welfare %}
+    <p>record time: <strong>{{ aw.ts if aw.ts else "n/a" }}</strong></p>
+    {% if not aw.current_run %}
+    <p class="muted">From before the welfare observer's latest start.</p>
+    {% endif %}
+    <p>awake time: <strong>{% if aw.awake_seconds is none %}n/a{% else %}{{ "%.1f"|format(aw.awake_seconds / 3600) }} h{% endif %}</strong></p>
+    <p>negative-valence share: <strong>{{ pct(aw.negative_valence_share) }}</strong>
+      (bar value: {{ num(aw.negative_valence_bar, 3) }})</p>
+    <div class="table-wrap">
+    <table class="mono">
+      <thead>
+        <tr>
+          <th>drive</th>
+          <th>uncontrolled ends</th>
+          <th>uncontrolled ends per awake hour</th>
+          <th>time above threshold</th>
+          <th>ended by sleep reset</th>
+          <th>crossing open now</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, label in [("boredom", "boredom"), ("social_drive", "social drive"), ("restlessness", "restlessness")] %}
+        {% set open_c = aw[key ~ "_open_crossings"] %}
+        <tr>
+          <td>{{ label }}</td>
+          <td>{{ pct(aw[key ~ "_uncontrolled_share"]) }}</td>
+          <td>{{ num(aw[key ~ "_uncontrolled_per_awake_hour"], 2) }}</td>
+          <td>{{ pct(aw[key ~ "_deprivation_share"]) }}</td>
+          <td>{% if aw[key ~ "_sleep_reset_ends"] is none %}n/a{% else %}{{ aw[key ~ "_sleep_reset_ends"]|int }}{% endif %}</td>
+          <td>{% if open_c is none %}n/a{% elif open_c %}yes{% else %}no{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p>curiosity interest share: <strong>{{ pct(aw.curiosity_interest_share) }}</strong></p>
+    <p class="muted">Uncontrolled means a crossing that ended without the entity's own response.</p>
+  {% else %}
+    <p class="muted">No affect welfare record yet. The welfare observer writes one every 300 s of unfrozen time.</p>
+  {% endif %}
+</section>
