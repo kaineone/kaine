@@ -16,5 +16,5 @@ The interoception module's sleep cursor starts at "0" (kaine/modules/interocepti
 
 ## Impact
 
-- stream-tail-cursors0
-- Behaviour: stream-tail-cursors1
+- kaine/modules/interoception/module.py, the vision and audition modules, a shared helper in kaine/bus or kaine/modules/base.py, the other tail-seeding consumers, tests.
+- Behaviour: interoception keeps its restored fatigue and regulation state across a restart.
