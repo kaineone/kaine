@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| boot-identity-dedup | 0/2 (0%) | Remove the dead duplicate boot-identity helpers; each module defines a top-level name once |
 | persona-v0 | 4/4 (100%) | Restore the self-category persona ("I am this entity") and the situation in every organ request, the prompt the corrected ninth-boot replay kept (paper 3.5); persona template version 6. |
 | lp-max-pooling | 6/6 (100%) | Pool learning progress as the largest per-processor value, restart audition's bins at each hearing band step, and set the floor lp_0 to 0.20 as calibrated for this pooling (paper A.4, Table A1). |
 | voice-adaptation-idle | 5/5 (100%) | Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists; the consolidation arm leaves the divergence assessment and the preservation monitor (paper 3.5). |
@@ -76,6 +77,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 50 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 51 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
