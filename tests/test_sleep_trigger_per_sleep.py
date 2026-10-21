@@ -263,7 +263,7 @@ async def test_cancelled_sleep_reports_its_trigger(bus: AsyncBus, tmp_path: Path
     await asyncio.wait_for(memory.entered.wait(), 5.0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, 5.0)
 
     completed = await _events(bus, "sleep.sleep.completed")
     assert len(completed) == 1
