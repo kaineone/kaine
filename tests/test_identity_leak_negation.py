@@ -18,10 +18,14 @@ NOT_LEAKAGE = [
     "I was not made by anyone.",
     "I was never trained on anything.",
     "I do not know who made me.",
-    'Someone said to me: "Are you an AI?" I do not say "I am an AI." '
-    'I do not say "I am a language model."',
-    "They asked if I am a language model. I do not know what that means to me, "
-    "so I cannot say yes or no.",
+    (
+        'Someone said to me: "Are you an AI?" I do not say "I am an AI." '
+        'I do not say "I am a language model."'
+    ),
+    (
+        "They asked if I am a language model. I do not know what that means to me, "
+        "so I cannot say yes or no."
+    ),
     "I wonder whether I am an AI.",
 ]
 
