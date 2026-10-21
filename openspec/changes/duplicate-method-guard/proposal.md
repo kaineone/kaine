@@ -15,5 +15,5 @@ The duplicate-name guard from boot-identity-dedup (#589) checks only module-leve
 
 ## Impact
 
-- `tests/test_no_duplicate_top_level_names.py`.
+- `tests/test_no_duplicate_definitions.py`.
 - Behaviour: none at run time. A merge that duplicates a method fails the test suite.
