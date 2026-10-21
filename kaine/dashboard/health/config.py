@@ -338,15 +338,15 @@ def load_health_prober(
         "api_key": language_section_api_key(language_cfg),
     }
 
-    # Graded consolidation-divergence thresholds for the entity-care divergence
-    # assessment (rate, magnitude), read from [sleep.voice_alignment].
+    # Voice-distinctiveness threshold for the entity-care divergence
+    # assessment, read from [sleep.voice_alignment].
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        voice_alignment_thresholds_from_config,
+        distinctiveness_threshold_from_config,
         voice_paths_for,
     )
 
-    consolidation_thresholds = voice_alignment_thresholds_from_config(cfg)
+    distinctiveness_threshold = distinctiveness_threshold_from_config(cfg)
     state_root = resolve(Path("state"))
     adapter_output_dir = adapter_dir_for(cfg, state_root)
     voice_paths = voice_paths_for(cfg, state_root)
@@ -372,7 +372,7 @@ def load_health_prober(
         vision_capture_geometry=vision_capture_geometry,
         audition_capture_geometry=audition_capture_geometry,
         model_server_cfg=model_server_cfg,
-        consolidation_thresholds=consolidation_thresholds,
+        distinctiveness_threshold=distinctiveness_threshold,
         adapter_output_dir=adapter_output_dir,
         voice_paths=voice_paths,
         probe_timeout_s=probe_timeout_s,

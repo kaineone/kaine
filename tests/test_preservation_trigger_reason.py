@@ -27,8 +27,6 @@ def _armed(*arms):
     signals = {}
     if "individuation" in arms:
         signals["individuation_individuated"] = True
-    if "consolidation" in arms:
-        signals["consolidation_divergence_signal"] = True
     if "self_model_drift" in arms:
         signals["self_model_drift_signal"] = True
     if "adapters" in arms:
@@ -88,7 +86,7 @@ async def test_voice_alone_reason_is_voice(bus, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_consolidation_alone_reason_is_consolidation(bus, tmp_path, monkeypatch):
+async def test_self_model_drift_alone_reason_is_self_model_drift(bus, tmp_path, monkeypatch):
     fm = _StubFM()
     reg, eid = await _entity(bus, tmp_path)
     mon = _div_monitor(
@@ -97,13 +95,13 @@ async def test_consolidation_alone_reason_is_consolidation(bus, tmp_path, monkey
         fm,
         _cfg(),
         monkeypatch,
-        assessments=[_not_diverged(), _armed("consolidation")],
+        assessments=[_not_diverged(), _armed("self_model_drift")],
         tmp_state_root=tmp_path / "state",
     )
     await mon._poll_once(asyncio.Event())
     await mon._poll_once(asyncio.Event())
     assert len(fm.calls) == 1
-    assert fm.calls[0]["reason"] == "consolidation"
+    assert fm.calls[0]["reason"] == "self_model_drift"
     await eid.shutdown()
 
 
@@ -137,17 +135,17 @@ async def test_two_arms_reason_is_sorted_joined(bus, tmp_path, monkeypatch):
         fm,
         _cfg(),
         monkeypatch,
-        assessments=[_not_diverged(), _armed("voice", "consolidation")],
+        assessments=[_not_diverged(), _armed("voice", "self_model_drift")],
         tmp_state_root=tmp_path / "state",
     )
     records = _capture_records(mon)
     await mon._poll_once(asyncio.Event())
     await mon._poll_once(asyncio.Event())
     assert len(fm.calls) == 1
-    assert fm.calls[0]["reason"] == "consolidation+voice"
+    assert fm.calls[0]["reason"] == "self_model_drift+voice"
     preserved = [payload for et, payload in records if et == "preservation.preserved"]
     assert len(preserved) == 1
-    assert preserved[0]["reason"] == "consolidation+voice"
+    assert preserved[0]["reason"] == "self_model_drift+voice"
     await eid.shutdown()
 
 
@@ -161,14 +159,14 @@ async def test_edge_on_second_arm_preserves_only_new_reason(bus, tmp_path, monke
         fm,
         _cfg(),
         monkeypatch,
-        assessments=[_armed("voice"), _armed("voice", "consolidation")],
+        assessments=[_armed("voice"), _armed("voice", "self_model_drift")],
         tmp_state_root=tmp_path / "state",
     )
     await mon._poll_once(asyncio.Event())
     await mon._poll_once(asyncio.Event())
     assert len(fm.calls) == 2
     assert fm.calls[0]["reason"] == "voice"
-    assert fm.calls[1]["reason"] == "consolidation"
+    assert fm.calls[1]["reason"] == "self_model_drift"
     await eid.shutdown()
 
 
@@ -182,7 +180,7 @@ async def test_rate_limited_skip_record_carries_reason(bus, tmp_path, monkeypatc
         fm,
         DivergenceMonitorConfig(enabled=True, min_interval_s=3600.0),
         monkeypatch,
-        assessments=[_armed("voice"), _armed("voice", "consolidation")],
+        assessments=[_armed("voice"), _armed("voice", "self_model_drift")],
         tmp_state_root=tmp_path / "state",
     )
     records = _capture_records(mon)
@@ -192,8 +190,8 @@ async def test_rate_limited_skip_record_carries_reason(bus, tmp_path, monkeypatc
     assert fm.calls[0]["reason"] == "voice"
     skipped = [payload for et, payload in records if et == "preservation.skipped"]
     assert len(skipped) == 1
-    assert skipped[0]["reason"] == "consolidation"
-    assert skipped[0]["new_arms"] == ["consolidation"]
+    assert skipped[0]["reason"] == "self_model_drift"
+    assert skipped[0]["new_arms"] == ["self_model_drift"]
     await eid.shutdown()
 
 
@@ -228,18 +226,18 @@ async def test_failed_record_carries_reason(bus, tmp_path, monkeypatch):
         fm,
         _cfg(),
         monkeypatch,
-        assessments=[_armed("consolidation")],
+        assessments=[_armed("self_model_drift")],
         tmp_state_root=tmp_path / "state",
     )
     records = _capture_records(mon)
     await mon._poll_once(asyncio.Event())
     failed = [payload for et, payload in records if et == "preservation.failed"]
     assert len(failed) == 1
-    assert failed[0]["reason"] == "consolidation"
+    assert failed[0]["reason"] == "self_model_drift"
     await eid.shutdown()
 
 
-@pytest.mark.parametrize("arm", ["voice", "consolidation", "self_model_drift", "adapters"])
+@pytest.mark.parametrize("arm", ["voice", "self_model_drift", "adapters"])
 @pytest.mark.asyncio
 async def test_reason_is_not_individuation_unless_arm_fired(
     bus, tmp_path, monkeypatch, arm

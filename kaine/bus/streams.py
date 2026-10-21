@@ -59,6 +59,11 @@ DEVELOPMENT_STREAM = "development.out"
 #: always agree; the stored stage value of the same spelling is a different name.
 DEVELOPMENT_SOURCE = DEVELOPMENT_STREAM.removesuffix(".out")
 
+#: Awake-floor operator events (kaine.cycle.housekeeping_floor); not a module stream, so nothing published there enters the workspace.
+HOUSEKEEPING_STREAM = "housekeeping.out"
+#: The housekeeping floor's bus source. Derived from the stream so the two always agree.
+HOUSEKEEPING_SOURCE = HOUSEKEEPING_STREAM.removesuffix(".out")
+
 #: The perception feed's own bus source and stream (stimulus-source-to-world
 #: transition outcomes). It is distinct from the perceptual locus module's stream,
 #: so each has its own cap and the rename never folds one onto the other.
@@ -106,6 +111,7 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
         LANGUAGE_EXTERNAL_STREAM,
         LANGUAGE_INTERNAL_STREAM,
         DEVELOPMENT_STREAM,
+        HOUSEKEEPING_STREAM,
         PERCEPTION_FEED_STREAM,
         INDIVIDUATION_STREAM,
         LIFECYCLE_STREAM,
@@ -124,6 +130,8 @@ __all__ = [
     "SOCIAL_COGNITION_STREAM",
     "DEVELOPMENT_STREAM",
     "DEVELOPMENT_SOURCE",
+    "HOUSEKEEPING_STREAM",
+    "HOUSEKEEPING_SOURCE",
     "PERCEPTION_FEED_SOURCE",
     "PERCEPTION_FEED_STREAM",
     "SLEEP_STREAM",

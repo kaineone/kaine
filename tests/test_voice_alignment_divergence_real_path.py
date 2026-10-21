@@ -103,11 +103,7 @@ async def test_observer_records_real_sleep_summary(bus: AsyncBus, tmp_path: Path
 
     payload = event.payload
     phase = _voice_alignment_phase(payload)
-    assert "consolidation_divergence" in phase["metadata"]
-    cd = phase["metadata"]["consolidation_divergence"]
-    assert cd["records_scanned"] == 1
-    assert cd["usable_pairs"] == 1
-    assert cd["divergence_rate"] == 1.0
+    assert "consolidation_divergence" not in phase["metadata"]
 
     sink = FakeSink()
     observer = VoiceAlignmentDivergenceObserver(bus, sink)

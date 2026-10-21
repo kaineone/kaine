@@ -19,11 +19,7 @@ from kaine.lifecycle.decommission import capture_backup
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.modules.sleep import FakeTrainer, Sleep, Trainer, VoiceAlignmentConfig
 from kaine.modules.sleep.corpus import intent_record_paths, rotate_intent_log
-from kaine.modules.sleep.voice_alignment import (
-    OPERATOR_APPROVED_ENV,
-    DPOPairBuilder,
-    read_consolidation_divergence,
-)
+from kaine.modules.sleep.voice_alignment import OPERATOR_APPROVED_ENV, DPOPairBuilder
 from kaine.security.crypto import (
     CryptoConfig,
     StateEncryptor,
@@ -157,8 +153,8 @@ def _seed_fork(fork_root: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_two_sleeps_keep_divergence_across_rotation(bus, tmp_path):
-    """Two sleeps with a rotation in between keep the divergence arm raised."""
+async def test_two_sleeps_scan_rotated_corpus_files(bus, tmp_path):
+    """Two sleeps with a rotation in between keep the corpus scan counts stable."""
     intent_records = [
         {
             "prompt": "p",
@@ -167,25 +163,26 @@ async def test_two_sleeps_keep_divergence_across_rotation(bus, tmp_path):
         }
         for i in range(20)
     ]
-    divergence_path = tmp_path / "consolidation_divergence.json"
     h = _make_sleep(bus, tmp_path, intent_records=intent_records)
-    h._consolidation_divergence_path = divergence_path
+    log_path = h._voice_config.intent_log_path
+    corpus_dir = log_path.parent / "intent_log"
 
-    await h._emit_consolidation_divergence()
-    rec = read_consolidation_divergence(divergence_path)
-    assert rec is not None
-    assert rec["records_scanned"] == 20
-    assert rec["divergence_rate"] == 1.0
+    pairs, scanned, usable = h._builder.build_with_counts(
+        intent_record_paths(log_path, corpus_dir), max_pairs=100
+    )
+    assert scanned == 20
+    assert usable == 20
+    assert len(pairs) == 20
 
-    corpus_dir = h._voice_config.intent_log_path.parent / "intent_log"
-    rotate_intent_log(h._voice_config.intent_log_path, corpus_dir, sleep_index=1)
-    assert not h._voice_config.intent_log_path.exists()
+    rotate_intent_log(log_path, corpus_dir, sleep_index=1)
+    assert not log_path.exists()
 
-    await h._emit_consolidation_divergence()
-    rec = read_consolidation_divergence(divergence_path)
-    assert rec is not None
-    assert rec["records_scanned"] == 20
-    assert rec["divergence_rate"] == 1.0
+    pairs2, scanned2, usable2 = h._builder.build_with_counts(
+        intent_record_paths(log_path, corpus_dir), max_pairs=100
+    )
+    assert scanned2 == 20
+    assert usable2 == 20
+    assert len(pairs2) == 20
 
 
 def test_scan_cap_across_files(tmp_path):
@@ -307,31 +304,3 @@ def test_rotate_intent_log_unlink_failure_cleans_up(monkeypatch, tmp_path):
 
     assert not corpus_dir.exists() or not any(corpus_dir.iterdir())
     assert log_path.read_text() == '{"record": 1}\n'
-
-
-@pytest.mark.asyncio
-async def test_failed_or_empty_scan_never_overwrites_the_record(bus, tmp_path, monkeypatch):
-    """A scan that raises, or finds nothing, keeps the earlier record."""
-    records = [
-        {"faithful_rendering": f"f{i}", "generated_text": f"g{i}", "prompt": "p"}
-        for i in range(20)
-    ]
-    sleep = _make_sleep(bus, tmp_path, intent_records=records)
-    record_path = tmp_path / "consolidation_divergence.json"
-    sleep._consolidation_divergence_path = record_path
-    await sleep.enter_sleep()
-    first = read_consolidation_divergence(record_path)
-    assert first["divergence_rate"] == 1.0
-
-    def boom(*args, **kwargs):
-        raise OSError("corpus unreadable")
-
-    monkeypatch.setattr(sleep._builder, "build_with_counts", boom)
-    await sleep.enter_sleep()
-    assert read_consolidation_divergence(record_path)["divergence_rate"] == 1.0
-
-    monkeypatch.setattr(
-        sleep._builder, "build_with_counts", lambda *a, **k: ([], 0, 0)
-    )
-    await sleep.enter_sleep()
-    assert read_consolidation_divergence(record_path)["divergence_rate"] == 1.0

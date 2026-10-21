@@ -113,10 +113,6 @@ def _social_cognition_qdrant(config: dict) -> bool:
     return (config.get("social_cognition") or {}).get("backend", "qdrant") == "qdrant"
 
 
-def _sleep_embedder_enabled(config: dict) -> bool:
-    return (config.get("sleep") or {}).get("consolidation_embedder_enabled", True)
-
-
 def _embedding_torch_backend(config: dict) -> bool:
     from kaine.text_embedding import resolve_embedding_config
     return resolve_embedding_config(config)["backend"] == "sentence_transformers"
@@ -167,14 +163,6 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
             "sentence_transformers",
             "memory",
             predicate=lambda c: _social_cognition_qdrant(c) and _embedding_torch_backend(c),
-        ),
-    ),
-    "sleep": (
-        Requirement(
-            "sentence_transformers",
-            "memory",
-            severity="warning",
-            predicate=lambda c: _sleep_embedder_enabled(c) and _embedding_torch_backend(c),
         ),
     ),
     "vision": (

@@ -31,17 +31,13 @@ from kaine.modules.sleep.phases import (
 from kaine.modules.sleep.scheduler import RestScheduler
 from kaine.modules.sleep.voice_alignment import (
     TRAINING_SOURCES,
-    ConsolidationDivergence,
     DPOPair,
     DPOPairBuilder,
     FakeTrainer,
     Trainer,
     TrainingResult,
     VoiceAlignmentConfig,
-    consolidation_magnitude,
     operator_approved,
-    read_consolidation_divergence,
-    write_consolidation_divergence,
 )
 from kaine.modules.sleep.voice_measures import (
     compute_sleep_measures,
@@ -92,12 +88,6 @@ class Sleep(BaseModule):
         # trainer is wired; None → train directly with the organ resident (the
         # pre-existing behavior, e.g. FakeTrainer / tests / multi-GPU host).
         organ_window_runner: Optional[Any] = None,
-        # Boundary-neutral semantic embedder for the consolidation-divergence
-        # MAGNITUDE (kaine.text_embedding, never kaine.evaluation). When None,
-        # the magnitude is reported null (honest degradation). Defaults to the
-        # semantic embedder; tests inject a HashEmbedder or None.
-        consolidation_embedder: Optional[Any] = None,
-        consolidation_divergence_path: Optional[Path] = None,
         scheduler: Optional[RestScheduler] = None,
         interval_seconds: float = 3600.0,
         max_deferral_seconds: float = 600.0,
@@ -139,9 +129,17 @@ class Sleep(BaseModule):
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
         organ_gguf_path: Optional[Path] = None,
+        # sleep housekeeping, paper 3.5 and A.5; None runs none
+        housekeeper: Optional[Any] = None,
+        # Shared housekeeping pressure holder (paper A.5): each successful
+        # housekeeping report sets the pressure that scales awake fatigue
+        # build-up at nu_act (1 + P^hk). None leaves fatigue unchanged.
+        housekeeping_pressure: Optional[Any] = None,
     ) -> None:
         super().__init__(bus)
         self._organ_gguf_path = organ_gguf_path
+        self._housekeeper = housekeeper
+        self._housekeeping_pressure = housekeeping_pressure
         if not 0.0 <= baseline_salience <= 1.0:
             raise ValueError("baseline_salience must be in [0, 1]")
         if not 0.0 <= alert_salience <= 1.0:
@@ -191,16 +189,6 @@ class Sleep(BaseModule):
         self._shielded_tasks: set[asyncio.Task[Any]] = set()
         self._builder = DPOPairBuilder()
         self._last_sleep_at: Optional[float] = None
-        # Consolidation-divergence magnitude embedder + persisted state path.
-        # The embedder lives in the boundary-neutral kaine.text_embedding so
-        # the sleep module (core) never imports kaine.evaluation. Injected by the cycle
-        # entrypoint (the semantic embedder, so magnitude is on the SAME scale
-        # as the A/B meter) — mirroring how the A/B observer's embedder is wired
-        # at the entrypoint, not defaulted in the module. When None the
-        # magnitude is reported null (honest degradation); the rate/counts are
-        # always emitted.
-        self._consolidation_embedder: Any = consolidation_embedder
-        self._consolidation_divergence_path = consolidation_divergence_path
         self._sleep_count: int = 0
 
         # Fatigue trigger state
@@ -843,12 +831,17 @@ class Sleep(BaseModule):
         # subjective.
         # infrastructural: real time, not subjective
         start = time.monotonic()
+        self._sleep_count += 1
         rest_started = self._rest_clock_now()
         await self.publish(
             "sleep.sleep.started",
-            # infrastructural: real time. "trigger" is present only for a
-            # requested rest, so ordinary sleeps publish exactly as before.
-            {"started_at": time.time(), **({"trigger": trigger} if trigger else {})},
+            # infrastructural: real time. Every sleep carries its sleep_index;
+            # "trigger" is present only for a sleep started by a request.
+            {
+                "started_at": time.time(),
+                "sleep_index": self._sleep_count,
+                **({"trigger": trigger} if trigger else {}),
+            },
             salience=self._baseline_salience,
         )
         if trigger == "requested" and self._pending_rest is not None:
@@ -859,6 +852,7 @@ class Sleep(BaseModule):
                 True, "accepted", pending["origin"], pending.get("proposal_id")
             )
         phase_results: list[PhaseResult] = []
+        housekeeping_report: Optional[dict[str, Any]] = None
 
         try:
             # --- Phase 1: Light Consolidation ---
@@ -1036,6 +1030,34 @@ class Sleep(BaseModule):
 
             if trigger == "developmental_rest":
                 await self._hold_developmental_rest(rest_started)
+
+            if self._housekeeper is not None:
+                store_bytes: Optional[int] = None
+                for r in phase_results:
+                    if getattr(r, "phase", None) == "deep_consolidation":
+                        downscale = (getattr(r, "metadata", None) or {}).get("downscale")
+                        if isinstance(downscale, dict):
+                            found = downscale.get("store_bytes")
+                            if isinstance(found, int) and not isinstance(found, bool):
+                                store_bytes = found
+                        break
+                try:
+                    housekeeping_report = await self._housekeeper.run(
+                        episodic_store_bytes=store_bytes
+                    )
+                    if self._housekeeping_pressure is not None:
+                        # Paper A.5: each successful housekeeping report sets
+                        # the pressure that scales awake fatigue build-up.
+                        self._housekeeping_pressure.set_from_sleep(housekeeping_report)
+                except Exception:
+                    log.warning("sleep: housekeeping failed (continuing)", exc_info=True)
+                    housekeeping_report = {"failed": True}
+                log.info(
+                    "sleep: housekeeping report: stopped=%s moved_files=%s pressure=%s",
+                    housekeeping_report.get("stopped"),
+                    housekeeping_report.get("moved_files"),
+                    housekeeping_report.get("pressure"),
+                )
         finally:
             # Sleep ends with the affective reset on every path (paper §3.5),
             # including an exception or a cancel in phases 1 to 4.
@@ -1125,6 +1147,8 @@ class Sleep(BaseModule):
             summary["memory_nodes_pruned"] = prune_meta.get("nodes_pruned")
         summary["corpus"] = corpus_summary
         summary["voice_measures"] = voice_measures
+        if self._housekeeper is not None:
+            summary["housekeeping"] = housekeeping_report
         all_succeeded = all(r.success for r in phase_results)
         salience = self._baseline_salience if all_succeeded else self._alert_salience
         summary["alert"] = not all_succeeded
@@ -1289,7 +1313,7 @@ class Sleep(BaseModule):
                 "audit_error": type(exc).__name__,
             }
         # Content-free bus event on sleep.out. An intermediate publish must
-        # never propagate (same catch-and-continue as the divergence metric).
+        # never propagate (catch, log and continue, as for every intermediate publish).
         try:
             await self.publish(
                 "sleep.ignition_audit",
@@ -1303,105 +1327,11 @@ class Sleep(BaseModule):
             )
         return payload
 
-    async def _emit_consolidation_divergence(
-        self,
-    ) -> tuple[list[Any], dict[str, Any]]:
-        """Build the DPO pairs and surface the content-free divergence metric.
-
-        Computed EVERY sleep — before the two-layer safety gate — so the
-        organ-level divergence signal is emitted even when training is
-        skipped/disabled or the adapter is later rejected (the divergence
-        happened independent of whether the organ was retrained).
-
-        Returns ``(pairs, metric_payload)``. ``pairs`` is reused by the training
-        path so the log is not scanned twice; ``metric_payload`` is the
-        content-free aggregate dict merged into the phase metadata. The metric
-        is published on ``sleep.consolidation_divergence`` and persisted to a
-        small state file for the core ``assess_divergence`` to read.
-
-        Boundary: only counts + a scalar magnitude leave here. The magnitude is
-        computed with the boundary-neutral ``kaine.text_embedding`` embedder —
-        the sleep module never imports ``kaine.evaluation``. NEVER the prompt/chosen/
-        rejected utterance text.
-        """
-        self._sleep_count += 1
-        build_failed = False
-        try:
-            paths = await asyncio.to_thread(
-                intent_record_paths,
-                self._voice_config.intent_log_path,
-                self._voice_config.intent_log_path.parent / "intent_log",
-            )
-            pairs, scanned, usable = await asyncio.to_thread(
-                self._builder.build_with_counts,
-                paths,
-                max_pairs=self._voice_config.max_samples,
-            )
-        except Exception:
-            log.warning("consolidation divergence: pair build failed", exc_info=True)
-            pairs, scanned, usable = [], 0, 0
-            build_failed = True
-        rate = usable / max(1, scanned)
-        magnitude, embedder_kind = await consolidation_magnitude(
-            pairs, embedder=self._consolidation_embedder
-        )
-        metric = ConsolidationDivergence(
-            records_scanned=scanned,
-            usable_pairs=usable,
-            divergence_rate=rate,
-            divergence_magnitude=magnitude,
-            embedder=embedder_kind,
-        )
-        payload = metric.as_payload()
-        payload["sleep_index"] = self._sleep_count
-        # Persist for the core lifecycle assessment (boundary-neutral seam: a
-        # written record, not an import).
-        kwargs: dict[str, Any] = {"sleep_index": self._sleep_count}
-        if self._consolidation_divergence_path is not None:
-            kwargs["path"] = self._consolidation_divergence_path
-        # The template arm is a protective floor (voice-development D8): a scan
-        # that failed or found nothing is no evidence, so it never overwrites an
-        # earlier record. Otherwise one bad read would un-diverge an entity.
-        prior = None
-        if scanned == 0:  # also the case when the build failed
-            read_kwargs = {"path": kwargs["path"]} if "path" in kwargs else {}
-            prior = read_consolidation_divergence(**read_kwargs)
-        if prior is not None:
-            payload["record_kept"] = True
-            log.warning(
-                "consolidation divergence: %s; keeping the earlier record",
-                "pair build failed" if build_failed else "no records scanned",
-            )
-        else:
-            write_consolidation_divergence(metric, **kwargs)
-        # Content-free bus event (rides the existing metric path). An
-        # intermediate publish must never propagate: catch, log, continue —
-        # the metric is already persisted above, and the sleep pipeline must
-        # not wedge on a transient bus failure (M2).
-        try:
-            await self.publish(
-                "sleep.consolidation_divergence",
-                dict(payload),
-                salience=self._baseline_salience,
-            )
-        except Exception:
-            log.warning(
-                "sleep: consolidation-divergence publish failed (continuing)",
-                exc_info=True,
-            )
-        return pairs, payload
-
     async def _run_voice_alignment(self) -> tuple[TrainingResult, PhaseResult]:
         start_ms = time.monotonic() * 1000.0
-        # Surface the organ-level divergence metric FIRST — unconditionally, on
-        # every sleep — so it is emitted even when training is skipped/disabled
-        # or the adapter is rejected below.
-        pairs, divergence_payload = await self._emit_consolidation_divergence()
 
         def _meta(extra: dict[str, Any]) -> dict[str, Any]:
-            merged = {"consolidation_divergence": dict(divergence_payload)}
-            merged.update(extra)
-            return merged
+            return dict(extra)
 
         # Two-layer safety gate. Both `[sleep.voice_alignment].enabled`
         # AND the env var KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
@@ -1464,6 +1394,21 @@ class Sleep(BaseModule):
                     }
                 ),
             )
+        pairs: list[Any] = []
+        try:
+            paths = await asyncio.to_thread(
+                intent_record_paths,
+                self._voice_config.intent_log_path,
+                self._voice_config.intent_log_path.parent / "intent_log",
+            )
+            pairs, _scanned, _usable = await asyncio.to_thread(
+                self._builder.build_with_counts,
+                paths,
+                max_pairs=self._voice_config.max_samples,
+            )
+        except Exception:
+            log.warning("voice_alignment: pair build failed", exc_info=True)
+            pairs = []
         if not pairs:
             voice_result = TrainingResult(
                 accepted=False,

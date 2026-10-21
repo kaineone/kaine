@@ -25,9 +25,8 @@ SKIPPED — the bracket is a single-GPU accommodation, not a universal requireme
 The window publishes its state through a small boundary-neutral STATE FILE
 (``state/sleep/organ_window.json``) that organ-dependent consumers (the language module's
 chat client, the A/B-divergence eval arm) read to learn the organ is "resting"
-and degrade gracefully — deferred/skipped, not crashed. This mirrors the written-
-record seam the sleep module already uses for the consolidation-divergence metric, so no
-consumer needs to import the sleep module.
+and degrade gracefully — deferred/skipped, not crashed. Because it is a written
+record, no consumer needs to import the sleep module.
 """
 from __future__ import annotations
 
