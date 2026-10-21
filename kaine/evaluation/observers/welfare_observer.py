@@ -1057,6 +1057,7 @@ def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSi
         Path(eval_cfg.paths.evaluation_logs) / "welfare",
         name="welfare",
         retention_days=eval_cfg.paths.retention_days,
+        study_record=True,
     )
     observer = WelfareObserver(
         bus,
