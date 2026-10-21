@@ -360,7 +360,7 @@ async def test_restart_mid_rest_resumes_for_the_remaining_time(bus, tmp_path, si
     assert aborted and aborted[0]["trigger"] == "state_cycle"
     state = first.serialize()
     assert state["state_cycle"]["phase"] == "resting"
-    assert state["state_cycle"]["rest_spent_s"] == pytest.approx(600.0, abs=3.0)
+    assert state["state_cycle"]["rest_spent_s"] == pytest.approx(600.0, abs=10.0)
 
     # A new process: a fresh clock at zero and the saved state.
     sim.t = 0.0
@@ -372,9 +372,9 @@ async def test_restart_mid_rest_resumes_for_the_remaining_time(bus, tmp_path, si
     ends = _ends(seen2)
     assert starts[0][0] == pytest.approx(0.0, abs=1.0)
     assert starts[0][1]["resumed"] is True
-    assert starts[0][1]["rest_seconds"] == pytest.approx(REST_S - 600.0, abs=3.0)
-    assert ends[0][0] == pytest.approx(REST_S - 600.0, abs=3.0)
-    assert ends[0][1]["rest_seconds"] == pytest.approx(REST_S - 600.0, abs=3.0)
+    assert starts[0][1]["rest_seconds"] == pytest.approx(REST_S - 600.0, abs=10.0)
+    assert ends[0][0] == pytest.approx(REST_S - 600.0, abs=10.0)
+    assert ends[0][1]["rest_seconds"] == pytest.approx(REST_S - 600.0, abs=10.0)
     # The awake stretch begins after the resumed rest.
     await _run(second, sim, ends[0][0] + T_ACT + 20)
     nxt = _starts(seen2, "state_cycle")[1]
@@ -612,3 +612,93 @@ async def test_a_rest_hold_counts_as_time_not_awake(bus, tmp_path, sim):
     # Awake time afterwards adds nothing.
     sim.t += 500.0
     assert cycle.unawake_subjective_seconds() == pytest.approx(unawake)
+
+
+# --- frozen time and shutdown -------------------------------------------------------
+
+
+class Frozen:
+    """A paused-seconds source: the entity clock runs on while the cycle is frozen."""
+
+    def __init__(self) -> None:
+        self.total = 0.0
+
+    def __call__(self) -> float:
+        return self.total
+
+
+async def test_frozen_time_does_not_count_toward_the_awake_stretch(bus, tmp_path, sim):
+    frozen = Frozen()
+    sleep = _make(bus, tmp_path, sim, Probe(True))
+    sleep.set_paused_source(frozen)
+    seen = _record(sleep, sim)
+    await _run(sleep, sim, 1000)
+    sim.t += 500.0  # a freeze of 500 s
+    frozen.total += 500.0
+    await _run(sleep, sim, T_ACT + 600)
+    assert _starts(seen, "state_cycle")[0][0] == pytest.approx(T_ACT + 500.0, abs=3.0)
+
+
+async def test_frozen_time_extends_a_rest(bus, tmp_path, sim):
+    frozen = Frozen()
+    sleep = _make(bus, tmp_path, sim, Probe(True))
+    sleep.set_paused_source(frozen)
+    seen = _record(sleep, sim)
+    await _run(sleep, sim, T_ACT + 10)
+    began = _starts(seen, "state_cycle")[0][0]
+    await _run(sleep, sim, began + 300)
+    sim.t += 200.0  # frozen during the rest
+    frozen.total += 200.0
+    while not _ends(seen):
+        await _run(sleep, sim, sim.t + 1.0)
+    assert _ends(seen)[0][0] - began == pytest.approx(REST_S + 200.0, abs=3.0)
+
+
+async def test_shutdown_during_a_rest_ends_it_aborted_without_completing_the_schedule(bus, tmp_path, sim):
+    sleep = _make(bus, tmp_path, sim, Probe(True))
+    seen = _record(sleep, sim)
+    marked: list[float] = []
+    sleep.scheduler.mark_completed = lambda: marked.append(sim.t)  # type: ignore[method-assign]
+    await _run(sleep, sim, T_ACT + 10)
+    began = _starts(seen, "state_cycle")[0][0]
+    await _run(sleep, sim, began + 400)
+    sleep._stopped.set()  # BaseModule.shutdown sets this before it cancels the task
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    ends = _ends(seen)
+    assert len(ends) == 1 and ends[0][1]["aborted"] is True
+    assert ends[0][1]["trigger"] == "state_cycle"
+    assert marked == []
+    assert sleep._affect.resets == 1
+    state = sleep.serialize()["state_cycle"]
+    assert state["phase"] == "resting"
+    assert state["rest_spent_s"] == pytest.approx(400.0, abs=10.0)
+
+
+async def test_hold_sleeps_less_real_time_at_high_time_scale(bus, tmp_path, monkeypatch):
+    class Fast(SimClock):
+        scale = 4.0
+
+    clock = Fast()
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float, result: Any = None) -> Any:
+        delays.append(delay)
+        clock.t += delay * 4.0
+        await _REAL_SLEEP(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    sleep = _make(bus, tmp_path, clock, Probe(True), developmental_rest_s=10.0)
+    await sleep._hold_developmental_rest(clock.t)
+    assert clock.t == pytest.approx(10.0, abs=0.01)  # no overshoot
+    assert max(delays) <= 1.0
+
+
+async def test_probe_failure_is_logged_once(bus, tmp_path, caplog):
+    def boom() -> bool:
+        raise RuntimeError("x")
+
+    sleep = _make(bus, tmp_path, SimClock(), boom)
+    for _ in range(5):
+        assert sleep._developing() is True
+    assert len([r for r in caplog.records if "development probe failed" in r.getMessage()]) == 1

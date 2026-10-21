@@ -2116,6 +2116,10 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
             and ctx.gate_runner is not None
             and ctx.gate_runner.stage.is_developing
         ),
+        # Frozen time counts toward neither the awake stretch nor the rest of the state cycle.
+        paused_source=lambda: (
+            ctx.cycle.paused_subjective_seconds() if ctx.cycle is not None else 0.0
+        ),
     )
     ctx.workspace = Workspace(
         strategy=RuleBasedSalience(

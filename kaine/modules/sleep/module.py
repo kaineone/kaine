@@ -238,6 +238,11 @@ class Sleep(BaseModule):
         self._cycle_rest_began: Optional[float] = None
         # Entity time a resumed rest had already run when this process started it.
         self._cycle_resume_spent_s: float = 0.0
+        self._paused_source: Optional[Callable[[], float]] = None
+        self._cycle_last_paused: float = 0.0
+        self._cycle_tick_paused: float = 0.0
+        self._cycle_rest_paused_base: float = 0.0
+        self._probe_failure_logged: bool = False
         # Length of the running rest's hold: the full rest, or the remainder when resumed.
         self._cycle_rest_seconds: float = self._developmental_rest_s
         self._entity_clock = entity_clock
@@ -548,6 +553,29 @@ class Sleep(BaseModule):
         """
         self._development_probe = probe
 
+    def set_paused_source(self, source: Optional[Callable[[], float]]) -> None:
+        """Store a callable returning the entity seconds the cycle has spent frozen.
+
+        Frozen time counts toward neither the awake stretch nor the rest. With no source
+        nothing is subtracted.
+        """
+        self._paused_source = source
+
+    def _paused_now(self) -> float:
+        source = self._paused_source
+        if source is None:
+            return self._cycle_last_paused
+        try:
+            self._cycle_last_paused = float(source())
+        except Exception:
+            log.debug("sleep: paused-time source failed", exc_info=True)
+        return self._cycle_last_paused
+
+    def _rest_elapsed(self, started: float) -> float:
+        """Entity seconds a rest begun at ``started`` has run, frozen time excluded."""
+        frozen = max(0.0, self._paused_now() - self._cycle_rest_paused_base)
+        return max(0.0, self._rest_clock_now() - started - frozen)
+
     def _developing(self) -> Optional[bool]:
         """True or False from the development probe; None when no probe is wired."""
         probe = self._development_probe
@@ -556,7 +584,12 @@ class Sleep(BaseModule):
         try:
             return bool(probe())
         except Exception:
-            log.warning("sleep: development probe failed, treating entity as developing")
+            if not self._probe_failure_logged:
+                self._probe_failure_logged = True
+                log.warning(
+                    "sleep: development probe failed, treating entity as developing",
+                    exc_info=True,
+                )
             return True
 
     def _start_state_cycle_sleep(self, resume: bool) -> None:
@@ -591,6 +624,9 @@ class Sleep(BaseModule):
         """Accrue awake entity time; time inside any sleep does not count."""
         now = self._rest_clock_now()
         last = self._cycle_last_tick
+        paused = self._paused_now()
+        last_paused = self._cycle_tick_paused
+        self._cycle_tick_paused = paused
         self._cycle_last_tick = now
         if developing is False:
             # Matured: the cycle no longer applies, so drop its state.
@@ -599,7 +635,7 @@ class Sleep(BaseModule):
         if developing is None or last is None:
             return
         if self._cycle_phase == "awake" and not self._sleep_lock.locked() and not self._sleep_pending:
-            self._cycle_awake_s += max(0.0, now - last)
+            self._cycle_awake_s += max(0.0, (now - last) - max(0.0, paused - last_paused))
 
     async def _maintenance_poll_once(self) -> None:
         """One poll: the state cycle in the developmental phase, the backstop otherwise."""
@@ -926,18 +962,18 @@ class Sleep(BaseModule):
             "sleep: developmental rest holds until %.0f s after it began",
             self._developmental_rest_s,
         )
-        while not self._stopped.is_set():
-            remaining = self._developmental_rest_s - (self._rest_clock_now() - started)
+        scale = float(getattr(self._entity_clock, "scale", 1.0) or 1.0)
+        while True:
+            if self._stopped.is_set():
+                # Shutdown before the rest ran its length: abort like a cancel, so the
+                # sleep ends aborted, is not marked completed, and keeps its remainder.
+                raise asyncio.CancelledError("sleep stopped during a state-cycle rest")
+            remaining = self._developmental_rest_s - self._rest_elapsed(started)
             if remaining <= 0:
                 self._cycle_reset(self._rest_clock_now())
                 break
-            await asyncio.sleep(min(1.0, remaining))
-        else:
-            # Stopped before the rest ran its length: keep what is left for the restart.
-            self._cycle_rest_spent_s = max(0.0, self._rest_clock_now() - started)
-            self._cycle_rest_began = None
-            log.info("sleep: developmental rest hold cut short at %.0f s", self._cycle_rest_spent_s)
-            return
+            # Real seconds: a remainder of entity seconds takes remaining / scale.
+            await asyncio.sleep(max(0.001, min(1.0, remaining / scale)))
         log.info("sleep: developmental rest hold ended")
 
     async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
@@ -961,6 +997,7 @@ class Sleep(BaseModule):
             resumed_spent = min(self._cycle_resume_spent_s, self._developmental_rest_s)
             self._cycle_resume_spent_s = 0.0
             rest_started -= resumed_spent
+            self._cycle_rest_paused_base = self._paused_now()
             self._cycle_rest_began = rest_started
             self._cycle_phase = "resting"
             self._cycle_rest_spent_s = resumed_spent
@@ -1707,7 +1744,7 @@ class Sleep(BaseModule):
         now = self._rest_clock_now()
         if self._cycle_phase == "resting":
             began = self._cycle_rest_began
-            spent = self._cycle_rest_spent_s if began is None else max(0.0, now - began)
+            spent = self._cycle_rest_spent_s if began is None else self._rest_elapsed(began)
             return {"phase": "resting", "awake_s": 0.0, "rest_spent_s": spent}
         awake = self._cycle_awake_s
         last = self._cycle_last_tick
@@ -1717,7 +1754,7 @@ class Sleep(BaseModule):
             and not self._sleep_pending
             and self._developing() is True
         ):
-            awake += max(0.0, now - last)
+            awake += max(0.0, (now - last) - max(0.0, self._paused_now() - self._cycle_tick_paused))
         return {"phase": "awake", "awake_s": awake, "rest_spent_s": 0.0}
 
     def _restore_state_cycle(self, raw: Any) -> None:
@@ -1821,7 +1858,7 @@ class Sleep(BaseModule):
                     and not isinstance(exc, Exception)
                 ):
                     # A cancel (shutdown) keeps the rest's remainder for the restart.
-                    self._cycle_rest_spent_s = max(0.0, self._rest_clock_now() - began)
+                    self._cycle_rest_spent_s = self._rest_elapsed(began)
                 elif isinstance(exc, Exception) and self._cycle_phase == "resting":
                     # A failed rest does not repeat at once; the awake stretch starts over.
                     self._cycle_reset(self._rest_clock_now())

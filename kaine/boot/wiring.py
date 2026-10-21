@@ -412,6 +412,7 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
 def _wire_affect_development(
     registry: ModuleRegistry,
     probe: Optional[Callable[[], bool]] = None,
+    paused_source: Optional[Callable[[], float]] = None,
 ) -> None:
     """Store and wire the developmental-phase probe into the affect and sleep modules.
 
@@ -422,6 +423,8 @@ def _wire_affect_development(
     A supervisor rebuild re-runs this helper without a probe and reuses the
     stored one.
     """
+    if paused_source is not None:
+        setattr(registry, "sleep_paused_source", paused_source)
     if probe is not None:
         setattr(registry, "affect_development_probe", probe)
     stored = getattr(registry, "affect_development_probe", None)
@@ -437,6 +440,10 @@ def _wire_affect_development(
         if callable(setter):
             setter(stored)
             log.info("wired sleep development probe")
+        paused = getattr(registry, "sleep_paused_source", None)
+        pause_setter = getattr(sleep, "set_paused_source", None)
+        if paused is not None and callable(pause_setter):
+            pause_setter(paused)
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:
