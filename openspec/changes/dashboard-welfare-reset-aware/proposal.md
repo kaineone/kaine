@@ -15,5 +15,5 @@ The dashboard's welfare_counts_from_jsonl takes the maximum over the last 500 li
 
 ## Impact
 
-- dashboard-welfare-reset-aware0
-- Behaviour: dashboard-welfare-reset-aware1
+- kaine/dashboard/ (welfare reader, evaluation tab, __main__.py), tests.
+- Behaviour: the welfare and evaluation panels show current values.
