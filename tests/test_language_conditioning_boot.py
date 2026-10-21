@@ -98,12 +98,11 @@ class _FakeSelfModel:
 @pytest.mark.asyncio
 async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
     """The [language] persona/context keys reach the assembler: the captured
-    request carries the configured name + persona text and the rendered
+    request carries the configured persona text and the rendered
     coalition, not the bare utterance (task 4.2 + 6.1 offline analogue)."""
     language = _language(
         bus,
         tmp_path,
-        persona_name="Testa",
         persona_external="CUSTOM-EXTERNAL-PERSONA.",
         context_max_events=3,
         context_char_budget=500,
@@ -112,7 +111,6 @@ async def test_make_language_threads_persona_and_budget_config(bus, tmp_path):
     await language.speak("hello there", snapshot=snap)
 
     req = language.chat_client.requests[-1]
-    assert "Testa" in req.system
     assert "CUSTOM-EXTERNAL-PERSONA." in req.system
     # Working memory (the conscious coalition) is rendered into the prompt...
     assert AWARENESS_HEADING in req.prompt

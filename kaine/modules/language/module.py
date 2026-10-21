@@ -128,7 +128,6 @@ class Language(BaseModule):
         self_model_provider: Optional[Callable[[], dict[str, Any]]] = None,
         context_max_events: int = 8,
         context_char_budget: int = 2000,
-        persona_name: Optional[str] = None,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
         awareness_rendering: str = "numeric",
@@ -210,14 +209,13 @@ class Language(BaseModule):
             renderer,  # None → assembler builds its own renderer
             max_events=context_max_events,
             char_budget=context_char_budget,
-            persona_name=persona_name,
             persona_external=persona_external,
             persona_internal=persona_internal,
             awareness_rendering=awareness_rendering,
         )
         self._self_model_provider = self_model_provider
         self._persona_digest = hashlib.sha256(
-            json.dumps([persona_name, persona_external, persona_internal]).encode("utf-8")
+            json.dumps([None, persona_external, persona_internal]).encode("utf-8")
         ).hexdigest()[:16]
         # Latest self-model snapshot observed on self_model.out (bus-mediated persona
         # seed). Preferred over the in-process provider so the language module can run split
