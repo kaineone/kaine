@@ -147,7 +147,7 @@ async def test_aborted_developmental_rest_includes_trigger_and_rest_seconds(
 
 
 @pytest.mark.asyncio
-async def test_aborted_ordinary_sleep_has_no_trigger_or_rest_seconds(
+async def test_aborted_ordinary_sleep_has_null_trigger_and_no_rest_seconds(
     bus, tmp_path: Path
 ):
     sleep = _make_sleep(bus, tmp_path)
@@ -166,7 +166,7 @@ async def test_aborted_ordinary_sleep_has_no_trigger_or_rest_seconds(
 
     payload = await _wait_for_aborted_completed(bus)
     assert payload["aborted"] is True
-    assert "trigger" not in payload
+    assert "trigger" in payload and payload["trigger"] is None
     assert "rest_seconds" not in payload
 
 

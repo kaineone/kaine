@@ -235,8 +235,9 @@ class _M1Stub:
         self.sleeps = 0
         self._sleeped = asyncio.Event()
 
-    async def enter_sleep(self):
+    async def enter_sleep(self, trigger=None):
         self.sleeps += 1
+        self.trigger = trigger
         self._sleeped.set()
 
 
@@ -249,6 +250,7 @@ async def test_maintenance_runs_without_fatigue_consumer():
     task = asyncio.create_task(Sleep._maintenance_poll_loop(stub))
     await asyncio.wait_for(stub._sleeped.wait(), 5)
     assert stub.sleeps == 1, "maintenance must fire with no fatigue events at all"
+    assert stub.trigger == "backstop"
     stub._stopped.set()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -300,13 +302,14 @@ class _HypConsumerStub:
         self._sleep_lock = asyncio.Lock()
         self._sleep_pending = False
         self._sleep_task = None
-        self._fatigue_triggered_sleep = False
         self.enter_started = 0
+        self.triggers: list = []
         self.enter_done = 0
         self._release = asyncio.Event()
 
-    async def enter_sleep(self):
+    async def enter_sleep(self, trigger=None):
         self.enter_started += 1
+        self.triggers.append(trigger)
         await self._release.wait()
         self.enter_done += 1
 
@@ -342,8 +345,8 @@ async def test_sleep_task_not_collected_and_no_double_trigger():
     await asyncio.wait_for(asyncio.gather(stub._sleep_task), 5)
     assert stub.enter_done == 1, "sleep must complete despite forced GC"
     assert stub._sleep_pending is False
-    assert stub._fatigue_triggered_sleep is True, (
-        "annotation flag must survive (not cleared by a loser branch)"
+    assert stub.triggers == ["fatigue"], (
+        "the fatigue trigger is recorded once; the second crossing starts no sleep"
     )
     consumer.cancel()
     with pytest.raises(asyncio.CancelledError):

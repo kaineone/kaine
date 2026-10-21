@@ -217,6 +217,12 @@ body {
   margin-right: -0.7rem;         /* bleed right into the spine (same colour) */
   font-size: 1.1rem;
 }
+.rail__entity {
+  font-size: var(--fs-xs);
+  color: var(--haze);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .rail__status {
   display: flex;
   flex-direction: column;

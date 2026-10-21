@@ -30,6 +30,7 @@ from kaine.dashboard.config import DashboardConfig
 from kaine.dashboard.conversation import (
     ConversationState,
     build_conversation_router,
+    build_sleep_router,
 )
 from kaine.dashboard.csrf import DashboardCSRFMiddleware
 from kaine.dashboard.cycle_control import build_cycle_control_router, control_snapshot
@@ -92,12 +93,18 @@ def create_app(
     health_prober: HealthProber | None = None,
     rate_control_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     evaluation_provider: Callable[[], dict[str, Any]] | None = None,
+    startup: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     state = conversation_state or ConversationState()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await bridge.start()
+        if startup is not None:
+            try:
+                await asyncio.wait_for(startup(), timeout=5.0)
+            except Exception:
+                log.warning("dashboard startup hook failed", exc_info=True)
         # Task 2.2: server-push a combined metrics+health snapshot over the
         # single diagnostics stream (retires the client-side DashboardVitals/
         # DashboardMetrics/DashboardSupervisor poll loops — see push_snapshots_periodically).
@@ -210,6 +217,7 @@ def create_app(
         # Health endpoint is always unauthenticated so container probes keep
         # working regardless of the privileged-read gate.
         app.include_router(build_health_router(health_prober))
+        app.include_router(build_sleep_router(state), dependencies=read_dep)
         app.include_router(build_perception_router(), dependencies=state_change_dep)
         app.include_router(build_cycle_control_router(), dependencies=state_change_dep)
         app.include_router(build_caretaker_router(), dependencies=state_change_dep)

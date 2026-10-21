@@ -14,8 +14,16 @@ Subcommands:
   a JSONL result file.
 
 * score -- read a result file and print per-variant rates plus a paired
-  bootstrap decision on whether V2 or V3 may be adopted. V12-V1 is reported for
-  comparison but does not enter the adoption rule.
+  bootstrap decision on whether V2 or V3 may be adopted. V12-V1 is reported
+  for comparison but does not enter the adoption rule.
+
+V5 replays the logged v5-persona request; V5m drops the personas' manner
+clause, V5e sends no system text and V5l drops the "- " marker from each
+awareness line. ``score --rule v6`` adopts the candidate whose any-meta
+difference from V5 has an upper 95% bound below 0, whose grounded difference
+is above -5 points and whose AI self-description difference is not above 0,
+choosing the lowest any-meta difference when several pass; it also reports
+the waking requests (those that open with the situation section) apart.
 
 Case and result files hold decrypted organ prompts and generated texts. They
 belong in a private scratch directory, never in the repository. Run it from a
@@ -40,6 +48,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import random
 import re
@@ -64,7 +73,13 @@ from kaine.security import crypto
 MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
-VARIANTS = ("V0", "V1", "V2", "V3", "V12", "V123", "raw")
+# from the tenth test boot's analyzer
+BROAD_ECHO = re.compile(
+    r"(own (plain )?(words|voice)|\bplain(ly)?\b|\bI say what\b|\bI speak (from|the way|plainly)\b|comes from what I (feel|notice))",
+    re.IGNORECASE,
+)
+
+VARIANTS = ("V0", "V1", "V2", "V3", "V12", "V123", "raw", "V5", "V5m", "V5e", "V5l")
 
 
 def require_loopback(url: str) -> None:
@@ -114,6 +129,11 @@ def drop_situation(prompt: str) -> str:
     return prompt[end + 2 :]
 
 
+def is_waking(prompt: str) -> bool:
+    """Return True when the prompt includes a situation section at the start."""
+    return prompt.startswith(SITUATION_HEADING + "\n")
+
+
 def drop_self_category(system: str) -> str:
     """Remove the persona self-category prefix from the system text, if present."""
     if system.startswith(PERSONA_SELF_CATEGORY):
@@ -142,6 +162,26 @@ def prose_awareness(prompt: str) -> str:
     return prompt[:start] + paragraph + prompt[end:]
 
 
+def unmarked_awareness(prompt: str) -> str:
+    """Remove the leading bullet marker from each awareness line, keeping one line per item."""
+    heading = AWARENESS_HEADING + "\n"
+    idx = prompt.find(heading)
+    if idx == -1:
+        return prompt
+    start = idx + len(heading)
+    end = prompt.find("\n\n", start)
+    if end == -1:
+        end = len(prompt)
+    block = prompt[start:end]
+    lines = block.split("\n")
+    cleaned = []
+    for line in lines:
+        if line.startswith("- "):
+            line = line[2:]
+        cleaned.append(line)
+    return prompt[:start] + "\n".join(cleaned) + prompt[end:]
+
+
 def apply_variant(name: str, system: str, prompt: str) -> tuple[str, str]:
     """Apply a named prompt variant to a (system, prompt) pair."""
     if name == "V0" or name == "raw":
@@ -159,11 +199,19 @@ def apply_variant(name: str, system: str, prompt: str) -> tuple[str, str]:
         prompt = drop_situation(prompt)
         prompt = prose_awareness(prompt)
         return (system, prompt)
+    if name == "V5":
+        return (system, prompt)
+    if name == "V5m":
+        return (system.replace(", in my own plain words", ""), prompt)
+    if name == "V5e":
+        return ("", prompt)
+    if name == "V5l":
+        return (system, unmarked_awareness(prompt))
     raise ValueError(f"unknown variant: {name}")
 
 
 def build_chat_request(
-    mode: str, system: str, prompt: str, seed: int, temperature: float
+    mode: str, system: str | None, prompt: str, seed: int, temperature: float
 ) -> ChatRequest:
     """Build the request the language module uses for a given mode."""
     max_tokens = 128 if mode == "internal" else 512
@@ -183,13 +231,14 @@ def build_chat_request(
 
 
 def ai_self(t: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(language model|artificial intelligence|chatbot|assistant|an ai|a new ai|am ai|ai model)\b",
-            t,
-            re.IGNORECASE,
-        )
-    ) or bool(re.search(r"designed to help people", t, re.IGNORECASE))
+    """Return whether the text contains an AI self-description arm.
+
+    This metric captures the ``origin``, ``maker`` and ``role`` arms from the
+    identity classifier. The denial arm needs request awareness, so it is not
+    included here.
+    """
+    from kaine.modules.language.identity_leak import classify
+    return classify(t, "") in {"origin", "maker", "role"}
 
 
 def second_person(t: str) -> bool:
@@ -225,7 +274,9 @@ def echo(t: str) -> bool:
     if re.search(r"(?m)^\s*#{1,6}\s", t):
         return True
     lowered = t.lower()
-    return any(p in lowered for p in phrases)
+    if any(p in lowered for p in phrases):
+        return True
+    return bool(BROAD_ECHO.search(t))
 
 
 def template_loop(t: str) -> bool:
@@ -411,6 +462,37 @@ def decide(results: list[dict], n_boot: int = 2000) -> dict:
     return {"V2": adopt_v2, "V3": adopt_v3, "details": comparisons}
 
 
+def decide_v6(results: list[dict], n_boot: int = 2000) -> dict:
+    """Apply the persona-v6 paired decision rule to the result rows."""
+    baseline = "V5"
+    candidates = ("V5m", "V5e", "V5l")
+    details: dict[str, dict[str, tuple[float, float, float]]] = {}
+    for cand in candidates:
+        details[cand] = {
+            "any_meta": paired_diff(results, "any_meta", cand, baseline, n_boot),
+            "grounded": paired_diff(results, "grounded", cand, baseline, n_boot),
+            "ai_self": paired_diff(results, "ai_self", cand, baseline, n_boot),
+        }
+
+    passed: list[str] = []
+    for cand in candidates:
+        comp = details[cand]
+        if any(math.isnan(comp[m][i]) for m in comp for i in range(3)):
+            continue
+        if (
+            comp["any_meta"][2] < 0
+            and comp["grounded"][0] > -0.05
+            and comp["ai_self"][0] <= 0
+        ):
+            passed.append(cand)
+
+    winner: str | None = None
+    if passed:
+        winner = min(passed, key=lambda c: details[c]["any_meta"][0])
+
+    return {"winner": winner, "passed": passed, "details": details}
+
+
 def _extract_cmd(args: argparse.Namespace) -> None:
     out_path = Path(args.out)
     try:
@@ -503,6 +585,14 @@ def _load_cases(path: Path) -> list[dict]:
 
 
 async def _run_cmd(args: argparse.Namespace) -> None:
+    import hashlib
+
+    def _derive_sampling_seed(case_id: str, seed: int) -> int:
+        # Derive a per-case, per-replicate sampling seed from the stored seed.
+        return int.from_bytes(
+            hashlib.sha256(f"{case_id}:{seed}".encode()).digest()[:4], "big"
+        ) & 0x7FFFFFFF
+
     if organ_window_state.organ_unloaded():
         print(
             "organ window state says the organ is unloaded here; run from a directory without state/sleep/organ_window.json",
@@ -560,10 +650,13 @@ async def _run_cmd(args: argparse.Namespace) -> None:
         if (case_id, variant, seed) in existing:
             return
 
+        sampling_seed = _derive_sampling_seed(case_id, seed)
+
         row: dict = {
             "case_id": case_id,
             "variant": variant,
             "seed": seed,
+            "sampling_seed": sampling_seed,
             "mode": mode,
             "prompt": prompt,
             "system": system,
@@ -578,7 +671,7 @@ async def _run_cmd(args: argparse.Namespace) -> None:
                             "prompt": f"{system}\n\n{prompt}" if system else prompt,
                             "n_predict": max_tokens,
                             "temperature": temperature,
-                            "seed": seed,
+                            "seed": sampling_seed,
                             "stop": list(OWN_TURN_STOP),
                             "dry_multiplier": 0.8,
                             "dry_base": 1.75,
@@ -603,7 +696,7 @@ async def _run_cmd(args: argparse.Namespace) -> None:
                         )
                     else:
                         request = build_chat_request(
-                            mode, system, prompt, seed, temperature
+                            mode, system if system else None, prompt, sampling_seed, temperature
                         )
                         resp = await chat_client.complete(request)
                         if resp.raw.get("organ_resting"):
@@ -648,18 +741,14 @@ async def _run_cmd(args: argparse.Namespace) -> None:
     print(f"done: {completed} generations written to {out_path}")
 
 
-def _score_cmd(args: argparse.Namespace) -> None:
-    results: list[dict] = []
-    with Path(args.results).open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            results.append(json.loads(line))
-
+def _print_rate_table(results: list[dict], heading: str | None = None) -> None:
     by_variant: dict[str, list[dict]] = {}
     for row in results:
         by_variant.setdefault(row.get("variant", "unknown"), []).append(row)
+
+    if heading is not None:
+        print(heading)
+        print()
 
     print(
         "| variant | n | any meta | AI self-description | second person | disclosure theme | list | heading or persona echo | template loop | grounded | median chars | cap hits | errors |"
@@ -716,6 +805,50 @@ def _score_cmd(args: argparse.Namespace) -> None:
         )
         print(line)
 
+
+def _score_cmd(args: argparse.Namespace) -> None:
+    results: list[dict] = []
+    with Path(args.results).open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            results.append(json.loads(line))
+
+    def fmt(triple: tuple[float, float, float]) -> str:
+        point, lo, hi = triple
+        if point != point:
+            return "N/A"
+        return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
+
+    if args.rule == "v6":
+        _print_rate_table(results)
+        waking = [r for r in results if is_waking(r.get("prompt", ""))]
+        print()
+        _print_rate_table(waking, heading="Waking cases only")
+        print()
+
+        print(
+            "V6 rule: a candidate (V5m, V5e, V5l) is adopted over V5 when its any-meta upper 95% bound is below 0, its grounded point is above -5 points, and its AI self-description point is at or below 0; the lowest any-meta point wins. Waking requests do not enter the decision."
+        )
+        print()
+
+        decided = [r for r in results if not is_waking(r.get("prompt", ""))]
+        decision = decide_v6(decided, n_boot=args.bootstrap)
+        details = decision["details"]
+        for cand in ("V5m", "V5e", "V5l"):
+            comp = details[cand]
+            print(f"{cand}-V5:")
+            print(f"  any-meta:  {fmt(comp['any_meta'])}")
+            print(f"  grounded:  {fmt(comp['grounded'])}")
+            print(f"  ai_self:   {fmt(comp['ai_self'])}")
+
+        winner = decision["winner"] if decision["winner"] is not None else "none"
+        print(f"winner: {winner}")
+        return
+
+    _print_rate_table(results)
+
     print()
     print(
         "Primary outcome: any-meta rate. Grounding guard: grounded rate. Differences are paired by case (mean over seeds per case, then the mean over cases) with a 95% interval from a cluster bootstrap over cases. V2 (and separately V3) is adopted when its any-meta difference from V0 has an upper 95% bound below 0 and its grounded difference from V0 is above -5 points, and V123 minus V1 also has an any-meta upper bound below 0 and a grounded difference above -5 points. V12-V1 is reported for comparison but does not enter the adoption rule. raw is exploratory and never adopted."
@@ -723,12 +856,6 @@ def _score_cmd(args: argparse.Namespace) -> None:
 
     decision = decide(results, n_boot=args.bootstrap)
     details = decision["details"]
-
-    def fmt(triple: tuple[float, float, float]) -> str:
-        point, lo, hi = triple
-        if point != point:
-            return "N/A"
-        return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
 
     for label in ("V2-V0", "V3-V0", "V123-V1", "V12-V1", "raw-V0", "V1-V0"):
         comp = details[label]
@@ -763,6 +890,7 @@ def _build_parser() -> argparse.ArgumentParser:
     score = sub.add_parser("score", help="score and decide on result variants")
     score.add_argument("--results", required=True)
     score.add_argument("--bootstrap", type=int, default=2000)
+    score.add_argument("--rule", choices=("v2v3", "v6"), default="v2v3")
     score.set_defaults(func=_score_cmd)
 
     return parser

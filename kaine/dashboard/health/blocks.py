@@ -107,17 +107,23 @@ def preservation_block(
 
 
 def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
-    """Read-only welfare counters for the entity-care panel.
+    """Read-only welfare counters plus the newest affect welfare record.
 
-    Numeric only: the four §5.5 gray-zone counts plus blind-sensor and
-    sensor-silent advisory state from the evaluation JSONL rollup (the dashboard
-    process holds no live sidecar registry). Never raises; a missing rollup
-    yields a ``source: none`` block.
+    Numeric only: the four §5.5 gray-zone counts, blind-sensor and
+    sensor-silent advisory state, and the most recent ``affect_welfare``
+    record from the evaluation JSONL rollup (the dashboard process holds no
+    live sidecar registry). Never raises; a missing rollup yields a
+    ``source: none`` block with ``affect_welfare: null``.
     """
     try:
-        from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+        from kaine.experiment.welfare_counts import (
+            affect_welfare_from_jsonl,
+            welfare_counts_from_jsonl,
+        )
 
-        return welfare_counts_from_jsonl(evaluation_logs_path)
+        counts = welfare_counts_from_jsonl(evaluation_logs_path)
+        counts["affect_welfare"] = affect_welfare_from_jsonl(evaluation_logs_path)
+        return counts
     except Exception:
         log.debug("welfare_block failed", exc_info=True)
         return {
@@ -130,6 +136,7 @@ def welfare_block(evaluation_logs_path: Path) -> dict[str, Any]:
             "sensor_silent_advisories": None,
             "silent_sensors": [],
             "source": "none",
+            "affect_welfare": None,
         }
 
 
