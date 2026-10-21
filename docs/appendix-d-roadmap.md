@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| duplicate-method-guard | 0/3 (0%) | The duplicate-name guard also checks methods in classes and nested functions |
 | boot-identity-dedup | 2/2 (100%) | Remove the dead duplicate boot-identity helpers; each module defines a top-level name once |
 | sleep-trigger-per-sleep | 5/5 (100%) | Each sleep records the trigger that started it (paper 3.5) |
 | identity-leak-negation | 4/4 (100%) | Negated and questioned identity predicates are not leakage (paper 3.5) |
@@ -84,6 +85,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 58 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 59 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
