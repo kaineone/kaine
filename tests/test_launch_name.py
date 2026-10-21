@@ -1036,3 +1036,21 @@ async def test_deferred_naming_reports_on_the_health_surface_and_as_an_event(bus
         assert await _report_naming_deferred(bus, EntityIdentity(entity_id=unnamed.entity_id, name="Kaine Nova")) is False
     finally:
         clear_backend_failures()
+
+
+def test_a_fork_of_a_fork_never_draws_an_ancestors_name(monkeypatch):
+    monkeypatch.setattr(sm_document, "_SURNAMES", ("Nova", "Aurora", "Zed"))
+    root = EntityIdentity(entity_id="ent-" + "1" * 32, minted_at=1.0, name="Kaine Nova")
+    for seed in range(40):
+        child = fork_identity(root, rng=random.Random(seed))
+        grandchild = fork_identity(child, rng=random.Random(seed))
+        assert grandchild.name not in ("Kaine Nova", child.name)
+        assert len({"Kaine Nova", child.name, grandchild.name}) == 3
+
+
+def test_a_parent_without_lineage_names_still_excludes_its_own_name(monkeypatch):
+    monkeypatch.setattr(sm_document, "_SURNAMES", ("Nova", "Aurora"))
+    parent = EntityIdentity(entity_id="ent-" + "2" * 32, minted_at=1.0, name="Kaine Aurora")
+    assert parent.lineage_names == ()
+    for seed in range(20):
+        assert fork_identity(parent, rng=random.Random(seed)).name == "Kaine Nova"

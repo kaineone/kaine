@@ -371,7 +371,7 @@ def fork_identity(
     """Create a fork identity: new minted ID, lineage extended by the parent.
 
     The fork is a new entity and gets its own newly drawn name, never the
-    parent's and never one of ``avoid_names`` (for an unnamed parent, the name in
+    parent's, never one named in the parent's ``lineage_names`` and never one of ``avoid_names`` (for an unnamed parent, the name in
     its self-model document). The parent's name is not copied into ``name``; it
     is recorded in ``lineage_names`` next to the parent's ID when known, and the
     earlier ancestors' entries are kept.
@@ -379,6 +379,7 @@ def fork_identity(
     from kaine.modules.self_model.document import generate_launch_name
 
     avoid = {n for n in avoid_names if n}
+    avoid.update(nm for _eid, nm in parent.lineage_names)
     if parent.name:
         avoid.add(parent.name)
     names = parent.lineage_names
