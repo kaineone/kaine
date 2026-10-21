@@ -14,8 +14,7 @@ endpoint.
 This module is the shared, dependency-free home for that signal: a tiny state
 file plus pure readers. It depends only on the stdlib, so BOTH the core runtime
 (the sleep module writes it, the language module reads it) and the evaluation sidecar (the A/B arm reads
-it) can use it without either side importing the other — the same written-record
-pattern the sleep module already uses for the consolidation-divergence metric.
+it) can use it without either side importing the other.
 
 Content-free: only a phase tag + a short human detail + the last adapter verdict
 ever leave here. Never utterance text.

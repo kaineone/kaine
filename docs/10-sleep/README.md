@@ -52,7 +52,7 @@ sequenceDiagram
     Note over Sleep: Locus off and playlist paused for the whole sleep
     Note over Sleep: Phase 2: replay in EpisodicMemory's replay window; downscale; prune
     Note over Sleep: Phase 3: associate related pairs as links; prune; sleep.association
-    Note over Sleep: Phase 4: consolidation divergence; voice-alignment gates; intent-log rotation, voice measures
+    Note over Sleep: Phase 4: voice-alignment gates (no pairs, no training); intent-log rotation, voice measures
     Note over Sleep: Phase 5: affect.affective_reset()
     Note over Sleep: Intent audit
     Sleep->>Bus: sleep.sleep.completed
@@ -75,7 +75,7 @@ Phase 3 runs only when `[sleep.consolidation].associative_replay = true` and oth
 
 ### Phase 4: voice alignment
 
-Phase 4 first builds preference pairs from the intent-expression log and publishes the content-free `sleep.consolidation_divergence` metric. It then checks the voice-alignment gates. No validated preference source exists yet, so the phase trains nothing, even with both operator gates open. The sleep module then moves the waking intent log `state/language/intent_expression.jsonl` into the per-sleep corpus under `state/language/intent_log/`. The move never overwrites a file, and a disk check warns at 80% of `corpus_ceiling_gb` and never deletes. It computes content-free voice measures from the rotated file. See [Voice alignment](voice-alignment.md).
+Phase 4 checks the voice-alignment gates. No validated preference source exists yet, so the phase builds no preference pairs, computes no organ-level divergence and trains nothing, even with both operator gates open (paper section 3.5). The sleep module then moves the waking intent log `state/language/intent_expression.jsonl` into the per-sleep corpus under `state/language/intent_log/`. The move never overwrites a file, and a disk check warns at 80% of `corpus_ceiling_gb` and never deletes. It computes content-free voice measures from the rotated file. See [Voice alignment](voice-alignment.md).
 
 ### Phase 5: affective reset
 
@@ -93,7 +93,6 @@ The sleep module runs the sleep-time intent audit (`sleep.ignition_audit`) and p
 | `sleep.rest_request` | `sleep.out` | Answer to a rest request |
 | `sleep.association` | `sleep.out` | Each phase-3 co-replayed pair: point ids and weight |
 | `affect.state` | `affect.out` | Phase 5, with `reset: true` |
-| `sleep.consolidation_divergence` | `sleep.out` | Every sleep, at the start of phase 4 |
 | `sleep.ignition_audit` | `sleep.out` | Every sleep, after the phases; also merged into the completed summary |
 | `sleep.sleep.completed` | `sleep.out` | The sleep ends; carries the phase results and the audit, or `{"aborted": true, "reason": ...}` if the pipeline itself aborted |
 | `interoception.fatigue` | `interoception.out` | Fatigue crossed its threshold; a trigger |

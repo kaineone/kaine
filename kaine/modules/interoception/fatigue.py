@@ -18,8 +18,9 @@ Design constraints
 from __future__ import annotations
 
 import logging
+import math
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,20 @@ class FatigueAccumulator:
     multiplied by ``faster_decay_factor`` so fatigue drops during
     rest.
 
+    Housekeeping pressure (paper A.5)
+    ---------------------------------
+    While awake, the build-up scales with the housekeeping pressure
+    ``P^hk`` supplied through the ``pressure`` callable:
+
+        F(t + dt) = max(0, F(t) + e * (1 + P^hk) * dt - decay * dt)
+
+    A resource at twice its budget therefore doubles the build-up, and
+    ``P^hk`` has no ceiling. The pressure is applied only while awake
+    (``faster_decay`` is set exactly while the entity sleeps); during
+    sleep, when no callable is injected, when it raises, or when it
+    returns a value that is not a finite number >= 0, the term is 0 and
+    the dynamics reduce to the plain integrator above (bit-identical).
+
     Threshold crossing
     ------------------
     When ``F`` crosses ``maintenance_threshold`` from below, the
@@ -54,6 +69,7 @@ class FatigueAccumulator:
         decay_per_s: float = 0.01,
         maintenance_threshold: float = 100.0,
         faster_decay_factor: float = 3.0,
+        pressure: Callable[[], float] | None = None,
     ) -> None:
         if decay_per_s < 0:
             raise ValueError("decay_per_s must be >= 0")
@@ -65,6 +81,9 @@ class FatigueAccumulator:
         self._decay_per_s = float(decay_per_s)
         self._threshold = float(maintenance_threshold)
         self._faster_decay_factor = float(faster_decay_factor)
+        # Housekeeping pressure callable (paper A.5); None gives the plain
+        # integrator.
+        self._pressure = pressure
 
         self._value: float = 0.0
         self._threshold_crossed: bool = False
@@ -100,6 +119,38 @@ class FatigueAccumulator:
     # Core interface
     # ------------------------------------------------------------------
 
+    def _pressure_value(self) -> float:
+        """Housekeeping pressure for the awake build term (paper A.5).
+
+        Returns 0.0 while asleep (``faster_decay`` is set exactly while the
+        entity sleeps), when no pressure callable is injected, when the
+        callable raises, or when it returns a value that is not a finite
+        number >= 0.
+        """
+        if self._pressure is None or self._faster_decay:
+            return 0.0
+        try:
+            p = self._pressure()
+        except Exception:
+            log.debug(
+                "FatigueAccumulator: housekeeping pressure read failed; using 0.0",
+                exc_info=True,
+            )
+            return 0.0
+        if (
+            isinstance(p, bool)
+            or not isinstance(p, (int, float))
+            or not math.isfinite(p)
+            or p < 0
+        ):
+            log.debug(
+                "FatigueAccumulator: housekeeping pressure %r is not a finite"
+                " number >= 0; using 0.0",
+                p,
+            )
+            return 0.0
+        return float(p)
+
     def update(self, prediction_error: float, *, now: Optional[float] = None) -> bool:
         """Integrate one observation.
 
@@ -128,11 +179,14 @@ class FatigueAccumulator:
         self._last_time = now
 
         e = max(0.0, float(prediction_error))
+        # Paper A.5: while awake, fatigue builds at e * (1 + P^hk); the
+        # pressure term is 0.0 during sleep or without an injected callable.
+        p = self._pressure_value()
         decay_rate = self._decay_per_s
         if self._faster_decay:
             decay_rate *= self._faster_decay_factor
 
-        new_value = max(0.0, self._value + e * dt - decay_rate * dt)
+        new_value = max(0.0, self._value + e * (1.0 + p) * dt - decay_rate * dt)
         was_below = self._value < self._threshold
         self._value = new_value
 
@@ -160,10 +214,12 @@ class FatigueAccumulator:
             return False
         dt = max(0.0, now - self._last_time)
         e = max(0.0, float(prediction_error))
+        # Same pressure scaling as update() so the prediction agrees with it.
+        p = self._pressure_value()
         decay_rate = self._decay_per_s
         if self._faster_decay:
             decay_rate *= self._faster_decay_factor
-        new_value = max(0.0, self._value + e * dt - decay_rate * dt)
+        new_value = max(0.0, self._value + e * (1.0 + p) * dt - decay_rate * dt)
         return self._value < self._threshold and new_value >= self._threshold
 
     def reset(self) -> None:

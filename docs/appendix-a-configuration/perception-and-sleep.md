@@ -166,7 +166,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `baseline_salience` | float | `0.5` | Intensity of ordinary consolidation lifecycle events. |
 | `alert_salience` | float | `0.8` | Intensity on consolidation errors or welfare-relevant conditions. |
 
-The retired key `planning_step_burst` is ignored with a warning if present, so older local configs still boot.
+The retired keys `planning_step_burst` and `consolidation_embedder_enabled` are ignored with a warning if present, so older local configs still boot.
 
 ### Consolidation phases
 
@@ -177,6 +177,22 @@ The retired key `planning_step_burst` is ignored with a warning if present, so o
 | `associative_replay` | boolean | `false` | Phase-3 associative replay (paper A.10). When `true`, phase 2 downscales without pruning, then phase 3 has the episodic memory module co-replay related trace pairs of different periods as weighted links (parameters in `[episodic_memory.association]`) and prune, and publishes one content-free `sleep.association` event per pair. |
 
 The former `downscale_factor` key is refused at boot. The sleep module now downscales the strength of each episodic memory module trace, set by `[episodic_memory.strength]`.
+
+### Housekeeping
+
+`[sleep.housekeeping]` sets sleep housekeeping (paper 3.5, A.5, Table A1; see the [sleep module](../09-modules/sleep.md#housekeeping)). The budgets are operator settings; the defaults are conservative, not a recommendation.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Run housekeeping last in every sleep. `false` gives the sleep summary without the `housekeeping` key, as before. |
+| `disk_budget_share` | float `(0, 1)` | `0.5` | `B^hk` for disk as a share of the volume holding the study records (the smallest, if they span several), so the pressure tracks how scarce the disk really is. Outside (0, 1) fails boot. |
+| `disk_budget_bytes` | integer `> 0` | unset | Optional explicit `B^hk` for disk; when set it overrides `disk_budget_share`. |
+| `memory_budget_bytes` | integer `> 0` | `1073741824` | `B^hk` for host memory. Reserved: the paper counts there only bus entries acknowledged by every consumer group and older than the restart replay window, and the bus has neither, so the memory term is 0. |
+| `time_allowance_s` | float `> 0` | `60.0` | `Delta_hk`: seconds housekeeping may spend per sleep. |
+| `archive_dir` | string | `"/app/archive"` | The archive volume. It is used only when it is a mount point on another device than the study records, so no edit is needed: bind a drive at `/app/archive` and exports start; without one, study records stay on the host and boot logs the projected days until the disk budget is reached. Empty also means no archive. It must lie outside the study-sink directories and `state/`. |
+| `reserve_bytes` | integer `> 0` | `5368709120` | The awake floor's fixed reserve. `R^hk` is the larger of this and `reserve_share` of the volume. |
+| `reserve_share` | float `(0, 1)` | `0.05` | The awake floor's reserve as a share of each data volume. Bad values, or a reserve at least a volume's size, fail boot. |
+| `floor_period_s` | float `> 0` | `60.0` | Seconds between the awake floor's free-space checks. |
 
 ### Voice alignment
 
@@ -202,6 +218,8 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 | `preference_source` | string | `"none"` | Where preferred training examples come from. Only `"none"` is accepted (the phase trains nothing) until Stage 2 adds a validated source; any other value fails at boot. |
 | `corpus_ceiling_gb` | float | `10.0` | Size of the per-sleep intent-log corpus (`state/language/intent_log/`) at which a warning is logged at 80%. Nothing is ever deleted; `0` disables the warning. |
 | `distinctiveness_threshold` | float | `0.0` | Voice-arm threshold for the divergence assessment. 0 until calibrated: any entity that has spoken counts as diverged by the voice arm. Must be at least 0. |
+
+The retired keys `consolidation_divergence_rate_threshold` and `consolidation_divergence_magnitude_threshold` are ignored with a warning if present. Voice adaptation computes no organ-level divergence until a validated preference source exists (paper section 3.5), so there is no consolidation arm for them to set.
 
 #### Training knobs
 
@@ -239,11 +257,3 @@ Details and the full operator procedure are in [Voice alignment](../10-sleep/voi
 
 On a single 12 GB GPU, a 4B LoRA training step (~9.8 GB) and the served organ (~3 GB) do not fit at the same time. With `reload_endpoint` or `restart_service`, the sleep module unloads the organ, trains, then reloads it (applying the accepted adapter through the server's `--lora` flag). The language organ's generation defers and the A/B-divergence eval arm skips while the organ is resting; both resume on reload. A failed or timed-out training window always reloads a working organ so the entity is not voiceless on wake. With `manual`, the operator owns the reload, so the system never stops the server unannounced.
 
-### Consolidation divergence thresholds
-
-Every voice-alignment sleep, the sleep module surfaces a content-free metric of how the entity's conditioned output diverged from its bare language organ: `divergence_rate` (usable DPO pairs / records scanned) and `divergence_magnitude` (mean cosine distance over the pairs). The metric is computed even when training is disabled, skipped, or the adapter is rejected. If either threshold is crossed, the entity is treated as organ-level diverged. Read by the welfare-gated decommission divergence assessment.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `consolidation_divergence_rate_threshold` | float | `0.5` | Breadth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |
-| `consolidation_divergence_magnitude_threshold` | float | `0.25` | Depth threshold for organ-level divergence, used by the live preservation monitor and the decommission check. |

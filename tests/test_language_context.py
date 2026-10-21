@@ -96,14 +96,14 @@ def test_default_personas_are_first_person_and_forbidden_word_free():
         lowered = persona.lower()
         for word in forbidden:
             assert word not in lowered
-        assert "I am this entity" not in persona
+        assert persona.startswith("I am this entity.")
 
 
-def test_default_personas_name_no_category():
+def test_default_personas_carry_the_self_category():
     for persona in (DEFAULT_PERSONA_EXTERNAL, DEFAULT_PERSONA_INTERNAL):
-        assert re.search(r"\bI am (?:a|an|this)\b", persona) is None
-    assert DEFAULT_PERSONA_EXTERNAL.startswith("What I say")
-    assert DEFAULT_PERSONA_INTERNAL.startswith("My thoughts")
+        assert persona.startswith("I am this entity.")
+        assert re.search(r"\bI am (?:a|an)\b", persona) is None
+        assert persona.count("I am") == 1
 
 
 def test_awareness_heading_in_prompt():

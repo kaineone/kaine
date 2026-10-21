@@ -92,12 +92,18 @@ def create_app(
     health_prober: HealthProber | None = None,
     rate_control_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     evaluation_provider: Callable[[], dict[str, Any]] | None = None,
+    startup: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     state = conversation_state or ConversationState()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await bridge.start()
+        if startup is not None:
+            try:
+                await asyncio.wait_for(startup(), timeout=5.0)
+            except Exception:
+                log.warning("dashboard startup hook failed", exc_info=True)
         # Task 2.2: server-push a combined metrics+health snapshot over the
         # single diagnostics stream (retires the client-side DashboardVitals/
         # DashboardMetrics/DashboardSupervisor poll loops — see push_snapshots_periodically).

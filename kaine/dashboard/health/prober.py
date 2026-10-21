@@ -91,10 +91,10 @@ class HealthProber:
     # Model-server (language-organ) service surface for the diagnostics panel:
     # the configured chat_url + served alias + the bearer key (presence only).
     model_server_cfg: dict[str, Any] = field(default_factory=dict)
-    # Graded consolidation-divergence thresholds for the entity-care block's
-    # divergence assessment (rate, magnitude). Defaults to None → the
-    # assess_divergence shipped conservative defaults.
-    consolidation_thresholds: tuple[float, float, float] | None = None
+    # Voice-distinctiveness threshold for the entity-care block's divergence
+    # assessment, read from [sleep.voice_alignment]. None keeps the
+    # assess_divergence default (0.0).
+    distinctiveness_threshold: float | None = None
     adapter_output_dir: Path | None = None
     voice_paths: Any | None = None
     cycle_runtime_path: Path = Path("state/cycle/runtime.json")
@@ -245,7 +245,7 @@ class HealthProber:
 
     def _entity_care_block(self) -> dict[str, Any]:
         return blocks.entity_care_block(
-            self.consolidation_thresholds,
+            self.distinctiveness_threshold,
             adapter_output_dir=self.adapter_output_dir,
             voice_paths=self.voice_paths,
         )

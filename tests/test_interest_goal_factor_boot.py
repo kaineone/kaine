@@ -106,7 +106,7 @@ async def test_boot_path_uses_interest_goal_scorer(monkeypatch):
         timestamp=datetime.now(timezone.utc),
     )
 
-    assert await goal.relevance(vision_event) == pytest.approx(1 + 0.5 * (0.55 - 0.05) / 0.95)
+    assert await goal.relevance(vision_event) == pytest.approx(1 + 0.5 * (0.55 - 0.20) / 0.80)
     assert await goal.relevance(sequence_event) == 1.0
 
 
