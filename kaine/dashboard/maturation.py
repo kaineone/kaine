@@ -5,7 +5,7 @@
 
 Two routes under /diagnostics:
 
-  GET  /diagnostics/maturation.json  — current maturation request/ack state plus developmental progress.
+  GET  /diagnostics/maturation.json  - current maturation request/ack state plus developmental progress and hearing stage.
   POST /diagnostics/maturation/ack   — operator acknowledges the maturation
 
 The maturation gate writes ``state/lifecycle/maturation_request.json``; the dashboard writes
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -62,6 +63,8 @@ _DEVELOPMENT_KEYS = {
     "readout",
     "decision",
     "awaiting_ack",
+    "world",
+    "conditions",
 }
 
 
@@ -77,6 +80,49 @@ def read_development(runtime_path: Path | None = None) -> dict | None:
     if not isinstance(block, dict):
         return None
     return {k: block[k] for k in block if k in _DEVELOPMENT_KEYS}
+
+
+def read_hearing_stage(runtime_path: Path | None = None) -> dict | None:
+    if runtime_path is None:
+        runtime_path = RUNTIME_PATH
+    runtime_path = resolve(runtime_path)
+    try:
+        raw = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    block = raw.get("hearing_stage")
+    if not isinstance(block, dict):
+        return None
+
+    def _finite(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if not math.isfinite(value):
+            return None
+        return value
+
+    stage = block.get("stage")
+    if isinstance(stage, bool) or not isinstance(stage, int) or stage < 0 or stage > 4:
+        return None
+
+    previous_stage = block.get("previous_stage")
+    if (
+        isinstance(previous_stage, bool)
+        or not isinstance(previous_stage, int)
+        or previous_stage < 0
+        or previous_stage > 4
+    ):
+        previous_stage = None
+
+    return {
+        "stage": stage,
+        "previous_stage": previous_stage,
+        "low_hz": _finite(block.get("low_hz")),
+        "high_hz": _finite(block.get("high_hz")),
+        "awake_seconds": _finite(block.get("awake_seconds")),
+    }
 
 
 def maturation_snapshot(
@@ -109,6 +155,7 @@ def maturation_snapshot(
             "acknowledged_at": None,
         }
     snapshot["development"] = read_development(runtime_path=runtime_path)
+    snapshot["hearing"] = read_hearing_stage(runtime_path=runtime_path)
     return snapshot
 
 

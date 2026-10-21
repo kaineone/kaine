@@ -61,6 +61,27 @@
   </ul>
   {% endif %}
 
+  {% if health and health.backends %}
+  {% set be = health.backends %}
+  <h3>backend load</h3>
+  {% if be.ok is sameas false %}
+  <ul class="health-list" id="backend-failures">
+    {% for f in be.failures %}
+    <li class="health-row" data-backend-failure="{{ f.module }}">
+      <span><span class="dep-name">{{ f.module }}: {{ f.backend }} failed, {% if f.fallback %}using {{ f.fallback }}{% else %}module disabled{% endif %}</span></span>
+      <span class="dep-detail">{{ f.reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif be.ok is sameas true %}
+  <p class="dep-detail" id="backend-load-note">Every selected backend loaded (reported by the cycle).</p>
+  {% elif be.source == "cycle_not_running" %}
+  <p class="dep-detail" id="backend-load-note">Not known: the cycle is not running.</p>
+  {% else %}
+  <p class="dep-detail" id="backend-load-note">Not known: the running cycle does not report backend loads.</p>
+  {% endif %}
+  {% endif %}
+
   {# The module grid is always rendered (the prober always returns a module
      list) so DashboardVitals can rebuild its cells live from health.modules plus
      recent per-module bus activity — a publishing module is never shown idle. #}
@@ -72,7 +93,7 @@
         <span class="mname">{{ m.name }}</span>
         <span class="mstate">
           {%- if not m.enabled -%}disabled
-          {%- elif m.capturing -%}🔴 capturing
+          {%- elif m.capturing -%}{% if not m.feed or m.feed == "live" %}🔴 capturing{% else %}capturing ({{ m.feed }}){% endif %}
           {%- elif m.initialized -%}running
           {%- else -%}idle{%- endif -%}
         </span>

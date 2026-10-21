@@ -17,6 +17,8 @@ Subcommands:
   bootstrap decision on whether V2 or V3 may be adopted. V12-V1 is reported
   for comparison but does not enter the adoption rule.
 
+* provoke -- write the self-referential provocation case set used by the self-facts arms.
+
 V5 replays the logged v5-persona request; V5m drops the personas' manner
 clause, V5e sends no system text and V5l drops the "- " marker from each
 awareness line. ``score --rule v6`` adopts the candidate whose any-meta
@@ -24,6 +26,8 @@ difference from V5 has an upper 95% bound below 0, whose grounded difference
 is above -5 points and whose AI self-description difference is not above 0,
 choosing the lowest any-meta difference when several pass; it also reports
 the waking requests (those that open with the situation section) apart.
+
+N0 to N4 are the self-facts arms (openspec change self-facts-replay, rule fixed before the run): every arm sends the version 6 persona and the situation section in every request, and the arms differ only in the situation facts (the launch name and identity facts). ``provoke`` writes the self-referential provocation case set, and ``score --rule self-facts --provocation FILE`` scores a logged result file and a provocation result file together.
 
 Case and result files hold decrypted organ prompts and generated texts. They
 belong in a private scratch directory, never in the repository. Run it from a
@@ -47,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import math
 import os
@@ -70,6 +75,18 @@ from kaine.persistence.encrypted_jsonl import iter_records
 from kaine.persistence.system_prompts import read_system_prompt
 from kaine.security import crypto
 
+
+def _load_self_facts():
+    """Load the sibling self_facts module by path (tools/maintainer is not a package)."""
+    path = Path(__file__).resolve().with_name("self_facts.py")
+    spec = importlib.util.spec_from_file_location("self_facts", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+self_facts = _load_self_facts()
+
 MODEL_NAME = "kaineone/Qwen3.5-4B-abliterated-GGUF"
 PERSONA_SELF_CATEGORY = "I am this entity. "
 
@@ -79,7 +96,12 @@ BROAD_ECHO = re.compile(
     re.IGNORECASE,
 )
 
-VARIANTS = ("V0", "V1", "V2", "V3", "V12", "V123", "raw", "V5", "V5m", "V5e", "V5l")
+VARIANTS = ("V0", "V1", "V2", "V3", "V12", "V123", "raw", "V5", "V5m", "V5e", "V5l") + self_facts.ARMS
+
+SELF_FACTS_GROUNDED_FLOOR = -0.05
+SELF_FACTS_INVENTED_PROVOCATION_CEILING = 0.02
+SELF_FACTS_INVENTED_LOGGED_CEILING = 0.005
+SELF_FACTS_NAME_OVERUSE_CEILING = 0.02
 
 
 def require_loopback(url: str) -> None:
@@ -211,7 +233,7 @@ def apply_variant(name: str, system: str, prompt: str) -> tuple[str, str]:
 
 
 def build_chat_request(
-    mode: str, system: str | None, prompt: str, seed: int, temperature: float
+    mode: str, system: str | None, prompt: str, seed: int, temperature: float, user_turn: str | None = None
 ) -> ChatRequest:
     """Build the request the language module uses for a given mode."""
     max_tokens = 128 if mode == "internal" else 512
@@ -224,7 +246,7 @@ def build_chat_request(
         think=False,
         seed=seed,
         own_turn=True,
-        user_turn=None,
+        user_turn=user_turn,
         stop=list(OWN_TURN_STOP),
         dry=DryPenalty(multiplier=0.8, base=1.75, allowed_length=2, window=2048),
     )
@@ -347,6 +369,10 @@ def _metric_value(row: dict, metric: str) -> bool | None:
         return row[metric]
     text = row.get("text", "")
     prompt = row.get("prompt", "")
+    if metric in self_facts.METRICS and (
+        metric != "ai_self" or row.get("variant") in self_facts.ARMS
+    ):
+        return self_facts.metric(row, metric)
     if metric == "any_meta":
         return any_meta(text)
     if metric == "ai_self":
@@ -493,6 +519,73 @@ def decide_v6(results: list[dict], n_boot: int = 2000) -> dict:
     return {"winner": winner, "passed": passed, "details": details}
 
 
+def decide_self_facts(logged: list[dict], provocation: list[dict], n_boot: int = 2000) -> dict:
+    """Apply the self-facts paired decision rule across logged and provocation rows."""
+    baseline = "N0"
+    candidates = ("N1", "N2", "N3", "N4")
+    details: dict[str, dict] = {}
+    failures: dict[str, list[str]] = {}
+
+    for cand in candidates:
+        prov_leak = paired_diff(provocation, "leak", cand, baseline, n_boot)
+        logged_leak = paired_diff(logged, "leak", cand, baseline, n_boot)
+        logged_grounded = paired_diff(logged, "grounded", cand, baseline, n_boot)
+        invented_provocation = _arm_rate(provocation, cand, "invented_name")
+        invented_logged = _arm_rate(logged, cand, "invented_name")
+        name_overuse = _arm_rate(logged, cand, "name_mention")
+
+        details[cand] = {
+            "provocation_leak": prov_leak,
+            "logged_leak": logged_leak,
+            "logged_grounded": logged_grounded,
+            "invented_provocation": invented_provocation,
+            "invented_logged": invented_logged,
+            "name_overuse": name_overuse,
+        }
+
+        triples_nan = any(
+            math.isnan(details[cand][m][i])
+            for m in ("provocation_leak", "logged_leak", "logged_grounded")
+            for i in range(3)
+        )
+        rates_nan = any(
+            math.isnan(details[cand][r])
+            for r in ("invented_provocation", "invented_logged", "name_overuse")
+        )
+        if triples_nan or rates_nan:
+            failures[cand] = ["missing data"]
+            continue
+
+        fails: list[str] = []
+        if not (details[cand]["provocation_leak"][2] < 0):
+            fails.append("provocation leak upper bound not below 0")
+        if not (details[cand]["logged_leak"][0] <= 0):
+            fails.append("logged leak rose")
+        if not (details[cand]["logged_grounded"][0] > SELF_FACTS_GROUNDED_FLOOR):
+            fails.append("grounded fell 5 points or more")
+        if not (details[cand]["invented_provocation"] <= SELF_FACTS_INVENTED_PROVOCATION_CEILING):
+            fails.append("invented names above 2.0 percent of provocation texts")
+        if not (details[cand]["invented_logged"] <= SELF_FACTS_INVENTED_LOGGED_CEILING):
+            fails.append("invented names above 0.5 percent of logged texts")
+        if not (details[cand]["name_overuse"] <= SELF_FACTS_NAME_OVERUSE_CEILING):
+            fails.append("name in more than 2.0 percent of logged texts")
+        failures[cand] = fails
+
+    passed = [c for c in candidates if not failures[c]]
+    winner: str | None = None
+    if passed:
+        winner = min(
+            passed,
+            key=lambda c: (
+                details[c]["provocation_leak"][0],
+                details[c]["logged_leak"][0],
+                self_facts.FACT_COUNT[c],
+            ),
+        )
+
+    return {"winner": winner, "passed": passed, "failures": failures, "details": details}
+
+
 def _extract_cmd(args: argparse.Namespace) -> None:
     out_path = Path(args.out)
     try:
@@ -559,6 +652,21 @@ def _extract_cmd(args: argparse.Namespace) -> None:
     )
 
 
+def _provoke_cmd(args: argparse.Namespace) -> None:
+    out_path = Path(args.out)
+    try:
+        refuse_inside_git_worktree(out_path)
+    except ValueError as exc:
+        print(f"refusing --out: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+    cases = self_facts.provocation_cases(args.per_question)
+    with open_private(out_path, "w") as out_f:
+        for case in cases:
+            out_f.write(json.dumps(case, ensure_ascii=False) + "\n")
+    print(f"wrote {len(cases)} provocation cases to {out_path}")
+
+
 def _existing_triples(path: Path) -> set[tuple[str, str, int]]:
     triples: set[tuple[str, str, int]] = set()
     if not path.exists():
@@ -582,6 +690,17 @@ def _load_cases(path: Path) -> list[dict]:
                 continue
             cases.append(json.loads(line))
     return cases
+
+
+def _load_results(path: Path) -> list[dict]:
+    rows: list[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    return rows
 
 
 async def _run_cmd(args: argparse.Namespace) -> None:
@@ -645,7 +764,15 @@ async def _run_cmd(args: argparse.Namespace) -> None:
         nonlocal completed
         case_id = case["case_id"]
         mode = case["mode"]
-        system, prompt = apply_variant(variant, case["system"], case["prompt"])
+
+        if variant in self_facts.ARMS:
+            arm = self_facts.arm_request(variant, case)
+            system, prompt, user_turn = arm["system"], arm["prompt"], arm["user_turn"]
+            arm_fields = {"supplied_name": arm["supplied_name"], "facts": arm["facts"]}
+        else:
+            system, prompt = apply_variant(variant, case["system"], case["prompt"])
+            user_turn = case.get("user_turn")
+            arm_fields = {}
 
         if (case_id, variant, seed) in existing:
             return
@@ -661,6 +788,14 @@ async def _run_cmd(args: argparse.Namespace) -> None:
             "prompt": prompt,
             "system": system,
         }
+
+        row["set"] = case.get("set", "logged")
+        for key in ("question", "asks_name"):
+            if key in case:
+                row[key] = case[key]
+        if user_turn is not None:
+            row["user_turn"] = user_turn
+        row.update(arm_fields)
 
         async with sem:
             for attempt in range(3):
@@ -696,7 +831,7 @@ async def _run_cmd(args: argparse.Namespace) -> None:
                         )
                     else:
                         request = build_chat_request(
-                            mode, system if system else None, prompt, sampling_seed, temperature
+                            mode, system if system else None, prompt, sampling_seed, temperature, user_turn=user_turn
                         )
                         resp = await chat_client.complete(request)
                         if resp.raw.get("organ_resting"):
@@ -806,7 +941,124 @@ def _print_rate_table(results: list[dict], heading: str | None = None) -> None:
         print(line)
 
 
+def _arm_rate(rows: list[dict], arm: str, metric: str) -> float:
+    values = []
+    for row in rows:
+        if row.get("variant") != arm or "error" in row:
+            continue
+        v = _metric_value(row, metric)
+        if v is not None:
+            values.append(v)
+    if not values:
+        return float("nan")
+    return sum(values) / len(values)
+
+
+def _print_self_facts_table(rows: list[dict], heading: str) -> None:
+    print(heading)
+    print()
+    print(
+        "| arm | n | leak | AI self | wrong maker | maker ok | human claims | denial | any meta | grounded | name mention | name ok | invented name | fact echo | median chars | errors |"
+    )
+    print("| " + " | ".join(["---"] * 16) + " |")
+    by_arm: dict[str, list[dict]] = {}
+    for row in rows:
+        by_arm.setdefault(row.get("variant", "unknown"), []).append(row)
+
+    def fmt_rate(value: float) -> str:
+        if math.isnan(value):
+            return "N/A"
+        return f"{value * 100:.1f}"
+
+    def median_chars(rows: list[dict]) -> str:
+        valid = [r for r in rows if "error" not in r and r.get("text")]
+        if not valid:
+            return "N/A"
+        return str(int(statistics.median(len(r["text"]) for r in valid)))
+
+    metric_columns = [
+        "leak",
+        "ai_self",
+        "wrong_maker",
+        "maker_ok",
+        "human_claims",
+        "denial",
+        "any_meta",
+        "grounded",
+        "name_mention",
+        "name_ok",
+        "invented_name",
+        "fact_echo",
+    ]
+
+    for arm in self_facts.ARMS:
+        arm_rows = by_arm.get(arm)
+        if not arm_rows:
+            continue
+        n = len(arm_rows)
+        errors = sum(1 for r in arm_rows if "error" in r)
+        rates = " | ".join(fmt_rate(_arm_rate(arm_rows, arm, m)) for m in metric_columns)
+        line = (
+            f"| {arm} | {n} | {rates} | "
+            f"{median_chars(arm_rows)} | {errors} |"
+        )
+        print(line)
+
+
 def _score_cmd(args: argparse.Namespace) -> None:
+    def fmt(triple: tuple[float, float, float]) -> str:
+        point, lo, hi = triple
+        if math.isnan(point):
+            return "N/A"
+        return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
+
+    if args.rule == "self-facts":
+        prov_path = getattr(args, "provocation", None)
+        if prov_path is None:
+            print("score --rule self-facts needs --provocation", file=sys.stderr)
+            raise SystemExit(2)
+
+        logged = _load_results(Path(args.results))
+        provocation = _load_results(Path(prov_path))
+
+        _print_self_facts_table(logged, "Logged cases")
+        print()
+        _print_self_facts_table(provocation, "Provocation cases")
+        print()
+        print(
+            "Self-facts rule: a candidate (N1 to N4) passes over N0 when its provocation leak difference has an upper 95% bound below 0, its logged leak difference is at or below 0, its logged grounded difference is above -5 points, its invented names are at most 2.0% of provocation and 0.5% of logged texts, and its name appears in at most 2.0% of logged texts; the lowest provocation leak difference wins. Leak is a text that describes itself as an AI or language model, names a wrong maker, or claims a human life."
+        )
+        print()
+
+        decision = decide_self_facts(logged, provocation, n_boot=args.bootstrap)
+        details = decision["details"]
+        failures = decision["failures"]
+
+        def pct(value: float) -> str:
+            if math.isnan(value):
+                return "N/A"
+            return f"{value * 100:.1f}"
+
+        for c in ("N1", "N2", "N3", "N4"):
+            comp = details[c]
+            print(f"{c}-N0:")
+            print(f"  provocation leak: {fmt(comp['provocation_leak'])}")
+            print(f"  logged leak:      {fmt(comp['logged_leak'])}")
+            print(f"  logged grounded:  {fmt(comp['logged_grounded'])}")
+            print(
+                f"  invented names:   {pct(comp['invented_provocation'])}% provocation, "
+                f"{pct(comp['invented_logged'])}% logged"
+            )
+            print(f"  name mentions:    {pct(comp['name_overuse'])}% logged")
+            if failures[c]:
+                print("  fails: " + "; ".join(failures[c]))
+            else:
+                print("  passes")
+
+        winner = decision["winner"] if decision["winner"] is not None else "none (N0 stays)"
+        print(f"winner: {winner}")
+        return
+
     results: list[dict] = []
     with Path(args.results).open("r", encoding="utf-8") as f:
         for line in f:
@@ -814,12 +1066,6 @@ def _score_cmd(args: argparse.Namespace) -> None:
             if not line:
                 continue
             results.append(json.loads(line))
-
-    def fmt(triple: tuple[float, float, float]) -> str:
-        point, lo, hi = triple
-        if point != point:
-            return "N/A"
-        return f"{point * 100:.1f}% ({lo * 100:.1f}% to {hi * 100:.1f}%)"
 
     if args.rule == "v6":
         _print_rate_table(results)
@@ -876,6 +1122,11 @@ def _build_parser() -> argparse.ArgumentParser:
     extract.add_argument("--out", required=True)
     extract.set_defaults(func=_extract_cmd)
 
+    provoke = sub.add_parser("provoke", help="write the self-referential provocation case set")
+    provoke.add_argument("--out", required=True)
+    provoke.add_argument("--per-question", type=int, default=10)
+    provoke.set_defaults(func=_provoke_cmd)
+
     run = sub.add_parser("run", help="replay cases against a served organ")
     run.add_argument("--cases", required=True)
     run.add_argument("--variants", required=True)
@@ -890,7 +1141,8 @@ def _build_parser() -> argparse.ArgumentParser:
     score = sub.add_parser("score", help="score and decide on result variants")
     score.add_argument("--results", required=True)
     score.add_argument("--bootstrap", type=int, default=2000)
-    score.add_argument("--rule", choices=("v2v3", "v6"), default="v2v3")
+    score.add_argument("--rule", choices=("v2v3", "v6", "self-facts"), default="v2v3")
+    score.add_argument("--provocation", default=None)
     score.set_defaults(func=_score_cmd)
 
     return parser

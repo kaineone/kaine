@@ -214,6 +214,12 @@ class ReviveSession:
         self._stage_path = stage_path
         self._individuation_root = individuation_root
         self._landed = False
+        self._new_faculty: list[str] | None = None
+
+    @property
+    def new_faculty(self) -> list[str] | None:
+        """Enabled modules the bundle did not capture; None until the revive has run."""
+        return self._new_faculty
 
     @property
     def plan(self) -> RevivePlan:
@@ -242,6 +248,7 @@ class ReviveSession:
         the stage write succeed is the session considered landed.
         """
         new = await revive_into(self._plan, registry)
+        self._new_faculty = list(new)
 
         # Restore individuation evidence before the stage file is written.
         try:

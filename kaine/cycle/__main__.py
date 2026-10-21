@@ -32,6 +32,7 @@ import os
 import signal
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable
@@ -86,6 +87,7 @@ from kaine.lifecycle.identity import (
     EntityIdentity,
     IdentityError,
     load_identity,
+    name_identity,
     resolve_spawn_identity,
     save_identity,
 )
@@ -99,6 +101,7 @@ from kaine.lifecycle.maturation_gate import (
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.registry import shutdown_order
+from kaine.modules.self_model.document import is_valid_name
 from kaine.perception_state import (
     read_desired,
     write_desired_audio,
@@ -833,6 +836,7 @@ async def _write_runtime_state(
     staging_enabled: bool = False,
     gate_status: dict | None = None,
     revived_from: str | None = None,
+    hearing_stage: dict | None = None,
 ) -> None:
     runtime_path = resolve(RUNTIME_PATH)
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
@@ -901,6 +905,9 @@ async def _write_runtime_state(
             payload["developmental_stage"].update(gate_status)
     if revived_from is not None:
         payload["revived_from"] = revived_from
+    # The hearing band's current stage from the hearing-stage watch, content-free.
+    if hearing_stage is not None:
+        payload["hearing_stage"] = dict(hearing_stage)
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -914,6 +921,15 @@ async def _write_runtime_state(
             payload["kaine_version"] = ctx.kaine_version
     except Exception:
         log.debug("could not read run context for runtime.json", exc_info=True)
+    # Backend load failures are recorded in THIS process; the dashboard runs in
+    # another process (its own container when deployed), so it reads the cycle's
+    # records from here. Content-free: module, backend, fallback, reason, time.
+    try:
+        from kaine.backend_state import backend_failures_snapshot
+
+        payload["backend_failures"] = backend_failures_snapshot()
+    except Exception:
+        log.debug("could not read backend failures for runtime.json", exc_info=True)
     # The atomic write+replace is blocking disk I/O on a once-a-second loop;
     # run it off the event loop so it never stalls the cognitive cycle.
     await asyncio.to_thread(write_json_atomic, runtime_path, payload)
@@ -1078,12 +1094,27 @@ def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
     return roots
 
 
-def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
+def _self_model_document_path(config: dict[str, Any] | None, state_root: Path) -> Path:
+    """The self-model document path: ``[self_model].persistence_path``, else the default
+    under ``state_root``. Resolved like every other state path."""
+    raw = ((config or {}).get("self_model") or {}).get("persistence_path")
+    if raw:
+        return resolve(Path(str(raw)))
+    return resolve(state_root) / "self_model" / "self_model.json"
+
+
+def _resolve_boot_identity(
+    state_root: Path, revive: Any, *, self_model_path: Path | None = None
+) -> EntityIdentity:
     """Resolve the entity identity for this boot before any module starts.
 
     When reviving, the bundle's identity is returned but not yet persisted: it is
-    written to disk only after the revive lands. A target tree that already holds
-    a different identity is refused before any state is modified.
+    written to disk only after the revive lands, and keeps the bundle's name (a
+    bundle identity without a name is named when the revive lands). A target tree
+    that already holds a different identity is refused before any state is
+    modified. Otherwise the spawn identity is resolved and named (a fresh spawn
+    mints a name; an unnamed identity adopts the self-model document's name or
+    mints one), whichever modules run.
     """
     path = resolve(state_root) / "identity" / "entity.json"
     if revive is not None:
@@ -1094,12 +1125,56 @@ def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
                 f"bundle identity is {revive.plan.identity.entity_id!r}"
             )
         return revive.plan.identity
-    return resolve_spawn_identity(state_root)
+    return resolve_spawn_identity(state_root, self_model_path=self_model_path)
 
 
-def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
-    """Persist a revived identity once the revive has successfully landed."""
-    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
+def _revived_self_model(registry: Any) -> Any | None:
+    """The self-model module in ``registry``, or ``None`` when it is absent."""
+    try:
+        if "self_model" in registry:
+            return registry.get("self_model")
+    except Exception:
+        log.debug("could not look up the self-model module", exc_info=True)
+    return None
+
+
+def _persist_revived_identity(
+    state_root: Path,
+    identity: EntityIdentity,
+    *,
+    self_model_name: str | None = None,
+) -> EntityIdentity:
+    """Persist a revived identity once the revive has successfully landed.
+
+    The revived entity's own name wins. The name is, in order: the bundle
+    identity's name; the name of the self-model state the bundle captured
+    (``self_model_name``, passed only when the bundle held that state); the
+    name already stored for the same ``entity_id`` in this tree; a newly drawn
+    name. A name in this tree's self-model document is never consulted, and a
+    name stored under a different ``entity_id`` is never adopted. A stored name
+    is replaced only when the new name comes from the bundle itself. Returns
+    the identity that was saved.
+    """
+    root = resolve(state_root)
+    path = root / "identity" / "entity.json"
+    existing = load_identity(path)
+    if existing is not None and existing.entity_id != identity.entity_id:
+        raise IdentityError(
+            f"refusing revive into tree with identity {existing.entity_id!r}; "
+            f"bundle identity is {identity.entity_id!r}"
+        )
+    from_bundle = identity.name is not None
+    if identity.name is None:
+        name = self_model_name if is_valid_name(self_model_name) else None
+        from_bundle = name is not None
+        if not name and existing is not None and is_valid_name(existing.name):
+            name = existing.name
+        if name:
+            identity = replace(identity, name=name)
+        else:
+            identity = name_identity(identity)
+    save_identity(identity, path, replace_name=from_bundle)
+    return identity
 
 
 # Effectors that have nothing to act on in the stimulus source: the embodiment module has no world and
@@ -1238,7 +1313,7 @@ def _start_development_owner(
 
 
 def _start_stimulus_source_presence(
-    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event
+    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event, *, on_watch: Callable[[Any], None] | None = None
 ) -> "asyncio.Task[None] | None":
     """Start the local stimulus source's presence publisher when a stimulus source clock is installed.
 
@@ -1254,6 +1329,8 @@ def _start_stimulus_source_presence(
 
     publisher = StimulusSourcePresencePublisher(bus, clock)
     watch = HearingStageWatch.from_config(kaine_config, bus)
+    if watch is not None and on_watch is not None:
+        on_watch(watch)
 
     async def _run() -> None:
         if watch is not None:
@@ -1356,8 +1433,17 @@ async def _apply_revive(revive, registry, state_root: Path) -> int | None:
     if refused is not None:
         return refused
 
+    self_model = _revived_self_model(registry)
+    # The revived self-model speaks for the bundle only when the bundle captured
+    # its state; otherwise the module holds nothing of the revived entity's.
+    new_faculty = getattr(revive, "new_faculty", None)
+    captured = new_faculty is not None and "self_model" not in new_faculty
     try:
-        _persist_revived_identity(state_root, revive.plan.identity)
+        saved = _persist_revived_identity(
+            state_root,
+            revive.plan.identity,
+            self_model_name=getattr(self_model, "entity_name", None) if captured else None,
+        )
     except (IdentityError, OSError) as exc:
         log.error(
             "could not persist revived identity %s: %s",
@@ -1374,6 +1460,13 @@ async def _apply_revive(revive, registry, state_root: Path) -> int | None:
                     exc_info=True,
                 )
         return IDENTITY_REFUSED_EXIT
+    # The running mind sees the final name for the rest of this boot.
+    try:
+        registry.identity_name = saved.name
+    except Exception:
+        log.debug("could not record the identity name on the registry", exc_info=True)
+    if self_model is not None and hasattr(self_model, "adopt_identity_name"):
+        self_model.adopt_identity_name(saved.name)
     return None
 
 
@@ -1484,9 +1577,24 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     # Entity identity resolution. Runs before stage resolution and before any
     # module state is touched, so a legacy identity is persisted before the same
     # boot can write a new artifact that would shift the derivation.
+    def _resolve_identity() -> EntityIdentity:
+        return _resolve_boot_identity(
+            resolve(Path("state")),
+            ctx.revive,
+            self_model_path=_self_model_document_path(
+                ctx.kaine_config, resolve(Path("state"))
+            ),
+        )
+
     try:
-        ctx.identity = _resolve_boot_identity(resolve(Path("state")), ctx.revive)
-    except IdentityError as exc:
+        try:
+            ctx.identity = _resolve_identity()
+        except OSError as exc:
+            # A concurrent first boot can replace the identity file under us; the
+            # file is whole once the other boot finishes, so read it again.
+            log.warning("identity resolution lost a race (%s); reading it again", exc)
+            ctx.identity = _resolve_identity()
+    except (IdentityError, OSError) as exc:
         log.error("entity identity resolution refused: %s", exc)
         return IDENTITY_REFUSED_EXIT
     log.info(
@@ -1806,8 +1914,41 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
     return None
 
 
+async def _report_naming_deferred(bus: Any, identity: EntityIdentity | None) -> bool:
+    """Publish an operator event when boot left the entity unnamed (the self-model
+    document exists but cannot be read). Returns True when an event was sent.
+
+    The health surface carries the matching warning (``kaine.backend_state``),
+    recorded where naming was deferred. Runs every boot that defers.
+    """
+    if identity is None or identity.name is not None or bus is None:
+        return False
+    from kaine.bus.schema import Event
+    from kaine.bus.streams import HOUSEKEEPING_SOURCE
+
+    event = Event(
+        source=HOUSEKEEPING_SOURCE,
+        type="identity.naming_deferred",
+        payload={
+            "entity_id": identity.entity_id,
+            "reason": "the self-model document exists but cannot be read",
+        },
+        salience=0.05,
+        timestamp=datetime.now(timezone.utc),
+    )
+    try:
+        await bus.publish(event)
+    except Exception:
+        log.warning("could not publish the naming-deferred operator event", exc_info=True)
+        return False
+    return True
+
+
 async def _phase_registry(ctx: BootContext) -> int | None:
     """Build and initialize the modules, hold effectors while developing, apply a revive, and wire the resume checkpoint."""
+
+    if ctx.revive is None:
+        await _report_naming_deferred(ctx.bus, ctx.identity)
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
@@ -1823,6 +1964,12 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         intent_secret=ctx.intent_secret,
         plugins=ctx.plugins,
         boot_stage=ctx.stage_state,
+        identity_name=ctx.identity.name if ctx.identity is not None else None,
+        identity_name_pending=(
+            ctx.revive is not None
+            and ctx.identity is not None
+            and ctx.identity.name is None
+        ),
     )
     if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
@@ -1850,8 +1997,17 @@ async def _phase_registry(ctx: BootContext) -> int | None:
             refused = REVIVE_REFUSED_EXIT
         else:
             refused = await _apply_revive(
-                ctx.revive, ctx.registry, resolve(Path("state"))
+                ctx.revive,
+                ctx.registry,
+                resolve(Path("state")),
             )
+            if refused is None:
+                try:
+                    landed = load_identity(resolve(Path("state")) / "identity" / "entity.json")
+                except IdentityError:
+                    landed = None
+                if landed is not None:
+                    ctx.identity = landed
             # A landed revive wins over any resume checkpoint: replace it immediately.
             if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
                 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
@@ -2627,7 +2783,10 @@ async def _phase_development(ctx: BootContext) -> int | None:
     # on development.out (the same contract an external provider uses), which the
     # maturation gate reads to detect stimulus source loss. development.out is not a module
     # stream, so presence never enters the workspace.
-    ctx.stimulus_source_presence_task = _start_stimulus_source_presence(ctx.kaine_config, ctx.bus, ctx.stop_event)
+    ctx.stimulus_source_presence_task = _start_stimulus_source_presence(
+        ctx.kaine_config, ctx.bus, ctx.stop_event,
+        on_watch=lambda watch: setattr(ctx, "hearing_stage_watch", watch),
+    )
     ctx.housekeeping_floor_task = _start_housekeeping_floor(ctx.kaine_config, ctx.bus, ctx.stop_event, is_asleep=lambda: ctx.cycle.is_asleep)
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
     # The readiness readout (local-womb-feed phase 3): measures, never imposes.
@@ -2819,6 +2978,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             gate_status=ctx.gate_runner.status if ctx.staging_enabled else None,
             staging_enabled=ctx.staging_enabled,
             revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
+            hearing_stage=ctx.hearing_stage_watch.current if ctx.hearing_stage_watch is not None else None,
         )
         try:
             await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)
