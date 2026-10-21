@@ -33,9 +33,14 @@ from kaine.config import load_kaine_config
 from kaine.dashboard.app import create_app, make_default_privacy_filter
 from kaine.dashboard.bridge import BusBridge
 from kaine.dashboard.config import DashboardConfigError, load_dashboard_config
-from kaine.dashboard.conversation import read_conversation_history
+from kaine.dashboard.conversation import (
+    ConversationState,
+    read_conversation_history,
+    read_entity_name,
+)
 from kaine.dashboard.health import load_health_prober
 from kaine.evaluation.stream_registry import diagnostics_streams
+from kaine.lifecycle.identity import IDENTITY_PATH
 from kaine.lifecycle.manager import ForkManager, merger_from_name
 from kaine.storage import install_data_root, resolve
 
@@ -241,6 +246,28 @@ async def _build():
         _load_lifecycle_config, _load_security_state_encryption_config
     )
 
+    # Conversation state is built after the state-encryption posture is
+    # installed because reading the self-model file may require decryption.
+    self_model_section = (kaine_config or {}).get("self_model") or {}
+    if not isinstance(self_model_section, dict):
+        self_model_section = {}
+    self_model_path_default = "state/self_model/self_model.json"
+    self_model_path_value = self_model_section.get("persistence_path", self_model_path_default)
+    if not isinstance(self_model_path_value, str):
+        self_model_path_value = self_model_path_default
+    self_model_path = resolve(Path(self_model_path_value))
+    identity_path = resolve(IDENTITY_PATH)
+
+    conversation_state = ConversationState()
+    launch_name = read_entity_name(self_model_path, identity_path)
+    if launch_name is not None:
+        conversation_state.entity_name = launch_name
+
+    bridge.add_observer(conversation_state.observe)
+
+    async def startup() -> None:
+        await conversation_state.backfill(bus)
+
     health_prober = None
     try:
         health_prober = load_health_prober()
@@ -325,9 +352,11 @@ async def _build():
         metrics_snapshot=metrics_snapshot,
         fork_manager=fork_manager,
         fork_manager_reason=fm_reason,
+        conversation_state=conversation_state,
         health_prober=health_prober,
         rate_control_publisher=rate_control_publisher,
         evaluation_provider=evaluation_provider,
+        startup=startup,
     )
 
     # Mount the evaluation tab router (/diagnostics/evaluation/) when enabled.

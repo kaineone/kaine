@@ -8,7 +8,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable, Protocol, runtime_checkable
+from typing import Any, Callable, Iterable, Protocol, runtime_checkable
 
 from kaine.bus.schema import Event
 from kaine.dashboard.privacy import PrivacyFilter
@@ -60,12 +60,14 @@ class BusBridge:
         streams: Iterable[str] = (),
         poll_interval_s: float = 0.2,
         read_count: int = 64,
+        observers: Iterable[Callable[[Event], None]] = (),
     ) -> None:
         self._bus = bus
         self._privacy = privacy
         self._streams = list(streams)
         self._poll_interval = float(poll_interval_s)
         self._read_count = int(read_count)
+        self._observers: list[Callable[[Event], None]] = list(observers)
         self._cursors: dict[str, str] = {}
         self._clients: list[SSEClient] = []
         self._resolve_warned: set[str] = set()
@@ -75,6 +77,9 @@ class BusBridge:
     @property
     def streams(self) -> list[str]:
         return list(self._streams)
+
+    def add_observer(self, fn: Callable[[Event], None]) -> None:
+        self._observers.append(fn)
 
     def add_client(self, surface: str) -> SSEClient:
         client = SSEClient(surface=surface)
@@ -153,6 +158,11 @@ class BusBridge:
                 continue
             self._cursors[stream] = last_scanned
             for entry_id, event in entries:
+                for observer in list(self._observers):
+                    try:
+                        observer(event)
+                    except Exception:
+                        log.warning("dashboard bridge observer failed", exc_info=True)
                 await self._dispatch(entry_id, event)
 
     async def _dispatch(self, entry_id: str, event: Event) -> None:
