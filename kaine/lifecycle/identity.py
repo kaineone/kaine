@@ -31,6 +31,7 @@ identity.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -42,7 +43,7 @@ import time
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 from kaine import legacy_names
 from kaine.legacy_aliases import lived_artifact_paths
@@ -90,6 +91,9 @@ class EntityIdentity:
     minted_at: float = 0.0
     legacy_source: str | None = None
     name: str | None = None
+    # Names of ancestors, as (entity_id, name) pairs in lineage order. Only ancestors
+    # whose name was known when the fork was made appear. Never copied into ``name``.
+    lineage_names: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.entity_id, str) or not _ENTITY_ID_RE.fullmatch(self.entity_id):
@@ -117,6 +121,18 @@ class EntityIdentity:
         if type(self.minted_at) not in (int, float) or not math.isfinite(self.minted_at):
             raise IdentityError(f"minted_at must be a finite number: {self.minted_at!r}")
 
+        if (
+            not isinstance(self.lineage_names, tuple)
+            or not all(
+                isinstance(p, tuple)
+                and len(p) == 2
+                and p[0] in self.lineage
+                and _valid_name(p[1])
+                for p in self.lineage_names
+            )
+            or len({p[0] for p in self.lineage_names}) != len(self.lineage_names)
+        ):
+            raise IdentityError(f"invalid lineage_names: {self.lineage_names!r}")
         if self.name is not None and not _valid_name(self.name):
             raise IdentityError(f"name must be a non-empty single-line string: {self.name!r}")
 
@@ -135,6 +151,8 @@ class EntityIdentity:
         }
         if self.name is not None:
             out["name"] = self.name
+        if self.lineage_names:
+            out["lineage_names"] = {eid: nm for eid, nm in self.lineage_names}
         return out
 
     @classmethod
@@ -144,10 +162,18 @@ class EntityIdentity:
             raise IdentityError("identity raw data must be a mapping")
         required = {"entity_id", "lineage", "origin", "minted_at", "legacy_source"}
         keys = set(raw.keys())
-        if keys != required and keys != required | {"name"}:
+        if not required <= keys or not keys <= required | {"name", "lineage_names"}:
             raise IdentityError(
                 f"identity dict has unexpected keys: {keys ^ required}"
             )
+        names_raw = raw.get("lineage_names", {})
+        if not isinstance(names_raw, Mapping) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in names_raw.items()
+        ):
+            raise IdentityError("lineage_names must map entity ids to names")
+        if "lineage_names" in raw and not names_raw:
+            raise IdentityError("lineage_names must not be empty when present")
+        lineage_names = tuple(names_raw.items())
         name = raw.get("name")
         if "name" in raw and not isinstance(name, str):
             raise IdentityError("name must be a string when present")
@@ -184,6 +210,7 @@ class EntityIdentity:
                 minted_at=minted_at,
                 legacy_source=legacy_source,
                 name=name,
+                lineage_names=lineage_names,
             )
         except IdentityError:
             raise
@@ -238,6 +265,31 @@ def load_identity(path: Path | None = None) -> EntityIdentity | None:
     return EntityIdentity.from_dict(raw)
 
 
+@contextlib.contextmanager
+def identity_lock(target: Path) -> Iterator[None]:
+    """Hold an exclusive advisory lock beside ``target`` for a read-check-write.
+
+    Serialises concurrent boots (and threads) that name or save the same identity
+    file. A no-op where ``fcntl`` is unavailable.
+    """
+    try:
+        import fcntl
+    except ImportError:  # non-POSIX
+        yield
+        return
+    target = Path(target)
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(target.with_name(target.name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 def save_identity(
     identity: EntityIdentity, path: Path | None = None, *, replace_name: bool = False
 ) -> None:
@@ -249,8 +301,18 @@ def save_identity(
     to a stored identity that has none is allowed. ``replace_name=True`` (only
     for a revive, where the revived entity's own name wins) allows the stored
     name of the same ``entity_id`` to change and logs a warning naming both.
+    The read-check-write holds :func:`identity_lock`, and the write goes through
+    a temp file unique to this call, so concurrent savers never share one.
     """
     target = resolve(path) if path is not None else resolve(IDENTITY_PATH)
+    with identity_lock(target):
+        _save_identity_locked(identity, target, replace_name=replace_name)
+
+
+def _save_identity_locked(
+    identity: EntityIdentity, target: Path, *, replace_name: bool = False
+) -> None:
+    """The body of :func:`save_identity`; the caller holds :func:`identity_lock`."""
     if target.exists():
         try:
             existing = EntityIdentity.from_dict(json.loads(target.read_text()))
@@ -276,10 +338,16 @@ def save_identity(
 
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     _chmod_quietly(target.parent, 0o700)
-    tmp = target.with_suffix(".json.tmp")
+    tmp = target.with_name(f"{target.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     payload = json.dumps(identity.to_dict(), indent=2, sort_keys=True)
-    _write_private(tmp, payload)
-    os.replace(tmp, target)
+    try:
+        _write_private(tmp, payload)
+        os.replace(tmp, target)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def mint_identity(*, now: Callable[[], float] = time.time) -> EntityIdentity:
@@ -298,21 +366,32 @@ def fork_identity(
     *,
     now: Callable[[], float] = time.time,
     rng: random.Random | None = None,
+    avoid_names: Iterable[str] = (),
 ) -> EntityIdentity:
     """Create a fork identity: new minted ID, lineage extended by the parent.
 
     The fork is a new entity and gets its own newly drawn name, never the
-    parent's. The parent's name is not copied.
+    parent's and never one of ``avoid_names`` (for an unnamed parent, the name in
+    its self-model document). The parent's name is not copied into ``name``; it
+    is recorded in ``lineage_names`` next to the parent's ID when known, and the
+    earlier ancestors' entries are kept.
     """
     from kaine.modules.self_model.document import generate_launch_name
 
+    avoid = {n for n in avoid_names if n}
+    if parent.name:
+        avoid.add(parent.name)
+    names = parent.lineage_names
+    if parent.name:
+        names = names + ((parent.entity_id, parent.name),)
     return EntityIdentity(
         entity_id="ent-" + uuid.uuid4().hex,
         lineage=parent.lineage + (parent.entity_id,),
         origin="minted",
         minted_at=now(),
         legacy_source=None,
-        name=generate_launch_name(rng=rng, exclude=parent.name),
+        name=generate_launch_name(rng=rng, exclude=avoid),
+        lineage_names=names,
     )
 
 
@@ -521,15 +600,25 @@ def name_identity(
             self_model_path,
             exc,
         )
+        # Reported on the health surface too, so a document that stays unreadable
+        # does not defer naming on every boot unnoticed.
+        from kaine.backend_state import record_backend_failure
+
+        record_backend_failure(
+            "identity",
+            "launch_name",
+            f"naming deferred: the self-model document cannot be read ({type(exc.__cause__ or exc).__name__})",
+        )
         return identity
     return replace(identity, name=name or generate_launch_name())
 
 
 def _save_naming(identity: EntityIdentity, path: Path) -> EntityIdentity:
-    """Save a freshly named identity. When a concurrent boot named the file first,
-    return the stored named identity (same ``entity_id``) instead of failing."""
+    """Save a freshly named identity (the caller holds :func:`identity_lock`). When a
+    concurrent writer named the file first, return the stored named identity (same
+    ``entity_id``) instead of failing."""
     try:
-        save_identity(identity, path)
+        _save_identity_locked(identity, path)
     except IdentityError:
         stored = load_identity(path)
         if stored is not None and stored.entity_id == identity.entity_id and stored.name:
@@ -565,28 +654,30 @@ def resolve_spawn_identity(
     identity_path = root / "identity" / "entity.json"
     if self_model_path is None:
         self_model_path = root / "self_model" / "self_model.json"
-    existing = load_identity(identity_path)
-    if existing is not None:
-        if existing.name is not None:
-            return existing
-        named = name_identity(existing, self_model_path=self_model_path)
-        if named.name is None:
-            return existing
-        return _save_naming(named, identity_path)
+    # The whole load, name and save runs under the identity lock, so two boots
+    # starting on one tree agree on a single identity and a single name.
+    with identity_lock(identity_path):
+        existing = load_identity(identity_path)
+        if existing is not None:
+            if existing.name is not None:
+                return existing
+            named = name_identity(existing, self_model_path=self_model_path)
+            if named.name is None:
+                return existing
+            return _save_naming(named, identity_path)
 
-    artifacts = own_lived_artifacts(root)
-    if not artifacts:
-        identity = mint_identity(now=now)
-    else:
-        digest = tree_digest(root, artifacts)
-        identity = legacy_identity("tree:" + digest, now=now)
+        artifacts = own_lived_artifacts(root)
+        if not artifacts:
+            identity = mint_identity(now=now)
+        else:
+            digest = tree_digest(root, artifacts)
+            identity = legacy_identity("tree:" + digest, now=now)
 
-    identity = name_identity(identity, self_model_path=self_model_path)
-    if identity.name is None:
-        save_identity(identity, identity_path)
-        return identity
-    identity = _save_naming(identity, identity_path)
-    return identity
+        identity = name_identity(identity, self_model_path=self_model_path)
+        if identity.name is None:
+            _save_identity_locked(identity, identity_path)
+            return identity
+        return _save_naming(identity, identity_path)
 
 
 def has_prior_lived_history_in_lineage(

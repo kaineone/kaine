@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import json
 import logging
 import os
 import shutil
@@ -102,6 +103,15 @@ def _artifact_dirs_by_module(root: Path) -> dict[str, Path]:
         if key not in found or p.name == key:
             found[key] = p
     return found
+
+
+def _self_model_state_name(modules: dict[str, Any]) -> str | None:
+    """The name inside a snapshot's captured self-model state, or None."""
+    try:
+        name = json.loads(modules["self_model"]["model"]).get("name")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+    return name if isinstance(name, str) and name else None
 
 
 class ForkManager:
@@ -275,10 +285,15 @@ class ForkManager:
                 parent_identity,
             )
 
+        # An unnamed parent's name lives only in its self-model state; the fork must
+        # not draw it.
+        avoid = [n for n in (_self_model_state_name(parent.modules),) if n]
         if parent_identity is not None:
-            child_identity = fork_identity(parent_identity)
+            child_identity = fork_identity(parent_identity, avoid_names=avoid)
         else:
-            child_identity = fork_identity(legacy_identity(f"snapshot:{parent.id}"))
+            child_identity = fork_identity(
+                legacy_identity(f"snapshot:{parent.id}"), avoid_names=avoid
+            )
 
         shed_set = set(shed)
         modules = {

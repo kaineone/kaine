@@ -17,6 +17,7 @@ import pytest
 from kaine.cycle.__main__ import (
     _apply_revive,
     _persist_revived_identity,
+    _phase_stage,
     _resolve_boot_identity,
 )
 from kaine.cycle.revive_boot import RevivePlan, prepare_revive
@@ -28,6 +29,7 @@ from kaine.lifecycle.identity import (
     fork_identity,
     load_identity,
     mint_identity,
+    name_identity,
     read_identity_sidecar,
     resolve_spawn_identity,
     save_identity,
@@ -313,6 +315,7 @@ async def test_apply_revive_has_the_running_self_model_adopt_the_final_name(bus,
 
     class _Landing:
         plan = RevivePlan(bundle=tmp_path / "b", preservation_id=None, stage=None, identity=unnamed)
+        new_faculty: list = []  # the bundle captured the self-model state
 
         async def revive(self, reg):
             # the revived state carries a name of its own
@@ -343,6 +346,7 @@ async def test_apply_revive_with_no_name_anywhere_mints_and_module_adopts(bus, t
 
     class _Landing:
         plan = RevivePlan(bundle=tmp_path / "b", preservation_id=None, stage=None, identity=unnamed)
+        new_faculty: list = []
 
         async def revive(self, reg):
             module.deserialize({"model": SelfModelDocument().to_json()})
@@ -681,22 +685,354 @@ def test_absent_and_nameless_documents_mint(tmp_path):
 
 
 def test_a_concurrent_boot_that_named_the_file_first_wins(tmp_path, monkeypatch):
-    import kaine.lifecycle.identity as idmod
-
     state_root = tmp_path / "state"
     path = state_root / "identity" / "entity.json"
     unnamed = mint_identity()
     save_identity(unnamed, path)
-    real_name = idmod.name_identity
+    real_name = name_identity
 
     def racing(identity, **kw):
         out = real_name(identity, **kw)
         # the other boot names the file between our load and our save
-        save_identity(EntityIdentity(entity_id=identity.entity_id, minted_at=identity.minted_at,
-                                     name="Kaine Other"), path)
+        other = EntityIdentity(
+            entity_id=identity.entity_id, minted_at=identity.minted_at, name="Kaine Other"
+        )
+        path.write_text(json.dumps(other.to_dict(), indent=2, sort_keys=True))
         return out
 
-    monkeypatch.setattr(idmod, "name_identity", racing)
+    monkeypatch.setattr("kaine.lifecycle.identity.name_identity", racing)
     resolved = resolve_spawn_identity(state_root)
     assert resolved.name == "Kaine Other"
     assert load_identity(path).name == "Kaine Other"
+
+
+# ---- second review: revive without captured self-model state -------------
+
+
+class _PendingBoot:
+    """A self-model built the way boot builds it for an unnamed-bundle revive."""
+
+    @staticmethod
+    def module(bus, path):
+        from kaine.modules.self_model import SelfModel
+
+        return SelfModel(bus, persistence_path=path, name_pending=True, save_interval_s=60)
+
+
+def _landing(tmp_path, identity, new_faculty, on_revive=None):
+    class _L:
+        plan = RevivePlan(bundle=tmp_path / "b", preservation_id=None, stage=None, identity=identity)
+
+        async def revive(self, reg):
+            if on_revive:
+                on_revive()
+
+    _L.new_faculty = new_faculty
+    return _L()
+
+
+@pytest.mark.asyncio
+async def test_revive_without_captured_self_model_keeps_the_tree_name(bus, tmp_path):
+    """The reviewer's repro: the tree is named, the bundle is unnamed and holds no self-model state."""
+    from kaine.modules.registry import ModuleRegistry
+
+    state_root = tmp_path / "state"
+    base = mint_identity()
+    _tree_identity(state_root, base, "Kaine Aurora")
+    path = state_root / "self_model" / "self_model.json"
+    _write_doc(path, "Kaine Aurora")
+    module = _PendingBoot.module(bus, path)
+    await module.initialize()
+    registry = ModuleRegistry()
+    registry.register(module)
+    registry.identity_name_pending = True
+    # nothing was minted or saved while the name was pending
+    assert module.entity_name is None
+    try:
+        landing = _landing(tmp_path, EntityIdentity(entity_id=base.entity_id), ["self_model"])
+        assert await _apply_revive(landing, registry, state_root) is None
+        assert load_identity(state_root / "identity" / "entity.json").name == "Kaine Aurora"
+        assert module.entity_name == "Kaine Aurora"
+        assert load(path).name == "Kaine Aurora"
+    finally:
+        await module.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_revive_does_not_adopt_another_entitys_document_name(bus, tmp_path):
+    from kaine.modules.registry import ModuleRegistry
+
+    state_root = tmp_path / "state"  # no identity file here
+    path = state_root / "self_model" / "self_model.json"
+    _write_doc(path, "Kaine Other")  # some other entity's document
+    module = _PendingBoot.module(bus, path)
+    await module.initialize()
+    registry = ModuleRegistry()
+    registry.register(module)
+    try:
+        landing = _landing(tmp_path, mint_identity(), ["self_model"])
+        assert await _apply_revive(landing, registry, state_root) is None
+        name = load_identity(state_root / "identity" / "entity.json").name
+        assert name is not None and name != "Kaine Other"
+        assert module.entity_name == name
+        assert load(path).name == name
+    finally:
+        await module.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_revive_with_captured_self_model_replaces_the_tree_name(bus, tmp_path, caplog):
+    from kaine.modules.registry import ModuleRegistry
+
+    state_root = tmp_path / "state"
+    base = mint_identity()
+    _tree_identity(state_root, base, "Kaine Aurora")
+    path = state_root / "self_model" / "self_model.json"
+    _write_doc(path, "Kaine Aurora")
+    module = _PendingBoot.module(bus, path)
+    await module.initialize()
+    registry = ModuleRegistry()
+    registry.register(module)
+    try:
+        landing = _landing(
+            tmp_path,
+            EntityIdentity(entity_id=base.entity_id),
+            [],
+            on_revive=lambda: module.deserialize({"model": SelfModelDocument(name="Kaine Nova").to_json()}),
+        )
+        with caplog.at_level("WARNING"):
+            assert await _apply_revive(landing, registry, state_root) is None
+        assert load_identity(state_root / "identity" / "entity.json").name == "Kaine Nova"
+        assert module.entity_name == "Kaine Nova" and load(path).name == "Kaine Nova"
+        assert "Kaine Aurora" in caplog.text
+    finally:
+        await module.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pending_module_neither_mints_nor_writes(bus, tmp_path):
+    path = tmp_path / "sm.json"
+    module = _PendingBoot.module(bus, path)
+    await module.initialize()
+    try:
+        assert module.entity_name is None
+        await module._save_to_disk()
+        assert not path.exists()
+        module.adopt_identity_name("Kaine Nova")
+        assert load(path).name == "Kaine Nova"
+    finally:
+        await module.shutdown()
+
+
+def test_registry_hands_the_pending_flag_to_the_factory(bus, tmp_path):
+    from kaine.boot.registry import construct_module
+    from kaine.modules.registry import ModuleRegistry
+
+    registry = ModuleRegistry()
+    registry.identity_name_pending = True
+    module = construct_module(
+        "self_model", bus, {"self_model": {"persistence_path": str(tmp_path / "sm.json")}},
+        registry=registry,
+    )
+    assert module._name_pending is True
+
+
+# ---- concurrency --------------------------------------------------------
+
+
+def test_concurrent_first_boots_agree_on_one_identity_and_name(tmp_path):
+    import threading
+
+    state_root = tmp_path / "state"
+    results, errors = [], []
+
+    def boot():
+        try:
+            results.append(resolve_spawn_identity(state_root))
+        except Exception as exc:  # pragma: no cover
+            errors.append(exc)
+
+    threads = [threading.Thread(target=boot) for _ in range(12)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors
+    assert len({(r.entity_id, r.name) for r in results}) == 1
+    assert results[0].name is not None
+    assert load_identity(state_root / "identity" / "entity.json") == results[0]
+    leftovers = [p.name for p in (state_root / "identity").iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == []
+
+
+def test_concurrent_processes_agree_on_one_identity(tmp_path):
+    import subprocess
+    import sys
+
+    state_root = tmp_path / "state"
+    code = (
+        "import sys; from kaine.lifecycle.identity import resolve_spawn_identity as r;"
+        "i = r(sys.argv[1]); print(i.entity_id, i.name)"
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", code, str(state_root)], stdout=subprocess.PIPE, text=True)
+        for _ in range(4)
+    ]
+    outs = [p.communicate()[0].strip() for p in procs]
+    assert all(p.returncode == 0 for p in procs)
+    assert len(set(outs)) == 1
+
+
+@pytest.mark.asyncio
+async def test_phase_stage_retries_after_a_lost_race(tmp_path, monkeypatch):
+    calls = {"n": 0}
+    good = EntityIdentity(entity_id="ent-" + "9" * 32, minted_at=1.0, name="Kaine Nova")
+
+    def flaky(state_root, revive, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FileNotFoundError("entity.json.tmp")
+        return good
+
+    monkeypatch.setattr("kaine.cycle.__main__._resolve_boot_identity", flaky)
+
+    class _Ctx:
+        kaine_config = {}
+        revive = None
+        identity = None
+
+    ctx = _Ctx()
+    try:
+        await _phase_stage(ctx)
+    except Exception:
+        pass  # later stage work is not under test
+    assert calls["n"] == 2 and ctx.identity == good
+
+
+# ---- lineage names ------------------------------------------------------
+
+
+def test_unnamed_and_parentless_files_stay_byte_identical(tmp_path):
+    ident = EntityIdentity(entity_id="ent-" + "a" * 32, minted_at=12.5, name="Kaine Nova")
+    assert "lineage_names" not in ident.to_dict()
+    path = tmp_path / "e.json"
+    save_identity(EntityIdentity(entity_id="ent-" + "a" * 32, minted_at=12.5), path)
+    assert b"lineage_names" not in path.read_bytes() and b"name" not in path.read_bytes()
+
+
+def test_fork_records_the_parents_name_in_lineage_names(monkeypatch):
+    monkeypatch.setattr(sm_document, "_SURNAMES", ("Nova", "Aurora", "Zed"))
+    root = EntityIdentity(entity_id="ent-" + "1" * 32, minted_at=1.0, name="Kaine Nova")
+    child = fork_identity(root)
+    assert child.lineage_names == ((root.entity_id, "Kaine Nova"),)
+    assert child.name != "Kaine Nova"
+    grandchild = fork_identity(child)
+    assert grandchild.lineage == (root.entity_id, child.entity_id)
+    assert grandchild.lineage_names == ((root.entity_id, "Kaine Nova"), (child.entity_id, child.name))
+    assert grandchild.name != child.name
+    assert EntityIdentity.from_dict(grandchild.to_dict()) == grandchild
+
+
+def test_lineage_names_round_trip_on_disk(tmp_path):
+    root = EntityIdentity(entity_id="ent-" + "1" * 32, minted_at=1.0, name="Kaine Nova")
+    child = fork_identity(root)
+    path = tmp_path / "e.json"
+    save_identity(child, path)
+    assert json.loads(path.read_text())["lineage_names"] == {root.entity_id: "Kaine Nova"}
+    assert load_identity(path) == child
+
+
+def test_an_unnamed_parent_adds_no_lineage_entry():
+    child = fork_identity(mint_identity())
+    assert child.lineage_names == ()
+    assert "lineage_names" not in child.to_dict()
+
+
+def test_lineage_names_are_validated():
+    base = {**_FIVE, "lineage": ["ent-" + "b" * 32]}
+    ok = {**base, "lineage_names": {"ent-" + "b" * 32: "Kaine Nova"}}
+    assert EntityIdentity.from_dict(ok).lineage_names
+    for bad in (
+        {"ent-" + "b" * 32: "bad\nname"},
+        {"ent-" + "c" * 32: "Kaine Nova"},  # not in the lineage
+        {},
+        {"ent-" + "b" * 32: 5},
+    ):
+        with pytest.raises(IdentityError):
+            EntityIdentity.from_dict({**base, "lineage_names": bad})
+
+
+def test_sidecar_stays_entity_id_and_lineage_only(tmp_path):
+    root = EntityIdentity(entity_id="ent-" + "1" * 32, minted_at=1.0, name="Kaine Nova")
+    child = fork_identity(root)
+    write_identity_sidecar(tmp_path, child)
+    assert set(json.loads((tmp_path / "identity.json").read_text())) == {"entity_id", "lineage"}
+
+
+# ---- unnamed-parent fork avoids the document name -----------------------
+
+
+def test_fork_of_an_unnamed_parent_avoids_its_self_model_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm_document, "_SURNAMES", ("Nova", "Aurora"))
+
+    class _Reg:
+        def all_modules(self):
+            return [_SelfModelStub()]
+
+    class _SelfModelStub:
+        name = "self_model"
+
+        def serialize(self):
+            return {"model": SelfModelDocument(name="Kaine Nova").to_json()}
+
+        def deserialize(self, state):
+            pass
+
+    parent_identity = mint_identity()  # unnamed
+    fm = ForkManager(tmp_path / "forks", identity_source=lambda: parent_identity)
+    parent = fm.snapshot(_Reg())
+    for _ in range(15):
+        child = fm.fork(parent.id)
+        assert EntityIdentity.from_dict(child.metadata["identity"]).name == "Kaine Aurora"
+
+
+def test_fork_of_a_legacy_unidentified_parent_avoids_its_self_model_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm_document, "_SURNAMES", ("Nova", "Aurora"))
+    fm = ForkManager(tmp_path / "forks")  # no identity source: snapshots carry no identity
+    stub = type("S", (), {"name": "self_model", "serialize": lambda self: {"model": SelfModelDocument(name="Kaine Aurora").to_json()}, "deserialize": lambda self, s: None})()
+    reg = type("R", (), {"all_modules": lambda self: [stub]})()
+    parent = fm.snapshot(reg)
+    for _ in range(15):
+        child = fm.fork(parent.id)
+        assert EntityIdentity.from_dict(child.metadata["identity"]).name == "Kaine Nova"
+
+
+# ---- deferral reporting -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deferred_naming_reports_on_the_health_surface_and_as_an_event(bus, tmp_path):
+    from kaine.backend_state import backend_failures_snapshot, clear_backend_failures
+    from kaine.cycle.__main__ import _report_naming_deferred
+
+    clear_backend_failures()
+    state_root = tmp_path / "state"
+    unnamed = mint_identity()
+    save_identity(unnamed, state_root / "identity" / "entity.json")
+    doc = state_root / "self_model" / "self_model.json"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("{not json")
+    try:
+        for boot in (1, 2):  # every boot that defers reports again
+            resolved = resolve_spawn_identity(state_root)
+            assert resolved.name is None
+            assert await _report_naming_deferred(bus, resolved) is True
+            failures = [f for f in backend_failures_snapshot() if f["module"] == "identity"]
+            assert len(failures) == boot
+        events = await bus.client.xrange("housekeeping.out")
+        assert len(events) == 2
+        assert "identity.naming_deferred" in str(events[0])
+        # a named entity reports nothing
+        assert await _report_naming_deferred(bus, EntityIdentity(entity_id=unnamed.entity_id, name="Kaine Nova")) is False
+    finally:
+        clear_backend_failures()

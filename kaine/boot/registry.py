@@ -109,6 +109,7 @@ def build_registry(
     plugins: Any = None,
     boot_stage: Any | None = None,
     identity_name: Optional[str] = None,
+    identity_name_pending: bool = False,
 ) -> ModuleRegistry:
     """Construct every enabled module from kaine.toml and register it.
 
@@ -154,6 +155,7 @@ def build_registry(
     # The entity's launch name from its identity (resolved at boot before any module
     # starts); the self-model module adopts it. None for a bare harness.
     registry.identity_name = identity_name
+    registry.identity_name_pending = identity_name_pending
     # The unified perception feed is a single top-level [perception_feed] section
     # (unified-perception-feed) that parameterizes BOTH the vision surface
     # (the vision module) and the hearing surface (the audition module) from one source of truth. Read
@@ -336,6 +338,7 @@ def construct_module(
 
     if name == "self_model":
         section["_identity_name"] = getattr(registry, "identity_name", None)
+        section["_identity_name_pending"] = getattr(registry, "identity_name_pending", False)
 
     if name in _FEEDBACK_MODULES:
         section[FEEDBACK_SECTION_KEY] = feedback_section(kaine_config)

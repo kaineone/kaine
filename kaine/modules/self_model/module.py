@@ -84,6 +84,10 @@ class SelfModel(BaseModule):
         # The entity's launch name from its identity, passed by boot. None in a
         # bare harness, where the module mints its own as before.
         identity_name: Optional[str] = None,
+        # True during a revive of a bundle whose identity has no name: the name is
+        # decided after the revive lands and arrives through adopt_identity_name.
+        # Until then the module neither mints nor keeps a name, and writes nothing.
+        name_pending: bool = False,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -103,6 +107,7 @@ class SelfModel(BaseModule):
             log.warning("ignoring an invalid identity name %r", identity_name)
             identity_name = None
         self._identity_name = identity_name or None
+        self._name_pending = bool(name_pending) and self._identity_name is None
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
         self._save_interval_s = float(save_interval_s)
@@ -144,6 +149,7 @@ class SelfModel(BaseModule):
             log.warning("ignoring an invalid identity name %r", name)
             return
         self._identity_name = name
+        self._name_pending = False
         if self._model.name != name:
             self._model = self._model.with_updates(name=name)
         try:
@@ -162,6 +168,9 @@ class SelfModel(BaseModule):
 
     async def initialize(self) -> None:
         self._model = load(self._persistence_path)
+        if self._name_pending:
+            # A revive decides the name after it lands; do not mint or keep one now.
+            self._model = self._model.with_updates(name="")
         # The identity owns the entity's launch name; adopt it when the document
         # differs (a fork's copied document carries its parent's name).
         if self._identity_name is not None:
@@ -174,7 +183,7 @@ class SelfModel(BaseModule):
                 log.info("self-model adopted identity name: %s", self._model.name)
         # Without an identity name, assign a launch name on first boot (Kaine + a
         # surname). Persisted, so it's stable across restarts.
-        elif not self._model.name:
+        elif not self._model.name and not self._name_pending:
             self._model = self._model.with_updates(name=generate_launch_name())
             try:
                 save_atomic(self._persistence_path, self._model)
@@ -587,6 +596,9 @@ class SelfModel(BaseModule):
             raise
 
     async def _save_to_disk(self) -> None:
+        if self._name_pending:
+            # Keep the stored document untouched until the revive names the entity.
+            return
         snapshot = self._model
 
         def _write_sync() -> None:

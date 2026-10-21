@@ -17,7 +17,7 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -64,14 +64,15 @@ _SURNAMES = _load_surnames()
 
 
 def generate_launch_name(
-    *, rng: random.Random | None = None, exclude: str | None = None
+    *, rng: random.Random | None = None, exclude: "str | Iterable[str] | None" = None
 ) -> str:
     """``Kaine <Surname>`` with a surname picked at launch. Injectable RNG for
     deterministic tests. ``exclude`` is a full name to avoid (a fork's parent's
     name); when every surname would produce it, the name is returned anyway."""
     r = rng or random
+    avoid = {exclude} if isinstance(exclude, str) else set(exclude or ())
     candidates = [
-        n for n in (f"{DEFAULT_FIRST_NAME} {s}" for s in _SURNAMES) if n != exclude
+        n for n in (f"{DEFAULT_FIRST_NAME} {s}" for s in _SURNAMES) if n not in avoid
     ]
     if not candidates:
         return f"{DEFAULT_FIRST_NAME} {r.choice(_SURNAMES)}"

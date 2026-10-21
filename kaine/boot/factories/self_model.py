@@ -31,6 +31,7 @@ def make_self_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "self_inference",  # nested sub-table
     }
     identity_name = section.pop("_identity_name", None)
+    name_pending = bool(section.pop("_identity_name_pending", False))
     kw = _pop(section, allowed)
 
     # Build the SelfInferenceEngine from the optional [self_model.self_inference]
@@ -56,5 +57,6 @@ def make_self_model(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     inference_engine = SelfInferenceEngine(**si_kwargs)
 
     return SelfModel(
-        bus, self_inference=inference_engine, identity_name=identity_name, **kw
+        bus, self_inference=inference_engine, identity_name=identity_name,
+        name_pending=name_pending, **kw
     )

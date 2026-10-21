@@ -35,6 +35,8 @@ class ModuleRegistry:
         self.plugins: Any = None
         # The entity's launch name from its identity, handed to the self-model module.
         self.identity_name: Optional[str] = None
+        # True while a revive of an unnamed bundle identity has yet to decide the name.
+        self.identity_name_pending: bool = False
 
     def register(self, module: BaseModule) -> None:
         if module.name in self._modules:

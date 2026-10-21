@@ -8,11 +8,15 @@ The launch name "Kaine <Surname>" is minted only by the self-model module, at it
 - Boot gives an entity a name before any module starts, whichever modules run:
   - a fresh spawn mints "Kaine <Surname>" from `kaine/modules/self_model/surnames.txt`;
   - an existing identity without a name adopts the self-model document's name if it has one, otherwise it mints one;
-  - a revive keeps the bundle's name; a bundle identity without a name takes the revived self-model's name, else the name stored for the same `entity_id` in the target tree, else a newly drawn name, and the running self-model adopts the result.
+  - a revive keeps the bundle's name; a bundle identity without a name takes the name of the self-model state the bundle captured (only if it holds that state), else the name stored for the same `entity_id` in the target tree, else a newly drawn name, and the running self-model adopts the result.
   An existing name is never overwritten. Saving refuses to replace a stored name with a different one.
 - A fork is a new entity, so it gets its own new name, drawn so it differs from its parent's. The parent's name is not copied, and the parent appears only in the lineage. The fork's copied self-model document adopts the fork's name.
 - The self-model module adopts the identity's name at boot, in place of minting its own. When it runs without an identity name (a bare test harness), it keeps its current behaviour.
 - Preservation bundles and decommission backups already carry the identity file and `EntityIdentity.to_dict()`, so they carry the name. The plaintext identity records keep `entity_id` and `lineage` only, and the agreement check compares those fields.
+
+- The self-model module holds no name while a revive of an unnamed bundle is pending, and the tree's own self-model document is never consulted on a revive.
+- The identity may record ancestors' names in `lineage_names`; a fork of an unnamed parent avoids the name in the parent's self-model state.
+- Naming and saving take a lock beside the identity file and write through unique temp files. Naming that is deferred because the self-model document is unreadable is reported on the health surface and as an operator event every boot.
 
 ## Capabilities
 

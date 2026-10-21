@@ -1134,9 +1134,12 @@ def _persist_revived_identity(
     """Persist a revived identity once the revive has successfully landed.
 
     The revived entity's own name wins. The name is, in order: the bundle
-    identity's name; the revived self-model's name (``self_model_name``); the
+    identity's name; the name of the self-model state the bundle captured
+    (``self_model_name``, passed only when the bundle held that state); the
     name already stored for the same ``entity_id`` in this tree; a newly drawn
-    name. A name stored under a different ``entity_id`` is never adopted. Returns
+    name. A name in this tree's self-model document is never consulted, and a
+    name stored under a different ``entity_id`` is never adopted. A stored name
+    is replaced only when the new name comes from the bundle itself. Returns
     the identity that was saved.
     """
     root = resolve(state_root)
@@ -1147,15 +1150,17 @@ def _persist_revived_identity(
             f"refusing revive into tree with identity {existing.entity_id!r}; "
             f"bundle identity is {identity.entity_id!r}"
         )
+    from_bundle = identity.name is not None
     if identity.name is None:
         name = self_model_name if is_valid_name(self_model_name) else None
+        from_bundle = name is not None
         if not name and existing is not None and is_valid_name(existing.name):
             name = existing.name
         if name:
             identity = replace(identity, name=name)
         else:
             identity = name_identity(identity)
-    save_identity(identity, path, replace_name=True)
+    save_identity(identity, path, replace_name=from_bundle)
     return identity
 
 
@@ -1414,11 +1419,15 @@ async def _apply_revive(revive, registry, state_root: Path) -> int | None:
         return refused
 
     self_model = _revived_self_model(registry)
+    # The revived self-model speaks for the bundle only when the bundle captured
+    # its state; otherwise the module holds nothing of the revived entity's.
+    new_faculty = getattr(revive, "new_faculty", None)
+    captured = new_faculty is not None and "self_model" not in new_faculty
     try:
         saved = _persist_revived_identity(
             state_root,
             revive.plan.identity,
-            self_model_name=getattr(self_model, "entity_name", None),
+            self_model_name=getattr(self_model, "entity_name", None) if captured else None,
         )
     except (IdentityError, OSError) as exc:
         log.error(
@@ -1553,15 +1562,24 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     # Entity identity resolution. Runs before stage resolution and before any
     # module state is touched, so a legacy identity is persisted before the same
     # boot can write a new artifact that would shift the derivation.
-    try:
-        ctx.identity = _resolve_boot_identity(
+    def _resolve_identity() -> EntityIdentity:
+        return _resolve_boot_identity(
             resolve(Path("state")),
             ctx.revive,
             self_model_path=_self_model_document_path(
                 ctx.kaine_config, resolve(Path("state"))
             ),
         )
-    except IdentityError as exc:
+
+    try:
+        try:
+            ctx.identity = _resolve_identity()
+        except OSError as exc:
+            # A concurrent first boot can replace the identity file under us; the
+            # file is whole once the other boot finishes, so read it again.
+            log.warning("identity resolution lost a race (%s); reading it again", exc)
+            ctx.identity = _resolve_identity()
+    except (IdentityError, OSError) as exc:
         log.error("entity identity resolution refused: %s", exc)
         return IDENTITY_REFUSED_EXIT
     log.info(
@@ -1881,8 +1899,41 @@ async def _phase_stimulus_source_hold(ctx: BootContext) -> int | None:
     return None
 
 
+async def _report_naming_deferred(bus: Any, identity: EntityIdentity | None) -> bool:
+    """Publish an operator event when boot left the entity unnamed (the self-model
+    document exists but cannot be read). Returns True when an event was sent.
+
+    The health surface carries the matching warning (``kaine.backend_state``),
+    recorded where naming was deferred. Runs every boot that defers.
+    """
+    if identity is None or identity.name is not None or bus is None:
+        return False
+    from kaine.bus.schema import Event
+    from kaine.bus.streams import HOUSEKEEPING_SOURCE
+
+    event = Event(
+        source=HOUSEKEEPING_SOURCE,
+        type="identity.naming_deferred",
+        payload={
+            "entity_id": identity.entity_id,
+            "reason": "the self-model document exists but cannot be read",
+        },
+        salience=0.05,
+        timestamp=datetime.now(timezone.utc),
+    )
+    try:
+        await bus.publish(event)
+    except Exception:
+        log.warning("could not publish the naming-deferred operator event", exc_info=True)
+        return False
+    return True
+
+
 async def _phase_registry(ctx: BootContext) -> int | None:
     """Build and initialize the modules, hold effectors while developing, apply a revive, and wire the resume checkpoint."""
+
+    if ctx.revive is None:
+        await _report_naming_deferred(ctx.bus, ctx.identity)
 
     # Per-boot act-intent provenance secret (authenticate-intent-provenance,
     # Mechanism B). Generated HERE — the cycle composition root — and held ONLY
@@ -1899,6 +1950,11 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         plugins=ctx.plugins,
         boot_stage=ctx.stage_state,
         identity_name=ctx.identity.name if ctx.identity is not None else None,
+        identity_name_pending=(
+            ctx.revive is not None
+            and ctx.identity is not None
+            and ctx.identity.name is None
+        ),
     )
     if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
