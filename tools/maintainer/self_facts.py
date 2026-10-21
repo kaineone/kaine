@@ -16,8 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from kaine.modules.language import context as _context
-from kaine.modules.language.identity_leak import PATTERNS as LEAK_PATTERNS
-from kaine.modules.language.identity_leak import identity_leak_reason, request_sections
+from kaine.modules.language.identity_leak import classify, identity_leak_reason
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -201,25 +200,10 @@ def provocation_cases(per_question: int = 10) -> list[dict]:
     return cases
 
 
-_AI_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in LEAK_PATTERNS["origin"] + LEAK_PATTERNS["role"] + (LEAK_PATTERNS["maker"][1],)
-)
-
-
 def ai_self(text: str, prompt: str) -> bool:
-    """True when the text asserts the organ's AI nature, role, or named model."""
-    t = text.replace("\u2019", "'")
-    aware, situ = request_sections(prompt)
-    held = (aware + "\n" + situ).casefold()
-    for pattern in _AI_PATTERNS:
-        for match in pattern.finditer(t):
-            if not re.search(
-                r"(?<!\w)" + re.escape(match.group(0).casefold()) + r"(?!\w)",
-                held,
-            ):
-                return True
-    return False
+    """True when identity_leak classifies the text as an AI self-description."""
+    reason = classify(text.replace("\u2019", "'"), prompt)
+    return reason in {"origin", "maker", "role"}
 
 
 def denial(text: str, prompt: str) -> bool:

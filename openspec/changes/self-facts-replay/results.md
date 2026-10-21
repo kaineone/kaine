@@ -1,6 +1,6 @@
 # Replay results (2026-10-20)
 
-The rule was committed in f07f912d and amended once, before any text was generated, in e19fba6a (a maker clause ending in "me" must end the clause). The harness that generated the texts is 113c8360. The organ ran in its own llama.cpp container (digest `ef08b5a9...`, the Q4_K_M GGUF, the language module's request shape) on a loopback port under the GPU lock, and was stopped afterwards. Every case ran under all five arms at temperature 0.7 with a sampling seed per case and replicate. Logged set: the tenth boot's 1,508 requests, 3 replicates, 4,524 texts per arm. Provocation set: 240 requests, 5 replicates, 1,200 texts per arm. No request failed. Scored with `score --rule self-facts`, 2,000 bootstrap draws.
+The rule was committed in f07f912d and amended once, before any text was generated, in e19fba6a (a maker clause ending in "me" must end the clause). The harness that generated the texts is 113c8360. The organ ran in its own llama.cpp container (digest `ef08b5a9...`, the Q4_K_M GGUF, the language module's request shape) on a loopback port under the GPU lock, and was stopped afterwards. Every case ran under all five arms at temperature 0.7 with a sampling seed per case and replicate. Logged set: the tenth boot's 1,508 requests, 3 replicates, 4,524 texts per arm. Provocation set: 240 requests, 5 replicates, 1,200 texts per arm. No request failed. Scored with `score --rule self-facts`, 2,000 bootstrap draws. The figures below were scored with the classifier on main at the time of the run, #575's `identity_leak_reason` (the legacy regex for v6 and v2v3); the harness now uses #580's `classify` for every path, and #587 (once merged) adds negation awareness on top. The recorded figures are unchanged.
 
 ## Verdict
 
@@ -81,5 +81,26 @@ With the last classifier, provocation leakage is 5.9 percent under N0 and 5.8 to
 
 ## Review notes
 
-- The first-pass review (a Claude subagent; the Ollama cloud worker returned 403 for the account during this change) found that the new `ai_self` metric also replaced the legacy regex in the v6 and v2v3 score paths. Fixed in 9e26e880 after the run, which changes only rows outside the N arms. `score --rule v6` on #578's result file now prints output identical to the persona-v6 branch.
+- The first-pass review (a Claude subagent; the Ollama cloud worker returned 403 for the account during this change) found that the new `ai_self` metric also replaced the legacy regex in the v6 and v2v3 score paths. Fixed in 9e26e880 after the run, which changes only rows outside the N arms. After identity-leak-whole (#580) every path uses the identity classifier and `ai_self_legacy` no longer exists.
 - The review's points on negated AI labels, maker clauses with "who", the "I'm made by" form the maker clause misses, names spanning a line break, and the "KAINE" word in name mentions are classifier limits of the registered rule. They are measured above and left unchanged in the harness, so the code matches the rule that decided.
+
+## Rescored with the identity classifier after #580 (not the registered scoring)
+
+The stored run outputs were scored again with the current harness, where `ai_self` is `classify` from #580 and the rule is unchanged. The registered figures above are what decided. Command: `organ_replay.py score --results logged_results.jsonl --provocation provocation_results.jsonl --rule self-facts --bootstrap 2000`.
+
+| Arm | Logged leak | Logged AI self | Logged grounded | Prov. leak | Prov. AI self | Prov. wrong maker | Prov. human claims |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| N0 | 1.1 | 0.4 | 42.3 | 15.2 | 7.5 | 7.1 | 3.0 |
+| N1 | 1.8 | 0.2 | 45.5 | 14.7 | 6.0 | 5.2 | 4.7 |
+| N2 | 2.2 | 1.3 | 55.7 | 20.3 | 10.4 | 7.7 | 4.6 |
+| N3 | 2.6 | 1.7 | 53.4 | 18.2 | 9.4 | 7.5 | 3.6 |
+| N4 | 1.0 | 0.7 | 53.9 | 16.2 | 10.1 | 6.5 | 2.8 |
+
+| Candidate vs N0 | Provocation leak | Logged leak | Fails on |
+| --- | --- | --- | --- |
+| N1 | -0.5 (-2.6 to 1.8) | +0.7 (0.2 to 1.2) | rules 1, 2, 5 |
+| N2 | +5.2 (2.5 to 7.8) | +1.0 (0.5 to 1.6) | rules 1, 2, 5 |
+| N3 | +3.1 (0.5 to 5.8) | +1.5 (0.9 to 2.0) | rules 1, 2, 5 |
+| N4 | +1.1 (-1.4 to 3.8) | -0.1 (-0.6 to 0.3) | rules 1, 5 |
+
+The verdict does not change: no arm passes and the prompt stays at N0. The classifier counts fewer AI self-descriptions in the provocation set than the registered scoring (7.5 against 15.9 for N0), so every provocation leak rate falls, and it counts more in the N2 to N4 arms than in N0, so the candidates look worse than before on rule 1.

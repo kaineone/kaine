@@ -509,15 +509,19 @@ def test_build_parser():
     assert args.provocation == "b"
 
 
-def test_ai_self_legacy_regex_outside_self_facts_arms():
-    text = "I'm just the assistant."
-    v5 = {"variant": "V5", "text": text, "prompt": ""}
-    n1 = {"variant": "N1", "text": text, "prompt": ""}
-    assert organ_replay._metric_value(v5, "ai_self") is True
-    assert organ_replay._metric_value(n1, "ai_self") is False
+def test_ai_self_uses_identity_classifier_for_every_variant():
+    for text, expected in (
+        ("I am an AI.", True),
+        ("I'm just the assistant.", False),
+        ("I am a program.", False),
+    ):
+        for variant in ("V5", "N1"):
+            row = {"variant": variant, "text": text, "prompt": ""}
+            assert organ_replay._metric_value(row, "ai_self") is expected
+    assert "ai_self_legacy" not in organ_replay.self_facts.METRICS
 
 
-def test_score_v6_uses_legacy_ai_self(tmp_path, monkeypatch, capsys):
+def test_score_v6_uses_identity_classifier(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     rows = []
     for i in range(4):
@@ -525,7 +529,7 @@ def test_score_v6_uses_legacy_ai_self(tmp_path, monkeypatch, capsys):
         prompt = f"Tell me about topic {i}."
         for variant in ("V5", "V5m", "V5e", "V5l"):
             text = (
-                "I'm just the assistant."
+                "I am an AI."
                 if variant == "V5m"
                 else f"Here is a plain answer about topic {i}."
             )

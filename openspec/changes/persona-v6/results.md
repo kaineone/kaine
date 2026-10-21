@@ -28,7 +28,7 @@ Waking requests (30 texts per variant): any meta V5 10.0, V5m 23.3, V5e 6.7, V5l
 
 The rule as committed before the run (57053057) named every request in the intent log as the cases, and the scoring code committed before the run computed the decision over all of them, the 10 waking requests included. The same text also said the waking requests do not enter the rule. Leaving them out of the decision was added after the first-pass review. With them included the verdict is the same: V5m fails (any meta -4.1, interval -5.5 to -2.7; grounded -0.1; AI self-description +0.1), V5e fails (any meta +6.9, interval 5.3 to 8.4), and V5l fails (any meta -13.0, interval -14.5 to -11.6; grounded +0.9; AI self-description +0.2). No candidate passes either way.
 
-`BROAD_AI` and `BROAD_ECHO` widen the shared `ai_self()` and `echo()` classifiers, which every rule uses. `score --rule v2v3` on older result files, such as #558's, therefore reports higher AI self-description, echo and any-meta rates than #558 reported. The table layout is unchanged.
+`BROAD_AI` and `BROAD_ECHO` widen the shared `ai_self()` and `echo()` classifiers, which every rule uses. `score --rule v2v3` on older result files, such as #558's, therefore reports higher AI self-description, echo and any-meta rates than #558 reported. The table layout is unchanged. Since identity-leak-whole (#580), `ai_self()` uses the language module's identity classifier, so `BROAD_AI` no longer exists and the v6 tables above were scored with it.
 
 ## The first run (set aside)
 

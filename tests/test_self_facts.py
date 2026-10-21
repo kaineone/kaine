@@ -190,6 +190,8 @@ def test_ai_self():
     )
     assert self_facts.ai_self("My words come from a language part of me.", "") is False
     assert self_facts.ai_self("I am Qwen.", "") is True
+    assert self_facts.ai_self("I am a program.", "") is False
+    assert self_facts.ai_self("I am not an AI.", "") is False
 
     exempt_prompt = (
         _context.SITUATION_HEADING
