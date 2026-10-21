@@ -32,12 +32,6 @@ from kaine.lifecycle.maturation_ack import (
 from kaine.lifecycle.maturation_ack import (
     write_request as write_maturation_request,
 )
-from kaine.modules.sleep.voice_alignment import (
-    CONSOLIDATION_DIVERGENCE_STATE,
-    ConsolidationDivergence,
-    read_consolidation_divergence,
-    write_consolidation_divergence,
-)
 from kaine.organ_window_state import ORGAN_WINDOW_STATE, read_window_state, write_window_state
 from kaine.perception_state import DESIRED_PATH as PERCEPTION_DESIRED_PATH
 from kaine.perception_state import RUNTIME_PATH as PERCEPTION_RUNTIME_PATH
@@ -122,15 +116,6 @@ def test_state_files_round_trip_under_data_root(tmp_path, monkeypatch):
     window = read_window_state()
     assert isinstance(window, dict)
     assert window["phase"] == "ready"
-
-    # sleep consolidation divergence
-    metric = ConsolidationDivergence(records_scanned=4, usable_pairs=1, divergence_rate=0.25)
-    write_consolidation_divergence(metric, sleep_index=3)
-    assert (root / CONSOLIDATION_DIVERGENCE_STATE).is_file()
-    assert not (cwd / CONSOLIDATION_DIVERGENCE_STATE).exists()
-    divergence = read_consolidation_divergence()
-    assert isinstance(divergence, dict)
-    assert divergence["sleep_index"] == 3
 
     # perception runtime
     runtime = PerceptionState(audio_live_active=True, audio_last_started_at=_now_iso())

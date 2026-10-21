@@ -8,15 +8,14 @@ divergence, memory probes, individuation) AND by core modules that must
 NOT import ``kaine.evaluation`` (the sidecar-decoupling boundary). It lives
 here — alongside :mod:`kaine.privacy_filter` and
 :mod:`kaine.persistence.jsonl_sink`, the other boundary-neutral primitives —
-so a core module (e.g. the sleep module computing its consolidation-divergence
-magnitude) can embed text without pulling in the evaluation subsystem.
+so a core module (episodic memory, for example) can embed text without
+pulling in the evaluation subsystem.
 
 ``kaine.evaluation.embeddings`` re-exports everything here unchanged, so the
 sidecar import sites are untouched.
 
 This module is the SINGLE source of the sentence-transformer embedder. The
-evaluation sidecar (``embed`` / ``cosine_similarity``), the sleep module's
-consolidation-divergence, and the memory/social modules (episodic memory, social cognition,
+evaluation sidecar (``embed`` / ``cosine_similarity``) and the memory/social modules (episodic memory, social cognition,
 which need ``encode`` / ``encode_batch`` / ``latent_dim`` / ``model_id`` /
 ``shutdown``) all share ONE wrapper here, so every subsystem embeds on the
 same model and the same cosine scale. ``kaine.modules.episodic_memory.embeddings``

@@ -3,8 +3,8 @@
 
 """Tests for OpenSpec change live-monitor-configured-thresholds.
 
-The live preservation monitor must pass the configured consolidation-divergence
-thresholds to assess_divergence, so it agrees with the decommission CLI.
+The live preservation monitor must pass the configured voice-distinctiveness
+threshold to assess_divergence, so it agrees with the decommission CLI.
 """
 from __future__ import annotations
 
@@ -21,11 +21,7 @@ from kaine.cycle.preservation_monitor import (
     DivergenceMonitorConfig,
 )
 from kaine.experiment.run_context import RunContext, set_run_context
-from kaine.lifecycle.divergence import (
-    DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
-    DEFAULT_CONSOLIDATION_RATE_THRESHOLD,
-    consolidation_thresholds_from_config,
-)
+from kaine.lifecycle.divergence import distinctiveness_threshold_from_config
 from kaine.modules.registry import ModuleRegistry
 from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
 
@@ -119,26 +115,31 @@ def _capture_assess_divergence(monkeypatch):
 
 
 @pytest.fixture
-def _consolidation_record(tmp_path):
-    """Write the cheap consolidation-divergence record used by the monitor."""
-    sleep_dir = tmp_path / "state" / "sleep"
-    sleep_dir.mkdir(parents=True)
-    with open(sleep_dir / "consolidation_divergence.json", "w") as f:
-        json.dump({"divergence_rate": 0.3, "divergence_magnitude": 0.1}, f)
-    return tmp_path / "state"
+def _spoken_state(tmp_path):
+    """Write a spoken intent and a readable distinctiveness measurement."""
+    state_root = tmp_path / "state"
+    language = state_root / "language"
+    language.mkdir(parents=True, exist_ok=True)
+    with open(language / "intent_expression.jsonl", "w") as f:
+        f.write(json.dumps({"generated_text": "hello world"}) + "\n")
+    with open(language / "voice_measures_latest.json", "w") as f:
+        json.dump({"distinctiveness": 0.3}, f)
+    return state_root
 
 
-def test_consolidation_thresholds_from_config_wiring():
-    assert consolidation_thresholds_from_config(
-        {"sleep": {"voice_alignment": {"consolidation_divergence_rate_threshold": 0.2}}}
-    ) == (0.2, DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD)
+def test_distinctiveness_threshold_from_config_wiring():
+    assert distinctiveness_threshold_from_config(
+        {"sleep": {"voice_alignment": {"distinctiveness_threshold": 0.2}}}
+    ) == 0.2
+    assert distinctiveness_threshold_from_config(None) == 0.0
+    assert distinctiveness_threshold_from_config({}) == 0.0
 
 
 @pytest.mark.asyncio
-async def test_live_monitor_honours_configured_consolidation_thresholds(
-    tmp_path, _consolidation_record, _capture_assess_divergence
+async def test_live_monitor_honours_configured_distinctiveness_threshold(
+    tmp_path, _spoken_state, _capture_assess_divergence
 ):
-    state_root = _consolidation_record
+    state_root = _spoken_state
 
     config = DivergenceMonitorConfig(
         enabled=True,
@@ -148,7 +149,7 @@ async def test_live_monitor_honours_configured_consolidation_thresholds(
         min_interval_s=0.0,
     )
 
-    # Lowered rate threshold: 0.2 < observed rate 0.3 → diverged.
+    # Lowered distinctiveness threshold: 0.2 < observed 0.3 -> diverged.
     monitor_low = DivergenceMonitor(
         registry=ModuleRegistry(),
         fork_manager=_StubFM(),
@@ -160,38 +161,27 @@ async def test_live_monitor_honours_configured_consolidation_thresholds(
             name="divergence",
         ),
         require_encryption=False,
-        consolidation_rate_threshold=0.2,
-        consolidation_magnitude_threshold=DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD,
+        distinctiveness_threshold=0.2,
     )
     await monitor_low._poll_once(asyncio.Event())
-    assert _capture_assess_divergence["kwargs"]["consolidation_rate_threshold"] == 0.2
-    assert (
-        _capture_assess_divergence["kwargs"]["consolidation_magnitude_threshold"]
-        == DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD
-    )
+    assert _capture_assess_divergence["kwargs"]["distinctiveness_threshold"] == 0.2
     assert _capture_assess_divergence["result"].diverged is True
 
-    # Default thresholds: rate 0.5 > observed rate 0.3 → not diverged by this signal.
+    # Raised distinctiveness threshold: 0.5 > observed 0.3 -> not diverged.
     _capture_assess_divergence.clear()
-    monitor_default = DivergenceMonitor(
+    monitor_high = DivergenceMonitor(
         registry=ModuleRegistry(),
         fork_manager=_StubFM(),
         config=config,
         bus=_FakeBus(),
         incident_log=IncidentLog(
             enabled=True,
-            path=tmp_path / "incidents_default",
+            path=tmp_path / "incidents_high",
             name="divergence",
         ),
         require_encryption=False,
+        distinctiveness_threshold=0.5,
     )
-    await monitor_default._poll_once(asyncio.Event())
-    assert (
-        _capture_assess_divergence["kwargs"]["consolidation_rate_threshold"]
-        == DEFAULT_CONSOLIDATION_RATE_THRESHOLD
-    )
-    assert (
-        _capture_assess_divergence["kwargs"]["consolidation_magnitude_threshold"]
-        == DEFAULT_CONSOLIDATION_MAGNITUDE_THRESHOLD
-    )
+    await monitor_high._poll_once(asyncio.Event())
+    assert _capture_assess_divergence["kwargs"]["distinctiveness_threshold"] == 0.5
     assert _capture_assess_divergence["result"].diverged is False

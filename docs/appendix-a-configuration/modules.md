@@ -325,7 +325,7 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `action_selection_stream` | string | `"action_selection.out"` | Stream observed for the action selection module's intents; each non-rest intent relieves restlessness. |
 | `fast_time_constant_s` | float | `10.0` | Time constant, in entity seconds, of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
 | `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; the error dynamics behind valence is the relative fall from slow to fast. |
-| `learning_progress_floor` | float | `0.05` | Noise floor on learning progress before it relieves curiosity. |
+| `learning_progress_floor` | float | `0.20` | Noise floor `lp_0` on learning progress before it builds curiosity and relieves boredom, calibrated for max pooling (paper A.4). |
 | `learning_progress_span_s` | float | `5400.0` | Span of the learning-progress windows, in entity seconds; must be an even whole number of `learning_progress_bin_s`. |
 | `learning_progress_bin_s` | float | `60.0` | Bin width for the learning-progress windows, in entity seconds. |
 | `alert_excess_margin` | float | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom. |

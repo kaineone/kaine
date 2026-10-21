@@ -11,8 +11,7 @@ hardware-dependent, per unsloth's documentation:
   - ``cuda`` (NVIDIA): **Unsloth Studio**, a self-contained external env;
   - ``rocm`` (AMD): **unsloth-core** in a separate env;
   - ``xpu``/``mps``/``cpu``: no GPU trainer — sleep-cycle voice-alignment training
-    is unavailable on this host (the phase stays off; the
-    consolidation-divergence metric still emits without training).
+    is unavailable on this host (the phase stays off).
 
 **Qwen3.5 requires transformers v5 in the trainer env.** Unsloth Studio ships
 with transformers 4.x by default, which does not recognise the ``qwen3_5``
@@ -143,8 +142,7 @@ def _unavailable_guidance(backend: str) -> TrainerGuidance:
         summary=(
             "No CUDA/ROCm GPU detected — the sleep-cycle voice-alignment GPU "
             "trainer needs CUDA (NVIDIA) or ROCm (AMD), so voice-alignment "
-            "training is unavailable on this host. The phase stays off; the "
-            "consolidation-divergence metric still emits without training."
+            "training is unavailable on this host. The phase stays off."
         ),
     )
 

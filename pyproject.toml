@@ -390,6 +390,8 @@ source_modules = [
     "kaine.text_embedding",
     "kaine.text_embedding_numpy",
     "kaine.lifecycle.welfare_signal",
+    # The housekeeping pressure holder (paper A.5), read by interoception and set by sleep and the awake floor.
+    "kaine.housekeeping_pressure",
     # Cross-cutting stdlib-only primitives shared by core, the modules, and the
     # evaluation sidecar alike (atomic JSON state writer, local-service port
     # registry/probe, the canonical episodic memory collection-kinds list). They must

@@ -140,12 +140,11 @@ def test_adapter_dir_uses_organ_window_state_dir():
     assert result == Path("/r") / _state_dir(organ_dir_key) / "adapters"
 
 
-def test_divergence_source_uses_divergence_state_dir():
-    """The divergence source must build its path from the legacy table."""
-    divergence_dir_key = _DIVERGENCE_ENTRY["old"].split("/")[0]
+def test_divergence_source_no_longer_reads_legacy_record():
+    """The legacy divergence record remains known; divergence.py no longer reads it."""
     source = Path(_divergence_mod.__file__).read_text(encoding="utf-8")
-    expected = f'state_root / "{_state_dir(divergence_dir_key)}" / "consolidation_divergence.json"'
-    assert expected in source
+    assert _DIVERGENCE_ENTRY["old"].endswith("/consolidation_divergence.json")
+    assert "\"consolidation_divergence.json\"" not in source  # no path literal; the docstring may name it
 
 
 def test_language_intent_log_path_pinned():

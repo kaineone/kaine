@@ -26,9 +26,6 @@ from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.storage import resolve, trainer_jobs_dir
-from kaine.text_embedding import (
-    Embedder,
-)
 
 log = logging.getLogger(__name__)
 
@@ -177,9 +174,21 @@ def make_sleep(
     world_model: Optional[BaseModule] = None,
     kaine_config: Optional[dict[str, Any]] = None,
     entity_clock: Optional[EntityClock] = None,
-    embedder: Optional[Embedder] = None,
 ) -> BaseModule:
     from kaine.modules.sleep.module import Sleep
+
+    def _format_bytes(value: float | int) -> str:
+        if value < 0:
+            value = 0.0
+        units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
+        size = float(value)
+        idx = 0
+        while size >= 1024 and idx < len(units) - 1:
+            size /= 1024
+            idx += 1
+        if idx == 0:
+            return f"{int(size)} B"
+        return f"{size:.2f} {units[idx]}"
 
     allowed = {
         "interval_seconds",
@@ -191,12 +200,18 @@ def make_sleep(
         "developmental_rest_s",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
+        "housekeeping",  # nested sub-table
     }
     # Retired keys: accepted so old operator files boot, ignored with a warning.
-    retired = {"planning_step_burst"}
+    retired = {"planning_step_burst", "consolidation_embedder_enabled"}
     _require_keys(section, allowed | retired)
     _warn_retired_keys(section, retired, "[sleep]")
     voice_cfg_section = section.get("voice_alignment") or {}
+    _warn_retired_keys(
+        voice_cfg_section,
+        {"consolidation_divergence_rate_threshold", "consolidation_divergence_magnitude_threshold"},
+        "[sleep.voice_alignment]",
+    )
     voice_config: Optional[VoiceAlignmentConfig] = voice_alignment_config_from_section(
         voice_cfg_section, kaine_config
     )
@@ -288,13 +303,6 @@ def make_sleep(
         kwargs["voice_alignment_config"] = voice_config
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
-    # Semantic embedder for the consolidation-divergence MAGNITUDE, on the same
-    # scale as the A/B meter. Lives in the boundary-neutral kaine.text_embedding
-    # (the sleep module never imports kaine.evaluation). Lazy: the heavy model only loads
-    # the first sleep that actually builds pairs; absent the dep, magnitude
-    # degrades to null and rate/counts still emit.
-    if embedder is not None:
-        kwargs["consolidation_embedder"] = embedder
     # When the operator has opted in (config + env var) AND the
     # `[training]` extras importable, wire the real Unsloth-backed
     # trainer. Otherwise FakeTrainer ships the "no backend" reason.
@@ -309,6 +317,72 @@ def make_sleep(
         runner = _make_organ_window_runner(voice_config, kaine_config or {})
         if runner is not None:
             kwargs["organ_window_runner"] = runner
+
+    # [sleep.housekeeping] sub-table: disk/memory budgets, archive directory.
+    from kaine.modules.sleep.housekeeping import (
+        Housekeeper,
+        HousekeepingConfig,
+        bus_memory_bytes,
+        study_record_roots,
+    )
+
+    hk_config = HousekeepingConfig.from_section(section.get("housekeeping"))
+    if hk_config.enabled:
+        from kaine.cycle.housekeeping_floor import FloorConfig
+
+        # Validate the floor config so a bad value fails boot early.
+        FloorConfig.from_section(section.get("housekeeping"))
+
+        from kaine.housekeeping_pressure import shared_pressure
+
+        episodic_cfg = (kaine_config or {}).get("episodic_memory") or {}
+        raw_budget = episodic_cfg.get("storage_budget_bytes")
+        episodic_budget_bytes: Optional[int] = None
+        if (
+            episodic_memory is not None
+            and isinstance(raw_budget, int)
+            and not isinstance(raw_budget, bool)
+            and raw_budget > 0
+        ):
+            episodic_budget_bytes = raw_budget
+        kwargs["housekeeper"] = Housekeeper(
+            hk_config,
+            roots=study_record_roots(kaine_config or {}),
+            memory_reader=lambda: bus_memory_bytes(bus.client),
+            episodic_budget_bytes=episodic_budget_bytes,
+        )
+        # Paper A.5: the shared pressure holder is updated from each sleep's
+        # housekeeping report and scales awake fatigue build-up.
+        kwargs["housekeeping_pressure"] = shared_pressure()
+
+        housekeeper = kwargs["housekeeper"]
+        if housekeeper._mounted_archive() is None:
+            archive_path = hk_config.archive_dir or "(unset)"
+            growth_text = "unknown"
+            budget_text = "unknown"
+            days_text = "an unknown time"
+            try:
+                budget = housekeeper.effective_disk_budget()
+                growth = housekeeper.growth_bytes_per_day()
+                days = housekeeper.days_until_budget()
+                budget_text = _format_bytes(budget)
+                if growth is not None:
+                    growth_text = _format_bytes(growth)
+                if days is not None:
+                    if days <= 0:
+                        days_text = "already reached"
+                    else:
+                        days_text = f"about {int(round(days))} days"
+            except Exception as exc:
+                log.debug("sleep housekeeping projection failed: %s", exc, exc_info=True)
+            log.warning(
+                "sleep housekeeping: no archive volume is mounted at %s, so study records stay on the host; at the current growth of %s a day the disk budget of %s is reached in %s (bind a drive at /app/archive to export them; docs/09-modules/sleep.md, Housekeeping)",
+                archive_path,
+                growth_text,
+                budget_text,
+                days_text,
+            )
+
     sleep_params = inspect.signature(Sleep).parameters
     if episodic_memory is not None:
         kwargs[parameter_for_config_key("episodic_memory", sleep_params)] = episodic_memory

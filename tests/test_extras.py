@@ -153,7 +153,7 @@ def test_sleep_warns_sentence_transformers_when_embedding_backend_torch(monkeypa
         "embedding": {"backend": "sentence_transformers"},
     }
     missing = check(config)
-    assert any(
+    assert not any(
         m.module == "sleep"
         and m.import_name == "sentence_transformers"
         and m.extra == "memory"
