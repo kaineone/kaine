@@ -4,7 +4,9 @@ The cycle-control file control.json holds a freeze stack written by two processe
 
 ## What Changes
 
-- A locked read-modify-write helper (an exclusive file lock beside the file) updates control.json, and both writers use it.\n- Atomic JSON writes use a unique temp file in the same directory, then os.replace.\n- The freeze stack's semantics are unchanged.
+- A locked read-modify-write helper (an exclusive file lock beside the file) updates control.json, and both writers use it.
+- Atomic JSON writes use a unique temp file in the same directory, then os.replace.
+- The freeze stack's semantics are unchanged.
 
 ## Capabilities
 
