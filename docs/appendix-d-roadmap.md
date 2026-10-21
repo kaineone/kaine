@@ -7,6 +7,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | launch-name-at-first-boot | 6/6 (100%) | Every entity is named at its first boot, in its identity file, whichever modules run (paper 3.5) |
+| boot-identity-dedup | 2/2 (100%) | Remove the dead duplicate boot-identity helpers; each module defines a top-level name once |
 | sleep-housekeeping | 7/7 (100%) | Every sleep runs housekeeping last before the affective reset: process-log backups are deleted and study records exported to an operator archive under a checksum, oldest first within budgets; awake fatigue builds at nu_act (1 + P^hk), and an awake floor keeps free space above a reserve, suspending the study record with a gap marker when it must (paper 3.5, A.5). |
 | persona-v0 | 4/4 (100%) | Restore the self-category persona ("I am this entity") and the situation in every organ request, the prompt the corrected ninth-boot replay kept (paper 3.5); persona template version 6. |
 | lp-max-pooling | 6/6 (100%) | Pool learning progress as the largest per-processor value, restart audition's bins at each hearing band step, and set the floor lp_0 to 0.20 as calibrated for this pooling (paper A.4, Table A1). |
@@ -78,6 +79,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 52 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 53 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

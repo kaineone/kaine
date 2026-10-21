@@ -1064,30 +1064,6 @@ def _resolve_start_stage(
     )
 
 
-def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
-    """Resolve the entity identity for this boot before any module starts.
-
-    When reviving, the bundle's identity is returned but not yet persisted: it is
-    written to disk only after the revive lands. A target tree that already holds
-    a different identity is refused before any state is modified.
-    """
-    path = resolve(state_root) / "identity" / "entity.json"
-    if revive is not None:
-        existing = load_identity(path)
-        if existing is not None and existing.entity_id != revive.plan.identity.entity_id:
-            raise IdentityError(
-                f"refusing revive into tree with identity {existing.entity_id!r}; "
-                f"bundle identity is {revive.plan.identity.entity_id!r}"
-            )
-        return revive.plan.identity
-    return resolve_spawn_identity(state_root)
-
-
-def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
-    """Persist a revived identity once the revive has successfully landed."""
-    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
-
-
 def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
     """Return the distinct preservation bundle root directories in ``config``.
 
