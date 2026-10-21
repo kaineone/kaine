@@ -4,7 +4,8 @@ The dashboard's welfare_counts_from_jsonl takes the maximum over the last 500 li
 
 ## What Changes
 
-- welfare_counts_from_jsonl goes through the reset-aware reader.\n- The evaluation tab reads what the cycle publishes, as #584 did for backend failures, or the dead live branch and its unused registry are removed and the tab says where its numbers come from.
+- welfare_counts_from_jsonl goes through the reset-aware reader.
+- The evaluation tab reads what the cycle publishes, as #584 did for backend failures, or the dead live branch and its unused registry are removed and the tab says where its numbers come from.
 
 ## Capabilities
 
