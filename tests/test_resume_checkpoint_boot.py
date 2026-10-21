@@ -104,7 +104,7 @@ async def test_revive_wins_over_stale_checkpoint(monkeypatch) -> None:
     mod = FakeModule("vocal", {})
     reg.register(mod)
 
-    async def fake_apply(revive, registry, state_root):
+    async def fake_apply(revive, registry, state_root,):
         registry.get("vocal").state = {"v": 2}
         return None
 
@@ -143,7 +143,7 @@ async def test_revive_wins_even_when_replace_fails(monkeypatch) -> None:
     mod = FakeModule("vocal", {})
     reg.register(mod)
 
-    async def fake_apply(revive, registry, state_root):
+    async def fake_apply(revive, registry, state_root,):
         registry.get("vocal").state = {"v": 2}
         return None
 
@@ -172,7 +172,7 @@ async def test_revive_refuses_when_checkpoint_cannot_be_replaced_or_removed(monk
     mod = FakeModule("vocal", {})
     reg.register(mod)
 
-    async def fake_apply(revive, registry, state_root):
+    async def fake_apply(revive, registry, state_root,):
         registry.get("vocal").state = {"v": 2}
         return None
 
@@ -212,7 +212,7 @@ async def test_revive_refused_when_set_aside_fails(monkeypatch) -> None:
     await rc.save_checkpoint(reg_old, ident, reason="periodic")
 
     apply_called = [False]
-    async def fake_apply(revive, registry, state_root):
+    async def fake_apply(revive, registry, state_root,):
         apply_called[0] = True
         return None
 
@@ -258,7 +258,7 @@ async def test_refused_revive_sets_the_checkpoint_aside(monkeypatch) -> None:
     await rc.save_checkpoint(reg_old, ident, reason="periodic")
     before = rc.checkpoint_file().read_bytes()
 
-    async def partial_then_refuse(revive, registry, state_root):
+    async def partial_then_refuse(revive, registry, state_root,):
         registry.get("vocal").state = {"v": 2}
         return 7
 
@@ -303,7 +303,7 @@ async def test_revive_record_guards_a_stale_checkpoint(monkeypatch) -> None:
     reg_old.register(FakeModule("vocal", {"v": 1}))
     await rc.save_checkpoint(reg_old, ident, reason="periodic")
 
-    async def fake_apply(revive, registry, state_root):
+    async def fake_apply(revive, registry, state_root,):
         registry.get("vocal").state = {"v": 2}
         return None
 

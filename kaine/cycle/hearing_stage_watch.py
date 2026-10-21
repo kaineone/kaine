@@ -42,6 +42,7 @@ class HearingStageWatch:
         self._period_s = period_s
         self._last_stage: int | None = None
         self._pending: list[dict[str, Any]] = []
+        self._current: dict[str, Any] | None = None
 
     def _format_band(self, edges: tuple[float | None, float | None]) -> str:
         low, high = edges
@@ -72,7 +73,15 @@ class HearingStageWatch:
             "awake_seconds": float(t),
         }
         self._last_stage = stage
+        self._current = dict(payload)
         return payload
+
+    @property
+    def current(self) -> dict[str, Any] | None:
+        """The newest reading, or None before the first."""
+        if self._current is None:
+            return None
+        return dict(self._current)
 
     async def run(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():

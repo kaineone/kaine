@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
-from kaine.boot.errors import _pop
+from kaine.boot.errors import _pop, _warn_retired_keys
 from kaine.bus.client import AsyncBus
 from kaine.defaults import language_section_api_key, language_section_chat_url
 from kaine.modules.base import BaseModule
@@ -39,7 +39,6 @@ def make_language(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "intent_log_path",
         "context_max_events",
         "context_char_budget",
-        "persona_name",
         "persona_external",
         "persona_internal",
         # "felt" (graded words, the shipped default) or "numeric" (raw values)
@@ -55,7 +54,12 @@ def make_language(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "gguf_path",
         "gguf_filename",
     }
-    kw = _pop(section, allowed)
+    # Retired: the organ's request carries no name (openspec persona-without-name).
+    # Accepted so old operator files boot, ignored with a warning.
+    retired = {"persona_name"}
+    _warn_retired_keys(section, retired, "[language]")
+    kw = _pop(section, allowed | retired)
+    kw.pop("persona_name", None)
     kw.pop("model_server_sleep_idle_seconds", None)
     kw.pop("outcome_reply_window_s", None)
     # Bearer token for a keyed model server (e.g. Unsloth Studio). Resolve from

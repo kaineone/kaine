@@ -572,8 +572,8 @@ def entity_locations(
         Location(
             "identity",
             BACKUP_DELETE,
-            resolve("state/identity/entity.json"),
-            "entity id and lineage",
+            resolve("state/identity/entity.json") + resolve("state/identity/entity.json.lock"),
+            "entity id, lineage and launch name, with the lock file beside it",
             bundle_dir="locations/identity",
         )
     )

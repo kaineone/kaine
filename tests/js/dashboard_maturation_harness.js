@@ -21,6 +21,13 @@ var ACK_CONFIRM_ROW_ID = "dev-ack-confirm-row";
 var ACK_CONFIRM_ID = "dev-ack-confirm";
 var ACK_CANCEL_ID = "dev-ack-cancel";
 var ACK_MSG_ID = "dev-ack-msg";
+var WORLD_ID = "dev-world";
+var WORLD_VALUE_ID = "dev-world-value";
+var HEARING_ID = "dev-hearing";
+var HEARING_VALUE_ID = "dev-hearing-value";
+var FEED_HEARING_ID = "feed-hearing-stage";
+var PASSES_ROW_ID = "dev-passes-row";
+var CONSOLIDATION_NOT_REQUIRED_ID = "dev-consolidation-not-required";
 var STATUS_URL = "/diagnostics/maturation.json";
 var ACK_URL = "/diagnostics/maturation/ack";
 
@@ -69,6 +76,13 @@ function makePanelElements(sandbox) {
   elements[ACK_CONFIRM_ID] = makeElement("button", { id: ACK_CONFIRM_ID, hidden: false });
   elements[ACK_CANCEL_ID] = makeElement("button", { id: ACK_CANCEL_ID, hidden: false });
   elements[ACK_MSG_ID] = makeElement("span", { id: ACK_MSG_ID });
+  elements[WORLD_ID] = makeElement("p", { id: WORLD_ID, hidden: true });
+  elements[WORLD_VALUE_ID] = makeElement("span", { id: WORLD_VALUE_ID });
+  elements[HEARING_ID] = makeElement("p", { id: HEARING_ID, hidden: true });
+  elements[HEARING_VALUE_ID] = makeElement("span", { id: HEARING_VALUE_ID });
+  elements[FEED_HEARING_ID] = makeElement("span", { id: FEED_HEARING_ID });
+  elements[PASSES_ROW_ID] = makeElement("li", { id: PASSES_ROW_ID, hidden: false });
+  elements[CONSOLIDATION_NOT_REQUIRED_ID] = makeElement("li", { id: CONSOLIDATION_NOT_REQUIRED_ID, hidden: true });
 }
 
 function makeSandbox(scenario) {
@@ -525,6 +539,368 @@ var scenarios = [
       }
       if (sandbox._visibilityCalls[0].ms !== 5000) {
         throw new Error("expected interval 5000, got " + sandbox._visibilityCalls[0].ms);
+      }
+    }
+  },
+  {
+    name: "hearing stage 1 renders band in panel and feed panel",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 1, previous_stage: 0, low_hz: 158.11, high_hz: 707.11, awake_seconds: 1 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingRow = sandbox.document.getElementById(HEARING_ID);
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      var expected = "stage 1 of 4, 158.1 to 707.1 Hz";
+      if (hearingRow.hidden) {
+        throw new Error("hearing row should be visible");
+      }
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+      if (feedHearing.textContent !== expected) {
+        throw new Error("unexpected feed hearing: " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing stage 2 with low null renders below high",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 2, previous_stage: 1, low_hz: null, high_hz: 707.11, awake_seconds: 1 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var expected = "stage 2 of 4, below 707.1 Hz";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing stage 4 renders open",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 4, previous_stage: 3, low_hz: null, high_hz: null, awake_seconds: 1 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var expected = "stage 4 of 4, open";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing null hides panel row and reports not reported in feed",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: null
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingRow = sandbox.document.getElementById(HEARING_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      if (!hearingRow.hidden) {
+        throw new Error("hearing row should be hidden when hearing is null");
+      }
+      if (feedHearing.textContent !== "not reported") {
+        throw new Error("expected 'not reported', got " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
+    name: "development null with hearing present shows panel and clears fields",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: null,
+            hearing: { stage: 0, previous_stage: null, low_hz: 100, high_hz: 200, awake_seconds: 0 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var panel = sandbox.document.getElementById(PANEL_ID);
+      if (panel.hidden) {
+        throw new Error("panel should be visible when hearing is present");
+      }
+      if (sandbox.document.getElementById(STAGE_ID).textContent !== "") {
+        throw new Error("stage should be cleared");
+      }
+      if (sandbox.document.getElementById(LIVED_ID).textContent !== "") {
+        throw new Error("lived should be cleared");
+      }
+      if (sandbox.document.getElementById(SLEEPS_ID).textContent !== "") {
+        throw new Error("sleeps should be cleared");
+      }
+      if (sandbox.document.getElementById(PASSES_ID).textContent !== "") {
+        throw new Error("passes should be cleared");
+      }
+      if (sandbox.document.getElementById(READINESS_ID).textContent !== "") {
+        throw new Error("readiness should be cleared");
+      }
+      if (!sandbox.document.getElementById(DECISION_ID).hidden) {
+        throw new Error("decision should be hidden");
+      }
+      if (!sandbox.document.getElementById(WORLD_ID).hidden) {
+        throw new Error("world row should be hidden");
+      }
+      if (sandbox.document.getElementById(HEARING_ID).hidden) {
+        throw new Error("hearing row should be visible");
+      }
+    }
+  },
+  {
+    name: "world perceptual shows world row",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              world: "perceptual",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var worldRow = sandbox.document.getElementById(WORLD_ID);
+      var worldValue = sandbox.document.getElementById(WORLD_VALUE_ID);
+      if (worldRow.hidden) {
+        throw new Error("world row should be visible");
+      }
+      if (worldValue.textContent !== "perceptual") {
+        throw new Error("unexpected world value: " + JSON.stringify(worldValue.textContent));
+      }
+    }
+  },
+  {
+    name: "consolidation not required hides passes row",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 5,
+              conditions: { c2_sleep_required: false, c2_consolidation_required: false },
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var passesRow = sandbox.document.getElementById(PASSES_ROW_ID);
+      var notRequiredRow = sandbox.document.getElementById(CONSOLIDATION_NOT_REQUIRED_ID);
+      if (!passesRow.hidden) {
+        throw new Error("passes row should be hidden when consolidation is not required");
+      }
+      if (notRequiredRow.hidden) {
+        throw new Error("not-required row should be visible");
+      }
+    }
+  },
+  {
+    name: "consolidation required shows passes row and hides not required",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 7,
+              conditions: { c2_sleep_required: true, c2_consolidation_required: true },
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var passesRow = sandbox.document.getElementById(PASSES_ROW_ID);
+      var notRequiredRow = sandbox.document.getElementById(CONSOLIDATION_NOT_REQUIRED_ID);
+      var passes = sandbox.document.getElementById(PASSES_ID);
+      if (passesRow.hidden) {
+        throw new Error("passes row should be visible when consolidation is required");
+      }
+      if (!notRequiredRow.hidden) {
+        throw new Error("not-required row should be hidden");
+      }
+      if (passes.textContent !== "7") {
+        throw new Error("unexpected passes count: " + JSON.stringify(passes.textContent));
+      }
+    }
+  },
+  {
+    name: "conditions absent shows passes row",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 3,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var passesRow = sandbox.document.getElementById(PASSES_ROW_ID);
+      var notRequiredRow = sandbox.document.getElementById(CONSOLIDATION_NOT_REQUIRED_ID);
+      var passes = sandbox.document.getElementById(PASSES_ID);
+      if (passesRow.hidden) {
+        throw new Error("passes row should be visible when conditions are absent");
+      }
+      if (!notRequiredRow.hidden) {
+        throw new Error("not-required row should be hidden when conditions are absent");
+      }
+      if (passes.textContent !== "3") {
+        throw new Error("unexpected passes count: " + JSON.stringify(passes.textContent));
+      }
+    }
+  },
+  {
+    name: "readiness renders not applicable markers",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              readiness: { ready: false, passed: [], unmet: [], not_applicable: ["C2_reality_model_consolidated"] },
+              readout: {}
+            }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var readiness = sandbox.document.getElementById(READINESS_ID);
+      var expected = "\u2013 C2_reality_model_consolidated (not applicable)";
+      if (readiness.textContent.indexOf(expected) === -1) {
+        throw new Error("expected not applicable marker, got " + JSON.stringify(readiness.textContent));
       }
     }
   }

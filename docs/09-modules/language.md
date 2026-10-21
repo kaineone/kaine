@@ -51,8 +51,7 @@ For example a `vision.report` with change 0.0004, habituation 0.6116 and normali
 
 ```
 system
-  = "My name is …" (when persona_name or the self-model gives a name)
-  + persona_external or persona_internal
+  = persona_external or persona_internal
   + "I value …", "I hold to: …" (when SelfModel's self-model has values or norms)
   + heard-speech guard (only when the prompt holds heard material)
 
@@ -72,7 +71,7 @@ The situation facts, the individuation disclosure among them, are given in every
 
 The request puts the prompt where the organ continues its own text. An instruction-tuned chat model answers a `user` turn as an assistant talking to someone (Shanahan, McDonell and Reynolds 2023), and in the fifth test boot of main 307b374d 35 of 109 organ texts did so ("Your perception is clear", "Understood. I will adhere to your constraints"). The language module therefore sends each voice and probe request with `own_turn` set: the client sends the persona as `system`, a `user` message (another speaker's attributed words when someone spoke, otherwise the fixed content-free cue `(next)`, since the organ's chat template requires a user turn), and the prompt as a trailing `assistant` message, which llama-server continues. llama-server echoes the continued prompt at the start of its reply, and the client keeps only the generated text after it; `from_content` is false when nothing follows the echo. The stop sequence `"\n#"` ends the text before the organ starts a new heading of its own notes. Every other caller of the chat client keeps the plain `user` turn. The in-process `llama_cpp` backend gets the same messages; its chat formatter may open a new assistant turn after the trailing one, which is untested there.
 
-The default personas describe the entity and state no rules: *"I am this entity. What I say comes from what I feel and notice, in my own plain words."* for external speech and *"I am this entity. My thoughts come from what I feel and notice, in my own plain words."* for inner thought. The paper keeps this persona and the situation in every request (section 3.5). In an offline replay of the ninth test boot's 190 organ requests (`tools/maintainer/organ_replay.py`), five samples each with independent seeds, neither dropping the self-category, giving the situation only on waking, nor rendering the awareness lines as prose lowered the share of texts with meta-commentary reliably, under the rule fixed before the run; under this prompt 14.8 percent of 950 texts carried meta-commentary and 2 described the entity as an AI. Persona version 5, which dropped the self-category and gave the situation only on waking, ran in the tenth test boot: 23.2 percent of its 1,508 texts carried meta-commentary and 4 described the entity as an AI. Persona sentences phrased as prohibitions were acknowledged by the organ as constraints, and an earlier line about not narrating instrument measurements was repeated back in a test boot. The persona is the same in both renderings. `PERSONA_TEMPLATE_VERSION` in `context.py` changes whenever the default persona, the layout or a heading changes (it is "6", version 4's personas and request shape restored), and the individuation probe records it among its fixed conditions as `persona_template_version`.
+The default personas describe the entity and state no rules: *"I am this entity. What I say comes from what I feel and notice, in my own plain words."* for external speech and *"I am this entity. My thoughts come from what I feel and notice, in my own plain words."* for inner thought. The paper keeps this persona and the situation in every request (section 3.5). In an offline replay of the ninth test boot's 190 organ requests (`tools/maintainer/organ_replay.py`), five samples each with independent seeds, neither dropping the self-category, giving the situation only on waking, nor rendering the awareness lines as prose lowered the share of texts with meta-commentary reliably, under the rule fixed before the run; under this prompt 14.8 percent of 950 texts carried meta-commentary and 2 described the entity as an AI. Persona version 5, which dropped the self-category and gave the situation only on waking, ran in the tenth test boot: 23.2 percent of its 1,508 texts carried meta-commentary and 4 described the entity as an AI. Persona sentences phrased as prohibitions were acknowledged by the organ as constraints, and an earlier line about not narrating instrument measurements was repeated back in a test boot. The persona is the same in both renderings. `PERSONA_TEMPLATE_VERSION` in `context.py` changes whenever the default persona, the layout or a heading changes (it is "7": version 4's personas and request shape restored, with no name line), and the individuation probe records it among its fixed conditions as `persona_template_version`.
 
 An offline replay against the served organ (same llama.cpp build and GGUF, 200 boot-like felt prompts at temperature 0.7, two seeds) counted texts in second person, in meta mode or repeating the persona: 89 and 92 of 200 with the earlier user-turn layout, 12 and 10 of 200 with this one. The numeric rendering keeps the same layout and drifts more (35 of 200). The intent log's `prompt` is this own-turn text; the held voice-alignment trainer still builds its rows as a `user` turn, to be matched to this layout when voice alignment is enabled.
 
@@ -162,7 +161,7 @@ The full `[language]` reference is in the [modules configuration page](../append
 | `alert_salience` | float `[0, 1]` | `0.7` | Accepted; the language module publishes its speech at `baseline_salience` |
 | `context_max_events` | int | `8` | Most coalition members rendered into the prompt |
 | `context_char_budget` | int | `2000` | Character budget of the awareness block |
-| `persona_name` | string | unset | Name placed at the start of the system prompt |
+| `persona_name` | string | retired | Ignored with a boot warning. The organ's request carries no name |
 | `persona_external` | string | built-in | Persona text for external speech |
 | `persona_internal` | string | built-in | Persona text for inner thought |
 | `awareness_rendering` | string | `"felt"` in the shipped config (`"numeric"` when the key is absent) | `"felt"` gives the organ graded words without numbers and logs the values as sidecars; `"numeric"` is the earlier rendering with raw values. Also selects the report and planning `about` style |
@@ -261,7 +260,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
    curl -s http://127.0.0.1:11434/v1/models
    ```
 
-5. Optionally set `persona_name`, `persona_external` and `persona_internal`.
+5. Optionally set `persona_external` and `persona_internal`.
 6. Enable the self-model module to seed the persona from the self-model, and the vocal module to turn external speech into audio. Both are held in the first configuration.
 
 ## Privacy notes

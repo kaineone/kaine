@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -368,6 +369,43 @@ def perception_feed_block(
     never a rendered frame. Reuses the same descriptor the run manifest
     records. Never raises; reports defaults on any error.
     """
+    def _stimulus_source_summary(feed: dict[str, Any]) -> dict[str, Any]:
+        summary: dict[str, Any] = {}
+
+        try:
+            from kaine.boot.perception_feed import _stimulus_source_params
+            params = _stimulus_source_params(feed)
+            summary["heartbeat_bpm"] = float(params.heartbeat_bpm)
+            summary["heartbeat_drift"] = float(params.heartbeat_drift)
+            summary["colour_ramp_seconds"] = float(params.colour_ramp_seconds)
+            summary["colour_hue_gain"] = float(params.maternal_state_hue_gain)
+        except Exception:
+            log.debug("stimulus_source params read failed", exc_info=True)
+            summary["heartbeat_bpm"] = None
+            summary["heartbeat_drift"] = None
+            summary["colour_ramp_seconds"] = None
+            summary["colour_hue_gain"] = None
+
+        try:
+            from kaine.boot.perception_feed import _maternal_voice_params
+            voice = _maternal_voice_params(feed)
+            summary["maternal_voice_enabled"] = bool(voice.enabled)
+        except Exception:
+            log.debug("maternal_voice params read failed", exc_info=True)
+            summary["maternal_voice_enabled"] = None
+
+        try:
+            from kaine.boot.perception_feed import _hearing_band_params
+            hearing = _hearing_band_params(feed)
+            summary["hearing_enabled"] = bool(hearing.enabled)
+            summary["hearing_maturation_seconds"] = float(hearing.maturation_seconds)
+        except Exception:
+            log.debug("hearing_band params read failed", exc_info=True)
+            summary["hearing_enabled"] = None
+            summary["hearing_maturation_seconds"] = None
+
+        return summary
+
     try:
         from kaine.boot import gather_perception_feed_descriptor
 
@@ -387,7 +425,7 @@ def perception_feed_block(
         descriptor = gather_perception_feed_descriptor(cfg)
         mode = descriptor.get("mode", "off")
         reproducible = mode in ("seeded", "playlist", "stimulus_source")
-        return {
+        result = {
             "mode": mode,
             "reproducible": reproducible,
             "descriptor": descriptor,
@@ -404,6 +442,9 @@ def perception_feed_block(
                 )
             ),
         }
+        if mode == "stimulus_source":
+            result["stimulus_source"] = _stimulus_source_summary(cfg["perception_feed"])
+        return result
     except Exception:
         log.debug("perception_feed_block failed", exc_info=True)
         return {
@@ -634,13 +675,15 @@ def supervisor_block(supervisor_control_path: Path, supervisor_escalation_path: 
 
 
 def module_states(
-    cycle_runtime_path: Path, modules_enabled: dict[str, bool]
+    cycle_runtime_path: Path,
+    modules_enabled: dict[str, bool],
+    feed_mode: str | None = None,
 ) -> list[dict[str, Any]]:
     """Per-module live state from runtime.json + perception state.
 
     Reports ``enabled`` (config), ``initialized`` (present in the running
     cycle's module list), and, for the perception modules, whether the
-    sensor is actively capturing.
+    sensor is actively capturing or a deterministic feed is configured.
     """
     running_modules: list[str] = []
     cycle_running = False
@@ -660,6 +703,8 @@ def module_states(
         audio_active = False
         video_active = False
 
+    deterministic = feed_mode in ("seeded", "playlist", "screen", "stimulus_source")
+
     rows: list[dict[str, Any]] = []
     for module, enabled in sorted(modules_enabled.items()):
         initialized = cycle_running and module in running_modules
@@ -669,8 +714,100 @@ def module_states(
             "initialized": bool(initialized),
         }
         if module == "audition":
-            row["capturing"] = bool(audio_active)
+            row["capturing"] = bool(audio_active) or (deterministic and initialized)
+            row["feed"] = (
+                feed_mode
+                if (deterministic and initialized)
+                else ("live" if audio_active else None)
+            )
         elif module == "vision":
-            row["capturing"] = bool(video_active)
+            row["capturing"] = bool(video_active) or (deterministic and initialized)
+            row["feed"] = (
+                feed_mode
+                if (deterministic and initialized)
+                else ("live" if video_active else None)
+            )
         rows.append(row)
     return rows
+
+
+_BACKEND_STR_MAX = 80
+_BACKEND_REASON_MAX = 200
+
+
+def _backend_name(value: Any) -> str | None:
+    return value[:_BACKEND_STR_MAX] if isinstance(value, str) else None
+
+
+def _clean_backend_failure(raw: Any) -> dict[str, Any] | None:
+    """Keep only the allowlisted, length-bounded fields of one failure record."""
+    if not isinstance(raw, dict):
+        return None
+    ts = raw.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or not math.isfinite(ts):
+        ts = None
+    reason = raw.get("reason")
+    return {
+        "module": _backend_name(raw.get("module")),
+        "backend": _backend_name(raw.get("backend")),
+        "fallback": _backend_name(raw.get("fallback")),
+        "reason": reason[:_BACKEND_REASON_MAX] if isinstance(reason, str) else "",
+        "ts": ts,
+    }
+
+
+def backends_block(cycle_runtime_path: Path) -> dict[str, Any]:
+    """Runtime-backend load failures, as reported by the cycle process.
+
+    The cycle records failures in its own process and writes them to
+    ``runtime.json`` as ``backend_failures``. ``source`` says where the answer
+    comes from: ``cycle`` (the file carries the list), ``cycle_not_running``
+    (no runtime file) or ``not_reported`` (unreadable file or no such key, e.g. a
+    cycle from before the field existed). Failures recorded in this (dashboard)
+    process are added. ``ok`` is False when any failure is listed, True when the
+    cycle reported an empty list, otherwise None (not known). Never raises.
+    """
+    source = "not_reported"
+    listed: list[Any] = []
+    try:
+        if not Path(cycle_runtime_path).exists():
+            source = "cycle_not_running"
+        else:
+            data = json.loads(Path(cycle_runtime_path).read_text())
+            if isinstance(data, dict) and isinstance(data.get("backend_failures"), list):
+                source = "cycle"
+                listed = data["backend_failures"]
+    except Exception:
+        log.debug("could not read backend failures from runtime.json", exc_info=True)
+        source = "not_reported"
+        listed = []
+    failures: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+
+    def _add(raw: Any) -> None:
+        item = _clean_backend_failure(raw)
+        if item is None:
+            return
+        key = (item["module"], item["backend"], item["fallback"], item["reason"])
+        if key in seen:
+            return
+        seen.add(key)
+        failures.append(item)
+
+    for raw in listed:
+        _add(raw)
+    try:
+        from kaine.backend_state import backend_failures_snapshot
+
+        for raw in backend_failures_snapshot():
+            _add(raw)
+    except Exception:
+        log.debug("could not read in-process backend failures", exc_info=True)
+    ok: bool | None
+    if failures:
+        ok = False
+    elif source == "cycle":
+        ok = True
+    else:
+        ok = None
+    return {"ok": ok, "source": source, "failures": failures}
