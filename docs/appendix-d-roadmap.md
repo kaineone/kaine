@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| preflight-launch-name-quiet | 0/3 (0%) | Preflight self-models no longer log launch names that read as renames |
+| preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
 | duplicate-method-guard | 3/3 (100%) | The duplicate-name guard also checks methods in classes and nested functions |
 | nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
