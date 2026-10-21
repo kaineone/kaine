@@ -10,5 +10,5 @@
 
 ## 3. Replay
 
-- [ ] 3.1 Run both case sets on the pinned organ under the GPU lock and stop the organ afterwards
-- [ ] 3.2 Score with the committed rule, read about 50 texts by hand, and write `results.md`
+- [x] 3.1 Run both case sets on the pinned organ under the GPU lock and stop the organ afterwards
+- [x] 3.2 Score with the committed rule, read about 50 texts by hand, and write `results.md`
