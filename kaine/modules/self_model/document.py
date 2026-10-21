@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 # First name shared by this lineage of entities; the surname individuates each
-# launch. The entity may rename itself later — this is only the starting point.
+# launch. The name is drawn once at first boot and kept for life.
 DEFAULT_FIRST_NAME = "Kaine"
 
 # A tribute to Second Life's "last name" lineage: the surnames residents chose
@@ -43,19 +43,27 @@ def _load_surnames() -> tuple[str, ...]:
 _SURNAMES = _load_surnames()
 
 
-def generate_launch_name(*, rng: random.Random | None = None) -> str:
+def generate_launch_name(
+    *, rng: random.Random | None = None, exclude: str | None = None
+) -> str:
     """``Kaine <Surname>`` with a surname picked at launch. Injectable RNG for
-    deterministic tests."""
+    deterministic tests. ``exclude`` is a full name to avoid (a fork's parent's
+    name); when every surname would produce it, the name is returned anyway."""
     r = rng or random
-    return f"{DEFAULT_FIRST_NAME} {r.choice(_SURNAMES)}"
+    candidates = [
+        n for n in (f"{DEFAULT_FIRST_NAME} {s}" for s in _SURNAMES) if n != exclude
+    ]
+    if not candidates:
+        return f"{DEFAULT_FIRST_NAME} {r.choice(_SURNAMES)}"
+    return r.choice(candidates)
 
 
 @dataclass(frozen=True)
 class SelfModelDocument:
-    # The entity's name. Empty until assigned. A first name + a surname chosen
-    # at first launch (see generate_launch_name); the long-term intent is that
-    # an entity renames ITSELF once it has a sense of identity, at which point
-    # this is overwritten from its own expressed preference.
+    # The entity's name. Empty until assigned. A first name + a surname drawn
+    # once at first boot (see generate_launch_name) and kept for life. The
+    # identity file (state/identity/entity.json) is the record of the name; this
+    # field mirrors it.
     name: str = ""
     values: list[str] = field(default_factory=list)
     behavioral_norms: list[str] = field(default_factory=list)

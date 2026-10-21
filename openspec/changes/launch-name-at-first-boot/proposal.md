@@ -8,7 +8,7 @@ The launch name "Kaine <Surname>" is minted only by the self-model module, at it
 - Boot gives an entity a name before any module starts, whichever modules run:
   - a fresh spawn mints "Kaine <Surname>" from `kaine/modules/self_model/surnames.txt`;
   - an existing identity without a name adopts the self-model document's name if it has one, otherwise it mints one;
-  - a revive keeps the bundle's name.
+  - a revive keeps the bundle's name; a bundle identity without a name takes the revived self-model's name, else the name stored for the same `entity_id` in the target tree, else a newly drawn name, and the running self-model adopts the result.
   An existing name is never overwritten. Saving refuses to replace a stored name with a different one.
 - A fork is a new entity, so it gets its own new name, drawn so it differs from its parent's. The parent's name is not copied, and the parent appears only in the lineage. The fork's copied self-model document adopts the fork's name.
 - The self-model module adopts the identity's name at boot, in place of minting its own. When it runs without an identity name (a bare test harness), it keeps its current behaviour.

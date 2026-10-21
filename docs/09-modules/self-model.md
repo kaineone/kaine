@@ -67,7 +67,7 @@ The factory rejects any other key in either table.
 
 ### Launch name
 
-On first boot, if the self-model has no name, `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/self_model/surnames.txt` and saves it at once. The name is a starting point that the entity may later replace.
+The entity's launch name belongs to its identity (`state/identity/entity.json`, key `name`). The cycle assigns it before any module starts: `generate_launch_name()` picks `"Kaine <Surname>"` from the Second Life surname list in `kaine/modules/self_model/surnames.txt`, or an existing identity adopts the name already in the self-model document. Boot passes the identity's name to the module. At `initialize()` the module writes that name into its document and saves it when the document's name differs, which is how a fork's copied document takes the fork's name, and a model restored from a snapshot takes it too. A module built without an identity name, as in a bare test harness, keeps the earlier behaviour: if the self-model has no name it picks one with `generate_launch_name()` and saves it at once. The name is drawn once at first boot and kept for life. The identity file is the record of it, and the self-model document mirrors it.
 
 ### Drift detection
 

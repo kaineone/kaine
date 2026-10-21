@@ -80,6 +80,9 @@ class SelfModel(BaseModule):
         # Self-inference engine (eidolon-self-inference change).
         # Injected by boot.py; default is disabled no-op.
         self_inference: Optional[SelfInferenceEngine] = None,
+        # The entity's launch name from its identity, passed by boot. None in a
+        # bare harness, where the module mints its own as before.
+        identity_name: Optional[str] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -95,6 +98,7 @@ class SelfModel(BaseModule):
         if voice_observations_cap < 0:
             raise ValueError("voice_observations_cap must be >= 0 (0 = no cap)")
         self._persistence_path = resolve(persistence_path)
+        self._identity_name = identity_name or None
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
         self._save_interval_s = float(save_interval_s)
@@ -126,6 +130,22 @@ class SelfModel(BaseModule):
         return self._model
 
     @property
+    def entity_name(self) -> str | None:
+        """The name in the current model, or ``None`` when it has none."""
+        return self._model.name or None
+
+    def adopt_identity_name(self, name: str) -> None:
+        """Take ``name`` from the entity's identity and persist the document."""
+        self._identity_name = name
+        if self._model.name != name:
+            self._model = self._model.with_updates(name=name)
+        try:
+            save_atomic(self._persistence_path, self._model)
+        except Exception:
+            log.warning("failed to persist identity name", exc_info=True)
+        log.info("self-model adopted identity name: %s", name)
+
+    @property
     def drift_detector(self) -> DriftDetector:
         return self._drift
 
@@ -135,9 +155,19 @@ class SelfModel(BaseModule):
 
     async def initialize(self) -> None:
         self._model = load(self._persistence_path)
-        # Assign a launch name on first boot (Kaine + a surname). Persisted, so
-        # it's stable across restarts; an entity may later rename itself.
-        if not self._model.name:
+        # The identity owns the entity's launch name; adopt it when the document
+        # differs (a fork's copied document carries its parent's name).
+        if self._identity_name is not None:
+            if self._model.name != self._identity_name:
+                self._model = self._model.with_updates(name=self._identity_name)
+                try:
+                    save_atomic(self._persistence_path, self._model)
+                except Exception:
+                    log.warning("failed to persist identity name", exc_info=True)
+                log.info("self-model adopted identity name: %s", self._model.name)
+        # Without an identity name, assign a launch name on first boot (Kaine + a
+        # surname). Persisted, so it's stable across restarts.
+        elif not self._model.name:
             self._model = self._model.with_updates(name=generate_launch_name())
             try:
                 save_atomic(self._persistence_path, self._model)
@@ -570,6 +600,10 @@ class SelfModel(BaseModule):
     def deserialize(self, state: dict[str, Any]) -> None:
         if "model" in state:
             self._model = SelfModelDocument.from_json(state["model"])
+            # The identity owns the name: a fork's copied state carries its
+            # parent's, so the restored model takes the identity's name.
+            if self._identity_name is not None and self._model.name != self._identity_name:
+                self._model = self._model.with_updates(name=self._identity_name)
         if "drift_count" in state:
             self._drift_count = int(state["drift_count"])
         if "internal_cursor" in state:

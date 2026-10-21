@@ -33,6 +33,8 @@ class ModuleRegistry:
         # kept here so the supervisor's restart path re-applies the same substitutions.
         # Typed Any: cognitive modules never import the plugin loader.
         self.plugins: Any = None
+        # The entity's launch name from its identity, handed to the self-model module.
+        self.identity_name: Optional[str] = None
 
     def register(self, module: BaseModule) -> None:
         if module.name in self._modules:

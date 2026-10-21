@@ -36,10 +36,11 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
@@ -64,6 +65,16 @@ class IdentityError(RuntimeError):
     """The identity file, sidecar or metadata is missing, malformed or inconsistent."""
 
 
+def _valid_name(name: object) -> bool:
+    """A name is a non-blank single-line string without control characters."""
+    return (
+        isinstance(name, str)
+        and bool(name.strip())
+        and len(name.splitlines()) == 1
+        and all(ord(c) >= 32 for c in name)
+    )
+
+
 @dataclass(frozen=True)
 class EntityIdentity:
     """The persistent identity of one being.
@@ -72,6 +83,8 @@ class EntityIdentity:
     ``legacy-<32 hex>`` for a deterministic legacy identity. ``lineage`` is the
     ordered list of ancestor entity IDs, oldest first. ``origin`` records how the
     ID was created. ``legacy_source`` is the source string for a legacy identity.
+    ``name`` is the entity's launch name ("Kaine <Surname>"); it is ``None`` until
+    boot assigns one and is written to disk only when set.
     """
 
     entity_id: str
@@ -79,6 +92,7 @@ class EntityIdentity:
     origin: str = "minted"
     minted_at: float = 0.0
     legacy_source: str | None = None
+    name: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.entity_id, str) or not _ENTITY_ID_RE.fullmatch(self.entity_id):
@@ -106,15 +120,25 @@ class EntityIdentity:
         if type(self.minted_at) not in (int, float) or not math.isfinite(self.minted_at):
             raise IdentityError(f"minted_at must be a finite number: {self.minted_at!r}")
 
+        if self.name is not None and not _valid_name(self.name):
+            raise IdentityError(f"name must be a non-empty single-line string: {self.name!r}")
+
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-safe dict representation."""
-        return {
+        """Return a JSON-safe dict representation.
+
+        ``name`` is included only when set, so an unnamed identity serializes
+        exactly as it did before names existed.
+        """
+        out: dict[str, Any] = {
             "entity_id": self.entity_id,
             "lineage": list(self.lineage),
             "origin": self.origin,
             "minted_at": self.minted_at,
             "legacy_source": self.legacy_source,
         }
+        if self.name is not None:
+            out["name"] = self.name
+        return out
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "EntityIdentity":
@@ -122,10 +146,14 @@ class EntityIdentity:
         if not isinstance(raw, Mapping):
             raise IdentityError("identity raw data must be a mapping")
         required = {"entity_id", "lineage", "origin", "minted_at", "legacy_source"}
-        if set(raw.keys()) != required:
+        keys = set(raw.keys())
+        if keys != required and keys != required | {"name"}:
             raise IdentityError(
-                f"identity dict has unexpected keys: {set(raw.keys()) ^ required}"
+                f"identity dict has unexpected keys: {keys ^ required}"
             )
+        name = raw.get("name")
+        if "name" in raw and not isinstance(name, str):
+            raise IdentityError("name must be a string when present")
 
         entity_id = raw["entity_id"]
         if not isinstance(entity_id, str):
@@ -158,6 +186,7 @@ class EntityIdentity:
                 origin=origin,
                 minted_at=minted_at,
                 legacy_source=legacy_source,
+                name=name,
             )
         except IdentityError:
             raise
@@ -212,11 +241,17 @@ def load_identity(path: Path | None = None) -> EntityIdentity | None:
     return EntityIdentity.from_dict(raw)
 
 
-def save_identity(identity: EntityIdentity, path: Path | None = None) -> None:
+def save_identity(
+    identity: EntityIdentity, path: Path | None = None, *, replace_name: bool = False
+) -> None:
     """Persist ``identity`` atomically, owner-only, refusing to clobber another being.
 
     If ``path`` already holds an identity with a different ``entity_id``,
-    :class:`IdentityError` is raised and the file is left unchanged.
+    :class:`IdentityError` is raised and the file is left unchanged. A stored
+    ``name`` is never replaced by a different one (same refusal); adding a name
+    to a stored identity that has none is allowed. ``replace_name=True`` (only
+    for a revive, where the revived entity's own name wins) allows the stored
+    name of the same ``entity_id`` to change and logs a warning naming both.
     """
     target = resolve(path) if path is not None else resolve(IDENTITY_PATH)
     if target.exists():
@@ -228,6 +263,18 @@ def save_identity(identity: EntityIdentity, path: Path | None = None) -> None:
             raise IdentityError(
                 f"refusing to overwrite identity file {target}: "
                 f"existing {existing.entity_id!r} != new {identity.entity_id!r}"
+            )
+        if replace_name and existing.name is not None and existing.name != identity.name:
+            log.warning(
+                "replacing the stored name %r of identity %s with %r",
+                existing.name,
+                identity.entity_id,
+                identity.name,
+            )
+        elif existing.name is not None and existing.name != identity.name:
+            raise IdentityError(
+                f"refusing to replace the name of identity file {target}: "
+                f"existing {existing.name!r} != new {identity.name!r}"
             )
 
     target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -249,14 +296,26 @@ def mint_identity(*, now: Callable[[], float] = time.time) -> EntityIdentity:
     )
 
 
-def fork_identity(parent: EntityIdentity, *, now: Callable[[], float] = time.time) -> EntityIdentity:
-    """Create a fork identity: new minted ID, lineage extended by the parent."""
+def fork_identity(
+    parent: EntityIdentity,
+    *,
+    now: Callable[[], float] = time.time,
+    rng: random.Random | None = None,
+) -> EntityIdentity:
+    """Create a fork identity: new minted ID, lineage extended by the parent.
+
+    The fork is a new entity and gets its own newly drawn name, never the
+    parent's. The parent's name is not copied.
+    """
+    from kaine.modules.self_model.document import generate_launch_name
+
     return EntityIdentity(
         entity_id="ent-" + uuid.uuid4().hex,
         lineage=parent.lineage + (parent.entity_id,),
         origin="minted",
         minted_at=now(),
         legacy_source=None,
+        name=generate_launch_name(rng=rng, exclude=parent.name),
     )
 
 
@@ -418,23 +477,76 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     return hashlib.sha256(joined).hexdigest()
 
 
+def _self_model_document_name(document_path: Path | None) -> str | None:
+    """The name in the self-model document at ``document_path``, or ``None``.
+
+    ``None`` when the path is absent, the document does not exist, it has no
+    name, or it cannot be read (a warning is logged for the last case).
+    """
+    if document_path is None:
+        return None
+    try:
+        if not document_path.exists():
+            return None
+        from kaine.modules.self_model.document import load as load_document
+
+        name = load_document(document_path).name
+    except Exception:
+        log.warning("cannot read the self-model document %s for its name", document_path, exc_info=True)
+        return None
+    if _valid_name(name):
+        return name
+    return None
+
+
+def name_identity(
+    identity: EntityIdentity, *, self_model_path: Path | None = None
+) -> EntityIdentity:
+    """Return ``identity`` with a name; an existing name is never replaced.
+
+    An unnamed identity adopts the self-model document's name when the document
+    at ``self_model_path`` has one, otherwise it draws "Kaine <Surname>". The
+    result is not persisted.
+    """
+    if identity.name is not None:
+        return identity
+    from kaine.modules.self_model.document import generate_launch_name
+
+    name = _self_model_document_name(self_model_path) or generate_launch_name()
+    return replace(identity, name=name)
+
+
 def resolve_spawn_identity(
-    state_root: Path | str = "state", *, now: Callable[[], float] = time.time
+    state_root: Path | str = "state",
+    *,
+    now: Callable[[], float] = time.time,
+    self_model_path: Path | None = None,
 ) -> EntityIdentity:
     """Resolve (and persist) this tree's identity at spawn/restart time.
 
-    - If ``<state_root>/identity/entity.json`` exists, return it unchanged.
+    - If ``<state_root>/identity/entity.json`` exists, return it (an identity
+      without a name is named and saved, see :func:`name_identity`).
     - If it is absent and no own lived artifacts exist, mint a new identity.
     - If it is absent and own lived artifacts exist, derive a deterministic
       legacy identity from ``tree:<digest>`` and persist it.
+
+    Every identity returned has a name. ``self_model_path`` is the self-model
+    document consulted for an existing name; it defaults to
+    ``<state_root>/self_model/self_model.json``.
 
     ``forks/`` and ``preservation/`` are never considered lived evidence.
     """
     root = resolve(state_root)
     identity_path = root / "identity" / "entity.json"
+    if self_model_path is None:
+        self_model_path = root / "self_model" / "self_model.json"
     existing = load_identity(identity_path)
     if existing is not None:
-        return existing
+        if existing.name is not None:
+            return existing
+        named = name_identity(existing, self_model_path=self_model_path)
+        save_identity(named, identity_path)
+        return named
 
     artifacts = own_lived_artifacts(root)
     if not artifacts:
@@ -443,6 +555,7 @@ def resolve_spawn_identity(
         digest = tree_digest(root, artifacts)
         identity = legacy_identity("tree:" + digest, now=now)
 
+    identity = name_identity(identity, self_model_path=self_model_path)
     save_identity(identity, identity_path)
     return identity
 

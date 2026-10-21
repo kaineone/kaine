@@ -32,6 +32,7 @@ import os
 import signal
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable
@@ -86,6 +87,7 @@ from kaine.lifecycle.identity import (
     EntityIdentity,
     IdentityError,
     load_identity,
+    name_identity,
     resolve_spawn_identity,
     save_identity,
 )
@@ -1102,12 +1104,27 @@ def _preservation_bundle_roots(config: dict[str, Any]) -> list[str]:
     return roots
 
 
-def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
+def _self_model_document_path(config: dict[str, Any] | None, state_root: Path) -> Path:
+    """The self-model document path: ``[self_model].persistence_path``, else the default
+    under ``state_root``. Resolved like every other state path."""
+    raw = ((config or {}).get("self_model") or {}).get("persistence_path")
+    if raw:
+        return resolve(Path(str(raw)))
+    return resolve(state_root) / "self_model" / "self_model.json"
+
+
+def _resolve_boot_identity(
+    state_root: Path, revive: Any, *, self_model_path: Path | None = None
+) -> EntityIdentity:
     """Resolve the entity identity for this boot before any module starts.
 
     When reviving, the bundle's identity is returned but not yet persisted: it is
-    written to disk only after the revive lands. A target tree that already holds
-    a different identity is refused before any state is modified.
+    written to disk only after the revive lands, and keeps the bundle's name (a
+    bundle identity without a name is named when the revive lands). A target tree
+    that already holds a different identity is refused before any state is
+    modified. Otherwise the spawn identity is resolved and named (a fresh spawn
+    mints a name; an unnamed identity adopts the self-model document's name or
+    mints one), whichever modules run.
     """
     path = resolve(state_root) / "identity" / "entity.json"
     if revive is not None:
@@ -1118,12 +1135,51 @@ def _resolve_boot_identity(state_root: Path, revive: Any) -> EntityIdentity:
                 f"bundle identity is {revive.plan.identity.entity_id!r}"
             )
         return revive.plan.identity
-    return resolve_spawn_identity(state_root)
+    return resolve_spawn_identity(state_root, self_model_path=self_model_path)
 
 
-def _persist_revived_identity(state_root: Path, identity: EntityIdentity) -> None:
-    """Persist a revived identity once the revive has successfully landed."""
-    save_identity(identity, resolve(state_root) / "identity" / "entity.json")
+def _revived_self_model(registry: Any) -> Any | None:
+    """The self-model module in ``registry``, or ``None`` when it is absent."""
+    try:
+        if "self_model" in registry:
+            return registry.get("self_model")
+    except Exception:
+        log.debug("could not look up the self-model module", exc_info=True)
+    return None
+
+
+def _persist_revived_identity(
+    state_root: Path,
+    identity: EntityIdentity,
+    *,
+    self_model_name: str | None = None,
+) -> EntityIdentity:
+    """Persist a revived identity once the revive has successfully landed.
+
+    The revived entity's own name wins. The name is, in order: the bundle
+    identity's name; the revived self-model's name (``self_model_name``); the
+    name already stored for the same ``entity_id`` in this tree; a newly drawn
+    name. A name stored under a different ``entity_id`` is never adopted. Returns
+    the identity that was saved.
+    """
+    root = resolve(state_root)
+    path = root / "identity" / "entity.json"
+    existing = load_identity(path)
+    if existing is not None and existing.entity_id != identity.entity_id:
+        raise IdentityError(
+            f"refusing revive into tree with identity {existing.entity_id!r}; "
+            f"bundle identity is {identity.entity_id!r}"
+        )
+    if identity.name is None:
+        name = self_model_name
+        if not name and existing is not None:
+            name = existing.name
+        if name:
+            identity = replace(identity, name=name)
+        else:
+            identity = name_identity(identity)
+    save_identity(identity, path, replace_name=True)
+    return identity
 
 
 # Effectors that have nothing to act on in the stimulus source: the embodiment module has no world and
@@ -1333,8 +1389,13 @@ async def _apply_revive(revive, registry, state_root: Path) -> int | None:
     if refused is not None:
         return refused
 
+    self_model = _revived_self_model(registry)
     try:
-        _persist_revived_identity(state_root, revive.plan.identity)
+        saved = _persist_revived_identity(
+            state_root,
+            revive.plan.identity,
+            self_model_name=getattr(self_model, "entity_name", None),
+        )
     except (IdentityError, OSError) as exc:
         log.error(
             "could not persist revived identity %s: %s",
@@ -1351,6 +1412,13 @@ async def _apply_revive(revive, registry, state_root: Path) -> int | None:
                     exc_info=True,
                 )
         return IDENTITY_REFUSED_EXIT
+    # The running mind sees the final name for the rest of this boot.
+    try:
+        registry.identity_name = saved.name
+    except Exception:
+        log.debug("could not record the identity name on the registry", exc_info=True)
+    if self_model is not None and hasattr(self_model, "adopt_identity_name"):
+        self_model.adopt_identity_name(saved.name)
     return None
 
 
@@ -1462,7 +1530,13 @@ async def _phase_stage(ctx: BootContext) -> int | None:
     # module state is touched, so a legacy identity is persisted before the same
     # boot can write a new artifact that would shift the derivation.
     try:
-        ctx.identity = _resolve_boot_identity(resolve(Path("state")), ctx.revive)
+        ctx.identity = _resolve_boot_identity(
+            resolve(Path("state")),
+            ctx.revive,
+            self_model_path=_self_model_document_path(
+                ctx.kaine_config, resolve(Path("state"))
+            ),
+        )
     except IdentityError as exc:
         log.error("entity identity resolution refused: %s", exc)
         return IDENTITY_REFUSED_EXIT
@@ -1800,6 +1874,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         intent_secret=ctx.intent_secret,
         plugins=ctx.plugins,
         boot_stage=ctx.stage_state,
+        identity_name=ctx.identity.name if ctx.identity is not None else None,
     )
     if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
@@ -1827,8 +1902,17 @@ async def _phase_registry(ctx: BootContext) -> int | None:
             refused = REVIVE_REFUSED_EXIT
         else:
             refused = await _apply_revive(
-                ctx.revive, ctx.registry, resolve(Path("state"))
+                ctx.revive,
+                ctx.registry,
+                resolve(Path("state")),
             )
+            if refused is None:
+                try:
+                    landed = load_identity(resolve(Path("state")) / "identity" / "entity.json")
+                except IdentityError:
+                    landed = None
+                if landed is not None:
+                    ctx.identity = landed
             # A landed revive wins over any resume checkpoint: replace it immediately.
             if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
                 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
