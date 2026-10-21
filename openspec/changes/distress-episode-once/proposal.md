@@ -16,5 +16,5 @@ Sustained distress has two detectors with separate, equal config keys, and the p
 
 ## Impact
 
-- distress-episode-once0
-- Behaviour: distress-episode-once1
+- kaine/cycle/preservation_monitor.py, the second detector, config/kaine.toml, the boot config loading, docs, tests.
+- Behaviour: repeated_distress is labelled only after the configured number of distinct episodes.
