@@ -1,0 +1,21 @@
+{# Read-only sleep and rest panel, filled by dashboard_sleep.js from
+   /diagnostics/sleep.json. Fixed labels and numbers only. #}
+<section id="sleep-rest" class="panel" data-readonly="true">
+  <h2>sleep and rest</h2>
+  <dl class="kv">
+    <dt>state</dt><dd id="sleep-state">n/a</dd>
+    <dt>trigger</dt><dd id="sleep-trigger">n/a</dd>
+    <dt>started</dt><dd id="sleep-started">n/a</dd>
+    <dt>duration</dt><dd id="sleep-duration">n/a</dd>
+    <dt>rest length</dt><dd id="sleep-rest-length">n/a</dd>
+  </dl>
+  <p id="sleep-aborted" class="muted" hidden>The last sleep was aborted.</p>
+  <h3>last rest request</h3>
+  <dl class="kv">
+    <dt>reason</dt><dd id="rest-reason">n/a</dd>
+    <dt>drive</dt><dd id="rest-drive">n/a</dd>
+    <dt>stall</dt><dd id="rest-stall">n/a</dd>
+    <dt>at</dt><dd id="rest-at">n/a</dd>
+  </dl>
+  <p id="rest-none" class="muted">No rest request seen.</p>
+</section>

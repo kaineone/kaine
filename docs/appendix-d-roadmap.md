@@ -7,6 +7,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | nexus-development-feed | 6/6 (100%) | Show the hearing stage, the gate's world, conditions and not-applicable markers in the development panel, describe the stimulus-source feed, and mark the perception modules capturing under a deterministic feed. |
+| nexus-welfare-rest | 5/5 (100%) | Show the affect welfare record per drive in the welfare board, and each sleep's trigger, the developmental rest's length and the affect module's rest requests. |
+| identity-leak-whole | 6/6 (100%) | Identity leakage is the organ speaking as itself rather than as the whole entity: predicate forms with reason codes, a self_description reason for the whole describing itself, both kept out of voice-alignment pairs, one classifier shared with the replay harness (paper 3.5). |
 | nexus-entity-name | 5/5 (100%) | Show the entity's name on the console, read from the self-model file and its `self_model.document` events, and start the status chip from the server's sleep state. |
 | persona-v6 | 5/5 (100%) | Replay the tenth boot's own organ requests with broader AI and echo classifiers and per-case seeds under a decision rule fixed before the run; no candidate won (paper 3.5). |
 | sleep-housekeeping | 7/7 (100%) | Every sleep runs housekeeping last before the affective reset: process-log backups are deleted and study records exported to an operator archive under a checksum, oldest first within budgets; awake fatigue builds at nu_act (1 + P^hk), and an awake floor keeps free space above a reserve, suspending the study record with a gap marker when it must (paper 3.5, A.5). |
@@ -80,6 +82,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 54 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 56 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
