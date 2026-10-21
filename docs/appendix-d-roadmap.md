@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
 | nexus-development-feed | 6/6 (100%) | Show the hearing stage, the gate's world, conditions and not-applicable markers in the development panel, describe the stimulus-source feed, and mark the perception modules capturing under a deterministic feed. |
 | self-facts-replay | 6/6 (100%) | Replay the tenth boot's requests and a self-referential provocation set with the launch name and identity facts as situation facts, under a leakage rule committed before the run; no arm won and the prompt stays as shipped (paper 3.5). |
 | launch-name-at-first-boot | 6/6 (100%) | Every entity is named at its first boot, in its identity file, whichever modules run (paper 3.5) |
@@ -88,6 +89,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 62 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 63 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

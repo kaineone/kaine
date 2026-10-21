@@ -146,6 +146,8 @@ See the module chapters for backend details: [audition](09-modules/audition.md),
 
 Below the dependencies, the modules grid shows each module's live state: `disabled`, `idle` (enabled but not in the running cycle), `running`, or `capturing`. The vision and audition modules read `🔴 capturing` while the live camera or microphone runs, and `capturing (<feed>)` while the running cycle feeds them from a seeded, playlist, screen or stimulus-source feed. Module state is read from `state/cycle/runtime.json` and `state/perceptual_locus/runtime.json`, resolved under the configured data root (`[storage].data_root` or `KAINE_DATA_ROOT`).
 
+Between the dependencies and the modules grid, the backend load row lists each module whose configured runtime backend could not load in the cycle, with the lighter backend used instead or a note that the module was disabled. The cycle writes these records into `state/cycle/runtime.json` as `backend_failures`, because the dashboard runs in a separate process (in the compose deployment, a separate container) and cannot see the cycle's in-process registry. When there is no runtime file, or the running cycle predates the field, the row says the state is not known instead of reporting success.
+
 The unauthenticated endpoint `/diagnostics/health.json` returns the same health data as JSON.
 
 ## Development panel
