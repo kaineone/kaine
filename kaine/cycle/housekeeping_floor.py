@@ -173,6 +173,9 @@ class AwakeFloor:
         self._bus = bus
         self._disk_usage = disk_usage
         self._suspending_volumes: set[str] = set()
+        # Last observed presence per volume label, so a missing path is
+        # reported once per change rather than on every check.
+        self._volume_present: dict[str, bool] = {}
 
     def reserve(self, total: int) -> int:
         """Return the reserve for a volume: the larger of the fixed size and the configured share."""
@@ -221,8 +224,13 @@ class AwakeFloor:
             try:
                 dev = os.stat(path).st_dev
             except OSError:
-                log.warning("volume %s path %s is missing, skipping", label, path)
+                if self._volume_present.get(label, True):
+                    log.warning("volume %s path %s is missing, skipping", label, path)
+                self._volume_present[label] = False
                 continue
+            if self._volume_present.get(label) is False:
+                log.info("volume %s path %s is now present", label, path)
+            self._volume_present[label] = True
             if dev in seen_devices:
                 continue
             seen_devices.add(dev)
