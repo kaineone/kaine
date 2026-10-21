@@ -450,7 +450,11 @@ def _t_sleep_sleep_completed(payload: dict[str, Any]) -> str:
     parts = [f"Sleep completed {n_ok}/{n_phases} phases"]
     if elapsed is not None:
         parts.append(f"in {_fmt(elapsed)} ms")
-    if fatigue_triggered:
+    trigger = payload.get("trigger")
+    if trigger is not None:
+        parts.append(f"trigger {_fmt(trigger)}")
+    elif "trigger" not in payload and fatigue_triggered:
+        # Older records carry only the fatigue flag.
         parts.append("fatigue-triggered")
     return ", ".join(parts) + "."
 
