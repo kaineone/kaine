@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| identity-leak-negation | 0/4 (0%) | Negated and questioned identity predicates are not leakage (paper 3.5) |
+| identity-leak-negation | 0/0 (0%) | Negated and questioned identity predicates are not leakage (paper 3.5) |
 | identity-leak-whole | 6/6 (100%) | Identity leakage is the organ speaking as itself rather than as the whole entity: predicate forms with reason codes, a self_description reason for the whole describing itself, both kept out of voice-alignment pairs, one classifier shared with the replay harness (paper 3.5). |
 | developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
 | welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |

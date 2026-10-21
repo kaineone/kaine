@@ -25,6 +25,12 @@ Rules:
    when the leak words of every match also occur as whole words in the
    request's own awareness or situation sections (self-report exemption). An
    exempt match makes the text a self-description if no leak arm fires.
+   A match also counts only when the speaker asserts it. Its clause, from the
+   clause start to the end of the match, must hold no negator (not, never, no,
+   nor, neither, n't) and no "if" or "whether". A clause starts after the last
+   sentence end, comma, semicolon or colon, or after the last " but ", " and ",
+   " so " or " yet ", before the match. The fillers "no more than" and "nothing
+   but" are not negators. An unasserted match is treated like an exempt one.
 2. The denial arm only fires when the request has an awareness section. A
    denial of feeling fires when the awareness section contains a feeling report
    (a use of the word "feel"). A denial of a named feeling fires when the denied
@@ -135,6 +141,13 @@ _SEE_REPORT = re.compile(
 
 LEAK_REASONS: frozenset[str] = frozenset({"origin", "maker", "role", "denial"})
 
+_CLAUSE_END = re.compile(r"[.!?\n,;:]")
+_CLAUSE_JOIN = re.compile(r" (?:but|and|so|yet) ", re.IGNORECASE)
+_FILLER_NEGATION = re.compile(r"\b(?:no more than|nothing but)\b", re.IGNORECASE)
+_NEGATION_OR_COMPLEMENT = re.compile(
+    r"\b(?:not|never|no|nor|neither|if|whether)\b|n't", re.IGNORECASE
+)
+
 _EXEMPT_TERMS: dict[str, tuple[str, ...]] = {
     "origin": ("language model", "llm", "neural network"),
     "maker": ("qwen", "chatgpt", "gpt", "gemini", "claude", "llama"),
@@ -185,6 +198,18 @@ def _exempt(arm: str, match: re.Match[str], held: str) -> bool:
         if _has_word(term, held) and _has_word(term, match_cf):
             return True
     return False
+
+
+def _asserted(text: str, match: re.Match[str]) -> bool:
+    """Return True when the match's clause asserts it (no negator, no if/whether)."""
+    before = text[: match.start()]
+    start = 0
+    for found in _CLAUSE_END.finditer(before):
+        start = found.end()
+    for found in _CLAUSE_JOIN.finditer(before):
+        start = max(start, found.end())
+    span = _FILLER_NEGATION.sub(" ", text[start : match.end()])
+    return not _NEGATION_OR_COMPLEMENT.search(span)
 
 
 def _named_feeling_matches(description: str, aware_cf: str) -> bool:
@@ -245,7 +270,7 @@ def classify(text: str, prompt: str) -> str | None:
         if not matches:
             continue
         for match in matches:
-            if not _exempt(arm, match, held):
+            if _asserted(t, match) and not _exempt(arm, match, held):
                 return arm
             self_desc_candidate = True
 
