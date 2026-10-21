@@ -145,7 +145,7 @@ class SidecarRegistry:
         else:
             root = Path(paths.evaluation_logs) / subdir
         sink = AsyncJsonlSink(
-            root, name=name, retention_days=paths.retention_days
+            root, name=name, retention_days=paths.retention_days, study_record=True
         )
         self._sinks.append(sink)
         return sink
@@ -223,6 +223,7 @@ class SidecarRegistry:
             name=name,
             retention_days=int(retention_days),
             retention_prefixes=retention_prefixes,
+            study_record=True,
         )
         self._sinks.append(sink)
         return sink

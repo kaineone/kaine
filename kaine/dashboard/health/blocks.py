@@ -243,7 +243,7 @@ def cycle_pacing_block(cycle_runtime_path: Path) -> dict[str, Any]:
 
 
 def entity_care_block(
-    consolidation_thresholds: tuple[float, float, float] | None,
+    distinctiveness_threshold: float | None,
     adapter_output_dir: Path | None = None,
     voice_paths: Any | None = None,
 ) -> dict[str, Any]:
@@ -272,11 +272,8 @@ def entity_care_block(
         from kaine.lifecycle.divergence import assess_divergence
 
         kwargs: dict[str, Any] = {}
-        if consolidation_thresholds is not None:
-            rate, mag, distinct = consolidation_thresholds
-            kwargs["consolidation_rate_threshold"] = rate
-            kwargs["consolidation_magnitude_threshold"] = mag
-            kwargs["distinctiveness_threshold"] = distinct
+        if distinctiveness_threshold is not None:
+            kwargs["distinctiveness_threshold"] = distinctiveness_threshold
         if adapter_output_dir is not None:
             kwargs["adapter_output_dir"] = adapter_output_dir
         if voice_paths is not None:

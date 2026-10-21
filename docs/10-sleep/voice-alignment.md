@@ -8,10 +8,7 @@ Related pages: [Sleep and maintenance](README.md), [Sleep](../09-modules/sleep.m
 
 The phase trains nothing. Training needs a source of preferred examples, and `[sleep.voice_alignment].preference_source` names it. Its only accepted value is `"none"`; a validated source and the offline check that must accompany it are still to be built. The intent-expression log does pair each utterance with the faithful rendering of the coalition that conditioned it, but that rendering is a readout of instrument state, and training the organ toward it would teach it to narrate readings. With `"none"`, the phase returns `skipped: no validated preference source (voice-development Stage 2)` even when both operator gates are open.
 
-Two things still run on every sleep:
-
-- the consolidation-divergence metric is computed and published (see [sleep module](../09-modules/sleep.md#consolidation-divergence)), and a scan that fails or finds no records keeps the earlier record in place;
-- after the phase, the sleep module moves the waking intent log into the per-sleep corpus under `state/language/intent_log/`.
+Pairs are built only after every gate below is open, so with `"none"` the phase builds no pairs and computes no organ-level divergence (paper section 3.5). After the phase, the sleep module still moves the waking intent log into the per-sleep corpus under `state/language/intent_log/`.
 
 The training path described below (`Sleep._train_on_pairs` and the trainer backends) is built and tested, and runs only once a training source exists.
 
@@ -21,8 +18,7 @@ Training needs every gate below open. A closed gate returns a successful `PhaseR
 
 ```mermaid
 flowchart TD
-    A[Phase 4 begins] --> M[Build pairs; publish consolidation divergence]
-    M --> B{"[sleep.voice_alignment]\nenabled = true?"}
+    A[Phase 4 begins] --> B{"[sleep.voice_alignment]\nenabled = true?"}
     B -- no --> C["Skip: training_skipped=true"]
     B -- yes --> D{"KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1?"}
     D -- no --> C
@@ -152,7 +148,7 @@ Set `trainer_python` to the external interpreter for your GPU vendor. Which stac
 | `rocm` (AMD) | unsloth-core ROCm env | that env's `bin/python` |
 | `xpu` / `mps` / `cpu` | none | unset; training stays off |
 
-On a host with no CUDA/ROCm GPU there is no GPU trainer. The voice-alignment phase stays off, and the consolidation-divergence metric still emits without training.
+On a host with no CUDA/ROCm GPU there is no GPU trainer. The voice-alignment phase stays off.
 
 #### Qwen3.5 prerequisites for the external trainer
 
@@ -268,7 +264,6 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 
 | Event type | Stream | Content |
 |------------|--------|---------|
-| `sleep.consolidation_divergence` | `sleep.out` | Content-free organ-divergence metric, emitted every sleep before the training gate. |
 | `sleep.sleep.completed` | `sleep.out` | Overall pipeline completion. `summary["voice_alignment"]` holds `accepted`, `adapter_path`, `capability_loss`, `reason`, and `samples_used`. The top-level summary holds `pairs_processed`, `dpo_loss`, and the before/after capability scores. |
 
 ## Configuration
@@ -305,8 +300,6 @@ Voice alignment does not publish training-phase events to the bus. The sleep mod
 | `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Job directories for the `in_process` and `subprocess` backends |
 | `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared jobs volume for `job_queue`; `KAINE_TRAINER_JOBS_DIR` takes precedence when set |
 | `trainer_timeout_s` | float | `21600.0` | Seconds the `job_queue` backend waits for a result |
-| `consolidation_divergence_rate_threshold` | float | `0.5` | Divergence rate at which the decommission check treats the organ as diverged |
-| `consolidation_divergence_magnitude_threshold` | float | `0.25` | Divergence magnitude at which the decommission check treats the organ as diverged |
 | `distinctiveness_threshold` | float `>= 0` | `0.0` | Voice-distinctiveness level at which the decommission check's voice arm treats an entity that has spoken as diverged; uncalibrated |
 
 An unknown `preference_source` or `train_precision`, or a negative `corpus_ceiling_gb` or `distinctiveness_threshold`, stops boot. With `enabled = true`, so does `organ_adapter` with a backend other than `job_queue`. With the environment gate also open, so does an unknown `trainer_backend`, `subprocess` without a valid `trainer_python`, or `in_process` in a runtime that cannot import the training dependencies.

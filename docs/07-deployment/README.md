@@ -161,7 +161,7 @@ A temporary entity is a fork that runs a directive, possibly with its entity tim
 
 ### Fork-merge welfare gate
 
-`gated_merge` in `kaine/lifecycle/fork_merge_gate.py` uses the shared divergence verdict from `kaine/lifecycle/divergence.py`. The verdict counts a fork as individuated when its ledger says so, when its consolidation divergence is over threshold, when the self-model module has recorded drift or when voice adapters are present, and no one of these signals suppresses another. Forks cannot yet be measured against a fork-point reference, so a fork is preserved when it has lived at least 1800 s (`fork_preserve_min_lived_s`) or when its lived time is unknown. The parent may still assimilate knowledge from a preserved fork in one direction. Ending an individuated fork requires the operator-authorized, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
+`gated_merge` in `kaine/lifecycle/fork_merge_gate.py` uses the shared divergence verdict from `kaine/lifecycle/divergence.py`. The verdict counts a fork as individuated when its ledger says so, when the self-model module has recorded drift, when voice adapters are present or when its voice arm votes diverged, and no one of these signals suppresses another. Forks cannot yet be measured against a fork-point reference, so a fork is preserved when it has lived at least 1800 s (`fork_preserve_min_lived_s`) or when its lived time is unknown. The parent may still assimilate knowledge from a preserved fork in one direction. Ending an individuated fork requires the operator-authorized, welfare-gated decommission path. See [Forks and merges](../12-forks-and-merges.md).
 
 ### Volunteer computing: BOINC
 
