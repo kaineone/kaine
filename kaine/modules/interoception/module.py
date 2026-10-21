@@ -123,6 +123,8 @@ class Interoception(BaseModule):
         maternal_drive: Callable[[], float] | None = None,
         workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
         positive_control: Optional[PositiveControlSettings] = None,
+        # Paper A.5: awake fatigue builds at nu_act (1 + P^hk).
+        housekeeping_pressure: Optional[Callable[[], float]] = None,
     ) -> None:
         super().__init__(bus)
         if read_interval_s <= 0:
@@ -200,6 +202,7 @@ class Interoception(BaseModule):
         self._fatigue = FatigueAccumulator(
             decay_per_s=float(fatigue_decay_per_s),
             maintenance_threshold=float(fatigue_maintenance_threshold),
+            pressure=housekeeping_pressure,
         )
         self._fatigue_threshold_emitted: bool = False
 

@@ -775,12 +775,15 @@ fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
 # The relative fall of the fast against the slow error mean is the error dynamics behind valence.
 slow_time_constant_s = 100.0
-# Learning-progress floor: progress below this is treated as zero.
-learning_progress_floor = 0.05
+# Learning-progress floor lp_0 (paper A.4, Table A1): progress below this is treated as zero.
+# Calibrated for max pooling: a frozen forward model, with the vision noise fitted to the tenth
+# test boot, ends about as rarely relieved as it did under mean pooling at 0.05.
+learning_progress_floor = 0.20
 # Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
 # are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
 # error from the older to the newer half of the last learning_progress_span_s (the whole history
-# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
+# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The pooled value is
+# the largest over sources, and audition's bins restart at each hearing-band step. The span covers the
 # forward models' learning curves and must be an even whole number of bins (subjective s).
 learning_progress_span_s = 5400.0
 learning_progress_bin_s = 60.0
@@ -1338,6 +1341,39 @@ replay_window_s = 5.0
 # and to prune, and publishes one content-free sleep.association event per pair.
 # Ships off; the first configuration idles the consolidation phases.
 associative_replay = false
+
+[sleep.housekeeping]
+# Sleep housekeeping (paper 3.5 and A.5). Every sleep, last before the affective reset, reclaims
+# regenerable or spent data oldest first: rotated backups of the process log (written with
+# --log-file) are deleted, and closed daily study-record files (dated before yesterday) in the
+# configured study-sink directories are exported to the archive under a SHA-256 check and only
+# then removed. Unexported study records are never deleted. It stops when the disk bytes are
+# within the disk budget or time_allowance_s (Delta_hk) has passed; whatever is left carries
+# over. Host memory counts only bus entries acknowledged by every consumer group and older than
+# the restart replay window; the bus has neither, so the memory term is 0. Awake, fatigue builds
+# at nu_act (1 + P^hk). Nothing under state/ is ever touched. The budgets and the reserve are
+# operator settings (Table A1); these defaults are conservative, not a recommendation.
+# The disk budget is disk_budget_share of the volume holding the study records (the smallest, if
+# they span several), so the pressure tracks real scarcity; set disk_budget_bytes to override it.
+# The archive is used only when archive_dir is a mount point on another device than the study
+# records (bind a drive at /app/archive with a compose overlay, see docs/09-modules/sleep.md);
+# otherwise study records stay on the host and boot logs the projected days until the budget.
+enabled = true
+disk_budget_share = 0.5            # B^hk for disk: half the study-record volume; (0, 1)
+# disk_budget_bytes = 10737418240  # optional explicit B^hk for disk, overrides the share
+memory_budget_bytes = 1073741824   # 1 GiB; reserved, the bus holds no entry the paper counts
+time_allowance_s = 60.0            # Delta_hk, seconds per sleep
+archive_dir = "/app/archive"       # used only if it is a mounted volume on another device
+# The awake floor (A.5): every floor_period_s while awake it checks the free space of every volume
+# a study sink writes to, and of state/, against R^hk = max(reserve_bytes, reserve_share x volume
+# size). Below R^hk it reclaims regenerable data on that volume oldest first until free space
+# reaches 2 R^hk (halfway between R^hk and the volume size where 2 R^hk does not fit); if free
+# space is still below R^hk it suspends the study record with a gap marker until free space is
+# back at that target. reserve_share in (0, 1); bad values, or a reserve at least a volume's
+# size, fail boot.
+reserve_bytes = 5368709120         # 5 GiB
+reserve_share = 0.05               # 5% of the volume
+floor_period_s = 60.0
 
 [sleep.voice_alignment]
 # Master gate. Even with `enabled = true`, the env var

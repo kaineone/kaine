@@ -440,6 +440,16 @@ class AsyncBus:
         entry_id, fields = entries[0]
         return _decode_entry(entry_id, fields)
 
+    async def recent(self, stream: str, count: int = 100) -> list[tuple[str, Event]]:
+        """Return up to ``count`` newest decoded entries on ``stream``, newest first."""
+        entries = await self._client.xrevrange(stream, count=count)
+        result: list[tuple[str, Event]] = []
+        for entry_id, fields in entries:
+            decoded = _decode_entry(entry_id, fields)
+            if decoded is not None:
+                result.append(decoded)
+        return result
+
     async def last_entry_id(self, stream: str) -> str:
         """Return a starting cursor for a non-blocking reader that should
         see only entries added from now on.
