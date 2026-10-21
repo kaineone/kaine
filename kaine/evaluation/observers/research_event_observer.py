@@ -300,9 +300,10 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {"memory_ids", "max_affect_intensity", "selection_scores", "count", "collection"}
     ),
     "episodic_memory.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
-    "sleep.sleep.started": frozenset({"started_at"}),
+    "sleep.sleep.started": frozenset({"started_at", "trigger"}),
     "sleep.sleep.completed": frozenset(
         {
+            "trigger",
             "phases_completed",
             "replay_count",
             "consolidation_summary_counts",

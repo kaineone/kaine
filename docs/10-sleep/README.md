@@ -18,6 +18,8 @@ The interoception module computes fatigue from unexpected interoceptive predicti
 flowchart TD
     A[interoception.fatigue crossed=true] --> B{Sleep running?}
     G[interoception.regulation action=request_maintenance] --> B
+    K[affect.regulation action=request_maintenance] --> B
+    L[affect.rest_request stimulus_spent] --> B
     F[interval_seconds since last sleep or boot] --> B
     H[intent.rest on action_selection.out] --> I{requested_rest_min_interval_s since last sleep ended?}
     I -->|no| J[sleep.rest_request too_soon]
@@ -26,12 +28,18 @@ flowchart TD
     B -->|no| E[Acquire the sleep lock and run the pipeline]
 ```
 
-There are four triggers:
+There are six triggers. Each sleep records the one that started it as `trigger`:
 
-- Fatigue. The sleep module watches `interoception.out` and starts a sleep when `interoception.fatigue` carries `crossed = true`.
-- Maintenance request. The interoception module's regulator publishes `interoception.regulation` with `action = "request_maintenance"` on the same stream, and the sleep module starts a sleep through the same guarded path. Both of these triggers need `[sleep.consolidation].fatigue_triggered = true`, which runs the `interoception.out` consumer.
-- Interval backstop. If no sleep has completed for `interval_seconds` (3600 s of entity time) since the last sleep or since boot, the scheduler starts one.
-- Requested rest. An `intent.rest` on `action_selection.out`, which the action selection module's `PlanningProposalSource` issues with `origin = "planning"` when the planning module is enabled, asks for a sleep. The sleep module accepts it only when `requested_rest_min_interval_s` (1800 s) has passed since the last sleep ended and no sleep is running or starting. It answers with `sleep.rest_request` (`accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted`), and an accepted request's `sleep.sleep.started` carries `trigger: "requested"`.
+- Fatigue (`fatigue`). The sleep module watches `interoception.out` and starts a sleep when `interoception.fatigue` carries `crossed = true`.
+- Maintenance request (`maintenance_request`). The interoception module's regulator publishes `interoception.regulation` with `action = "request_maintenance"` on the same stream, and the sleep module starts a sleep through the same guarded path.
+- Emotion regulation (`affect_regulation`). Emotion regulation's tier 3 publishes `affect.regulation` with `action = "request_maintenance"` on `affect.out`, and the sleep module starts a sleep through the same path.
+- Developmental rest (`developmental_rest`). In the developmental phase, an `affect.rest_request` on a spent stimulus starts a rest (see [the sleep module](../09-modules/sleep.md#developmental-rest)).
+- Interval backstop (`backstop`). If no sleep has completed for `interval_seconds` (3600 s of entity time) since the last sleep or since boot, the scheduler starts one.
+- Requested rest (`requested`). An `intent.rest` on `action_selection.out`, which the action selection module's `PlanningProposalSource` issues with `origin = "planning"` when the planning module is enabled, asks for a sleep. The sleep module accepts it only when `requested_rest_min_interval_s` (1800 s) has passed since the last sleep ended and no sleep is running or starting. It answers with `sleep.rest_request` (`accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted`).
+
+The first four triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`.
+
+Every sleep carries its own `trigger` on `sleep.sleep.started` and `sleep.sleep.completed`, and a direct call without a trigger records null. `fatigue_triggered` in the summary is true only when the trigger is `fatigue`. A trigger that arrives during a running sleep starts nothing and does not change that sleep's trigger.
 
 The sleep lock stops a second sleep from starting while one runs. It blocks nothing else.
 
@@ -89,12 +97,12 @@ The sleep module runs the sleep-time intent audit (`sleep.ignition_audit`) and p
 
 | Event | Stream | When |
 |---|---|---|
-| `sleep.sleep.started` | `sleep.out` | A sleep begins; `trigger: "requested"` only for a requested rest |
+| `sleep.sleep.started` | `sleep.out` | A sleep begins; carries `sleep_index` and `trigger` |
 | `sleep.rest_request` | `sleep.out` | Answer to a rest request |
 | `sleep.association` | `sleep.out` | Each phase-3 co-replayed pair: point ids and weight |
 | `affect.state` | `affect.out` | Phase 5, with `reset: true` |
 | `sleep.ignition_audit` | `sleep.out` | Every sleep, after the phases; also merged into the completed summary |
-| `sleep.sleep.completed` | `sleep.out` | The sleep ends; carries the phase results and the audit, or `{"aborted": true, "reason": ...}` if the pipeline itself aborted |
+| `sleep.sleep.completed` | `sleep.out` | The sleep ends; carries `trigger`, the phase results and the audit, or `{"aborted": true, "reason": ..., "trigger": ...}` if the pipeline itself aborted |
 | `interoception.fatigue` | `interoception.out` | Fatigue crossed its threshold; a trigger |
 | `interoception.regulation` | `interoception.out` | The regulator requests maintenance; a trigger |
 
