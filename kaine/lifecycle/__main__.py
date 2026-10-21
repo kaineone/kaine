@@ -576,17 +576,15 @@ def main(
     # --- Assess divergence (pure reads) --------------------------------
     from kaine.lifecycle.divergence import (
         adapter_dir_for,
-        voice_alignment_thresholds_from_config,
+        distinctiveness_threshold_from_config,
         voice_paths_for,
     )
 
-    cons_rate, cons_mag, distinct = voice_alignment_thresholds_from_config(config)
+    distinct = distinctiveness_threshold_from_config(config)
     adapter_dir = adapter_dir_for(config, state_root)
     voice_paths = voice_paths_for(config, state_root)
     assessment = assess_divergence(
         state_root=state_root,
-        consolidation_rate_threshold=cons_rate,
-        consolidation_magnitude_threshold=cons_mag,
         distinctiveness_threshold=distinct,
         adapter_output_dir=adapter_dir,
         voice_paths=voice_paths,

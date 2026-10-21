@@ -775,12 +775,15 @@ fast_time_constant_s = 10.0
 # Slow time constant for prediction-error averaging and alert-rate slow habituation (subjective s).
 # The relative fall of the fast against the slow error mean is the error dynamics behind valence.
 slow_time_constant_s = 100.0
-# Learning-progress floor: progress below this is treated as zero.
-learning_progress_floor = 0.05
+# Learning-progress floor lp_0 (paper A.4, Table A1): progress below this is treated as zero.
+# Calibrated for max pooling: a frozen forward model, with the vision noise fitted to the tenth
+# test boot, ends about as rarely relieved as it did under mean pooling at 0.05.
+learning_progress_floor = 0.20
 # Learning progress, which builds curiosity and relieves boredom (paper A.4, Table A1): each perceptual source's errors
 # are summed in bins of learning_progress_bin_s, and progress is the relative fall of the mean
 # error from the older to the newer half of the last learning_progress_span_s (the whole history
-# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The span covers the
+# while shorter; Oudeyer, Kaplan and Hafner 2007; Baranes and Oudeyer 2013). The pooled value is
+# the largest over sources, and audition's bins restart at each hearing-band step. The span covers the
 # forward models' learning curves and must be an even whole number of bins (subjective s).
 learning_progress_span_s = 5400.0
 learning_progress_bin_s = 60.0
@@ -1482,19 +1485,6 @@ organ_adapters_dir = "/organ-adapters"
 # wait for the organ to report ready after activation. Empty defaults to
 # [language].chat_url.
 organ_url = ""
-# Organ-level consolidation-divergence thresholds the welfare-gated
-# decommission's divergence assessment reads (lifecycle/divergence.py). Every
-# the voice-alignment sleep module surfaces a content-free metric — the breadth
-# (divergence_rate = usable DPO pairs / records scanned) and depth
-# (divergence_magnitude = mean cosine distance over the pairs) of how the
-# entity's conditioned output diverged from its bare language organ. When the
-# latest rate OR magnitude crosses its threshold, the entity is treated as
-# organ-level diverged (a graded companion to the individuation permutation
-# test). This metric is computed even when training is disabled/skipped or the
-# adapter is rejected (the divergence happened regardless). Ship conservative;
-# operator-calibrated.
-consolidation_divergence_rate_threshold = 0.5
-consolidation_divergence_magnitude_threshold = 0.25
 
 [social_cognition]
 # Social-cognition / theory-of-mind module. Ships disabled.
