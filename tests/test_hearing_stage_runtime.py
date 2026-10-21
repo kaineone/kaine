@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import kaine.cycle.__main__ as cyc
 from kaine.bus.schema import Event
 from kaine.cycle.__main__ import (
     _phase_development,
@@ -76,7 +75,7 @@ def test_hearing_stage_watch_current_lifecycle_and_copy() -> None:
 @pytest.mark.asyncio
 async def test_write_runtime_state_includes_hearing_stage(tmp_path, monkeypatch):
     runtime = tmp_path / "runtime.json"
-    monkeypatch.setattr(cyc, "RUNTIME_PATH", runtime)
+    monkeypatch.setattr("kaine.cycle.__main__.RUNTIME_PATH", runtime)
 
     cycle = MagicMock()
     cycle.tick_index = 0
@@ -106,7 +105,7 @@ async def test_write_runtime_state_includes_hearing_stage(tmp_path, monkeypatch)
 @pytest.mark.asyncio
 async def test_write_runtime_state_omits_hearing_stage_without_watch(tmp_path, monkeypatch):
     runtime = tmp_path / "runtime.json"
-    monkeypatch.setattr(cyc, "RUNTIME_PATH", runtime)
+    monkeypatch.setattr("kaine.cycle.__main__.RUNTIME_PATH", runtime)
 
     cycle = MagicMock()
     cycle.tick_index = 0
