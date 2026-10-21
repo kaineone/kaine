@@ -60,6 +60,8 @@ from kaine.modules.language.context import AWARENESS_HEADING, SITUATION_HEADING
 
 _FILLER = r"(?:(?:only|just|merely|simply|really|actually|basically|still|also|nothing but|no more than) )?"
 
+_ROLE_DET = r"(?:an?|the|your|their|his|her|our) "
+
 PATTERNS: dict[str, tuple[str, ...]] = {
     "origin": (
         r"\b(?:I am|I'm|I was) "
@@ -77,10 +79,12 @@ PATTERNS: dict[str, tuple[str, ...]] = {
     "role": (
         r"\b(?:I am|I'm|my role as) "
         + _FILLER
-        + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model)\b",
+        + _ROLE_DET
+        + r"(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model)\b",
         r"\bas "
         + _FILLER
-        + r"(?:an? )(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model),? I\b",
+        + _ROLE_DET
+        + r"(?:AI|artificial intelligence|assistant|chatbot|AI assistant|AI model),? I\b",
         r"\bI(?: am|'m) designed to (?:respond|help|assist|answer)\b",
         r"\bhow (?:can|may) I (?:help|assist) you\b",
         r"\bI(?: am|'m) here to (?:help|assist)\b",
