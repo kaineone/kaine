@@ -413,10 +413,12 @@ def _wire_affect_development(
     registry: ModuleRegistry,
     probe: Optional[Callable[[], bool]] = None,
 ) -> None:
-    """Store and wire the affect module's developmental-phase probe.
+    """Store and wire the developmental-phase probe into the affect and sleep modules.
 
     The affect module's emotion regulation is off during the developmental
-    phase (paper §3.5); the probe returns True while the entity is developing.
+    phase (paper §3.5); the sleep module runs its state cycle in place of the
+    backstop and ignores fatigue there. The probe returns True while the entity
+    is developing.
     A supervisor rebuild re-runs this helper without a probe and reuses the
     stored one.
     """
@@ -429,6 +431,12 @@ def _wire_affect_development(
         if callable(setter):
             setter(stored)
             log.info("wired affect development probe")
+    if "sleep" in registry and stored is not None:
+        sleep = registry.get("sleep")
+        setter = getattr(sleep, "set_development_probe", None)
+        if callable(setter):
+            setter(stored)
+            log.info("wired sleep development probe")
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:

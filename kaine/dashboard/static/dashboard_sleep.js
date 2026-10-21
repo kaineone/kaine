@@ -8,7 +8,7 @@
   var POLL_MS = 5000;
 
   var TRIGGER_LABELS = {
-    developmental_rest: "developmental rest",
+    state_cycle: "state-cycle rest",
     requested: "requested",
     backstop: "backstop (an hour awake)",
     fatigue_or_backstop: "fatigue or backstop (not stated)"
