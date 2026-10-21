@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 
@@ -14,7 +15,7 @@ import pytest
 from kaine.boot import make_language
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.language import FakeChatClient
+from kaine.modules.language import FakeChatClient, Language
 from kaine.modules.language.context import PERSONA_TEMPLATE_VERSION, ContextAssembler
 
 NAME = "Kaine Nova"
@@ -43,9 +44,9 @@ def test_self_model_name_never_reaches_request(mode):
     assert "honesty" in ctx.system
 
 
-def test_assembler_no_longer_takes_persona_name():
-    with pytest.raises(TypeError):
-        ContextAssembler(persona_name=NAME)  # type: ignore[call-arg]
+def test_persona_name_parameter_is_retired():
+    assert "persona_name" not in inspect.signature(ContextAssembler.__init__).parameters
+    assert "persona_name" not in inspect.signature(Language.__init__).parameters
 
 
 @pytest.mark.asyncio
@@ -89,7 +90,7 @@ async def test_cached_bus_self_model_has_no_name_key(bus, tmp_path):
     from datetime import datetime, timezone
 
     from kaine.bus import Event
-    from kaine.modules.language import IntentExpressionLog, Language
+    from kaine.modules.language import IntentExpressionLog
 
     await bus.publish(
         Event(
