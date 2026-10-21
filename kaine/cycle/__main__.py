@@ -101,6 +101,7 @@ from kaine.lifecycle.maturation_gate import (
 from kaine.modules.affect.modulator import StateModulator
 from kaine.modules.positive_control import finish_positive_controls
 from kaine.modules.registry import shutdown_order
+from kaine.modules.self_model.document import is_valid_name
 from kaine.perception_state import (
     read_desired,
     write_desired_audio,
@@ -1171,8 +1172,8 @@ def _persist_revived_identity(
             f"bundle identity is {identity.entity_id!r}"
         )
     if identity.name is None:
-        name = self_model_name
-        if not name and existing is not None:
+        name = self_model_name if is_valid_name(self_model_name) else None
+        if not name and existing is not None and is_valid_name(existing.name):
             name = existing.name
         if name:
             identity = replace(identity, name=name)

@@ -66,13 +66,10 @@ class IdentityError(RuntimeError):
 
 
 def _valid_name(name: object) -> bool:
-    """A name is a non-blank single-line string without control characters."""
-    return (
-        isinstance(name, str)
-        and bool(name.strip())
-        and len(name.splitlines()) == 1
-        and all(ord(c) >= 32 for c in name)
-    )
+    """The shared name check (see ``is_valid_name`` in the self-model document)."""
+    from kaine.modules.self_model.document import is_valid_name
+
+    return is_valid_name(name)
 
 
 @dataclass(frozen=True)
@@ -477,11 +474,16 @@ def tree_digest(state_root: Path | str, artifacts: list[Path]) -> str:
     return hashlib.sha256(joined).hexdigest()
 
 
+class _DocumentUnreadable(Exception):
+    """The self-model document exists but could not be read."""
+
+
 def _self_model_document_name(document_path: Path | None) -> str | None:
     """The name in the self-model document at ``document_path``, or ``None``.
 
-    ``None`` when the path is absent, the document does not exist, it has no
-    name, or it cannot be read (a warning is logged for the last case).
+    ``None`` when the path is absent, the document does not exist, or it has no
+    (valid) name. Raises :class:`_DocumentUnreadable` when the document exists but
+    cannot be read (corrupt, wrong key, permissions), so the caller can defer.
     """
     if document_path is None:
         return None
@@ -491,12 +493,9 @@ def _self_model_document_name(document_path: Path | None) -> str | None:
         from kaine.modules.self_model.document import load as load_document
 
         name = load_document(document_path).name
-    except Exception:
-        log.warning("cannot read the self-model document %s for its name", document_path, exc_info=True)
-        return None
-    if _valid_name(name):
-        return name
-    return None
+    except Exception as exc:
+        raise _DocumentUnreadable(str(exc)) from exc
+    return name if _valid_name(name) else None
 
 
 def name_identity(
@@ -505,15 +504,39 @@ def name_identity(
     """Return ``identity`` with a name; an existing name is never replaced.
 
     An unnamed identity adopts the self-model document's name when the document
-    at ``self_model_path`` has one, otherwise it draws "Kaine <Surname>". The
+    at ``self_model_path`` has one, otherwise it draws "Kaine <Surname>". When the
+    document exists but cannot be read, naming is deferred: a warning is logged
+    and the identity is returned unnamed, so the next boot tries again. The
     result is not persisted.
     """
     if identity.name is not None:
         return identity
     from kaine.modules.self_model.document import generate_launch_name
 
-    name = _self_model_document_name(self_model_path) or generate_launch_name()
-    return replace(identity, name=name)
+    try:
+        name = _self_model_document_name(self_model_path)
+    except _DocumentUnreadable as exc:
+        log.warning(
+            "cannot read the self-model document %s; not naming the entity this boot: %s",
+            self_model_path,
+            exc,
+        )
+        return identity
+    return replace(identity, name=name or generate_launch_name())
+
+
+def _save_naming(identity: EntityIdentity, path: Path) -> EntityIdentity:
+    """Save a freshly named identity. When a concurrent boot named the file first,
+    return the stored named identity (same ``entity_id``) instead of failing."""
+    try:
+        save_identity(identity, path)
+    except IdentityError:
+        stored = load_identity(path)
+        if stored is not None and stored.entity_id == identity.entity_id and stored.name:
+            log.info("identity %s was named by another boot; keeping %r", stored.entity_id, stored.name)
+            return stored
+        raise
+    return identity
 
 
 def resolve_spawn_identity(
@@ -530,7 +553,9 @@ def resolve_spawn_identity(
     - If it is absent and own lived artifacts exist, derive a deterministic
       legacy identity from ``tree:<digest>`` and persist it.
 
-    Every identity returned has a name. ``self_model_path`` is the self-model
+    Every identity returned has a name unless the self-model document exists but
+    cannot be read, in which case naming is deferred to the next boot.
+    ``self_model_path`` is the self-model
     document consulted for an existing name; it defaults to
     ``<state_root>/self_model/self_model.json``.
 
@@ -545,8 +570,9 @@ def resolve_spawn_identity(
         if existing.name is not None:
             return existing
         named = name_identity(existing, self_model_path=self_model_path)
-        save_identity(named, identity_path)
-        return named
+        if named.name is None:
+            return existing
+        return _save_naming(named, identity_path)
 
     artifacts = own_lived_artifacts(root)
     if not artifacts:
@@ -556,7 +582,10 @@ def resolve_spawn_identity(
         identity = legacy_identity("tree:" + digest, now=now)
 
     identity = name_identity(identity, self_model_path=self_model_path)
-    save_identity(identity, identity_path)
+    if identity.name is None:
+        save_identity(identity, identity_path)
+        return identity
+    identity = _save_naming(identity, identity_path)
     return identity
 
 

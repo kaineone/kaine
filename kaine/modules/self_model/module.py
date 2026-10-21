@@ -16,6 +16,7 @@ from kaine.modules.base import BaseModule
 from kaine.modules.self_model.document import (
     SelfModelDocument,
     generate_launch_name,
+    is_valid_name,
     load,
     save_atomic,
 )
@@ -98,6 +99,9 @@ class SelfModel(BaseModule):
         if voice_observations_cap < 0:
             raise ValueError("voice_observations_cap must be >= 0 (0 = no cap)")
         self._persistence_path = resolve(persistence_path)
+        if identity_name is not None and not is_valid_name(identity_name):
+            log.warning("ignoring an invalid identity name %r", identity_name)
+            identity_name = None
         self._identity_name = identity_name or None
         self._drift = drift_detector or SourceDistributionDrift(window=drift_window)
         self._drift_threshold = float(drift_threshold)
@@ -136,6 +140,9 @@ class SelfModel(BaseModule):
 
     def adopt_identity_name(self, name: str) -> None:
         """Take ``name`` from the entity's identity and persist the document."""
+        if not is_valid_name(name):
+            log.warning("ignoring an invalid identity name %r", name)
+            return
         self._identity_name = name
         if self._model.name != name:
             self._model = self._model.with_updates(name=name)

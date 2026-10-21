@@ -10,12 +10,32 @@ observation; it prescribes nothing.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import tempfile
+import unicodedata
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
+
+MAX_NAME_LENGTH = 64
+
+
+def is_valid_name(name: object) -> bool:
+    """A name is a non-blank single-line string of at most 64 characters, with no
+    leading or trailing whitespace and no control, format (bidi), surrogate,
+    private-use or unassigned character (any Unicode category starting with "C")."""
+    return (
+        isinstance(name, str)
+        and 0 < len(name) <= MAX_NAME_LENGTH
+        and name == name.strip()
+        and all(not unicodedata.category(c).startswith("C") for c in name)
+        and len(name.splitlines()) == 1
+    )
+
 
 # First name shared by this lineage of entities; the surname individuates each
 # launch. The name is drawn once at first boot and kept for life.
@@ -92,8 +112,12 @@ class SelfModelDocument:
     @classmethod
     def from_json(cls, text: str) -> "SelfModelDocument":
         data = json.loads(text)
+        name = str(data.get("name", ""))
+        if name and not is_valid_name(name):
+            log.warning("self-model document holds an invalid name %r; treating it as no name", name)
+            name = ""
         return cls(
-            name=str(data.get("name", "")),
+            name=name,
             values=list(data.get("values", [])),
             behavioral_norms=list(data.get("behavioral_norms", [])),
             capability_map=dict(data.get("capability_map", {})),

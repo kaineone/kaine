@@ -30,3 +30,11 @@
 #### Scenario: A revive keeps the bundle's name
 - **WHEN** a bundle named "Kaine Nova" is revived into a tree whose identity has the same `entity_id` and the name "Kaine Aurora"
 - **THEN** the identity file's `name` becomes "Kaine Nova" and a warning names both names
+
+#### Scenario: An unreadable self-model document defers naming
+- **WHEN** the cycle starts on a tree whose identity file has no name and whose self-model document exists but cannot be read
+- **THEN** a warning is logged, no name is saved this boot, and the next boot tries again; a name is minted only when the document is absent or readable with no name
+
+#### Scenario: Name validity
+- **WHEN** a name is empty, has leading or trailing whitespace, spans several lines, exceeds 64 characters, or contains a character in any Unicode "C" category (controls, bidi and other format characters)
+- **THEN** it is rejected as an identity name and counts as no name when read from a self-model document

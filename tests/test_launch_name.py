@@ -594,3 +594,109 @@ def test_decommission_backup_carries_the_identity_file_with_its_name(tmp_path):
     ]
     assert copies, list(result.backup_path.rglob("*"))
     assert json.loads(copies[0].read_text())["name"] == "Kaine Nova"
+
+
+# ---- review follow-ups --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        " ",
+        " Kaine Nova",
+        "Kaine Nova ",
+        "Kaine\nNova",
+        "Kaine\x00Nova",
+        "Kaine\x7fNova",
+        "Kaine\x85Nova",
+        "Kaine ‮Nova",
+        "Kaine​Nova",
+        "K" * 65,
+    ],
+)
+def test_invalid_names_are_rejected_everywhere(bad, tmp_path):
+    assert not sm_document.is_valid_name(bad)
+    with pytest.raises(IdentityError):
+        EntityIdentity(entity_id="ent-" + "a" * 32, name=bad)
+    doc = SelfModelDocument.from_json(json.dumps({"name": bad}))
+    assert doc.name == ""
+
+
+def test_name_length_cap_boundary():
+    assert sm_document.is_valid_name("K" * 64)
+    assert not sm_document.is_valid_name("K" * 65)
+
+
+def test_every_surname_makes_a_valid_name():
+    for surname in sm_document._SURNAMES:
+        assert sm_document.is_valid_name(f"Kaine {surname}"), surname
+
+
+def test_revive_ignores_an_invalid_self_model_name(tmp_path):
+    state_root = tmp_path / "state"
+    base = mint_identity()
+    _tree_identity(state_root, base, "Kaine Aurora")
+    saved = _persist_revived_identity(
+        state_root, EntityIdentity(entity_id=base.entity_id), self_model_name="  ‮ "
+    )
+    assert saved.name == "Kaine Aurora"
+    fresh = _persist_revived_identity(tmp_path / "other", mint_identity(), self_model_name="a\nb")
+    assert sm_document.is_valid_name(fresh.name)
+
+
+def test_corrupt_document_defers_naming(tmp_path, caplog):
+    state_root = tmp_path / "state"
+    unnamed = mint_identity()
+    save_identity(unnamed, state_root / "identity" / "entity.json")
+    doc = state_root / "self_model" / "self_model.json"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("{not json")
+    with caplog.at_level("WARNING"):
+        resolved = resolve_spawn_identity(state_root)
+    assert resolved.name is None
+    assert "name" not in json.loads((state_root / "identity" / "entity.json").read_text())
+    assert "not naming" in caplog.text
+    # The next boot, with a readable document, names it.
+    _write_doc(doc, "Kaine Nova")
+    assert resolve_spawn_identity(state_root).name == "Kaine Nova"
+
+
+def test_corrupt_document_on_a_legacy_tree_defers_naming(tmp_path):
+    state_root = tmp_path / "state"
+    doc = state_root / "self_model" / "self_model.json"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("{not json")
+    resolved = resolve_spawn_identity(state_root)
+    assert resolved.name is None
+    assert load_identity(state_root / "identity" / "entity.json") == resolved
+
+
+def test_absent_and_nameless_documents_mint(tmp_path):
+    a = tmp_path / "a"
+    assert resolve_spawn_identity(a).name is not None
+    b = tmp_path / "b"
+    save_atomic(b / "self_model" / "self_model.json", SelfModelDocument())
+    assert resolve_spawn_identity(b).name is not None
+
+
+def test_a_concurrent_boot_that_named_the_file_first_wins(tmp_path, monkeypatch):
+    import kaine.lifecycle.identity as idmod
+
+    state_root = tmp_path / "state"
+    path = state_root / "identity" / "entity.json"
+    unnamed = mint_identity()
+    save_identity(unnamed, path)
+    real_name = idmod.name_identity
+
+    def racing(identity, **kw):
+        out = real_name(identity, **kw)
+        # the other boot names the file between our load and our save
+        save_identity(EntityIdentity(entity_id=identity.entity_id, minted_at=identity.minted_at,
+                                     name="Kaine Other"), path)
+        return out
+
+    monkeypatch.setattr(idmod, "name_identity", racing)
+    resolved = resolve_spawn_identity(state_root)
+    assert resolved.name == "Kaine Other"
+    assert load_identity(path).name == "Kaine Other"
