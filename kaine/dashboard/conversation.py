@@ -171,9 +171,11 @@ class ConversationState:
         signature = self._stat_signature()
         if signature == self._name_signature:
             return
-        self._name_signature = signature
         name = read_entity_name(*self._name_paths)
         if name is not None:
+            # Only a successful read settles the signature, so a failed one (an
+            # unreadable or half-written file) is retried at the next interval.
+            self._name_signature = signature
             self.entity_name = name
 
     def current_name(self) -> str:

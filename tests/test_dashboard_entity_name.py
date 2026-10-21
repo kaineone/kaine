@@ -483,3 +483,77 @@ async def test_header_name_is_html_escaped():
     assert "<script>1</script>" not in text
     assert "<b>x</b>" not in text
     assert "&lt;b&gt;x&lt;/b&gt; &amp; &lt;script&gt;1&lt;/script&gt;" in text
+
+
+def test_failed_read_is_retried_without_a_file_change(tmp_path: Path, monkeypatch):
+    import kaine.dashboard.conversation as conv
+
+    state, identity = _watching_state(tmp_path)
+    identity.write_text('{"name": "Kaine Whipple"}')
+    real = conv.read_entity_name
+    calls = {"n": 0}
+
+    def flaky(*args):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real(*args)
+
+    monkeypatch.setattr(conv, "read_entity_name", flaky)
+    assert state.current_name() == "KAINE"
+    assert state.current_name() == "Kaine Whipple"
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_console_page_shows_name_in_header_and_title(tmp_path: Path):
+    state, identity = _watching_state(tmp_path)
+    identity.write_text('{"name": "Kaine Whipple"}')
+    client, _app = await _make_app_client(state=state)
+    async with client:
+        resp = await client.get("/", headers={"Authorization": "Bearer test-token"})
+    assert resp.status_code == 200
+    assert 'id="header-entity-name" data-entity-name>Kaine Whipple<' in resp.text
+    assert "<title>Kaine Whipple" in resp.text
+
+
+def _entity_name_app(**overrides) -> httpx.AsyncClient:
+    config = DashboardConfig(
+        host_allowlist=("127.0.0.1", "localhost", "test"),
+        operator_token="test-token",
+        **overrides,
+    )
+    bridge = BusBridge(StubBus(), PrivacyFilter(), streams=[], poll_interval_s=0.01)
+
+    async def history_loader(n: int):
+        return []
+
+    app = create_app(
+        config=config,
+        bridge=bridge,
+        history_loader=history_loader,
+        metrics_snapshot=lambda: {"cycle_status": "not running"},
+    )
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.mark.asyncio
+async def test_entity_name_json_404_when_diagnostics_off():
+    async with _entity_name_app(diagnostics_enabled=False) as client:
+        assert (await client.get("/diagnostics/entity-name.json")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_entity_name_json_requires_token_when_read_gate_on():
+    json_accept = {"Accept": "application/json"}
+    async with _entity_name_app(conversation_enabled=True, diagnostics_enabled=True) as client:
+        denied = await client.get("/diagnostics/entity-name.json", headers=json_accept)
+        assert denied.status_code in (401, 403)
+        ok = await client.get(
+            "/diagnostics/entity-name.json",
+            headers={**json_accept, "Authorization": "Bearer test-token"},
+        )
+        assert ok.status_code == 200
+        assert ok.json() == {"name": "KAINE"}
+        post = await client.post(
+            "/diagnostics/entity-name.json", headers={"Authorization": "Bearer test-token"}
+        )
+        assert post.status_code == 405
