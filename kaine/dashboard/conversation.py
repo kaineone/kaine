@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -29,6 +30,32 @@ def _entry_order(entry_id: Any) -> tuple[int, int]:
         entry_id = entry_id.decode()
     ms, _, seq = str(entry_id).partition("-")
     return (int(ms), int(seq or 0))
+
+
+def read_entity_name(self_model_path: Path, identity_path: Path) -> str | None:
+    """Return a non-empty name from the self-model file or the identity file."""
+    if self_model_path.is_file():
+        try:
+            from kaine.modules.self_model.document import load
+
+            doc = load(self_model_path)
+            name = getattr(doc, "name", None)
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+        except Exception:
+            log.debug("failed to read self-model name", exc_info=True)
+
+    if identity_path.is_file():
+        try:
+            data = json.loads(identity_path.read_text())
+            if isinstance(data, dict):
+                name = data.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+        except Exception:
+            log.debug("failed to read identity name", exc_info=True)
+
+    return None
 
 
 async def read_conversation_history(bus: Any, n: int) -> list[tuple[str, Event]]:
@@ -84,6 +111,36 @@ class ConversationState:
     def __init__(self) -> None:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
+
+    def observe(self, event: Event) -> None:
+        """Update name or sleep state from an event. Ignores malformed payloads."""
+        if event.type == "self_model.document":
+            if isinstance(event.payload, dict):
+                self.update_from_self_model({"name": event.payload.get("name")})
+        elif event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
+            self.update_from_sleep(event.type)
+
+    async def backfill(self, bus: Any, *, scan: int = 500) -> None:
+        """Read recent self-model and sleep events and apply the newest match."""
+        try:
+            entries = await bus.recent("self_model.out", count=scan)
+        except Exception:
+            log.debug("conversation backfill failed for self_model.out", exc_info=True)
+        else:
+            for entry_id, event in entries:
+                if event.type == "self_model.document":
+                    self.observe(event)
+                    break
+
+        try:
+            entries = await bus.recent("sleep.out", count=scan)
+        except Exception:
+            log.debug("conversation backfill failed for sleep.out", exc_info=True)
+        else:
+            for entry_id, event in entries:
+                if event.type in ("sleep.sleep.started", "sleep.sleep.completed"):
+                    self.observe(event)
+                    break
 
     def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")
