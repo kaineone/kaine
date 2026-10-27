@@ -54,7 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
@@ -220,17 +220,7 @@ class WorldModel(BaseModule):
         self._load_weights_if_present()
         # Seed peer cursors to "now" so we only process new events.
         for stream in (self._episodic_memory_stream, self._sleep_stream):
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._peer_cursors[stream] = entry_id
-            else:
-                self._peer_cursors[stream] = "0-0"
+            self._peer_cursors[stream] = await tail_id(self._bus, stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._peer_consumer_loop(), name=f"{self.name}-peer-consumer")

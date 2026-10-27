@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 from kaine import legacy_aliases
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.self_model.document import (
@@ -256,16 +256,7 @@ class SelfModel(BaseModule):
 
     async def _latest_cursor(self, stream: str) -> str:
         """Resolve a stream's tail id so the loop only sees new utterances."""
-        try:
-            latest = await self._bus.client.xrevrange(stream, count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            return entry_id
-        return "0-0"
+        return await tail_id(self._bus, stream)
 
     async def shutdown(self) -> None:
         await super().shutdown()

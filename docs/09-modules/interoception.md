@@ -98,6 +98,8 @@ Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning
 | `sleep.out` | `sleep.sleep.started` | Suspends readout learning and expected-error learning; fatigue decays three times faster |
 | `sleep.out` | `sleep.sleep.completed` | Resumes learning; resets the fatigue accumulator and the regulation detector |
 
+The module reads `sleep.out` from the stream tail, seeded at initialize. Sleeps that finished before boot are not replayed, so a restart keeps the restored fatigue and regulation state, and a crash in the middle of a sleep leaves the module awake. A sleep that is already running at boot is not detected until its next event arrives.
+
 ## Outputs
 
 All events are published to the `interoception.out` stream.

@@ -13,7 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.sleep.corpus import (
@@ -292,58 +292,18 @@ class Sleep(BaseModule):
         # _interoception_cursor seeding below) — each sleep then reads everything new
         # since its cursor, bounded to the window since _last_sleep_at.
         for stream in self._audit_cursors:
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                tail = latest[0][0]
-                if isinstance(tail, bytes):
-                    tail = tail.decode()
-                self._audit_cursors[stream] = tail
-        try:
-            latest_ws = await self._bus.client.xrevrange("workspace.broadcast", count=1)
-        except Exception:
-            latest_ws = []
-        if latest_ws:
-            tail = latest_ws[0][0]
-            if isinstance(tail, bytes):
-                tail = tail.decode()
-            self._broadcast_cursor = tail
+            self._audit_cursors[stream] = await tail_id(self._bus, stream)
+        self._broadcast_cursor = await tail_id(self._bus, "workspace.broadcast")
         # Seed cursor so we only process new action selection module intents from now on.
-        try:
-            latest = await self._bus.client.xrevrange("action_selection.out", count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            self._action_selection_cursor = entry_id
+        self._action_selection_cursor = await tail_id(self._bus, "action_selection.out")
         self._tasks.append(
             asyncio.create_task(self._action_selection_consumer_loop(), name="sleep-action-selection-consumer")
         )
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
-            try:
-                latest = await self._bus.client.xrevrange("interoception.out", count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._interoception_cursor = entry_id
+            self._interoception_cursor = await tail_id(self._bus, "interoception.out")
             # Seed cursor so we only process new affect module events from now on.
-            try:
-                latest = await self._bus.client.xrevrange("affect.out", count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._affect_cursor = entry_id
+            self._affect_cursor = await tail_id(self._bus, "affect.out")
             self._tasks.append(
                 asyncio.create_task(self._interoception_consumer_loop(), name="sleep-interoception-consumer")
             )

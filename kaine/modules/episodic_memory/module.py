@@ -8,7 +8,7 @@ import logging
 import math
 from typing import Any, ClassVar, Optional, Sequence
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
@@ -195,17 +195,7 @@ class EpisodicMemory(BaseModule):
         await self._core.initialize()
         # Seed cursors for peer streams so we only process new events from here.
         for stream in (self._affect_stream, self._sleep_stream):
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._peer_cursors[stream] = entry_id
-            else:
-                self._peer_cursors[stream] = "0-0"
+            self._peer_cursors[stream] = await tail_id(self._bus, stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._peer_consumer_loop(), name=f"{self.name}-affect-consumer")
