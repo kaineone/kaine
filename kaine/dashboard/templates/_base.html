@@ -11,6 +11,7 @@
   <script src="{{ asset('/static/dashboard_caretaker.js') }}" defer></script>
   <script src="{{ asset('/static/dashboard_maturation.js') }}" defer></script>
   <script src="{{ asset('/static/dashboard_sleep.js') }}" defer></script>
+  <script src="{{ asset('/static/dashboard_entity_name.js') }}" defer></script>
 </head>
 <body data-dashboard-layout="dashboard">
   {# Fixed full-window alert border — JS drives data-state; CSS paints it. #}
@@ -48,6 +49,9 @@
     </aside>
     <div class="shell__body">
       <header>
+        {# The entity's name, on every page whether or not the console is on. #}
+        {% set _entity_name = request.app.state.conversation_state.current_name() if request is defined and request and request.app.state.conversation_state is defined else "KAINE" %}
+        <p class="header-entity" id="header-entity-name" data-entity-name>{{ _entity_name }}</p>
         {% block header_extra %}{% endblock %}
       </header>
       <main class="dashboard-main">

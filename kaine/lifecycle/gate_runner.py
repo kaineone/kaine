@@ -234,6 +234,18 @@ class MaturationGateRunner:
                 )
                 for _, event in entries:
                     if event.type == "sleep.sleep.completed" and event.source == "sleep":
+                        # A state-cycle rest cut by a restart ends aborted (cancelled) and
+                        # resumes as a new sleep; the resumed completion is the one cycle, so
+                        # a cancelled state-cycle completion that kept its remainder (resumable) counts nothing. A rest that failed
+                        # with an error does not resume, so it still counts.
+                        payload = event.payload if isinstance(event.payload, dict) else {}
+                        if (
+                            payload.get("aborted") is True
+                            and payload.get("trigger") == "state_cycle"
+                            and payload.get("reason") == "CancelledError"
+                            and payload.get("resumable") is True
+                        ):
+                            continue
                         total += 1
                 if last_scanned is None:
                     break

@@ -412,14 +412,19 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
 def _wire_affect_development(
     registry: ModuleRegistry,
     probe: Optional[Callable[[], bool]] = None,
+    paused_source: Optional[Callable[[], float]] = None,
 ) -> None:
-    """Store and wire the affect module's developmental-phase probe.
+    """Store and wire the developmental-phase probe into the affect and sleep modules.
 
     The affect module's emotion regulation is off during the developmental
-    phase (paper §3.5); the probe returns True while the entity is developing.
+    phase (paper §3.5); the sleep module runs its state cycle in place of the
+    backstop and ignores fatigue there. The probe returns True while the entity
+    is developing.
     A supervisor rebuild re-runs this helper without a probe and reuses the
     stored one.
     """
+    if paused_source is not None:
+        setattr(registry, "sleep_paused_source", paused_source)
     if probe is not None:
         setattr(registry, "affect_development_probe", probe)
     stored = getattr(registry, "affect_development_probe", None)
@@ -429,6 +434,22 @@ def _wire_affect_development(
         if callable(setter):
             setter(stored)
             log.info("wired affect development probe")
+    if "interoception" in registry and stored is not None:
+        intero = registry.get("interoception")
+        intero_setter = getattr(intero, "set_development_probe", None)
+        if callable(intero_setter):
+            intero_setter(stored)
+    if "sleep" in registry:
+        sleep = registry.get("sleep")
+        setter = getattr(sleep, "set_development_probe", None)
+        if callable(setter):
+            # Stored None is wired too: the phase is then known to be absent.
+            setter(stored)
+            log.info("wired sleep development probe")
+        paused = getattr(registry, "sleep_paused_source", None)
+        pause_setter = getattr(sleep, "set_paused_source", None)
+        if paused is not None and callable(pause_setter):
+            pause_setter(paused)
 
 
 def _wire_self_hearing_gate(registry: ModuleRegistry) -> None:

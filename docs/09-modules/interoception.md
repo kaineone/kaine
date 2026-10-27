@@ -78,7 +78,7 @@ The interoception module learns, per channel, the expected absolute prediction e
 F(t+dt) = max(0, F(t) + e·dt − decay·dt)
 ```
 
-During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `interoception.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
+During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `interoception.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold. In the developmental phase the crossing starts no sleep (paper 3.5), so the module clears this latch when the phase ends, and a standing crossing is then announced again.
 
 `RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `interoception.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. The interoception module never acts on its own advisories; the cognitive cycle and the sleep module decide what to do.
 

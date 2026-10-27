@@ -11,7 +11,7 @@ import math
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.entity_clock import EntityClock
@@ -68,6 +68,9 @@ class SleepBusyError(RuntimeError):
 
 class Sleep(BaseModule):
     name: ClassVar[str] = "sleep"
+    # The supervisor serializes this module before an in-process rebuild and restores it into
+    # the new one, so the state cycle (and a rest cut by the restart) survives.
+    carries_state_across_restart: ClassVar[bool] = True
 
     def holds_external_resources(self) -> bool:
         return True
@@ -123,8 +126,18 @@ class Sleep(BaseModule):
         # rest; bounds rest requests from an exploring planning module.
         requested_rest_min_interval_s: float = 1800.0,
         # Developmental-phase rest duration, Delta_rest from paper section 3.5
-        # and Table A1: 1260 s is the mean length of a quiescent episode (state 1F).
-        developmental_rest_s: float = 1260.0,
+        # and Table A1: 1410 s is the median length of a quiescent episode (state 1F)
+        # at 38 weeks (Nijhuis et al. 1982).
+        developmental_rest_s: float = 1410.0,
+        # Share of developmental entity time spent in the rest, s_q from Table A1:
+        # the fraction of time near-term fetuses are quiescent (Nijhuis et al. 1982).
+        developmental_quiescent_share: float = 0.32,
+        # Returns True while the entity is in the developmental phase. None means
+        # staging is off: the state cycle never runs and the backstop and fatigue apply.
+        development_probe: Optional[Callable[[], bool]] = None,
+        # True while boot has not yet wired the probe (or its explicit absence): the
+        # backstop waits, so a restored overdue scheduler cannot fire it before the phase is known.
+        await_development_probe: bool = False,
         # Path to the organ GGUF served by the language module. Used to identify the correct
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
@@ -185,6 +198,8 @@ class Sleep(BaseModule):
         self._pre_sleep_locus: Optional[str] = None
 
         self._sleep_lock = asyncio.Lock()
+        self._sleep_pending: bool = False
+        self._sleep_task: Optional[asyncio.Task[Any]] = None
         # Tasks that must outlive a cancel of the sleep (the final affective reset).
         self._shielded_tasks: set[asyncio.Task[Any]] = set()
         self._builder = DPOPairBuilder()
@@ -204,6 +219,39 @@ class Sleep(BaseModule):
         ):
             raise ValueError("developmental_rest_s must be a finite number greater than 0")
         self._developmental_rest_s = float(developmental_rest_s)
+        if (
+            isinstance(developmental_quiescent_share, bool)
+            or not isinstance(developmental_quiescent_share, (int, float))
+            or not math.isfinite(developmental_quiescent_share)
+            or not 0.0 < developmental_quiescent_share < 1.0
+        ):
+            raise ValueError("developmental_quiescent_share must be a number between 0 and 1, exclusive")
+        self._developmental_quiescent_share = float(developmental_quiescent_share)
+        # T_act = Delta_rest (1 - s_q) / s_q: awake entity time between rests (paper 3.5).
+        self._developmental_awake_s = (
+            self._developmental_rest_s
+            * (1.0 - self._developmental_quiescent_share)
+            / self._developmental_quiescent_share
+        )
+        self._development_probe: Optional[Callable[[], bool]] = development_probe
+        self._await_development_probe = bool(await_development_probe) and development_probe is None
+        # State cycle: phase, awake entity time spent since boot or the previous rest,
+        # and the entity time a rest has run (kept across a restart).
+        self._cycle_phase: str = "awake"
+        self._cycle_awake_s: float = 0.0
+        self._cycle_rest_spent_s: float = 0.0
+        self._cycle_last_tick: Optional[float] = None
+        # Rest-clock reading the running rest counts from (set while a state_cycle sleep runs).
+        self._cycle_rest_began: Optional[float] = None
+        # Entity time a resumed rest had already run when this process started it.
+        self._cycle_resume_spent_s: float = 0.0
+        self._paused_source: Optional[Callable[[], float]] = None
+        self._cycle_last_paused: float = 0.0
+        self._cycle_tick_paused: float = 0.0
+        self._cycle_rest_paused_base: float = 0.0
+        self._probe_failure_logged: bool = False
+        # Length of the running rest's hold: the full rest, or the remainder when resumed.
+        self._cycle_rest_seconds: float = self._developmental_rest_s
         self._entity_clock = entity_clock
         self._action_selection_cursor: str = "0"
         # Seed from boot time so a fresh boot or module restart cannot bypass
@@ -280,7 +328,7 @@ class Sleep(BaseModule):
                 log.info("sleep: sleep index resumes at %d", self._sleep_count)
         self._sleep_pending = False
         self._sleep_task = None
-        # M1 — interval-based maintenance poll: RestScheduler.is_due() is
+        # M1: interval-based maintenance poll: RestScheduler.is_due() is
         # checked periodically and fires enter_sleep() when due, entirely
         # independent of the interoception.fatigue consumer (fulfilling the boot.py
         # promise). Due-ness itself is judged on the scheduler's (subjective)
@@ -389,6 +437,14 @@ class Sleep(BaseModule):
                             )
                             if not (fatigue_trigger or regulation_trigger):
                                 continue
+                            if fatigue_trigger and self._developing() is True:
+                                # Paper 3.5: no sleep homeostasis in the developmental
+                                # phase, so fatigue sets no sleep; the state cycle times rest.
+                                log.debug(
+                                    "sleep: interoception.fatigue crossed=true ignored "
+                                    "in the developmental phase"
+                                )
+                                continue
                             if fatigue_trigger:
                                 trigger = "fatigue"
                                 log.info(
@@ -425,15 +481,6 @@ class Sleep(BaseModule):
                                     "triggering affect-driven maintenance"
                                 )
                                 await self._start_maintenance_sleep("affect_regulation")
-                            elif (
-                                event.type == "affect.rest_request"
-                                and event.payload.get("reason") == "stimulus_spent"
-                            ):
-                                log.info(
-                                    "sleep: affect.rest_request (stimulus spent), "
-                                    "starting a developmental rest"
-                                )
-                                await self._start_developmental_rest()
 
                     if idle:
                         await asyncio.sleep(0.05)
@@ -465,24 +512,130 @@ class Sleep(BaseModule):
                 name="sleep-fatigue-sleep",
             )
 
-    async def _start_developmental_rest(self) -> None:
-        """Guarded start of a developmental rest on a spent stimulus."""
-        if not self._sleep_lock.locked() and not self._sleep_pending:
-            self._sleep_pending = True
-            self._sleep_task = asyncio.create_task(
-                self._developmental_rest_enter_sleep(),
-                name="sleep-developmental-rest",
-            )
+    def set_development_probe(self, probe: Optional[Callable[[], bool]]) -> None:
+        """Store a callable that returns True while the entity is in the developmental phase.
 
-    async def _developmental_rest_enter_sleep(self) -> None:
+        With no probe (staging off) the entity counts as matured: the state cycle never
+        runs and the backstop and fatigue trigger apply. Calling this, even with None,
+        tells the module the phase is known, which lets the backstop run.
+        """
+        self._development_probe = probe
+        self._await_development_probe = False
+
+    def set_paused_source(self, source: Optional[Callable[[], float]]) -> None:
+        """Store a callable returning the entity seconds the cycle has spent frozen.
+
+        Frozen time counts toward neither the awake stretch nor the rest. With no source
+        nothing is subtracted.
+        """
+        self._paused_source = source
+
+    def _paused_now(self) -> float:
+        source = self._paused_source
+        if source is None:
+            return self._cycle_last_paused
         try:
-            await self.enter_sleep(trigger="developmental_rest")
-        except SleepBusyError:
-            log.debug("sleep: developmental rest skipped, sleep already running")
+            self._cycle_last_paused = float(source())
         except Exception:
-            log.exception("sleep: developmental rest enter_sleep failed")
+            log.debug("sleep: paused-time source failed", exc_info=True)
+        return self._cycle_last_paused
+
+    def _rest_elapsed(self, started: float) -> float:
+        """Entity seconds a rest begun at ``started`` has run, frozen time excluded."""
+        frozen = max(0.0, self._paused_now() - self._cycle_rest_paused_base)
+        return max(0.0, self._rest_clock_now() - started - frozen)
+
+    def _developing(self) -> Optional[bool]:
+        """True or False from the development probe; None when no probe is wired."""
+        probe = self._development_probe
+        if probe is None:
+            return None
+        try:
+            return bool(probe())
+        except Exception:
+            if not self._probe_failure_logged:
+                self._probe_failure_logged = True
+                log.warning(
+                    "sleep: development probe failed, treating entity as developing",
+                    exc_info=True,
+                )
+            return True
+
+    def _start_state_cycle_sleep(self, resume: bool) -> None:
+        """Guarded start of a state-cycle rest; ``resume`` continues a rest cut by a restart."""
+        if self._sleep_lock.locked() or self._sleep_pending:
+            return
+        self._sleep_pending = True
+        self._cycle_resume_spent_s = self._cycle_rest_spent_s if resume else 0.0
+        self._sleep_task = asyncio.create_task(
+            self._state_cycle_enter_sleep(),
+            name="sleep-state-cycle",
+        )
+
+    async def _state_cycle_enter_sleep(self) -> None:
+        try:
+            await self.enter_sleep(trigger="state_cycle")
+        except SleepBusyError:
+            log.debug("sleep: state-cycle rest skipped, sleep already running")
+        except Exception:
+            log.exception("sleep: state-cycle enter_sleep failed")
         finally:
             self._sleep_pending = False
+
+    def _cycle_reset(self, now: float) -> None:
+        """Begin a fresh awake stretch at ``now``."""
+        self._cycle_phase = "awake"
+        self._cycle_awake_s = 0.0
+        self._cycle_rest_spent_s = 0.0
+        self._cycle_last_tick = now
+
+    def _cycle_tick(self, developing: Optional[bool]) -> None:
+        """Accrue awake entity time; time inside any sleep does not count."""
+        now = self._rest_clock_now()
+        last = self._cycle_last_tick
+        paused = self._paused_now()
+        last_paused = self._cycle_tick_paused
+        self._cycle_tick_paused = paused
+        self._cycle_last_tick = now
+        if developing is False:
+            # Matured: the cycle no longer applies, so drop its state.
+            self._cycle_reset(now)
+            return
+        if developing is None or last is None:
+            return
+        if self._cycle_phase == "awake" and not self._sleep_lock.locked() and not self._sleep_pending:
+            self._cycle_awake_s += max(0.0, (now - last) - max(0.0, paused - last_paused))
+
+    async def _maintenance_poll_once(self) -> None:
+        """One poll: the state cycle in the developmental phase, the backstop otherwise."""
+        developing = self._developing()
+        self._cycle_tick(developing)
+        if self._sleep_lock.locked() or self._sleep_pending:
+            return
+        if developing is True:
+            # The hourly backstop starts no sleep in the phase; the cycle times rest.
+            if self._cycle_phase == "resting":
+                log.info(
+                    "sleep: resuming a state-cycle rest after a restart, %.0f s spent",
+                    self._cycle_rest_spent_s,
+                )
+                self._start_state_cycle_sleep(resume=True)
+            elif self._cycle_awake_s >= self._developmental_awake_s:
+                log.info("sleep: state cycle awake time reached, starting a rest")
+                self._start_state_cycle_sleep(resume=False)
+            return
+        if self._await_development_probe:
+            return
+        if self._scheduler.is_due():
+            log.info(
+                "sleep: rest scheduler reports sleep due: "
+                "triggering interval-based maintenance"
+            )
+            self._sleep_pending = True
+            self._sleep_task = asyncio.create_task(
+                self._interval_triggered_enter_sleep(),
+                name="sleep-interval-sleep",
+            )
 
     async def _action_selection_consumer_loop(self) -> None:
         """Background loop: watch action_selection.out for rest requests.
@@ -777,14 +930,22 @@ class Sleep(BaseModule):
     async def _hold_developmental_rest(self, started: float) -> None:
         """Hold the developmental rest for the configured duration."""
         log.info(
-            "sleep: developmental rest holds until %.0f s after it began",
+            "sleep: developmental rest holds until %.0f s after it began, %.0f s remaining",
             self._developmental_rest_s,
+            self._developmental_rest_s - self._rest_elapsed(started),
         )
-        while not self._stopped.is_set():
-            remaining = self._developmental_rest_s - (self._rest_clock_now() - started)
+        while True:
+            if self._stopped.is_set():
+                # Shutdown before the rest ran its length: abort like a cancel, so the
+                # sleep ends aborted, is not marked completed, and keeps its remainder.
+                raise asyncio.CancelledError("sleep stopped during a state-cycle rest")
+            remaining = self._developmental_rest_s - self._rest_elapsed(started)
             if remaining <= 0:
+                self._cycle_reset(self._rest_clock_now())
                 break
-            await asyncio.sleep(min(1.0, remaining))
+            # Real seconds: a remainder of entity seconds takes remaining / scale.
+            scale = float(getattr(self._entity_clock, "scale", 1.0) or 1.0)
+            await asyncio.sleep(max(0.001, min(1.0, remaining / scale)))
         log.info("sleep: developmental rest hold ended")
 
     async def _run_pipeline_inner(self, trigger: Optional[str] = None) -> dict[str, Any]:
@@ -797,15 +958,29 @@ class Sleep(BaseModule):
         start = time.monotonic()
         self._sleep_count += 1
         rest_started = self._rest_clock_now()
+        started_payload: dict[str, Any] = {
+            "started_at": time.time(),
+            "sleep_index": self._sleep_count,
+            "trigger": trigger,
+        }
+        if trigger == "state_cycle":
+            # A rest cut by a restart resumes for its remaining time: its clock starts
+            # that far back, so the hold measures the remainder.
+            resumed_spent = min(self._cycle_resume_spent_s, self._developmental_rest_s)
+            self._cycle_resume_spent_s = 0.0
+            rest_started -= resumed_spent
+            self._cycle_rest_paused_base = self._paused_now()
+            self._cycle_rest_began = rest_started
+            self._cycle_phase = "resting"
+            self._cycle_rest_spent_s = resumed_spent
+            self._cycle_rest_seconds = self._developmental_rest_s - resumed_spent
+            started_payload["rest_seconds"] = self._cycle_rest_seconds
+            started_payload["resumed"] = resumed_spent > 0.0
         await self.publish(
             "sleep.sleep.started",
             # infrastructural: real time. Every sleep carries its sleep_index
             # and the trigger that started it (None for a direct call).
-            {
-                "started_at": time.time(),
-                "sleep_index": self._sleep_count,
-                "trigger": trigger,
-            },
+            started_payload,
             salience=self._baseline_salience,
         )
         if trigger == "requested" and self._pending_rest is not None:
@@ -992,7 +1167,7 @@ class Sleep(BaseModule):
                         exc_info=True,
                     )
 
-            if trigger == "developmental_rest":
+            if trigger == "state_cycle":
                 await self._hold_developmental_rest(rest_started)
 
             if self._housekeeper is not None:
@@ -1126,8 +1301,11 @@ class Sleep(BaseModule):
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
-        if trigger == "developmental_rest":
-            summary["rest_seconds"] = self._developmental_rest_s
+        if trigger == "state_cycle":
+            summary["rest_seconds"] = self._cycle_rest_seconds
+        elif self._cycle_phase == "awake":
+            # Any completed sleep restarts the active stretch, so two rests never run back to back.
+            self._cycle_reset(self._rest_clock_now())
         # Publishing sleep.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (interoception._sleep_event_loop handles this event).
         await self.publish("sleep.sleep.completed", summary, salience=salience)
@@ -1533,7 +1711,58 @@ class Sleep(BaseModule):
             "sleep_index": self._sleep_count,
             # Process-independent schedule: time remaining until sleep.
             "schedule": self._scheduler.export_remaining(),
+            # The developmental state cycle: phase and the entity time spent in it.
+            "state_cycle": self._export_state_cycle(),
         }
+
+    def _export_state_cycle(self) -> dict[str, Any]:
+        now = self._rest_clock_now()
+        if self._cycle_phase == "resting":
+            began = self._cycle_rest_began
+            spent = self._cycle_rest_spent_s if began is None else self._rest_elapsed(began)
+            return {"phase": "resting", "awake_s": 0.0, "rest_spent_s": spent}
+        awake = self._cycle_awake_s
+        last = self._cycle_last_tick
+        if (
+            last is not None
+            and not self._sleep_lock.locked()
+            and not self._sleep_pending
+            and self._developing() is True
+        ):
+            awake += max(0.0, (now - last) - max(0.0, self._paused_now() - self._cycle_tick_paused))
+        return {"phase": "awake", "awake_s": awake, "rest_spent_s": 0.0}
+
+    def _restore_state_cycle(self, raw: Any) -> None:
+        def _num(value: Any) -> Optional[float]:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return None
+            value = float(value)
+            return value if math.isfinite(value) and value >= 0.0 else None
+
+        if not isinstance(raw, dict):
+            log.warning("sleep: malformed state_cycle in snapshot; starting a fresh cycle")
+            return
+        phase = raw.get("phase")
+        awake = _num(raw.get("awake_s"))
+        spent = _num(raw.get("rest_spent_s"))
+        if phase == "resting" and spent is not None:
+            if spent < self._developmental_rest_s:
+                self._cycle_phase = "resting"
+                self._cycle_rest_spent_s = spent
+                self._cycle_awake_s = 0.0
+            else:
+                # The rest had already run its length: the awake stretch begins.
+                self._cycle_phase = "awake"
+                self._cycle_awake_s = 0.0
+                self._cycle_rest_spent_s = 0.0
+        elif phase == "awake" and awake is not None:
+            self._cycle_phase = "awake"
+            self._cycle_awake_s = awake
+            self._cycle_rest_spent_s = 0.0
+        else:
+            log.warning("sleep: malformed state_cycle in snapshot; starting a fresh cycle")
+            return
+        self._cycle_last_tick = None
 
     def deserialize(self, state: dict[str, Any]) -> None:
         if "last_sleep_at" in state:
@@ -1558,6 +1787,8 @@ class Sleep(BaseModule):
                 )
         else:
             log.info("sleep: snapshot has no schedule; starting a fresh interval")
+        if "state_cycle" in state:
+            self._restore_state_cycle(state["state_cycle"])
         if "sleep_index" in state:
             value = state["sleep_index"]
             if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
@@ -1593,8 +1824,23 @@ class Sleep(BaseModule):
                 "reason": type(exc).__name__,
                 "trigger": trigger,
             }
-            if trigger == "developmental_rest":
-                payload["rest_seconds"] = self._developmental_rest_s
+            if trigger == "state_cycle":
+                payload["rest_seconds"] = self._cycle_rest_seconds
+                began = self._cycle_rest_began
+                if (
+                    began is not None
+                    and self._cycle_phase == "resting"
+                    and not isinstance(exc, Exception)
+                ):
+                    # A cancel (shutdown) keeps the rest's remainder for the restart.
+                    self._cycle_rest_spent_s = self._rest_elapsed(began)
+                    # Only a kept remainder resumes as a new sleep, so only this
+                    # completion is the one the maturation gate skips.
+                    payload["resumable"] = True
+                elif isinstance(exc, Exception) and self._cycle_phase == "resting":
+                    # A failed rest does not repeat at once; the awake stretch starts over.
+                    self._cycle_reset(self._rest_clock_now())
+                self._cycle_rest_began = None
             publish = asyncio.ensure_future(
                 self.publish(
                     "sleep.sleep.completed",
@@ -1610,6 +1856,8 @@ class Sleep(BaseModule):
             except Exception:
                 log.exception("sleep: aborted-sleep completed publish also failed")
             raise
+        finally:
+            self._cycle_rest_began = None
 
     async def _fatigue_triggered_enter_sleep(self, trigger: Optional[str] = None) -> None:
         """L3 — wrapper owning the pending-guard bookkeeping.
@@ -1639,7 +1887,7 @@ class Sleep(BaseModule):
             self._sleep_pending = False
 
     async def _maintenance_poll_loop(self) -> None:
-        """M1 — periodic RestScheduler.is_due()/enter_sleep() poll.
+        """M1: periodic poll: the developmental state cycle, else RestScheduler.is_due().
 
         Satisfies the boot.py promise that interval-based rest fires
         without any interoception.fatigue consumer: the scheduler (whose clock is
@@ -1649,20 +1897,7 @@ class Sleep(BaseModule):
         """
         while not self._stopped.is_set():
             try:
-                if (
-                    self._scheduler.is_due()
-                    and not self._sleep_lock.locked()
-                    and not self._sleep_pending
-                ):
-                    log.info(
-                        "sleep: rest scheduler reports sleep due — "
-                        "triggering interval-based maintenance"
-                    )
-                    self._sleep_pending = True
-                    self._sleep_task = asyncio.create_task(
-                        self._interval_triggered_enter_sleep(),
-                        name="sleep-interval-sleep",
-                    )
+                await self._maintenance_poll_once()
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 raise

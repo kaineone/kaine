@@ -97,6 +97,8 @@ The console at `/` is mounted only when `[dashboard].conversation_enabled` is tr
 
 The page title and the line under the wordmark show the entity's name. At start the dashboard reads it from the self-model file (`[self_model].persistence_path`, by default `state/self_model/self_model.json`, decrypted when state encryption is on), and when that file holds no name, from a `name` field in `state/identity/entity.json` if one is there. While it runs it takes each new name from the self-model's `self_model.document` events on `self_model.out`. With no name anywhere, for example when the self-model module is off and has never run, the console shows "KAINE". Reload the page to see a name that arrived after it opened.
 
+Every page, the diagnostics and evaluation pages included, shows the name in its header whether or not the console is enabled. The dashboard checks the self-model file and `state/identity/entity.json` for changes at most every 10 s and re-reads the name when either changed, so a name minted after the dashboard started appears on the next page load or poll without a restart. The header polls `/diagnostics/entity-name.json`, which returns only the name and sits behind the same access rules as the pages. Before any name exists the header shows "KAINE".
+
 The status chip starts from the sleep state the dashboard last read on `sleep.out` (it reads the newest `sleep.sleep.started` or `sleep.sleep.completed` when it starts), so a page opened during a sleep shows "sleeping" as soon as the cycle reports running.
 
 ### Diagnostics
@@ -198,9 +200,7 @@ For curiosity it shows the interest share, the share of awake time at or above i
 
 ## Sleep and rest
 
-The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a developmental rest, the rest's length. The trigger is the one the sleep module states where it states one: `developmental rest` (a spent stimulus in the developmental phase, a 1,260 s rest) or `requested`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
-
-Below it the panel shows the last `affect.rest_request`: the reason (`stimulus spent`), the drive, how long its goal had stalled, and the time. When the dashboard starts it reads the newest sleep events and rest request from the last 2,000 entries of `sleep.out` and `affect.out`, so a request older than that shows only after the next one.
+The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a state-cycle rest, the rest's length. The trigger is the one the sleep module states where it states one: `state-cycle rest` (the developmental state cycle, a 1,410 s rest after about 2,996 s awake) or `requested`. A sleep recorded under the earlier rule, trigger `developmental_rest`, shows as `developmental rest (earlier rule)`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
 
 ## Live charts and pacing
 
