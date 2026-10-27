@@ -516,13 +516,13 @@ def format_summary(result: dict[str, Any]) -> str:
         lines.append(
             "  NEGATIVE = the layer meaningfully re-ranks selection AWAY from the "
             "coherent coalition — a result adverse to the hypothesis, reported "
-            "honestly, not a harness failure."
+            "honestly, not a runner failure."
         )
     else:
         lines.append(
             "  NULL = the layer produced no meaningful change in selection on this "
             "stimulus (its removal would be justified). A reportable result, not a "
-            "harness failure."
+            "runner failure."
         )
     return "\n".join(lines)
 

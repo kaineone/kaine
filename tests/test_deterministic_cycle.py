@@ -16,11 +16,11 @@ Wall-clock latency fields (`wall_duration_ms`, `slip_ms`) are explicitly EXCLUDE
 from the identity comparison — they are physical host measurements and are not
 part of the reproducibility guarantee.
 
-The harness drives the REAL `Workspace` (rule-based salience) and the REAL
+The test setup drives the REAL `Workspace` (rule-based salience) and the REAL
 `ActionSelection` over a deterministic in-memory bus. The bus uses caller-supplied,
 fixed entry ids so the selected-entry identity is meaningful across runs — a
 time-based bus id (as Redis/fakeredis assigns) would be nondeterministic by
-construction and would defeat the very property under test, so the harness
+construction and would defeat the very property under test, so the test setup
 controls ids explicitly.
 """
 from __future__ import annotations
@@ -260,7 +260,7 @@ async def test_different_seeds_same_scripted_stimulus_documents_seed_independenc
     """Honest characterisation of WHAT the determinism guarantee covers.
 
     The keystone above proves SAME seed → SAME trajectory. A natural follow-up is
-    "different seeds → different trajectories". But the scripted-stimulus harness
+    "different seeds → different trajectories". But the scripted-stimulus setup
     here drives only the REAL `RuleBasedSalience` (novelty + static goal/affect
     scorers) and the REAL rule-based `ActionSelection` — none of which consult the global
     RNG. The salience scoring, canonical tie-break, inhibition, and the action selection module's
@@ -271,7 +271,7 @@ async def test_different_seeds_same_scripted_stimulus_documents_seed_independenc
     fact rather than fake a "different seeds differ" pass. The determinism
     guarantee the spec makes is "same seed + same scripted input → identical
     trajectory" (reproducibility), NOT "the seed perturbs the rule-based cognitive
-    path" — there is no stochastic policy in this harness to perturb. A
+    path" — there is no stochastic policy in this setup to perturb. A
     seed-dependent divergence would require a stochastic component (e.g. a sampled
     policy / dropout) that this scripted, rule-based path deliberately excludes.
     """

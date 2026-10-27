@@ -372,7 +372,7 @@ def format_summary_table(result: dict[str, Any]) -> str:
     if sv == NULL:
         lines.append(
             "  NULL = AIF statistically matches the baseline (or a mixed suite). "
-            "This is a reportable result, not a harness failure."
+            "This is a reportable result, not a runner failure."
         )
     elif sv == NEGATIVE:
         lines.append(

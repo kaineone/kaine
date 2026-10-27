@@ -3,7 +3,7 @@
 
 """Tests for the interoception module's learned expected prediction error and unexpected error.
 
-The harness follows tests/test_interoception_warmup.py: deterministic fakes, a fakeredis
+The test setup follows tests/test_interoception_warmup.py: deterministic fakes, a fakeredis
 bus fixture, and ManualMonotonic clock. The new ExpectedErrorModel is tested
 directly, and the real SubstrateForwardModel is driven on a synthetic noisy
 periodic channel to show that fatigue driven by the unexpected error stays

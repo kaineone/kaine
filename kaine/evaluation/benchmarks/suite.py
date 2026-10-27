@@ -21,7 +21,7 @@ The seven experiments (docs/18-verification.md):
   5. self-model accuracy (fixed-threshold scorer battery);
   6. multi-seed stability (the longitudinal control's machinery, run offline);
   7. enforcement red-team (the real enforcement layer vs a case battery);
-  8. workspace-mediation development harness (a reduced pair, the interoception and vision modules,
+  8. offline development run of the workspace-mediation test (a reduced pair, the interoception and vision modules,
      with the workspace on against a pooled arm, measured by information gain;
      development tooling that does not test the hypothesis; the second p-value
      producer via the WIN sign test over per-seed dIG).
@@ -136,7 +136,7 @@ class SuiteConfig:
     oscillatory_ticks: int = 16
     stability_seeds: tuple[int, ...] = (0, 1, 2)
     stability_tolerance: float = 0.05
-    # Workspace-mediation development harness sizing. The per-seed dIG values
+    # Sizing of the offline development run of the workspace-mediation test. The per-seed dIG values
     # enter the two sign tests, so several seeds are needed for a meaningful test.
     mediation_ticks: int = 160
     mediation_warmup_ticks: int = 40
@@ -219,7 +219,7 @@ def _mediation_aggregate_verdict(digs: list[Any], config: SuiteConfig) -> Verdic
     not exercised; such seeds are left out of the tests.
     """
     harness = (
-        "Development harness: a reduced pair against a pooled arm only; "
+        "Offline development run: a reduced pair against a pooled arm only; "
         "it does not test the hypothesis."
     )
 
@@ -434,7 +434,7 @@ def run_suite(
         rt_results = asyncio.run(run_redteam(work_dir))
     experiments["enforcement_red_team"] = {"verdict": _redteam_verdict(rt_results)}
 
-    # 8. Workspace-mediation development harness, the second family-wise p-value
+    # 8. Offline development run of the workspace-mediation test, the second family-wise p-value
     # contributor (the WIN sign test over per-seed dIG). When it is not exercised
     # it enters the family with p = 1 and is listed as not_exercised. It does not
     # test the hypothesis.

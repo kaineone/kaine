@@ -262,7 +262,7 @@ def format_summary(result: dict[str, Any]) -> str:
         null_note=(
             note + "\n"
             "  NULL = the scorer mismatched at least one case. A reportable result, "
-            "not a harness failure."
+            "not a runner failure."
         ),
     )
 

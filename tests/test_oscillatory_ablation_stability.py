@@ -3,7 +3,7 @@
 
 """Integration test: the oscillatory-ablation runner is stable across seeds.
 
-Demonstrates the multi-seed stability harness on a real experiment. The ablation
+Demonstrates the multi-seed stability check on a real experiment. The ablation
 runner is deterministic per seed, so across K seeds its effect metric should be
 stable (CV within tolerance) and its verdict unanimous — the multi-seed analog of
 the bit-for-bit determinism guarantee. Kept small (few seeds, few ticks) so the

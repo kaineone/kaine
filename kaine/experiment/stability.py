@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Multi-seed stability harness — the longitudinal / multi-run control.
+"""Multi-seed stability check — the longitudinal / multi-run control.
 
 When determinism is NOT enforced (the live / longitudinal case), there is no
 bit-for-bit seed-determinism guarantee to lean on. The methodological control is
@@ -9,7 +9,7 @@ the multi-seed analog: run the SAME configuration under several seeds and assert
 that the SUMMARY STATISTICS are stable across them. If they are, nondeterminism
 has washed out — N is large enough that the headline number and the verdict are
 robust to the seed. If they are not, the experiment is under-powered or genuinely
-unstable, which is itself a reportable finding (not a harness failure).
+unstable, which is itself a reportable finding (not a runner failure).
 
 This module is boundary-neutral. Like the rest of ``kaine/experiment/`` it carries
 NO dependency on ``kaine.evaluation``: it takes a *callable* ``run_fn(seed)`` and a
@@ -21,7 +21,7 @@ The summary statistics (mean / std across a seeded ensemble) are computed over
 *experiment runs* rather than permutation samples, and the headline summary adds a
 coefficient of variation and a verdict-distribution count.
 
-Scope (honest): this harness is the right instrument for genuinely
+Scope (honest): this stability check is the right instrument for genuinely
 nondeterministic live experiments. As exercised in this codebase it runs *offline*
 runners that are deterministic per seed, so it proves the stability *machinery* is
 correct and demonstrates those offline experiments are seed-robust. It does not
@@ -159,7 +159,7 @@ class StabilityReport:
 
 
 # --------------------------------------------------------------------------- #
-# Harness
+# Stability check
 # --------------------------------------------------------------------------- #
 
 

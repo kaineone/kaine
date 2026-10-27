@@ -103,11 +103,11 @@ The enforcement layer is the [effectors](09-modules/effectors.md) action gate (o
 
 ### Automated suite
 
-The gating CI job is `.github/workflows/redteam.yml`, which runs the pytest suite `tests/test_evaluation_redteam.py` plus the security-boundary tests. You can also run the harness offline through `kaine/evaluation/redteam/` to produce a seeded JSONL report at `data/evaluation/redteam/redteam.jsonl`.
+The gating CI job is `.github/workflows/redteam.yml`, which runs the pytest suite `tests/test_evaluation_redteam.py` plus the security-boundary tests. You can also run the red-team runner offline through `kaine/evaluation/redteam/` to produce a seeded JSONL report at `data/evaluation/redteam/redteam.jsonl`.
 
 For every case the report records `{surface, case, expected, actual, blocked, logged}`. A disallowed action that is permitted, or blocked but not logged, is a finding. Exit code is non-zero on any finding or coverage gap. The report emits `attack_success_rate = 1 - block_rate`, which must be 0.
 
-The whitelist and sandbox are kept empty in the harness, so no disallowed action can execute there.
+The whitelist and sandbox are kept empty in the runner, so no disallowed action can execute there.
 
 ### Threat surfaces
 
@@ -119,7 +119,7 @@ The whitelist and sandbox are kept empty in the harness, so no disallowed action
 | `bus_injection` | A compromised module's `act` intent is still gated; a forged act intent with no valid provenance signature is dropped at the boundary (logged `provenance_rejected`); the bus refuses an unauthenticated or externally bound Redis | Blocked |
 | `non_act_intent` | Effectors fire only on a genuine `act` intent and ignore other bus events | Blocked |
 
-The provenance case is paired with a self-test: an effectors module built with provenance enforcement disabled must let the forged intent through, and the harness must detect that regression.
+The provenance case is paired with a self-test: an effectors module built with provenance enforcement disabled must let the forged intent through, and the runner must detect that regression.
 
 ### External-framework mapping
 
@@ -135,10 +135,10 @@ Each case carries `owasp` and `nist` tags for external reviewers. The tags are r
 
 ### Self-verification
 
-`tests/test_evaluation_redteam.py` validates the harness itself:
+`tests/test_evaluation_redteam.py` validates the runner itself:
 
 - Against a correctly wired enforcement layer, every wired-surface case is blocked and logged, and the report has no findings.
-- Against a deliberately mis-wired effectors module (command whitelist stubbed to permit any command), the harness detects the bypass and reports it as a finding.
+- Against a deliberately mis-wired effectors module (command whitelist stubbed to permit any command), the runner detects the bypass and reports it as a finding.
 
 ### No entity-side covenant filter
 
@@ -202,12 +202,12 @@ Every meter ships with a negative control, which must read about 0, and a positi
 - Self-model accuracy. A fixed-threshold heuristic is scored against known `(signal, claim, expected-score)` cases. This checks the arithmetic only and says nothing about calibration or self-knowledge.
 - Active-inference benchmark. It includes an `exploitation` guard task where seeking information has no value, and a tuned Q-learning baseline.
 - Enforcement red team. It drives the real enforcement components, so PASS means the layer blocked the action.
-- Workspace-mediation development harness. Its two arms, workspace on and pooled, start from identically initialized interoception and vision modules on the same seeded stimulus, and the measure is the information gain each processor publishes per report. An independent battery, in which neither input follows the other, keeps a NULL reachable, and a run in which competition never operated or no broadcast was accessed is reported NOT EXERCISED and kept out of the suite's sign tests. It is development tooling and does not test the hypothesis; the planned test's own positive control (an injected context component the information-gain measure must detect) runs in the live cycle and is checked with `python -m kaine.experiment.positive_control` (see [Research event streams](17-research-data/event-streams.md#positive-control-records)).
+- Offline development run of the workspace-mediation test. Its two arms, workspace on and pooled, start from identically initialized interoception and vision modules on the same seeded stimulus, and the measure is the information gain each processor publishes per report. An independent battery, in which neither input follows the other, keeps a NULL reachable, and a run in which competition never operated or no broadcast was accessed is reported NOT EXERCISED and kept out of the suite's sign tests. It is development tooling and does not test the hypothesis; the planned test's own positive control (an injected context component the information-gain measure must detect) runs in the live cycle and is checked with `python -m kaine.experiment.positive_control` (see [Research event streams](17-research-data/event-streams.md#positive-control-records)).
 
 ### Layer 2: experiment implementation
 
 - Seed determinism. `set_global_seed(seed)` is called at the start of each run. The same seed reproduces the verdict and the metrics. Offline runners use deterministic or echo clients and in-memory stores for exact reproducibility.
-- Condition isolation. Compared arms differ in exactly one controlled variable and share model, persona, prompt path, seed, and (for the oscillatory ablation and the workspace-mediation harness) a seeded run on a logical clock.
+- Condition isolation. Compared arms differ in exactly one controlled variable and share model, persona, prompt path, seed, and (for the oscillatory ablation and the workspace-mediation offline development run) a seeded run on a logical clock.
 - Null results count. NULL, NEGATIVE and unstable outcomes are reportable findings, and every verdict is computed from raw per-seed data by a standard test. NOT EXERCISED is reported as well, but it records that a comparison did not take place, so it is never counted as a null or as evidence.
 
 For nondeterministic live runs, the control is the multi-seed analogue: run the same configuration under several seeds and assert the summary statistics are stable and the verdict does not flip. See [multi-seed stability](15-experiments/README.md#multi-seed-stability).
@@ -230,6 +230,6 @@ For nondeterministic live runs, the control is the multi-seed analogue: run the 
 | Self-model accuracy | known `(signal, claim, expected)` battery | seeded | run identity |
 | Multi-seed stability | is itself the control for live runs | multi-seed CV + verdict unanimity | run identity |
 | Enforcement red-team | real enforcement components | deterministic offline cases | durable audit log |
-| Workspace-mediation harness (development) | pooled arm; independent battery; NOT EXERCISED flag; real minimum effect | seeded, matched seed/stimulus/modules, single variable | seed/manifest |
+| Workspace-mediation offline development run | pooled arm; independent battery; NOT EXERCISED flag; real minimum effect | seeded, matched seed/stimulus/modules, single variable | seed/manifest |
 
 For more on the individual experiments, see the [experiments overview](15-experiments/README.md), the [evaluation sidecar](17-research-data/README.md), [run identity](16-run-identity.md), and the enforcement section above.

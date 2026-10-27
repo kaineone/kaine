@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the multi-seed stability harness (longitudinal-stability change).
+"""Tests for the multi-seed stability check (longitudinal-stability change).
 
 Spec-scenario coverage (openspec/changes/longitudinal-stability/specs/
 experiment-foundation/spec.md):
@@ -276,7 +276,7 @@ def _imports_of(module_path: Path) -> set[str]:
 
 
 def test_stability_module_does_not_import_evaluation():
-    """The harness lives in kaine.experiment and must stay boundary-neutral:
+    """The stability check lives in kaine.experiment and must stay boundary-neutral:
     it must NOT import kaine.evaluation (so core may use it too)."""
     repo = Path(__file__).parent.parent
     mod = repo / "kaine" / "experiment" / "stability.py"
@@ -289,7 +289,7 @@ def test_stability_module_does_not_import_evaluation():
 
 
 def test_no_core_module_imports_kaine_evaluation_via_stability():
-    """git-grep guard: the new harness did not introduce a core->evaluation import."""
+    """git-grep guard: the new stability check did not introduce a core->evaluation import."""
     repo = Path(__file__).parent.parent
     proc = subprocess.run(
         ["git", "grep", "-l", "from kaine.evaluation", "--", "kaine/experiment/"],

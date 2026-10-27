@@ -3,7 +3,7 @@
 
 """Tests for the mandatory pre-boot dry-run / smoke gate (kaine.preboot).
 
-This is the harness that must report PASS before any entity boot. It must
+This is the check that must report PASS before any entity boot. It must
 compose fakes for every external dependency (services, organ, perception
 source factories, the welfare preserve->revive round-trip) so the suite never
 touches a live service, never boots the entity, and never installs a real
@@ -299,7 +299,7 @@ async def test_smoke_welfare_passes_when_key_and_roundtrip_ok(monkeypatch):
     assert statuses["State-encryption key"] == preboot.PASS
     assert statuses["Preserve -> revive dry run"] == preboot.PASS
     # The configured require_encryption must actually reach the self-check —
-    # this is the gap the harness exists to close.
+    # this is the gap this check exists to close.
     assert captured["require_encryption"] is True
 
 
@@ -519,7 +519,7 @@ async def test_dry_run_resolves_state_key_before_services_check(monkeypatch, tmp
     is resolved from secrets/state_key AFTER that probe runs (e.g. only
     inside check_welfare, which runs later), the SERVICES probe falsely
     reports "no key" even though WELFARE NET later proves the key works —
-    exactly the false-negative caught running this harness live. The key must
+    exactly the false-negative caught running this check live. The key must
     be resolved once, before any check that depends on it runs."""
     monkeypatch.delenv("KAINE_STATE_KEY", raising=False)
     key_file = tmp_path / "state_key"

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Two-arm workspace-mediation development harness over the REAL interoception and vision modules.
+"""Two-arm offline development run of the workspace-mediation test over the REAL interoception and vision modules.
 
 The workspace-on arm uses the workspace to competitively select a coalition each
 tick from the candidate events (the interoception module's report, the vision module's report, and scripted
@@ -86,7 +86,7 @@ class MediationConfig:
     n_background: int = 2
     interoception_units: int = 16
     vision_units: int = 32
-    # The harness raises the vision module's learning rate so a short run shows learning;
+    # The run raises the vision module's learning rate so a short run shows learning;
     # the live module keeps its own default.
     vision_lr: float = 0.02
 
@@ -345,7 +345,7 @@ def _compute_effect(
 
 
 _HARNESS_SUFFIX = (
-    "Development harness: a reduced pair against a pooled arm only; "
+    "Offline development run: a reduced pair against a pooled arm only; "
     "it does not test the hypothesis."
 )
 
@@ -407,7 +407,7 @@ async def run_ablation(
     *,
     stimulus: MediationStimulus = COUPLED_STIMULUS,
 ) -> dict[str, Any]:
-    """Run the two-arm workspace-mediation development harness; return records."""
+    """Run the two-arm offline development run of the workspace-mediation test; return records."""
     config = config or MediationConfig()
     script = stimulus.script(
         config.seed, config.ticks, n_background=config.n_background
@@ -481,7 +481,7 @@ def format_summary(result: dict[str, Any]) -> str:
         return str(value)
 
     lines = [
-        "Workspace-mediation development harness: workspace on against pooled",
+        "Offline development run of the workspace-mediation test: workspace on against pooled",
         "=" * 70,
         f"seed={cfg['seed']} ticks={cfg['ticks']} warmup_ticks={cfg['warmup_ticks']} "
         f"top_k={cfg['top_k']} access_threshold={cfg['access_threshold']}",
@@ -494,7 +494,7 @@ def format_summary(result: dict[str, Any]) -> str:
         f"competing_fraction            = {eff['competing_fraction']:.3f}",
         f"accessed_broadcasts           = {eff['accessed_broadcasts']}",
         f"VERDICT: {v['outcome']}: {v['detail']}",
-        "This harness is development tooling and does not test the hypothesis.",
+        "This run is development tooling and does not test the hypothesis.",
     ]
     return "\n".join(lines)
 

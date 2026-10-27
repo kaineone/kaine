@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The pooled arm of the workspace-mediation development harness.
+"""The pooled arm of the offline development run of the workspace-mediation test.
 
 Every candidate event enters the broadcast context weighted by its own
 salience. There is no scoring, no top-k selection, no access gate, and no

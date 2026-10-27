@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Pure measure functions for the workspace-mediation development harness.
+"""Pure measure functions for the offline development run of the workspace-mediation test.
 
 For each context-conditioned processor j, IG_j is the mean per-report
 ``context_gain`` over reports whose gain is a finite float and whose tick index

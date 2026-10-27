@@ -222,7 +222,7 @@ The boundary closes that path cryptographically:
 
 The secret lives in the process, so a full compromise of the cycle process defeats it, but such an attacker already controls the action selection module. The boundary holds against the realistic threat of a compromised peripheral module. Per-process Redis ACLs are the direction once services split.
 
-The red-team battery exercises this boundary with cases such as `bus_injection` and `forged_act_intent` (case id `bus.forged_act_intent_fails_provenance`), paired with a mis-wire self-test that disables enforcement and asserts the harness detects the regression. See [Verification](18-verification.md) and the effectors module page [the effectors module](09-modules/effectors.md).
+The red-team battery exercises this boundary with cases such as `bus_injection` and `forged_act_intent` (case id `bus.forged_act_intent_fails_provenance`), paired with a mis-wire self-test that disables enforcement and asserts the runner detects the regression. See [Verification](18-verification.md) and the effectors module page [the effectors module](09-modules/effectors.md).
 
 ## Redis and Qdrant security
 

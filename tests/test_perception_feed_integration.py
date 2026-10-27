@@ -10,7 +10,7 @@ deterministic (virtual-world) feed was gated behind the PHYSICAL-locus reader
 (``effective_*_capture`` requires ``locus == "physical"``) while the shipped
 desired-state defaults to ``locus = "physical"`` with both modality flags off.
 
-This harness wires the SAME locus-gated capture supervisors the live boot uses
+This test wires the SAME locus-gated capture supervisors the live boot uses
 (the vision module -> LiveCamera, the audition module -> LiveMicrophone, plus the passive
 PerceptualLocusLocus arbiter) against an in-memory bus, selects the virtual feed the
 way boot now does (``perception_state.select_virtual_feed``), and asserts that

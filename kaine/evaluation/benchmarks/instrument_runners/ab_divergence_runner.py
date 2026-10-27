@@ -272,7 +272,7 @@ def format_summary(result: dict[str, Any]) -> str:
         ),
         null_note=(
             "  NULL = the meter could not separate conditioned from unconditioned "
-            "output on this battery. A reportable result, not a harness failure."
+            "output on this battery. A reportable result, not a runner failure."
         ),
     )
 

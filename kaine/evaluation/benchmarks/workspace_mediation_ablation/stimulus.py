@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Seeded, deterministic stimulus for the workspace-mediation development harness.
+"""Seeded, deterministic stimulus for the offline development run of the workspace-mediation test.
 
 The stimulus drives the interoception module with scripted metrics and the vision module with scripted frame
 vectors. It also emits background candidate events each tick so the candidate
@@ -60,7 +60,7 @@ LATENT_DIM: int = 8
 
 
 class VectorEncoder:
-    """A per-frame vector encoder for the harness.
+    """A per-frame vector encoder for the offline development run.
 
     The frame is its own latent, so encode is the identity cast to float.
     Implements the vision encoder protocol with ``clip_len == 1``.

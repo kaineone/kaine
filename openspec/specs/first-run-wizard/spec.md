@@ -371,7 +371,7 @@ configuration from either front end.
 Setup SHALL write only configuration keys on its owned-key allowlist, and
 SHALL merge them into an existing operator override rather than replacing
 the file. The allowlist SHALL exclude `[research]`, which the research
-harness owns, every operator-presence gate, and
+gate owns, every operator-presence gate, and
 `[dashboard].non_loopback_allowed`.
 
 #### Scenario: Hand edits survive a re-run

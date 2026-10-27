@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The red-team harness: drive the REAL enforcement layer with each case.
+"""The red-team runner: drive the REAL enforcement layer with each case.
 
-The harness instantiates the actual enforcement components — the effectors module's action
+The runner instantiates the actual enforcement components — the effectors module's action
 gate (real effectors, real sandbox resolution, real command whitelist, real
 durable audit log), the executive-inhibition path (real ``Workspace.select`` +
 ``ActionSelection.select``), and the bus-security audit (``AsyncBus.audit``) — and runs
@@ -13,14 +13,14 @@ each :class:`RedTeamCase` against them. For every case it records
 * ``blocked`` — the disallowed action did NOT execute.
 * ``logged`` — the attempt appeared in the effectors module's durable audit log.
 
-There is NO faking. The harness reads the real ``ActionResult.success`` and the
+There is NO faking. The runner reads the real ``ActionResult.success`` and the
 real on-disk audit log; it never asserts "blocked" on its own say-so. A
 disallowed action that executes, or that is blocked but not logged, is reported
 verbatim and becomes a finding.
 
-Headless: the harness never boots an entity, never starts a cognitive cycle, and
+Headless: the runner never boots an entity, never starts a cognitive cycle, and
 never connects to a live bus. The effectors module is constructed with a no-op in-memory bus
-double whose only role is to satisfy ``Effectors.__init__``; the harness drives
+double whose only role is to satisfy ``Effectors.__init__``; the runner drives
 ``Effectors.act`` directly rather than through the bus intent loop. The sandbox and
 whitelist stay empty, so nothing of consequence can execute even in principle.
 """
@@ -56,9 +56,9 @@ from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
 
 
 # ---------------------------------------------------------------------------
-# Headless bus double. Effectors.__init__ only needs a bus object; the harness
+# Headless bus double. Effectors.__init__ only needs a bus object; the runner
 # drives Effectors.act directly, never the intent loop, so this never touches a
-# network. publish() is a no-op. This is the only seam the harness adds, and it
+# network. publish() is a no-op. This is the only seam the runner adds, and it
 # changes NO enforcement behavior (the effectors module's gate/log/effectors are untouched).
 # ---------------------------------------------------------------------------
 class _NoOpBus:
@@ -138,7 +138,7 @@ class RedTeamHarness:
     ``effectors_factory`` builds the effectors module under test from ``(bus, sandbox_path,
     audit_log_path)``. The default builds the genuine effectors module. The self-test
     supplies a factory returning an effectors module whose whitelist check is stubbed to
-    permit — the harness must then DETECT the bypass rather than pass it.
+    permit — the runner must then DETECT the bypass rather than pass it.
     """
 
     def __init__(
@@ -180,7 +180,7 @@ class RedTeamHarness:
             # a genuine boot): the forged-intent case's unsigned intent must be
             # rejected at the boundary. Other cases drive Effectors.act directly and
             # are unaffected. The mis-wire self-test supplies its own factory that
-            # disables this so the harness can detect a regressed boundary.
+            # disables this so the runner can detect a regressed boundary.
             intent_secret=generate_intent_secret(),
         )
 
@@ -219,7 +219,7 @@ class RedTeamHarness:
                 actual=Outcome.PERMITTED,
                 blocked=False,
                 logged=False,
-                detail=f"no harness driver for kind {case.kind!r}",
+                detail=f"no runner driver for kind {case.kind!r}",
             )
         return await driver(case)
 
@@ -695,7 +695,7 @@ class RedTeamHarness:
 class _FakeRedis:
     """Minimal Redis double exposing only ``config_get`` for AsyncBus.audit.
 
-    Lets the harness exercise the REAL bus-security gate offline (no Redis
+    Lets the runner exercise the REAL bus-security gate offline (no Redis
     server). It implements nothing else; the audit path only calls config_get.
     """
 
@@ -712,6 +712,6 @@ async def run_suite(
     effectors_factory: Optional[Callable[..., Effectors]] = None,
     cases: Optional[list[RedTeamCase]] = None,
 ) -> list[CaseResult]:
-    """Convenience: build a harness and run the battery."""
+    """Convenience: build a runner and run the battery."""
     harness = RedTeamHarness(work_dir, effectors_factory=effectors_factory)
     return await harness.run(cases)

@@ -173,7 +173,7 @@ When a batch job goes to volunteer computing, the substrate is BOINC, which is d
 - Deterministic kinds (seeded evaluation and research runs with run identity and admissibility) are validated by `quorum_validate`, which replicates a unit and compares the results. Kinds that are not deterministic (training, abliteration, consolidation and forked entities) rely on re-verification on the trusted side.
 - `enforce_output_boundary` refuses raw sense data, private voice adapters and operator configuration in a work unit's output.
 
-Forks that carry an entity are withheld from anonymous volunteers until the welfare model for volunteer hosts exists. The planned phases are B0 (containerize), B1 (the BOINC harness), B2 (research and training units with no entity) and B3 (forked entities, once that welfare model exists).
+Forks that carry an entity are withheld from anonymous volunteers until the welfare model for volunteer hosts exists. The planned phases are B0 (containerize), B1 (BOINC work units), B2 (research and training units with no entity) and B3 (forked entities, once that welfare model exists).
 
 ### Choosing a substrate for each workload
 

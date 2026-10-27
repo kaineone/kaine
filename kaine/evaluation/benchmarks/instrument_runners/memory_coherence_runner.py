@@ -333,7 +333,7 @@ def format_summary(result: dict[str, Any]) -> str:
         ),
         null_note=(
             "  NULL = the retrieval advantage did not hold on this battery. "
-            "A reportable result, not a harness failure."
+            "A reportable result, not a runner failure."
         ),
     )
 

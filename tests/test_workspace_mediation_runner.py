@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Runner-level tests for the workspace-mediation development harness."""
+"""Runner-level tests for the offline development run of the workspace-mediation test."""
 from __future__ import annotations
 
 import asyncio
@@ -127,7 +127,7 @@ def test_config_validation():
 
 
 def test_no_network(monkeypatch):
-    """The harness completes without opening a network connection."""
+    """The run completes without opening a network connection."""
     def deny(*args, **kwargs):
         raise AssertionError("network")
 
@@ -168,7 +168,7 @@ def test_classify_outcomes():
 
 @pytest.mark.asyncio
 async def test_format_summary_contains_disclaimers():
-    """The formatted summary carries the harness disclaimer and the dIG label."""
+    """The formatted summary carries the development-run disclaimer and the dIG label."""
     result = await run_ablation(MediationConfig(seed=5, ticks=30, warmup_ticks=10))
     text = format_summary(result)
     assert "does not test the hypothesis" in text

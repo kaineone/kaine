@@ -153,7 +153,7 @@ def build_registry(
     # oscillator wiring read them back from the registry.
     registry.plugins = plugins
     # The entity's launch name from its identity (resolved at boot before any module
-    # starts); the self-model module adopts it. None for a bare harness.
+    # starts); the self-model module adopts it. None for a bare test setup.
     registry.identity_name = identity_name
     registry.identity_name_pending = identity_name_pending
     # The unified perception feed is a single top-level [perception_feed] section

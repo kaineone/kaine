@@ -131,7 +131,7 @@ Boot logs one WARNING line for each filled seam. The run manifest records, for e
 
 ## Plugins in ablation runs
 
-The development harness of the workspace-mediation test constructs the interoception and vision modules directly and does not load plugins.
+The offline development run of the workspace-mediation test constructs the interoception and vision modules directly and does not load plugins.
 
 ## The CL1 substrate plugin
 

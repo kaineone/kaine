@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Multi-seed stability adapter for the workspace-mediation development harness.
+"""Multi-seed stability adapter for the offline development run of the workspace-mediation test.
 
 Runs the ablation across several seeds and summarizes whether its headline
 effect (dIG) and its WIN/NULL/NEGATIVE verdict are stable, via the boundary-
