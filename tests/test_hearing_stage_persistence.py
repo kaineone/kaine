@@ -227,3 +227,26 @@ def test_lived_artifact_detection_counts_the_file(tmp_path):
     (tmp_path / "lifecycle").mkdir()
     _write(tmp_path / "lifecycle" / "hearing_stage.json", ME)
     assert own_lived_artifacts(tmp_path) == [tmp_path / "lifecycle" / "hearing_stage.json"]
+
+
+@pytest.mark.asyncio
+async def test_preserve_bundles_the_current_dwell(tmp_path, self_model):  # noqa: F811
+    lifecycle_dir = tmp_path / "lifecycle"
+    lifecycle_dir.mkdir()
+    (lifecycle_dir / "stage.json").write_text(json.dumps({"stage": "development"}))
+    state = HearingStageState(PARAMS, path=lifecycle_dir / "hearing_stage.json", entity_id=ME)
+    state.observe(0.0, None)
+    state.observe(10.0, None)  # 10 s of dwell: under the 30 s autosave step
+    assert not (lifecycle_dir / "hearing_stage.json").exists()
+
+    bundle, _ = await _preserve_bundle(
+        tmp_path,
+        self_model,
+        monkeypatch_stage=lifecycle_dir / "stage.json",
+        hearing_stage_state=state,
+    )
+    target = tmp_path / "revived"
+    target.mkdir()
+    extract_bundle_development(bundle, target)
+    restored = HearingStageState.load(PARAMS, path=target / "hearing_stage.json", entity_id=ME)
+    assert restored.dwell_seconds == 10.0

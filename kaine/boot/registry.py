@@ -232,6 +232,8 @@ def build_registry(
         _install_shared_stimulus_source_clock(
             perception_feed, kaine_config, entity_clock, stage_state=boot_stage
         )
+        # Preservation flushes the stage owner before it bundles the stage file.
+        registry.hearing_stage_state = perception_feed.get("_hearing_stage_state")
     if _feed_mode in ("seeded", "playlist", "stimulus_source") and (
         bool(toggles.get("vision", False)) or bool(toggles.get("audition", False))
     ):

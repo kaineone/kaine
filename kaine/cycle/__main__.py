@@ -3087,6 +3087,10 @@ async def _shutdown(ctx: BootContext) -> None:
             log.debug("stimulus source presence task cancelled at shutdown")
         except Exception:
             log.exception("stimulus source presence task shutdown failed")
+    # Save the hearing stage owner even when the watch task was cancelled before it started.
+    hearing_state = ((ctx.kaine_config or {}).get("perception_feed") or {}).get("_hearing_stage_state")
+    if hearing_state is not None:
+        hearing_state.save()
     if ctx.housekeeping_floor_task is not None:
         ctx.housekeeping_floor_task.cancel()
         try:

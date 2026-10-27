@@ -209,6 +209,12 @@ async def preserve_live(
                 "[preservation].require_encryption = false."
             )
 
+    # The hearing stage owner saves every 30 s of dwell; flush it so the bundle
+    # holds the current dwell.
+    hearing_state = getattr(registry, "hearing_stage_state", None)
+    if hearing_state is not None:
+        hearing_state.save()
+
     # Resolve the stage file path at call time so tests can monkeypatch it.
     if stage_path is None:
         from kaine.lifecycle import stage as _stage_module
