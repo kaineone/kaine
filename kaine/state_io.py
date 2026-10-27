@@ -28,11 +28,14 @@ SEPARATE from this plaintext helper on purpose.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
+
+log = logging.getLogger(__name__)
 
 __all__ = ["write_json_atomic", "update_json_locked", "file_lock"]
 
@@ -44,14 +47,14 @@ def write_json_atomic(path: Path, payload: Any) -> None:
     call in the same directory (so concurrent writers never share one), fsyncs
     it, then ``os.replace``s it into place (atomic on POSIX). The temp file is
     removed if anything fails. The serialization is
-    ``json.dumps(payload, indent=2, sort_keys=True)`` and the file mode follows
-    the process umask, as before.
+    ``json.dumps(payload, indent=2, sort_keys=True)`` and the file is created
+    owner-only (0600).
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         try:
             view = memoryview(data)
@@ -64,8 +67,8 @@ def write_json_atomic(path: Path, payload: Any) -> None:
     except BaseException:
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as exc:
+            log.debug("could not remove temp file %s: %s", tmp, exc)
         raise
 
 

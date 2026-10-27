@@ -9,6 +9,8 @@ import multiprocessing as mp
 import threading
 from pathlib import Path
 
+import pytest
+
 from kaine.cycle import control_state
 from kaine.state_io import update_json_locked, write_json_atomic
 
@@ -64,13 +66,13 @@ def test_welfare_push_racing_operator_resume_keeps_welfare(tmp_path: Path, monke
 
 def test_write_json_atomic_concurrent_leaves_valid_file_and_no_temp(tmp_path: Path) -> None:
     path = tmp_path / "s.json"
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def run(i: int) -> None:
         try:
             for j in range(50):
                 write_json_atomic(path, {"i": i, "j": j})
-        except BaseException as exc:  # pragma: no cover
+        except Exception as exc:  # pragma: no cover
             errors.append(exc)
 
     ts = [threading.Thread(target=run, args=(i,)) for i in range(8)]
@@ -85,20 +87,16 @@ def test_write_json_atomic_concurrent_leaves_valid_file_and_no_temp(tmp_path: Pa
 
 def test_write_json_atomic_cleans_up_on_failure(tmp_path: Path) -> None:
     path = tmp_path / "s.json"
-    try:
+    with pytest.raises(TypeError):
         write_json_atomic(path, {"x": object()})
-    except TypeError:
-        pass
     assert list(tmp_path.iterdir()) == []
 
 
 def test_update_json_locked_default_and_no_write_on_error(tmp_path: Path) -> None:
     path = tmp_path / "a.json"
     assert update_json_locked(path, lambda d: {**d, "n": 1}, default={}) == {"n": 1}
-    try:
+    with pytest.raises(ZeroDivisionError):
         update_json_locked(path, lambda d: 1 / 0, default={})
-    except ZeroDivisionError:
-        pass
     assert json.loads(path.read_text()) == {"n": 1}
 
 
@@ -156,10 +154,8 @@ def test_write_json_atomic_uses_unique_temp_names(tmp_path: Path, monkeypatch) -
 
 def test_lock_released_after_exception_and_missing_file_ok(tmp_path: Path) -> None:
     path = tmp_path / "missing" / "control.json"
-    try:
+    with pytest.raises(LookupError):
         control_state.override(["welfare"], path=path)
-    except LookupError:
-        pass
     assert not path.exists()
     # The lock must be free again: this would deadlock if it leaked.
     done: list[bool] = []
