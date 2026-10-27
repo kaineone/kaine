@@ -75,6 +75,18 @@ async def test_tail_id_swallows_lookup_errors():
     assert await tail_id(Broken(), "x") == "0-0"
 
 
+@pytest.mark.asyncio
+async def test_tail_id_strict_raises_on_lookup_error():
+    class Broken:
+        class client:  # noqa: N801
+            @staticmethod
+            async def xrevrange(*_a, **_k):
+                raise RuntimeError("down")
+
+    with pytest.raises(RuntimeError):
+        await tail_id(Broken(), "x", strict=True)
+
+
 # ---- interoception --------------------------------------------------------
 
 

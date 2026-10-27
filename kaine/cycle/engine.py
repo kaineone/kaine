@@ -10,7 +10,7 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
 from kaine.cycle.protocols import (
     CycleHook,
@@ -1121,18 +1121,8 @@ class CognitiveCycle:
         return phases
 
     async def _tail_id(self, stream: str) -> str:
-        """Latest entry id of a stream ("0" when empty) — H3 cursor seeding."""
-        try:
-            latest = await self._bus.client.xrevrange(stream, count=1)
-        except Exception:
-            log.warning("tail lookup failed for %s", stream, exc_info=True)
-            return "0"
-        if not latest:
-            return "0"
-        entry_id = latest[0][0]
-        if isinstance(entry_id, bytes):
-            entry_id = entry_id.decode()
-        return entry_id
+        """Latest entry id of a stream ("0-0" when empty) — H3 cursor seeding."""
+        return await tail_id(self._bus, stream)
 
     async def _safe_read(
         self, stream: str, last_id: str

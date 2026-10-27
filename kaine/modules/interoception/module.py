@@ -350,7 +350,7 @@ class Interoception(BaseModule):
         # Start the sleep consumer at the stream tail: replaying past sleeps would
         # reset restored fatigue and regulation, and a replayed started event with
         # no completion would leave the module asleep after a crash mid-sleep.
-        self._sleep_cursor = await tail_id(self._bus, "sleep.out")
+        self._sleep_cursor = await tail_id(self._bus, "sleep.out", strict=True)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._produce_loop(), name=f"{self.name}-producer")

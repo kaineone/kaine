@@ -187,7 +187,7 @@ class Sequence(BaseModule):
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._sleep_cursor = await tail_id(self._bus, _SLEEP_STREAM)
+        self._sleep_cursor = await tail_id(self._bus, _SLEEP_STREAM, strict=True)
 
         await super().initialize()
         self._tasks.append(

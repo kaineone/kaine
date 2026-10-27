@@ -690,7 +690,7 @@ class Audition(BaseModule):
         await super().initialize()
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._sleep_cursor = await tail_id(self._bus, self._SLEEP_STREAM)
+        self._sleep_cursor = await tail_id(self._bus, self._SLEEP_STREAM, strict=True)
         self._tasks.append(
             asyncio.create_task(self._sleep_loop(), name=f"{self.name}-sleep-consumer")
         )

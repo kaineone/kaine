@@ -613,7 +613,7 @@ async def get_bus(client: Optional[aioredis.Redis] = None) -> AsyncBus:
     return _BUS_INSTANCE
 
 
-async def tail_id(bus: Any, stream: str) -> str:
+async def tail_id(bus: Any, stream: str, *, strict: bool = False) -> str:
     """Return the id of ``stream``'s newest entry, or ``"0-0"``.
 
     A live consumer seeds its cursor with this so it reads only entries
@@ -621,10 +621,16 @@ async def tail_id(bus: Any, stream: str) -> str:
     An empty or missing stream gives ``"0-0"``, and so does a failed lookup
     (logged), which is the cursor every hand-written seed used before this
     helper. Do not use it for a reader that is meant to read history.
+
+    With ``strict=True`` a failed lookup raises instead of falling back to
+    ``"0-0"``. Use it where falling back would replay history that the consumer
+    must not see (the sleep consumers), so the failure surfaces at start.
     """
     try:
         latest = await bus.client.xrevrange(stream, count=1)
     except Exception:
+        if strict:
+            raise
         log.warning("tail lookup failed for %s", stream, exc_info=True)
         return "0-0"
     if not latest:
