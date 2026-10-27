@@ -262,6 +262,7 @@ async def _build():
     launch_name = read_entity_name(self_model_path, identity_path)
     if launch_name is not None:
         conversation_state.entity_name = launch_name
+    conversation_state.watch_name_files(self_model_path, identity_path)
 
     bridge.add_observer(conversation_state.observe)
 
