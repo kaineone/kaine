@@ -31,10 +31,10 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from kaine import legacy_aliases
-from kaine.state_io import write_json_atomic
+from kaine.state_io import update_json_locked
 from kaine.storage import resolve
 
 CONTROL_PATH = Path("state/cycle/control.json")
@@ -123,10 +123,6 @@ class CycleControl:
         )
 
 
-# Shared boundary-neutral atomic JSON writer (see kaine.state_io).
-_atomic_write = write_json_atomic
-
-
 def read_control(path: Path | None = None) -> CycleControl:
     target = resolve(path or CONTROL_PATH)
     if not target.exists():
@@ -163,22 +159,45 @@ def read_frozen_state(path: Path | None = None) -> bool | None:
 
 def write_control(state: CycleControl, path: Path | None = None) -> None:
     target = resolve(path or CONTROL_PATH)
-    _atomic_write(target, state.to_dict())
+    update_json_locked(target, lambda _current: state.to_dict(), default={})
 
 
-def _from_stack(
-    stack: list[dict[str, Any]], path: Path | None
-) -> CycleControl:
+def _state_of(stack: list[dict[str, Any]]) -> CycleControl:
     view = _top_view(tuple(stack))
-    state = CycleControl(
+    return CycleControl(
         frozen=view["frozen"],
         frozen_at=view["frozen_at"],
         reason=view["reason"],
         source=view["source"],
         stack=tuple(stack),
     )
-    write_control(state, path)
-    return state
+
+
+def _update_stack(
+    path: Path | None,
+    fn: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+) -> CycleControl:
+    """Locked read-modify-write of the freeze stack.
+
+    The cycle and the dashboard both write control.json, so the read, the change
+    and the write happen under one exclusive lock; ``fn`` gets a copy of the
+    current stack and returns the new one.
+    """
+    target = resolve(path or CONTROL_PATH)
+    box: list[CycleControl] = []
+
+    def apply(current: Any) -> dict[str, Any]:
+        data = current if isinstance(current, dict) else {}
+        try:
+            control = CycleControl.from_dict(data)
+        except (ValueError, TypeError, AttributeError):
+            control = CycleControl()
+        state = _state_of(fn([dict(e) for e in control.stack]))
+        box.append(state)
+        return state.to_dict()
+
+    update_json_locked(target, apply, default={})
+    return box[0]
 
 
 def push_freeze(
@@ -188,12 +207,8 @@ def push_freeze(
     source: str = "operator",
 ) -> CycleControl:
     """Stack a new freeze source on top of any active ones (C2)."""
-    current = read_control(path)
-    return _from_stack(
-        list(current.stack)
-        + [{"source": source, "reason": reason, "frozen_at": _now_iso()}],
-        path,
-    )
+    entry = {"source": source, "reason": reason, "frozen_at": _now_iso()}
+    return _update_stack(path, lambda stack: stack + [entry])
 
 
 def pop_freeze(
@@ -209,17 +224,18 @@ def pop_freeze(
     :func:`override`, :func:`stand_down` with the matching source, or
     :func:`unfreeze` (clean boot) may lift them.
     """
-    current = read_control(path)
-    stack = [dict(e) for e in current.stack]
-    if source is None:
-        if stack:
-            stack.pop()
-    else:
-        for i in range(len(stack) - 1, -1, -1):
-            if stack[i].get("source") == source:
-                stack.pop(i)
-                break
-    return _from_stack(stack, path)
+    def apply(stack: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if source is None:
+            if stack:
+                stack.pop()
+        else:
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i].get("source") == source:
+                    stack.pop(i)
+                    break
+        return stack
+
+    return _update_stack(path, apply)
 
 
 def stand_down(path: Path | None = None, *, source: str) -> CycleControl:
@@ -230,9 +246,9 @@ def stand_down(path: Path | None = None, *, source: str) -> CycleControl:
     ``source="operator"`` leaves welfare, developmental phase and programme_end entries
     in place.
     """
-    current = read_control(path)
-    stack = [dict(e) for e in current.stack if e.get("source") != source]
-    return _from_stack(stack, path)
+    return _update_stack(
+        path, lambda stack: [e for e in stack if e.get("source") != source]
+    )
 
 
 def override(
@@ -254,13 +270,15 @@ def override(
     for s in sources:
         if s not in OVERRIDABLE_SOURCES:
             raise ValueError(f"source {s!r} is not overridable")
-    current = read_control(path)
-    active_sources = {e.get("source", "operator") for e in current.stack}
-    for s in sources:
-        if s not in active_sources:
-            raise LookupError(f"no active entry for source {s!r}")
-    stack = [dict(e) for e in current.stack if e.get("source") not in sources]
-    new_state = _from_stack(stack, path)
+
+    def apply(stack: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        active_sources = {e.get("source", "operator") for e in stack}
+        for s in sources:
+            if s not in active_sources:
+                raise LookupError(f"no active entry for source {s!r}")
+        return [e for e in stack if e.get("source") not in sources]
+
+    new_state = _update_stack(path, apply)
     record = {
         "at": _now_iso(),
         "sources": sorted(sources),
@@ -289,6 +307,4 @@ def unfreeze(path: Path | None = None) -> CycleControl:
     This is intended for the cycle's own fresh start; the dashboard operator resume
     uses :func:`stand_down` with ``source="operator"`` instead.
     """
-    state = CycleControl()
-    write_control(state, path)
-    return state
+    return _update_stack(path, lambda _stack: [])

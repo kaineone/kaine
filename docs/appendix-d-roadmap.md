@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| control-freeze-lock | 0/4 (0%) | freeze-stack writes to control.json are locked and use unique temp files |
+| control-freeze-lock | 4/4 (100%) | freeze-stack writes to control.json are locked and use unique temp files |
 | preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
 | floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
