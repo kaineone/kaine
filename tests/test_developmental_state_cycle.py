@@ -797,7 +797,13 @@ async def test_a_resumed_rest_counts_once_toward_the_sleep_cycles(bus):
     from kaine.lifecycle.stage import DEVELOPMENT, StageState
 
     for payload in (
-        {"trigger": "state_cycle", "aborted": True, "reason": "CancelledError", "rest_seconds": REST_S},
+        {
+            "trigger": "state_cycle",
+            "aborted": True,
+            "reason": "CancelledError",
+            "rest_seconds": REST_S,
+            "resumable": True,
+        },
         {"trigger": "state_cycle", "rest_seconds": 810.0},
         {"trigger": "backstop"},
         {"trigger": "fatigue", "aborted": True, "reason": "CancelledError"},
@@ -809,8 +815,73 @@ async def test_a_resumed_rest_counts_once_toward_the_sleep_cycles(bus):
     runner._sleep_stream = "sleep.out"
     runner._stage = replace(StageState(stage=DEVELOPMENT), sleep_cursor="0-0", sleep_count=0)
     await runner._count_new_sleeps()
-    # The cancelled state-cycle completion counts nothing; a failed one does, as it never resumes.
+    # The resumable cancelled completion counts nothing; a failed one does, as it never resumes.
     assert runner._stage.sleep_count == 4
+
+
+async def test_a_cancel_that_kept_no_remainder_counts_toward_the_sleep_cycles(bus):
+    from dataclasses import replace
+
+    from kaine.lifecycle.gate_runner import MaturationGateRunner
+    from kaine.lifecycle.stage import DEVELOPMENT, StageState
+
+    await bus.publish(
+        _event(
+            "sleep",
+            "sleep.sleep.completed",
+            {"trigger": "state_cycle", "aborted": True, "reason": "CancelledError", "rest_seconds": REST_S},
+        )
+    )
+    runner = object.__new__(MaturationGateRunner)
+    runner._bus = bus
+    runner._sleep_stream = "sleep.out"
+    runner._stage = replace(StageState(stage=DEVELOPMENT), sleep_cursor="0-0", sleep_count=0)
+    await runner._count_new_sleeps()
+    assert runner._stage.sleep_count == 1
+
+
+async def _aborted_payload(bus, sleep, in_hold: asyncio.Event):
+    task = asyncio.create_task(sleep.enter_sleep(trigger="state_cycle"))
+    await asyncio.wait_for(in_hold.wait(), 10)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    for _ in range(100):
+        for _, e in await bus.read("sleep.out", last_id="0", count=1000):
+            if e.type == "sleep.sleep.completed":
+                return e.payload
+        await _REAL_SLEEP(0.02)
+    raise AssertionError("no completed event")
+
+
+async def test_cancel_during_the_hold_is_resumable(bus, tmp_path):
+    sleep = _make(bus, tmp_path, None, Probe(True))
+    in_hold = asyncio.Event()
+    original = sleep._hold_developmental_rest
+
+    async def hold(started):
+        in_hold.set()
+        await original(started)
+
+    sleep._hold_developmental_rest = hold
+    payload = await _aborted_payload(bus, sleep, in_hold)
+    assert payload["aborted"] is True and payload["reason"] == "CancelledError"
+    assert payload.get("resumable") is True
+
+
+async def test_cancel_after_the_hold_is_not_resumable(bus, tmp_path):
+    sleep = _make(bus, tmp_path, None, Probe(True))
+    in_hold = asyncio.Event()
+
+    async def hold_then_cancel(started):
+        # The hold ran its length and reset the cycle; the cancel lands afterwards.
+        sleep._cycle_reset(sleep._rest_clock_now())
+        in_hold.set()
+        await _REAL_SLEEP(60)
+
+    sleep._hold_developmental_rest = hold_then_cancel
+    payload = await _aborted_payload(bus, sleep, in_hold)
+    assert payload["reason"] == "CancelledError"
+    assert "resumable" not in payload
 
 
 def test_maturation_clears_the_interoception_fatigue_latch():

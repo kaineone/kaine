@@ -2411,6 +2411,7 @@ async def _phase_sidecar(ctx: BootContext) -> int | None:
             cognitive_query_client=_cognitive_query_client_factory(ctx.registry, ctx.eval_cfg),
             embedder=shared_embedder(ctx.registry, ctx.kaine_config),
             welfare_observer=ctx.welfare_producer[0] if ctx.welfare_producer else None,
+            development_probe=_development_probe(ctx),
         )
         try:
             await ctx.sidecar.start()

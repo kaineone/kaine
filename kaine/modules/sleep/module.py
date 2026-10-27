@@ -328,7 +328,7 @@ class Sleep(BaseModule):
                 log.info("sleep: sleep index resumes at %d", self._sleep_count)
         self._sleep_pending = False
         self._sleep_task = None
-        # M1 — interval-based maintenance poll: RestScheduler.is_due() is
+        # M1: interval-based maintenance poll: RestScheduler.is_due() is
         # checked periodically and fires enter_sleep() when due, entirely
         # independent of the interoception.fatigue consumer (fulfilling the boot.py
         # promise). Due-ness itself is judged on the scheduler's (subjective)
@@ -668,7 +668,7 @@ class Sleep(BaseModule):
             return
         if self._scheduler.is_due():
             log.info(
-                "sleep: rest scheduler reports sleep due — "
+                "sleep: rest scheduler reports sleep due: "
                 "triggering interval-based maintenance"
             )
             self._sleep_pending = True
@@ -1874,6 +1874,9 @@ class Sleep(BaseModule):
                 ):
                     # A cancel (shutdown) keeps the rest's remainder for the restart.
                     self._cycle_rest_spent_s = self._rest_elapsed(began)
+                    # Only a kept remainder resumes as a new sleep, so only this
+                    # completion is the one the maturation gate skips.
+                    payload["resumable"] = True
                 elif isinstance(exc, Exception) and self._cycle_phase == "resting":
                     # A failed rest does not repeat at once; the awake stretch starts over.
                     self._cycle_reset(self._rest_clock_now())
@@ -1924,7 +1927,7 @@ class Sleep(BaseModule):
             self._sleep_pending = False
 
     async def _maintenance_poll_loop(self) -> None:
-        """M1 — periodic poll: the developmental state cycle, else RestScheduler.is_due().
+        """M1: periodic poll: the developmental state cycle, else RestScheduler.is_due().
 
         Satisfies the boot.py promise that interval-based rest fires
         without any interoception.fatigue consumer: the scheduler (whose clock is
