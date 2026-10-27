@@ -15,6 +15,7 @@ import pytest
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import Event
+from kaine.dashboard import conversation as conv
 from kaine.dashboard.app import create_app
 from kaine.dashboard.bridge import BusBridge
 from kaine.dashboard.config import DashboardConfig
@@ -458,8 +459,6 @@ async def test_header_placeholder_then_name_without_restart(tmp_path: Path):
 
 
 def test_name_refresh_is_throttled_and_follows_changes(tmp_path: Path, monkeypatch):
-    import kaine.dashboard.conversation as conv
-
     clock = [100.0]
     monkeypatch.setattr(conv.time, "monotonic", lambda: clock[0])
     state, identity = _watching_state(tmp_path, interval_s=10.0)
@@ -486,8 +485,6 @@ async def test_header_name_is_html_escaped():
 
 
 def test_failed_read_is_retried_without_a_file_change(tmp_path: Path, monkeypatch):
-    import kaine.dashboard.conversation as conv
-
     state, identity = _watching_state(tmp_path)
     identity.write_text('{"name": "Kaine Whipple"}')
     real = conv.read_entity_name
