@@ -628,10 +628,10 @@ async def tail_id(bus: Any, stream: str, *, strict: bool = False) -> str:
     """
     try:
         latest = await bus.client.xrevrange(stream, count=1)
-    except Exception:
+    except Exception as exc:
         if strict:
             raise
-        log.warning("tail lookup failed for %s", stream, exc_info=True)
+        log.warning("tail lookup failed for %s: %r", stream, exc)
         return "0-0"
     if not latest:
         return "0-0"
