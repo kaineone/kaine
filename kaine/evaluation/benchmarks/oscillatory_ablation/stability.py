@@ -3,7 +3,7 @@
 
 """Multi-seed stability adapter for the oscillatory-ablation runner.
 
-Demonstrates the boundary-neutral stability harness
+Demonstrates the boundary-neutral stability check
 (:func:`kaine.experiment.stability.run_multi_seed`) on a *real* experiment: it
 runs the controlled oscillatory-ablation runner across several seeds and reports
 whether its headline effect metric and its WIN/NULL verdict are stable.
@@ -13,7 +13,7 @@ The ablation runner is deterministic *per seed* (same seed + scripted input +
 should be stable and the verdict unanimous — a clean demonstration that the
 stability machinery is correct and that this offline experiment is seed-robust.
 The same adapter shape works for any seed-varying experiment that returns a
-``Verdict``; for a genuinely nondeterministic *live* experiment the same harness
+``Verdict``; for a genuinely nondeterministic *live* experiment the same stability check
 is the right instrument (raise the tolerance to whatever spread the live process
 admits, run more seeds), but this adapter is exercised offline only.
 
@@ -89,7 +89,7 @@ def run_ablation_stability(
             publication_threshold=template.publication_threshold,
         )
         # run_ablation re-seeds each arm internally via set_global_seed(config.seed),
-        # so the harness's pinning is redundant-but-consistent here.
+        # so the stability check's pinning is redundant-but-consistent here.
         return asyncio.run(run_ablation(config))
 
     return run_multi_seed(

@@ -25,7 +25,7 @@ Pieces:
   contiguity, expected streams) producing an ``AdmissibilityReport``.
 * :mod:`kaine.experiment.log_schema` — declarative physical-range validation of
   logged numbers (``sweep_run`` → ``Violation`` list).
-* :mod:`kaine.experiment.stability` — the multi-seed stability harness
+* :mod:`kaine.experiment.stability` — the multi-seed stability check
   (``run_multi_seed`` / ``assert_stable`` → ``StabilityReport``): the longitudinal
   control that runs an experiment across several seeds and asserts the summary
   statistics (mean / std / CV / verdict distribution) are stable.

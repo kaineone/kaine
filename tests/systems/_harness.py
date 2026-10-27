@@ -49,7 +49,7 @@ class SubsystemHarness:
             try:
                 await self._module.shutdown()
             except Exception:
-                # Best-effort teardown: the harness is exiting regardless,
+                # Best-effort teardown: the test setup is exiting regardless,
                 # and a module's shutdown failure shouldn't mask whatever
                 # assertion/error the test itself is already reporting.
                 pass

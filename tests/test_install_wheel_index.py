@@ -1005,7 +1005,7 @@ def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path
     """A failing GPU self-test falls back to CPU wheels and records the marker.
 
     Invariant: when the resolver requests a GPU numerical self-test and it
-    fails (here because torch is poisoned in the test harness), pip first
+    fails (here because torch is poisoned in the test setup), pip first
     installs the GPU torch stack, then force-reinstalls the CPU stack, and the
     installer writes ``kaine-accel-fallback.json`` naming the GPU index and
     torch version.  Later runs skip the GPU attempt while the marker matches.
@@ -1035,7 +1035,7 @@ def test_selftest_fallback_writes_marker_and_force_reinstalls_cpu(tmp_path: Path
     data = json.loads(marker_file.read_text(encoding="utf-8"))
     assert data["index_url"] == CUDA132_INDEX, _context(proc, pip_log)
     assert data["torch"] == "2.14.0", _context(proc, pip_log)
-    # The harness poisons torch, so the self-test exits 2 (skipped), not 1.
+    # The test setup poisons torch, so the self-test exits 2 (skipped), not 1.
     assert data["reason"] == "GPU numerical self-test could not run (exit 2)", _context(
         proc, pip_log
     )

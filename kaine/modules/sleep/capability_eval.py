@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Pluggable capability-eval harness for voice-alignment training.
+"""Pluggable capability-eval runner for voice-alignment training.
 
 Voice-alignment training fires DPO on intent-expression pairs, then
 asks: did the resulting adapter cripple the underlying model? The

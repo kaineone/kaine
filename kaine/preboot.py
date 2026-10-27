@@ -475,7 +475,7 @@ def _resolve_state_key_into_env(
 async def check_welfare(config: dict[str, Any]) -> list[CheckResult]:
     """Real preserve_live -> revive round-trip, with REAL encryption active.
 
-    This is the check that catches the exact gap flagged for this harness: a
+    This catches the exact gap flagged for the preboot smoke check: a
     recent change made ``preserve_live`` fail CLOSED (raise) when
     ``require_encryption`` is set but the state encryptor is not actively
     encrypting. The existing self-check

@@ -1,15 +1,15 @@
 # active-inference-benchmark Specification
 
 ## Purpose
-The active-inference benchmark is an offline harness for comparing the planning module's active-inference engine against a reinforcement-learning baseline on a matched suite of bounded discrete decision tasks, producing seeded, reproducible metrics and a reportable verdict about the value of epistemic action.
+The active-inference benchmark is an offline runner for comparing the planning module's active-inference engine against a reinforcement-learning baseline on a matched suite of bounded discrete decision tasks, producing seeded, reproducible metrics and a reportable verdict about the value of epistemic action.
 
 ## Requirements
 
 ### Requirement: Offline AIF-vs-RL benchmark on matched bounded tasks
-The system SHALL provide an offline benchmark harness that runs the planning module's
+The system SHALL provide an offline benchmark runner that runs the planning module's
 active-inference engine and a reinforcement-learning baseline on a shared suite
 of bounded discrete decision tasks, matched on observation model and reward.
-The harness SHALL run headless without an entity boot and without attaching to
+The runner SHALL run headless without an entity boot and without attaching to
 the live cognitive loop or event bus. The active-inference agent SHALL reuse
 the same pymdp generative-model construction that the live planning module uses.
 
@@ -34,20 +34,20 @@ epistemic tasks and the gap between epistemic and exploitation performance.
 #### Scenario: Epistemic task requires information-seeking
 - **WHEN** the epistemic task is run
 - **THEN** the reward-maximizing policy requires taking the probe action before committing
-- **AND** the harness records each agent's probe rate and timing
+- **AND** the runner records each agent's probe rate and timing
 
 #### Scenario: Exploitation task has no hidden state
 - **WHEN** the exploitation task is run
 - **THEN** the optimal policy is a fixed observation→action mapping requiring no probing
 
 ### Requirement: Reported metrics and a reportable verdict
-For each task and aggregated across seeds, the harness SHALL report decision
+For each task and aggregated across seeds, the runner SHALL report decision
 quality (asymptotic reward), sample efficiency (steps/episodes to a performance
 threshold and/or cumulative regret), and value of epistemic action. It SHALL
 classify each task and the suite overall as WIN, NULL, or NEGATIVE using a
 statistical test across seeds. NULL (AIF statistically matches the baseline) and
 NEGATIVE (AIF underperforms) SHALL be first-class reportable outcomes, surfaced
-plainly rather than treated as harness failures.
+plainly rather than treated as runner failures.
 
 #### Scenario: A null result is reported as null
 - **WHEN** the AIF and RL decision-quality distributions are not separable

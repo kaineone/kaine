@@ -6,7 +6,7 @@
 Regression guard for the "awake but senseless" boot: with
 ``[perception_feed].mode = "stimulus_source"`` and the perception module enabled, the
 entity's vision and audition modules publish real events when the
-virtual locus is selected. This harness wires the same locus-gated capture
+virtual locus is selected. This test wires the same locus-gated capture
 supervisors against an in-memory bus, selects the virtual feed via
 ``perception_state.select_virtual_feed()``, and asserts that within a bounded
 wait visual events land on ``vision.out`` and auditory events on

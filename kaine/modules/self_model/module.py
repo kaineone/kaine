@@ -82,7 +82,7 @@ class SelfModel(BaseModule):
         # Injected by boot.py; default is disabled no-op.
         self_inference: Optional[SelfInferenceEngine] = None,
         # The entity's launch name from its identity, passed by boot. None in a
-        # bare harness, where the module mints its own as before.
+        # bare test setup, where the module mints its own as before.
         identity_name: Optional[str] = None,
         # True during a revive of a bundle whose identity has no name: the name is
         # decided after the revive lands and arrives through adopt_identity_name.

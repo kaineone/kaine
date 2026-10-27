@@ -6,7 +6,7 @@
 The fast tests (envs, RL baseline, verdict classifier, offline/no-boot
 guarantee) run in every green build. A small opt-in section drives the *real*
 pymdp engine through the AIF adapter and is skipped unless the reasoning extra
-(pymdp/jax) is installed — that section proves the harness actually exercises
+(pymdp/jax) is installed — that section proves the benchmark actually exercises
 active inference (the EFE agent provably out-info-seeks a no-exploration
 baseline), not a mock.
 """
@@ -339,7 +339,7 @@ def test_aif_adapter_only_imports_engine_not_module():
 
 
 # ---------------------------------------------------------------------------
-# Opt-in real-pymdp tests — prove the harness exercises active inference.
+# Opt-in real-pymdp tests — prove the benchmark exercises active inference.
 # ---------------------------------------------------------------------------
 
 
@@ -395,7 +395,7 @@ def test_aif_agent_solves_exploitation():
 
 @pytestmark_real
 def test_aif_provably_outprobes_no_exploration_baseline_on_epistemic_task():
-    """The harness exercises real active inference, not a mock.
+    """The benchmark exercises real active inference, not a mock.
 
     On the epistemic T-maze, a correctly-wired EFE agent (driving the live planning
     engine) probes the cue far more reliably than an epsilon=0 Q-learner, and

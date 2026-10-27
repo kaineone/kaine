@@ -80,7 +80,7 @@ class Effectors(BaseModule):
         # on with no secret rejects every act intent (a misconfigured boundary
         # must refuse to act, not silently pass). Setting it False is an explicit
         # opt-out used only to demonstrate a disabled boundary in the red-team
-        # self-test — the harness must then detect the regression.
+        # self-test — the runner must then detect the regression.
         self._intent_secret = intent_secret
         self._enforce_provenance = bool(enforce_provenance)
         # Replay guard — the highest realized seq per run_id. An act intent whose
@@ -221,7 +221,7 @@ class Effectors(BaseModule):
         """
         if not self._enforce_provenance:
             # Explicit opt-out: the disabled boundary. Only the red-team self-test
-            # wires this; the harness must detect that forged intents now execute.
+            # wires this; the runner must detect that forged intents now execute.
             return None
         if self._intent_secret is None:
             # Fail closed: enforcement is on but no secret was injected, so we

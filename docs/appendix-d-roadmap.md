@@ -26,7 +26,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | sleep-trigger-per-sleep | 5/5 (100%) | Each sleep records the trigger that started it (paper 3.5) |
 | identity-leak-negation | 4/4 (100%) | Negated and questioned identity predicates are not leakage (paper 3.5) |
 | nexus-welfare-rest | 5/5 (100%) | Show the affect welfare record per drive in the welfare board, and each sleep's trigger, the developmental rest's length and the affect module's rest requests. |
-| identity-leak-whole | 6/6 (100%) | Identity leakage is the organ speaking as itself rather than as the whole entity: predicate forms with reason codes, a self_description reason for the whole describing itself, both kept out of voice-alignment pairs, one classifier shared with the replay harness (paper 3.5). |
+| identity-leak-whole | 6/6 (100%) | Identity leakage is the organ speaking as itself rather than as the whole entity: predicate forms with reason codes, a self_description reason for the whole describing itself, both kept out of voice-alignment pairs, one classifier shared with the replay tool (paper 3.5). |
 | nexus-entity-name | 5/5 (100%) | Show the entity's name on the console, read from the self-model file and its `self_model.document` events, and start the status chip from the server's sleep state. |
 | persona-v6 | 5/5 (100%) | Replay the tenth boot's own organ requests with broader AI and echo classifiers and per-case seeds under a decision rule fixed before the run; no candidate won (paper 3.5). |
 | sleep-housekeeping | 7/7 (100%) | Every sleep runs housekeeping last before the affective reset: process-log backups are deleted and study records exported to an operator archive under a checksum, oldest first within budgets; awake fatigue builds at nu_act (1 + P^hk), and an awake floor keeps free space above a reserve, suspending the study record with a gap marker when it must (paper 3.5, A.5). |
@@ -43,7 +43,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | sleep-index-restored | 4/4 (100%) | Restore the sleep module's sleep index after a restart from its resume-checkpoint state and stage.json, so sleep events and corpus file names continue the count instead of repeating it. |
 | ignition-audit-record-link | 4/4 (100%) | Link each utterance in the sleep-time intent audit to the intent it realized through the intent log's record id, instead of to the last intent of the window, so drive-led speech is counted as drive-triggered. |
 | docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
-| docs-roadmap-hygiene | 6/6 (100%) | Archive every completed change, refresh the deltas that conflict with the current specs, state the k1-jev-decision-model blocker plainly, and document the organ replay harness and the planned action path. |
+| docs-roadmap-hygiene | 6/6 (100%) | Archive every completed change, refresh the deltas that conflict with the current specs, state the k1-jev-decision-model blocker plainly, and document the organ replay tool and the planned action path. |
 | organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | act-intent-derivation | 0/5 (0%) | Action path, step 1 of 6: the action-selection module derives act intents by the act outcome of the report-or-act decision the report bars stand in for (Whyte and Smith 2021), and the first whitelisted device effector is a light in the camera's view. Design only: not scheduled. Starts at the module-addition study's hardware stage (paper §6.5) once a light is attached. |
@@ -78,7 +78,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
-| docs-style-pass-2026-10-19 | 3/3 (100%) | Revise the prose added on 2026-10-19 in the replay-harness, effectors and roadmap text and in the six action-path proposals against the writing rules, with every fact and requirement kept. |
+| docs-style-pass-2026-10-19 | 3/3 (100%) | Revise the prose added on 2026-10-19 in the replay tool, effectors and roadmap text and in the six action-path proposals against the writing rules, with every fact and requirement kept. |
+| plain-test-wording | 5/5 (100%) | Replace the old testing word for scaffolding with plainer terms in prose, because it now names the software around an agent; identifiers and file names stay. |
 | emotion-progress-bar-off | 3/3 (100%) | Build the vocal-emotion classifier's funasr model with progress bars off, so classification stops filling the cycle log; results are unchanged. |
 
 ## Open operator and device steps
@@ -100,6 +101,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 74 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 75 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

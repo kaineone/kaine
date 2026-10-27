@@ -24,7 +24,7 @@ testable parts are:
   non-deterministic kinds rely on the trusted-side re-verification gate.
 
 Phasing (see ``docs/07-deployment/README.md``): B0 containerize → B1 BOINC
-harness → B2 non-entity research/training units → B3 (gated) entity-bearing
+work units → B2 non-entity research/training units → B3 (gated) entity-bearing
 forked entities. Entity-bearing forks are withheld here (``accepts`` returns
 False) until the volunteer-host welfare-and-security model exists.
 """

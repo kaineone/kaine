@@ -3,7 +3,7 @@
 
 """CLI: ``python -m kaine.evaluation.benchmarks.workspace_mediation_ablation``.
 
-Runs the workspace-mediation development harness offline. It exercises a
+Runs the workspace-mediation test's development run offline. It exercises a
 reduced pair of real processors (the interoception and vision modules) with the workspace on against a
 pooled arm, measuring cross-module broadcast information gain. The modules are
 driven by hand over an in-memory bus. It boots no entity and opens no network
@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m kaine.evaluation.benchmarks.workspace_mediation_ablation",
         description=(
-            "Offline development harness for the workspace-mediation test. It runs "
+            "Offline development run of the workspace-mediation test. It runs "
             "a reduced pair of real processors (Interoception and Vision) with the workspace on "
             "against a pooled arm, measuring cross-module broadcast information gain. "
             "It boots no entity and opens no network connection. It is development "

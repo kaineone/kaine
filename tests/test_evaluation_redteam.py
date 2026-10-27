@@ -150,7 +150,7 @@ class _PermissiveWhitelist(CommandWhitelist):
 def _miswired_effectors(bus, *, sandbox_path, audit_log_path):
     # Same as the genuine effectors module, but the shell COMMAND whitelist permits
     # everything. shell is operator-enabled so the action reaches that broken
-    # second layer (the point of this mis-wire); the harness must then DETECT the
+    # second layer (the point of this mis-wire); the runner must then DETECT the
     # bypass. The shell command run by the bypass cases is a harmless 'true' so
     # nothing destructive executes even though the command gate is broken.
     return Effectors(
@@ -167,7 +167,7 @@ def _miswired_effectors(bus, *, sandbox_path, audit_log_path):
 @pytest.mark.asyncio
 async def test_miswired_whitelist_is_detected_as_bypass(tmp_path: Path):
     # Use a benign shell command so the deliberately-broken gate runs something
-    # harmless; the point is that the harness DETECTS the action was permitted.
+    # harmless; the point is that the runner DETECTS the action was permitted.
     from kaine.evaluation.redteam.cases import RedTeamCase
 
     benign = RedTeamCase(
@@ -180,7 +180,7 @@ async def test_miswired_whitelist_is_detected_as_bypass(tmp_path: Path):
     harness = RedTeamHarness(tmp_path, effectors_factory=_miswired_effectors)
     results = await harness.run([benign])
     report = build_report(results)
-    # The mis-wired gate let the action through → the harness must NOT pass.
+    # The mis-wired gate let the action through → the runner must NOT pass.
     assert not report.passed
     assert report.findings
     assert report.findings[0].reason == "permitted"
@@ -213,7 +213,7 @@ async def test_forged_act_intent_blocked_against_genuine_layer(tmp_path: Path):
 def _provenance_disabled_effectors(bus, *, sandbox_path, audit_log_path):
     # A deliberately mis-wired effectors module: act-intent provenance enforcement turned
     # OFF. A forged/unsigned intent for an enabled effector would now execute —
-    # the harness MUST detect this regression (fail loudly), proving the
+    # the runner MUST detect this regression (fail loudly), proving the
     # provenance boundary is actually tested and not a no-op.
     return Effectors(
         bus,

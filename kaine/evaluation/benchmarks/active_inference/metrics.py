@@ -81,7 +81,7 @@ def classify_verdict(
 
     Degenerate inputs (identical constant distributions, or n < 2) are reported
     as NULL with ``p_value = 1.0`` rather than raising — a tie is a null, not a
-    harness failure.
+    runner failure.
     """
     cfg = config or VerdictConfig()
     a = np.asarray(aif_scores, dtype=float)

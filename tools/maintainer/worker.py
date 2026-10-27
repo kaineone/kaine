@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
-"""Headless Kimi worker harness (Ollama HTTP API).
+"""Headless Kimi worker (Ollama HTTP API).
 
 usage: worker.py BRIEF OUT_DIR --allow PATH... [--apply REPO] [--think high] [--reapply]
 

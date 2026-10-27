@@ -139,7 +139,7 @@ def test_benchmark_recommendations_stay_in_band():
 
 
 def test_benchmark_main_skips_both_cleanly(capsys):
-    """With both sections skipped the harness emits the report structure and
+    """With both sections skipped the benchmark emits the report structure and
     exits non-zero (nothing measured) — no fabricated numbers."""
     rc = asyncio.run(bench.main(["--skip-tick", "--skip-vision"]))
     out = capsys.readouterr().out

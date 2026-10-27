@@ -20,7 +20,7 @@ SECURITY.md ("Reporting a Vulnerability").
 
 ## Reproduction
 
-<!-- Minimal steps. Which modules were enabled? Offline harness or live boot? -->
+<!-- Minimal steps. Which modules were enabled? Offline run or live boot? -->
 
 1.
 2.

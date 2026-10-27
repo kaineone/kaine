@@ -42,7 +42,7 @@ def test_dashboard_legacy_storage_js_behavioural():
         text=True,
     )
     assert result.returncode == 0, (
-        f"behavioural harness failed:\n"
+        f"behavioural test script failed:\n"
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )

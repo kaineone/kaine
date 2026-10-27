@@ -1,7 +1,7 @@
 # experiment-foundation Specification
 
 ## Purpose
-Experiment-foundation provides shared global seed control, per-run identity and manifest tracking, a common verdict schema, and a multi-seed stability harness for running the seven experiments under one seed with corrected verdicts.
+Experiment-foundation provides shared global seed control, per-run identity and manifest tracking, a common verdict schema, and a multi-seed stability check for running the seven experiments under one seed with corrected verdicts.
 
 ## Requirements
 
@@ -70,10 +70,10 @@ SHALL NOT be counted as evidence for or against an effect.
 - **WHEN** a verdict with outcome NOT_EXERCISED is serialised
 - **THEN** its `outcome` is the string `"NOT_EXERCISED"`, distinct from `"NULL"`
 
-### Requirement: Multi-seed stability harness
-The system SHALL provide a reusable, boundary-neutral multi-seed stability harness
+### Requirement: Multi-seed stability check
+The system SHALL provide a reusable, boundary-neutral multi-seed stability check
 — the longitudinal / multi-run control — that runs an experiment across several
-seeds and reports summary statistics and a stability verdict. The harness SHALL
+seeds and reports summary statistics and a stability verdict. The stability check SHALL
 take a callable `run_fn(seed)` and a `metric_fn` (it SHALL NOT depend on
 `kaine.evaluation`, so both the core cycle and the evaluation sidecar may use it),
 run `run_fn` once per seed pinning the global seed before each invocation, and
@@ -83,27 +83,27 @@ distribution of verdict outcomes across seeds, and a stability boolean. The
 ensemble SHALL be reported stable when the coefficient of variation is within a
 configured tolerance AND the verdict is unanimous across seeds; it SHALL be
 reported unstable otherwise. The report SHALL expose human-readable reasons for its
-stability verdict, and the harness SHALL provide an assertion helper that raises an
+stability verdict, and the stability check SHALL provide an assertion helper that raises an
 error carrying those reasons when the ensemble is not stable. This is the
 multi-seed analog of the bit-for-bit seed-determinism guarantee: it demonstrates
 that N seeds are enough for nondeterminism to wash out.
 
 #### Scenario: A stable experiment across seeds yields a stable report
-- **WHEN** the harness runs an experiment whose headline metric varies across
+- **WHEN** the stability check runs an experiment whose headline metric varies across
   seeds within the configured tolerance and whose verdict is the same on every seed
 - **THEN** the report's coefficient of variation is within tolerance
 - **AND** the verdict distribution records a single unanimous outcome
 - **AND** the report is stable
 
 #### Scenario: A deliberately unstable metric is reported unstable
-- **WHEN** the harness runs an experiment whose headline metric swings beyond the
+- **WHEN** the stability check runs an experiment whose headline metric swings beyond the
   configured tolerance across seeds
 - **THEN** the report's coefficient of variation exceeds the tolerance
 - **AND** the report is not stable
 - **AND** the report's reasons state that the metric varies too much across seeds
 
 #### Scenario: Verdict unanimity is captured and gates stability
-- **WHEN** the harness runs an experiment whose headline metric is stable across
+- **WHEN** the stability check runs an experiment whose headline metric is stable across
   seeds but whose verdict outcome differs between seeds
 - **THEN** the verdict distribution records more than one outcome
 - **AND** the report is not unanimous
@@ -117,7 +117,7 @@ that N seeds are enough for nondeterminism to wash out.
   unstable
 
 #### Scenario: Demonstrated on a real experiment, offline
-- **WHEN** the harness runs the oscillatory-ablation runner across several seeds
+- **WHEN** the stability check runs the oscillatory-ablation runner across several seeds
   with few ticks
 - **THEN** the report's verdict distribution is a unanimous WIN
 - **AND** the effect metric's coefficient of variation is within tolerance
@@ -171,7 +171,7 @@ false individuation. A runner SHALL exist that supplies real counters from the r
 - **THEN** it reports not-warmed-up and does not emit an individuated verdict
 
 ### Requirement: One definition of the shared summary statistics
-The system SHALL define the mean, the population standard deviation and the linear-interpolation percentile once, in a stdlib-only module under `kaine.experiment`. The stability harness, the ignition-study analysis and the prediction-error observer SHALL use those definitions and SHALL NOT define their own. Each statistic SHALL return 0.0 on empty input, and the standard deviation SHALL return 0.0 for fewer than two values.
+The system SHALL define the mean, the population standard deviation and the linear-interpolation percentile once, in a stdlib-only module under `kaine.experiment`. The stability check, the ignition-study analysis and the prediction-error observer SHALL use those definitions and SHALL NOT define their own. Each statistic SHALL return 0.0 on empty input, and the standard deviation SHALL return 0.0 for fewer than two values.
 
 #### Scenario: Empty input yields zero
 - **WHEN** the mean or the percentile is taken of an empty sequence, or the standard deviation of a single value
@@ -182,7 +182,7 @@ The system SHALL define the mean, the population standard deviation and the line
 - **THEN** it equals numpy's default linear-interpolation percentile of that sequence
 
 #### Scenario: The instruments share the definitions
-- **WHEN** the stability harness, the ignition-study analysis or the prediction-error observer summarises its values
+- **WHEN** the stability check, the ignition-study analysis or the prediction-error observer summarises its values
 - **THEN** it uses the shared definitions
 
 ### Requirement: Unexercised experiments stay in the family-wise correction at p = 1
@@ -194,12 +194,12 @@ SHALL NOT be reported as NULL. The family-wise view SHALL list such experiments 
 name under `not_exercised` and mark their comparisons, and the printed report SHALL
 name them as not exercised.
 
-#### Scenario: An unexercised harness stays in the family at p = 1
-- **WHEN** the workspace-mediation harness is NOT_EXERCISED in a suite run
-- **THEN** `workspace_mediation` is a family-wise comparison with raw p-value 1, the family size is unchanged, the harness appears under `not_exercised`, and its experiment verdict is NOT_EXERCISED
+#### Scenario: An unexercised run stays in the family at p = 1
+- **WHEN** the workspace-mediation offline development run is NOT_EXERCISED in a suite run
+- **THEN** `workspace_mediation` is a family-wise comparison with raw p-value 1, the family size is unchanged, the run appears under `not_exercised`, and its experiment verdict is NOT_EXERCISED
 
-#### Scenario: An exercised harness enters with its own p-value
-- **WHEN** the workspace-mediation harness gives WIN, NULL or NEGATIVE
+#### Scenario: An exercised run enters with its own p-value
+- **WHEN** the workspace-mediation offline development run gives WIN, NULL or NEGATIVE
 - **THEN** its WIN sign-test p-value is its family member and `not_exercised` is empty
 
 ### Requirement: The run manifest records the curiosity scheme

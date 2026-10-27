@@ -86,5 +86,5 @@ def test_dashboard_auth_js_behavioural():
         text=True,
     )
     assert result.returncode == 0, (
-        f"behavioural harness failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"behavioural test script failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
