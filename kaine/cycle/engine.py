@@ -1121,7 +1121,7 @@ class CognitiveCycle:
         return phases
 
     async def _tail_id(self, stream: str) -> str:
-        """Latest entry id of a stream ("0-0" when empty) — H3 cursor seeding."""
+        """Latest entry id of a stream ("0-0" when empty), for H3 cursor seeding."""
         return await tail_id(self._bus, stream)
 
     async def _safe_read(
