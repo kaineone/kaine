@@ -1832,6 +1832,12 @@ async def _phase_bus(ctx: BootContext) -> int | None:
     from kaine.cycle.preservation_monitor import PreservationConfig
 
     ctx.preservation_cfg = PreservationConfig.from_section(ctx.kaine_config.get("preservation") or {})
+    # One source for the sustained-distress rule: the welfare observer and the
+    # protective monitor both read [evaluation.welfare].
+    ctx.preservation_cfg.welfare_response.adopt_sustained_distress(
+        ctx.eval_cfg.welfare.interoceptive_distress_threshold,
+        ctx.eval_cfg.welfare.interoceptive_distress_duration_s,
+    )
 
     try:
         ctx.welfare_producer = await _start_welfare_producer(ctx.bus, ctx.eval_cfg, ctx.preservation_cfg)

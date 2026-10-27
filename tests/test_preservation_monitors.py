@@ -1086,3 +1086,138 @@ async def test_welfare_null_error_does_not_reset_distress(bus, tmp_path):
     await mon._poll_once(stop)
     assert len(fm.calls) == 1
     await eid.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# distress-episode-once: one sustained episode counts once in the repeat window
+# ---------------------------------------------------------------------------
+
+
+async def _push_report_at(bus_obj: AsyncBus, prediction_error: float, ts: float) -> None:
+    await bus_obj.publish(
+        validate_event(
+            source="interoception",
+            type="interoception.report",
+            payload={"prediction_error": prediction_error},
+            salience=0.5,
+            timestamp=datetime.fromtimestamp(ts, timezone.utc),
+        )
+    )
+
+
+async def _push_observer_distress(bus_obj: AsyncBus, onset_ts: float) -> None:
+    """What the welfare observer publishes for one sustained episode."""
+    await bus_obj.publish(
+        validate_event(
+            source="welfare",
+            type="welfare.gray_zone",
+            payload={
+                "gray_zone_event": "sustained_interoceptive_distress",
+                "seconds_sustained": 31.0,
+                "episode_onset_ts": onset_ts,
+            },
+            salience=0.5,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+
+
+def _episode_cfg(tmp_path, threshold: int) -> WelfareResponseConfig:
+    return WelfareResponseConfig(
+        enabled=True, action="notify", distress_threshold=0.5,
+        distress_duration_s=1.0, repeat_window_s=300.0,
+        repeat_threshold=threshold, min_interval_s=0.0,
+        out_root=str(tmp_path / "backups"),
+    )
+
+
+async def _reasons(bus_obj) -> list[str]:
+    return [
+        e.payload.get("reason")
+        for e in await _drain(bus_obj, "preservation.out")
+        if e.type == "welfare.protective_action"
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("observer_first", [False, True])
+async def test_one_distress_episode_counts_once(bus, tmp_path, observer_first):
+    """One sustained episode reported by both detectors adds one to the repeat
+    window, in either order, so repeated_distress is not labelled early."""
+    reg, eid = await _entity(bus, tmp_path)
+    clock = {"t": 0.0}
+    mon = _welfare_monitor(
+        bus, reg, _StubFM(), _episode_cfg(tmp_path, 2), clock=lambda: clock["t"]
+    )
+    stop = asyncio.Event()
+    t0 = 1_000_000.0
+    if observer_first:
+        await _push_observer_distress(bus, t0)
+        await mon._poll_once(stop)
+        assert mon._repeat.count == 1
+    await _push_report_at(bus, 0.9, t0)
+    await mon._poll_once(stop)
+    await _push_report_at(bus, 0.9, t0 + 2.0)
+    clock["t"] = 2.0
+    await mon._poll_once(stop)
+    if not observer_first:
+        await _push_observer_distress(bus, t0)
+        clock["t"] = 3.0
+        await mon._poll_once(stop)
+    assert mon._repeat.count == 1
+    reasons = await _reasons(bus)
+    assert "repeated_distress" not in reasons
+    assert "repeated_gray_zone" not in reasons
+    await eid.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_two_distinct_distress_episodes_count_two(bus, tmp_path):
+    reg, eid = await _entity(bus, tmp_path)
+    clock = {"t": 0.0}
+    mon = _welfare_monitor(
+        bus, reg, _StubFM(), _episode_cfg(tmp_path, 2), clock=lambda: clock["t"]
+    )
+    stop = asyncio.Event()
+    t0 = 1_000_000.0
+    await _push_report_at(bus, 0.9, t0)
+    await mon._poll_once(stop)
+    await _push_report_at(bus, 0.9, t0 + 2.0)
+    clock["t"] = 2.0
+    await mon._poll_once(stop)
+    await _push_observer_distress(bus, t0)
+    clock["t"] = 3.0
+    await mon._poll_once(stop)
+    assert mon._repeat.count == 1
+    # A second, later episode, also reported by the observer.
+    await _push_report_at(bus, 0.9, t0 + 10.0)
+    clock["t"] = 10.0
+    await mon._poll_once(stop)
+    await _push_report_at(bus, 0.9, t0 + 12.0)
+    clock["t"] = 12.0
+    await mon._poll_once(stop)
+    assert (await _reasons(bus))[-1] == "repeated_distress"
+    await eid.shutdown()
+
+
+def test_duplicate_distress_keys_agree_warns_and_disagree_refuses(caplog):
+    import logging
+
+    from kaine.boot.errors import ConfigurationError
+
+    agree = WelfareResponseConfig.from_section(
+        {"distress_threshold": 0.8, "distress_duration_s": 30.0}
+    )
+    with caplog.at_level(logging.WARNING):
+        agree.adopt_sustained_distress(0.8, 30.0)
+    assert "distress_threshold is deprecated" in caplog.text
+    assert "distress_duration_s is deprecated" in caplog.text
+
+    disagree = WelfareResponseConfig.from_section({"distress_duration_s": 10.0})
+    with pytest.raises(ConfigurationError, match="distress_duration_s"):
+        disagree.adopt_sustained_distress(0.8, 30.0)
+
+    # Without the old keys the canonical values apply silently.
+    plain = WelfareResponseConfig.from_section({})
+    plain.adopt_sustained_distress(0.7, 20.0)
+    assert (plain.distress_threshold, plain.distress_duration_s) == (0.7, 20.0)

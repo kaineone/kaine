@@ -56,7 +56,7 @@ Each toggle below is gated by `[evaluation].enabled`, except that the welfare ob
 
 ### `[evaluation.welfare]`
 
-Tune the sidecar welfare observer's interoceptive-distress rule and its sensor advisories. The silent-sensor advisory has no key of its own: it uses `interoceptive_distress_duration_s`. These defaults match [`[preservation.welfare_response]`](#preservationwelfare_response). See `kaine/evaluation/config.py` for the full reader.
+Tune the sidecar welfare observer's interoceptive-distress rule and its sensor advisories. The silent-sensor advisory has no key of its own: it uses `interoceptive_distress_duration_s`. The protective monitor under [`[preservation.welfare_response]`](#preservationwelfare_response) reads the same two keys for its own sustained-distress rule, so there is one source for both detectors. See `kaine/evaluation/config.py` for the full reader.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -210,10 +210,10 @@ Autonomous welfare-protective response. Watches the interoceptive-distress signa
 | `enabled` | boolean | `false` | Default is disabled. |
 | `poll_interval_s` | float | `1.0` | Poll cadence for draining `interoception.out`. |
 | `action` | string | `"pause"` | `"pause"` (preserve then freeze the cycle, resumable), `"end"` (preserve then signal the run to stop), or `"notify"` (preserve, record a flagged event, and continue). |
-| `distress_threshold` | float | `0.8` | `prediction_error` magnitude at/above which distress is counted. |
-| `distress_duration_s` | float | `30.0` | Continuous sustain required before the action fires, counted in wall time while distress samples arrive and unfrozen time after the last sample. |
+| `distress_threshold` | float | none | Deprecated. The threshold is `[evaluation.welfare].interoceptive_distress_threshold`. If this key is set and equals it, boot logs a warning; if it differs, boot is refused with a `ConfigurationError`. |
+| `distress_duration_s` | float | none | Deprecated. The duration is `[evaluation.welfare].interoceptive_distress_duration_s`. If this key is set and equals it, boot logs a warning; if it differs, boot is refused with a `ConfigurationError`. |
 | `repeat_window_s` | float | `300.0` | Window for the repeated-episodes arm. |
-| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. |
+| `repeat_threshold` | integer | `3` | Sustained episodes within `repeat_window_s` that also cross the threshold. Counts both sustained interoceptive-distress crossings and `welfare.gray_zone` events published by the welfare observer, which runs whenever the welfare response is enabled. One sustained-distress episode counts once, even though the monitor and the observer both detect it, so `repeated_distress` is labelled only after `repeat_threshold` distinct episodes. |
 | `warmup_s` | float | `120.0` | Cold-start warm-up: during the first `warmup_s` of unfrozen time after run start, gray-zone/distress events are logged but do not count toward the repeat threshold or trigger the response. |
 | `warmup_ceiling_s` | float | `1800.0` | Whole warm-up is capped at max(`warmup_s`, `warmup_ceiling_s`) of wall time since run start. The interoception module's `warmup_active` flag extends warm-up only while wall time is below `warmup_ceiling_s`, and 0 means no extension. |
 | `min_interval_s` | float | `1800.0` | Rate limit for the `notify` action only: at most one `notify` event per this interval. |
