@@ -161,7 +161,7 @@ The run loop first drains `cycle.control` for `cycle.set_rates` events and `inte
 6. On a broadcast tick, publishes the snapshot to `workspace.broadcast`, then calls `ActionSelection.select()` and publishes its intents to `action_selection.out`.
 7. Publishes telemetry to `cycle.out`.
 
-The cycle can be **frozen** through `state/cycle/control.json`, a stack of per-source freeze entries (`operator`, `supervisor`, `welfare`, `development`, `programme_end`, `preserve`). Each recovery pops only its own entry, so a welfare pause survives a supervisor recovery, and the cycle resumes only when the stack is empty. A freeze stops the entity clock while operators repair infrastructure; it is not a shutdown.
+The cycle can be **frozen** through `state/cycle/control.json`, a stack of per-source freeze entries (`operator`, `supervisor`, `welfare`, `development`, `programme_end`, `preserve`). Each recovery pops only its own entry, so a welfare pause survives a supervisor recovery, and the cycle resumes only when the stack is empty. Writers update the file under a lock, so concurrent pushes and pops never lose an entry. A freeze stops the entity clock while operators repair infrastructure; it is not a shutdown.
 
 See [The cognitive cycle](../08-cognitive-cycle/README.md) for the full tick sequence, rate control and the interoception module's regulation.
 

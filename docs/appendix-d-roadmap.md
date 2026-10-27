@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| control-freeze-lock | 4/4 (100%) | freeze-stack writes to control.json are locked and use unique temp files |
 | dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
 | distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
@@ -98,6 +99,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 72 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 73 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
