@@ -215,8 +215,17 @@ def welfare_counts_from_jsonl(logs_root: Path) -> dict[str, Any]:
     Returns the four numeric gray-zone counters, the highest blind-sensor and
     sensor-silent advisory counts seen since the latest reset, the processor
     labels still blind or silent, and ``source`` ('jsonl' | 'none').
+
+    Every figure is counted since the latest restart reset (the ``reset``
+    advisory the welfare observer writes at start), so records from before a
+    restart never raise a count after it. With no reset in the rollup the
+    counters are the maximum over the newest 500 lines.
     """
     entries = _read_welfare_lines(Path(logs_root) / "welfare")
+    for idx in range(len(entries) - 1, -1, -1):
+        if entries[idx].get("advisory") == ADVISORY_RESET:
+            entries = entries[idx:]
+            break
     advisory_state = advisory_state_from_jsonl(logs_root)
 
     if not entries:

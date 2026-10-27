@@ -249,7 +249,7 @@ Records without content are kept: welfare and incident logs (CAL Article 4.7), o
 
 ## Dashboard auth posture
 
-The dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.
+The dashboard serves the operator web UI and diagnostics surface. By default it binds to `127.0.0.1:8088`. The root path `/` redirects to `/diagnostics/` when conversation is disabled. The header of every page shows the entity's name, which is identity data and not cognitive content. `/diagnostics/health.json` is always unauthenticated; it only reports dependency status.
 
 `[dashboard].access` controls who can use the dashboard:
 

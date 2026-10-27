@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Tests for the developmental rest triggered by affect.rest_request (paper §3.5).
+"""Tests for the state-cycle rest hold (paper §3.5).
 
-The developmental rest starts when the stimulus is spent, holds for
-developmental_rest_s (default 1260 s), and ends with an affective reset.
+A state_cycle sleep holds for developmental_rest_s (default 1410 s) and
+ends with an affective reset.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,6 @@ import pytest
 from kaine.boot.factories.sleep import make_sleep
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.bus.schema import validate_event
 from kaine.modules.sleep import (
     FakeTrainer,
     Sleep,
@@ -103,55 +101,6 @@ async def _wait_for_started(bus: AsyncBus, trigger: str, timeout: float = 2.0) -
         await asyncio.sleep(0.02)
 
 
-async def _publish_rest_request(bus: AsyncBus, reason: str) -> None:
-    event = validate_event(
-        source="affect",
-        type="affect.rest_request",
-        payload={"reason": reason, "drive": "boredom", "stall_s": 120.0},
-        salience=0.6,
-        timestamp=datetime.now(timezone.utc),
-    )
-    await bus.publish(event)
-
-
-@pytest.mark.asyncio
-async def test_stimulus_spent_rest_request_triggers_developmental_rest(bus: AsyncBus, tmp_path: Path):
-    """affect.rest_request with reason stimulus_spent starts a developmental rest."""
-    sleep = _make_sleep(bus, tmp_path, developmental_rest_s=3600.0)
-    await sleep.initialize()
-
-    await _publish_rest_request(bus, "stimulus_spent")
-    payload = await _wait_for_started(bus, "developmental_rest", timeout=2.0)
-
-    assert payload["trigger"] == "developmental_rest"
-    await sleep.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_non_stimulus_rest_request_does_not_trigger_rest(bus: AsyncBus, tmp_path: Path):
-    """Only reason stimulus_spent triggers a developmental rest."""
-    sleep = _make_sleep(bus, tmp_path, developmental_rest_s=3600.0)
-    await sleep.initialize()
-
-    # Another reason on affect.rest_request
-    await _publish_rest_request(bus, "other_reason")
-
-    # Another affect event type
-    event = validate_event(
-        source="affect",
-        type="affect.regulation",
-        payload={"action": "request_maintenance"},
-        salience=0.6,
-        timestamp=datetime.now(timezone.utc),
-    )
-    await bus.publish(event)
-
-    with pytest.raises(asyncio.TimeoutError):
-        await _wait_for_started(bus, "developmental_rest", timeout=0.3)
-
-    await sleep.shutdown()
-
-
 @pytest.mark.asyncio
 async def test_developmental_rest_holds_for_configured_duration(bus: AsyncBus, tmp_path: Path):
     """The developmental rest holds for developmental_rest_s before the affective reset."""
@@ -167,13 +116,13 @@ async def test_developmental_rest_holds_for_configured_duration(bus: AsyncBus, t
     )
 
     start = time.monotonic()
-    summary = await sleep.enter_sleep(trigger="developmental_rest")
+    summary = await sleep.enter_sleep(trigger="state_cycle")
     elapsed = time.monotonic() - start
 
     assert elapsed >= 0.55, f"expected at least ~0.6 s hold, got {elapsed:.3f} s"
     assert affect.reset_at is not None
     assert affect.reset_at - start >= 0.55
-    assert summary.get("trigger") == "developmental_rest"
+    assert summary.get("trigger") == "state_cycle"
     assert summary.get("rest_seconds") == pytest.approx(0.6)
     await sleep.shutdown()
 
@@ -204,7 +153,7 @@ async def test_developmental_rest_cancel_runs_affective_reset_and_aborts(bus: As
         affect=affect,
     )
 
-    task = asyncio.create_task(sleep.enter_sleep(trigger="developmental_rest"))
+    task = asyncio.create_task(sleep.enter_sleep(trigger="state_cycle"))
     await asyncio.sleep(0.3)
     task.cancel()
     (outcome,) = await asyncio.gather(task, return_exceptions=True)
@@ -226,30 +175,6 @@ async def test_developmental_rest_cancel_runs_affective_reset_and_aborts(bus: As
     assert payload.get("aborted") is True
     assert affect.reset_at is not None
     assert not sleep._sleep_lock.locked()
-    await sleep.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_second_rest_request_while_holding_is_guarded(bus: AsyncBus, tmp_path: Path):
-    """A second affect.rest_request during a developmental rest cannot start another sleep."""
-    sleep = _make_sleep(bus, tmp_path, developmental_rest_s=1.0)
-    await sleep.initialize()
-
-    await _publish_rest_request(bus, "stimulus_spent")
-    first_payload = await _wait_for_started(bus, "developmental_rest", timeout=2.0)
-    assert first_payload["trigger"] == "developmental_rest"
-
-    # While the rest holds, publish a second request.
-    await _publish_rest_request(bus, "stimulus_spent")
-    await asyncio.sleep(0.3)
-
-    started_events = []
-    entries = await bus.read("sleep.out", last_id="0", count=1000)
-    for _, event in entries:
-        if event.type == "sleep.sleep.started" and event.payload.get("trigger") == "developmental_rest":
-            started_events.append(event.payload)
-
-    assert len(started_events) == 1
     await sleep.shutdown()
 
 

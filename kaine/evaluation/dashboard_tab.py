@@ -13,7 +13,7 @@ import json
 import logging
 import statistics
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -34,9 +34,6 @@ __all__ = [
     "aggregate_evaluation_metrics",
     "build_evaluation_router",
 ]
-
-if TYPE_CHECKING:
-    from kaine.evaluation.registry import SidecarRegistry
 
 log = logging.getLogger(__name__)
 
@@ -124,7 +121,6 @@ def build_evaluation_router(
     config: EvaluationConfig,
     *,
     attribution: AttributionRecorder | None,
-    registry: "SidecarRegistry | None" = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics/evaluation")
     templates = _templates()
@@ -133,7 +129,7 @@ def build_evaluation_router(
     async def evaluation_page(request: Request):
         if not config.enabled:
             raise HTTPException(404, "evaluation sidecar disabled")
-        metrics = _aggregate(config, attribution, registry)
+        metrics = _aggregate(config, attribution)
         return templates.TemplateResponse(
             request, "evaluation.html", {"metrics": metrics}
         )
@@ -142,71 +138,35 @@ def build_evaluation_router(
     async def evaluation_summary():
         if not config.enabled:
             raise HTTPException(404, "evaluation sidecar disabled")
-        return JSONResponse(_aggregate(config, attribution, registry))
+        return JSONResponse(_aggregate(config, attribution))
 
     return router
 
 
-def _aggregate_welfare(
-    logs_root: Path,
-    registry: "SidecarRegistry | None",
-) -> dict[str, Any]:
-    """Aggregate welfare Gray-Zone counts.
+def _aggregate_welfare(logs_root: Path) -> dict[str, Any]:
+    """Welfare gray-zone counts and sensor advisory state.
 
-    Prefer the live registry counters when available; fall back to reading
-    the most recent JSONL entry so the tab works against a stopped cycle.
-    Returns a dict with keys unmaintained_fatigue, sustained_extreme_vad,
-    replay_overload plus a ``source`` field ('live' | 'jsonl' | 'none').
+    The dashboard runs in its own process and the welfare observer runs in the
+    cycle, so the numbers come from the observer's JSONL rollup under
+    ``<evaluation_logs>/welfare``, read with the reset-aware reader: a count
+    after a restart reset is not raised by records from before it. ``source``
+    is 'jsonl' or 'none'.
     """
-    # 1. Live registry (preferred).
-    wo = getattr(registry, "welfare_observer", None) if registry else None
-    if wo is not None:
-        return {
-            "unmaintained_fatigue": wo.unmaintained_fatigue_count,
-            "sustained_extreme_vad": wo.sustained_extreme_vad_count,
-            "replay_overload": wo.replay_overload_count,
-            "sustained_interoceptive_distress": wo.sustained_interoceptive_distress_count,
-            "blind_sensor_advisories": wo.blind_sensor_count,
-            "blind_sensors": list(wo.blind_sensors),
-            "sensor_silent_advisories": wo.sensor_silent_count,
-            "silent_sensors": list(wo.silent_sensors),
-            "source": "live",
-        }
-
-    # 2. JSONL rollup (cold dashboard / dashboard restart).
     return welfare_counts_from_jsonl(logs_root)
 
 
-def _aggregate_prediction_error(
-    logs_root: Path,
-    registry: "SidecarRegistry | None",
-) -> dict[str, Any]:
-    """Aggregate prediction-error sliding-window statistics.
+def _aggregate_prediction_error(logs_root: Path) -> dict[str, Any]:
+    """Prediction-error sliding-window statistics from the observer's rollup.
 
-    Returns a dict with per-source mean/p95/p99 plus total event counts.
-    When no data exists returns ``{"source": "none"}``.
+    The prediction-error observer runs in the cycle and writes its newest
+    per-source statistics and event counts to
+    ``<evaluation_logs>/prediction_error``; this reads the latest entry.
+    Returns ``{"source": "none"}`` when no rollup exists.
     """
-    # 1. Live registry.
-    pe_obs = getattr(registry, "prediction_error_observer", None) if registry else None
-    if pe_obs is not None:
-        event_counts = pe_obs.event_counts
-        per_source: dict[str, Any] = {}
-        for stream in event_counts:
-            stats = pe_obs._stats_for_source(stream)
-            per_source[stream] = stats
-        return {
-            "event_counts": event_counts,
-            "per_source": per_source,
-            "source": "live",
-        }
-
-    # 2. JSONL rollup.
     pe_dir = logs_root / "prediction_error"
     entries = _latest_lines(pe_dir, name="prediction_error", limit=50)
     if not entries:
         return {"source": "none"}
-    # The JSONL entries carry ``sources`` (per-stream stats) and
-    # ``event_counts``; use the most recent entry.
     latest = entries[-1]
     return {
         "event_counts": latest.get("event_counts") or {},
@@ -376,7 +336,6 @@ def aggregate_evaluation_metrics(
     config: EvaluationConfig,
     *,
     attribution: AttributionRecorder | None = None,
-    registry: "SidecarRegistry | None" = None,
 ) -> dict[str, Any]:
     """Public entrypoint for the evaluation metrics aggregate.
 
@@ -386,13 +345,12 @@ def aggregate_evaluation_metrics(
     """
     if not config.enabled:
         return empty_evaluation_metrics()
-    return _aggregate(config, attribution, registry)
+    return _aggregate(config, attribution)
 
 
 def _aggregate(
     config: EvaluationConfig,
     attribution: AttributionRecorder | None,
-    registry: "SidecarRegistry | None" = None,
 ) -> dict[str, Any]:
     logs_root = resolve(config.paths.evaluation_logs)
 
@@ -475,8 +433,8 @@ def _aggregate(
     }
 
     # --- sidecar observer surfaces ---
-    welfare = _aggregate_welfare(logs_root, registry)
-    prediction_error = _aggregate_prediction_error(logs_root, registry)
+    welfare = _aggregate_welfare(logs_root)
+    prediction_error = _aggregate_prediction_error(logs_root)
     coherence = _aggregate_coherence(logs_root)
     planning_policy = _aggregate_planning_policy(logs_root)
     individuation = _aggregate_individuation(config)

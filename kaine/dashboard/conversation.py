@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import re
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -25,6 +26,8 @@ log = logging.getLogger(__name__)
 
 LANGUAGE_EXTERNAL_STREAM = "language.external"
 SLEEP_STREAM = "sleep.out"
+
+NAME_REFRESH_INTERVAL_S = 10.0
 
 _LABEL_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 
@@ -130,9 +133,58 @@ class ConversationState:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
         self.sleep: dict[str, Any] | None = None
-        self.rest_request: dict[str, Any] | None = None
         self._sleep_start_seen: bool = False
         self._sleep_start_trigger: str | None = None
+        self._name_paths: tuple[Path, Path] | None = None
+        self._name_interval_s: float = NAME_REFRESH_INTERVAL_S
+        self._name_signature: tuple[Any, ...] | None = None
+        self._name_checked_at: float | None = None
+
+    def watch_name_files(
+        self,
+        self_model_path: Path,
+        identity_path: Path,
+        *,
+        interval_s: float = NAME_REFRESH_INTERVAL_S,
+    ) -> None:
+        """Track the files the name is read from, so ``current_name`` can notice changes."""
+        self._name_paths = (self_model_path, identity_path)
+        self._name_interval_s = interval_s
+        self._name_signature = self._stat_signature()
+        self._name_checked_at = time.monotonic()
+
+    def _stat_signature(self) -> tuple[Any, ...]:
+        signature: list[Any] = []
+        for path in self._name_paths or ():
+            try:
+                st = path.stat()
+                signature.append((st.st_mtime_ns, st.st_size))
+            except OSError:
+                signature.append(None)
+        return tuple(signature)
+
+    def refresh_name(self) -> None:
+        """Re-read the name when the self-model or identity file has changed."""
+        if self._name_paths is None:
+            return
+        signature = self._stat_signature()
+        if signature == self._name_signature:
+            return
+        name = read_entity_name(*self._name_paths)
+        if name is not None:
+            # Only a successful read settles the signature, so a failed one (an
+            # unreadable or half-written file) is retried at the next interval.
+            self._name_signature = signature
+            self.entity_name = name
+
+    def current_name(self) -> str:
+        """The entity's name, checking the watched files at most once per interval."""
+        if self._name_paths is not None:
+            now = time.monotonic()
+            if self._name_checked_at is None or now - self._name_checked_at >= self._name_interval_s:
+                self._name_checked_at = now
+                self.refresh_name()
+        return self.entity_name
 
     def observe(self, event: Event) -> None:
         """Update name, sleep state, or sleep/rest diagnostics from an event."""
@@ -145,8 +197,6 @@ class ConversationState:
         elif event.type == "sleep.sleep.completed":
             self.update_from_sleep(event.type)
             self._on_sleep_completed(event)
-        elif event.type == "affect.rest_request":
-            self._on_rest_request(event)
 
     def _on_sleep_started(self, event: Event) -> None:
         payload = event.payload if isinstance(event.payload, dict) else {}
@@ -158,7 +208,7 @@ class ConversationState:
             "trigger": trigger,
             "started_at": _finite(payload.get("started_at")),
             "duration_s": None,
-            "rest_seconds": None,
+            "rest_seconds": _finite(payload.get("rest_seconds")),
             "aborted": False,
             "completed_at": None,
         }
@@ -198,20 +248,10 @@ class ConversationState:
         self._sleep_start_seen = False
         self._sleep_start_trigger = None
 
-    def _on_rest_request(self, event: Event) -> None:
-        payload = event.payload if isinstance(event.payload, dict) else {}
-        self.rest_request = {
-            "reason": _label(payload.get("reason")),
-            "drive": _label(payload.get("drive")),
-            "stall_s": _finite(payload.get("stall_s")),
-            "at": event.timestamp.isoformat(),
-        }
-
     def sleep_snapshot(self) -> dict[str, Any]:
         return {
             "sleeping": self.sleeping,
             "sleep": dict(self.sleep) if self.sleep else None,
-            "rest_request": dict(self.rest_request) if self.rest_request else None,
         }
 
     async def backfill(self, bus: Any, *, scan: int = 2000) -> None:
@@ -250,16 +290,6 @@ class ConversationState:
                     if start_idx is not None:
                         self.observe(entries[start_idx][1])
                     self.observe(newest_event)
-
-        try:
-            entries = await bus.recent("affect.out", count=scan)
-        except Exception:
-            log.debug("conversation backfill failed for affect.out", exc_info=True)
-        else:
-            for entry_id, event in entries:
-                if event.type == "affect.rest_request":
-                    self.observe(event)
-                    break
 
     def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")
@@ -315,7 +345,7 @@ def build_conversation_router(
             except Exception:
                 log.warning("evaluation_provider raised", exc_info=True)
         context: dict[str, Any] = {
-            "entity_name": state.entity_name,
+            "entity_name": state.current_name(),
             "sleeping": state.sleeping,
             "evaluation": evaluation,
         }
@@ -334,6 +364,14 @@ def build_sleep_router(state: ConversationState) -> APIRouter:
     async def sleep_diagnostics():
         return JSONResponse(
             state.sleep_snapshot(),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/diagnostics/entity-name.json")
+    async def entity_name_json():
+        # The name only: identity data the operator already holds.
+        return JSONResponse(
+            {"name": state.current_name()},
             headers={"Cache-Control": "no-store"},
         )
 

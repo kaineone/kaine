@@ -97,6 +97,8 @@ The console at `/` is mounted only when `[dashboard].conversation_enabled` is tr
 
 The page title and the line under the wordmark show the entity's name. At start the dashboard reads it from the self-model file (`[self_model].persistence_path`, by default `state/self_model/self_model.json`, decrypted when state encryption is on), and when that file holds no name, from a `name` field in `state/identity/entity.json` if one is there. While it runs it takes each new name from the self-model's `self_model.document` events on `self_model.out`. With no name anywhere, for example when the self-model module is off and has never run, the console shows "KAINE". Reload the page to see a name that arrived after it opened.
 
+Every page, the diagnostics and evaluation pages included, shows the name in its header whether or not the console is enabled. The dashboard checks the self-model file and `state/identity/entity.json` for changes at most every 10 s and re-reads the name when either changed, so a name minted after the dashboard started appears on the next page load or poll without a restart. The header polls `/diagnostics/entity-name.json`, which returns only the name and sits behind the same access rules as the pages. Before any name exists the header shows "KAINE".
+
 The status chip starts from the sleep state the dashboard last read on `sleep.out` (it reads the newest `sleep.sleep.started` or `sleep.sleep.completed` when it starts), so a page opened during a sleep shows "sleeping" as soon as the cycle reports running.
 
 ### Diagnostics
@@ -107,7 +109,7 @@ Content fields are stripped unless `[dashboard].dev_content_override` is true. S
 
 ### Evaluation
 
-`/diagnostics/evaluation/` shows the evaluation sidecar's scrubbed metrics, among them A/B divergence, welfare events, module attribution, PLV coherence and per-source prediction error, and never shows message text. The prediction-error panel keeps a sliding window of errors from the interoception, sequence and vision modules' reports, the audition module's transcription and emotion events, and the world model module's world error.
+`/diagnostics/evaluation/` shows the evaluation sidecar's scrubbed metrics, among them A/B divergence, welfare events, module attribution, PLV coherence and per-source prediction error, and never shows message text. The dashboard runs in its own process, so every figure comes from the rollup files the cycle's observers write under `data/evaluation/`, and each panel says which rollup it read. It does not read the observers' live counters. The welfare counts are counted since the welfare observer last started: the reader stops at the latest restart reset record, so a count from before a restart never raises one after it. The prediction-error panel keeps a sliding window of errors from the interoception, sequence and vision modules' reports, the audition module's transcription and emotion events, and the world model module's world error.
 
 The sidecar writes JSONL under `data/` and an optional `summary.json` for batch charts. See the [research data chapter](17-research-data/README.md) for how to read and configure it.
 
@@ -180,7 +182,7 @@ The preservation panel lists each action of the preservation monitors, a diverge
 
 Each line shows operational fields only: monitor, transition, reason, action, and preservation or snapshot ids. A failed preservation is shown in the critical colour and needs the operator's attention. See [Preservation](11-preservation.md) for the full behaviour.
 
-The entity-care panel shows the welfare gray-zone counters and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
+The entity-care panel shows the welfare gray-zone counters, counted since the welfare observer last started, and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
 
 ## Affect welfare record
 
@@ -198,9 +200,7 @@ For curiosity it shows the interest share, the share of awake time at or above i
 
 ## Sleep and rest
 
-The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a developmental rest, the rest's length. The trigger is the one the sleep module states where it states one: `developmental rest` (a spent stimulus in the developmental phase, a 1,260 s rest) or `requested`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
-
-Below it the panel shows the last `affect.rest_request`: the reason (`stimulus spent`), the drive, how long its goal had stalled, and the time. When the dashboard starts it reads the newest sleep events and rest request from the last 2,000 entries of `sleep.out` and `affect.out`, so a request older than that shows only after the next one.
+The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a state-cycle rest, the rest's length. The trigger is the one the sleep module states where it states one: `state-cycle rest` (the developmental state cycle, a 1,410 s rest after about 2,996 s awake) or `requested`. A sleep recorded under the earlier rule, trigger `developmental_rest`, shows as `developmental rest (earlier rule)`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
 
 ## Live charts and pacing
 

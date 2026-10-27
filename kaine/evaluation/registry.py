@@ -73,6 +73,7 @@ class SidecarRegistry:
         bare_inference_client: Optional[BareInferenceClient] = None,
         embedder: Optional[TextEmbedder] = None,
         welfare_observer: Optional[WelfareObserver] = None,
+        development_probe: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._bus = bus
         self._config = config
@@ -98,6 +99,10 @@ class SidecarRegistry:
         # external observer.
         self._welfare_observer: WelfareObserver | None = welfare_observer
         self._welfare_external = welfare_observer is not None
+        # In the developmental phase the welfare observer holds fatigue alarms; every
+        # observer the registry builds gets the probe, whether or not the welfare
+        # response (and so the external producer) is enabled.
+        self._development_probe = development_probe
         # The live oscillatory-ablation recorder is NOT a bus subscriber (it is
         # driven directly by the cycle), so it is held apart from _observers and
         # its record() is exposed via the ablation_recorder property. Its sink IS
@@ -393,7 +398,9 @@ class SidecarRegistry:
             self._prediction_error_observer = pe_obs
             self._observers.append(pe_obs)
         if obs_cfg.welfare and not self._welfare_external:
-            observer, sink = build_welfare_producer(self._bus, self._config)
+            observer, sink = build_welfare_producer(
+                self._bus, self._config, self._development_probe
+            )
             self._sinks.append(sink)
             self._observers.append(observer)
             self._welfare_observer = observer

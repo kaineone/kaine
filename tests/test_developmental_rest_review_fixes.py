@@ -13,8 +13,6 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.bus.schema import Event
-from kaine.modules.affect import Affect
 from kaine.modules.sleep import (
     FakeTrainer,
     Sleep,
@@ -132,9 +130,9 @@ async def test_aborted_developmental_rest_includes_trigger_and_rest_seconds(
         entity_clock=FakeEntityClock(),
     )
     task = asyncio.create_task(
-        sleep.enter_sleep(trigger="developmental_rest")
+        sleep.enter_sleep(trigger="state_cycle")
     )
-    await _wait_for_started(bus, trigger="developmental_rest")
+    await _wait_for_started(bus, trigger="state_cycle")
     await asyncio.sleep(0.05)
     task.cancel()
     (outcome,) = await asyncio.gather(task, return_exceptions=True)
@@ -142,7 +140,7 @@ async def test_aborted_developmental_rest_includes_trigger_and_rest_seconds(
 
     payload = await _wait_for_aborted_completed(bus)
     assert payload["aborted"] is True
-    assert payload.get("trigger") == "developmental_rest"
+    assert payload.get("trigger") == "state_cycle"
     assert payload.get("rest_seconds") == 30.0
 
 
@@ -168,79 +166,3 @@ async def test_aborted_ordinary_sleep_has_null_trigger_and_no_rest_seconds(
     assert payload["aborted"] is True
     assert "trigger" in payload and payload["trigger"] is None
     assert "rest_seconds" not in payload
-
-
-def _make_affect(bus: AsyncBus, t: list[float], probe=None):
-    affect = Affect(bus, clock=lambda: t[0], publish_interval_s=1.0)
-    affect._development_probe = probe
-    lp: list[float] = [0.0]
-    nb: list[float] = [0.0]
-    affect._progress = lambda: (lp[0], 0.0)
-    affect._alert_excess = lambda: nb[0]
-    return affect, lp, nb
-
-
-async def _read_events(bus: AsyncBus) -> list[Event]:
-    return [ev for _id, ev in await bus.read("affect.out", last_id="0", count=5000)]
-
-
-def _rest_requests(events: list[Event]) -> list[Event]:
-    return [ev for ev in events if ev.type == "affect.rest_request"]
-
-
-@pytest.mark.asyncio
-async def test_affect_rest_request_publish_failure_does_not_requeue(bus):
-    t = [0.0]
-    affect, lp, nb = _make_affect(bus, t, probe=lambda: True)
-
-    original_publish = affect.publish
-
-    class RestRequestPublishFailure(Exception):
-        pass
-
-    rest_request_calls = 0
-
-    async def wrapped_publish(topic, payload, **kwargs):
-        nonlocal rest_request_calls
-        if topic == "affect.rest_request":
-            rest_request_calls += 1
-            if rest_request_calls == 1:
-                raise RestRequestPublishFailure("intentional failure")
-        return await original_publish(topic, payload, **kwargs)
-
-    affect.publish = wrapped_publish
-
-    # The wrapper raises only on the first rest-request publish; collecting the
-    # failures lets the except document that this is the expected, intentional
-    # failure, and the count is asserted below.
-    failures: list[RestRequestPublishFailure] = []
-
-    for _ in range(605):
-        lp[0] = 0.0
-        nb[0] = 0.0
-        affect.drives.boredom.value = 0.95
-        t[0] += 1.0
-        try:
-            await affect._tick()
-        except RestRequestPublishFailure as exc:
-            failures.append(exc)
-
-    for _ in range(100):
-        lp[0] = 0.0
-        nb[0] = 0.0
-        affect.drives.boredom.value = 0.95
-        t[0] += 1.0
-        try:
-            await affect._tick()
-        except RestRequestPublishFailure as exc:
-            failures.append(exc)
-
-    # The intentional failure must surface exactly once across both loops: the
-    # failed publish is not retried, and no later tick raises again.
-    assert len(failures) == 1
-    assert rest_request_calls == 1
-
-    events = await _read_events(bus)
-    rests = _rest_requests(events)
-    assert len(rests) == 0
-    assert len(rests) <= 1

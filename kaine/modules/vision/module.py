@@ -9,7 +9,7 @@ import logging
 import math
 from typing import Any, ClassVar, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -338,7 +338,7 @@ class Vision(BaseModule):
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._sleep_cursor = await self._bus.last_entry_id(_SLEEP_STREAM)
+        self._sleep_cursor = await tail_id(self._bus, _SLEEP_STREAM, strict=True)
 
         await super().initialize()
         self._tasks.append(

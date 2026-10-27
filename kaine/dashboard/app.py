@@ -135,6 +135,7 @@ def create_app(
 
     app = FastAPI(lifespan=lifespan)
     app.state.config = config
+    app.state.conversation_state = state
     app.state.sessions = SessionStore(
         idle_seconds=config.session_idle_minutes * 60,
         max_age_seconds=getattr(config, "session_max_hours", 24) * 3600,

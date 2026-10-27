@@ -78,7 +78,7 @@ The interoception module learns, per channel, the expected absolute prediction e
 F(t+dt) = max(0, F(t) + e·dt − decay·dt)
 ```
 
-During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `interoception.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold.
+During a hard-threshold breach the raw prediction error is the input `e` instead. When `F` crosses `fatigue_maintenance_threshold`, the interoception module publishes `interoception.fatigue`, which the sleep module watches. It fires once per crossing and re-arms when fatigue falls below the threshold. In the developmental phase the crossing starts no sleep (paper 3.5), so the module clears this latch when the phase ends, and a standing crossing is then announced again.
 
 `RegulationDetector` tracks how long the same error (unexpected error, or raw error during a breach) stays at or above `regulation_threshold`. Each completed `regulation_sustain_window_s` emits one escalating `interoception.regulation` advisory: `reduce_rate` (severity 1), then `shed_module` (severity 2), then `request_maintenance` (severity 3). The episode resets as soon as the error falls below the threshold. The interoception module never acts on its own advisories; the cognitive cycle and the sleep module decide what to do.
 
@@ -97,6 +97,8 @@ Warm-up ends once the readout has taken `regulation_warmup_min_samples` learning
 | Workspace broadcast | `on_workspace(snapshot)` | Adopts accessed broadcasts as the readout's context |
 | `sleep.out` | `sleep.sleep.started` | Suspends readout learning and expected-error learning; fatigue decays three times faster |
 | `sleep.out` | `sleep.sleep.completed` | Resumes learning; resets the fatigue accumulator and the regulation detector |
+
+The module reads `sleep.out` from the stream tail, seeded at initialize. Sleeps that finished before boot are not replayed, so a restart keeps the restored fatigue and regulation state, and a crash in the middle of a sleep leaves the module awake. A sleep that is already running at boot is not detected until its next event arrives.
 
 ## Outputs
 
