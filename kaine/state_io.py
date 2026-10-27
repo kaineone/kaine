@@ -84,10 +84,7 @@ def file_lock(path: Path) -> Iterator[None]:
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
+        pass
 
 
 def update_json_locked(
