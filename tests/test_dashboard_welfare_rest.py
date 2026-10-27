@@ -202,21 +202,21 @@ def test_developmental_rest_details():
     state.observe(
         _sleep_event(
             "sleep.sleep.started",
-            {"trigger": "developmental_rest", "started_at": 1000.0},
+            {"trigger": "state_cycle", "started_at": 1000.0},
         )
     )
     state.observe(
         _sleep_event(
             "sleep.sleep.completed",
             {
-                "trigger": "developmental_rest",
+                "trigger": "state_cycle",
                 "rest_seconds": 1260.0,
                 "total_elapsed_ms": 1265000.0,
             },
         )
     )
     snap = state.sleep_snapshot()
-    assert snap["sleep"]["trigger"] == "developmental_rest"
+    assert snap["sleep"]["trigger"] == "state_cycle"
     assert snap["sleep"]["rest_seconds"] == 1260.0
     assert snap["sleep"]["duration_s"] == 1265.0
     assert snap["sleep"]["started_at"] == 1000.0
@@ -291,20 +291,20 @@ def test_aborted_completion_after_untriggered_start_has_no_trigger():
 
 def test_aborted_developmental_rest_keeps_its_trigger():
     state = ConversationState()
-    state.observe(_sleep_event("sleep.sleep.started", {"trigger": "developmental_rest"}))
+    state.observe(_sleep_event("sleep.sleep.started", {"trigger": "state_cycle"}))
     state.observe(
         _sleep_event(
             "sleep.sleep.completed",
             {
                 "aborted": True,
                 "reason": "stop",
-                "trigger": "developmental_rest",
+                "trigger": "state_cycle",
                 "rest_seconds": 1260.0,
             },
         )
     )
     sleep = state.sleep_snapshot()["sleep"]
-    assert sleep["trigger"] == "developmental_rest"
+    assert sleep["trigger"] == "state_cycle"
     assert sleep["aborted"] is True
 
 
@@ -348,24 +348,6 @@ def test_invalid_sleep_label_becomes_none():
     assert state2.sleep_snapshot()["sleep"]["trigger"] is None
 
 
-def test_rest_request_recorded():
-    state = ConversationState()
-    ts = datetime(2026, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
-    event = Event(
-        source="affect",
-        type="affect.rest_request",
-        payload={"reason": "stimulus_spent", "drive": "boredom", "stall_s": 612.0},
-        salience=0.1,
-        timestamp=ts,
-    )
-    state.observe(event)
-    snap = state.sleep_snapshot()
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
-    assert snap["rest_request"]["drive"] == "boredom"
-    assert snap["rest_request"]["stall_s"] == 612.0
-    assert snap["rest_request"]["at"] == ts.isoformat()
-
-
 class FakeRecentBus:
     def __init__(self, recents: dict[str, list[tuple[str, Event]]], raise_on=None):
         self._recents = recents
@@ -388,7 +370,7 @@ async def test_backfill_completed_then_started():
                     _sleep_event(
                         "sleep.sleep.completed",
                         {
-                            "trigger": "developmental_rest",
+                            "trigger": "state_cycle",
                             "rest_seconds": 1260.0,
                             "total_elapsed_ms": 1265000.0,
                         },
@@ -398,7 +380,7 @@ async def test_backfill_completed_then_started():
                     "1-0",
                     _sleep_event(
                         "sleep.sleep.started",
-                        {"trigger": "developmental_rest", "started_at": 1000.0},
+                        {"trigger": "state_cycle", "started_at": 1000.0},
                     ),
                 ),
             ]
@@ -406,7 +388,7 @@ async def test_backfill_completed_then_started():
     )
     await state.backfill(bus)
     snap = state.sleep_snapshot()
-    assert snap["sleep"]["trigger"] == "developmental_rest"
+    assert snap["sleep"]["trigger"] == "state_cycle"
     assert snap["sleep"]["asleep"] is False
 
 
@@ -441,29 +423,6 @@ async def test_backfill_newest_started_leaves_asleep():
 
 
 @pytest.mark.asyncio
-async def test_backfill_affect_rest_request():
-    state = ConversationState()
-    bus = FakeRecentBus(
-        {
-            "affect.out": [
-                ("2-0", _event("affect", "affect.state", {})),
-                (
-                    "1-0",
-                    _event(
-                        "affect",
-                        "affect.rest_request",
-                        {"reason": "stimulus_spent", "drive": "boredom", "stall_s": 612.0},
-                    ),
-                ),
-            ]
-        }
-    )
-    await state.backfill(bus)
-    snap = state.sleep_snapshot()
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
-
-
-@pytest.mark.asyncio
 async def test_backfill_continues_when_one_stream_raises():
     state = ConversationState()
     bus = FakeRecentBus(
@@ -474,28 +433,17 @@ async def test_backfill_continues_when_one_stream_raises():
                     "2-0",
                     _sleep_event(
                         "sleep.sleep.completed",
-                        {"trigger": "developmental_rest", "total_elapsed_ms": 1000.0},
+                        {"trigger": "state_cycle", "total_elapsed_ms": 1000.0},
                     ),
                 ),
-                ("1-0", _sleep_event("sleep.sleep.started", {"trigger": "developmental_rest"})),
-            ],
-            "affect.out": [
-                (
-                    "1-0",
-                    _event(
-                        "affect",
-                        "affect.rest_request",
-                        {"reason": "stimulus_spent", "drive": "boredom", "stall_s": 10.0},
-                    ),
-                )
+                ("1-0", _sleep_event("sleep.sleep.started", {"trigger": "state_cycle"})),
             ],
         },
         raise_on={"self_model.out"},
     )
     await state.backfill(bus)
     snap = state.sleep_snapshot()
-    assert snap["sleep"]["trigger"] == "developmental_rest"
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
+    assert snap["sleep"]["trigger"] == "state_cycle"
 
 
 class StubBus:
@@ -538,14 +486,14 @@ async def test_sleep_diagnostics_route():
     state.observe(
         _sleep_event(
             "sleep.sleep.started",
-            {"trigger": "developmental_rest", "started_at": 1000.0},
+            {"trigger": "state_cycle", "started_at": 1000.0},
         )
     )
     state.observe(
         _sleep_event(
             "sleep.sleep.completed",
             {
-                "trigger": "developmental_rest",
+                "trigger": "state_cycle",
                 "rest_seconds": 1260.0,
                 "total_elapsed_ms": 1265000.0,
             },
@@ -560,7 +508,7 @@ async def test_sleep_diagnostics_route():
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["sleep"]["trigger"] == "developmental_rest"
+        assert data["sleep"]["trigger"] == "state_cycle"
         assert data["sleep"]["rest_seconds"] == 1260.0
         assert resp.headers.get("cache-control") == "no-store"
     finally:

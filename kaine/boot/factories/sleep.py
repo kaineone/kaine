@@ -198,6 +198,7 @@ def make_sleep(
         "alert_salience",
         "requested_rest_min_interval_s",
         "developmental_rest_s",
+        "developmental_quiescent_share",
         "voice_alignment",  # nested sub-table
         "consolidation",  # nested sub-table: fatigue_triggered, replay_window_s
         "housekeeping",  # nested sub-table
@@ -262,6 +263,18 @@ def make_sleep(
                 "[sleep].developmental_rest_s must be a number greater than 0"
             )
         kwargs["developmental_rest_s"] = float(raw_dev)
+    if "developmental_quiescent_share" in section:
+        raw_share = section["developmental_quiescent_share"]
+        if (
+            isinstance(raw_share, bool)
+            or not isinstance(raw_share, (int, float))
+            or not math.isfinite(raw_share)
+            or not 0 < raw_share < 1
+        ):
+            raise ValueError(
+                "[sleep].developmental_quiescent_share must be a number greater than 0 and less than 1"
+            )
+        kwargs["developmental_quiescent_share"] = float(raw_share)
     # [sleep.consolidation] sub-table: fatigue_triggered, replay_window_s.
     # interval_seconds remains the max-interval safety net.
     consolidation = section.get("consolidation") or {}
@@ -399,6 +412,8 @@ def make_sleep(
         _pclock = _pf.get("_shared_playlist_clock")
         if _pclock is not None:
             kwargs["playlist_clock"] = _pclock
+    # The cycle wires the development probe after the modules exist; until then the backstop waits.
+    kwargs["await_development_probe"] = True
     return Sleep(bus, **kwargs)
 
 

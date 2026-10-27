@@ -329,9 +329,9 @@ async def test_direct_enter_sleep_records_a_null_trigger(bus: AsyncBus, tmp_path
 async def test_developmental_rest_keeps_its_rest_seconds(bus: AsyncBus, tmp_path: Path):
     sleep = _make_sleep(bus, tmp_path)
     sleep._developmental_rest_s = 0.0
-    summary = await sleep.enter_sleep(trigger="developmental_rest")
+    summary = await sleep.enter_sleep(trigger="state_cycle")
 
-    assert summary["trigger"] == "developmental_rest"
+    assert summary["trigger"] == "state_cycle"
     assert summary["fatigue_triggered"] is False
     assert "rest_seconds" in summary
 

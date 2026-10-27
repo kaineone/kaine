@@ -453,10 +453,23 @@ class Supervisor:
         oscillator = getattr(module, "oscillator", None)
         try:
             await module.shutdown()
+            # A module that carries state across an in-process restart (the sleep module's
+            # state cycle) is serialized after shutdown, so a cut rest keeps its remainder.
+            carried: Optional[dict[str, Any]] = None
+            if getattr(module, "carries_state_across_restart", False):
+                try:
+                    carried = module.serialize()
+                except Exception:
+                    log.warning("serialize of %s before restart failed", name, exc_info=True)
             new = self._rebuild_module(name)
             if oscillator is not None and hasattr(new, "attach_oscillator"):
                 new.attach_oscillator(oscillator)
             await new.initialize()
+            if carried is not None:
+                try:
+                    new.deserialize(carried)
+                except Exception:
+                    log.warning("deserialize of %s after restart failed", name, exc_info=True)
             self._registry.replace(name, new)
             from kaine.boot import rewire_module
 
