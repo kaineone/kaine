@@ -10,7 +10,7 @@ from collections import deque
 from typing import Any, ClassVar, Iterable, Optional
 
 from kaine import legacy_aliases
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
@@ -183,21 +183,11 @@ class Sequence(BaseModule):
 
         # Resolve cursors before starting tasks so initial events aren't missed
         for stream in self._user_input_streams:
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._user_input_cursors[stream] = entry_id
-            else:
-                self._user_input_cursors[stream] = "0-0"
+            self._user_input_cursors[stream] = await tail_id(self._bus, stream)
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._sleep_cursor = await self._bus.last_entry_id(_SLEEP_STREAM)
+        self._sleep_cursor = await tail_id(self._bus, _SLEEP_STREAM, strict=True)
 
         await super().initialize()
         self._tasks.append(

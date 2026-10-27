@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-from kaine.bus.client import AsyncBus, get_bus, reset_bus_for_tests
+from kaine.bus.client import AsyncBus, get_bus, reset_bus_for_tests, tail_id
 from kaine.bus.config import BusConfig, load_bus_config
 from kaine.bus.errors import (
     BusConfigError,
@@ -24,4 +24,5 @@ __all__ = [
     "load_bus_config",
     "module_stream",
     "reset_bus_for_tests",
+    "tail_id",
 ]

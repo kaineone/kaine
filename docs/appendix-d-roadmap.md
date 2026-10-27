@@ -6,6 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
+| stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
 | developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
 | dashboard-name-always-shown | 4/4 (100%) | The entity name is shown on every dashboard page and refreshed when it appears |
 | preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
@@ -95,6 +96,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 69 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 70 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

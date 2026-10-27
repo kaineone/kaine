@@ -9,7 +9,7 @@ import math
 from collections import deque
 from typing import Any, Callable, ClassVar, Mapping, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event, module_stream, split_stream_entry_key
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
@@ -581,17 +581,7 @@ class Affect(BaseModule):
         if self._coupling.enabled:
             peer_streams.append(self._social_cognition_agent_model_stream)
         for stream in peer_streams:
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._cursors[stream] = entry_id
-            else:
-                self._cursors[stream] = "0-0"
+            self._cursors[stream] = await tail_id(self._bus, stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(

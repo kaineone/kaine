@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
 from kaine import legacy_aliases
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.defaults import DEFAULT_CHAT_URL
@@ -437,28 +437,12 @@ class Language(BaseModule):
     async def initialize(self) -> None:
         # Seek to the latest intent entry so we only realize intents formed
         # after boot, mirroring Audio Out's dedicated-loop cursor seeding.
-        try:
-            latest = await self._bus.client.xrevrange(self._intent_stream, count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            self._intent_cursor = entry_id
+        self._intent_cursor = await tail_id(self._bus, self._intent_stream)
 
         # Seed the sleep module's sleep-index cursor from the stream tail, then scan
         # the most recent events to catch the latest sleep_index published
         # before boot. Never use "$": a non-blocking read from "$" never returns.
-        try:
-            latest_sleep = await self._bus.client.xrevrange("sleep.out", count=1)
-        except Exception:
-            latest_sleep = []
-        if latest_sleep:
-            entry_id = latest_sleep[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            self._sleep_cursor = entry_id
+        self._sleep_cursor = await tail_id(self._bus, "sleep.out")
         try:
             recent_sleep = await self._bus.client.xrevrange("sleep.out", count=200)
         except Exception as exc:

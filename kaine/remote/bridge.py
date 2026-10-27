@@ -55,7 +55,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 
 log = logging.getLogger(__name__)
@@ -644,17 +644,7 @@ class RemoteBridge:
         """Forward entity speech + heard transcriptions to transcript clients."""
         cursors: dict[str, str] = {}
         for stream in (LANGUAGE_EXTERNAL_STREAM, AUDITION_STREAM):
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                cursors[stream] = entry_id
-            else:
-                cursors[stream] = "0-0"
+            cursors[stream] = await tail_id(self._bus, stream)
         try:
             while True:
                 progressed = False
@@ -738,17 +728,7 @@ class RemoteBridge:
         ``affect.emotion`` change events) and fans out compact JSON to mood-ring
         subscribers. Read-only: this loop never writes to the bus or disk.
         Coalesced to <=~10/s so a chatty affect module can't flood clients."""
-        try:
-            latest = await self._bus.client.xrevrange(AFFECT_STREAM, count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            cursor = entry_id
-        else:
-            cursor = "0-0"
+        cursor = await tail_id(self._bus, AFFECT_STREAM)
         try:
             while True:
                 try:
