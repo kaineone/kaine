@@ -232,6 +232,7 @@ class _M1Stub:
         self._sleep_lock = asyncio.Lock()  # unlocked -> not sleeping
         self._sleep_pending = False
         self._sleep_task = None
+        self._await_development_probe = False
         self.sleeps = 0
         self._sleeped = asyncio.Event()
 
