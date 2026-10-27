@@ -5,7 +5,7 @@
 
 The developmental stimulus's audio passes a hearing band that widens in steps,
 following the order fetal hearing matures. A stage ends when audition's own
-learning progress has saturated (or at a dwell cap), not at a fixed time; the
+learning progress has saturated (or at a dwell cap); the
 rule lives in ``hearing_stage_state.HearingStageState``, and this module only
 holds the stage edges and the filter design. Band edges are
 placed geometrically midway between the outermost tested tone the fetus can

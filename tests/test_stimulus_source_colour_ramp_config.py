@@ -7,6 +7,8 @@ import logging
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from kaine.boot.perception_feed import _stimulus_source_params
 from kaine.lifecycle.stage import stimulus_source_params_digest
 from kaine.modules.stimulus_source_signal import StimulusSourceParams
@@ -36,6 +38,51 @@ def test_dataclass_default_and_digest_unchanged() -> None:
     default_params = StimulusSourceParams()
     assert default_params.colour_ramp_seconds == 3600.0
     assert stimulus_source_params_digest(default_params) == _DEFAULTS_DIGEST
+
+
+def test_hearing_none_leaves_the_record_and_digest_unchanged() -> None:
+    from kaine.lifecycle.stored_field_names import stimulus_source_params_record
+
+    params = StimulusSourceParams()
+    assert "hearing_schedule" not in stimulus_source_params_record(params)
+    assert stimulus_source_params_digest(params, hearing=None) == _DEFAULTS_DIGEST
+
+
+def test_hearing_schedule_joins_the_record_and_digest() -> None:
+    from kaine.lifecycle.stored_field_names import stimulus_source_params_record
+    from kaine.modules.audition.hearing_band import HearingBandParams
+
+    params = StimulusSourceParams()
+    hearing = HearingBandParams()
+    record = stimulus_source_params_record(params, hearing=hearing)
+    assert record["hearing_schedule"] == {
+        "saturation_window_seconds": 600.0,
+        "min_dwell_seconds": 5400.0,
+        "max_dwell_seconds": 25200.0,
+        "colour": "stage/5",
+    }
+    with_hearing = stimulus_source_params_digest(params, hearing=hearing)
+    assert with_hearing != _DEFAULTS_DIGEST
+    assert stimulus_source_params_digest(params, hearing=HearingBandParams()) == with_hearing
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"saturation_window_seconds": 300.0},
+        {"min_dwell_seconds": 3600.0},
+        {"max_dwell_seconds": 7200.0},
+    ],
+)
+def test_digest_changes_with_each_hearing_schedule_value(change) -> None:
+    from dataclasses import replace
+
+    from kaine.modules.audition.hearing_band import HearingBandParams
+
+    params = StimulusSourceParams()
+    base = stimulus_source_params_digest(params, hearing=HearingBandParams())
+    changed = stimulus_source_params_digest(params, hearing=replace(HearingBandParams(), **change))
+    assert changed != base
 
 
 def test_retired_key_is_accepted_with_a_warning_and_ignored(caplog) -> None:

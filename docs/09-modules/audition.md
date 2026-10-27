@@ -331,7 +331,7 @@ Audition holds no raw audio beyond a single `process_audio()` call, except that 
 | `tests/test_audio_self_hearing.py` | `SpeakingGate` self-hearing suppression |
 | `tests/test_audition_feed.py` | Seeded audio (determinism, seek safety, seed decorrelation), playlist audio (manifest verification failing closed, PyAV absent), and `stimulus_source` |
 | `tests/test_maternal_voice.py`, `tests/test_stimulus_source_maternal_voice.py`, `tests/test_stimulus_source_voice_boot.py` | The maternal voice: loud failure on a missing or altered file, spectrum below the intrauterine cutoff, seeded determinism, arousal pacing, repertoire growth with awake time, byte-identical audio when disabled, boot wiring and the parameter digest |
-| `tests/test_hearing_band.py`, `tests/test_stimulus_source_hearing_band.py`, `tests/test_stimulus_source_hearing_boot.py` | The hearing band: the stage edges on the tested tones, the stage provider (not the awake time) choosing the band, the filter's stopbands, byte-identical audio when disabled, independence from earlier blocks, restart continuity, the spectrum under the moving edges, boot wiring and the parameter digest |
+| `tests/test_hearing_band.py`, `tests/test_stimulus_source_hearing_band.py`, `tests/test_stimulus_source_hearing_boot.py` | The hearing band: the stage edges on the tested tones, the stage provider choosing the band, the filter's stopbands, byte-identical audio when disabled, independence from earlier blocks, restart continuity, the spectrum under the moving edges, boot wiring and the parameter digest |
 | `tests/systems/test_audition_subsystem.py` | Redis-backed subsystem integration |
 
 ## Spec and related

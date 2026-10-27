@@ -213,7 +213,7 @@ async def test_band_step_restarts_audition_only(bus):
 @pytest.mark.parametrize(
     "event",
     [
-        lambda: _hearing(0, None),
+        lambda: _hearing(2, None),
         lambda: _hearing(-1, None),
         lambda: _hearing(5, None),
         lambda: Event(
@@ -408,3 +408,62 @@ async def test_audition_learning_progress_gated_on_stage_and_window(bus):
     await affect._handle_peer_event("development.out", _hearing(1, 0))
     assert affect.audition_learning_progress(1) is None
     assert affect.audition_learning_progress(0) is None
+
+
+async def _affect_with_audition_history(bus, t):
+    affect = Affect(
+        bus,
+        clock=lambda: t[0],
+        publish_interval_s=1.0,
+        learning_progress_span_s=240.0,
+        learning_progress_bin_s=60.0,
+    )
+    await affect._handle_peer_event("audition.out", _audition(1.0))
+    for _ in range(240):
+        t[0] += 1.0
+        err = 0.5 if t[0] > 120.0 else 1.0
+        await affect._handle_peer_event("audition.out", _audition(err))
+        await affect._tick()
+    return affect
+
+
+async def test_lower_stage_event_restarts_audition_bins(bus):
+    """A persisted stage of 4 with an owner that restarts at stage 0 must not lock affect out."""
+    t = [0.0]
+    affect = await _affect_with_audition_history(bus, t)
+    affect._hearing_stage = 4
+    assert "audition" in affect._lp_windows
+    assert affect.audition_learning_progress(0) is None
+
+    await affect._handle_peer_event("development.out", _hearing(0, None))
+    assert affect._hearing_stage == 0
+    assert "audition" not in affect._lp_windows
+
+    await affect._handle_peer_event("audition.out", _audition(1.0))
+    for _ in range(240):
+        t[0] += 1.0
+        err = 0.5 if t[0] > 360.0 else 1.0
+        await affect._handle_peer_event("audition.out", _audition(err))
+        await affect._tick()
+    value = affect.audition_learning_progress(0)
+    assert value is not None and value > 0.0
+
+
+async def test_same_stage_event_leaves_audition_bins_alone(bus):
+    t = [0.0]
+    affect = await _affect_with_audition_history(bus, t)
+    await affect._handle_peer_event("development.out", _hearing(2, None))
+    window = affect._lp_windows["audition"]
+    await affect._handle_peer_event("development.out", _hearing(2, 2))
+    assert affect._hearing_stage == 2
+    assert affect._lp_windows["audition"] is window
+
+
+async def test_rising_stage_event_still_restarts_audition_bins(bus):
+    t = [0.0]
+    affect = await _affect_with_audition_history(bus, t)
+    await affect._handle_peer_event("development.out", _hearing(1, None))
+    assert "audition" in affect._lp_windows
+    await affect._handle_peer_event("development.out", _hearing(2, 1))
+    assert affect._hearing_stage == 2
+    assert "audition" not in affect._lp_windows

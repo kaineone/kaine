@@ -1165,9 +1165,9 @@ pause_max_seconds = 1.5         # maximum pause between utterances
 # at 354-707 Hz (500 Hz alone). Stage 1: 250 Hz joins (low edge 158 Hz). Stage 2:
 # 100 Hz joins and, with no unheard tone below, the low edge goes (low-pass at
 # 707 Hz, the heartbeat thud heard). Stage 3: 1000 Hz joins (low-pass at
-# 1732 Hz). Stage 4: 3000 Hz joins and the band is open. A step comes when the
-# entity is ready for it, not on a clock: stage k ends when audition's learning
-# progress, restarted at the step, stays below the affect module's
+# 1732 Hz). Stage 4: 3000 Hz joins and the band is open. A stage ends when
+# audition's learning progress has saturated or at the maximum dwell: stage k
+# ends when that progress, restarted at the step, stays below the affect module's
 # learning_progress_floor (0.20) for saturation_window_seconds of awake time
 # after at least min_dwell_seconds in the stage, or at max_dwell_seconds
 # (paper A.7, Table A1: W_sat, d_min, d_max; provisional, to be calibrated;
@@ -1653,8 +1653,8 @@ window = 64
 # ([perception_feed].mode = "stimulus_source"); if enabled without one, the loud, repeated
 # `stage.development.no_stimulus` signal fires rather than a silent senseless hold.
 # The gate MEASURES readiness (stimulus source readout + the sleep module's count + the world model module's
-# consolidation + the hearing schedule) and imposes no development; a readiness gate, not a
-# target (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
+# consolidation + the hearing schedule) and imposes no development
+# (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
 enabled = false
 min_sleep_cycles = 5              # the sleep module's maintenance cycles before maturation is possible
 min_consolidation_passes = 3      # successful world model sleep-training passes (C2)

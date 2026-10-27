@@ -138,8 +138,10 @@ def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourc
 def _shared_hearing_stage_state(feed: dict[str, Any]) -> Any:
     """Return the installed hearing stage owner, or a fresh unpersisted one.
 
-    Only unit tests that build a factory without the install step get the
-    fresh one.
+    Unit tests that build a factory without the install step and the
+    ``kaine/preboot.py`` dry-run checks get the fresh one. It starts at stage 0,
+    writes no file and shares no state with the running entity, so those callers
+    see the opening band and cannot move the persisted stage.
     """
     from kaine.modules.audition.hearing_stage_state import HearingStageState
 
@@ -232,10 +234,19 @@ def _install_shared_stimulus_source_clock(
         ((kaine_config or {}).get("affect") or {}).get("learning_progress_floor", 0.20)
     )
     stage_file = Path(stage_path) if stage_path is not None else Path(_lifecycle_stage.STAGE_PATH)
+    # The cycle puts the entity id and lineage into the feed config before the
+    # registry is built. Without them the owner adopts no file that names an entity.
+    entity_id = perception_feed.get("_entity_id")
+    if not isinstance(entity_id, str):
+        entity_id = None
+    raw_lineage = perception_feed.get("_entity_lineage")
+    lineage = tuple(x for x in raw_lineage if isinstance(x, str)) if isinstance(raw_lineage, (list, tuple)) else ()
     hearing_state = HearingStageState.load(
         hearing_params,
         path=resolve_storage(stage_file).parent / "hearing_stage.json",
         lp_floor=lp_floor,
+        entity_id=entity_id,
+        lineage=lineage,
     )
     perception_feed["_hearing_stage_state"] = hearing_state
     if kaine_config is not None:
@@ -322,14 +333,20 @@ def _plan_stimulus_source_world_transition(
             logging.WARNING,
         )
     try:
-        digest = _lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
+        stimulus_params = _stimulus_source_params(feed)
+        digest = _lifecycle_stage.stimulus_source_params_digest(
+            stimulus_params, hearing=_hearing_band_params(feed)
+        )
+        # An entity matured before the hearing schedule joined the digest recorded the
+        # form without it, so that form is accepted as well.
+        legacy_digest = _lifecycle_stage.stimulus_source_params_digest(stimulus_params)
     except Exception as exc:
         return (
             False,
             f"the stimulus source parameters could not be read to check the maturation record: {exc}",
             logging.WARNING,
         )
-    if digest != stage_state.stimulus_source_params_digest:
+    if stage_state.stimulus_source_params_digest not in (digest, legacy_digest):
         return (
             False,
             "the configured stimulus source parameters differ from those recorded at maturation "

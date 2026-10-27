@@ -383,10 +383,13 @@ class Affect(BaseModule):
         return per_source, max(values)
 
     def _on_hearing_stage(self, payload: Mapping[str, Any]) -> None:
-        """Handle a hearing-stage step from the development stream.
+        """Handle a hearing-stage event from the development stream.
 
-        Audition's learning-progress bins restart on each rising band step
-        (paper A.4, "for audition restarting at each band step of A.7").
+        Audition's learning-progress bins restart on any change of stage, higher
+        or lower (paper A.4, "for audition restarting at each band step of A.7").
+        A lower stage arrives when the stage owner starts below a persisted value,
+        for instance an entity migrated from the earlier awake-time schedule. The
+        same stage again leaves the bins alone.
         """
         stage = payload.get("stage")
         if not isinstance(stage, int) or isinstance(stage, bool) or not (0 <= stage <= 4):
@@ -394,14 +397,14 @@ class Affect(BaseModule):
         if self._hearing_stage is None:
             self._hearing_stage = stage
             return
-        if stage > self._hearing_stage:
+        if stage != self._hearing_stage:
             if "audition" in self._lp_windows:
                 del self._lp_windows["audition"]
-                log.info(
-                    "affect: hearing band stage %d (was %d); audition learning-progress bins restart",
-                    stage,
-                    self._hearing_stage,
-                )
+            log.info(
+                "affect: hearing band stage %d (was %d); audition learning-progress bins restart",
+                stage,
+                self._hearing_stage,
+            )
             self._hearing_stage = stage
 
     def audition_learning_progress(self, stage: int) -> float | None:

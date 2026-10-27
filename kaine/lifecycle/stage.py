@@ -405,14 +405,20 @@ def record_maturation_stimulus_source(
     )
 
 
-def stimulus_source_params_digest(params: object) -> str:
+def stimulus_source_params_digest(params: object, *, hearing: object | None = None) -> str:
     """Return a stable sha256 hex digest of a stimulus source parameters object.
 
     ``params`` must be a dataclass instance (e.g. ``StimulusSourceParams``); its fields are
     serialised under their stored names (see :mod:`kaine.lifecycle.stored_field_names`) as a
-    compact sorted JSON object before hashing.
+    compact sorted JSON object before hashing. ``hearing`` is the hearing band parameters
+    (a dataclass with ``saturation_window_seconds``, ``min_dwell_seconds`` and
+    ``max_dwell_seconds``). When given, the digest also covers the hearing schedule that
+    drives the field's colour; when ``None`` the digest equals the one computed before the
+    hearing schedule was added.
     """
     payload = json.dumps(
-        stimulus_source_params_record(params), sort_keys=True, separators=(",", ":")
+        stimulus_source_params_record(params, hearing=hearing),
+        sort_keys=True,
+        separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

@@ -55,7 +55,7 @@ def test_own_lived_artifacts_listing(tmp_path):
     def _entry(new):
         return next(e for e in legacy_names.LIVED_ARTIFACTS if e["new"] == new)
 
-    expected = [Path("lifecycle/stage.json")]
+    expected = [Path("lifecycle/stage.json"), Path("lifecycle/hearing_stage.json")]
     for new in (
         "world_model/world_model.ckpt",
         "sleep/consolidation_divergence.json",

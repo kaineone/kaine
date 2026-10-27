@@ -361,7 +361,10 @@ def _evaluate_c3(sensory_schedule: tuple[int, int] | None) -> ConditionResult:
     missing reading."""
     if sensory_schedule is None:
         return ConditionResult(
-            "C3_sensory_schedule_complete", False, "no sensory schedule reading"
+            "C3_sensory_schedule_complete",
+            False,
+            "no sensory schedule reading: the hearing schedule runs only with the "
+            "local stimulus source, so an external stimulus provider cannot satisfy C3",
         )
     stage, final_stage = sensory_schedule
     if stage < final_stage:

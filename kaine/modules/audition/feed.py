@@ -382,7 +382,7 @@ class StimulusSourceProceduralAudioStream:
     When an enabled hearing band is given, the bed and the voice pass a
     band-pass that widens with the hearing stage in the order fetal hearing
     matures (Hepper and Shahidullah 1994); the stage comes from the stage
-    owner (``hearing_stage``), not from the awake time. Without a band, or
+    owner (``hearing_stage``). Without a band, or
     with it disabled, the output is unchanged. The awake time is read only
     for the maternal voice's unlock.
 

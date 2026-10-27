@@ -127,7 +127,11 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
 
 # Developmental-phase files that travel with the entity. The viability verdict is not one:
 # it already rides inside the progress file.
-BUNDLED_DEVELOPMENT_FILES = ("development_progress.json", "development_readout.json")
+BUNDLED_DEVELOPMENT_FILES = (
+    "development_progress.json",
+    "development_readout.json",
+    "hearing_stage.json",
+)
 DEVELOPMENT_STATE_FILES = BUNDLED_DEVELOPMENT_FILES + ("development_viability.json",)
 
 # Bundle member directories. The writer and every reader pass them through
@@ -377,7 +381,7 @@ async def preserve_live(
                     shutil.copy2(src, dest)
                     _chmod_quietly(dest, 0o600)
             if development_copied:
-                inventory.append(f"{dev_member}/ (development progress and readout)")
+                inventory.append(f"{dev_member}/ (development progress, readout and hearing stage)")
         # Individuation evidence: encrypted maturation reference, ledger, reports,
         # and the stored maturation adapter. This evidence travels with the entity.
         if individuation_root.is_dir():

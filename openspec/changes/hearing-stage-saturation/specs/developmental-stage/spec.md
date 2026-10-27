@@ -23,6 +23,10 @@ The system SHALL advance `development → embodied` only when ALL applicable con
 - **WHEN** the hearing stage owner supplies no reading
 - **THEN** C3 is not met
 
+#### Scenario: An external stimulus provider cannot satisfy C3
+- **WHEN** the perception feed is not the local stimulus source
+- **THEN** C3 is not met and its detail says the hearing schedule runs only with the local stimulus source
+
 #### Scenario: An entity without sleep is judged on what it is
 - **WHEN** neither the sleep module nor the world model module is enabled and C1 and C3 hold
 - **THEN** C2 is recorded as not applicable and does not hold the entity in the stimulus source

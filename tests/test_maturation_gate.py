@@ -130,6 +130,13 @@ def test_c3_none_fails_closed() -> None:
     assert c3.met is False and "no sensory schedule reading" in c3.detail
 
 
+def test_c3_none_detail_names_the_local_stimulus_source() -> None:
+    c3 = mg._evaluate_c3(None)
+    assert c3.met is False
+    assert "runs only with the local stimulus source" in c3.detail
+    assert "external stimulus provider cannot satisfy C3" in c3.detail
+
+
 def test_c3_before_final_stage_names_the_stage() -> None:
     c3 = mg._evaluate_c3((2, 4))
     assert c3.met is False and "hearing stage 2 of 4" in c3.detail

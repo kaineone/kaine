@@ -134,6 +134,7 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
     the maturation transition.
     """
     from kaine.boot import _stimulus_source_params
+    from kaine.boot.perception_feed import _hearing_band_params
 
     def _maturation_hook():
         clock.begin_maturation(maturation_seconds)
@@ -143,7 +144,9 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
                 return
             stimulus_source_t = clock.maturation_end_stimulus_source_seconds()
             stimulus_source_seed = int(feed.get("seed", 0))
-            params_digest = lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
+            params_digest = lifecycle_stage.stimulus_source_params_digest(
+                _stimulus_source_params(feed), hearing=_hearing_band_params(feed)
+            )
             bloom_ends_at = (now() + timedelta(seconds=maturation_seconds)).isoformat()
             lifecycle_stage.write_stage(
                 lifecycle_stage.record_maturation_stimulus_source(
@@ -2012,6 +2015,13 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # any other bus writer fails verification and never reaches an effector.
     ctx.intent_secret = generate_intent_secret()
 
+    # The hearing stage file is keyed to the entity. The identity was resolved in
+    # _phase_stage; the feed config carries it to the stage owner build_registry installs.
+    if ctx.identity is not None:
+        feed_cfg = ctx.kaine_config.setdefault("perception_feed", {})
+        feed_cfg["_entity_id"] = ctx.identity.entity_id
+        feed_cfg["_entity_lineage"] = list(ctx.identity.lineage)
+
     ctx.registry = build_registry(
         ctx.bus,
         ctx.kaine_config,
@@ -2066,6 +2076,10 @@ async def _phase_registry(ctx: BootContext) -> int | None:
                     landed = None
                 if landed is not None:
                     ctx.identity = landed
+                # The revive restored hearing_stage.json after the owner was built; read it again.
+                hearing_state = (ctx.kaine_config.get("perception_feed") or {}).get("_hearing_stage_state")
+                if hearing_state is not None:
+                    hearing_state.reload()
             # A landed revive wins over any resume checkpoint: replace it immediately.
             if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
                 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
@@ -2098,8 +2112,10 @@ async def _phase_maturation_gate(ctx: BootContext) -> int | None:
         stimulus_source_feed_configured=ctx.stimulus_source_ready,
     )
 
-    # C3 reads the hearing stage owner at call time: boot builds it after this
-    # phase, so the closure looks it up in the shared perception_feed mapping.
+    # C3 reads the hearing stage owner at call time from the shared
+    # perception_feed mapping. _phase_registry installs the owner there only for
+    # the local stimulus source; with an external stimulus provider the key is
+    # absent, the closure returns None and C3 fails closed.
     def _sensory_schedule() -> tuple[int, int] | None:
         from kaine.modules.audition.hearing_band import HEARING_FINAL_STAGE
 

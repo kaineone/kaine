@@ -321,3 +321,24 @@ def test_shared_hearing_stage_state_falls_back_to_a_fresh_unpersisted_one():
     state = _shared_hearing_stage_state({})
     assert state.stage == 0
     assert state._path is None
+
+
+
+def test_registry_installs_no_hearing_owner_for_an_external_provider():
+    """An external stimulus provider gets no hearing stage owner, so C3 cannot pass."""
+    from kaine.boot import build_registry
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import BusConfig
+
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    bus = AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
+    )
+    config: dict[str, object] = {
+        "modules": {"vision": False, "audition": False},
+        "perception_feed": {"mode": "external"},
+    }
+    build_registry(bus, config)
+    assert "_hearing_stage_state" not in config["perception_feed"]
+    assert "_shared_stimulus_source_clock" not in config["perception_feed"]

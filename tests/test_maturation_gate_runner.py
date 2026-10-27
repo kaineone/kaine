@@ -809,6 +809,27 @@ async def test_runner_without_a_source_fails_c3_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_phase_maturation_gate_external_provider_has_no_reading(tmp_path: Path) -> None:
+    import types
+    from unittest.mock import MagicMock
+
+    from kaine.cycle.__main__ import _phase_maturation_gate
+    from kaine.lifecycle.stage import StageState
+
+    # An external stimulus provider installs no hearing stage owner in the feed.
+    ctx = types.SimpleNamespace(
+        kaine_config={"perception_feed": {"mode": "external"}},
+        bus=MagicMock(),
+        registry=MagicMock(),
+        stage_state=StageState(),
+        staging_enabled=False,
+        stimulus_source_ready=False,
+    )
+    await _phase_maturation_gate(ctx)
+    assert ctx.gate_runner._sensory_schedule() is None
+
+
+@pytest.mark.asyncio
 async def test_runner_treats_a_raising_source_as_no_reading(tmp_path: Path) -> None:
     runner = _schedule_runner(tmp_path)
 
