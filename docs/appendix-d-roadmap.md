@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| dashboard-welfare-reset-aware | 0/4 (0%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
+| dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
 | preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
 | floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |

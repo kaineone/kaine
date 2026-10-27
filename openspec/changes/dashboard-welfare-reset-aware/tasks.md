@@ -1,6 +1,7 @@
 ## 1. Implementation
 
-- [x] 1.1 Check git history (including pre-rename module names) for prior fixes, and grep sibling modules for the same pattern
-- [x] 1.2 Keep the hardened or shared copy and route the other callers through it
-- [x] 1.3 Add a test pinning the failing case
-- [x] 1.4 Update the docs that describe the behaviour
+- [x] 1.1 Check history for prior work: the reset-aware reader came with #475 and the cycle-published pattern with #584; the dashboard registry has no earlier fix
+- [x] 1.2 Route welfare_counts_from_jsonl through the latest restart reset
+- [x] 1.3 Remove the never-started SidecarRegistry and the registry parameters from the evaluation tab
+- [x] 1.4 Add tests for the reset case and for the absence of the registry, and mutation-check them
+- [x] 1.5 Update the evaluation template source lines and docs/05-dashboard.md
