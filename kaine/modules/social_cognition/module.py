@@ -21,7 +21,7 @@ import asyncio
 import logging
 from typing import Any, ClassVar, Optional, Sequence
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
@@ -111,17 +111,7 @@ class SocialCognition(BaseModule):
             await self._store._embedder.load()
         await self._store.initialize()
         # Seed the audition cursor to "now" so we only process new events.
-        try:
-            latest = await self._bus.client.xrevrange("audition.out", count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            self._audition_cursor = entry_id
-        else:
-            self._audition_cursor = "0-0"
+        self._audition_cursor = await tail_id(self._bus, "audition.out")
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(

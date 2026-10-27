@@ -84,7 +84,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from kaine.bus.schema import Event, validate_event
 from kaine.cycle.unfrozen_clock import UnfrozenClock
@@ -424,8 +424,12 @@ class WelfareObserver(StreamSubscriberObserver):
         affect_summary_interval_s: float = _DEFAULT_AFFECT_SUMMARY_INTERVAL_S,
         poll_interval_s: float = 0.5,
         unfrozen_clock: UnfrozenClock | None = None,
+        development_probe: Callable[[], bool] | None = None,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
+        # True while the entity is in the developmental phase, when fatigue sets no sleep
+        # (paper 3.5) and an unmaintained crossing is no gray-zone event. None: always alarm.
+        self._development_probe = development_probe
         self._sink = sink
         self._unfrozen = unfrozen_clock or UnfrozenClock.for_welfare()
         self._diag_unknown_seen = 0
@@ -876,10 +880,22 @@ class WelfareObserver(StreamSubscriberObserver):
             }
         )
 
+    def _developing(self) -> bool:
+        probe = self._development_probe
+        if probe is None:
+            return False
+        try:
+            return bool(probe())
+        except Exception:
+            return True
+
     # --- Stream handlers -------------------------------------------------
 
     async def _handle_interoception(self, entry_id: str, event: Event) -> None:
         if event.type == "interoception.fatigue":
+            if self._developing():
+                log.debug("welfare_observer: fatigue crossing ignored in the developmental phase")
+                return
             # Record fatigue threshold crossing time.
             self._fatigue_crossed_at = self._unfrozen.now()
             log.debug("welfare_observer: interoception.fatigue crossing recorded at %s", entry_id)
@@ -1000,6 +1016,8 @@ class WelfareObserver(StreamSubscriberObserver):
         now = self._unfrozen.now()
 
         # (a) Unmaintained fatigue.
+        if self._fatigue_crossed_at is not None and self._developing():
+            self._fatigue_crossed_at = None
         if (
             self._fatigue_crossed_at is not None
             and (now - self._fatigue_crossed_at) >= self._maintenance_window_s
@@ -1056,7 +1074,9 @@ class WelfareObserver(StreamSubscriberObserver):
             await self._write_affect_summary()
 
 
-def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSink]:
+def build_welfare_producer(
+    bus, eval_cfg, development_probe=None
+) -> tuple[WelfareObserver, AsyncJsonlSink]:
     """Construct the welfare gray-zone producer outside the evaluation sidecar.
 
     This producer belongs to the welfare net; it is started whenever the
@@ -1078,5 +1098,6 @@ def build_welfare_producer(bus, eval_cfg) -> tuple[WelfareObserver, AsyncJsonlSi
         blind_sensor_samples=eval_cfg.welfare.blind_sensor_samples,
         negative_valence_bar=eval_cfg.welfare.negative_valence_bar,
         affect_summary_interval_s=eval_cfg.welfare.affect_summary_interval_s,
+        development_probe=development_probe,
     )
     return observer, sink

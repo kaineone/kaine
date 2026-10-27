@@ -10,7 +10,7 @@ import math
 from collections import deque
 from typing import Any, Callable, ClassVar, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -205,6 +205,10 @@ class Interoception(BaseModule):
             pressure=housekeeping_pressure,
         )
         self._fatigue_threshold_emitted: bool = False
+        # Developmental-phase probe (None: staging off). Fatigue starts no sleep in the phase,
+        # so the emission latch can stay set; at maturation it is cleared (see _check_maturation).
+        self._development_probe: Optional[Callable[[], bool]] = None
+        self._was_developing: bool = False
 
         # --- Homeostatic regulation ---
         self._regulation = RegulationDetector(
@@ -347,6 +351,10 @@ class Interoception(BaseModule):
 
     async def initialize(self) -> None:
         await self._reader.initialize()
+        # Start the sleep consumer at the stream tail: replaying past sleeps would
+        # reset restored fatigue and regulation, and a replayed started event with
+        # no completion would leave the module asleep after a crash mid-sleep.
+        self._sleep_cursor = await tail_id(self._bus, "sleep.out", strict=True)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._produce_loop(), name=f"{self.name}-producer")
@@ -837,6 +845,7 @@ class Interoception(BaseModule):
         if pc_args is not None:
             await self._queue_positive_control(pc_args, pc_suspended)
 
+        self._check_maturation()
         # --- Publish interoception.fatigue if threshold newly crossed ---
         if fatigue_crossed and not self._fatigue_threshold_emitted:
             self._fatigue_threshold_emitted = True
@@ -1014,6 +1023,27 @@ class Interoception(BaseModule):
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             raise
+
+    def set_development_probe(self, probe: Optional[Callable[[], bool]]) -> None:
+        """Store a callable returning True while the entity is in the developmental phase."""
+        self._development_probe = probe
+
+    def _check_maturation(self) -> None:
+        """Clear the fatigue latch when the phase ends, so a standing crossing is announced again.
+
+        In the phase a crossing starts no sleep, so the latch is not cleared by one; after
+        maturation fatigue must behave as it did before the phase.
+        """
+        probe = self._development_probe
+        if probe is None:
+            return
+        try:
+            developing = bool(probe())
+        except Exception:
+            developing = True
+        if self._was_developing and not developing:
+            self._fatigue_threshold_emitted = False
+        self._was_developing = developing
 
     async def _sleep_event_loop(self) -> None:
         """Subscribe to sleep.out to set/clear the _in_sleep flag."""

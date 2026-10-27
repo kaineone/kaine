@@ -46,6 +46,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine import legacy_aliases, perception_state
+from kaine.bus.client import tail_id
 from kaine.modules.base import BaseModule
 from kaine.modules.embodiment.adapter import EmbodimentAdapter, FeedFrame
 from kaine.modules.embodiment.channels import CONTINUOUS_CHANNEL_RANGE
@@ -216,11 +217,7 @@ class Embodiment(BaseModule):
         await super().shutdown()
 
     async def _latest_id(self, stream: str) -> str:
-        try:
-            latest = await self._bus.client.xrevrange(stream, count=1)
-            return latest[0][0] if latest else "0-0"
-        except Exception:
-            return "0-0"
+        return await tail_id(self._bus, stream)
 
     # ---- perception: body → KAINE -----------------------------------------
     async def _feed_loop(self) -> None:

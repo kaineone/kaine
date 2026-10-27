@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 from kaine.backend_state import record_backend_failure
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.entity_clock import EntityClock
 from kaine.modules.affect.state import DimensionalState
@@ -248,17 +248,7 @@ class Vocal(BaseModule):
         if self._mirroring_enabled:
             streams_to_subscribe.append(self._audition_prosody_stream)
         for stream in streams_to_subscribe:
-            try:
-                latest = await self._bus.client.xrevrange(stream, count=1)
-            except Exception:
-                latest = []
-            if latest:
-                entry_id = latest[0][0]
-                if isinstance(entry_id, bytes):
-                    entry_id = entry_id.decode()
-                self._cursors[stream] = entry_id
-            else:
-                self._cursors[stream] = "0-0"
+            self._cursors[stream] = await tail_id(self._bus, stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(

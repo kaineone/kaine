@@ -232,8 +232,15 @@ class _M1Stub:
         self._sleep_lock = asyncio.Lock()  # unlocked -> not sleeping
         self._sleep_pending = False
         self._sleep_task = None
+        self._await_development_probe = False
         self.sleeps = 0
         self._sleeped = asyncio.Event()
+
+    def _developing(self):
+        return None  # no development probe: the backstop applies
+
+    def _cycle_tick(self, developing):
+        pass
 
     async def enter_sleep(self, trigger=None):
         self.sleeps += 1
@@ -247,6 +254,7 @@ async def test_maintenance_runs_without_fatigue_consumer():
     stub._interval_triggered_enter_sleep = types.MethodType(
         Sleep._interval_triggered_enter_sleep, stub
     )
+    stub._maintenance_poll_once = types.MethodType(Sleep._maintenance_poll_once, stub)
     task = asyncio.create_task(Sleep._maintenance_poll_loop(stub))
     await asyncio.wait_for(stub._sleeped.wait(), 5)
     assert stub.sleeps == 1, "maintenance must fire with no fatigue events at all"
@@ -306,6 +314,9 @@ class _HypConsumerStub:
         self.triggers: list = []
         self.enter_done = 0
         self._release = asyncio.Event()
+
+    def _developing(self):
+        return None  # no development probe: fatigue applies
 
     async def enter_sleep(self, trigger=None):
         self.enter_started += 1

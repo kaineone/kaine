@@ -146,7 +146,7 @@ Detects four gray-zone events:
 
 | Condition | Trigger | Default window |
 |-----------|---------|----------------|
-| Unmaintained fatigue | `interoception.fatigue` crossing without `sleep.sleep.completed` within window | 900 s |
+| Unmaintained fatigue | `interoception.fatigue` crossing without `sleep.sleep.completed` within window; not raised in the developmental phase, where fatigue sets no sleep | 900 s |
 | Sustained extreme VAD | `\|valence\| >= 0.7` and `arousal >= 0.7` for longer than the duration | 60 s |
 | Replay write-rate excess | `episodic_memory.replay` events exceed threshold within consolidation window | 10 events / 5 s |
 | Sustained interoceptive distress | `interoception.report` `prediction_error` ≥ threshold continuously | ≥ 0.8 for 30 s |

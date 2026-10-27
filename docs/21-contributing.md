@@ -119,7 +119,7 @@ kaine/modules/<name>/
 └── ...             # collaborators, clients, etc.
 ```
 
-Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `bus.last_entry_id()` (`kaine/bus/client.py`). If your module's events relieve an affect drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
+Read your module's input streams with `AsyncBus.read_entries` and advance the cursor to the last scanned id, so undecodable entries do not make the consumer re-read the same batch forever. A non-blocking read from a `"$"` cursor raises `ValueError`; seed the cursor with `await tail_id(bus, stream)` (`kaine/bus/client.py`), which returns the newest entry id or `"0-0"` for an empty or missing stream. A live consumer seeds its cursor this way at initialize so it never replays history from earlier runs; only a deliberate history reader starts at `"0"`. If your module's events relieve an affect drive, declare `relieves_drives: ClassVar[frozenset[str]]` with one or more of `curiosity`, `boredom`, `social_drive`, `restlessness`; an unknown drive name fails the boot.
 
 The module class must:
 
