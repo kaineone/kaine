@@ -1911,7 +1911,7 @@ action = "pause"
 # distress crossings AND welfare.gray_zone events (any of the four categories:
 # replay_overload, unmaintained_fatigue, sustained_extreme_vad,
 # sustained_interoceptive_distress) published by the sidecar welfare observer on
-# welfare.out — so the protective response covers all four categories. One
+# welfare.out, so the protective response covers all four categories. One
 # sustained-distress episode counts once, even though both detectors report it.
 repeat_window_s = 300.0
 repeat_threshold = 3
