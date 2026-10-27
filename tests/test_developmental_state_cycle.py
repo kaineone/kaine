@@ -564,7 +564,7 @@ def test_dashboard_shows_the_state_cycle_rest_and_its_length():
     assert snap["sleep"]["rest_seconds"] == REST_S
     js = (Path(__file__).resolve().parents[1] / "kaine" / "dashboard" / "static" / "dashboard_sleep.js").read_text()
     assert 'state_cycle: "state-cycle rest"' in js
-    assert "developmental_rest" not in js
+    assert 'developmental_rest: "developmental rest (earlier rule)"' in js
 
 
 # --- welfare: a rest counts as time not awake --------------------------------------
@@ -702,3 +702,253 @@ async def test_probe_failure_is_logged_once(bus, tmp_path, caplog):
     for _ in range(5):
         assert sleep._developing() is True
     assert len([r for r in caplog.records if "development probe failed" in r.getMessage()]) == 1
+
+
+# --- welfare observer, gate count, interoception latch, supervisor, probe wait ---------
+
+
+class _Sink:
+    def __init__(self) -> None:
+        self.rows: list[dict[str, Any]] = []
+
+    async def write(self, entry: dict[str, Any]) -> None:
+        self.rows.append(entry)
+
+
+async def test_unmaintained_fatigue_alarm_is_off_in_the_phase_through_a_full_rest(bus, tmp_path, sim):
+    from kaine.evaluation.observers.welfare_observer import WelfareObserver
+
+    probe = Probe(True)
+    sink = _Sink()
+    obs = WelfareObserver(bus, sink, maintenance_window_s=900.0, unfrozen_clock=sim, development_probe=probe)
+    sleep = _make(bus, tmp_path, sim, probe)
+    seen = _record(sleep, sim)
+    crossing = _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0})
+    fed = 0
+
+    async def feed_sleep_events() -> None:
+        nonlocal fed
+        while fed < len(seen):
+            _, kind, payload = seen[fed]
+            fed += 1
+            if kind.startswith("sleep.sleep."):
+                await obs._handle_sleep("1-0", _event("sleep", kind, payload))
+
+    # A crossing early in the awake stretch, which no sleep answers, and another mid-rest.
+    await _run(sleep, sim, 100)
+    await obs._handle_interoception("1-0", crossing)
+    for _ in range(3):
+        await _run(sleep, sim, sim.t + 400)
+        await feed_sleep_events()
+        await obs._check_timed_conditions()
+    while not _ends(seen):
+        await _run(sleep, sim, sim.t + 100)
+        await feed_sleep_events()
+        if sleep.is_sleeping:
+            await obs._handle_interoception("2-0", crossing)
+        await obs._check_timed_conditions()
+    assert _starts(seen, "state_cycle")
+    assert obs.unmaintained_fatigue_count == 0
+    assert sink.rows == []
+
+    # After maturation a crossing no sleep answers raises the alarm as before.
+    probe.value = False
+    await obs._handle_interoception("3-0", crossing)
+    sim.t += 1000.0
+    await obs._check_timed_conditions()
+    assert obs.unmaintained_fatigue_count == 1
+
+
+async def test_fatigue_alarm_without_a_probe_is_unchanged(bus):
+    from kaine.evaluation.observers.welfare_observer import WelfareObserver
+
+    clock = SimClock()
+    obs = WelfareObserver(bus, _Sink(), maintenance_window_s=900.0, unfrozen_clock=clock)
+    await obs._handle_interoception("1-0", _event("interoception", "interoception.fatigue", {}))
+    clock.t = 1000.0
+    await obs._check_timed_conditions()
+    assert obs.unmaintained_fatigue_count == 1
+
+
+async def test_a_resumed_rest_counts_once_toward_the_sleep_cycles(bus):
+    from dataclasses import replace
+
+    from kaine.lifecycle.gate_runner import MaturationGateRunner
+    from kaine.lifecycle.stage import DEVELOPMENT, StageState
+
+    for payload in (
+        {"trigger": "state_cycle", "aborted": True, "rest_seconds": REST_S},
+        {"trigger": "state_cycle", "rest_seconds": 810.0},
+        {"trigger": "backstop"},
+        {"trigger": "fatigue", "aborted": True},
+    ):
+        await bus.publish(_event("sleep", "sleep.sleep.completed", payload))
+    runner = object.__new__(MaturationGateRunner)
+    runner._bus = bus
+    runner._sleep_stream = "sleep.out"
+    runner._stage = replace(StageState(stage=DEVELOPMENT), sleep_cursor="0-0", sleep_count=0)
+    await runner._count_new_sleeps()
+    assert runner._stage.sleep_count == 3  # the aborted state-cycle completion counts nothing
+
+
+def test_maturation_clears_the_interoception_fatigue_latch():
+    from kaine.modules.interoception.module import Interoception
+
+    module = object.__new__(Interoception)
+    probe = Probe(True)
+    module._development_probe = probe
+    module._was_developing = False
+    module._fatigue_threshold_emitted = True
+    module._check_maturation()
+    assert module._fatigue_threshold_emitted is True  # still in the phase
+    probe.value = False
+    module._check_maturation()
+    assert module._fatigue_threshold_emitted is False
+    module._fatigue_threshold_emitted = True
+    module._check_maturation()
+    assert module._fatigue_threshold_emitted is True  # only the flip clears it
+
+
+def test_wiring_gives_interoception_the_probe():
+    class Registry:
+        def __init__(self) -> None:
+            self.modules: dict[str, Any] = {}
+
+        def __contains__(self, name: str) -> bool:
+            return name in self.modules
+
+        def get(self, name: str) -> Any:
+            return self.modules[name]
+
+    class Holder:
+        probe: Any = "unset"
+
+        def set_development_probe(self, probe: Any) -> None:
+            self.probe = probe
+
+    registry = Registry()
+    registry.modules["interoception"] = Holder()
+    registry.modules["sleep"] = Holder()
+    _wire_affect_development(registry, Probe(True))  # type: ignore[arg-type]
+    assert registry.modules["interoception"].probe is not None
+    plain = Registry()
+    plain.modules["sleep"] = Holder()
+    _wire_affect_development(plain)  # type: ignore[arg-type]
+    assert plain.modules["sleep"].probe is None  # an explicit "no probe" is still wired
+
+
+async def test_backstop_waits_until_the_probe_is_wired(bus, tmp_path, sim):
+    sleep = _make(bus, tmp_path, sim, None, interval_seconds=100.0, await_development_probe=True)
+    seen = _record(sleep, sim)
+    await _run(sleep, sim, 500)
+    assert sleep.is_due() and _starts(seen) == []
+    sleep.set_development_probe(None)  # staging off: the phase is known to be absent
+    await _run(sleep, sim, 520)
+    assert [p["trigger"] for _, p in _starts(seen)] == ["backstop"]
+
+
+async def test_backstop_stays_off_when_the_wired_probe_says_developing(bus, tmp_path, sim):
+    sleep = _make(bus, tmp_path, sim, None, interval_seconds=100.0, await_development_probe=True)
+    seen = _record(sleep, sim)
+    await _run(sleep, sim, 500)
+    sleep.set_development_probe(Probe(True))
+    await _run(sleep, sim, 520)
+    assert _starts(seen, "backstop") == []
+
+
+def test_the_factory_waits_for_the_probe(bus):
+    assert make_sleep(bus, {})._await_development_probe is True
+
+
+async def test_a_completed_maintenance_sleep_restarts_the_active_stretch(bus, tmp_path, sim):
+    sleep = _make(bus, tmp_path, sim, Probe(True))
+    seen = _record(sleep, sim)
+    await _run(sleep, sim, 2900)
+    assert sleep._cycle_awake_s > 2800
+    await sleep.enter_sleep(trigger="maintenance_request")
+    assert sleep._cycle_awake_s == 0.0
+    done = sim.t
+    await _run(sleep, sim, done + T_ACT + 20)
+    assert _starts(seen, "state_cycle")[0][0] - done == pytest.approx(T_ACT, abs=3.0)
+
+
+async def test_an_aborted_sleep_does_not_restart_the_active_stretch(bus, tmp_path, sim):
+    sleep = _make(bus, tmp_path, sim, Probe(True))
+    await _run(sleep, sim, 1000)
+
+    async def boom(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("phase failure")
+
+    sleep._run_voice_alignment = boom  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+        await sleep.enter_sleep(trigger="maintenance_request")
+    assert sleep._cycle_awake_s == pytest.approx(1000.0, abs=3.0)
+
+
+async def test_hold_reads_the_clock_scale_on_each_iteration(bus, tmp_path, monkeypatch):
+    class Shifting(SimClock):
+        scale = 1.0
+
+    clock = Shifting()
+
+    async def fake_sleep(delay: float, result: Any = None) -> Any:
+        clock.t += delay * clock.scale
+        if clock.t > 3.0:
+            clock.scale = 4.0
+        await _REAL_SLEEP(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    sleep = _make(bus, tmp_path, clock, Probe(True), developmental_rest_s=10.0)
+    await sleep._hold_developmental_rest(clock.t)
+    assert clock.t == pytest.approx(10.0, abs=0.01)
+
+
+async def _supervisor_for(sleep: Sleep, rebuilt: list[Sleep], probe: Probe):
+    from kaine.cycle.supervisor import Supervisor
+    from kaine.modules.registry import ModuleRegistry
+
+    registry = ModuleRegistry()
+    registry.register(sleep)
+    registry.affect_development_probe = probe  # type: ignore[attr-defined]
+    supervisor = object.__new__(Supervisor)
+    supervisor._registry = registry
+    supervisor._kaine_config = {}
+    supervisor._incidents = {}
+    supervisor._fork_manager = None
+    supervisor._rebuild_module = lambda name: rebuilt[0]
+    return supervisor, registry
+
+
+async def test_a_supervisor_restart_keeps_the_awake_time(bus, tmp_path):
+    clock = SimClock()
+    probe = Probe(True)
+    old = _make(bus, tmp_path, clock, probe, await_development_probe=True)
+    old._cycle_awake_s = 1234.0
+    new = _make(bus, tmp_path, clock, None, await_development_probe=True)
+    supervisor, registry = await _supervisor_for(old, [new], probe)
+    try:
+        result = await supervisor._restart_module("sleep")
+        assert result.ok and registry.get("sleep") is new
+        assert new._cycle_phase == "awake"
+        assert new._cycle_awake_s == pytest.approx(1234.0)
+        assert new._await_development_probe is False  # rewired with the stored probe
+    finally:
+        await new.shutdown()
+
+
+async def test_a_supervisor_restart_resumes_a_cut_rest(bus, tmp_path):
+    clock = SimClock()
+    probe = Probe(True)
+    old = _make(bus, tmp_path, clock, probe, await_development_probe=True)
+    old._cycle_phase = "resting"
+    old._cycle_rest_spent_s = 600.0
+    new = _make(bus, tmp_path, clock, None, await_development_probe=True)
+    supervisor, registry = await _supervisor_for(old, [new], probe)
+    try:
+        result = await supervisor._restart_module("sleep")
+        assert result.ok
+        payload = await _wait_started(bus, "state_cycle", timeout=5.0)
+        assert payload["resumed"] is True
+        assert payload["rest_seconds"] == pytest.approx(REST_S - 600.0)
+    finally:
+        await new.shutdown()

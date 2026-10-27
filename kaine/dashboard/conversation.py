@@ -130,7 +130,6 @@ class ConversationState:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
         self.sleep: dict[str, Any] | None = None
-        self.rest_request: dict[str, Any] | None = None
         self._sleep_start_seen: bool = False
         self._sleep_start_trigger: str | None = None
 
@@ -145,8 +144,6 @@ class ConversationState:
         elif event.type == "sleep.sleep.completed":
             self.update_from_sleep(event.type)
             self._on_sleep_completed(event)
-        elif event.type == "affect.rest_request":
-            self._on_rest_request(event)
 
     def _on_sleep_started(self, event: Event) -> None:
         payload = event.payload if isinstance(event.payload, dict) else {}
@@ -198,20 +195,10 @@ class ConversationState:
         self._sleep_start_seen = False
         self._sleep_start_trigger = None
 
-    def _on_rest_request(self, event: Event) -> None:
-        payload = event.payload if isinstance(event.payload, dict) else {}
-        self.rest_request = {
-            "reason": _label(payload.get("reason")),
-            "drive": _label(payload.get("drive")),
-            "stall_s": _finite(payload.get("stall_s")),
-            "at": event.timestamp.isoformat(),
-        }
-
     def sleep_snapshot(self) -> dict[str, Any]:
         return {
             "sleeping": self.sleeping,
             "sleep": dict(self.sleep) if self.sleep else None,
-            "rest_request": dict(self.rest_request) if self.rest_request else None,
         }
 
     async def backfill(self, bus: Any, *, scan: int = 2000) -> None:
@@ -250,16 +237,6 @@ class ConversationState:
                     if start_idx is not None:
                         self.observe(entries[start_idx][1])
                     self.observe(newest_event)
-
-        try:
-            entries = await bus.recent("affect.out", count=scan)
-        except Exception:
-            log.debug("conversation backfill failed for affect.out", exc_info=True)
-        else:
-            for entry_id, event in entries:
-                if event.type == "affect.rest_request":
-                    self.observe(event)
-                    break
 
     def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")

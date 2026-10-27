@@ -412,6 +412,8 @@ def make_sleep(
         _pclock = _pf.get("_shared_playlist_clock")
         if _pclock is not None:
             kwargs["playlist_clock"] = _pclock
+    # The cycle wires the development probe after the modules exist; until then the backstop waits.
+    kwargs["await_development_probe"] = True
     return Sleep(bus, **kwargs)
 
 

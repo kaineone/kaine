@@ -234,6 +234,12 @@ class MaturationGateRunner:
                 )
                 for _, event in entries:
                     if event.type == "sleep.sleep.completed" and event.source == "sleep":
+                        # A state-cycle rest cut by a restart ends aborted and resumes as a
+                        # new sleep; the resumed completion is the one cycle, so an aborted
+                        # state-cycle completion counts nothing.
+                        payload = event.payload if isinstance(event.payload, dict) else {}
+                        if payload.get("aborted") is True and payload.get("trigger") == "state_cycle":
+                            continue
                         total += 1
                 if last_scanned is None:
                     break

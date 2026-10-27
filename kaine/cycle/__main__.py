@@ -564,7 +564,34 @@ def build_ab_divergence_control_client(eval_cfg, *, assembler=None):
     return AssemblerConditionedClient(_build_prompt, _complete)
 
 
-async def _start_welfare_producer(bus, eval_cfg, preservation_cfg) -> tuple[Any, Any] | None:
+def _development_probe(ctx: BootContext) -> Callable[[], bool]:
+    """True while the entity is in the developmental phase; before the gate runner exists it reads the boot stage."""
+
+    def probe() -> bool:
+        if not ctx.staging_enabled:
+            return False
+        if ctx.gate_runner is not None:
+            return bool(ctx.gate_runner.stage.is_developing)
+        return bool(ctx.stage_state is not None and ctx.stage_state.is_developing)
+
+    return probe
+
+
+def _wire_development(ctx: BootContext) -> None:
+    """Give the affect, sleep and interoception modules the phase probe, and the sleep module the frozen-time source."""
+    _wire_affect_development(
+        ctx.registry,
+        _development_probe(ctx),
+        # Frozen time counts toward neither the awake stretch nor the rest of the state cycle.
+        paused_source=lambda: (
+            ctx.cycle.paused_subjective_seconds() if ctx.cycle is not None else 0.0
+        ),
+    )
+
+
+async def _start_welfare_producer(
+    bus, eval_cfg, preservation_cfg, development_probe=None
+) -> tuple[Any, Any] | None:
     """Start the welfare-net gray-zone producer when the welfare response is on.
 
     The gray-zone producer belongs to the welfare net, so it runs whenever the
@@ -577,7 +604,7 @@ async def _start_welfare_producer(bus, eval_cfg, preservation_cfg) -> tuple[Any,
     observer = None
     sink = None
     try:
-        observer, sink = build_welfare_producer(bus, eval_cfg)
+        observer, sink = build_welfare_producer(bus, eval_cfg, development_probe)
         await sink.start()
         await observer.start()
     except Exception as exc:
@@ -1834,7 +1861,9 @@ async def _phase_bus(ctx: BootContext) -> int | None:
     ctx.preservation_cfg = PreservationConfig.from_section(ctx.kaine_config.get("preservation") or {})
 
     try:
-        ctx.welfare_producer = await _start_welfare_producer(ctx.bus, ctx.eval_cfg, ctx.preservation_cfg)
+        ctx.welfare_producer = await _start_welfare_producer(
+            ctx.bus, ctx.eval_cfg, ctx.preservation_cfg, _development_probe(ctx)
+        )
     except RuntimeError:
         log.error(
             "refusing to start: the welfare response is enabled but its gray-zone producer could not start"
@@ -1979,6 +2008,10 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     if ctx.staging_enabled and ctx.stage_state.is_developing:
         _hold_effectors_for_development(ctx.registry)
 
+    # Wire the phase probe before any module loop starts, so the sleep module's poll
+    # never runs the backstop on a phase it does not yet know.
+    _wire_development(ctx)
+
     for module in list(ctx.registry.all_modules()):
         await module.initialize()
 
@@ -2109,18 +2142,7 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
 
         ctx.affect_observer = _observe_affect_and_regulation
     # Emotion regulation is off during the developmental phase (paper §3.5).
-    _wire_affect_development(
-        ctx.registry,
-        lambda: bool(
-            ctx.staging_enabled
-            and ctx.gate_runner is not None
-            and ctx.gate_runner.stage.is_developing
-        ),
-        # Frozen time counts toward neither the awake stretch nor the rest of the state cycle.
-        paused_source=lambda: (
-            ctx.cycle.paused_subjective_seconds() if ctx.cycle is not None else 0.0
-        ),
-    )
+    _wire_development(ctx)
     ctx.workspace = Workspace(
         strategy=RuleBasedSalience(
             novelty=NoveltyTracker(window=int(syn_cfg.get("novelty_window", 32))),

@@ -8,6 +8,9 @@ The eleventh test boot spent eight hours of its developmental phase almost entir
 - Fatigue starts no sleep in the developmental phase. A maintenance request from the interoception module still starts a sleep, which ends with its phases as now.
 - The boredom-stall rest request is removed: the affect module no longer publishes `affect.rest_request` and the sleep module no longer consumes it. A stalled boredom goal is still abandoned as stalled, with its crossing left open. An old affect snapshot's engagement field is ignored on restore.
 - The cycle survives a restart. Its phase (awake or resting) and the entity time spent in that phase persist. A restart during a rest resumes the rest for its remaining time; a restart during awake time keeps the awake time already spent.
+- Any completed sleep restarts the awake stretch, so two rests never run back to back. Frozen time counts toward neither the awake stretch nor a rest. The supervisor carries the sleep module's state through an in-process restart, and the backstop waits until boot has wired the development probe.
+- The welfare observer raises no unmaintained-fatigue event in the phase, the interoception module clears its fatigue latch at maturation, and the maturation gate counts a resumed rest once.
+- The dashboard drops its rest-request line and labels earlier `developmental_rest` sleeps as the earlier rule.
 - After maturation, or with developmental staging disabled, the hourly backstop and the fatigue trigger behave exactly as before, and no state-cycle sleep starts.
 - Config defaults follow Table A1, with validation of `0 < s_q < 1`. Docs and the dashboard's sleep panel name the trigger. `Delta_awake`, `Delta_budget`, the colour ramp and the hearing span are unchanged.
 

@@ -434,10 +434,16 @@ def _wire_affect_development(
         if callable(setter):
             setter(stored)
             log.info("wired affect development probe")
-    if "sleep" in registry and stored is not None:
+    if "interoception" in registry and stored is not None:
+        intero = registry.get("interoception")
+        intero_setter = getattr(intero, "set_development_probe", None)
+        if callable(intero_setter):
+            intero_setter(stored)
+    if "sleep" in registry:
         sleep = registry.get("sleep")
         setter = getattr(sleep, "set_development_probe", None)
         if callable(setter):
+            # Stored None is wired too: the phase is then known to be absent.
             setter(stored)
             log.info("wired sleep development probe")
         paused = getattr(registry, "sleep_paused_source", None)

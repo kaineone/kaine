@@ -8,9 +8,9 @@ const source = fs.readFileSync(SOURCE_PATH, "utf8");
 
 const TEXT_IDS = [
   "sleep-state", "sleep-trigger", "sleep-started", "sleep-duration",
-  "sleep-rest-length", "rest-reason", "rest-drive", "rest-stall", "rest-at"
+  "sleep-rest-length"
 ];
-const HIDDEN_IDS = ["sleep-aborted", "rest-none"];
+const HIDDEN_IDS = ["sleep-aborted"];
 
 function makeSandbox(payload) {
   var elements = {};
@@ -77,7 +77,6 @@ var scenarios = [
         asleep: false, trigger: "state_cycle", started_at: 1000,
         duration_s: 1415, rest_seconds: 1410, aborted: false, completed_at: null
       },
-      rest_request: null
     },
     check: function (s) {
       expectEqual(s, "sleep-state", "awake");
@@ -96,7 +95,6 @@ var scenarios = [
         started_at: Date.now() / 1000 - 60,
         duration_s: null, rest_seconds: null, aborted: false, completed_at: null
       },
-      rest_request: null
     },
     check: function (s) {
       expectEqual(s, "sleep-state", "asleep");
@@ -116,7 +114,6 @@ var scenarios = [
         asleep: false, trigger: "fatigue_or_backstop", started_at: null,
         duration_s: 30, rest_seconds: null, aborted: false, completed_at: null
       },
-      rest_request: null
     },
     check: function (s) {
       expectEqual(s, "sleep-trigger", "fatigue or backstop (not stated)");
@@ -132,7 +129,6 @@ var scenarios = [
         asleep: false, trigger: "backstop", started_at: null,
         duration_s: 1, rest_seconds: null, aborted: true, completed_at: null
       },
-      rest_request: null
     },
     check: function (s) {
       expectEqual(s, "sleep-trigger", "backstop (an hour awake)");
@@ -140,37 +136,22 @@ var scenarios = [
     }
   },
   {
-    name: "rest request rendered",
+    name: "an earlier-rule developmental rest keeps a label",
     payload: {
       sleeping: false,
-      sleep: null,
-      rest_request: {
-        reason: "stimulus spent", drive: "boredom", stall_s: 612,
-        at: "2026-01-02T12:00:00+00:00"
+      sleep: {
+        asleep: false, trigger: "developmental_rest", started_at: 1000,
+        duration_s: 1265, rest_seconds: 1260, aborted: false, completed_at: null
       }
     },
     check: function (s) {
-      expectEqual(s, "rest-reason", "stimulus spent");
-      expectEqual(s, "rest-drive", "boredom");
-      expectEqual(s, "rest-stall", "10 min 12 s");
-      if (s._elements["rest-at"].textContent === "n/a") {
-        throw new Error("rest-at not rendered");
-      }
-      expectHidden(s, "rest-none", true);
-    }
-  },
-  {
-    name: "no rest request shows the none note",
-    payload: { sleeping: false, sleep: null, rest_request: null },
-    check: function (s) {
-      expectHidden(s, "rest-none", false);
-      expectEqual(s, "rest-reason", "n/a");
-      expectEqual(s, "rest-stall", "n/a");
+      expectEqual(s, "sleep-trigger", "developmental rest (earlier rule)");
+      expectEqual(s, "sleep-rest-length", "21 min 0 s");
     }
   },
   {
     name: "null sleep gives n/a",
-    payload: { sleeping: false, sleep: null, rest_request: null },
+    payload: { sleeping: false, sleep: null },
     check: function (s) {
       expectEqual(s, "sleep-state", "awake");
       expectEqual(s, "sleep-trigger", "n/a");
@@ -182,7 +163,7 @@ var scenarios = [
   },
   {
     name: "helpers",
-    payload: { sleeping: false, sleep: null, rest_request: null },
+    payload: { sleeping: false, sleep: null },
     check: function (s) {
       var api = s.window.DashboardSleep;
       if (api.triggerLabel(null) !== "not known") throw new Error("null label");

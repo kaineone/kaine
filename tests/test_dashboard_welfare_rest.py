@@ -348,24 +348,6 @@ def test_invalid_sleep_label_becomes_none():
     assert state2.sleep_snapshot()["sleep"]["trigger"] is None
 
 
-def test_rest_request_recorded():
-    state = ConversationState()
-    ts = datetime(2026, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
-    event = Event(
-        source="affect",
-        type="affect.rest_request",
-        payload={"reason": "stimulus_spent", "drive": "boredom", "stall_s": 612.0},
-        salience=0.1,
-        timestamp=ts,
-    )
-    state.observe(event)
-    snap = state.sleep_snapshot()
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
-    assert snap["rest_request"]["drive"] == "boredom"
-    assert snap["rest_request"]["stall_s"] == 612.0
-    assert snap["rest_request"]["at"] == ts.isoformat()
-
-
 class FakeRecentBus:
     def __init__(self, recents: dict[str, list[tuple[str, Event]]], raise_on=None):
         self._recents = recents
@@ -441,29 +423,6 @@ async def test_backfill_newest_started_leaves_asleep():
 
 
 @pytest.mark.asyncio
-async def test_backfill_affect_rest_request():
-    state = ConversationState()
-    bus = FakeRecentBus(
-        {
-            "affect.out": [
-                ("2-0", _event("affect", "affect.state", {})),
-                (
-                    "1-0",
-                    _event(
-                        "affect",
-                        "affect.rest_request",
-                        {"reason": "stimulus_spent", "drive": "boredom", "stall_s": 612.0},
-                    ),
-                ),
-            ]
-        }
-    )
-    await state.backfill(bus)
-    snap = state.sleep_snapshot()
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
-
-
-@pytest.mark.asyncio
 async def test_backfill_continues_when_one_stream_raises():
     state = ConversationState()
     bus = FakeRecentBus(
@@ -479,23 +438,12 @@ async def test_backfill_continues_when_one_stream_raises():
                 ),
                 ("1-0", _sleep_event("sleep.sleep.started", {"trigger": "state_cycle"})),
             ],
-            "affect.out": [
-                (
-                    "1-0",
-                    _event(
-                        "affect",
-                        "affect.rest_request",
-                        {"reason": "stimulus_spent", "drive": "boredom", "stall_s": 10.0},
-                    ),
-                )
-            ],
         },
         raise_on={"self_model.out"},
     )
     await state.backfill(bus)
     snap = state.sleep_snapshot()
     assert snap["sleep"]["trigger"] == "state_cycle"
-    assert snap["rest_request"]["reason"] == "stimulus_spent"
 
 
 class StubBus:

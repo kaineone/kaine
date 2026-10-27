@@ -68,6 +68,9 @@ class SleepBusyError(RuntimeError):
 
 class Sleep(BaseModule):
     name: ClassVar[str] = "sleep"
+    # The supervisor serializes this module before an in-process rebuild and restores it into
+    # the new one, so the state cycle (and a rest cut by the restart) survives.
+    carries_state_across_restart: ClassVar[bool] = True
 
     def holds_external_resources(self) -> bool:
         return True
@@ -132,6 +135,9 @@ class Sleep(BaseModule):
         # Returns True while the entity is in the developmental phase. None means
         # staging is off: the state cycle never runs and the backstop and fatigue apply.
         development_probe: Optional[Callable[[], bool]] = None,
+        # True while boot has not yet wired the probe (or its explicit absence): the
+        # backstop waits, so a restored overdue scheduler cannot fire it before the phase is known.
+        await_development_probe: bool = False,
         # Path to the organ GGUF served by the language module. Used to identify the correct
         # base voice profile for distinctiveness measurement; None means the
         # digest is unknown and distinctiveness will be null.
@@ -228,6 +234,7 @@ class Sleep(BaseModule):
             / self._developmental_quiescent_share
         )
         self._development_probe: Optional[Callable[[], bool]] = development_probe
+        self._await_development_probe = bool(await_development_probe) and development_probe is None
         # State cycle: phase, awake entity time spent since boot or the previous rest,
         # and the entity time a rest has run (kept across a restart).
         self._cycle_phase: str = "awake"
@@ -549,9 +556,11 @@ class Sleep(BaseModule):
         """Store a callable that returns True while the entity is in the developmental phase.
 
         With no probe (staging off) the entity counts as matured: the state cycle never
-        runs and the backstop and fatigue trigger apply.
+        runs and the backstop and fatigue trigger apply. Calling this, even with None,
+        tells the module the phase is known, which lets the backstop run.
         """
         self._development_probe = probe
+        self._await_development_probe = False
 
     def set_paused_source(self, source: Optional[Callable[[], float]]) -> None:
         """Store a callable returning the entity seconds the cycle has spent frozen.
@@ -654,6 +663,8 @@ class Sleep(BaseModule):
             elif self._cycle_awake_s >= self._developmental_awake_s:
                 log.info("sleep: state cycle awake time reached, starting a rest")
                 self._start_state_cycle_sleep(resume=False)
+            return
+        if self._await_development_probe:
             return
         if self._scheduler.is_due():
             log.info(
@@ -959,10 +970,10 @@ class Sleep(BaseModule):
     async def _hold_developmental_rest(self, started: float) -> None:
         """Hold the developmental rest for the configured duration."""
         log.info(
-            "sleep: developmental rest holds until %.0f s after it began",
+            "sleep: developmental rest holds until %.0f s after it began, %.0f s remaining",
             self._developmental_rest_s,
+            self._developmental_rest_s - self._rest_elapsed(started),
         )
-        scale = float(getattr(self._entity_clock, "scale", 1.0) or 1.0)
         while True:
             if self._stopped.is_set():
                 # Shutdown before the rest ran its length: abort like a cancel, so the
@@ -973,6 +984,7 @@ class Sleep(BaseModule):
                 self._cycle_reset(self._rest_clock_now())
                 break
             # Real seconds: a remainder of entity seconds takes remaining / scale.
+            scale = float(getattr(self._entity_clock, "scale", 1.0) or 1.0)
             await asyncio.sleep(max(0.001, min(1.0, remaining / scale)))
         log.info("sleep: developmental rest hold ended")
 
@@ -1331,6 +1343,9 @@ class Sleep(BaseModule):
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
         if trigger == "state_cycle":
             summary["rest_seconds"] = self._cycle_rest_seconds
+        elif self._cycle_phase == "awake":
+            # Any completed sleep restarts the active stretch, so two rests never run back to back.
+            self._cycle_reset(self._rest_clock_now())
         # Publishing sleep.sleep.completed causes the interoception module to reset its
         # FatigueAccumulator (interoception._sleep_event_loop handles this event).
         await self.publish("sleep.sleep.completed", summary, salience=salience)
