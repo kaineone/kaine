@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from kaine.modules import stimulus_source_signal as sig
 from kaine.modules.audition.feed import (
     StimulusSourceAudioSchedule,
     StimulusSourceProceduralAudioStream,
@@ -210,8 +211,6 @@ def test_video_chroma_rises_with_each_hearing_stage_for_the_same_maternal_state(
 
 def test_video_schedule_saturation_is_stage_over_five_times_hue_gain(monkeypatch) -> None:
     seen: list[float] = []
-    import kaine.modules.stimulus_source_signal as sig
-
     real = sig.colour_saturation
 
     def spy(stage):

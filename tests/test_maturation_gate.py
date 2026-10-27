@@ -150,7 +150,7 @@ def test_c3_holds_at_the_final_stage() -> None:
 def test_retired_min_lived_seconds_warns_once_and_is_ignored(caplog) -> None:
     import logging
 
-    mg._MIN_LIVED_WARNED = False
+    mg._RETIRED_KEYS_WARNED.clear()
     with caplog.at_level(logging.WARNING, logger=mg.__name__):
         first = mg.MaturationConfig.from_dict({"min_lived_seconds": 86400})
         mg.MaturationConfig.from_dict({"min_lived_seconds": 100})

@@ -53,7 +53,7 @@ from typing import Any, Mapping
 log = logging.getLogger(__name__)
 
 # The retired-key warning fires once per process, however many configs load.
-_MIN_LIVED_WARNED = False
+_RETIRED_KEYS_WARNED: set[str] = set()
 
 # --- Stage-event names + owner --------------------------------------------
 #
@@ -153,10 +153,9 @@ class MaturationConfig:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None) -> "MaturationConfig":
-        global _MIN_LIVED_WARNED
         d = dict(data or {})
-        if "min_lived_seconds" in d and not _MIN_LIVED_WARNED:
-            _MIN_LIVED_WARNED = True
+        if "min_lived_seconds" in d and "min_lived_seconds" not in _RETIRED_KEYS_WARNED:
+            _RETIRED_KEYS_WARNED.add("min_lived_seconds")
             log.warning(
                 "[developmental_stage].min_lived_seconds is retired and ignored; "
                 "delete it from the configuration file"
