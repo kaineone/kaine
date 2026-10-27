@@ -255,7 +255,8 @@ class WelfareResponseConfig:
         ``[evaluation.welfare].interoceptive_distress_threshold`` and
         ``interoceptive_distress_duration_s``. The old keys in this table are
         still accepted. A key that agrees with the canonical value logs a
-        warning; a key that disagrees raises ``ConfigurationError``.
+        warning; a key that disagrees raises ``ConfigurationError`` while the
+        response is enabled (a disabled response never acts on the value).
         """
         canonical = {
             "distress_threshold": (
@@ -269,7 +270,7 @@ class WelfareResponseConfig:
         }
         for key in sorted(self.legacy_distress_keys):
             value, canonical_key = canonical[key]
-            if float(getattr(self, key)) != value:
+            if float(getattr(self, key)) != value and self.enabled:
                 raise ConfigurationError(
                     f"[preservation.welfare_response].{key} = {getattr(self, key)} "
                     f"disagrees with [evaluation.welfare].{canonical_key} = {value}. "
@@ -277,8 +278,8 @@ class WelfareResponseConfig:
                     f"remove [preservation.welfare_response].{key}."
                 )
             log.warning(
-                "[preservation.welfare_response].%s is deprecated; it agrees with "
-                "[evaluation.welfare].%s, which both detectors now read. Remove it.",
+                "[preservation.welfare_response].%s is deprecated; both detectors "
+                "now read [evaluation.welfare].%s. Remove it.",
                 key,
                 canonical_key,
             )

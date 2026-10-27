@@ -1729,7 +1729,8 @@ planning_policy = true
 # The sustained-distress rule, read by BOTH detectors: the sidecar welfare observer
 # and the protective monitor under [preservation.welfare_response]. The old
 # distress_threshold and distress_duration_s keys in that table are still accepted:
-# a value that agrees logs a boot warning, a value that disagrees refuses the boot.
+# a value that agrees logs a boot warning, and a value that disagrees refuses the
+# boot while the response is enabled.
 # prediction_error magnitude at/above which distress is counted, and how long it
 # must be sustained continuously.
 interoceptive_distress_threshold = 0.8
@@ -1904,7 +1905,7 @@ action = "pause"
 # (interoceptive_distress_threshold, interoceptive_distress_duration_s), shared
 # with the welfare observer. The old distress_threshold and distress_duration_s
 # keys are still accepted here: a value that agrees logs a boot warning, a value
-# that disagrees refuses the boot.
+# that disagrees refuses the boot while the response is enabled.
 # The "repeated within a window" arm: this many episodes within repeat_window_s
 # also crosses the threshold. Episodes counted are BOTH sustained interoceptive-
 # distress crossings AND welfare.gray_zone events (any of the four categories:

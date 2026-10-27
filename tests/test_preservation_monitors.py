@@ -1213,9 +1213,16 @@ def test_duplicate_distress_keys_agree_warns_and_disagree_refuses(caplog):
     assert "distress_threshold is deprecated" in caplog.text
     assert "distress_duration_s is deprecated" in caplog.text
 
-    disagree = WelfareResponseConfig.from_section({"distress_duration_s": 10.0})
+    disagree = WelfareResponseConfig.from_section(
+        {"enabled": True, "distress_duration_s": 10.0}
+    )
     with pytest.raises(ConfigurationError, match="distress_duration_s"):
         disagree.adopt_sustained_distress(0.8, 30.0)
+
+    # A disabled response never acts on the value, so a stale key cannot block boot.
+    off = WelfareResponseConfig.from_section({"distress_duration_s": 10.0})
+    off.adopt_sustained_distress(0.8, 30.0)
+    assert off.distress_duration_s == 30.0
 
     # Without the old keys the canonical values apply silently.
     plain = WelfareResponseConfig.from_section({})
