@@ -170,3 +170,43 @@ def test_lock_released_after_exception_and_missing_file_ok(tmp_path: Path) -> No
     t.join(10)
     assert done == [True]
     assert [e["source"] for e in control_state.read_control(path).stack] == ["welfare"]
+
+
+def _dashboard_worker(path: str, n: int) -> None:
+    """The dashboard side: operator freeze / resume through the real router."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from kaine.dashboard.config import DashboardConfig
+    from kaine.dashboard.cycle_control import build_cycle_control_router
+
+    app = FastAPI()
+    app.state.config = DashboardConfig(
+        operator_token="t", host_allowlist=("127.0.0.1", "localhost", "testserver")
+    )
+    app.include_router(
+        build_cycle_control_router(
+            control_path=Path(path), audit_path=Path(path).with_name("audit.jsonl")
+        )
+    )
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer t"}
+    for _ in range(n):
+        assert client.post("/diagnostics/cycle/freeze", json={"frozen": True, "reason": "d"}, headers=headers).status_code == 200
+        assert client.post("/diagnostics/cycle/freeze", json={"frozen": False}, headers=headers).status_code == 200
+
+
+def test_cycle_and_dashboard_processes_together_keep_welfare(tmp_path: Path) -> None:
+    path = tmp_path / "control.json"
+    control_state.push_freeze("w", path=path, source="welfare")
+    ctx = mp.get_context("fork")
+    procs = [
+        ctx.Process(target=_worker, args=(str(path), "supervisor", 100)),
+        ctx.Process(target=_dashboard_worker, args=(str(path), 60)),
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(120)
+        assert p.exitcode == 0
+    assert [e["source"] for e in control_state.read_control(path).stack] == ["welfare"]
