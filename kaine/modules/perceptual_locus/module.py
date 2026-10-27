@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 from kaine import perception_state as ps
+from kaine.bus.client import tail_id
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -68,11 +69,7 @@ class PerceptualLocus(BaseModule):
         self._tasks: list[asyncio.Task] = []
 
     async def initialize(self) -> None:
-        try:
-            latest = await self._bus.client.xrevrange(self._intent_stream, count=1)
-            self._intent_cursor = latest[0][0] if latest else "0-0"
-        except Exception:
-            self._intent_cursor = "0-0"
+        self._intent_cursor = await tail_id(self._bus, self._intent_stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._intent_loop(), name="perception-intent")

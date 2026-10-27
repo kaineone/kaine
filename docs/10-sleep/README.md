@@ -19,8 +19,8 @@ flowchart TD
     A[interoception.fatigue crossed=true] --> B{Sleep running?}
     G[interoception.regulation action=request_maintenance] --> B
     K[affect.regulation action=request_maintenance] --> B
-    L[affect.rest_request stimulus_spent] --> B
-    F[interval_seconds since last sleep or boot] --> B
+    L[developing: T_act of awake entity time] --> B
+    F[interval_seconds since last sleep or boot, not in the developmental phase] --> B
     H[intent.rest on action_selection.out] --> I{requested_rest_min_interval_s since last sleep ended?}
     I -->|no| J[sleep.rest_request too_soon]
     I -->|yes| B
@@ -33,11 +33,11 @@ There are six triggers. Each sleep records the one that started it as `trigger`:
 - Fatigue (`fatigue`). The sleep module watches `interoception.out` and starts a sleep when `interoception.fatigue` carries `crossed = true`.
 - Maintenance request (`maintenance_request`). The interoception module's regulator publishes `interoception.regulation` with `action = "request_maintenance"` on the same stream, and the sleep module starts a sleep through the same guarded path.
 - Emotion regulation (`affect_regulation`). Emotion regulation's tier 3 publishes `affect.regulation` with `action = "request_maintenance"` on `affect.out`, and the sleep module starts a sleep through the same path.
-- Developmental rest (`developmental_rest`). In the developmental phase, an `affect.rest_request` on a spent stimulus starts a rest (see [the sleep module](../09-modules/sleep.md#developmental-rest)).
-- Interval backstop (`backstop`). If no sleep has completed for `interval_seconds` (3600 s of entity time) since the last sleep or since boot, the scheduler starts one.
+- State cycle (`state_cycle`). In the developmental phase, after `T_act` (about 2,996 s) of awake entity time the maintenance poll starts a rest of `developmental_rest_s` (1,410 s), then `T_act` awake again (see [the sleep module](../09-modules/sleep.md#the-developmental-state-cycle)). In that phase fatigue and the backstop start no sleep.
+- Interval backstop (`backstop`). If no sleep has completed for `interval_seconds` (3600 s of entity time) since the last sleep or since boot, the scheduler starts one. After maturation, or with staging off.
 - Requested rest (`requested`). An `intent.rest` on `action_selection.out`, which the action selection module's `PlanningProposalSource` issues with `origin = "planning"` when the planning module is enabled, asks for a sleep. The sleep module accepts it only when `requested_rest_min_interval_s` (1800 s) has passed since the last sleep ended and no sleep is running or starting. It answers with `sleep.rest_request` (`accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted`).
 
-The first four triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`.
+The fatigue, maintenance and emotion-regulation triggers share one consumer loop, which runs only when `[sleep.consolidation].fatigue_triggered = true`.
 
 Every sleep carries its own `trigger` on `sleep.sleep.started` and `sleep.sleep.completed`, and a direct call without a trigger records null. `fatigue_triggered` in the summary is true only when the trigger is `fatigue`. A trigger that arrives during a running sleep starts nothing and does not change that sleep's trigger.
 

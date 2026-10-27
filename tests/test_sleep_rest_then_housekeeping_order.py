@@ -132,7 +132,7 @@ async def test_developmental_rest_order_is_hold_then_housekeeping_then_reset(bus
     sleep._hold_developmental_rest = wrapped_hold
 
     start = time.monotonic()
-    await sleep.enter_sleep(trigger="developmental_rest")
+    await sleep.enter_sleep(trigger="state_cycle")
 
     names = [name for name, _ in events]
     assert names == ["hold_end", "housekeeping", "reset"]
@@ -166,7 +166,7 @@ async def test_cancel_during_hold_runs_reset_but_not_housekeeping(bus, tmp_path)
     sleep = _make_sleep(bus, tmp_path, affect=affect, developmental_rest_s=30.0)
     sleep._housekeeper = housekeeper
 
-    task = asyncio.create_task(sleep.enter_sleep(trigger="developmental_rest"))
+    task = asyncio.create_task(sleep.enter_sleep(trigger="state_cycle"))
     await asyncio.sleep(0.2)
     task.cancel()
 

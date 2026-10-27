@@ -8,7 +8,8 @@
   var POLL_MS = 5000;
 
   var TRIGGER_LABELS = {
-    developmental_rest: "developmental rest",
+    state_cycle: "state-cycle rest",
+    developmental_rest: "developmental rest (earlier rule)",
     requested: "requested",
     backstop: "backstop (an hour awake)",
     fatigue_or_backstop: "fatigue or backstop (not stated)"
@@ -96,31 +97,8 @@
     setHidden("sleep-aborted", !sleep.aborted);
   }
 
-  function renderRest(req) {
-    if (!req) {
-      setText("rest-reason", "n/a");
-      setText("rest-drive", "n/a");
-      setText("rest-stall", "n/a");
-      setText("rest-at", "n/a");
-      setHidden("rest-none", false);
-      return;
-    }
-    setText(
-      "rest-reason",
-      req.reason == null ? "n/a" : String(req.reason).replace(/_/g, " ")
-    );
-    setText(
-      "rest-drive",
-      req.drive == null ? "n/a" : String(req.drive).replace(/_/g, " ")
-    );
-    setText("rest-stall", formatDuration(req.stall_s));
-    setText("rest-at", req.at ? timeOf(req.at) : "n/a");
-    setHidden("rest-none", true);
-  }
-
   function render(data) {
     renderSleep(data || {});
-    renderRest(data ? data.rest_request : null);
   }
 
   function refresh() {

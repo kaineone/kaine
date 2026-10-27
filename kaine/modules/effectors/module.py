@@ -9,7 +9,7 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Iterable, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.modules.base import BaseModule
 from kaine.modules.effectors.audit_log import ActionAuditLog
@@ -142,15 +142,7 @@ class Effectors(BaseModule):
     async def initialize(self) -> None:
         # Seek to the latest intent entry so we only realize intents formed
         # after boot, mirroring Audio Out's dedicated-loop cursor seeding.
-        try:
-            latest = await self._bus.client.xrevrange(self._intent_stream, count=1)
-        except Exception:
-            latest = []
-        if latest:
-            entry_id = latest[0][0]
-            if isinstance(entry_id, bytes):
-                entry_id = entry_id.decode()
-            self._intent_cursor = entry_id
+        self._intent_cursor = await tail_id(self._bus, self._intent_stream)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._intent_loop(), name=f"{self.name}-intent")

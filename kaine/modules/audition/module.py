@@ -10,7 +10,7 @@ import math
 from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
-from kaine.bus.client import AsyncBus
+from kaine.bus.client import AsyncBus, tail_id
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
@@ -690,7 +690,7 @@ class Audition(BaseModule):
         await super().initialize()
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
-        self._sleep_cursor = await self._bus.last_entry_id(self._SLEEP_STREAM)
+        self._sleep_cursor = await tail_id(self._bus, self._SLEEP_STREAM, strict=True)
         self._tasks.append(
             asyncio.create_task(self._sleep_loop(), name=f"{self.name}-sleep-consumer")
         )

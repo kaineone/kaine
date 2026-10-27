@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -172,3 +173,57 @@ async def test_registry_builds_memory_and_self_model_with_providers(tmp_path):
     names = [o.name for o in sidecar.observers]
     assert "memory_probes" in names
     assert "self_model_accuracy" in names
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def now(self) -> float:
+        return self.t
+
+
+class _Probe:
+    def __init__(self, value: bool) -> None:
+        self.value = value
+
+    def __call__(self) -> bool:
+        return self.value
+
+
+@pytest.mark.asyncio
+async def test_registry_welfare_observer_holds_fatigue_alarm_in_the_phase(tmp_path):
+    """Default config (no external producer, welfare response off): the observer the
+    registry builds still holds the fatigue alarm in the developmental phase."""
+    from kaine.bus.schema import Event
+
+    probe = _Probe(True)
+    sidecar = SidecarRegistry(
+        bus=FakeBus(),
+        config=_config(tmp_path),
+        embedder=HashEmbedder(),
+        development_probe=probe,
+    )
+    sidecar.build()
+    obs = sidecar._welfare_observer
+    assert obs is not None
+    clock = _Clock()
+    obs._unfrozen = clock
+    crossing = Event(
+        source="interoception",
+        type="interoception.fatigue",
+        payload={"value": 105.0, "threshold": 100.0},
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+    await obs._handle_interoception("1-0", crossing)
+    clock.t += obs._maintenance_window_s + 1.0
+    await obs._check_timed_conditions()
+    assert obs.unmaintained_fatigue_count == 0
+
+    # After maturation the alarm still fires.
+    probe.value = False
+    await obs._handle_interoception("2-0", crossing)
+    clock.t += obs._maintenance_window_s + 1.0
+    await obs._check_timed_conditions()
+    assert obs.unmaintained_fatigue_count == 1

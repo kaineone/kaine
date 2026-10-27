@@ -237,7 +237,6 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     # by `_apply_taxonomy_fields`, so it never overwrites the record's own
     # `source`.
     "affect.regulation": frozenset({"tier", "action", "intensity", "episode_s", "size", "bias", "decay_s", "emotion_before", "emotion_after"}),
-    "affect.rest_request": frozenset({"reason", "drive", "stall_s"}),
     # --- Perception (derived only) ---
     # The tone error ratio, the tone rule and whether the tone was classified,
     # for the tone analysis (paper A.8).
@@ -300,10 +299,11 @@ _TAXONOMY: dict[str, frozenset[str]] = {
         {"memory_ids", "max_affect_intensity", "selection_scores", "count", "collection"}
     ),
     "episodic_memory.replay": frozenset({"memory_ids", "max_affect_intensity", "selection_scores", "count"}),
-    "sleep.sleep.started": frozenset({"started_at", "trigger"}),
+    "sleep.sleep.started": frozenset({"started_at", "trigger", "rest_seconds", "resumed"}),
     "sleep.sleep.completed": frozenset(
         {
             "trigger",
+            "rest_seconds",
             "phases_completed",
             "replay_count",
             "consolidation_summary_counts",
