@@ -1569,6 +1569,7 @@ def test_evaluation_tab_takes_no_registry_and_never_reports_live(tmp_path):
 
 
 def test_dashboard_entrypoint_builds_no_sidecar_registry():
-    import kaine.dashboard.__main__ as dash_main
+    from importlib.util import find_spec
 
-    assert "SidecarRegistry" not in Path(dash_main.__file__).read_text(encoding="utf-8")
+    origin = find_spec("kaine.dashboard.__main__").origin
+    assert "SidecarRegistry" not in Path(origin).read_text(encoding="utf-8")
