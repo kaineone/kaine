@@ -186,7 +186,8 @@ async def _async_self_check(
         tmp_path = Path(tmp)
         reg = ModuleRegistry()
         eid = SelfModel(
-            bus, persistence_path=tmp_path / "sm.json", save_interval_s=60
+            bus, persistence_path=tmp_path / "sm.json", save_interval_s=60,
+            preflight=True,
         )
         await eid.initialize()
         eid._model = SelfModelDocument(name="preflight-probe", values=["continuity"])
@@ -217,7 +218,8 @@ async def _async_self_check(
         # Revive into a FRESH registry and assert continuity.
         reg2 = ModuleRegistry()
         eid2 = SelfModel(
-            bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60
+            bus, persistence_path=tmp_path / "sm2.json", save_interval_s=60,
+            preflight=True,
         )
         await eid2.initialize()
         reg2.register(eid2)

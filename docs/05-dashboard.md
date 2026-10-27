@@ -97,6 +97,8 @@ The console at `/` is mounted only when `[dashboard].conversation_enabled` is tr
 
 The page title and the line under the wordmark show the entity's name. At start the dashboard reads it from the self-model file (`[self_model].persistence_path`, by default `state/self_model/self_model.json`, decrypted when state encryption is on), and when that file holds no name, from a `name` field in `state/identity/entity.json` if one is there. While it runs it takes each new name from the self-model's `self_model.document` events on `self_model.out`. With no name anywhere, for example when the self-model module is off and has never run, the console shows "KAINE". Reload the page to see a name that arrived after it opened.
 
+Every page, the diagnostics and evaluation pages included, shows the name in its header whether or not the console is enabled. The dashboard checks the self-model file and `state/identity/entity.json` for changes at most every 10 s and re-reads the name when either changed, so a name minted after the dashboard started appears on the next page load or poll without a restart. The header polls `/diagnostics/entity-name.json`, which returns only the name and sits behind the same access rules as the pages. Before any name exists the header shows "KAINE".
+
 The status chip starts from the sleep state the dashboard last read on `sleep.out` (it reads the newest `sleep.sleep.started` or `sleep.sleep.completed` when it starts), so a page opened during a sleep shows "sleeping" as soon as the cycle reports running.
 
 ### Diagnostics
