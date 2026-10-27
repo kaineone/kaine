@@ -109,7 +109,7 @@ Content fields are stripped unless `[dashboard].dev_content_override` is true. S
 
 ### Evaluation
 
-`/diagnostics/evaluation/` shows the evaluation sidecar's scrubbed metrics, among them A/B divergence, welfare events, module attribution, PLV coherence and per-source prediction error, and never shows message text. The prediction-error panel keeps a sliding window of errors from the interoception, sequence and vision modules' reports, the audition module's transcription and emotion events, and the world model module's world error.
+`/diagnostics/evaluation/` shows the evaluation sidecar's scrubbed metrics, among them A/B divergence, welfare events, module attribution, PLV coherence and per-source prediction error, and never shows message text. The dashboard runs in its own process, so every figure comes from the rollup files the cycle's observers write under `data/evaluation/`, and each panel says which rollup it read. It does not read the observers' live counters. The welfare counts are counted since the welfare observer last started: the reader stops at the latest restart reset record, so a count from before a restart never raises one after it. The prediction-error panel keeps a sliding window of errors from the interoception, sequence and vision modules' reports, the audition module's transcription and emotion events, and the world model module's world error.
 
 The sidecar writes JSONL under `data/` and an optional `summary.json` for batch charts. See the [research data chapter](17-research-data/README.md) for how to read and configure it.
 
@@ -182,7 +182,7 @@ The preservation panel lists each action of the preservation monitors, a diverge
 
 Each line shows operational fields only: monitor, transition, reason, action, and preservation or snapshot ids. A failed preservation is shown in the critical colour and needs the operator's attention. See [Preservation](11-preservation.md) for the full behaviour.
 
-The entity-care panel shows the welfare gray-zone counters and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
+The entity-care panel shows the welfare gray-zone counters, counted since the welfare observer last started, and, below them, the sensor advisories: how many have been raised since the welfare observer last started, which processors are blind now (their readings have stayed undefined) and which are silent now (they stopped publishing). Each processor's state comes from its latest advisory or clear after the observer's latest start in the rollup, so a restart never leaves a stale state and an old advisory that was never cleared does not drop off. A sensor advisory is a sensor fault, and no protective action follows from it. See [the welfare observer](17-research-data/README.md#sensor-advisories).
 
 ## Affect welfare record
 

@@ -304,7 +304,6 @@ async def _build():
     # evaluation panels server-side via `evaluation_provider`. The router (for
     # `/diagnostics/evaluation/`) is added after the app is built.
     eval_cfg: Any = None
-    eval_registry: Any = None
     eval_attribution: Any = None
     evaluation_provider = None
     try:
@@ -316,30 +315,9 @@ async def _build():
 
         eval_cfg = load_evaluation_config()
         if eval_cfg.enabled:
-            # Pass the live sidecar registry so observer counts (welfare,
-            # prediction-error) surface without needing the JSONL rollups.
-            # Attribution is threaded through the same call. Both are optional;
-            # when None the surface degrades gracefully.
-            try:
-                from kaine.evaluation.registry import SidecarRegistry
-                from kaine.text_embedding import make_text_embedder
-
-                kaine_config = (
-                    load_kaine_config()
-                    if Path("config/kaine.toml").exists()
-                    else {}
-                )
-                eval_registry = SidecarRegistry(
-                    bus=bus,
-                    config=eval_cfg,
-                    embedder=make_text_embedder(kaine_config),
-                )
-            except Exception:
-                logging.debug("sidecar registry unavailable at dashboard boot", exc_info=True)
-
             def evaluation_provider() -> dict[str, Any]:
                 return aggregate_evaluation_metrics(
-                    eval_cfg, attribution=eval_attribution, registry=eval_registry
+                    eval_cfg, attribution=eval_attribution
                 )
         else:
             evaluation_provider = empty_evaluation_metrics
@@ -369,7 +347,6 @@ async def _build():
                 build_evaluation_router(
                     eval_cfg,
                     attribution=eval_attribution,
-                    registry=eval_registry,
                 ),
                 dependencies=list(getattr(app.state, "read_dependencies", [])),
             )
