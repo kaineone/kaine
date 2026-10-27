@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| developmental-state-cycle | 8/8 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
+| developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
 | floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
 | identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
 | duplicate-method-guard | 3/3 (100%) | The duplicate-name guard also checks methods in classes and nested functions |

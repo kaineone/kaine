@@ -759,6 +759,26 @@ async def test_unmaintained_fatigue_alarm_is_off_in_the_phase_through_a_full_res
     assert obs.unmaintained_fatigue_count == 1
 
 
+async def test_the_preservation_repeat_arm_sees_no_fatigue_event_in_the_phase(bus, sim):
+    from kaine.cycle.preservation_monitor import WelfareProtectiveMonitor
+    from kaine.evaluation.observers.welfare_observer import WelfareObserver
+    from kaine.lifecycle.welfare_signal import WindowedEventCounter
+
+    crossing = _event("interoception", "interoception.fatigue", {"value": 105.0, "threshold": 100.0})
+    for developing, expected in ((True, []), (False, ["repeated_gray_zone"])):
+        probe = Probe(developing)
+        obs = WelfareObserver(bus, _Sink(), maintenance_window_s=900.0, unfrozen_clock=sim, development_probe=probe)
+        await obs._handle_interoception("1-0", crossing)
+        sim.t += 1000.0
+        await obs._check_timed_conditions()
+        monitor = object.__new__(WelfareProtectiveMonitor)
+        monitor._bus = bus
+        monitor._welfare_cursor = "0"
+        monitor._clock = lambda: sim.t
+        monitor._repeat = WindowedEventCounter(window_s=300.0, threshold=1)
+        assert await monitor._drain_gray_zone() == expected
+
+
 async def test_fatigue_alarm_without_a_probe_is_unchanged(bus):
     from kaine.evaluation.observers.welfare_observer import WelfareObserver
 
@@ -777,10 +797,11 @@ async def test_a_resumed_rest_counts_once_toward_the_sleep_cycles(bus):
     from kaine.lifecycle.stage import DEVELOPMENT, StageState
 
     for payload in (
-        {"trigger": "state_cycle", "aborted": True, "rest_seconds": REST_S},
+        {"trigger": "state_cycle", "aborted": True, "reason": "CancelledError", "rest_seconds": REST_S},
         {"trigger": "state_cycle", "rest_seconds": 810.0},
         {"trigger": "backstop"},
-        {"trigger": "fatigue", "aborted": True},
+        {"trigger": "fatigue", "aborted": True, "reason": "CancelledError"},
+        {"trigger": "state_cycle", "aborted": True, "reason": "RuntimeError", "rest_seconds": REST_S},
     ):
         await bus.publish(_event("sleep", "sleep.sleep.completed", payload))
     runner = object.__new__(MaturationGateRunner)
@@ -788,7 +809,8 @@ async def test_a_resumed_rest_counts_once_toward_the_sleep_cycles(bus):
     runner._sleep_stream = "sleep.out"
     runner._stage = replace(StageState(stage=DEVELOPMENT), sleep_cursor="0-0", sleep_count=0)
     await runner._count_new_sleeps()
-    assert runner._stage.sleep_count == 3  # the aborted state-cycle completion counts nothing
+    # The cancelled state-cycle completion counts nothing; a failed one does, as it never resumes.
+    assert runner._stage.sleep_count == 4
 
 
 def test_maturation_clears_the_interoception_fatigue_latch():
@@ -952,3 +974,19 @@ async def test_a_supervisor_restart_resumes_a_cut_rest(bus, tmp_path):
         assert payload["rest_seconds"] == pytest.approx(REST_S - 600.0)
     finally:
         await new.shutdown()
+
+
+def test_the_research_taxonomy_drops_the_dead_rest_request_and_names_the_rest_fields():
+    from kaine.evaluation.observers.research_event_observer import _TAXONOMY
+
+    assert "affect.rest_request" not in _TAXONOMY
+    assert {"rest_seconds", "resumed"} <= _TAXONOMY["sleep.sleep.started"]
+
+
+def test_boot_wires_the_phase_before_any_module_initializes():
+    import inspect
+
+    from kaine.cycle import __main__ as cycle_main
+
+    source = inspect.getsource(cycle_main._phase_registry)
+    assert source.index("_wire_development(ctx)") < source.index("await module.initialize()")

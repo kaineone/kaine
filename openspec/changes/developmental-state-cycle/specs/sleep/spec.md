@@ -30,11 +30,15 @@ A completed sleep of any trigger SHALL restart the awake stretch of the state cy
 - **THEN** the next `state_cycle` rest starts `T_act` of awake time after that sleep ended
 
 ### Requirement: The cycle is carried through restarts of the module and of boot
-An in-process restart of the sleep module by the supervisor SHALL carry the module's state, the state cycle included, into the rebuilt module. Until boot has wired the development probe, or its explicit absence, the hourly backstop SHALL start no sleep. A resumed rest SHALL log the time remaining, and the maturation gate SHALL count a rest cut by a restart and resumed as one sleep cycle.
+An in-process restart of the sleep module by the supervisor SHALL carry the module's state, the state cycle included, into the rebuilt module. Until boot has wired the development probe, or its explicit absence, the hourly backstop SHALL start no sleep. A resumed rest SHALL log the time remaining, and the maturation gate SHALL count a rest cut by a cancel and resumed as one sleep cycle, while a rest that failed with an error, which does not resume, counts as one.
 
 #### Scenario: A supervisor restart during a rest
 - **WHEN** the supervisor rebuilds the sleep module 600 s into a 1410 s rest
 - **THEN** the rebuilt module resumes the rest for the remaining 810 s
+
+#### Scenario: A rest cut by a restart and resumed
+- **WHEN** a `state_cycle` rest ends aborted with reason `CancelledError` and the resumed rest completes
+- **THEN** the maturation gate counts one sleep cycle
 
 #### Scenario: A revive with an overdue scheduler
 - **WHEN** the sleep module initializes with an overdue restored scheduler before the probe is wired
