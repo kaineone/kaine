@@ -199,6 +199,7 @@ def test_development_state_files_pinned():
     assert (
         _preservation.BUNDLED_DEVELOPMENT_FILES
         == tuple(Path(_state_path(rel)).name for rel in ("lifecycle/development_progress.json", "lifecycle/development_readout.json"))
+        + ("hearing_stage.json",)
         and _preservation.DEVELOPMENT_STATE_FILES
         == _preservation.BUNDLED_DEVELOPMENT_FILES + (Path(_state_path("lifecycle/development_viability.json")).name,)
     )

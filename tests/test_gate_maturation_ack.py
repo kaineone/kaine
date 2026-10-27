@@ -198,13 +198,12 @@ def _build_runner(
     require_ack: bool = True,
 ) -> MaturationGateRunner:
     state = _fresh_development_state(tmp_path)
-    return MaturationGateRunner(
+    runner = MaturationGateRunner(
         bus=bus,
         config=MaturationConfig(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
             require_operator_ack_for_maturation=require_ack,
         ),
@@ -221,6 +220,8 @@ def _build_runner(
         maturation_request_path=tmp_path / "maturation_request.json",
         maturation_ack_path=tmp_path / "maturation_ack.json",
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
+    return runner
 
 
 @pytest.mark.asyncio

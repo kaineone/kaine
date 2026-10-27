@@ -309,7 +309,7 @@ def test_maturation_field_is_the_stimulus_source_bloom_peak_at_the_recorded_time
     schedule = StimulusSourceSchedule(seed=7, width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H)
     stimulus_source = StimulusSourceProceduralSource(
         schedule, params=params,
-        clock=StimulusSourceClock(lived_offset_seconds=5000.0), lived_seconds=lambda: 5000.0,
+        clock=StimulusSourceClock(lived_offset_seconds=5000.0), hearing_stage=lambda: 0,
     )
     i_maturation = math.floor(5003.2 * schedule.frame_rate_hz)
     assert np.array_equal(field, stimulus_source.frame_at(i_maturation, maturation_progress=1.0))
@@ -1091,3 +1091,47 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
     assert isinstance(video, TransitionVideoSource)
     assert isinstance(audio, TransitionAudioStream)
     assert video.clock is pclock and audio.clock is pclock
+
+
+def test_the_conditions_hold_for_a_digest_recorded_with_the_hearing_schedule():
+    from kaine.boot.perception_feed import _hearing_band_params
+
+    feed = _feed()
+    digest = lifecycle_stage.stimulus_source_params_digest(
+        _stimulus_source_params(feed), hearing=_hearing_band_params(feed)
+    )
+    active, _reason, level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=digest)
+    )
+    assert active and level == logging.INFO
+
+
+def test_the_conditions_hold_for_a_digest_recorded_before_the_hearing_schedule():
+    feed = _feed()
+    legacy = lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
+    active, _reason, _level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=legacy)
+    )
+    assert active
+
+
+def test_a_changed_hearing_schedule_fails_the_recorded_new_form_digest():
+    from kaine.boot.perception_feed import _hearing_band_params
+
+    feed = _feed()
+    recorded = lifecycle_stage.stimulus_source_params_digest(
+        _stimulus_source_params(feed), hearing=_hearing_band_params(feed)
+    )
+    feed["stimulus_source"] = {"hearing": {"min_dwell_seconds": 3600.0}}
+    active, reason, level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=recorded)
+    )
+    assert not active and level == logging.WARNING and "digest mismatch" in reason
+
+
+def test_a_different_recorded_digest_is_rejected():
+    feed = _feed()
+    active, reason, _level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest="b" * 64)
+    )
+    assert not active and "digest mismatch" in reason

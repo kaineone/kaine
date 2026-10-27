@@ -14,9 +14,12 @@ hold, and it treats any missing or stale evidence as NOT ready (**fail-closed**)
       the sleep module is present and consolidation is checked iff both the sleep module and
       the world model module are present. Reading BOTH signals avoids counting empty sleeps.
       When neither faculty is present, C2 is not applicable.
-  C3  Minimum lived subjective time — >= ``min_lived_seconds`` of lived
-      ``EntityClock`` time has accrued since the developmental phase began (the warmed-up-
-      signal floor against a fast-forwarded false maturation).
+  C3  The sensory schedule is complete: the hearing stage owner reports the
+      final stage reached. Each stage is released by saturation of audition's
+      learning progress, bounded by a minimum and a maximum dwell in awake
+      time (paper A.7, Table A1), so a fast-forwarded false maturation cannot
+      skip the schedule. The old lived-time floor (``min_lived_seconds``) is
+      retired. With no reading from the stage owner, C3 fails closed.
 
 Maturation is additionally guarded by **embodiment availability** when the embodiment module is
 present: developmental readiness is necessary but not sufficient. The stage flips
@@ -43,8 +46,14 @@ cognitive module and is trivially testable without booting an entity.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Mapping
+
+log = logging.getLogger(__name__)
+
+# The retired-key warning fires once per process, however many configs load.
+_RETIRED_KEYS_WARNED: set[str] = set()
 
 # --- Stage-event names + owner --------------------------------------------
 #
@@ -129,7 +138,6 @@ class MaturationConfig:
     enabled: bool = False
     min_sleep_cycles: int = 5
     min_consolidation_passes: int = 3
-    min_lived_seconds: float = 86400.0
     gate_cadence_seconds: float = 60.0
     readout_max_age_cadences: float = 3.0
     require_operator_ack_for_maturation: bool = False
@@ -146,6 +154,12 @@ class MaturationConfig:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None) -> "MaturationConfig":
         d = dict(data or {})
+        if "min_lived_seconds" in d and "min_lived_seconds" not in _RETIRED_KEYS_WARNED:
+            _RETIRED_KEYS_WARNED.add("min_lived_seconds")
+            log.warning(
+                "[developmental_stage].min_lived_seconds is retired and ignored; "
+                "delete it from the configuration file"
+            )
         base = cls()
         return cls(
             enabled=bool(d.get("enabled", base.enabled)),
@@ -153,7 +167,6 @@ class MaturationConfig:
             min_consolidation_passes=int(
                 d.get("min_consolidation_passes", base.min_consolidation_passes)
             ),
-            min_lived_seconds=float(d.get("min_lived_seconds", base.min_lived_seconds)),
             gate_cadence_seconds=float(
                 d.get("gate_cadence_seconds", base.gate_cadence_seconds)
             ),
@@ -341,15 +354,27 @@ def _evaluate_c2(
     )
 
 
-def _evaluate_c3(lived_seconds: float | None, cfg: MaturationConfig) -> ConditionResult:
-    """C3 — the lived-subjective-time floor. Fail-closed on a missing value."""
-    if lived_seconds is None or lived_seconds < cfg.min_lived_seconds:
+def _evaluate_c3(sensory_schedule: tuple[int, int] | None) -> ConditionResult:
+    """C3: the sensory schedule is complete. ``sensory_schedule`` is the
+    hearing stage owner's ``(stage, final_stage)`` reading. Fail-closed on a
+    missing reading."""
+    if sensory_schedule is None:
         return ConditionResult(
-            "C3_min_lived_time",
+            "C3_sensory_schedule_complete",
             False,
-            f"lived {lived_seconds}s < {cfg.min_lived_seconds}s",
+            "no sensory schedule reading: the hearing schedule runs only with the "
+            "local stimulus source, so an external stimulus provider cannot satisfy C3",
         )
-    return ConditionResult("C3_min_lived_time", True, "lived-time floor reached")
+    stage, final_stage = sensory_schedule
+    if stage < final_stage:
+        return ConditionResult(
+            "C3_sensory_schedule_complete",
+            False,
+            f"hearing stage {stage} of {final_stage}",
+        )
+    return ConditionResult(
+        "C3_sensory_schedule_complete", True, "sensory schedule complete"
+    )
 
 
 def evaluate_readiness(
@@ -357,7 +382,7 @@ def evaluate_readiness(
     readiness_readout: Mapping[str, Any] | None,
     sleep_count: int | None,
     consolidation_passes: int | None,
-    lived_seconds: float | None,
+    sensory_schedule: tuple[int, int] | None,
     config: MaturationConfig,
     faculties: Faculties = Faculties(),
 ) -> Readiness:
@@ -371,7 +396,7 @@ def evaluate_readiness(
     return Readiness(
         c1=_evaluate_c1(readiness_readout, config.regulation_thresholds),
         c2=_evaluate_c2(sleep_count, consolidation_passes, config, faculties=faculties),
-        c3=_evaluate_c3(lived_seconds, config),
+        c3=_evaluate_c3(sensory_schedule),
     )
 
 

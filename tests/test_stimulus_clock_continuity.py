@@ -165,7 +165,6 @@ async def test_restart_round_trip_does_not_advance_downtime() -> None:
         bus=_make_bus(),
         config=MaturationConfig(
             enabled=True,
-            min_lived_seconds=86400,
             gate_cadence_seconds=3600,
         ),
         registry=_make_registry(),

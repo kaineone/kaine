@@ -10,6 +10,7 @@ import pytest
 
 from kaine.cycle.__main__ import _make_maturation_hook
 from kaine.lifecycle import stage as lifecycle_stage
+from kaine.modules.audition.hearing_band import HearingBandParams
 from kaine.modules.stimulus_source_signal import StimulusSourceParams
 from kaine.modules.vision.feed import StimulusSourceClock
 
@@ -124,7 +125,9 @@ def test_maturation_hook_records_stimulus_source_state(tmp_path, monkeypatch):
     assert after.is_embodied
     assert after.stimulus_source_t_at_maturation == 12.5
     assert after.stimulus_source_seed == 7
-    assert after.stimulus_source_params_digest == lifecycle_stage.stimulus_source_params_digest(StimulusSourceParams())
+    assert after.stimulus_source_params_digest == lifecycle_stage.stimulus_source_params_digest(
+        StimulusSourceParams(), hearing=HearingBandParams()
+    )
     assert after.maturation_bloom_ends_at == (base_time + timedelta(seconds=2.5)).isoformat()
 
 

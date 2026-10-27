@@ -14,16 +14,15 @@ from kaine.modules.audition.feed import (
 from kaine.modules.audition.hearing_band import (
     HEARING_BAND_STAGES,
     HearingBandParams,
-    band_edges,
+    stage_edges,
 )
+from kaine.modules.audition.hearing_stage_state import HearingStageState
 from kaine.modules.audition.maternal_voice import (
     MaternalVoiceLayer,
     MaternalVoiceParams,
     MaternalVoiceRepertoire,
 )
 from kaine.modules.stimulus_source_signal import StimulusSourceParams
-
-_W = HearingBandParams().maturation_seconds
 
 
 @pytest.fixture(scope="module")
@@ -77,7 +76,9 @@ def voice_3000(rep_3000, schedule, params, background_rms):
     )
 
 
-def _make_stream(schedule, params, *, voice=None, hearing=None, awake=None):
+def _make_stream(
+    schedule, params, *, voice=None, hearing=None, awake=None, hearing_stage=None
+):
     return StimulusSourceProceduralAudioStream(
         schedule,
         params=params,
@@ -86,6 +87,7 @@ def _make_stream(schedule, params, *, voice=None, hearing=None, awake=None):
         voice=voice,
         hearing=hearing,
         awake=awake,
+        hearing_stage=hearing_stage,
     )
 
 
@@ -111,15 +113,15 @@ def test_disabled_band_is_byte_identical_golden(voice_500, schedule, params):
 
 
 def test_band_is_deterministic_and_seed_keyed(voice_3000, schedule, params):
-    a = 0.6 * _W
+    a = 100.0
     s1 = _make_stream(
         schedule, params, voice=voice_3000, hearing=HearingBandParams()
     )
     s2 = _make_stream(
         schedule, params, voice=voice_3000, hearing=HearingBandParams()
     )
-    b1 = b"".join(s1.pcm_at(k, awake_seconds=a) for k in range(50))
-    b2 = b"".join(s2.pcm_at(k, awake_seconds=a) for k in range(50))
+    b1 = b"".join(s1.pcm_at(k, awake_seconds=a, hearing_stage=2) for k in range(50))
+    b2 = b"".join(s2.pcm_at(k, awake_seconds=a, hearing_stage=2) for k in range(50))
     assert b1 == b2
 
     schedule4 = StimulusSourceAudioSchedule(
@@ -128,7 +130,7 @@ def test_band_is_deterministic_and_seed_keyed(voice_3000, schedule, params):
     s3 = _make_stream(
         schedule4, params, voice=voice_3000, hearing=HearingBandParams()
     )
-    b3 = b"".join(s3.pcm_at(k, awake_seconds=a) for k in range(50))
+    b3 = b"".join(s3.pcm_at(k, awake_seconds=a, hearing_stage=2) for k in range(50))
     assert b3 != b1
 
 
@@ -136,7 +138,7 @@ def test_block_independent_of_render_history(
     schedule, params, rep_3000, background_rms
 ):
     layer_params = MaternalVoiceParams()
-    for awake in (100.0, 30000.0, 90000.0):
+    for awake, stage in ((100.0, 0), (30000.0, 2), (90000.0, 4)):
         for k in (5, 7777, 3000000):
             layer_only = MaternalVoiceLayer(
                 rep_3000,
@@ -150,7 +152,7 @@ def test_block_independent_of_render_history(
                 params,
                 voice=layer_only,
                 hearing=HearingBandParams(),
-            ).pcm_at(k, awake_seconds=awake)
+            ).pcm_at(k, awake_seconds=awake, hearing_stage=stage)
 
             layer_hist = MaternalVoiceLayer(
                 rep_3000,
@@ -167,7 +169,9 @@ def test_block_independent_of_render_history(
             )
             last = None
             for j in range(k - 10, k + 1):
-                last = hist_stream.pcm_at(j, awake_seconds=awake)
+                last = hist_stream.pcm_at(
+                    j, awake_seconds=awake, hearing_stage=stage
+                )
             assert only == last
 
     for k in (0, 1):
@@ -197,37 +201,37 @@ def test_block_independent_of_render_history(
         assert out == only
 
 
-def test_restart_resumes_band(schedule, params):
-    t2 = 0.625 * _W
-    offset = t2 - 10.0
+def test_restart_resumes_band(schedule, params, tmp_path):
+    path = tmp_path / "hearing_stage.json"
+    path.write_text('{"version": 1, "stage": 2, "dwell_seconds": 10.0}')
+    state_a = HearingStageState.load(HearingBandParams(), path=path)
+    state_b = HearingStageState.load(HearingBandParams(), path=path)
     stream_a = _make_stream(
         schedule,
         params,
         hearing=HearingBandParams(),
-        awake=lambda: offset + 10.0,
+        hearing_stage=lambda: state_a.stage,
     )
-    bytes_a = stream_a.pcm_at(1234, awake_seconds=None)
-
     stream_b = _make_stream(
         schedule,
         params,
         hearing=HearingBandParams(),
-        awake=lambda: t2,
+        hearing_stage=lambda: state_b.stage,
     )
-    bytes_b = stream_b.pcm_at(1234, awake_seconds=None)
-
-    assert bytes_a == bytes_b
-    assert band_edges(t2, HearingBandParams()) == HEARING_BAND_STAGES[2]
+    assert stream_a.pcm_at(1234) == stream_b.pcm_at(1234)
+    assert stream_a.pcm_at(1234) == stream_a.pcm_at(1234, hearing_stage=2)
+    assert stream_a.pcm_at(1234) != stream_a.pcm_at(1234, hearing_stage=0)
+    assert stage_edges(state_a.stage) == HEARING_BAND_STAGES[2]
 
 
 def test_spectrum_follows_moving_edges(schedule, params):
     stream = _make_stream(schedule, params, hearing=HearingBandParams())
     stage0_below_300 = None
     for s in range(5):
-        a = s * (_W / 4) + 600.0 if s < 4 else _W + 600.0
+        a = 600.0 + s * 3600.0
         k0 = int(a / 0.03)
         chunks = b"".join(
-            stream.pcm_at(k, awake_seconds=a)
+            stream.pcm_at(k, awake_seconds=a, hearing_stage=s)
             for k in range(k0, k0 + 2000)
         )
         x = np.frombuffer(chunks, dtype="<i2").astype(np.float64)
@@ -277,10 +281,11 @@ def test_heartbeat_thud_heard_from_stage_two(schedule, params):
         return float(np.sum(pwr[mask]))
 
     for s in range(5):
-        a = s * (_W / 4) + 600.0 if s < 4 else _W + 600.0
+        a = 600.0 + s * 3600.0
         k0 = int(a / 0.03)
         on_chunks = b"".join(
-            on.pcm_at(k, awake_seconds=a) for k in range(k0, k0 + 2000)
+            on.pcm_at(k, awake_seconds=a, hearing_stage=s)
+            for k in range(k0, k0 + 2000)
         )
         off_chunks = b"".join(
             off.pcm_at(k, awake_seconds=a) for k in range(k0, k0 + 2000)
@@ -297,11 +302,12 @@ def test_heartbeat_thud_heard_from_stage_two(schedule, params):
 def test_open_band_is_the_band_off_stream_delayed(schedule, params):
     on = _make_stream(schedule, params, hearing=HearingBandParams())
     off = _make_stream(schedule, params, hearing=None)
-    awake = _W + 600.0
+    awake = 600.0
     k0 = 3000000
 
     on_chunks = b"".join(
-        on.pcm_at(k, awake_seconds=awake) for k in range(k0, k0 + 10)
+        on.pcm_at(k, awake_seconds=awake, hearing_stage=4)
+        for k in range(k0, k0 + 10)
     )
     off_chunks = b"".join(
         off.pcm_at(k, awake_seconds=awake) for k in range(k0 - 2, k0 + 10)
@@ -347,7 +353,7 @@ def test_band_reaches_voice_formants_late(
         schedule, params, voice=layer0, hearing=HearingBandParams()
     )
     chunks0 = b"".join(
-        stream0.pcm_at(start_block + i, awake_seconds=0.0 + 600.0)
+        stream0.pcm_at(start_block + i, awake_seconds=600.0, hearing_stage=0)
         for i in range(1000)
     )
 
@@ -362,7 +368,7 @@ def test_band_reaches_voice_formants_late(
         schedule, params, voice=layer4, hearing=HearingBandParams()
     )
     chunks4 = b"".join(
-        stream4.pcm_at(start_block + i, awake_seconds=_W + 600.0)
+        stream4.pcm_at(start_block + i, awake_seconds=600.0, hearing_stage=4)
         for i in range(1000)
     )
 
@@ -378,7 +384,7 @@ def test_band_reaches_voice_formants_late(
     assert formant_ratio(chunks4) - formant_ratio(chunks0) >= 20.0
 
 
-def test_disabled_params_attach_nothing(schedule, params):
+def test_disabled_params_attach_nothing(schedule, params, voice_3000):
     def provider() -> float:
         return 123.0
 
@@ -390,10 +396,68 @@ def test_disabled_params_attach_nothing(schedule, params):
     )
     assert disabled._read_awake() is None
 
-    enabled = _make_stream(
+    band_only = _make_stream(
         schedule,
         params,
         hearing=HearingBandParams(enabled=True),
         awake=provider,
     )
-    assert enabled._read_awake() == 123.0
+    assert band_only._read_awake() is None
+
+    with_voice = _make_stream(
+        schedule,
+        params,
+        voice=voice_3000,
+        hearing=HearingBandParams(enabled=True),
+        awake=provider,
+    )
+    assert with_voice._read_awake() == 123.0
+
+
+def test_filter_follows_the_stage_provider_not_the_awake_time(schedule, params):
+    def render(stage, awake):
+        stream = _make_stream(
+            schedule,
+            params,
+            hearing=HearingBandParams(),
+            awake=lambda: awake,
+            hearing_stage=lambda: stage,
+        )
+        return b"".join(stream.pcm_at(k) for k in range(300, 330))
+
+    assert render(0, 100.0) == render(0, 90000.0)
+    assert render(4, 100.0) == render(4, 90000.0)
+    assert render(0, 50000.0) != render(4, 50000.0)
+
+
+def test_changing_the_stage_mid_stream_changes_later_blocks(schedule, params):
+    stage = {"value": 0}
+    stream = _make_stream(
+        schedule,
+        params,
+        hearing=HearingBandParams(),
+        hearing_stage=lambda: stage["value"],
+    )
+    before = stream.pcm_at(500)
+    assert stream.pcm_at(500) == before
+    stage["value"] = 4
+    after = stream.pcm_at(500)
+    assert after != before
+    assert after == stream.pcm_at(500, hearing_stage=4)
+
+
+def test_no_stage_provider_means_stage_zero(schedule, params):
+    stream = _make_stream(schedule, params, hearing=HearingBandParams())
+    assert stream.pcm_at(500) == stream.pcm_at(500, hearing_stage=0)
+
+
+def test_disabled_band_ignores_the_stage_provider(schedule, params):
+    plain = _make_stream(schedule, params)
+    disabled = _make_stream(
+        schedule,
+        params,
+        hearing=HearingBandParams(enabled=False),
+        hearing_stage=lambda: 3,
+    )
+    for k in (0, 1, 777, 240000):
+        assert disabled.pcm_at(k) == plain.pcm_at(k)

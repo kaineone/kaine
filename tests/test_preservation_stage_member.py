@@ -62,11 +62,14 @@ async def self_model(tmp_path):
         print(f"self-model teardown ignored: {exc!r}")
 
 
-async def _preserve_bundle(tmp_path, self_model, *, monkeypatch_stage: Path | None = None):
+async def _preserve_bundle(
+    tmp_path, self_model, *, monkeypatch_stage: Path | None = None, hearing_stage_state=None
+):
     if monkeypatch_stage is not None:
         stage.STAGE_PATH = monkeypatch_stage
     reg = ModuleRegistry()
     reg.register(self_model)
+    reg.hearing_stage_state = hearing_stage_state
     fork_root = tmp_path / "forks"
     out_root = tmp_path / "backups"
     fm = ForkManager(fork_root)

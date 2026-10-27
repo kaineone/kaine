@@ -57,7 +57,10 @@ _ORIGINS = frozenset({"minted", "legacy"})
 IDENTITY_PATH = Path("state/identity/entity.json")
 SIDECAR_NAME = "identity.json"
 
-OWN_LIVED_ARTIFACTS: tuple[Path, ...] = (Path("lifecycle/stage.json"),) + tuple(
+OWN_LIVED_ARTIFACTS: tuple[Path, ...] = (
+    Path("lifecycle/stage.json"),
+    Path("lifecycle/hearing_stage.json"),
+) + tuple(
     Path(rel) for rel in lived_artifact_paths()
 )
 

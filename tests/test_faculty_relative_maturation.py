@@ -211,8 +211,8 @@ def _make_ready() -> Readiness:
         },
         sleep_count=5,
         consolidation_passes=3,
-        lived_seconds=100.0,
-        config=MaturationConfig(min_lived_seconds=0),
+        sensory_schedule=(4, 4),
+        config=MaturationConfig(),
     )
 
 
@@ -252,7 +252,7 @@ def test_c2_faculty_relative_truth_table(
 def test_c2_not_applicable_not_reported_as_passed() -> None:
     """A not-applicable C2 must not appear in passed_markers but must appear in
     not_applicable, while readiness stays ready."""
-    cfg = MaturationConfig(min_lived_seconds=0)
+    cfg = MaturationConfig()
     faculties = Faculties(sleep=False, world_model=False, embodiment=False)
     readiness = evaluate_readiness(
         readiness_readout={
@@ -264,7 +264,7 @@ def test_c2_not_applicable_not_reported_as_passed() -> None:
         },
         sleep_count=0,
         consolidation_passes=0,
-        lived_seconds=0.0,
+        sensory_schedule=(4, 4),
         config=cfg,
         faculties=faculties,
     )
@@ -400,7 +400,6 @@ async def test_first_configuration_maturations_into_perceptual_world(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_base_registry(),
@@ -409,6 +408,7 @@ async def test_first_configuration_maturations_into_perceptual_world(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     async def _explode() -> tuple[bool, bool, bool]:
@@ -458,7 +458,6 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_embodiment_only_registry(),
@@ -467,6 +466,7 @@ async def test_embodiment_present_but_unreachable_holds_awaiting_embodiment(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
     runner._embodiment_availability = AsyncMock(return_value=(True, True, False))
 
@@ -502,7 +502,6 @@ async def test_status_reports_not_applicable_for_first_configuration(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_base_registry(),
@@ -511,6 +510,7 @@ async def test_status_reports_not_applicable_for_first_configuration(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     async def _explode() -> tuple[bool, bool, bool]:

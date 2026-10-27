@@ -1135,10 +1135,7 @@ luminance_mean = 0.15           # dim field
 luminance_contrast = 0.10       # low contrast
 luminance_pulse_depth = 0.35    # how strongly the field pulses with the beat
 maternal_state_hue_gain = 0.6   # how strongly the maternal state colours the field
-colour_ramp_seconds = 86400     # awake seconds, the time constant of colour's rise from grey; equals the
-                                # phase's awake-time floor ([developmental_stage].min_lived_seconds, Table A1
-                                # Delta_awake), so colour keeps rising across the phase (paper A.7; newborn
-                                # colour vision is still limited, Adams et al. 1994)
+# Colour saturation is k/5 in hearing stage k (a design choice, paper A.7; newborn colour vision is limited, Adams, Courage and Mercer 1994).
 
 [perception_feed.stimulus_source.audio]
 lowpass_hz = 500                # soundscape low-pass corner (100-2000)
@@ -1162,20 +1159,31 @@ pause_min_seconds = 0.5         # minimum pause between utterances
 pause_max_seconds = 1.5         # maximum pause between utterances
 
 # The hearing band (paper §7, A.7): the stimulus audio, bed and voice alike,
-# passes a band-pass that widens over awake time in the order fetal hearing
+# passes a band-pass that widens in four steps, in the order fetal hearing
 # matures (Hepper and Shahidullah 1994). Each edge lies midway (log scale)
 # between the outermost tested tone heard and the next one not heard. It starts
-# at 354-707 Hz (500 Hz alone) and over maturation_seconds takes four equal
-# steps: 250 Hz joins (low edge 158 Hz); 100 Hz joins and, with no unheard tone
-# below, the low edge goes (low-pass at 707 Hz, the heartbeat thud heard); 1000 Hz
-# joins (low-pass at 1732 Hz); 3000 Hz joins and the band is open. The shipped
-# 12 h span puts a step every 3 h, since offline each low step gives two to four
-# hours of learning progress (paper A.7). With it on,
-# the voice loads with its low-pass at 3000 Hz; the bed keeps lowpass_hz.
-# enabled = false gives the audio without the band byte for byte.
+# at 354-707 Hz (500 Hz alone). Stage 1: 250 Hz joins (low edge 158 Hz). Stage 2:
+# 100 Hz joins and, with no unheard tone below, the low edge goes (low-pass at
+# 707 Hz, the heartbeat thud heard). Stage 3: 1000 Hz joins (low-pass at
+# 1732 Hz). Stage 4: 3000 Hz joins and the band is open. A stage ends when
+# audition's learning progress has saturated or at the maximum dwell: stage k
+# ends when that progress, restarted at the step, stays below the affect module's
+# learning_progress_floor (0.20) for saturation_window_seconds of awake time
+# after at least min_dwell_seconds in the stage, or at max_dwell_seconds
+# (paper A.7, Table A1: W_sat, d_min, d_max; provisional, to be calibrated;
+# staging by ability follows Law et al. 2014). The defaults make a step arrive
+# 1.5 to 7 awake hours after the last, so the schedule runs 6 to 28 awake hours.
+# Dwell persists across restarts in state/lifecycle/hearing_stage.json and
+# counts awake time only; the saturation window restarts after a restart. A
+# missing learning-progress reading counts as unsaturated. With the band on, the
+# voice loads with its low-pass at 3000 Hz; the bed keeps lowpass_hz.
+# enabled = false gives the audio without the band byte for byte; the schedule,
+# the colour (k/5) and the maturation gate's C3 still run.
 [perception_feed.stimulus_source.hearing]
 enabled = true
-maturation_seconds = 43200.0    # awake seconds over which the band widens (Table A1 Delta_hear, 12 h)
+saturation_window_seconds = 600.0   # awake seconds the learning progress must stay below the floor (Table A1 W_sat)
+min_dwell_seconds = 5400.0          # awake seconds a stage lasts at least, 1.5 h (Table A1 d_min)
+max_dwell_seconds = 25200.0         # awake seconds after which a stage ends regardless, 7 h (Table A1 d_max)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so
@@ -1645,12 +1653,13 @@ window = 64
 # ([perception_feed].mode = "stimulus_source"); if enabled without one, the loud, repeated
 # `stage.development.no_stimulus` signal fires rather than a silent senseless hold.
 # The gate MEASURES readiness (stimulus source readout + the sleep module's count + the world model module's
-# consolidation + lived time) and imposes no development — a readiness gate, not a
-# target (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
+# consolidation + the hearing schedule) and imposes no development
+# (warmed-up-signal precedent: paper §6.6, soma-coldstart-regulation-warmup).
 enabled = false
 min_sleep_cycles = 5              # the sleep module's maintenance cycles before maturation is possible
 min_consolidation_passes = 3      # successful world model sleep-training passes (C2)
-min_lived_seconds = 86400         # floor of lived subjective time in the developmental phase (C3)
+# C3 is the sensory schedule being complete (the hearing band reaches its final stage); the old
+# min_lived_seconds floor is retired and ignored.
 gate_cadence_seconds = 60         # how often the maturation gate is evaluated
 readout_max_age_cadences = 3      # a stimulus source readout older than this many cadences is stale (C1)
 require_operator_ack_for_maturation = false  # autonomous by default; true for supervised shakedowns

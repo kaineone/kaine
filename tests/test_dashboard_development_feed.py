@@ -216,11 +216,13 @@ def test_perception_feed_block_stimulus_source_defaults() -> None:
     summary = block["stimulus_source"]
     assert summary["heartbeat_bpm"] == 70.0
     assert summary["heartbeat_drift"] == 0.03
-    assert summary["colour_ramp_seconds"] == 3600.0
+    assert "colour_ramp_seconds" not in summary
     assert summary["colour_hue_gain"] == 0.6
     assert summary["maternal_voice_enabled"] is True
     assert summary["hearing_enabled"] is True
-    assert summary["hearing_maturation_seconds"] == 43200.0
+    assert summary["hearing_saturation_window_seconds"] == 600.0
+    assert summary["hearing_min_dwell_seconds"] == 5400.0
+    assert summary["hearing_max_dwell_seconds"] == 25200.0
     for value in summary.values():
         assert isinstance(value, (bool, int, float)) or value is None
 
@@ -248,7 +250,9 @@ def test_perception_feed_block_invalid_hearing_table() -> None:
     )
     summary = block["stimulus_source"]
     assert summary["hearing_enabled"] is None
-    assert summary["hearing_maturation_seconds"] is None
+    assert summary["hearing_min_dwell_seconds"] is None
+    assert summary["hearing_max_dwell_seconds"] is None
+    assert summary["hearing_saturation_window_seconds"] is None
     assert summary["heartbeat_bpm"] == 70.0
     assert summary["maternal_voice_enabled"] is True
 

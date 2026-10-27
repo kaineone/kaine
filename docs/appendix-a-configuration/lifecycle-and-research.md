@@ -135,7 +135,6 @@ The maturation gate that decides when an entity in its developmental phase matur
 | `enabled` | boolean | `false` | Master gate. When false, the maturation gate is bypassed. |
 | `min_sleep_cycles` | integer | `5` | The sleep module's cycles the entity must complete before maturation. |
 | `min_consolidation_passes` | integer | `3` | Consolidation passes the entity must complete before maturation. |
-| `min_lived_seconds` | float | `86400.0` | Lived seconds (entity clock) required before maturation. |
 | `gate_cadence_seconds` | float | `60.0` | How often the gate evaluates readiness. |
 | `readout_max_age_cadences` | float | `3.0` | How many gate cadences back the gate reads `development.readiness` markers from the bus; older readouts are ignored. |
 | `require_operator_ack_for_maturation` | boolean | `false` | Hold a ready entity until the operator acknowledges maturation. |
@@ -144,6 +143,8 @@ The maturation gate that decides when an entity in its developmental phase matur
 | `stimulus_source_loss_after_seconds` | float | `5.0` | Seconds without stimulus source presence before the watcher freezes the entity in its developmental phase. It releases the freeze when the stimulus source returns. |
 | `stimulus_source_arm_timeout_seconds` | float | `120.0` | How long the watcher waits for the stimulus source to first appear before it arms. |
 | `stimulus_source_presence_window_seconds` | float | `3.0` | Window over which stimulus source presence is measured. |
+
+The maturation gate's third condition, C3, is that the sensory schedule is complete: the hearing stage has reached its last stage (see [the developmental phase](../06-operation/development.md#which-conditions-apply)). The key `min_lived_seconds` is retired: it is accepted with a warning and ignored.
 
 ### `[developmental_stage.regulation_thresholds]`
 

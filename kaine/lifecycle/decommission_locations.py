@@ -537,6 +537,7 @@ def entity_locations(
                     "development_readout.json",
                     "development_progress.json",
                     "development_viability.json",
+                    "hearing_stage.json",
                     "self_rhythm_identity.json",
                 ),
             ),

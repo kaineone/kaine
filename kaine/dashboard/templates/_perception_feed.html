@@ -52,11 +52,11 @@
         <dt>heartbeat</dt>
         <dd>{% if ss.get("heartbeat_bpm") is not none %}{{ ss.heartbeat_bpm }} bpm base, drift {{ ss.heartbeat_drift }}{% else %}n/a{% endif %}</dd>
         <dt>colour saturation</dt>
-        <dd>{% if ss.get("colour_ramp_seconds") is not none %}ramp time constant {{ ss.colour_ramp_seconds }} s, hue gain {{ ss.colour_hue_gain }}{% else %}n/a{% endif %}</dd>
+        <dd>{% if ss.get("colour_hue_gain") is not none %}follows the hearing stage (stage/5), hue gain {{ ss.colour_hue_gain }}{% else %}n/a{% endif %}</dd>
         <dt>maternal voice</dt>
         <dd>{% if ss.get("maternal_voice_enabled") is true %}on{% elif ss.get("maternal_voice_enabled") is false %}off{% else %}n/a{% endif %}</dd>
         <dt>hearing band</dt>
-        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}n/a{% else %}widens over {{ ss.hearing_maturation_seconds }} s · now <span id="feed-hearing-stage">n/a</span>{% endif %}</dd>
+        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}n/a{% else %}steps on saturation (window {{ ss.hearing_saturation_window_seconds }} s, dwell {{ ss.hearing_min_dwell_seconds }} to {{ ss.hearing_max_dwell_seconds }} s) · now <span id="feed-hearing-stage">n/a</span>{% endif %}</dd>
       </dl>
     {% endif %}
   {% else %}

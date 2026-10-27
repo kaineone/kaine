@@ -3,8 +3,11 @@
 
 """Hearing band schedule and FIR filter design.
 
-The developmental stimulus's audio passes a hearing band that widens over the
-entity's awake time, following the order fetal hearing matures. Band edges are
+The developmental stimulus's audio passes a hearing band that widens in steps,
+following the order fetal hearing matures. A stage ends when audition's own
+learning progress has saturated (or at a dwell cap); the
+rule lives in ``hearing_stage_state.HearingStageState``, and this module only
+holds the stage edges and the filter design. Band edges are
 placed geometrically midway between the outermost tested tone the fetus can
 hear and the next tested tone outside that range. Once the lowest tested
 tone (100 Hz) is heard there is no unheard tone below it, so the low edge
@@ -28,6 +31,7 @@ Neonatal Edition 71(2), F81-F87.
 from __future__ import annotations
 
 import functools
+import logging
 import math
 from dataclasses import dataclass
 
@@ -35,14 +39,16 @@ import numpy as np
 
 from kaine.config import require_known_keys
 
+log = logging.getLogger(__name__)
+
 __all__ = (
     "HEARING_TONES_HZ",
     "HEARING_BAND_TAPS",
     "HEARING_BAND_STAGES",
     "HEARING_TOP_TONE_HZ",
     "HearingBandParams",
-    "hearing_stage",
-    "band_edges",
+    "HEARING_FINAL_STAGE",
+    "stage_edges",
     "band_taps",
     "band_frequency_response_db",
 )
@@ -50,6 +56,9 @@ __all__ = (
 HEARING_TONES_HZ: tuple[float, ...] = (100.0, 250.0, 500.0, 1000.0, 3000.0)
 
 HEARING_BAND_TAPS: int = 1025
+
+# The last stage; the band is open and the schedule is complete.
+HEARING_FINAL_STAGE: int = 4
 
 _T0, _T1, _T2, _T3, _T4 = HEARING_TONES_HZ
 
@@ -68,44 +77,97 @@ HEARING_BAND_STAGES: tuple[tuple[float | None, float | None], ...] = (
 )
 
 
+_MAX_SECONDS = 2592000.0
+
+_RETIRED_KEYS = frozenset({"maturation_seconds"})
+
+_TABLE = "[perception_feed.stimulus_source.hearing]"
+
+
+def _seconds_field(section: dict, key: str, default: float) -> float:
+    table = _TABLE
+    value = section.get(key, default)
+    if isinstance(value, bool):
+        raise ValueError(
+            f"{table} {key} must be a finite number in (0.0, {_MAX_SECONDS}], got bool"
+        )
+    if not isinstance(value, (int, float)):
+        raise ValueError(
+            f"{table} {key} must be a finite number in (0.0, {_MAX_SECONDS}], "
+            f"got {type(value).__name__}"
+        )
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(
+            f"{table} {key} must be a finite number in (0.0, {_MAX_SECONDS}], got non-finite"
+        )
+    if not (0.0 < value <= _MAX_SECONDS):
+        raise ValueError(f"{table} {key} must be in (0.0, {_MAX_SECONDS}], got {value}")
+    return value
+
+
 @dataclass(frozen=True)
 class HearingBandParams:
     """Parameters for the widening hearing band.
 
     Attributes:
         enabled: Whether the hearing band filter is active.
-        maturation_seconds: Time over which the band widens from the initial
-            500 Hz stage to the full range. Constrained to one minute to
-            30 days.
+        saturation_window_seconds: Awake seconds audition's learning progress
+            must stay below the floor for a stage to end by saturation.
+        min_dwell_seconds: Awake seconds a stage must have run before
+            saturation can end it.
+        max_dwell_seconds: Awake seconds after which a stage ends regardless
+            of learning progress.
     """
 
     enabled: bool = True
-    maturation_seconds: float = 43200.0
+    saturation_window_seconds: float = 600.0
+    min_dwell_seconds: float = 5400.0
+    max_dwell_seconds: float = 25200.0
 
     @classmethod
     def from_section(cls, section: dict | None) -> "HearingBandParams":
         """Build parameters from a configuration table.
 
         Args:
-            section: A mapping with optional keys ``enabled`` and
-                ``maturation_seconds``. ``None`` is treated as an empty table.
+            section: A mapping with optional keys ``enabled``,
+                ``saturation_window_seconds``, ``min_dwell_seconds`` and
+                ``max_dwell_seconds``. The retired key ``maturation_seconds``
+                is accepted and ignored with a warning. ``None`` is treated
+                as an empty table.
 
         Returns:
             A populated ``HearingBandParams`` instance.
 
         Raises:
             ValueError: If ``section`` is not a dict, contains unknown keys,
-                or holds invalid values.
+                holds invalid values, or violates
+                ``0 < saturation_window_seconds <= min_dwell_seconds <=
+                max_dwell_seconds``.
         """
+        table = _TABLE
         if section is None:
             section = {}
         if not isinstance(section, dict):
-            raise ValueError(
-                "[perception_feed.stimulus_source.hearing] must be a table"
-            )
+            raise ValueError(f"{table} must be a table")
 
-        table = "[perception_feed.stimulus_source.hearing]"
-        require_known_keys(section, {"enabled", "maturation_seconds"}, table)
+        require_known_keys(
+            section,
+            {
+                "enabled",
+                "saturation_window_seconds",
+                "min_dwell_seconds",
+                "max_dwell_seconds",
+            }
+            | _RETIRED_KEYS,
+            table,
+        )
+        for key in sorted(_RETIRED_KEYS & set(section)):
+            log.warning(
+                "%s.%s is retired and ignored; delete it from the configuration file",
+                table,
+                key,
+            )
 
         enabled = section.get("enabled", True)
         if not isinstance(enabled, bool):
@@ -113,68 +175,32 @@ class HearingBandParams:
                 f"{table} enabled must be a bool, got {type(enabled).__name__}"
             )
 
-        maturation_seconds = section.get("maturation_seconds", 43200.0)
-        if isinstance(maturation_seconds, bool):
+        window = _seconds_field(section, "saturation_window_seconds", 600.0)
+        min_dwell = _seconds_field(section, "min_dwell_seconds", 5400.0)
+        max_dwell = _seconds_field(section, "max_dwell_seconds", 25200.0)
+        if not (window <= min_dwell <= max_dwell):
             raise ValueError(
-                f"{table} maturation_seconds must be a finite number in "
-                "[60.0, 2592000.0], got bool"
-            )
-        if not isinstance(maturation_seconds, (int, float)):
-            raise ValueError(
-                f"{table} maturation_seconds must be a finite number in "
-                f"[60.0, 2592000.0], got {type(maturation_seconds).__name__}"
-            )
-        maturation_seconds = float(maturation_seconds)
-        if not math.isfinite(maturation_seconds):
-            raise ValueError(
-                f"{table} maturation_seconds must be a finite number in "
-                "[60.0, 2592000.0], got non-finite"
-            )
-        if not (60.0 <= maturation_seconds <= 2592000.0):
-            raise ValueError(
-                f"{table} maturation_seconds must be in [60.0, 2592000.0], "
-                f"got {maturation_seconds}"
+                f"{table} requires saturation_window_seconds <= min_dwell_seconds "
+                f"<= max_dwell_seconds, got {window}, {min_dwell}, {max_dwell}"
             )
 
-        return cls(enabled=enabled, maturation_seconds=maturation_seconds)
+        return cls(
+            enabled=enabled,
+            saturation_window_seconds=window,
+            min_dwell_seconds=min_dwell,
+            max_dwell_seconds=max_dwell,
+        )
 
 
-def hearing_stage(awake_seconds: float, params: HearingBandParams) -> int:
-    """Return the hearing band stage for the given awake time.
+def stage_edges(stage: int) -> tuple[float | None, float | None]:
+    """Return the low and high band edges for a hearing stage.
 
-    Stages advance at exact quarter-marks of ``maturation_seconds`` so that
-    boundary times such as ``W / 4`` evaluate unambiguously.
-
-    Args:
-        awake_seconds: Time the entity has been awake.
-        params: Band parameters.
-
-    Returns:
-        An integer stage in ``[0, 4]``.
+    A stage outside ``[0, HEARING_FINAL_STAGE]`` is clamped into range and a
+    non-integer (or bool) stage is treated as stage 0.
     """
-    T = float(awake_seconds)
-    W = params.maturation_seconds
-
-    if not math.isfinite(T):
-        return 0
-
-    if T >= W:
-        return 4
-    if T >= 3.0 * W / 4.0:
-        return 3
-    if T >= W / 2.0:
-        return 2
-    if T >= W / 4.0:
-        return 1
-
-    return 0
-
-
-def band_edges(
-    awake_seconds: float, params: HearingBandParams
-) -> tuple[float | None, float | None]:
-    """Return the low and high band edges for the given awake time."""
-    return HEARING_BAND_STAGES[hearing_stage(awake_seconds, params)]
+    if isinstance(stage, bool) or not isinstance(stage, int):
+        stage = 0
+    return HEARING_BAND_STAGES[max(0, min(HEARING_FINAL_STAGE, stage))]
 
 
 def band_taps(

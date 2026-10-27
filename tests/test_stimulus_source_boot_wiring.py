@@ -258,3 +258,87 @@ def test_build_registry_stimulus_source_mode_shares_one_clock_and_selects_virtua
     assert clock.stimulus_source_seconds() >= 200.0
     assert kaine_config["perception_feed"]["_stimulus_source_lived_seconds"]() >= 200.0
     assert perception_state.read_desired().locus == "virtual"
+
+
+def test_install_builds_one_hearing_stage_owner_persisted_beside_the_stage_file(tmp_path, monkeypatch):
+    from kaine.boot.perception_feed import _shared_hearing_stage_state
+    from kaine.lifecycle import stage as stage_mod
+    from kaine.modules.audition.hearing_stage_state import HearingStageState
+
+    stage_dir = tmp_path / "lifecycle"
+    stage_dir.mkdir()
+    stage_path = stage_dir / "stage.json"
+    monkeypatch.setattr(stage_mod, "STAGE_PATH", stage_path)
+    (stage_dir / "hearing_stage.json").write_text(
+        '{"version": 1, "stage": 2, "dwell_seconds": 100.0}'
+    )
+    feed: dict[str, object] = {"mode": "stimulus_source", "seed": 1}
+    cfg: dict[str, object] = {"affect": {"learning_progress_floor": 0.3}}
+    _install_shared_stimulus_source_clock(feed, cfg, None)
+
+    state = feed["_hearing_stage_state"]
+    assert isinstance(state, HearingStageState)
+    assert cfg["perception_feed"]["_hearing_stage_state"] is state
+    assert state.stage == 2
+    assert _shared_hearing_stage_state(feed) is state
+
+    # The same object reaches the video and the audio factory.
+    video = _build_perception_feed_video_factory("stimulus_source", feed, width=32, height=24)("x", width=32, height=24)
+    audio = _build_perception_feed_audio_factory(
+        "stimulus_source", feed, sample_rate=16000, channels=1, frames_per_block=480
+    )(device=None, sample_rate=16000, channels=1, frames_per_block=480, callback=lambda b: None)
+    assert video._hearing_stage() == 2
+    assert audio._read_stage() == 2
+
+    state.save()
+    saved = (stage_dir / "hearing_stage.json").read_text()
+    assert '"stage": 2' in saved or '"stage":2' in saved
+
+
+def test_install_uses_an_explicit_stage_path_directory(tmp_path):
+    feed: dict[str, object] = {}
+    stage_path = tmp_path / "elsewhere" / "stage.json"
+    _install_shared_stimulus_source_clock(feed, None, None, stage_path=stage_path)
+    state = feed["_hearing_stage_state"]
+    assert state._path == tmp_path / "elsewhere" / "hearing_stage.json"
+
+
+def test_install_creates_the_stage_owner_even_with_the_band_disabled(tmp_path):
+    feed: dict[str, object] = {"stimulus_source": {"hearing": {"enabled": False}}}
+    _install_shared_stimulus_source_clock(feed, None, None, stage_path=tmp_path / "stage.json")
+    assert feed["_hearing_stage_state"].stage == 0
+
+
+def test_install_refuses_a_bad_hearing_table_at_boot(tmp_path):
+    feed: dict[str, object] = {"stimulus_source": {"hearing": {"min_dwell_seconds": 9000.0, "max_dwell_seconds": 100.0}}}
+    with pytest.raises(ValueError):
+        _install_shared_stimulus_source_clock(feed, None, None, stage_path=tmp_path / "stage.json")
+
+
+def test_shared_hearing_stage_state_falls_back_to_a_fresh_unpersisted_one():
+    from kaine.boot.perception_feed import _shared_hearing_stage_state
+
+    state = _shared_hearing_stage_state({})
+    assert state.stage == 0
+    assert state._path is None
+
+
+
+def test_registry_installs_no_hearing_owner_for_an_external_provider():
+    """An external stimulus provider gets no hearing stage owner, so C3 cannot pass."""
+    from kaine.boot import build_registry
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import BusConfig
+
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    bus = AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
+    )
+    config: dict[str, object] = {
+        "modules": {"vision": False, "audition": False},
+        "perception_feed": {"mode": "external"},
+    }
+    build_registry(bus, config)
+    assert "_hearing_stage_state" not in config["perception_feed"]
+    assert "_shared_stimulus_source_clock" not in config["perception_feed"]

@@ -44,6 +44,21 @@ def test_params_defaults() -> None:
     assert p.lowpass_hz == 500.0
 
 
+def test_retired_colour_ramp_key_warns_and_is_not_applied(caplog) -> None:
+    with caplog.at_level("WARNING", logger="kaine.modules.stimulus_source_signal"):
+        p = StimulusSourceParams.from_sections(None, {"colour_ramp_seconds": 86400.0}, None)
+    assert p.colour_ramp_seconds == 3600.0
+    assert any(
+        "colour_ramp_seconds is retired and ignored" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_retired_colour_ramp_key_is_not_range_checked() -> None:
+    p = StimulusSourceParams.from_sections(None, {"colour_ramp_seconds": -1.0}, None)
+    assert p.colour_ramp_seconds == 3600.0
+
+
 def test_params_unknown_key_rejected() -> None:
     with pytest.raises(ValueError, match="unknown .* config keys"):
         StimulusSourceParams.from_sections({"not_a_key": 1}, None, None)
@@ -81,8 +96,6 @@ def test_params_numeric_fields_must_not_be_bool() -> None:
         ("video", "luminance_pulse_depth", 1.1),
         ("video", "maternal_state_hue_gain", -0.1),
         ("video", "maternal_state_hue_gain", 1.1),
-        ("video", "colour_ramp_seconds", 0.0),
-        ("video", "colour_ramp_seconds", -1.0),
         ("audio", "lowpass_hz", 50.0),
         ("audio", "lowpass_hz", 2001.0),
         ("stimulus_source", "external_drive_max_amplitude", -0.1),
@@ -180,22 +193,16 @@ def test_beat_pulse_vectorised() -> None:
     )
 
 
-def test_colour_saturation() -> None:
-    params = StimulusSourceParams()
-    assert colour_saturation(0.0, params) == 0.0
-    assert colour_saturation(-1.0, params) == 0.0
-    assert colour_saturation(float("inf"), params) == 0.0
-    assert colour_saturation(float("nan"), params) == 0.0
+def test_colour_saturation_is_k_over_five_per_stage() -> None:
+    assert [colour_saturation(k) for k in range(5)] == [0.0, 0.2, 0.4, 0.6, 0.8]
 
-    prev = 0.0
-    for lived in (1.0, 10.0, 100.0, 1000.0, 10_000.0):
-        s = colour_saturation(lived, params)
-        assert 0.0 <= s < 1.0
-        assert s > prev
-        prev = s
 
-    tau = params.colour_ramp_seconds
-    assert colour_saturation(3.0 * tau, params) > 0.9
+def test_colour_saturation_clamps_and_rejects_non_ints() -> None:
+    assert colour_saturation(-3) == 0.0
+    assert colour_saturation(5) == 0.8
+    assert colour_saturation(99) == 0.8
+    for bad in (True, False, None, 2.0, "3", float("nan")):
+        assert colour_saturation(bad) == 0.0  # type: ignore[arg-type]
 
 
 def test_flow_phase_properties() -> None:

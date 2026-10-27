@@ -4,7 +4,7 @@
 """Pure, deterministic maternal-channel signal functions for the stimulus source feed.
 
 Implements the external maternal-state signal, the maternal heartbeat phase,
-the beat pulse, the colour-onset saturation ramp, and the parameter contract.
+the beat pulse, the colour saturation per hearing stage, and the parameter contract.
 Everything here is a pure function of ``(seed, time)`` plus ``StimulusSourceParams``;
 no entity state, no clocks, no I/O, no persistence.
 
@@ -15,8 +15,9 @@ Grounding citations placed at the relevant sites:
 - External maternal-state signal as the driver of hue/flow (not a mirror of the
   entity): Feldman 2007 (biobehavioral synchrony; maternal physiological/
   emotional-state transmission to the fetus).
-- Colour/saturation onset schedule: Hepper & Shahidullah 1994; Teller /
-  Bornstein (infant colour-vision development).
+- Colour saturation k/5 in hearing stage k (paper A.7, Table A1): a design
+  choice without a source. Newborn colour vision is limited (Adams, Courage
+  and Mercer 1994).
 - The luminance pulse coupled to the heartbeat is an external cross-modal
   rhythmic drive / maturation cue, NOT a reproduced stimulus source feature. See Notbohm 2016
   vs Duecker 2021 (entrainment debate; do not overclaim) and Frontiers 2022
@@ -28,6 +29,7 @@ Grounding citations placed at the relevant sites:
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -38,6 +40,8 @@ from kaine.config import require_known_keys
 from kaine.legacy_aliases import parameter_for_config_key
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "StimulusSourceParams",
@@ -89,6 +93,9 @@ class StimulusSourceParams:
     luminance_contrast: float = 0.10
     luminance_pulse_depth: float = 0.35
     maternal_state_hue_gain: float = 0.6
+    # Retired: colour saturation now follows the hearing stage. The field stays
+    # at its old default only so the parameter digest of the defaults does not
+    # change. The config key is accepted with a warning and not applied.
     colour_ramp_seconds: float = 3600.0
 
     lowpass_hz: float = 500.0
@@ -132,6 +139,14 @@ class StimulusSourceParams:
             require_known_keys(
                 audio, audio_allowed, "[perception_feed.stimulus_source.audio]"
             )
+
+        if video and "colour_ramp_seconds" in video:
+            log.warning(
+                "%s.%s is retired and ignored; delete it from the configuration file",
+                "[perception_feed.stimulus_source.video]",
+                "colour_ramp_seconds",
+            )
+            video = {k: v for k, v in video.items() if k != "colour_ramp_seconds"}
 
         merged = {}
         for section in (stimulus_source, video, audio):
@@ -180,7 +195,6 @@ class StimulusSourceParams:
         _float_field("luminance_contrast", 0.0, 0.5)
         _float_field("luminance_pulse_depth", 0.0, 1.0)
         _float_field("maternal_state_hue_gain", 0.0, 1.0)
-        _float_field("colour_ramp_seconds", 0.0, math.inf, open_lo=True)
         _float_field("lowpass_hz", 100.0, 2000.0)
         _float_field("maternal_distress_max_magnitude", 0.0, 1.0)
         _float_field("maternal_distress_max_seconds", 0.0, math.inf, open_lo=True)
@@ -378,24 +392,17 @@ def beat_pulse(phase: float | np.ndarray) -> float | np.ndarray:
     return np.clip(pulse, 0.0, 1.0)
 
 
-def colour_saturation(lived_seconds: float, params: StimulusSourceParams) -> float:
-    """Cone-maturation analog: saturation rises from near-grey toward maturation.
+def colour_saturation(hearing_stage: int) -> float:
+    """Schedule saturation for a hearing stage: k/5 in stage k (0.0 to 0.8).
 
-    Returns ``1 - exp(-lived_seconds / colour_ramp_seconds)`` in ``[0, 1)``.
-    Non-finite or negative inputs saturate to 0.
+    Paper A.7, Table A1. The k/5 steps are a design choice without a source;
+    newborn colour vision is limited (Adams, Courage and Mercer 1994). A stage
+    above 4 is clamped to 4 and below 0 to 0. A bool, a non-int or None gives
+    0.0.
     """
-    if not math.isfinite(lived_seconds) or lived_seconds <= 0.0:
+    if isinstance(hearing_stage, bool) or not isinstance(hearing_stage, int):
         return 0.0
-    tau = float(params.colour_ramp_seconds)
-    if tau <= 0.0:
-        return 0.0
-    sat = 1.0 - math.exp(-lived_seconds / tau)
-    if sat < 0.0:
-        return 0.0
-    if sat >= 1.0:
-        # Keep the contract ``[0, 1)``.
-        return 0.9999999999999999
-    return float(sat)
+    return max(0, min(4, hearing_stage)) / 5.0
 
 
 def flow_phase(seed: int, t: float | np.ndarray, params: StimulusSourceParams) -> float | np.ndarray:

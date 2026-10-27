@@ -54,7 +54,6 @@ def _runner(
             gate_cadence_seconds=1.0,
             min_sleep_cycles=100,
             min_consolidation_passes=100,
-            min_lived_seconds=1e9,
         ),
         registry=_FakeRegistry(),
         entity_clock=clock,

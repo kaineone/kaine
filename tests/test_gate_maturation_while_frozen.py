@@ -192,7 +192,6 @@ async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -206,6 +205,7 @@ async def test_maturation_deferred_while_frozen_then_maturations_when_unfrozen(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: True)
 
@@ -247,7 +247,6 @@ async def test_maturation_deferred_when_is_paused_raises(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -261,6 +260,7 @@ async def test_maturation_deferred_when_is_paused_raises(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     def _broken_is_paused() -> bool:
         raise RuntimeError("pause probe unavailable")

@@ -134,6 +134,7 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
     the maturation transition.
     """
     from kaine.boot import _stimulus_source_params
+    from kaine.boot.perception_feed import _hearing_band_params
 
     def _maturation_hook():
         clock.begin_maturation(maturation_seconds)
@@ -143,7 +144,9 @@ def _make_maturation_hook(clock, feed, maturation_seconds, *, now=lambda: dateti
                 return
             stimulus_source_t = clock.maturation_end_stimulus_source_seconds()
             stimulus_source_seed = int(feed.get("seed", 0))
-            params_digest = lifecycle_stage.stimulus_source_params_digest(_stimulus_source_params(feed))
+            params_digest = lifecycle_stage.stimulus_source_params_digest(
+                _stimulus_source_params(feed), hearing=_hearing_band_params(feed)
+            )
             bloom_ends_at = (now() + timedelta(seconds=maturation_seconds)).isoformat()
             lifecycle_stage.write_stage(
                 lifecycle_stage.record_maturation_stimulus_source(
@@ -1339,14 +1342,33 @@ def _start_development_owner(
     return asyncio.create_task(owner.run(stop_event), name="cycle.development")
 
 
+def _affect_audition_lp_provider(registry) -> "Callable[[int], float | None] | None":
+    """Return the affect module's audition learning-progress reader, or None.
+
+    The hearing stage watch feeds it to the hearing stage state. Absent affect
+    module means no reading, which counts as unsaturated.
+    """
+    try:
+        affect = registry.get("affect") if registry is not None and "affect" in registry else None
+    except Exception:
+        return None
+    return getattr(affect, "audition_learning_progress", None)
+
+
 def _start_stimulus_source_presence(
-    kaine_config: dict[str, Any], bus: Any, stop_event: asyncio.Event, *, on_watch: Callable[[Any], None] | None = None
+    kaine_config: dict[str, Any],
+    bus: Any,
+    stop_event: asyncio.Event,
+    *,
+    on_watch: Callable[[Any], None] | None = None,
+    lp_provider: Callable[[int], float | None] | None = None,
 ) -> "asyncio.Task[None] | None":
     """Start the local stimulus source's presence publisher when a stimulus source clock is installed.
 
     ``build_registry`` installs the shared stimulus source clock only for
     ``[perception_feed].mode = "stimulus_source"``; any other mode starts nothing.
-    If the audition module is enabled, also starts the hearing stage watch.
+    Also starts the hearing stage watch when the hearing stage state is installed;
+    ``lp_provider`` reads audition's learning progress for the current stage.
     """
     clock = (kaine_config.get("perception_feed") or {}).get("_shared_stimulus_source_clock")
     if clock is None:
@@ -1355,7 +1377,7 @@ def _start_stimulus_source_presence(
     from kaine.cycle.stimulus_source_presence import StimulusSourcePresencePublisher
 
     publisher = StimulusSourcePresencePublisher(bus, clock)
-    watch = HearingStageWatch.from_config(kaine_config, bus)
+    watch = HearingStageWatch.from_config(kaine_config, bus, lp_provider)
     if watch is not None and on_watch is not None:
         on_watch(watch)
 
@@ -1993,6 +2015,13 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     # any other bus writer fails verification and never reaches an effector.
     ctx.intent_secret = generate_intent_secret()
 
+    # The hearing stage file is keyed to the entity. The identity was resolved in
+    # _phase_stage; the feed config carries it to the stage owner build_registry installs.
+    if ctx.identity is not None:
+        feed_cfg = ctx.kaine_config.setdefault("perception_feed", {})
+        feed_cfg["_entity_id"] = ctx.identity.entity_id
+        feed_cfg["_entity_lineage"] = list(ctx.identity.lineage)
+
     ctx.registry = build_registry(
         ctx.bus,
         ctx.kaine_config,
@@ -2047,6 +2076,10 @@ async def _phase_registry(ctx: BootContext) -> int | None:
                     landed = None
                 if landed is not None:
                     ctx.identity = landed
+                # The revive restored hearing_stage.json after the owner was built; read it again.
+                hearing_state = (ctx.kaine_config.get("perception_feed") or {}).get("_hearing_stage_state")
+                if hearing_state is not None:
+                    hearing_state.reload()
             # A landed revive wins over any resume checkpoint: replace it immediately.
             if refused is None and not await _replace_checkpoint_after_revive(ctx.registry, ctx.identity):
                 from kaine.cycle.revive_boot import REVIVE_REFUSED_EXIT
@@ -2078,6 +2111,20 @@ async def _phase_maturation_gate(ctx: BootContext) -> int | None:
         staging_enabled=ctx.staging_enabled,
         stimulus_source_feed_configured=ctx.stimulus_source_ready,
     )
+
+    # C3 reads the hearing stage owner at call time from the shared
+    # perception_feed mapping. _phase_registry installs the owner there only for
+    # the local stimulus source; with an external stimulus provider the key is
+    # absent, the closure returns None and C3 fails closed.
+    def _sensory_schedule() -> tuple[int, int] | None:
+        from kaine.modules.audition.hearing_band import HEARING_FINAL_STAGE
+
+        state = (ctx.kaine_config.get("perception_feed") or {}).get("_hearing_stage_state")
+        if state is None:
+            return None
+        return (int(state.stage), HEARING_FINAL_STAGE)
+
+    ctx.gate_runner.set_sensory_schedule_source(_sensory_schedule)
 
 
 async def _phase_workspace(ctx: BootContext) -> int | None:
@@ -2819,6 +2866,7 @@ async def _phase_development(ctx: BootContext) -> int | None:
     ctx.stimulus_source_presence_task = _start_stimulus_source_presence(
         ctx.kaine_config, ctx.bus, ctx.stop_event,
         on_watch=lambda watch: setattr(ctx, "hearing_stage_watch", watch),
+        lp_provider=_affect_audition_lp_provider(ctx.registry),
     )
     ctx.housekeeping_floor_task = _start_housekeeping_floor(ctx.kaine_config, ctx.bus, ctx.stop_event, is_asleep=lambda: ctx.cycle.is_asleep)
     # Sleep stops the readout's awake time and aborts a running probe, like a freeze.
@@ -3039,6 +3087,10 @@ async def _shutdown(ctx: BootContext) -> None:
             log.debug("stimulus source presence task cancelled at shutdown")
         except Exception:
             log.exception("stimulus source presence task shutdown failed")
+    # Save the hearing stage owner even when the watch task was cancelled before it started.
+    hearing_state = ((ctx.kaine_config or {}).get("perception_feed") or {}).get("_hearing_stage_state")
+    if hearing_state is not None:
+        hearing_state.save()
     if ctx.housekeeping_floor_task is not None:
         ctx.housekeeping_floor_task.cancel()
         try:

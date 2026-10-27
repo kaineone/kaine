@@ -103,7 +103,7 @@ def _make_vision(bus: AsyncBus, clock) -> Vision:
             schedule,
             params=StimulusSourceParams(),
             clock=clock,
-            lived_seconds=lambda: clock.stimulus_source_seconds(),
+            hearing_stage=lambda: 0,
         )
 
     return Vision(

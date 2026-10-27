@@ -23,6 +23,7 @@ from kaine.modules.audition.hearing_band import (
     HEARING_BAND_STAGES,
     HearingBandParams,
 )
+from kaine.modules.audition.hearing_stage_state import HearingStageState
 from kaine.modules.vision.feed import StimulusSourceClock
 
 
@@ -36,15 +37,20 @@ class _FakeBus:
 
 
 def test_hearing_stage_watch_current_lifecycle_and_copy() -> None:
-    W = 3600.0
-    params = HearingBandParams(enabled=True, maturation_seconds=W)
+    state = HearingStageState(
+        HearingBandParams(
+            saturation_window_seconds=100.0,
+            min_dwell_seconds=200.0,
+            max_dwell_seconds=1000.0,
+        )
+    )
     awake_value = 0.0
     bus = _FakeBus()
 
     def awake() -> float:
         return awake_value
 
-    watch = HearingStageWatch(bus, awake, params)
+    watch = HearingStageWatch(bus, awake, state)
 
     assert watch.current is None
 
@@ -58,7 +64,7 @@ def test_hearing_stage_watch_current_lifecycle_and_copy() -> None:
     returned["stage"] = 99
     assert watch.current == payload0
 
-    awake_value = W / 4.0
+    awake_value = 1000.0
     payload1 = watch.check()
     assert payload1 is not None
     assert watch.current == payload1
@@ -68,7 +74,8 @@ def test_hearing_stage_watch_current_lifecycle_and_copy() -> None:
         "previous_stage": 0,
         "low_hz": HEARING_BAND_STAGES[1][0],
         "high_hz": HEARING_BAND_STAGES[1][1],
-        "awake_seconds": W / 4.0,
+        "awake_seconds": 1000.0,
+        "dwell_seconds": 0.0,
     }
 
 
@@ -126,15 +133,15 @@ async def test_write_runtime_state_omits_hearing_stage_without_watch(tmp_path, m
 
 
 def _stimulus_source_config(clock: StimulusSourceClock, audition: bool) -> dict[str, Any]:
-    return {
-        "modules": {"audition": audition} if audition else {},
-        "perception_feed": {
-            "mode": "stimulus_source",
-            "_shared_stimulus_source_clock": clock,
-            "_stimulus_source_lived_seconds": lambda: 0.0,
-            "stimulus_source": {"hearing": {"enabled": True}},
-        },
+    """Config with a hearing stage state when ``audition`` is true, without one otherwise."""
+    feed: dict[str, Any] = {
+        "mode": "stimulus_source",
+        "_shared_stimulus_source_clock": clock,
+        "_stimulus_source_lived_seconds": lambda: 0.0,
     }
+    if audition:
+        feed["_hearing_stage_state"] = HearingStageState(HearingBandParams())
+    return {"perception_feed": feed}
 
 
 @pytest.mark.asyncio
@@ -161,7 +168,7 @@ async def test_start_stimulus_source_presence_calls_on_watch():
 
 
 @pytest.mark.asyncio
-async def test_start_stimulus_source_presence_skips_on_watch_without_audition():
+async def test_start_stimulus_source_presence_skips_on_watch_without_stage_state():
     seen: list[Any] = []
     bus = _FakeBus()
     clock = StimulusSourceClock(lived_offset_seconds=0.0)
