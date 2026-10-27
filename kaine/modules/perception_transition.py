@@ -223,7 +223,9 @@ def render_maturation_field(
         schedule,
         params=params,
         clock=StimulusSourceClock(lived_offset_seconds=lived),
-        lived_seconds=lambda: lived,
+        # The bloom peak (maturation_progress 1.0) sets full saturation, so the
+        # schedule saturation from the hearing stage never shows here.
+        hearing_stage=lambda: 0,
     )
     index = int(math.floor(float(stimulus_source_t_at_maturation) * float(schedule.frame_rate_hz)))
     return source.frame_at(index, maturation_progress=1.0)

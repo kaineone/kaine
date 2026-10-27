@@ -87,7 +87,7 @@ def patched_video_signal(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         "kaine.modules.stimulus_source_signal.colour_saturation",
-        lambda lived, p: 0.0,
+        lambda stage: 0.0,
     )
     monkeypatch.setattr(
         "kaine.modules.stimulus_source_signal.maternal_hue",
@@ -181,7 +181,7 @@ def test_video_frame_maturation_progress_none_identical(
         video_schedule,
         params=video_params,
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     source.open()
     f_none = source.frame_at(0, maturation_progress=None)
@@ -197,7 +197,7 @@ def test_video_frame_blooms_and_stays_bounded(
         video_schedule,
         params=video_params,
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     source.open()
     f0 = source.frame_at(0, maturation_progress=0.0)
@@ -214,7 +214,7 @@ def test_video_read_stops_after_maturation(
         video_schedule,
         params=video_params,
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     source.open()
     ok, frame = source.read()
@@ -330,7 +330,6 @@ async def test_gate_runner_calls_maturation_hook_once_after_embodied(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -344,6 +343,7 @@ async def test_gate_runner_calls_maturation_hook_once_after_embodied(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     calls: list[Any] = []
@@ -382,7 +382,6 @@ async def test_gate_runner_raising_maturation_hook_does_not_stop_maturation(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -396,6 +395,7 @@ async def test_gate_runner_raising_maturation_hook_does_not_stop_maturation(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
     runner.set_pause_sources(paused_seconds=lambda: 0.0, is_paused=lambda: False)
 
     def bad_hook() -> None:

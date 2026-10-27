@@ -216,7 +216,6 @@ async def test_gate_keeps_developing_when_conditions_unmet(tmp_path: Path) -> No
             enabled=True,
             min_sleep_cycles=5,
             min_consolidation_passes=3,
-            min_lived_seconds=86400,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(consolidation_passes=1),
@@ -481,7 +480,6 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavaila
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(consolidation_passes=1, embodiment_enabled=False),
@@ -490,6 +488,7 @@ async def test_gate_holds_awaiting_embodiment_when_ready_but_embodiment_unavaila
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     await runner._evaluate_once()
     await runner._evaluate_once()
@@ -519,7 +518,6 @@ async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Pa
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -533,6 +531,7 @@ async def test_gate_maturations_when_ready_and_embodiment_available(tmp_path: Pa
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     await runner._evaluate_once()
     await runner._evaluate_once()
@@ -574,7 +573,6 @@ async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch)
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry(
@@ -588,6 +586,7 @@ async def test_maturation_unlocks_development_locus(tmp_path: Path, monkeypatch)
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     await runner._evaluate_once()
     await runner._evaluate_once()
@@ -669,7 +668,6 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry_with_embodiment(embodiment),
@@ -678,6 +676,7 @@ async def test_maturation_calls_embodiment_activate_before_stage_file_and_unlock
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     # First tick anchors the sleep cursor; the second counts the sleep.
     await runner._evaluate_once()
@@ -728,7 +727,6 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
             enabled=True,
             min_sleep_cycles=1,
             min_consolidation_passes=1,
-            min_lived_seconds=0,
             gate_cadence_seconds=0.01,
         ),
         registry=_make_registry_with_embodiment(embodiment),
@@ -737,6 +735,7 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
         staging_enabled=True,
         stimulus_source_feed_configured=True,
     )
+    runner.set_sensory_schedule_source(lambda: (4, 4))
 
     await runner._evaluate_once()
     await runner._evaluate_once()
@@ -756,3 +755,93 @@ async def test_maturation_deferred_when_embodiment_activate_fails(
     assert desired.locus == "virtual"
     assert desired.locus_locked is True
     assert desired.locked_by == "development"
+
+
+# --- C3: the sensory schedule source ----------------------------------------
+
+
+def _schedule_runner(tmp_path: Path, **config_over: Any) -> MaturationGateRunner:
+    readout = {
+        "endogenous_self_sustain": True,
+        "entrain_then_autonomy": True,
+        "hrv_variability": 0.5,
+        "stimulus_source_prediction_error": 0.1,
+        "return_to_baseline_seconds": 10.0,
+    }
+    return MaturationGateRunner(
+        bus=_make_bus(published=[], readout=readout, sleep_count=1),
+        config=MaturationConfig(
+            enabled=True,
+            min_sleep_cycles=1,
+            min_consolidation_passes=1,
+            gate_cadence_seconds=0.01,
+            **config_over,
+        ),
+        registry=_make_registry(consolidation_passes=1, embodiment_enabled=False),
+        entity_clock=_make_clock(),
+        stage_state=_fresh_development_state(tmp_path),
+        staging_enabled=True,
+        stimulus_source_feed_configured=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_runner_passes_the_source_reading_to_c3(tmp_path: Path) -> None:
+    runner = _schedule_runner(tmp_path)
+    runner.set_sensory_schedule_source(lambda: (2, 4))
+    await runner._evaluate_once()
+    status = runner.status
+    assert status["sensory_schedule"] == {"stage": 2, "final_stage": 4}
+    assert "C3_sensory_schedule_complete" in status["readiness"]["unmet"]
+
+    runner.set_sensory_schedule_source(lambda: (4, 4))
+    await runner._evaluate_once()
+    assert runner.status["sensory_schedule"] == {"stage": 4, "final_stage": 4}
+    assert "C3_sensory_schedule_complete" not in runner.status["readiness"]["unmet"]
+
+
+@pytest.mark.asyncio
+async def test_runner_without_a_source_fails_c3_closed(tmp_path: Path) -> None:
+    runner = _schedule_runner(tmp_path)
+    await runner._evaluate_once()
+    assert runner.status["sensory_schedule"] is None
+    assert "C3_sensory_schedule_complete" in runner.status["readiness"]["unmet"]
+
+
+@pytest.mark.asyncio
+async def test_runner_treats_a_raising_source_as_no_reading(tmp_path: Path) -> None:
+    runner = _schedule_runner(tmp_path)
+
+    def _boom() -> tuple[int, int]:
+        raise RuntimeError("owner gone")
+
+    runner.set_sensory_schedule_source(_boom)
+    await runner._evaluate_once()
+    assert runner.status["sensory_schedule"] is None
+    assert "C3_sensory_schedule_complete" in runner.status["readiness"]["unmet"]
+
+
+@pytest.mark.asyncio
+async def test_phase_maturation_gate_wires_the_schedule_late(tmp_path: Path) -> None:
+    import types
+    from unittest.mock import MagicMock
+
+    from kaine.cycle.__main__ import _phase_maturation_gate
+    from kaine.lifecycle.stage import StageState
+    from kaine.modules.audition.hearing_band import HEARING_FINAL_STAGE
+
+    feed: dict[str, Any] = {}
+    ctx = types.SimpleNamespace(
+        kaine_config={"perception_feed": feed},
+        bus=MagicMock(),
+        registry=MagicMock(),
+        stage_state=StageState(),
+        staging_enabled=False,
+        stimulus_source_ready=False,
+    )
+    await _phase_maturation_gate(ctx)
+    read = ctx.gate_runner._sensory_schedule
+    assert read() is None  # owner not built yet
+
+    feed["_hearing_stage_state"] = types.SimpleNamespace(stage=3)
+    assert read() == (3, HEARING_FINAL_STAGE)

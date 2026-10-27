@@ -17,7 +17,6 @@ def _cfg(**over) -> mg.MaturationConfig:
     base = {
         "min_sleep_cycles": 5,
         "min_consolidation_passes": 3,
-        "min_lived_seconds": 100.0,
         "regulation_thresholds": {
             "endogenous_self_sustain": True,
             "entrain_then_autonomy": True,
@@ -45,7 +44,7 @@ def _ready(cfg: mg.MaturationConfig) -> mg.Readiness:
         readiness_readout=_good_readout(),
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=200.0,
+        sensory_schedule=(4, 4),
         config=cfg,
     )
 
@@ -65,7 +64,7 @@ def test_c1_absent_readout_fails_closed() -> None:
         readiness_readout=None,
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=200.0,
+        sensory_schedule=(4, 4),
         config=_cfg(),
     )
     assert r.c1.met is False and r.ready is False
@@ -78,7 +77,7 @@ def test_c1_marker_below_threshold_fails() -> None:
         readiness_readout=ro,
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=200.0,
+        sensory_schedule=(4, 4),
         config=_cfg(),
     )
     assert r.c1.met is False
@@ -112,22 +111,46 @@ def test_c2_none_fails_closed() -> None:
     assert mg._evaluate_c2(None, None, _cfg()).met is False
 
 
-# --- C3 lived-time floor ----------------------------------------------------
+# --- C3 sensory schedule complete -------------------------------------------
 
 
-def test_c3_below_floor_blocks_fast_forwarded_maturation() -> None:
+def test_c3_before_final_stage_blocks_maturation() -> None:
     r = mg.evaluate_readiness(
         readiness_readout=_good_readout(),
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=1.0,  # below the 100s floor
+        sensory_schedule=(3, 4),  # one stage short
         config=_cfg(),
     )
     assert r.c3.met is False and r.ready is False
 
 
 def test_c3_none_fails_closed() -> None:
-    assert mg._evaluate_c3(None, _cfg()).met is False
+    c3 = mg._evaluate_c3(None)
+    assert c3.met is False and "no sensory schedule reading" in c3.detail
+
+
+def test_c3_before_final_stage_names_the_stage() -> None:
+    c3 = mg._evaluate_c3((2, 4))
+    assert c3.met is False and "hearing stage 2 of 4" in c3.detail
+
+
+def test_c3_holds_at_the_final_stage() -> None:
+    c3 = mg._evaluate_c3((4, 4))
+    assert c3.met is True and c3.detail == "sensory schedule complete"
+
+
+def test_retired_min_lived_seconds_warns_once_and_is_ignored(caplog) -> None:
+    import logging
+
+    mg._MIN_LIVED_WARNED = False
+    with caplog.at_level(logging.WARNING, logger=mg.__name__):
+        first = mg.MaturationConfig.from_dict({"min_lived_seconds": 86400})
+        mg.MaturationConfig.from_dict({"min_lived_seconds": 100})
+    warnings = [r for r in caplog.records if "min_lived_seconds is retired" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "delete it from the configuration file" in warnings[0].getMessage()
+    assert not hasattr(first, "min_lived_seconds")
 
 
 # --- all three required -----------------------------------------------------
@@ -139,7 +162,7 @@ def test_all_conditions_required() -> None:
     assert set(r.passed_markers) == {
         "C1_regulation_baseline",
         "C2_reality_model_consolidated",
-        "C3_min_lived_time",
+        "C3_sensory_schedule_complete",
     }
 
 
@@ -152,7 +175,7 @@ def test_not_ready_keeps_developing() -> None:
         readiness_readout=None,
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=200.0,
+        sensory_schedule=(4, 4),
         config=cfg,
     )
     d = mg.decide_maturation(readiness=r, embodiment_ready=True)
@@ -232,7 +255,7 @@ def test_gate_only_reads_never_writes() -> None:
         readiness_readout=spy,
         sleep_count=6,
         consolidation_passes=4,
-        lived_seconds=200.0,
+        sensory_schedule=(4, 4),
         config=_cfg(),
     )
     assert r.ready is True

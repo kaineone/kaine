@@ -24,20 +24,21 @@ def test_stimulus_source_perception_feed():
             "stimulus_source": {
                 "heartbeat_bpm": 70.0,
                 "heartbeat_drift": 0.05,
-                "colour_ramp_seconds": 3600.0,
                 "colour_hue_gain": 1.0,
                 "maternal_voice_enabled": True,
                 "hearing_enabled": True,
-                "hearing_maturation_seconds": 43200.0,
+                "hearing_saturation_window_seconds": 600.0,
+                "hearing_min_dwell_seconds": 5400.0,
+                "hearing_max_dwell_seconds": 25200.0,
             },
         },
     )
     assert "stimulus source" in html
     assert "70.0 bpm base" in html
-    assert "ramp time constant 3600.0 s" in html
+    assert "follows the hearing stage" in html
     assert "maternal voice" in html
     assert "on" in html
-    assert "widens over 43200.0 s" in html
+    assert "window 600.0 s, dwell 5400.0 to 25200.0 s" in html
     assert 'id="feed-hearing-stage"' in html
 
 

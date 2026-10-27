@@ -40,7 +40,7 @@ The hearing module. In the [first configuration](#first-configuration) sound ent
 
 ### Awake time
 
-Entity time during which the entity is awake and the cycle is not frozen. The developmental phase's minimum is set in awake time; the config key keeps the older name `min_lived_seconds`. See [the developmental phase on one host](06-operation/development.md).
+Entity time during which the entity is awake and the cycle is not frozen. The hearing stage's dwell is counted in awake time, and the stage file keeps the total as `lived_seconds`. See [the developmental phase on one host](06-operation/development.md).
 
 ---
 

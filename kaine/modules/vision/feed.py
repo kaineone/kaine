@@ -90,7 +90,7 @@ class StimulusSourceSchedule:
     """Reproducible stimulus source video schedule.
 
     The rendered frame stream is a pure function of
-    ``(seed, frame_index, params, lived_seconds)``.  Only these knobs are kept;
+    ``(seed, frame_index, params, hearing stage)``.  Only these knobs are kept;
     no pixels persist.
     """
 
@@ -457,10 +457,10 @@ class StimulusSourceProceduralSource:
     the pulsing light is a cross-modal rhythmic drive, not a biological stimulus source
     feature (Notbohm 2016 vs Duecker 2021; Frontiers 2022).  The maternal hue/
     flow is the external mother's emotional weather (Feldman 2007).  Colour
-    saturation follows the biological sense-onset schedule (Hepper &
-    Shahidullah 1994; Teller / Bornstein).
+    saturation is k/5 in hearing stage k (paper A.7, Table A1), scaled by the
+    maternal-state hue gain.
 
-    Persists only ``(seed, schedule, params, clock, lived_seconds provider)``;
+    Persists only ``(seed, schedule, params, clock, hearing-stage provider)``;
     never a rendered frame.
     """
 
@@ -470,12 +470,12 @@ class StimulusSourceProceduralSource:
         *,
         params: StimulusSourceParams,
         clock: StimulusSourceClock,
-        lived_seconds: Callable[[], float],
+        hearing_stage: Callable[[], int],
     ) -> None:
         self._schedule = schedule
         self._params = params
         self._clock = clock
-        self._lived = lived_seconds
+        self._hearing_stage = hearing_stage
         self._opened = False
 
     @property
@@ -509,7 +509,7 @@ class StimulusSourceProceduralSource:
     ) -> Any:
         """Render ``frame(seed, i)`` as a BGR uint8 ndarray.
 
-        Pure function of ``(seed, frame_index, params, lived_seconds,
+        Pure function of ``(seed, frame_index, params, hearing stage,
         maturation_progress)``.
         """
         import colorsys
@@ -563,7 +563,7 @@ class StimulusSourceProceduralSource:
         # (Frontiers 2022), the heartbeat pulse fades, and colour saturation
         # rises to full.  The result is clipped to MATURATION_BLOOM_PEAK so the
         # bloom is bounded and cannot startle.
-        schedule_saturation = float(colour_saturation(self._lived(), p)) * float(
+        schedule_saturation = float(colour_saturation(self._hearing_stage())) * float(
             p.maternal_state_hue_gain
         )
         if maturation_progress is None:
@@ -588,7 +588,7 @@ class StimulusSourceProceduralSource:
         pulse = 1.0 + pulse_depth * beat_pulse(phase)
         luminance = np.clip(luminance * pulse, 0.0, 1.0)
 
-        # Colour onset schedule (Teller / Bornstein): near-grey early.
+        # Colour saturation by hearing stage: near-grey in stage 0.
         hue = maternal_hue(float(valence))
         r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         hue_rgb = np.array([r, g, b], dtype=np.float32)

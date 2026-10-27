@@ -163,7 +163,7 @@ The development panel appears while the entity is in the developmental phase or 
 - the gate decision and, with operator acknowledgement on, the acknowledgement control;
 - the hearing band's stage, for example "stage 1 of 4, 158.1 to 707.1 Hz", "below 707.1 Hz" once the lower edge is gone, or "open" at stage 4.
 
-In stimulus-source mode the perception feed panel lists the configured stimulus: the base heartbeat rate and its drift, the colour ramp's time constant and hue gain, whether the maternal voice is on, and the hearing band's span with its current stage. They are the configured values. The heartbeat drifts around its base rate with the simulated maternal state, and the panel does not show the rate of the moment. See [developmental phase](06-operation/development.md) for what each one does.
+In stimulus-source mode the perception feed panel lists the configured stimulus: the base heartbeat rate and its drift, the colour's hue gain (colour follows the hearing stage), whether the maternal voice is on, and the hearing band's saturation window and dwell bounds with its current stage. They are the configured values. The heartbeat drifts around its base rate with the simulated maternal state, and the panel does not show the rate of the moment. See [developmental phase](06-operation/development.md) for what each one does.
 
 ## Run identity and supervision
 

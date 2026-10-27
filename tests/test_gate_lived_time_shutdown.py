@@ -38,7 +38,6 @@ def _runner(
         bus=_make_bus(),
         config=MaturationConfig(
             enabled=True,
-            min_lived_seconds=86400,
             gate_cadence_seconds=3600,
         ),
         registry=_make_registry(),
@@ -188,7 +187,6 @@ async def test_no_write_before_boot_anchored() -> None:
         bus=bus,
         config=MaturationConfig(
             enabled=True,
-            min_lived_seconds=86400,
             gate_cadence_seconds=3600,
         ),
         registry=_make_registry(),

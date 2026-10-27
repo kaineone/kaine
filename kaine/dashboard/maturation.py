@@ -57,6 +57,7 @@ _DEVELOPMENT_KEYS = {
     "development_started_at",
     "born_at",
     "lived_seconds",
+    "sensory_schedule",
     "sleep_count",
     "consolidation_passes",
     "readiness",

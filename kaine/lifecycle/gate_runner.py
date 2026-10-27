@@ -124,6 +124,9 @@ class MaturationGateRunner:
         self._last_status: dict[str, Any] = {}
         # Reads the stimulus source clock; handed over by the cycle entrypoint.
         self._stimulus_source_seconds: Callable[[], float] | None = None
+        # Reads the hearing stage owner as (stage, final_stage); handed over
+        # by the cycle entrypoint. C3 fails closed without it.
+        self._sensory_schedule: Callable[[], tuple[int, int] | None] | None = None
 
     def set_pause_sources(
         self,
@@ -147,6 +150,21 @@ class MaturationGateRunner:
     def set_stimulus_source_clock(self, read: Callable[[], float] | None) -> None:
         """Hand over the stimulus source clock's reader, recorded in the stage file each tick and at shutdown."""
         self._stimulus_source_seconds = read
+
+    def set_sensory_schedule_source(
+        self, fn: Callable[[], tuple[int, int] | None] | None
+    ) -> None:
+        """Hand over the reader of the hearing stage owner, as ``(stage, final_stage)`` or ``None``; C3 reads it every evaluation."""
+        self._sensory_schedule = fn
+
+    def _read_sensory_schedule(self) -> tuple[int, int] | None:
+        if self._sensory_schedule is None:
+            return None
+        try:
+            return self._sensory_schedule()
+        except Exception:
+            log.debug("sensory schedule source raised; C3 reads no schedule", exc_info=True)
+            return None
 
     @property
     def stage(self) -> lifecycle_stage.StageState:
@@ -399,6 +417,8 @@ class MaturationGateRunner:
             "c2_consolidation_required": bool(faculties.sleep and faculties.world_model),
         }
 
+        schedule = self._read_sensory_schedule()
+
         def _set_status(
             *,
             readiness: Any = None,
@@ -409,6 +429,10 @@ class MaturationGateRunner:
             """Store a content-free status snapshot for Dashboard."""
             self._last_status = {
                 "lived_seconds": float(self._stage.lived_seconds or 0.0),
+                "sensory_schedule": (
+                    {"stage": schedule[0], "final_stage": schedule[1]}
+                    if schedule is not None else None
+                ),
                 "sleep_count": self._stage.sleep_count or 0,
                 "consolidation_passes": consolidation_passes,
                 "world": world,
@@ -464,13 +488,12 @@ class MaturationGateRunner:
         readiness_readout = await self._stimulus_source_readiness_readout()
         sleep_count = self._stage.sleep_count
         consolidation_passes = self._world_model_consolidation_passes()
-        lived_seconds = self._stage.lived_seconds
 
         readiness = evaluate_readiness(
             readiness_readout=readiness_readout,
             sleep_count=sleep_count,
             consolidation_passes=consolidation_passes,
-            lived_seconds=lived_seconds,
+            sensory_schedule=schedule,
             config=self._config,
             faculties=faculties,
         )

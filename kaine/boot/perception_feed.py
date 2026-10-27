@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from kaine.modules.vision.feed import StimulusSourceClock
 from kaine.bus.streams import PERCEPTION_FEED_SOURCE
 from kaine.entity_clock import EntityClock
+from kaine.storage import resolve as resolve_storage
 
 log = logging.getLogger(__name__)
 
@@ -134,6 +135,20 @@ def _shared_stimulus_source_objects(feed: dict[str, Any]) -> tuple[StimulusSourc
     return (StimulusSourceClock(lived_offset_seconds=resume), lambda: offset)
 
 
+def _shared_hearing_stage_state(feed: dict[str, Any]) -> Any:
+    """Return the installed hearing stage owner, or a fresh unpersisted one.
+
+    Only unit tests that build a factory without the install step get the
+    fresh one.
+    """
+    from kaine.modules.audition.hearing_stage_state import HearingStageState
+
+    state = feed.get("_hearing_stage_state")
+    if state is not None:
+        return state
+    return HearingStageState(_hearing_band_params(feed), path=None)
+
+
 def _install_shared_stimulus_source_clock(
     perception_feed: dict[str, Any],
     kaine_config: dict[str, Any] | None,
@@ -207,11 +222,28 @@ def _install_shared_stimulus_source_clock(
     perception_feed["_shared_stimulus_source_clock"] = clock
     perception_feed["_stimulus_source_lived_seconds"] = lived_provider
     perception_feed["_stimulus_source_unawake"] = unawake
+
+    # The single owner of the hearing stage. It drives the band, the colour
+    # saturation and the maturation gate even when the band is disabled.
+    from kaine.modules.audition.hearing_stage_state import HearingStageState
+
+    hearing_params = _hearing_band_params(perception_feed)
+    lp_floor = float(
+        ((kaine_config or {}).get("affect") or {}).get("learning_progress_floor", 0.20)
+    )
+    stage_file = Path(stage_path) if stage_path is not None else Path(_lifecycle_stage.STAGE_PATH)
+    hearing_state = HearingStageState.load(
+        hearing_params,
+        path=resolve_storage(stage_file).parent / "hearing_stage.json",
+        lp_floor=lp_floor,
+    )
+    perception_feed["_hearing_stage_state"] = hearing_state
     if kaine_config is not None:
         target = kaine_config.setdefault("perception_feed", {})
         target["_shared_stimulus_source_clock"] = clock
         target["_stimulus_source_lived_seconds"] = lived_provider
         target["_stimulus_source_unawake"] = unawake
+        target["_hearing_stage_state"] = hearing_state
 
 
 def bind_stimulus_source_unawake_source(kaine_config: dict[str, Any] | None, fn: Callable[[], float]) -> None:
@@ -523,11 +555,15 @@ def _build_perception_feed_video_factory(
             width=width,
             height=height,
         )
-        clock, lived = _shared_stimulus_source_objects(feed)
+        clock, _lived = _shared_stimulus_source_objects(feed)
+        hearing_state = _shared_hearing_stage_state(feed)
 
         def _stimulus_source_factory(device, *, width, height):  # noqa: ANN001
             return StimulusSourceProceduralSource(
-                schedule, params=params, clock=clock, lived_seconds=lived
+                schedule,
+                params=params,
+                clock=clock,
+                hearing_stage=lambda: hearing_state.stage,
             )
 
         return _stimulus_source_factory
@@ -737,6 +773,7 @@ def _build_perception_feed_audio_factory(
             frames_per_block=fpb,
         )
         clock, lived = _shared_stimulus_source_objects(feed)
+        hearing_state = _shared_hearing_stage_state(feed)
         voice_params = _maternal_voice_params(feed)
         voice = None
         if voice_params.enabled:
@@ -773,8 +810,9 @@ def _build_perception_feed_audio_factory(
             )
         if hearing.enabled:
             log.info(
-                "stimulus source: hearing band on (widens over %.0f s of awake time)",
-                hearing.maturation_seconds,
+                "stimulus source: hearing band on (stages advance on saturation, %.0f to %.0f s of awake time each)",
+                hearing.min_dwell_seconds,
+                hearing.max_dwell_seconds,
             )
         else:
             log.info(
@@ -783,7 +821,14 @@ def _build_perception_feed_audio_factory(
 
         def _stimulus_source_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
             return StimulusSourceProceduralAudioStream(
-                schedule, params=params, clock=clock, callback=callback, voice=voice, awake=lived, hearing=hearing
+                schedule,
+                params=params,
+                clock=clock,
+                callback=callback,
+                voice=voice,
+                awake=lived,
+                hearing=hearing,
+                hearing_stage=lambda: hearing_state.stage,
             )
 
         return _stimulus_source_factory

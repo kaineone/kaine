@@ -380,9 +380,11 @@ class StimulusSourceProceduralAudioStream:
     Gerhardt and Abrams 2000); without one the output is unchanged.
 
     When an enabled hearing band is given, the bed and the voice pass a
-    band-pass that widens over awake time in the order fetal hearing
-    matures (Hepper and Shahidullah 1994); without one, or with it
-    disabled, the output is unchanged.
+    band-pass that widens with the hearing stage in the order fetal hearing
+    matures (Hepper and Shahidullah 1994); the stage comes from the stage
+    owner (``hearing_stage``), not from the awake time. Without a band, or
+    with it disabled, the output is unchanged. The awake time is read only
+    for the maternal voice's unlock.
 
     Persists only ``(seed, schedule, params, clock)``; no PCM is written.
     """
@@ -402,6 +404,7 @@ class StimulusSourceProceduralAudioStream:
         voice: "MaternalVoiceLayer | None" = None,
         awake: Callable[[], float] | None = None,
         hearing: "HearingBandParams | None" = None,
+        hearing_stage: Callable[[], int] | None = None,
     ) -> None:
         self._schedule = schedule
         self._params = params
@@ -410,6 +413,7 @@ class StimulusSourceProceduralAudioStream:
         self._voice = voice
         self._awake = awake
         self._hearing = hearing if (hearing is not None and hearing.enabled) else None
+        self._hearing_stage = hearing_stage
         self._mix_cache: dict[int, "np.ndarray"] = {}
         self._mix_newest: int | None = None
         self._mix_lock = threading.Lock()
@@ -458,10 +462,16 @@ class StimulusSourceProceduralAudioStream:
 
     def _read_awake(self) -> float | None:
         """Return the current awake time, or ``None`` if no awake provider is set
-        or neither a voice nor an enabled hearing band is attached."""
-        if self._awake is None or (self._voice is None and self._hearing is None):
+        or no voice is attached (only the voice unlock uses the awake time)."""
+        if self._awake is None or self._voice is None:
             return None
         return float(self._awake())
+
+    def _read_stage(self) -> int:
+        """Return the stage owner's current hearing stage (0 with no provider)."""
+        if self._hearing_stage is None:
+            return 0
+        return int(self._hearing_stage())
 
     def _mix(self, block_index: int, awake: float) -> "np.ndarray":
         """Return the unfiltered float mix of ``block_index``."""
@@ -512,6 +522,7 @@ class StimulusSourceProceduralAudioStream:
                     k,
                     maturation_progress=self._clock.maturation_progress(),
                     awake_seconds=self._read_awake(),
+                    hearing_stage=self._read_stage() if self._hearing is not None else None,
                 )
             except Exception:
                 log.error(
@@ -598,14 +609,16 @@ class StimulusSourceProceduralAudioStream:
         *,
         maturation_progress: float | None = None,
         awake_seconds: float | None = None,
+        hearing_stage: int | None = None,
     ) -> bytes:
         """Synthesize the int16 LE PCM block at ``block_index``.
 
         Pure function of ``(seed, block_index, params, maturation_progress)``
         and, with a voice, of the awake time at each slot's first rendering.
         With an enabled hearing band the block is additionally a pure function
-        of the awake time and the voice plans, regardless of which blocks were
-        rendered before it.
+        of the hearing stage and the voice plans, regardless of which blocks
+        were rendered before it. ``hearing_stage`` defaults to the stage
+        provider's current stage (0 with no provider).
         """
         import numpy as np
 
@@ -629,8 +642,8 @@ class StimulusSourceProceduralAudioStream:
         else:
             from kaine.modules.audition.hearing_band import (
                 HEARING_BAND_TAPS,
-                band_edges,
                 band_taps,
+                stage_edges,
             )
 
             if awake_seconds is not None:
@@ -648,7 +661,8 @@ class StimulusSourceProceduralAudioStream:
             keep = n + HEARING_BAND_TAPS - 1
             x = x[-keep:]
 
-            low, high = band_edges(awake, self._hearing)
+            stage = hearing_stage if hearing_stage is not None else self._read_stage()
+            low, high = stage_edges(stage)
             taps = band_taps(low, high, float(max(1, s.sample_rate)))
             samples = np.convolve(x, taps, mode="valid")
 

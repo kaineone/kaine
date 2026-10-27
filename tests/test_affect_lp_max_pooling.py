@@ -376,3 +376,35 @@ async def test_hearing_stage_literals_match_publisher(bus):
     affect = Affect(bus)
     assert affect._hearing_stage_type == kaine.cycle.hearing_stage_watch.HEARING_STAGE_TYPE
     assert affect._development_stream == kaine.bus.streams.DEVELOPMENT_STREAM
+
+
+async def test_audition_learning_progress_gated_on_stage_and_window(bus):
+    t = [0.0]
+    affect = Affect(
+        bus,
+        clock=lambda: t[0],
+        publish_interval_s=1.0,
+        learning_progress_span_s=240.0,
+    )
+    # No stage seen yet: no reading, even for stage 0.
+    assert affect.audition_learning_progress(0) is None
+
+    await affect._handle_peer_event("development.out", _hearing(0, None))
+    # Stage seen but no audition window yet.
+    assert affect.audition_learning_progress(0) is None
+
+    await affect._handle_peer_event("audition.out", _audition(1.0))
+    for _ in range(240):
+        t[0] += 1.0
+        err = 0.5 if t[0] > 120.0 else 1.0
+        await affect._handle_peer_event("audition.out", _audition(err))
+        await affect._tick()
+    value = affect.audition_learning_progress(0)
+    assert value is not None and value > 0.0
+
+    # The watch moves to stage 1 first; the stale stage-0 reading is not served
+    # for stage 1 until the affect module has seen the event and restarted its bins.
+    assert affect.audition_learning_progress(1) is None
+    await affect._handle_peer_event("development.out", _hearing(1, 0))
+    assert affect.audition_learning_progress(1) is None
+    assert affect.audition_learning_progress(0) is None

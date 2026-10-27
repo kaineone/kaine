@@ -11,12 +11,12 @@ import pytest
 from kaine.modules.audition.hearing_band import (
     HEARING_BAND_STAGES,
     HEARING_BAND_TAPS,
+    HEARING_FINAL_STAGE,
     HEARING_TOP_TONE_HZ,
     HearingBandParams,
-    band_edges,
     band_frequency_response_db,
     band_taps,
-    hearing_stage,
+    stage_edges,
 )
 
 
@@ -36,80 +36,79 @@ def test_stage_edges_follow_tone_grid():
     assert HEARING_TOP_TONE_HZ == 3000.0
 
 
-def test_schedule_shape():
-    params = HearingBandParams(maturation_seconds=86400.0)
-    cases = [
-        (-5, 0),
-        (float("nan"), 0),
-        (float("inf"), 0),
-        (0, 0),
-        (21599.999, 0),
-        (21600, 1),
-        (43199.9, 1),
-        (43200, 2),
-        (64800, 3),
-        (86399.9, 3),
-        (86400, 4),
-        (10**7, 4),
-    ]
-    for awake, expected in cases:
-        assert hearing_stage(awake, params) == expected
+def test_stage_edges_per_stage_and_clamping():
+    assert HEARING_FINAL_STAGE == 4
+    for stage in range(5):
+        assert stage_edges(stage) == HEARING_BAND_STAGES[stage]
+    assert stage_edges(-3) == HEARING_BAND_STAGES[0]
+    assert stage_edges(99) == HEARING_BAND_STAGES[4]
+    assert stage_edges(True) == HEARING_BAND_STAGES[0]
+    assert stage_edges("2") == HEARING_BAND_STAGES[0]
+    assert stage_edges(2.0) == HEARING_BAND_STAGES[0]
+    assert stage_edges(None) == HEARING_BAND_STAGES[0]
 
-    W = params.maturation_seconds
-    low_edges = []
-    high_edges = []
-    times = []
-    for T in range(0, int(2 * W) + 1, 600):
-        low, high = band_edges(T, params)
-        times.append(T)
-        low_edges.append(low)
-        high_edges.append(high)
 
-    mapped_low = [0.0 if low is None else low for low in low_edges]
-    mapped_high = [math.inf if high is None else high for high in high_edges]
-    for i in range(1, len(times)):
+def test_edges_widen_with_stage():
+    mapped_low = [0.0 if low is None else low for low, _ in HEARING_BAND_STAGES]
+    mapped_high = [math.inf if high is None else high for _, high in HEARING_BAND_STAGES]
+    for i in range(1, 5):
         assert mapped_low[i] <= mapped_low[i - 1]
         assert mapped_high[i] >= mapped_high[i - 1]
 
-    low_hit_index = next(i for i, low in enumerate(low_edges) if low is None)
-    high_move_index = next(
-        i for i, high in enumerate(high_edges) if high != high_edges[0]
-    )
-    assert low_hit_index < high_move_index
-
 
 def test_from_section_defaults_and_validation():
-    assert HearingBandParams().maturation_seconds == 43200.0
+    defaults = HearingBandParams()
+    assert defaults.saturation_window_seconds == 600.0
+    assert defaults.min_dwell_seconds == 5400.0
+    assert defaults.max_dwell_seconds == 25200.0
 
-    default = HearingBandParams.from_section(None)
-    assert default.enabled is True
-    assert default.maturation_seconds == 43200.0
-
-    empty = HearingBandParams.from_section({})
-    assert empty.enabled is True
-    assert empty.maturation_seconds == 43200.0
+    for section in (None, {}):
+        parsed = HearingBandParams.from_section(section)
+        assert parsed == defaults
 
     configured = HearingBandParams.from_section(
-        {"enabled": False, "maturation_seconds": 3600}
+        {
+            "enabled": False,
+            "saturation_window_seconds": 60,
+            "min_dwell_seconds": 120,
+            "max_dwell_seconds": 600,
+        }
     )
-    assert configured.enabled is False
-    assert configured.maturation_seconds == 3600.0
+    assert configured == HearingBandParams(False, 60.0, 120.0, 600.0)
 
     invalid_sections = [
         {"enabled": 1},
-        {"maturation_seconds": True},
-        {"maturation_seconds": "x"},
-        {"maturation_seconds": float("nan")},
-        {"maturation_seconds": 59.0},
-        {"maturation_seconds": 2592001.0},
+        {"saturation_window_seconds": True},
+        {"min_dwell_seconds": "x"},
+        {"max_dwell_seconds": float("nan")},
+        {"max_dwell_seconds": float("inf")},
+        {"saturation_window_seconds": 0},
+        {"saturation_window_seconds": -1.0},
+        {"max_dwell_seconds": 2592001.0},
+        {"saturation_window_seconds": 6000.0},
+        {"min_dwell_seconds": 30000.0},
+        {"min_dwell_seconds": 100.0},
         {"unknown": 1},
     ]
     for section in invalid_sections:
         with pytest.raises(ValueError):
             HearingBandParams.from_section(section)
 
+    with pytest.raises(ValueError, match="saturation_window_seconds"):
+        HearingBandParams.from_section({"saturation_window_seconds": 0})
+
     with pytest.raises(ValueError):
         HearingBandParams.from_section([])
+
+
+def test_retired_maturation_seconds_is_ignored_with_warning(caplog):
+    with caplog.at_level("WARNING"):
+        parsed = HearingBandParams.from_section({"maturation_seconds": 3600})
+    assert parsed == HearingBandParams()
+    assert (
+        "[perception_feed.stimulus_source.hearing].maturation_seconds is retired and ignored"
+        in caplog.text
+    )
 
 
 def test_taps_unity_and_stopband():

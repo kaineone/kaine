@@ -57,7 +57,9 @@ def test_hearing_band_disabled():
 
 def test_hearing_band_config_is_validated():
     invalid = [
-        {"seed": 7, "stimulus_source": {"hearing": {"maturation_seconds": 10.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"min_dwell_seconds": 9000.0, "max_dwell_seconds": 4000.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"saturation_window_seconds": 9000.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"min_dwell_seconds": 0.0}}},
         {"seed": 7, "stimulus_source": {"hearing": {"bogus": 1}}},
         {"seed": 7, "stimulus_source": {"hearing": 3}},
     ]
@@ -73,15 +75,46 @@ def test_hearing_band_config_is_validated():
 
 
 def test_hearing_band_out_of_digest():
-    with_hearing = _stimulus_source_params({"stimulus_source": {"hearing": {"maturation_seconds": 3600.0}}})
+    with_hearing = _stimulus_source_params({"stimulus_source": {"hearing": {"min_dwell_seconds": 3600.0}}})
     without_hearing = _stimulus_source_params({"stimulus_source": {}})
     assert with_hearing == without_hearing
     assert stimulus_source_params_digest(with_hearing) == stimulus_source_params_digest(without_hearing)
 
 
-def test_hearing_band_maturation_seconds_reaches_stream():
-    stream = _make_stream({"seed": 7, "stimulus_source": {"hearing": {"maturation_seconds": 7200.0}}})
-    assert stream._hearing.maturation_seconds == 7200.0
+def test_hearing_band_dwell_bounds_reach_stream():
+    stream = _make_stream(
+        {
+            "seed": 7,
+            "stimulus_source": {
+                "hearing": {
+                    "saturation_window_seconds": 300.0,
+                    "min_dwell_seconds": 3600.0,
+                    "max_dwell_seconds": 7200.0,
+                }
+            },
+        }
+    )
+    assert stream._hearing.saturation_window_seconds == 300.0
+    assert stream._hearing.min_dwell_seconds == 3600.0
+    assert stream._hearing.max_dwell_seconds == 7200.0
+
+
+def test_retired_maturation_seconds_is_accepted_with_a_warning(caplog):
+    with caplog.at_level("WARNING"):
+        stream = _make_stream({"seed": 7, "stimulus_source": {"hearing": {"maturation_seconds": 7200.0}}})
+    assert stream._hearing == HearingBandParams()
+    assert any("maturation_seconds is retired and ignored" in r.getMessage() for r in caplog.records)
+
+
+def test_stream_reads_the_installed_stage_owner():
+    from kaine.modules.audition.hearing_stage_state import HearingStageState
+
+    state = HearingStageState(HearingBandParams(), path=None)
+    feed = {"seed": 7, "stimulus_source": {}, "_hearing_stage_state": state}
+    stream = _make_stream(feed)
+    assert stream._read_stage() == 0
+    state._stage = 3
+    assert stream._read_stage() == 3
 
 
 def test_hearing_band_needs_sample_rate():

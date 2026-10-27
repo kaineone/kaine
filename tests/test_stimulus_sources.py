@@ -74,7 +74,7 @@ def test_video_deterministic_and_shape() -> None:
         schedule,
         params=StimulusSourceParams(),
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     f0 = src.frame_at(0)
     f0b = src.frame_at(0)
@@ -91,7 +91,7 @@ def test_video_luminance_mean_and_pulse() -> None:
         schedule,
         params=params,
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
 
     onset_i = next(
@@ -111,28 +111,27 @@ def test_video_luminance_mean_and_pulse() -> None:
     assert onset_mean > mid_mean
 
 
-def test_video_colour_saturation_ramp() -> None:
-    tau = StimulusSourceParams().colour_ramp_seconds
+def test_video_colour_saturation_follows_the_hearing_stage() -> None:
     clock_grey = StimulusSourceClock(lived_offset_seconds=0.0, clock=lambda: 0.0)
 
     src_grey = StimulusSourceProceduralSource(
         StimulusSourceSchedule(seed=7, width=64, height=48),
         params=StimulusSourceParams(),
         clock=clock_grey,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
-    calls: list[float] = []
+    calls: list[int] = []
 
-    def lived() -> float:
-        calls.append(3.0 * tau)
-        return 3.0 * tau
+    def stage() -> int:
+        calls.append(4)
+        return 4
 
     clock_rich = StimulusSourceClock(lived_offset_seconds=0.0, clock=lambda: 0.0)
     src_rich = StimulusSourceProceduralSource(
         StimulusSourceSchedule(seed=7, width=64, height=48),
         params=StimulusSourceParams(),
         clock=clock_rich,
-        lived_seconds=lived,
+        hearing_stage=stage,
     )
 
     grey = src_grey.frame_at(10)
@@ -143,7 +142,7 @@ def test_video_colour_saturation_ramp() -> None:
 
     assert mean_channel_spread(grey) < 0.005
     assert mean_channel_spread(rich) > 0.02
-    assert calls == [3.0 * tau]
+    assert calls == [4]
 
 
 def test_video_open_read_release_protocol() -> None:
@@ -153,7 +152,7 @@ def test_video_open_read_release_protocol() -> None:
         schedule,
         params=StimulusSourceParams(),
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     opened = src.open()
     assert opened is True
@@ -174,7 +173,7 @@ def test_video_read_fake_clock() -> None:
         schedule,
         params=StimulusSourceParams(),
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     src.open()
     ok, frame = src.read()
@@ -186,11 +185,57 @@ def test_video_read_fake_clock() -> None:
     assert np.array_equal(frame2, expected)
 
 
-def test_video_constructor_requires_clock_and_lived_seconds() -> None:
+def test_video_chroma_rises_with_each_hearing_stage_for_the_same_maternal_state() -> None:
+    schedule = StimulusSourceSchedule(seed=7, width=64, height=48)
+    params = StimulusSourceParams()
+    stage = {"value": 0}
+    src = StimulusSourceProceduralSource(
+        schedule,
+        params=params,
+        clock=StimulusSourceClock(lived_offset_seconds=0.0, clock=lambda: 0.0),
+        hearing_stage=lambda: stage["value"],
+    )
+
+    def spread(img: np.ndarray) -> float:
+        return float(np.mean(np.std(img / 255.0, axis=2)))
+
+    spreads = []
+    for k in range(5):
+        stage["value"] = k
+        spreads.append(spread(src.frame_at(10)))
+    assert spreads[0] < 0.005
+    assert all(b > a for a, b in zip(spreads, spreads[1:]))
+    assert spreads[4] > spreads[0]
+
+
+def test_video_schedule_saturation_is_stage_over_five_times_hue_gain(monkeypatch) -> None:
+    seen: list[float] = []
+    import kaine.modules.stimulus_source_signal as sig
+
+    real = sig.colour_saturation
+
+    def spy(stage):
+        value = real(stage)
+        seen.append(value)
+        return value
+
+    monkeypatch.setattr(sig, "colour_saturation", spy)
+    for k in range(5):
+        src = StimulusSourceProceduralSource(
+            StimulusSourceSchedule(seed=1, width=16, height=12),
+            params=StimulusSourceParams(),
+            clock=StimulusSourceClock(lived_offset_seconds=0.0, clock=lambda: 0.0),
+            hearing_stage=lambda k=k: k,
+        )
+        src.frame_at(0)
+    assert seen == [0.0, 0.2, 0.4, 0.6, 0.8]
+
+
+def test_video_constructor_requires_clock_and_hearing_stage() -> None:
     schedule = StimulusSourceSchedule(seed=1, width=32, height=24)
     with pytest.raises(TypeError):
         StimulusSourceProceduralSource(
-            schedule, params=StimulusSourceParams(), lived_seconds=lambda: 0.0
+            schedule, params=StimulusSourceParams(), hearing_stage=lambda: 0
         )
     with pytest.raises(TypeError):
         StimulusSourceProceduralSource(
@@ -228,7 +273,7 @@ def test_cross_modal_beat_alignment() -> None:
             video_schedule,
             params=params,
             clock=clock,
-            lived_seconds=lambda: 0.0,
+            hearing_stage=lambda: 0,
         )
         src.open()
         _, frame = src.read()
@@ -267,7 +312,7 @@ def test_lived_offset_continues_across_boots() -> None:
         schedule,
         params=params,
         clock=clock,
-        lived_seconds=lambda: L + e,
+        hearing_stage=lambda: 0,
     )
     frame = src.frame_at(int((L + e) * schedule.frame_rate_hz))
 
@@ -276,7 +321,7 @@ def test_lived_offset_continues_across_boots() -> None:
         schedule,
         params=params,
         clock=clock0,
-        lived_seconds=lambda: e,
+        hearing_stage=lambda: 0,
     )
     frame0 = src0.frame_at(int(e * schedule.frame_rate_hz))
 
@@ -449,7 +494,7 @@ def test_zero_persistence_no_artifacts(tmp_path, monkeypatch) -> None:
             StimulusSourceSchedule(seed=42, width=64, height=48),
             params=StimulusSourceParams(),
             clock=clock,
-            lived_seconds=lambda: 0.0,
+            hearing_stage=lambda: 0,
         )
         audio = StimulusSourceProceduralAudioStream(
             StimulusSourceAudioSchedule(seed=42),
@@ -505,7 +550,7 @@ def test_stimulus_source_is_cpu_only_and_torch_free() -> None:
         "from kaine.modules.stimulus_source_signal import StimulusSourceParams\n"
         "c = StimulusSourceClock(lived_offset_seconds=0.0)\n"
         "v = StimulusSourceProceduralSource(StimulusSourceSchedule(width=32, height=24), params=StimulusSourceParams(),"
-        " clock=c, lived_seconds=lambda: 0.0)\n"
+        " clock=c, hearing_stage=lambda: 0)\n"
         "v.frame_at(0)\n"
         "a = StimulusSourceProceduralAudioStream(StimulusSourceAudioSchedule(), params=StimulusSourceParams(), clock=c,"
         " callback=lambda b: None)\n"
@@ -522,8 +567,8 @@ def test_stimulus_source_is_cpu_only_and_torch_free() -> None:
 
 def test_no_entity_state_feeds_the_stimulus_source() -> None:
     # The stimulus source is external: its only inputs are the seed, the parameters, the
-    # shared stimulus source clock and lived time (for the colour-onset schedule and
-    # the maternal voice's repertoire unlocking and the hearing band only).
+    # shared stimulus source clock, the hearing stage (for the colour schedule and the
+    # hearing band) and lived time (for the maternal voice's repertoire unlocking only).
     # Nothing from the entity's affect, workspace or modules may reach it.
     import ast
     import importlib.util
@@ -531,10 +576,11 @@ def test_no_entity_state_feeds_the_stimulus_source() -> None:
     from pathlib import Path
 
     assert list(inspect.signature(StimulusSourceProceduralSource.__init__).parameters) == [
-        "self", "schedule", "params", "clock", "lived_seconds",
+        "self", "schedule", "params", "clock", "hearing_stage",
     ]
     assert list(inspect.signature(StimulusSourceProceduralAudioStream.__init__).parameters) == [
         "self", "schedule", "params", "clock", "callback", "voice", "awake", "hearing",
+        "hearing_stage",
     ]
     spec = importlib.util.find_spec("kaine.modules.stimulus_source_signal")
     assert spec is not None and spec.origin is not None
@@ -553,7 +599,7 @@ def test_video_read_marks_delivery() -> None:
         StimulusSourceSchedule(seed=1, width=16, height=12),
         params=StimulusSourceParams(),
         clock=clock,
-        lived_seconds=lambda: 0.0,
+        hearing_stage=lambda: 0,
     )
     assert clock.last_delivery("video") is None
     src.open()

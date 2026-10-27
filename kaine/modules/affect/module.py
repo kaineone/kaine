@@ -404,6 +404,22 @@ class Affect(BaseModule):
                 )
             self._hearing_stage = stage
 
+    def audition_learning_progress(self, stage: int) -> float | None:
+        """Return audition's windowed learning progress for hearing ``stage``, else None.
+
+        None until this module has seen the matching ``development.hearing_stage``
+        event and holds an audition window with a value. That gates out the
+        stale pre-restart reading in the interval between the hearing stage
+        watch advancing the stage and this module restarting its audition bins
+        on the event.
+        """
+        if self._hearing_stage != stage:
+            return None
+        window = self._lp_windows.get("audition")
+        if window is None:
+            return None
+        return window.value(self._clock())
+
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
 

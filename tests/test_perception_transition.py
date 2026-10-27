@@ -309,7 +309,7 @@ def test_maturation_field_is_the_stimulus_source_bloom_peak_at_the_recorded_time
     schedule = StimulusSourceSchedule(seed=7, width=STIMULUS_SOURCE_W, height=STIMULUS_SOURCE_H)
     stimulus_source = StimulusSourceProceduralSource(
         schedule, params=params,
-        clock=StimulusSourceClock(lived_offset_seconds=5000.0), lived_seconds=lambda: 5000.0,
+        clock=StimulusSourceClock(lived_offset_seconds=5000.0), hearing_stage=lambda: 0,
     )
     i_maturation = math.floor(5003.2 * schedule.frame_rate_hz)
     assert np.array_equal(field, stimulus_source.frame_at(i_maturation, maturation_progress=1.0))

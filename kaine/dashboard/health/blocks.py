@@ -377,13 +377,11 @@ def perception_feed_block(
             params = _stimulus_source_params(feed)
             summary["heartbeat_bpm"] = float(params.heartbeat_bpm)
             summary["heartbeat_drift"] = float(params.heartbeat_drift)
-            summary["colour_ramp_seconds"] = float(params.colour_ramp_seconds)
             summary["colour_hue_gain"] = float(params.maternal_state_hue_gain)
         except Exception:
             log.debug("stimulus_source params read failed", exc_info=True)
             summary["heartbeat_bpm"] = None
             summary["heartbeat_drift"] = None
-            summary["colour_ramp_seconds"] = None
             summary["colour_hue_gain"] = None
 
         try:
@@ -398,11 +396,17 @@ def perception_feed_block(
             from kaine.boot.perception_feed import _hearing_band_params
             hearing = _hearing_band_params(feed)
             summary["hearing_enabled"] = bool(hearing.enabled)
-            summary["hearing_maturation_seconds"] = float(hearing.maturation_seconds)
+            summary["hearing_min_dwell_seconds"] = float(hearing.min_dwell_seconds)
+            summary["hearing_max_dwell_seconds"] = float(hearing.max_dwell_seconds)
+            summary["hearing_saturation_window_seconds"] = float(
+                hearing.saturation_window_seconds
+            )
         except Exception:
             log.debug("hearing_band params read failed", exc_info=True)
             summary["hearing_enabled"] = None
-            summary["hearing_maturation_seconds"] = None
+            summary["hearing_min_dwell_seconds"] = None
+            summary["hearing_max_dwell_seconds"] = None
+            summary["hearing_saturation_window_seconds"] = None
 
         return summary
 
