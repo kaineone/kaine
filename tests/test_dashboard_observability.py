@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -261,34 +260,9 @@ def test_welfare_section_no_data(tmp_path):
     from kaine.evaluation.dashboard_tab import _aggregate
 
     cfg = _eval_config(tmp_path)
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     assert "welfare" in result
     assert result["welfare"]["source"] == "none"
-
-
-def test_welfare_section_from_live_registry(tmp_path):
-    from kaine.evaluation.dashboard_tab import _aggregate
-
-    cfg = _eval_config(tmp_path)
-
-    # Build a stub welfare observer.
-    wo = MagicMock()
-    wo.unmaintained_fatigue_count = 2
-    wo.sustained_extreme_vad_count = 1
-    wo.replay_overload_count = 0
-    wo.sustained_interoceptive_distress_count = 3
-
-    registry = MagicMock()
-    registry.welfare_observer = wo
-    registry.prediction_error_observer = None
-
-    result = _aggregate(cfg, attribution=None, registry=registry)
-    w = result["welfare"]
-    assert w["source"] == "live"
-    assert w["unmaintained_fatigue"] == 2
-    assert w["sustained_extreme_vad"] == 1
-    assert w["replay_overload"] == 0
-    assert w["sustained_interoceptive_distress"] == 3
 
 
 def test_welfare_section_from_jsonl(tmp_path):
@@ -307,7 +281,7 @@ def test_welfare_section_from_jsonl(tmp_path):
         }) + "\n"
     )
 
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     w = result["welfare"]
     assert w["source"] == "jsonl"
     assert w["unmaintained_fatigue"] == 3
@@ -317,27 +291,8 @@ def test_prediction_error_section_no_data(tmp_path):
     from kaine.evaluation.dashboard_tab import _aggregate
 
     cfg = _eval_config(tmp_path)
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     assert result["prediction_error"]["source"] == "none"
-
-
-def test_prediction_error_section_from_live_registry(tmp_path):
-    from kaine.evaluation.dashboard_tab import _aggregate
-
-    cfg = _eval_config(tmp_path)
-
-    pe_obs = MagicMock()
-    pe_obs.event_counts = {"interoception.out": 10, "sequence.out": 5}
-    pe_obs._stats_for_source.return_value = {"n": 10, "mean": 0.05, "p95": 0.12, "p99": 0.18}
-
-    registry = MagicMock()
-    registry.welfare_observer = None
-    registry.prediction_error_observer = pe_obs
-
-    result = _aggregate(cfg, attribution=None, registry=registry)
-    pe = result["prediction_error"]
-    assert pe["source"] == "live"
-    assert pe["event_counts"]["interoception.out"] == 10
 
 
 def test_prediction_error_section_from_jsonl(tmp_path):
@@ -356,7 +311,7 @@ def test_prediction_error_section_from_jsonl(tmp_path):
         }) + "\n"
     )
 
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     pe = result["prediction_error"]
     assert pe["source"] == "jsonl"
     assert pe["per_source"]["interoception.out"]["n"] == 32
@@ -366,7 +321,7 @@ def test_coherence_section_no_data(tmp_path):
     from kaine.evaluation.dashboard_tab import _aggregate
 
     cfg = _eval_config(tmp_path)
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     assert result["coherence"]["source"] == "none"
 
 
@@ -384,7 +339,7 @@ def test_coherence_section_from_jsonl(tmp_path):
         }) + "\n"
     )
 
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     coh = result["coherence"]
     assert coh["source"] == "jsonl"
     assert coh["n"] == 1
@@ -395,18 +350,18 @@ def test_individuation_section_absent(tmp_path):
     from kaine.evaluation.dashboard_tab import _aggregate
 
     cfg = _eval_config(tmp_path)
-    result = _aggregate(cfg, attribution=None, registry=None)
+    result = _aggregate(cfg, attribution=None)
     assert result["individuation"] is None
 
 
 # ---------------------------------------------------------------------------
-# Section 4 (HTTP) — evaluation router accepts optional registry param
+# Section 4 (HTTP) — evaluation router mounts without a sidecar registry
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_evaluation_router_accepts_registry_param(tmp_path):
-    """build_evaluation_router must accept registry= without error."""
+async def test_evaluation_router_mounts_without_registry(tmp_path):
+    """build_evaluation_router mounts with attribution only."""
     import httpx
     from fastapi import FastAPI
 
@@ -414,7 +369,7 @@ async def test_evaluation_router_accepts_registry_param(tmp_path):
 
     cfg = _eval_config(tmp_path)
     app = FastAPI()
-    app.include_router(build_evaluation_router(cfg, attribution=None, registry=None))
+    app.include_router(build_evaluation_router(cfg, attribution=None))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
@@ -436,7 +391,7 @@ async def test_evaluation_summary_welfare_no_data_field(tmp_path):
 
     cfg = _eval_config(tmp_path)
     app = FastAPI()
-    app.include_router(build_evaluation_router(cfg, attribution=None, registry=None))
+    app.include_router(build_evaluation_router(cfg, attribution=None))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
@@ -453,7 +408,7 @@ async def test_evaluation_summary_welfare_no_data_field(tmp_path):
 
 
 def test_coherence_absent_produces_no_error(tmp_path):
-    """With no coherence JSONL and no registry, _aggregate_coherence returns no-data."""
+    """With no coherence JSONL, _aggregate_coherence returns no-data."""
     from kaine.evaluation.dashboard_tab import _aggregate_coherence
 
     result = _aggregate_coherence(Path(tmp_path / "nonexistent"))
@@ -464,7 +419,7 @@ def test_coherence_absent_produces_no_error(tmp_path):
 def test_welfare_absent_produces_no_error(tmp_path):
     from kaine.evaluation.dashboard_tab import _aggregate_welfare
 
-    result = _aggregate_welfare(Path(tmp_path / "nonexistent"), registry=None)
+    result = _aggregate_welfare(Path(tmp_path / "nonexistent"))
     assert result["source"] == "none"
 
 
@@ -1528,3 +1483,92 @@ def test_welfare_block_reads_encrypted_lines(tmp_path, monkeypatch):
     assert block["source"] == "jsonl"
     assert block["blind_sensors"] == ["vision"]
     assert block["blind_sensor_advisories"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Welfare counts honour restart resets; the tab reads the cycle's rollups
+# ---------------------------------------------------------------------------
+
+
+def _write_welfare_lines(tmp_path, lines):
+    welfare_dir = Path(tmp_path) / "welfare"
+    welfare_dir.mkdir(parents=True, exist_ok=True)
+    (welfare_dir / "welfare-2026-06-01.jsonl").write_text(
+        "".join(json.dumps(line) + "\n" for line in lines)
+    )
+
+
+def _count_line(n):
+    return {"ts": "t", "gray_zone_event": "unmaintained_fatigue", "unmaintained_fatigue_count": n}
+
+
+def test_welfare_counts_count_five_reset_zero_gives_zero(tmp_path):
+    from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+
+    _write_welfare_lines(
+        tmp_path, [_count_line(5), {"ts": "t", "advisory": "reset"}, _count_line(0)]
+    )
+    counts = welfare_counts_from_jsonl(tmp_path)
+    assert counts["unmaintained_fatigue"] == 0
+    assert counts["source"] == "jsonl"
+
+
+def test_welfare_counts_reset_with_no_later_record_gives_zero(tmp_path):
+    from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+
+    _write_welfare_lines(tmp_path, [_count_line(5), {"ts": "t", "advisory": "reset"}])
+    assert welfare_counts_from_jsonl(tmp_path)["unmaintained_fatigue"] == 0
+
+
+def test_welfare_counts_use_only_records_after_the_latest_reset(tmp_path):
+    from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+
+    reset = {"ts": "t", "advisory": "reset"}
+    _write_welfare_lines(
+        tmp_path,
+        [_count_line(9), reset, _count_line(4), reset, _count_line(1), _count_line(2)],
+    )
+    assert welfare_counts_from_jsonl(tmp_path)["unmaintained_fatigue"] == 2
+
+
+def test_welfare_counts_without_a_reset_take_the_maximum(tmp_path):
+    from kaine.experiment.welfare_counts import welfare_counts_from_jsonl
+
+    _write_welfare_lines(tmp_path, [_count_line(3), _count_line(7), _count_line(5)])
+    assert welfare_counts_from_jsonl(tmp_path)["unmaintained_fatigue"] == 7
+
+
+def test_evaluation_tab_welfare_honours_reset(tmp_path):
+    from kaine.evaluation.dashboard_tab import _aggregate
+
+    cfg = _eval_config(tmp_path)
+    _write_welfare_lines(
+        Path(cfg.paths.evaluation_logs),
+        [_count_line(5), {"ts": "t", "advisory": "reset"}, _count_line(0)],
+    )
+    w = _aggregate(cfg, attribution=None)["welfare"]
+    assert w["unmaintained_fatigue"] == 0
+    assert w["source"] == "jsonl"
+
+
+def test_evaluation_tab_takes_no_registry_and_never_reports_live(tmp_path):
+    import inspect
+
+    from kaine.evaluation import dashboard_tab
+
+    for fn in (
+        dashboard_tab._aggregate,
+        dashboard_tab.aggregate_evaluation_metrics,
+        dashboard_tab.build_evaluation_router,
+    ):
+        assert "registry" not in inspect.signature(fn).parameters
+    cfg = _eval_config(tmp_path)
+    result = dashboard_tab._aggregate(cfg, attribution=None)
+    assert result["welfare"]["source"] != "live"
+    assert result["prediction_error"]["source"] != "live"
+
+
+def test_dashboard_entrypoint_builds_no_sidecar_registry():
+    import kaine.dashboard.__main__ as dash_main
+
+    assert "SidecarRegistry" not in Path(dash_main.__file__).read_text(encoding="utf-8")

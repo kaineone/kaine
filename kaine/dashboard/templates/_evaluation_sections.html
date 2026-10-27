@@ -249,7 +249,7 @@
       <h2>Welfare (Gray-Zone) — §5.5 events</h2>
       {% set w = metrics.welfare %}
       {% if w and w.source != "none" %}
-        <p class="muted">Source: {{ w.source }}</p>
+        <p class="muted">Counted since the welfare observer last started, from its rollup under data/evaluation/welfare/ ({{ w.source }}).</p>
         <dl class="kv">
           <dt>unmaintained fatigue crossings</dt>
           <dd>{{ w.unmaintained_fatigue if w.unmaintained_fatigue is not none else "—" }}</dd>
@@ -269,7 +269,7 @@
       <h2>Prediction error (per-source sliding window)</h2>
       {% set pe = metrics.prediction_error %}
       {% if pe and pe.source != "none" %}
-        <p class="muted">Source: {{ pe.source }}</p>
+        <p class="muted">Latest entry of the prediction-error observer's rollup under data/evaluation/prediction_error/ ({{ pe.source }}).</p>
         <div class="table-wrap">
         <table>
           <thead><tr><th>stream</th><th>n</th><th>mean</th><th>p95</th><th>p99</th><th>total events</th></tr></thead>
