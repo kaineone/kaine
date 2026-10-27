@@ -1729,6 +1729,17 @@ prediction_error = true
 welfare = true
 planning_policy = true
 
+[evaluation.welfare]
+# The sustained-distress rule, read by BOTH detectors: the sidecar welfare observer
+# and the protective monitor under [preservation.welfare_response]. The old
+# distress_threshold and distress_duration_s keys in that table are still accepted:
+# a value that agrees logs a boot warning, and a value that disagrees refuses the
+# boot while the response is enabled.
+# prediction_error magnitude at/above which distress is counted, and how long it
+# must be sustained continuously.
+interoceptive_distress_threshold = 0.8
+interoceptive_distress_duration_s = 30.0
+
 
 [individuation]
 # Individuation producer: periodically and privately assesses how much the entity
@@ -1894,17 +1905,18 @@ poll_interval_s = 1.0
 # "end" (preserve then signal the run to stop), or "notify" (preserve, record a
 # flagged event, and continue). Per the operator, DEFAULT is preserve+pause.
 action = "pause"
-# prediction_error magnitude at/above which distress is counted, and how long it
-# must be sustained continuously before the protective action fires (matches the
-# welfare observer's interoceptive-distress defaults).
-distress_threshold = 0.8
-distress_duration_s = 30.0
+# The sustained-distress threshold and duration come from [evaluation.welfare]
+# (interoceptive_distress_threshold, interoceptive_distress_duration_s), shared
+# with the welfare observer. The old distress_threshold and distress_duration_s
+# keys are still accepted here: a value that agrees logs a boot warning, a value
+# that disagrees refuses the boot while the response is enabled.
 # The "repeated within a window" arm: this many episodes within repeat_window_s
 # also crosses the threshold. Episodes counted are BOTH sustained interoceptive-
 # distress crossings AND welfare.gray_zone events (any of the four categories:
 # replay_overload, unmaintained_fatigue, sustained_extreme_vad,
 # sustained_interoceptive_distress) published by the sidecar welfare observer on
-# welfare.out — so the protective response covers all four categories.
+# welfare.out, so the protective response covers all four categories. One
+# sustained-distress episode counts once, even though both detectors report it.
 repeat_window_s = 300.0
 repeat_threshold = 3
 # Cold-start warm-up: warm-up counts unfrozen time, with a wall-time cap of

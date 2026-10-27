@@ -447,6 +447,10 @@ class WelfareObserver(StreamSubscriberObserver):
         self._sustained_extreme_vad_count: int = 0
         self._replay_overload_count: int = 0
         self._sustained_interoceptive_distress_count: int = 0
+        # Event time of the first at/above-threshold sample of the open distress
+        # episode. Published with the gray-zone event as ``episode_onset_ts`` so
+        # the protective monitor counts one episode once.
+        self._distress_onset_ts: float | None = None
 
         # --- State for (a): unmaintained fatigue. ---
         # Unfrozen-clock time when fatigue threshold was most recently crossed.
@@ -865,6 +869,11 @@ class WelfareObserver(StreamSubscriberObserver):
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "gray_zone_event": "sustained_interoceptive_distress",
                 "seconds_sustained": seconds_sustained,
+                **(
+                    {"episode_onset_ts": self._distress_onset_ts}
+                    if self._distress_onset_ts is not None
+                    else {}
+                ),
                 "interoceptive_distress_threshold": self._interoceptive_distress_threshold,
                 "interoceptive_distress_duration_s": self._interoceptive_distress_duration_s,
                 "sustained_interoceptive_distress_count": self._sustained_interoceptive_distress_count,
@@ -912,6 +921,8 @@ class WelfareObserver(StreamSubscriberObserver):
             # Pass both clocks so frozen time after the last sample is not
             # counted, but samples that keep arriving during a freeze sustain
             # the wall-time portion of the run.
+            if self._interoceptive_distress.active_since is None:
+                self._distress_onset_ts = self._event_timestamp_seconds(event)
             if self._interoceptive_distress.observe(magnitude, now, wall_now=wall_now):
                 await self._emit_sustained_interoceptive_distress(
                     self._interoceptive_distress.last_fire_elapsed

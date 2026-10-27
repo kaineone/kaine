@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from kaine import legacy_aliases
+from kaine.boot.errors import ConfigurationError
 from kaine.bus.schema import validate_event
 from kaine.config import require_known_keys
 from kaine.cycle import control_state
@@ -75,6 +76,8 @@ def _map_arms(arms: list[Any]) -> frozenset[str]:
 _MONITOR_OUT_SALIENCE = 0.5
 _INTEROCEPTION_STREAM = "interoception.out"
 _WELFARE_STREAM = "welfare.out"
+# Most recent distress episodes remembered for counting each once.
+_COUNTED_EPISODES_MAX = 256
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +197,10 @@ class WelfareResponseConfig:
     min_interval_s: float = 1800.0
     out_root: str = "backups"
     entity_name: str = "kaine"
+    # The legacy duplicate sustained-distress keys the operator set in this
+    # table. The canonical source is ``[evaluation.welfare]``; see
+    # :meth:`adopt_sustained_distress`.
+    legacy_distress_keys: frozenset[str] = frozenset()
 
     _ACTIONS = ("pause", "end", "notify")
 
@@ -233,7 +240,51 @@ class WelfareResponseConfig:
             min_interval_s=float(section.get("min_interval_s", 1800.0)),
             out_root=str(section.get("out_root", "backups")),
             entity_name=str(section.get("entity_name", "kaine")),
+            legacy_distress_keys=frozenset(
+                key
+                for key in ("distress_threshold", "distress_duration_s")
+                if key in section
+            ),
         )
+
+    def adopt_sustained_distress(self, threshold: float, duration_s: float) -> None:
+        """Take the sustained-distress parameters from ``[evaluation.welfare]``.
+
+        The sidecar welfare observer and this monitor detect the same
+        sustained distress, so they read one source:
+        ``[evaluation.welfare].interoceptive_distress_threshold`` and
+        ``interoceptive_distress_duration_s``. The old keys in this table are
+        still accepted. A key that agrees with the canonical value logs a
+        warning; a key that disagrees raises ``ConfigurationError`` while the
+        response is enabled (a disabled response never acts on the value).
+        """
+        canonical = {
+            "distress_threshold": (
+                float(threshold),
+                "interoceptive_distress_threshold",
+            ),
+            "distress_duration_s": (
+                float(duration_s),
+                "interoceptive_distress_duration_s",
+            ),
+        }
+        for key in sorted(self.legacy_distress_keys):
+            value, canonical_key = canonical[key]
+            if float(getattr(self, key)) != value and self.enabled:
+                raise ConfigurationError(
+                    f"[preservation.welfare_response].{key} = {getattr(self, key)} "
+                    f"disagrees with [evaluation.welfare].{canonical_key} = {value}. "
+                    f"Both detectors read [evaluation.welfare].{canonical_key}; "
+                    f"remove [preservation.welfare_response].{key}."
+                )
+            log.warning(
+                "[preservation.welfare_response].%s is deprecated; both detectors "
+                "now read [evaluation.welfare].%s. Remove it.",
+                key,
+                canonical_key,
+            )
+        self.distress_threshold = float(threshold)
+        self.distress_duration_s = float(duration_s)
 
 
 @dataclass
@@ -714,6 +765,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._repeat = WindowedEventCounter(
             window_s=config.repeat_window_s, threshold=config.repeat_threshold
         )
+        # One sustained-distress episode is seen by two detectors: this monitor's
+        # own tracker and the welfare observer's, which publishes it as a
+        # welfare.gray_zone event. An episode is identified by the event time of
+        # its first at/above-threshold sample, which both detectors read from the
+        # same interoception.report, and counts once toward the repeat window
+        # whichever detector reports it first.
+        self._distress_onset_ts: float | None = None
+        self._counted_episodes: dict[float, None] = {}
         # Latch: once a humane action has been taken, do not re-fire (the run is
         # being paused/ended; preserving again every poll would be noise).
         self._acted = False
@@ -777,6 +836,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Clear any partial onset so warm-up transients never carry over.
         self._distress.reset()
         self._repeat.reset()
+        self._counted_episodes.clear()
         if seen:
             await self._record(
                 {
@@ -859,13 +919,15 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             magnitude = float(raw)
             u_now = self._unfrozen.now()
             now = self._clock()
+            if self._distress.active_since is None:
+                self._distress_onset_ts = self._event_ts(event)
             if self._distress.observe(magnitude, u_now, wall_now=now):
                 reason = "sustained_distress"
                 # A sustained episode also counts toward the repeat window. A
                 # windowed-repeat crossing reclassifies as "repeated_distress"
                 # (record's side effect — appending this episode to the window —
                 # must happen regardless of the resulting classification).
-                if self._repeat.record(now):
+                if self._count_episode(self._distress_onset_ts, now):
                     reason = "repeated_distress"
                 reasons.append(reason)
         if last_scanned is not None:
@@ -876,7 +938,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             now = self._clock()
             if self._distress.check_timeout(u_now):
                 reason = "sustained_distress"
-                if self._repeat.record(now):
+                if self._count_episode(self._distress_onset_ts, now):
                     reason = "repeated_distress"
                 reasons.append(reason)
         # Repeated gray-zone arm: drain welfare.out for welfare.gray_zone events
@@ -892,6 +954,33 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._acted:
                 break
             await self._respond(reason)
+
+    def _count_episode(self, onset_ts: float | None, now: float) -> bool:
+        """Add one distress episode to the repeat window, once per episode.
+
+        ``onset_ts`` identifies the episode. An episode already counted (by the
+        other detector) adds nothing and cannot cross the repeat threshold. With
+        no onset the report cannot be matched, so it counts as its own episode.
+        Returns True when the repeat window crosses its threshold.
+        """
+        if onset_ts is not None:
+            if onset_ts in self._counted_episodes:
+                return False
+            self._counted_episodes[onset_ts] = None
+            # Bounded memory: only the most recent episodes can still be
+            # reported by the other detector.
+            while len(self._counted_episodes) > _COUNTED_EPISODES_MAX:
+                del self._counted_episodes[next(iter(self._counted_episodes))]
+        return self._repeat.record(now)
+
+    @staticmethod
+    def _event_ts(event: Any) -> float | None:
+        ts = getattr(event, "timestamp", None)
+        if ts is None:
+            return None
+        if ts.tzinfo is None or ts.tzinfo.utcoffset(ts) is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts.timestamp()
 
     async def _drain_gray_zone(self) -> list[str]:
         """Drain welfare.gray_zone events; return all crossing reasons.
@@ -913,7 +1002,16 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if event.type != "welfare.gray_zone":
                 continue
             now = self._clock()
-            if self._repeat.record(now):
+            payload = event.payload or {}
+            onset = None
+            if payload.get("gray_zone_event") == "sustained_interoceptive_distress":
+                raw_onset = payload.get("episode_onset_ts")
+                if isinstance(raw_onset, (int, float)) and not isinstance(raw_onset, bool):
+                    onset = float(raw_onset)
+                crossed = self._count_episode(onset, now)
+            else:
+                crossed = self._repeat.record(now)
+            if crossed:
                 reasons.append("repeated_gray_zone")
         if last_scanned is not None:
             self._welfare_cursor = last_scanned
