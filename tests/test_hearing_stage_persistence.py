@@ -29,8 +29,9 @@ from tests.test_preservation_stage_member import (  # noqa: F401
     self_model,
 )
 
-# Fixtures used by name in the tests below.
-_FIXTURES = (_plaintext_encryptor, _restore_stage_path, self_model)
+# Imported pytest fixtures, used by name in the tests below; listing them in
+# __all__ marks the imports as intended.
+__all__ = ["_plaintext_encryptor", "_restore_stage_path", "self_model"]
 
 PARAMS = HearingBandParams()
 ME = "ent-" + "a" * 32
