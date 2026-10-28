@@ -353,7 +353,11 @@ def test_verdict_after_maturation_is_ignored(
     monkeypatch.setattr(
         runner,
         "_read_child_runtime",
-        lambda *args, **kwargs: {"run_id": "r1", "developmental_stage": {"stage": "embodied"}},
+        lambda *args, **kwargs: {
+            "run_id": "r1",
+            "developmental_stage": {"stage": "embodied"},
+            "individuation": {"reference_kind": "maturation", "reference_complete": True},
+        },
     )
     monkeypatch.setattr(runner, "_maturation_bloom_over", lambda *args, **kwargs: True)
 
@@ -368,6 +372,10 @@ def test_verdict_after_maturation_is_ignored(
 
     line_dir = study_dir / "development"
     (line_dir / "state" / "lifecycle").mkdir(parents=True, exist_ok=True)
+    # The runner now waits for the content-free individuation block in
+    # runtime.json before it requests maturation preservation, so provide a
+    # complete maturation block so the request happens before the late
+    # viability verdict.
 
     calls = 0
 

@@ -382,19 +382,24 @@ class StudyRunner:
         return now - first_embodied_wall >= fallback_seconds
 
     @staticmethod
-    def _maturation_reference_complete(line_dir: Path) -> bool:
-        """Whether the child's individuation maturation reference is complete:
-        the reference document and its ledger are both on disk.  The producer
-        writes the reference first and the ledger second, each atomically, and
-        treats a reference without a ledger as an incomplete capture, so both
-        files together mean the capture finished."""
-        root = line_dir / "state" / "individuation"
-        try:
-            return (root / "reference.json").stat().st_size > 0 and (
-                root / "ledger.json"
-            ).stat().st_size > 0
-        except OSError:
+    def _maturation_reference_complete(runtime: dict[str, Any]) -> bool:
+        """Whether the child's individuation maturation reference is complete.
+
+        Reads the content-free ``individuation`` block the cycle writes into
+        ``state/cycle/runtime.json``. The block is true only when the scheduler
+        reports a present reference, a readable ledger, and the ledger file on
+        disk, and the reference kind is ``maturation``.  A capture downgraded
+        during sleep has kind ``capture`` and does not count as the maturation
+        reference; the runner keeps waiting for a maturation reference or times
+        out. The caller must pass a ``runtime.json`` that has already been
+        guarded against stale files from earlier children.
+        """
+        if not isinstance(runtime, dict):
             return False
+        block = runtime.get("individuation")
+        if not isinstance(block, dict):
+            return False
+        return bool(block.get("reference_complete")) and block.get("reference_kind") == "maturation"
 
     def _maturation_bloom_fallback_seconds(self, line_dir: Path, env: Mapping[str, str]) -> float:
         """How long to wait after the embodied stage when the stage file does
@@ -731,7 +736,7 @@ class StudyRunner:
                             # on disk, or the bounded wait has run out.
                             if not expect_reference:
                                 reference_state = REFERENCE_NOT_ENABLED
-                            elif self._maturation_reference_complete(line_dir):
+                            elif self._maturation_reference_complete(runtime):
                                 reference_state = REFERENCE_COMPLETE
                             else:
                                 if reference_wait_started is None:

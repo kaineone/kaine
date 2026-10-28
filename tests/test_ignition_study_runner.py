@@ -101,11 +101,26 @@ STANDIN_SCRIPT = textwrap.dedent(
             data = {"world_model_captured": False}
         write_json(bundle_dir / "manifest.json", data)
 
+    def write_encrypted_placeholder(path):
+        # The real cycle writes these files encrypted; the runner must never
+        # try to parse them as JSON.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bytes([0]) + b"ciphertext")
+
+    def write_runtime_individuation(cwd, block):
+        state_dir = cwd / "state" / "cycle"
+        runtime_path = state_dir / "runtime.json"
+        runtime = json.loads(runtime_path.read_text())
+        runtime["individuation"] = block
+        write_json(runtime_path, runtime)
+
     def write_reference(cwd):
         root = cwd / "state" / "individuation"
-        root.mkdir(parents=True, exist_ok=True)
-        (root / "reference.json").write_text("{}")
-        (root / "ledger.json").write_text("{}")
+        write_encrypted_placeholder(root / "reference.json")
+        write_encrypted_placeholder(root / "ledger.json")
+        write_runtime_individuation(
+            cwd, {"reference_kind": "maturation", "reference_complete": True}
+        )
         (cwd.parent / "reference_at.txt").write_text(str(time.time()))
 
     def cycle(args):
@@ -203,8 +218,24 @@ STANDIN_SCRIPT = textwrap.dedent(
                     [cwd],
                 ).start()
             elif reference_mode == "reference_only":
-                (cwd / "state" / "individuation").mkdir(parents=True, exist_ok=True)
-                (cwd / "state" / "individuation" / "reference.json").write_text("{}")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+            elif reference_mode == "ledger_only":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+            elif reference_mode == "invalid_json":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+            elif reference_mode == "capture":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+                write_runtime_individuation(
+                    cwd, {"reference_kind": "capture", "reference_complete": True}
+                )
+            elif reference_mode == "incomplete":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+                write_runtime_individuation(
+                    cwd, {"reference_kind": "maturation", "reference_complete": False}
+                )
             write_json(lifecycle_dir / "stage.json", stage)
             wait_for_request(state_dir, "maturation", True, bundle_dir)
             return
@@ -1181,7 +1212,10 @@ def test_maturation_preservation_with_the_reference_already_present(
     assert first["maturation_reference"] == "complete"
 
 
-@pytest.mark.parametrize("mode", ["none", "reference_only"])
+@pytest.mark.parametrize(
+    "mode",
+    ["none", "reference_only", "ledger_only", "invalid_json", "capture", "incomplete"],
+)
 def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
     tmp_path: Path, known_modules, monkeypatch, mode
 ):
