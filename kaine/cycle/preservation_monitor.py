@@ -776,6 +776,13 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Latch: once a humane action has been taken, do not re-fire (the run is
         # being paused/ended; preserving again every poll would be noise).
         self._acted = False
+        # The latch is released again only when this monitor's own pause is
+        # lifted (see _maybe_rearm). True while the freeze it placed, or found at
+        # its first poll, is the reason for the latch.
+        self._pause_placed = False
+        self._holders_checked = False
+        # Reads the freeze holders; None means unreadable.
+        self._read_holders = control_state.read_holder_sources
         # M3: rate limit for "notify" responses — at most one notify bundle
         # per min_interval_s, so sustained distress does not fire one bundle
         # per distress cycle.
@@ -874,7 +881,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 self._diag_unknown_seen = diag["unknown_episodes"]
             except Exception:
                 log.warning("welfare monitor: incident log write failed", exc_info=True)
+        if not self._holders_checked:
+            self._holders_checked = True
+            self._adopt_standing_welfare_freeze()
         if self._acted:
+            await self._maybe_rearm()
             return
         now = self._clock()
         if self._started_at is None:
@@ -954,6 +965,77 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._acted:
                 break
             await self._respond(reason)
+
+    def _adopt_standing_welfare_freeze(self) -> None:
+        """A welfare freeze left by an earlier process (a restart keeps it)
+        latches this monitor as if it had placed the pause itself, so the same
+        release re-arms it."""
+        try:
+            holders = self._read_holders()
+        except Exception:
+            holders = None
+        if holders and "welfare" in holders:
+            self._acted = True
+            self._pause_placed = True
+            log.warning("welfare monitor: a welfare freeze stands from before this start")
+
+    async def _maybe_rearm(self) -> None:
+        """Re-arm after the pause this monitor placed has been resolved.
+
+        The rule, from the code's own state: the latch was set by a pause (a
+        ``pause``, a ``pause_fallback``, or a welfare freeze found at the first
+        poll), and the control file now readably holds no ``welfare`` entry,
+        which only a named override (:func:`control_state.override`) removes. An
+        ``end`` never re-arms: the process is stopping. An unreadable control
+        file is not a release.
+
+        Re-arming starts a new episode: the sustained-distress tracker and the
+        repeat window are emptied and both stream cursors move to the stream
+        tail, so neither the distress that caused the pause nor the events
+        published while frozen can fire the response again. A condition that
+        is still present must accrue a full new sustained duration of unfrozen
+        time (or a full new repeat window) before it acts again, and the
+        counted-episode memory is kept so one old episode is not counted twice.
+        """
+        if not self._pause_placed:
+            return
+        try:
+            holders = self._read_holders()
+        except Exception:
+            holders = None
+        if holders is None or "welfare" in holders:
+            return
+        try:
+            interoception_tail = await self._bus.last_entry_id(_INTEROCEPTION_STREAM)
+            welfare_tail = await self._bus.last_entry_id(_WELFARE_STREAM)
+        except Exception:
+            log.warning("welfare monitor: re-arm deferred, stream tail unreadable", exc_info=True)
+            return
+        self._cursor = interoception_tail
+        self._welfare_cursor = welfare_tail
+        self._distress = SustainedThresholdTracker(
+            threshold=self._config.distress_threshold,
+            duration_s=self._config.distress_duration_s,
+        )
+        self._distress_onset_ts = None
+        self._repeat = WindowedEventCounter(
+            window_s=self._config.repeat_window_s, threshold=self._config.repeat_threshold
+        )
+        self._acted = False
+        self._pause_placed = False
+        log.warning("welfare monitor: the welfare freeze was lifted; the response is re-armed")
+        try:
+            await self._record(
+                {
+                    "monitor": "welfare",
+                    "transition": "rearmed",
+                    "run_id": self._run_id(),
+                    "poll_index": self.poll_index,
+                },
+                event_type="welfare.protective_action",
+            )
+        except Exception:
+            log.warning("welfare monitor: re-arm record failed", exc_info=True)
 
     def _count_episode(self, onset_ts: float | None, now: float) -> bool:
         """Add one distress episode to the repeat window, once per episode.
@@ -1080,6 +1162,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # "notify" preserves + records + continues (no freeze, no end).
 
         self._acted = action != "notify"
+        self._pause_placed = action_taken in ("pause", "pause_fallback")
 
         await self._record(
             {

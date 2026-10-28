@@ -54,7 +54,7 @@ from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
 from kaine.cycle.boot_context import BootContext
-from kaine.cycle.control_state import read_control, unfreeze
+from kaine.cycle.control_state import read_control, unfreeze_for_boot
 from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.ignition_log import (
@@ -2606,11 +2606,12 @@ async def _phase_signals(ctx: BootContext) -> int | None:
             # Windows / restricted env — fall through to KeyboardInterrupt path.
             pass
 
-    # A fresh launch always starts running: clear any stale operator freeze the
-    # previous run may have left behind (freeze is a runtime control, not a boot
-    # state).
+    # A fresh launch starts running: clear any stale freeze the previous run
+    # may have left behind (freeze is a runtime control, not a boot state),
+    # except a welfare freeze, which only a named override lifts. A restart,
+    # an automatic one included, must not answer the protective response.
     try:
-        unfreeze()
+        unfreeze_for_boot()
     except Exception:
         log.debug("could not clear freeze control at startup", exc_info=True)
     # A deliberate fresh launch also clears any prior escalation halt.

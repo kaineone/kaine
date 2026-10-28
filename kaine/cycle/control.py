@@ -3,7 +3,9 @@
 
 """Operator CLI for cycle-layer commands.
 
-Currently supports requesting a live preservation and waiting for the result.
+Supports requesting a live preservation and waiting for the result, and lifting
+a welfare, development or programme_end freeze by name (the release path for a
+run whose dashboard is read-only).
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from kaine.config import load_kaine_config
+from kaine.cycle import control_state
 from kaine.cycle.preserve_watch import (
     REQUEST_PATH,
     RESULT_PATH,
@@ -56,6 +59,22 @@ def run_preserve(
     return 2
 
 
+def run_override(sources: list[str]) -> int:
+    """Lift the named freeze holders and print what remains.
+
+    Returns 0 on success and 1 when a source is not overridable or holds no
+    active entry.
+    """
+    try:
+        state = control_state.override(sources)
+    except (ValueError, LookupError) as exc:
+        print(f"Override refused: {exc}")
+        return 1
+    remaining = ", ".join(h["source"] for h in state.holders) or "none"
+    print(f"Lifted: {', '.join(sorted(sources))}; still frozen by: {remaining}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         config = load_kaine_config()
@@ -84,7 +103,19 @@ def main(argv: list[str] | None = None) -> int:
         help="seconds to wait for the result (default 120)",
     )
 
+    override = sub.add_parser(
+        "override", help="lift named welfare, development or programme_end freezes"
+    )
+    override.add_argument(
+        "sources",
+        nargs="+",
+        choices=control_state.OVERRIDABLE_SOURCES,
+        help="the freeze holders to lift",
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "override":
+        return run_override(list(args.sources))
     if args.command == "preserve":
         return run_preserve(
             args.reason,

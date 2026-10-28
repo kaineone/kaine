@@ -17,15 +17,15 @@ python -m kaine.cycle
 
 The dashboard binds to loopback by default. How to reach it, switch to token mode, and serve it over your tailnet is covered in [opening the dashboard](../05-dashboard.md).
 
-A fresh launch clears any stale freeze left by a previous run, so the entity always starts running.
+A fresh launch clears any stale freeze left by a previous run, except a `welfare` freeze, which stays until you override it by name.
 
 The launch above is the operator-supervised mode, in which a person watches the run. KAINE also has an unattended supervision mode, selected with `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` (the environment variable takes precedence). A nine-condition gate checks the host before the cycle starts unattended, and if the gate refuses, the cycle exits with code 6. Selecting unattended mode together with research mode or `KAINE_CYCLE_OPERATOR_PRESENT=1` is a configuration error. The research mode is covered in [Preservation](../11-preservation.md) and [For researchers](../14-for-researchers.md).
 
 ### Freeze and resume
 
-The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A frozen state is not persisted across restarts; a fresh launch clears any stale freeze and the cycle starts running.
+The diagnostics page has a "cycle control" panel with "freeze cycle" and "resume cycle" buttons. While frozen, the cycle stops ticking but the process stays up. A freeze is not persisted across restarts, except a `welfare` freeze: a fresh launch clears every other stale freeze and the cycle starts running, but a `welfare` freeze stays until you override it.
 
-Freeze requests can come from several holders, which stack: `operator`, `supervisor`, `welfare`, `preserve`, `development` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. The supervisor and preservation release their own entries. A `welfare`, `development` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen.
+Freeze requests can come from several holders, which stack: `operator`, `supervisor`, `welfare`, `preserve`, `development` and `programme_end`. The dashboard "resume cycle" button releases only `operator` entries. The supervisor and preservation release their own entries. A `welfare`, `development` or `programme_end` freeze stays until you override it by name: the panel shows which holders remain and offers an "override … freeze" button that needs a second click to confirm. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`. A fresh launch starts unfrozen unless a `welfare` freeze is standing.
 
 ### Normal stop
 

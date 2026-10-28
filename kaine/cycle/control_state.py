@@ -22,7 +22,8 @@ backward-compatible. A recovery (e.g. the supervisor's) may pop only its own ent
 operator's own resume lifts only operator entries via :func:`stand_down` with
 ``source="operator"``; welfare, the developmental phase and programme_end entries are lifted
 only by :func:`override` naming them (or an explicit stand-down with the matching
-source). :func:`unfreeze` is reserved for the cycle's own clean boot.
+source). :func:`unfreeze_for_boot` is the cycle's own clean boot and keeps a welfare entry;
+:func:`unfreeze` lifts everything and is for tests and tools.
 """
 from __future__ import annotations
 
@@ -155,6 +156,23 @@ def read_frozen_state(path: Path | None = None) -> bool | None:
     if control.stack:
         return True
     return bool(control.frozen)
+
+
+def read_holder_sources(path: Path | None = None) -> frozenset[str] | None:
+    """Return the sources that currently hold a freeze.
+
+    An absent file or an empty stack gives the empty set. ``None`` means the
+    file exists but cannot be read or parsed: callers that act on a release must
+    treat that as "not released".
+    """
+    target = resolve(path or CONTROL_PATH)
+    if not target.exists():
+        return frozenset()
+    try:
+        control = CycleControl.from_dict(json.loads(target.read_text()))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+    return frozenset(str(e.get("source", "operator")) for e in control.stack)
 
 
 def write_control(state: CycleControl, path: Path | None = None) -> None:
@@ -299,6 +317,19 @@ def freeze(
     source: str = "operator",
 ) -> CycleControl:
     return push_freeze(reason=reason, path=path, source=source)
+
+
+def unfreeze_for_boot(path: Path | None = None) -> CycleControl:
+    """Clean boot: lift every freeze except a welfare one.
+
+    A welfare freeze records that the protective response found the entity in
+    distress and preserved it. It is lifted only by a named override
+    (:func:`override`), so a restart, an automatic one included, does not lift
+    it: the entity stays frozen until someone has answered the notice.
+    """
+    return _update_stack(
+        path, lambda stack: [e for e in stack if e.get("source") == "welfare"]
+    )
 
 
 def unfreeze(path: Path | None = None) -> CycleControl:
