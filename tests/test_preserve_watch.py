@@ -183,6 +183,24 @@ async def test_watcher_run_loops_until_stop_event(tmp_path):
     assert len(calls) >= 1
 
 
+@pytest.mark.asyncio
+async def test_watcher_runs_preservation_with_corrupt_control_json(tmp_path):
+    control_path = tmp_path / "control.json"
+    control_path.write_text("{not json")
+    original = control_path.read_bytes()
+
+    watcher = _make_watcher(tmp_path, control_path=control_path)
+    write_request_for_test(tmp_path, "corrupt-test", stop=False)
+
+    await watcher.step()
+
+    result = read_result(watcher._result_path)
+    assert result is not None
+    assert result["ok"] is True
+    assert watcher._release_pending is False
+    assert control_path.read_bytes() == original
+
+
 def write_request_for_test(tmp_path, reason, stop):
     from kaine.cycle.preserve_watch import new_request
 

@@ -3,9 +3,11 @@
 
 """The welfare response re-arms once its pause is lifted, and a welfare freeze
 survives a restart."""
+
 from __future__ import annotations
 
 import asyncio
+import json
 import signal
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -308,3 +310,187 @@ def test_the_control_cli_lifts_a_welfare_freeze_by_name(capsys):
     # A second override finds nothing to lift and says so.
     assert control.run_override(["welfare"]) == 1
     assert "Override refused" in capsys.readouterr().out
+
+
+def test_the_control_cli_override_handles_os_error(monkeypatch, capsys):
+    from kaine.cycle import control
+
+    def _raise_oserror(sources):
+        raise OSError(13, f"Permission denied: {sources}")
+
+    monkeypatch.setattr(control_state, "override", _raise_oserror)
+    assert control.run_override(["welfare"]) == 2
+    assert "Override failed" in capsys.readouterr().out
+
+
+# ---- unfreeze_for_boot fail-closed behaviour -------------------------------
+
+
+def test_boot_unfreeze_with_corrupt_control_json_keeps_freeze_and_does_not_overwrite():
+    control_state.CONTROL_PATH.write_text("{not json")
+    state = control_state.unfreeze_for_boot()
+    assert control_state.CONTROL_PATH.read_text() == "{not json"
+    assert state.frozen is True
+    assert state.source == "welfare"
+    assert [e["source"] for e in state.stack] == ["welfare"]
+
+
+def test_boot_unfreeze_lifts_only_non_welfare_holders_from_readable_file():
+    for source in ("operator", "supervisor", "development", "programme_end", "preserve"):
+        control_state.push_freeze(reason="x", source=source)
+    control_state.push_freeze(reason="distress", source="welfare")
+
+    state = control_state.unfreeze_for_boot()
+    assert [e["source"] for e in state.stack] == ["welfare"]
+    assert state.frozen is True
+
+
+class _FakeCycle:
+    def __init__(self):
+        self._paused = False
+
+    @property
+    def is_paused(self):
+        return self._paused
+
+    async def pause(self):
+        self._paused = True
+
+    async def resume(self):
+        self._paused = False
+
+
+@pytest.mark.asyncio
+async def test_corrupt_control_json_makes_freeze_watch_loop_pause_the_cycle(tmp_path, monkeypatch):
+    import kaine.cycle.__main__ as cycle_main
+
+    ctrl = tmp_path / "control.json"
+    ctrl.write_text("{not json")
+    monkeypatch.setattr(cycle_main, "read_control", lambda: control_state.read_control(ctrl))
+    monkeypatch.setattr(cycle_main, "write_desired_audio", lambda *a, **k: None)
+    monkeypatch.setattr(cycle_main, "write_desired_video", lambda *a, **k: None)
+
+    cycle = _FakeCycle()
+    stop = asyncio.Event()
+    task = asyncio.create_task(cycle_main._freeze_watch_loop(cycle, stop))
+    try:
+        waited = 0.0
+        while not cycle.is_paused and waited < 2.0:
+            await asyncio.sleep(0.02)
+            waited += 0.02
+        assert cycle.is_paused
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=2.0)
+
+
+def test_override_on_corrupt_control_json_replaces_file_and_records_audit(tmp_path):
+    control_state.CONTROL_PATH.write_text("{not json")
+    state = control_state.override(["welfare"])
+    assert state.frozen is False
+    assert state.stack == ()
+    # The corrupt file is replaced by a clean, readable one.
+    loaded = control_state.read_control()
+    assert loaded.frozen is False
+    assert loaded.stack == ()
+    # The audit log records the override and notes the file was unreadable.
+    lines = control_state.OVERRIDE_AUDIT_PATH.read_text().strip().split("\n")
+    assert lines
+    last = json.loads(lines[-1])
+    assert last["sources"] == ["welfare"]
+    assert last["remaining"] == []
+    assert "unreadable" in last.get("note", "")
+
+
+def test_freeze_and_pop_on_corrupt_control_json_are_no_op(tmp_path):
+    p = tmp_path / "control.json"
+    p.write_text("{not json")
+    original = p.read_bytes()
+
+    state = control_state.freeze(reason="supervisor fault", path=p, source="supervisor")
+    assert p.read_bytes() == original
+    assert state.frozen is True
+    assert state.source == "welfare"
+
+    state = control_state.pop_freeze(path=p, source="supervisor")
+    assert p.read_bytes() == original
+    assert state.frozen is True
+    assert state.source == "welfare"
+
+
+
+@pytest.mark.parametrize("content", ["null", "[]", '"frozen"'])
+def test_json_that_is_not_an_object_reads_frozen_and_only_a_welfare_override_replaces_it(
+    tmp_path, content
+):
+    p = tmp_path / "control.json"
+    p.write_text(content)
+    original = p.read_bytes()
+    assert control_state.read_control(p).source == "welfare"
+
+    state = control_state.stand_down(path=p, source="operator")
+    assert p.read_bytes() == original
+    assert state.frozen is True
+
+    with pytest.raises(LookupError):
+        control_state.override(["development"], path=p, audit_path=tmp_path / "audit.jsonl")
+    assert p.read_bytes() == original
+
+    state = control_state.override(["welfare"], path=p, audit_path=tmp_path / "audit.jsonl")
+    assert state.frozen is False
+    assert control_state.read_control(p).frozen is False
+
+def test_read_control_on_corrupt_file_has_stable_frozen_at(tmp_path):
+    p = tmp_path / "control.json"
+    p.write_text("{not json")
+    a = control_state.read_control(p)
+    b = control_state.read_control(p)
+    assert a.frozen_at == b.frozen_at
+    assert a.frozen_at is not None
+
+
+def test_override_development_on_corrupt_file_is_refused(tmp_path):
+    p = tmp_path / "control.json"
+    p.write_text("{not json")
+    original = p.read_bytes()
+    with pytest.raises(LookupError, match="welfare"):
+        control_state.override(["development"], path=p)
+    assert p.read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_welfare_monitor_freeze_on_corrupt_file_records_unreadable(bus, tmp_path):
+    u = _Mono(0.0)
+    mon = _monitor(bus, u)
+
+    control_state.CONTROL_PATH.write_text("{not json")
+    await _act(mon, bus, u)
+    assert control_state.read_holder_sources() is None
+
+    entries, _ = await bus.read_entries("preservation.out", last_id="0", count=128, block_ms=0)
+    protective = [e for _, e in entries if e.type == "welfare.protective_action"]
+    assert protective
+    assert protective[-1].payload.get("freeze_failed_unreadable") is True
+
+
+@pytest.mark.asyncio
+async def test_end_action_finds_standing_welfare_freeze_at_first_poll(bus):
+    control_state.freeze(reason="welfare: sustained_distress", source="welfare")
+    u = _Mono(0.0)
+    ended: list[bool] = []
+    mon = _monitor(bus, u, cfg=_cfg(action="end"), on_end=lambda: ended.append(True))
+    stop = asyncio.Event()
+
+    # A welfare freeze from an earlier process is found at the first poll.
+    await _distress(bus)
+    await mon._poll_once(stop)
+    assert mon._acted is True
+    assert ended == []
+    assert len(mon._fork_manager.calls) == 0
+
+    # An end never re-arms, even after the welfare freeze is lifted.
+    control_state.override(["welfare"])
+    await mon._poll_once(stop)
+    assert mon._acted is True
+    assert ended == []
+    assert len(mon._fork_manager.calls) == 0

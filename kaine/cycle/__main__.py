@@ -2611,9 +2611,16 @@ async def _phase_signals(ctx: BootContext) -> int | None:
     # except a welfare freeze, which only a named override lifts. A restart,
     # an automatic one included, must not answer the protective response.
     try:
-        unfreeze_for_boot()
+        boot_control = unfreeze_for_boot()
     except Exception:
         log.debug("could not clear freeze control at startup", exc_info=True)
+    else:
+        if boot_control.frozen:
+            log.warning(
+                "entity is frozen at boot (source=%s); "
+                "it will stay frozen until a human releases it with an explicit override",
+                boot_control.source,
+            )
     # A deliberate fresh launch also clears any prior escalation halt.
     try:
         clear_escalation()

@@ -62,14 +62,17 @@ def run_preserve(
 def run_override(sources: list[str]) -> int:
     """Lift the named freeze holders and print what remains.
 
-    Returns 0 on success and 1 when a source is not overridable or holds no
-    active entry.
+    Returns 0 on success, 1 when a source is not overridable or holds no
+    active entry, and 2 on an OS-level failure such as a permission error.
     """
     try:
         state = control_state.override(sources)
     except (ValueError, LookupError) as exc:
         print(f"Override refused: {exc}")
         return 1
+    except OSError as exc:
+        print(f"Override failed: {exc}")
+        return 2
     remaining = ", ".join(h["source"] for h in state.holders) or "none"
     print(f"Lifted: {', '.join(sorted(sources))}; still frozen by: {remaining}")
     return 0

@@ -62,6 +62,8 @@ Warm-up is capped at the larger of `warmup_s` and `warmup_ceiling_s` of wall tim
 
 **A welfare freeze survives a restart.** The cycle's clean boot lifts every freeze holder except `welfare`, so a restart, an automatic one included, does not answer the protective response. Run `python -m kaine.cycle.control override welfare` from the entity's working directory (or use the dashboard override panel) to lift it; the override is recorded in `state/cycle/override_audit.jsonl`.
 
+**An unreadable control file reads as a welfare freeze.** If `state/cycle/control.json` exists but is not a readable JSON object, the cycle treats it as a `welfare` freeze, logs the path once, and does not rewrite it: every freeze, release and clean boot leaves it untouched. Only an override that names `welfare` replaces it with a clean file, and the audit record notes that the file was unreadable.
+
 Samples still count when they arrive. A crossing sample is evaluated at once, a sample below the threshold during a freeze still resets a sustained run, and gray-zone events produced during a freeze still count toward `repeat_threshold`, so a genuine crossing during a long freeze is never lost. A sustained run that began before the freeze picks up again with its accumulated duration once the freeze ends. The repeat window, the poll cadence and `min_interval_s` stay on wall time.
 
 If the freeze state cannot be read (a missing permission or a corrupt file), the welfare timers keep counting as though the cycle were running, because a broken control file must never switch protection off. The monitor writes one `freeze_state_unreadable` incident, and the observer writes one sink record, for each such episode.

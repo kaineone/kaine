@@ -25,10 +25,13 @@ def test_control_round_trip(tmp_path):
     assert got.frozen is False and got.reason is None
 
 
-def test_control_corrupt_file_defaults_unfrozen(tmp_path):
+def test_control_corrupt_file_fails_closed_as_welfare_freeze(tmp_path):
     p = tmp_path / "control.json"
     p.write_text("{ not json")
-    assert cs.read_control(p).frozen is False
+    state = cs.read_control(p)
+    assert state.frozen is True
+    assert state.source == "welfare"
+    assert "unreadable" in (state.reason or "")
 
 
 # ---- freeze-watch loop ------------------------------------------------------

@@ -997,6 +997,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         time (or a full new repeat window) before it acts again, and the
         counted-episode memory is kept so one old episode is not counted twice.
         """
+        if self._config.action == "end":
+            return
         if not self._pause_placed:
             return
         try:
@@ -1141,10 +1143,17 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # --- 2. Take the humane action (pause by default). ---
         action = self._config.action
         action_taken = action
+        freeze_failed_unreadable = False
         if action == "pause":
-            control_state.freeze(
-                reason=f"welfare: {crossing_reason}", source="welfare"
-            )
+            control_state.freeze(reason=f"welfare: {crossing_reason}", source="welfare")
+            if control_state.control_file_unreadable():
+                # The control file is corrupt, so read_control already reports a
+                # welfare freeze. Treat the pause as placed so the latch holds.
+                freeze_failed_unreadable = True
+                log.warning(
+                    "welfare monitor: control file is unreadable; "
+                    "the cycle is already treated as frozen"
+                )
         elif action == "end":
             if self._on_end is not None:
                 try:
@@ -1158,6 +1167,12 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     reason=f"welfare: {crossing_reason} (end unavailable)",
                     source="welfare",
                 )
+                if control_state.control_file_unreadable():
+                    freeze_failed_unreadable = True
+                    log.warning(
+                        "welfare monitor: control file is unreadable; "
+                        "the cycle is already treated as frozen"
+                    )
                 action_taken = "pause_fallback"
         # "notify" preserves + records + continues (no freeze, no end).
 
@@ -1176,6 +1191,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 "preservation_id": preservation_id,
                 "snapshot_id": snapshot_id,
                 "preserve_error": preserve_error,
+                "freeze_failed_unreadable": freeze_failed_unreadable,
                 "distress_threshold": self._config.distress_threshold,
                 "distress_duration_s": self._config.distress_duration_s,
                 "poll_index": self.poll_index,

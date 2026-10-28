@@ -28,6 +28,7 @@ source). :func:`unfreeze_for_boot` is the cycle's own clean boot and keeps a wel
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -43,9 +44,89 @@ OVERRIDABLE_SOURCES = ("welfare", "development", "programme_end")
 SELF_RELEASING_SOURCES = ("supervisor", "preserve")
 OVERRIDE_AUDIT_PATH = Path("state/cycle/override_audit.jsonl")
 
+log = logging.getLogger(__name__)
+
+
+# Sentinel passed to update_json_locked as its default. When the file exists but
+# cannot be read or parsed, update_json_locked hands us this sentinel; a missing
+# file also yields the sentinel, which we then treat as an empty stack.
+_CORRUPT_SENTINEL = object()
+
+
+class _CorruptControlFile(Exception):
+    """Private signal used inside update_json_locked's apply function.
+
+    Raising this prevents any write and lets _update_stack return the same
+    fail-closed welfare state that read_control reports.
+    """
+
+
+# Paths for which we have already logged a corrupt-control-file error, so the
+# freeze-watch loop (which polls every ~0.25 s) does not spam the log. A path is
+# removed when a subsequent read succeeds, so a fresh corruption is reported.
+_LOGGED_CORRUPT_PATHS: set[Path] = set()
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _mark_readable(path: Path) -> None:
+    _LOGGED_CORRUPT_PATHS.discard(path)
+
+
+def _log_corrupt_once(path: Path) -> None:
+    if path not in _LOGGED_CORRUPT_PATHS:
+        _LOGGED_CORRUPT_PATHS.add(path)
+        log.error("control file exists but cannot be read or parsed: %s", path)
+
+
+def control_file_unreadable(path: Path | None = None) -> bool:
+    """True when the file exists but is not readable JSON that builds a CycleControl.
+
+    A missing file is not unreadable; callers that need to distinguish missing
+    from corrupt should combine this with an existence check.
+    """
+    target = resolve(path or CONTROL_PATH)
+    if not target.exists():
+        return False
+    try:
+        _parse_control(target.read_text())
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return True
+    return False
+
+
+def _parse_control(text: str) -> CycleControl:
+    """Parse control.json text; anything but a JSON object is unreadable."""
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("control file is not a JSON object")
+    return CycleControl.from_dict(data)
+
+
+def _fail_closed_state(path: Path) -> CycleControl:
+    """Return a synthetic welfare freeze for an unreadable control file.
+
+    The frozen_at timestamp is derived from the file's mtime so repeated reads
+    of the same corrupt file are stable; if stat fails, the current time is used.
+    """
+    try:
+        frozen_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+    except OSError:
+        frozen_at = _now_iso()
+    entry = {
+        "source": "welfare",
+        "reason": "control file unreadable; treating as welfare freeze",
+        "frozen_at": frozen_at,
+    }
+    return CycleControl(
+        frozen=True,
+        frozen_at=entry["frozen_at"],
+        reason=entry["reason"],
+        source="welfare",
+        stack=(entry,),
+    )
 
 
 def _top_view(stack: tuple[dict[str, Any], ...]) -> dict[str, Any]:
@@ -127,11 +208,18 @@ class CycleControl:
 def read_control(path: Path | None = None) -> CycleControl:
     target = resolve(path or CONTROL_PATH)
     if not target.exists():
+        _mark_readable(target)
         return CycleControl()
     try:
-        return CycleControl.from_dict(json.loads(target.read_text()))
-    except (json.JSONDecodeError, OSError):
-        return CycleControl()
+        control = _parse_control(target.read_text())
+        _mark_readable(target)
+        return control
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        # Writes go through the locked, atomic update_json_locked, so a corrupt
+        # existing file is genuine corruption, not a caught-mid-write artifact.
+        # Fail closed: treat it as a welfare freeze until a human overrides it.
+        _log_corrupt_once(target)
+        return _fail_closed_state(target)
 
 
 def read_frozen_state(path: Path | None = None) -> bool | None:
@@ -169,7 +257,7 @@ def read_holder_sources(path: Path | None = None) -> frozenset[str] | None:
     if not target.exists():
         return frozenset()
     try:
-        control = CycleControl.from_dict(json.loads(target.read_text()))
+        control = _parse_control(target.read_text())
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
     return frozenset(str(e.get("source", "operator")) for e in control.stack)
@@ -200,21 +288,38 @@ def _update_stack(
     The cycle and the dashboard both write control.json, so the read, the change
     and the write happen under one exclusive lock; ``fn`` gets a copy of the
     current stack and returns the new one.
+
+    If the file exists but is corrupt, the mutation is a no-op: nothing is
+    written, the corruption is logged once, and the same fail-closed welfare
+    state that :func:`read_control` reports is returned. Only :func:`override`
+    may replace a corrupt control file, and only when it explicitly names
+    ``"welfare"``.
     """
     target = resolve(path or CONTROL_PATH)
     box: list[CycleControl] = []
 
     def apply(current: Any) -> dict[str, Any]:
-        data = current if isinstance(current, dict) else {}
+        if current is _CORRUPT_SENTINEL and not target.exists():
+            data: dict[str, Any] = {}
+        elif isinstance(current, dict):
+            data = current
+        else:
+            # Unreadable, or JSON that is not an object: read_control reports
+            # either as a welfare freeze, so no mutation may replace it.
+            raise _CorruptControlFile()
         try:
             control = CycleControl.from_dict(data)
-        except (ValueError, TypeError, AttributeError):
-            control = CycleControl()
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise _CorruptControlFile()
         state = _state_of(fn([dict(e) for e in control.stack]))
         box.append(state)
         return state.to_dict()
 
-    update_json_locked(target, apply, default={})
+    try:
+        update_json_locked(target, apply, default=_CORRUPT_SENTINEL)
+    except _CorruptControlFile:
+        _log_corrupt_once(target)
+        return _fail_closed_state(target)
     return box[0]
 
 
@@ -264,9 +369,15 @@ def stand_down(path: Path | None = None, *, source: str) -> CycleControl:
     ``source="operator"`` leaves welfare, developmental phase and programme_end entries
     in place.
     """
-    return _update_stack(
-        path, lambda stack: [e for e in stack if e.get("source") != source]
-    )
+    return _update_stack(path, lambda stack: [e for e in stack if e.get("source") != source])
+
+
+def _append_audit_record(record: dict[str, Any], *, audit_path: Path | None = None) -> None:
+    target = resolve(audit_path or OVERRIDE_AUDIT_PATH)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a") as f:
+        f.write(json.dumps(record) + "\n")
 
 
 def override(
@@ -281,6 +392,12 @@ def override(
     source must have an active entry. The audit record is content-free: it
     records when the override happened, which sources were lifted, and which
     holders remained.
+
+    If the control file exists but is corrupt, an explicit override is the only
+    operation allowed to replace it. Because the fail-closed state reports a
+    welfare holder, the requested sources must include ``"welfare"``; otherwise
+    LookupError is raised. The override writes a clean file and records that the
+    file was unreadable.
     """
     sources = list(sources)
     if not sources:
@@ -289,24 +406,51 @@ def override(
         if s not in OVERRIDABLE_SOURCES:
             raise ValueError(f"source {s!r} is not overridable")
 
-    def apply(stack: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        active_sources = {e.get("source", "operator") for e in stack}
+    target = resolve(path or CONTROL_PATH)
+    replaced_corrupt_file = False
+
+    def apply(current: Any) -> dict[str, Any]:
+        nonlocal replaced_corrupt_file
+        if current is _CORRUPT_SENTINEL and not target.exists():
+            data: dict[str, Any] = {}
+        elif isinstance(current, dict):
+            data = current
+        else:
+            # Unreadable, or JSON that is not an object: read as a welfare freeze.
+            replaced_corrupt_file = True
+            if "welfare" not in sources:
+                raise LookupError(
+                    f"unreadable control file at {target} holds a welfare freeze; "
+                    "override must include 'welfare'"
+                )
+            return CycleControl().to_dict()
+        try:
+            control = CycleControl.from_dict(data)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            replaced_corrupt_file = True
+            if "welfare" not in sources:
+                raise LookupError(
+                    f"unreadable control file at {target} holds a welfare freeze; "
+                    "override must include 'welfare'"
+                )
+            return CycleControl().to_dict()
+        active_sources = {e.get("source", "operator") for e in control.stack}
         for s in sources:
             if s not in active_sources:
                 raise LookupError(f"no active entry for source {s!r}")
-        return [e for e in stack if e.get("source") not in sources]
+        new_state = _state_of([e for e in control.stack if e.get("source") not in sources])
+        return new_state.to_dict()
 
-    new_state = _update_stack(path, apply)
-    record = {
+    new_state_data = update_json_locked(target, apply, default=_CORRUPT_SENTINEL)
+    new_state = CycleControl.from_dict(new_state_data)
+    record: dict[str, Any] = {
         "at": _now_iso(),
         "sources": sorted(sources),
         "remaining": [h["source"] for h in new_state.holders],
     }
-    target = resolve(audit_path or OVERRIDE_AUDIT_PATH)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    with os.fdopen(fd, "a") as f:
-        f.write(json.dumps(record) + "\n")
+    if replaced_corrupt_file:
+        record["note"] = "control file was unreadable; replaced with clean file after override"
+    _append_audit_record(record, audit_path=audit_path)
     return new_state
 
 
@@ -326,10 +470,25 @@ def unfreeze_for_boot(path: Path | None = None) -> CycleControl:
     distress and preserved it. It is lifted only by a named override
     (:func:`override`), so a restart, an automatic one included, does not lift
     it: the entity stays frozen until someone has answered the notice.
+
+    If the existing control file exists but cannot be read or parsed, the file
+    is left as it is, an error is logged, and a synthetic welfare freeze is
+    returned so the caller fails closed (treat the cycle as frozen until a
+    human looks).
     """
-    return _update_stack(
-        path, lambda stack: [e for e in stack if e.get("source") == "welfare"]
-    )
+    target = resolve(path or CONTROL_PATH)
+    if target.exists():
+        try:
+            _parse_control(target.read_text())
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            log.error(
+                "control file exists but cannot be read or parsed at boot: %s. "
+                "The entity stays frozen until a human releases it with an explicit override.",
+                target,
+            )
+            return _fail_closed_state(target)
+        return _update_stack(path, lambda stack: [e for e in stack if e.get("source") == "welfare"])
+    return _update_stack(path, lambda _stack: [])
 
 
 def unfreeze(path: Path | None = None) -> CycleControl:
