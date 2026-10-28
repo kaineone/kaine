@@ -206,7 +206,9 @@ STANDIN_SCRIPT = textwrap.dedent(
             if bloom != "none":
                 ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
                 stage["maturation_bloom_ends_at"] = ends.isoformat()
-            reference_mode = os.environ.get("IGNITION_STANDIN_REFERENCE", "none")
+            # The study overlay runs the individuation producer on every step, so
+            # by default the child captures its maturation reference as the cycle does.
+            reference_mode = os.environ.get("IGNITION_STANDIN_REFERENCE", "present")
             if reference_mode == "present":
                 write_reference(cwd)
             elif reference_mode == "late":
@@ -1173,17 +1175,10 @@ def test_an_unreadable_welfare_freeze_marker_is_reported_in_status(
     assert "Welfare freeze marker unreadable: development step 0" in status
 
 
-def _enable_individuation(study_dir: Path) -> None:
-    """The step's resolved config runs the individuation producer."""
-    with open(study_dir.parent / "repo" / "config" / "kaine.toml", "a") as fh:
-        fh.write("[individuation]\nenabled = true\n")
-
-
 def test_maturation_preservation_waits_for_a_late_reference(
     tmp_path: Path, known_modules, monkeypatch
 ):
     study_dir = _create_study(tmp_path, viewings=1)
-    _enable_individuation(study_dir)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "late")
@@ -1201,7 +1196,6 @@ def test_maturation_preservation_with_the_reference_already_present(
     tmp_path: Path, known_modules, monkeypatch
 ):
     study_dir = _create_study(tmp_path, viewings=1)
-    _enable_individuation(study_dir)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "present")
@@ -1220,7 +1214,6 @@ def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
     tmp_path: Path, known_modules, monkeypatch, mode
 ):
     study_dir = _create_study(tmp_path, viewings=1)
-    _enable_individuation(study_dir)
     script = tmp_path / "standin.py"
     script.write_text(STANDIN_SCRIPT)
     monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", mode)
@@ -1234,16 +1227,6 @@ def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
     assert record["maturation_reference"] == "missing"
     assert record["bundle"] and Path(record["bundle"]).exists()
     assert _load_steps(study_dir)[0]["outcome"] == "failed:maturation_reference_missing"
-
-
-def test_no_wait_when_the_child_does_not_run_the_individuation_producer(
-    tmp_path: Path, known_modules
-):
-    study_dir = _create_study(tmp_path, viewings=1)
-    script = tmp_path / "standin.py"
-    script.write_text(STANDIN_SCRIPT)
-    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=0.0)) == "complete"
-    assert _load_steps(study_dir)[0]["maturation_reference"] == "not_enabled"
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
