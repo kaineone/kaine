@@ -10,7 +10,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
 | distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
-| rest-resume-process-restart | 5/5 (100%) | A state-cycle rest cut by a process restart resumes for its remaining time; the resume checkpoint updates only the sleep module's state_cycle entry during a rest |
+| rest-resume-process-restart | 5/6 (83%) | A state-cycle rest cut by a process restart resumes for its remaining time; the resume checkpoint updates only the sleep module's state_cycle entry during a rest |
 | developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
 | hearing-stage-saturation | 11/11 (100%) | Release each hearing stage by audition's saturated learning progress between a minimum and maximum dwell, colour k/5 per stage, and C3 as schedule completion (paper A.7, Table A1). |
 | dashboard-name-always-shown | 4/4 (100%) | The entity name is shown on every dashboard page and refreshed when it appears |

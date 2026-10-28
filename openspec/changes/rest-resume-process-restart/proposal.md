@@ -24,3 +24,7 @@ The supervisor's in-process restart carries the rest. A process restart reads th
 - **Docs:** `docs/06-operation/development.md`.
 - **Tests:** `tests/test_rest_resume_process_restart.py`.
 - **Preserved entities:** checkpoints written before this change load unchanged.
+
+## Ordering
+
+The sleep delta modifies the requirement "The state cycle survives a restart", which exists in `openspec/specs/sleep/spec.md` only once developmental-state-cycle is archived. This change archives after developmental-state-cycle.

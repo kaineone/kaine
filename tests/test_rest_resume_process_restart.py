@@ -22,6 +22,8 @@ from typing import Any
 
 import pytest
 
+from kaine.bus.client import AsyncBus
+from kaine.bus.config import BusConfig
 from kaine.lifecycle.identity import mint_identity
 from kaine.lifecycle.resume_checkpoint import (
     ResumeCheckpointer,
@@ -32,18 +34,100 @@ from kaine.lifecycle.resume_checkpoint import (
     set_aside_for_revive,
     update_state_cycle_entry,
 )
+from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
 from kaine.security.crypto import CryptoConfig, StateEncryptor, is_encrypted, set_state_encryptor
-from tests.test_developmental_state_cycle import (
-    REST_S,
-    T_ACT,
-    Probe,
-    SimClock,
-    _REAL_SLEEP,
-    _make,
-    _record,
-    _starts,
-    bus,  # noqa: F401  (fixture)
-)
+
+REST_S = 1410.0
+SHARE = 0.32
+T_ACT = REST_S * (1.0 - SHARE) / SHARE
+
+_REAL_SLEEP = asyncio.sleep
+
+
+@pytest.fixture
+async def bus():
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    client = fakeredis.FakeRedis(decode_responses=True)
+    b = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    yield b
+    await b.close()
+
+
+class FakeEpisodicMemory:
+    async def consolidate_now(self) -> int:
+        return 0
+
+    async def downscale(self, protect=()):
+        return {"n_new": 0, "factor": 1.0, "protected": 0, "total_before": 0.0, "total_after": 0.0, "silent": 0}
+
+    async def replay_now(self) -> list:
+        return []
+
+
+class FakeAffect:
+    def __init__(self) -> None:
+        self.resets = 0
+
+    async def affective_reset(self) -> None:
+        self.resets += 1
+
+
+class SimClock:
+    def __init__(self, t: float = 0.0) -> None:
+        self.t = t
+
+    def now(self) -> float:
+        return self.t
+
+
+class Probe:
+    def __init__(self, value: bool = True) -> None:
+        self.value = value
+
+    def __call__(self) -> bool:
+        return self.value
+
+
+def _make(bus: AsyncBus, tmp_path: Path, clock: SimClock | None, probe: Any = None, **kwargs: Any) -> Sleep:
+    config = VoiceAlignmentConfig(
+        intent_log_path=tmp_path / "intent.jsonl",
+        adapter_output_dir=tmp_path / "adapters",
+        enabled=False,
+    )
+    params: dict[str, Any] = {
+        "episodic_memory": FakeEpisodicMemory(),
+        "affect": FakeAffect(),
+        "trainer": FakeTrainer(),
+        "voice_alignment_config": config,
+        "developmental_rest_s": REST_S,
+        "developmental_quiescent_share": SHARE,
+        "development_probe": probe,
+        "entity_clock": clock,
+    }
+    params.update(kwargs)
+    sleep = Sleep(bus, **params)
+    return sleep
+
+
+def _record(sleep: Sleep, clock: SimClock) -> list[tuple[float, str, dict[str, Any]]]:
+    seen: list[tuple[float, str, dict[str, Any]]] = []
+    original = sleep.publish
+
+    async def recording(event_type: str, payload: dict[str, Any], **kwargs: Any) -> Any:
+        seen.append((clock.t, event_type, dict(payload)))
+        return await original(event_type, payload, **kwargs)
+
+    sleep.publish = recording  # type: ignore[method-assign]
+    return seen
+
+
+def _starts(seen: list[Any], trigger: str | None = None) -> list[tuple[float, dict[str, Any]]]:
+    return [
+        (t, p)
+        for t, kind, p in seen
+        if kind == "sleep.sleep.started" and (trigger is None or p.get("trigger") == trigger)
+    ]
+
 
 
 class HoldClock(SimClock):
@@ -302,7 +386,6 @@ async def test_rest_progress_is_written_each_interval_not_each_poll(bus, tmp_pat
 async def test_no_checkpoint_yet_writes_nothing(bus, tmp_path, sim):
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    sleep = _make(bus, tmp_path, sim, Probe(True))
     entry = {"phase": "resting", "awake_s": 0.0, "rest_spent_s": 30.0}
     assert update_state_cycle_entry(ident, entry, d) is False
     assert not checkpoint_file(d).exists()

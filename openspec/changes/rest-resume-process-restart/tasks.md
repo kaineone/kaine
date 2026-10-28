@@ -5,3 +5,7 @@
 - [x] 1.3 Sleep module accessor and boot wiring through the registry
 - [x] 1.4 Tests: process restart with a fresh registry, crash mid-rest, crash after completion, other modules unchanged, encrypted tree, frozen time, other entity, revive record
 - [x] 1.5 Docs: development.md resume checkpoint paragraph
+
+## 2. Archive
+
+- [ ] 2.1 Archive this change after developmental-state-cycle is archived (its sleep requirement is the one this change modifies)
