@@ -6,14 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| language-shutdown-failure-quiet | 7/8 (88%) | A stop interrupts the utterance in flight: one info line, a content-free interrupted_by_stop record for external speech, and no late publish; failures while running are unchanged |
-| js-sleep-duration-clock | 3/4 (75%) | The dashboard sleep test reads a fixed clock, so a slow runner cannot change the time so far |
-| control-freeze-lock | 4/4 (100%) | freeze-stack writes to control.json are locked and use unique temp files |
-| dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
-| distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | welfare-response-rearms | 7/7 (100%) | The protective welfare response re-arms once its pause is lifted, a welfare freeze survives a restart, and a control command lifts a named freeze |
-| stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
-| caretaker-in-research-runs | 6/6 (100%) | Research runs build the caretaker from the same [caretaker] section so welfare, stimulus-loss and input-loss notices reach a person, and the study runner surfaces a welfare freeze in status and the outcome |
 | docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
 | organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
@@ -70,6 +63,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 84 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 37 active changes, 414 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
