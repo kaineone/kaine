@@ -8,6 +8,10 @@ and restores it on a plain start. Per paper A.7, module state persists with the 
 checkpointed each entity minute and at shutdown, so a restart neither resets nor repeats it.
 The checkpoint is one file that is replaced atomically and encrypted through the process state encryptor.
 A revive never reads this checkpoint.
+Module state is checkpointed only while awake. A developmental state-cycle rest is the one
+exception, and it touches only the sleep module's state_cycle entry inside the last awake
+checkpoint (phase and rest time spent), so a process restart resumes the rest for its remainder
+while no other module's entry ever holds possibly inconsistent mid-sleep state.
 
 Self-persisting modules (self_model, episodic_memory, social_cognition, world_model) are excluded
 because they keep their own store or file that they reload on start; capturing them would risk rolling
@@ -502,6 +506,71 @@ async def save_checkpoint(
     return True
 
 
+def _rest_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate a sleep state_cycle entry; an awake entry always carries awake_s 0."""
+    phase = entry.get("phase")
+    spent = entry.get("rest_spent_s")
+    if phase == "resting":
+        if isinstance(spent, bool) or not isinstance(spent, (int, float)) or not math.isfinite(spent) or spent < 0:
+            return None
+        return {"phase": "resting", "awake_s": 0.0, "rest_spent_s": float(spent)}
+    if phase == "awake":
+        return {"phase": "awake", "awake_s": 0.0, "rest_spent_s": 0.0}
+    return None
+
+
+def update_state_cycle_entry(
+    identity: EntityIdentity | None,
+    entry: dict[str, Any],
+    directory: Path | None = None,
+) -> bool:
+    """Replace only the sleep module's state_cycle entry inside the existing checkpoint.
+
+    Every other module's entry stays as the last awake write left it. The same entity check
+    and revive-record rule as a restore apply, and the write is the same atomic encrypted
+    replace. With no usable checkpoint nothing is written.
+    """
+    new_entry = _rest_entry(entry)
+    if new_entry is None or identity is None:
+        return False
+
+    try:
+        snap = read_checkpoint(directory)
+    except CheckpointUnreadable as exc:
+        log.warning("resume checkpoint: rest progress not written, checkpoint unreadable (%s)", exc)
+        return False
+    if snap is None:
+        log.debug("resume checkpoint: no checkpoint yet; rest progress not written")
+        return False
+
+    try:
+        checkpoint_identity = identity_of_snapshot(snap)
+    except Exception as exc:
+        log.warning("resume checkpoint: rest progress not written (%s)", type(exc).__name__)
+        return False
+    if checkpoint_identity is None or checkpoint_identity.entity_id != identity.entity_id:
+        log.warning("resume checkpoint: rest progress not written, the checkpoint is of another entity")
+        return False
+
+    started = read_revive_started_at(directory)
+    if started is not None and snap.timestamp < started:
+        log.warning("resume checkpoint: rest progress not written, the checkpoint predates the latest revive")
+        return False
+
+    sleep_state = snap.modules.get("sleep")
+    if not isinstance(sleep_state, dict):
+        log.debug("resume checkpoint: no sleep entry in the checkpoint; rest progress not written")
+        return False
+
+    sleep_state["state_cycle"] = new_entry
+    try:
+        write_checkpoint(snap, directory)
+    except Exception as exc:
+        log.warning("resume checkpoint: rest progress not written (%s); the previous one is kept", type(exc).__name__)
+        return False
+    return True
+
+
 def discard_checkpoint(directory: Path | None = None) -> bool:
     """Remove the checkpoint file and its temporary sibling."""
     file = checkpoint_file(directory)
@@ -530,6 +599,7 @@ class ResumeCheckpointer:
         directory: Path | None = None,
         interval_seconds: float = CHECKPOINT_INTERVAL_SECONDS,
         poll_seconds: float = 1.0,
+        rest_source: Callable[[], dict[str, Any] | None] | None = None,
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
@@ -543,6 +613,12 @@ class ResumeCheckpointer:
         self._directory = directory
         self._interval = interval_seconds
         self._poll = poll_seconds
+        # Returns the sleep module's state_cycle entry, or None without one.
+        self._rest_source = rest_source
+        # Whether the checkpoint holds a resting entry this writer put there.
+        self._rest_marked = False
+        self._rest_written_spent = 0.0
+        self._rest_retry_at = 0.0
 
         self._stopping: asyncio.Event | None = None
         self._task: asyncio.Task | None = None
@@ -567,6 +643,41 @@ class ResumeCheckpointer:
         except Exception:
             return False
 
+    def _read_rest(self) -> dict[str, Any] | None:
+        if self._rest_source is None:
+            return None
+        try:
+            entry = self._rest_source()
+        except Exception:
+            return None
+        return entry if isinstance(entry, dict) else None
+
+    async def _sync_rest(self, *, final: bool = False) -> None:
+        """Keep the checkpoint's sleep state_cycle entry in step with a running rest.
+
+        Writes when a rest starts, each interval of rest time, at shutdown, and once when the
+        rest ends (the entry then reads awake with 0 s), so a crash after a rest resumes none.
+        """
+        entry = self._read_rest()
+        if entry is None:
+            return
+        resting = entry.get("phase") == "resting"
+        if not resting and not self._rest_marked:
+            return
+        spent = entry.get("rest_spent_s") if resting else 0.0
+        if resting and not final and self._rest_marked:
+            if not isinstance(spent, (int, float)) or spent - self._rest_written_spent < self._interval:
+                return
+        if not final and time.monotonic() < self._rest_retry_at:
+            return
+        ok = await asyncio.to_thread(update_state_cycle_entry, self._identity, entry, self._directory)
+        if not ok:
+            self._rest_retry_at = time.monotonic() + self._interval
+            return
+        self.writes += 1
+        self._rest_marked = resting
+        self._rest_written_spent = float(spent) if resting else 0.0
+
     async def run(self) -> None:
         """Poll until stopped and write a checkpoint each interval of awake time."""
         if self._stopping is None:
@@ -581,6 +692,8 @@ class ResumeCheckpointer:
             except asyncio.TimeoutError:
                 # The poll interval elapsed; check below whether a write is due.
                 pass
+
+            await self._sync_rest()
 
             awake = self._read_awake()
             ok = self._read_can_write()
@@ -603,6 +716,7 @@ class ResumeCheckpointer:
                 )
                 if success:
                     self.writes += 1
+                    self._rest_marked = False
                 last = awake
 
     async def stop(self) -> None:
@@ -637,6 +751,8 @@ class ResumeCheckpointer:
             log.info(
                 "resume checkpoint: asleep or frozen at shutdown; keeping the last awake checkpoint"
             )
+            # A state-cycle rest still records its progress in the sleep entry alone.
+            await self._sync_rest(final=True)
             return False
 
         success = await save_checkpoint(
@@ -648,4 +764,5 @@ class ResumeCheckpointer:
         )
         if success:
             self.writes += 1
+            self._rest_marked = False
         return success
