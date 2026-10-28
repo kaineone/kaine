@@ -54,6 +54,11 @@ SELF_MODEL_OUT_STREAM: str = "self_model.out"
 SELF_MODEL_SELF_MODEL_TYPE: str = "self_model.document"
 
 
+class _InterruptedByStop(Exception):
+    """Raised inside a generation when a stop has begun by the time the organ answers: the
+    utterance is discarded, never logged or published."""
+
+
 class Language(BaseModule):
     """Language organ - the LLM speaks *from* workspace access, not from
     the bare triggering text.
@@ -726,16 +731,19 @@ class Language(BaseModule):
                 await self.think(about, **kwargs)
         except asyncio.CancelledError:
             raise
+        except _InterruptedByStop:
+            log.info("language: %s intent interrupted by stop", kind)
+            await self._note_interrupted_by_stop(kind, "shutdown")
         except Exception as exc:
             if self._shutting_down():
-                # The model server went away with the stack: one line, no traceback.
-                log.warning(
-                    "language: %s intent not realized during shutdown (%s)",
-                    kind,
-                    type(exc).__name__,
+                # A stop has begun, so the failure is the interruption, whatever the
+                # server did: one line, no traceback, and the interruption record.
+                log.info(
+                    "language: %s intent interrupted by stop (%s)", kind, type(exc).__name__
                 )
-            else:
-                log.exception("language failed to realize %s intent", kind)
+                await self._note_interrupted_by_stop(kind, type(exc).__name__)
+                return
+            log.exception("language failed to realize %s intent", kind)
             # C3: content-free realization-failed audit event — mode and
             # reason class ONLY; never the text, prompt, or any payload that
             # was headed for generation. Guards are cleared by the
@@ -749,6 +757,20 @@ class Language(BaseModule):
                 )
             except Exception:
                 log.warning("language: realization_failed publish failed", exc_info=True)
+
+    async def _note_interrupted_by_stop(self, kind: str, reason_class: str) -> None:
+        """Content-free record that a stop cut an external utterance (mode and reason
+        class only, never text). Inner speech is never recorded, so a think writes none."""
+        if kind != SPEAK:
+            return
+        try:
+            await self._write_mode_record(
+                INTERNAL_STREAM,
+                "interrupted_by_stop",
+                {"mode": kind, "reason_class": reason_class},
+            )
+        except Exception:
+            log.warning("language: interrupted_by_stop publish failed", exc_info=True)
 
     async def _settle_gen_task(self) -> None:
         """Await the held generation, converting a preemptive cancellation into
@@ -780,6 +802,8 @@ class Language(BaseModule):
                     # cancellation or a cleanup error); the bare ``raise`` below
                     # re-raises the outer cancellation we are still handling.
                     pass
+                if mode == "external":
+                    await self._note_interrupted_by_stop(SPEAK, "CancelledError")
                 raise
         except Exception:
             log.exception("language generation task failed")
@@ -787,6 +811,7 @@ class Language(BaseModule):
     async def _cancel_gen_task(self) -> None:
         """Best-effort cancel of any in-flight generation (shutdown path)."""
         task = self._gen_task
+        mode = self._gen_mode
         self._gen_task = None
         self._gen_mode = None
         if task is None or task.done():
@@ -798,6 +823,9 @@ class Language(BaseModule):
             # Best-effort settle of the cancelled task; shutdown propagation is
             # handled by the caller's own re-raise.
             pass
+        # The utterance is gone: leave the content-free interruption record (external only).
+        if mode == "external":
+            await self._note_interrupted_by_stop(SPEAK, "CancelledError")
 
     def _record_preemption(self, mode: Optional[str]) -> None:
         tick = getattr(self._latest_snapshot, "tick_index", None)
@@ -944,6 +972,10 @@ class Language(BaseModule):
             dry=self._dry,
         )
         response = await self._chat_client.complete(request)
+        if self._shutting_down():
+            # The answer arrived after the stop began: the evaluation sidecar and the
+            # run recorder may already be stopped, so nothing is logged or published.
+            raise _InterruptedByStop()
 
         # A loop or a cap-cut fragment ends at a sentence boundary (paper 3.5); the
         # cut text is what is logged, published and returned.

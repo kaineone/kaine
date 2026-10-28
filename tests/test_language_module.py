@@ -931,18 +931,22 @@ async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncB
         await language.shutdown()
 
 
-# --- failure during shutdown versus while running ------------------------------
+# --- a stop interrupts an utterance; an outage while running is a failure ------
 
 
-async def _realization_failed_records(bus: AsyncBus) -> list[dict]:
+async def _records_of(bus: AsyncBus, type_: str) -> list[dict]:
     entries = await bus.client.xrange(INTERNAL_STREAM)
-    return [json.loads(fields["payload"]) for _entry_id, fields in entries if fields["type"] == "realization_failed"]
+    return [json.loads(fields["payload"]) for _entry_id, fields in entries if fields["type"] == type_]
+
+
+def _no_trace_no_error(caplog) -> None:
+    own = [r for r in caplog.records if r.name == "kaine.modules.language.module"]
+    assert all(r.exc_info is None for r in own)
+    assert not [r for r in own if r.levelno >= 30]
 
 
 @pytest.mark.asyncio
-async def test_failure_after_cycle_stop_logs_one_line_without_traceback(
-    bus: AsyncBus, tmp_path: Path, caplog
-):
+async def test_speak_failing_after_cycle_stop_is_an_interruption(bus: AsyncBus, tmp_path: Path, caplog):
     language = _make_failing_language(bus, tmp_path)
     stop_event = asyncio.Event()
     language.set_stop_event(stop_event)
@@ -950,49 +954,64 @@ async def test_failure_after_cycle_stop_logs_one_line_without_traceback(
     assert not language._stopped.is_set()
 
     with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
-        await language._realize_intent("think", "inner thought")
+        await language._realize_intent(SPEAK, "hello secret")
 
-    failures = [r for r in caplog.records if "not realized" in r.getMessage()]
-    assert len(failures) == 1
-    assert failures[0].levelname == "WARNING"
-    assert "think" in failures[0].getMessage()
-    assert "ConnectionError" in failures[0].getMessage()
-    assert all(r.exc_info is None for r in caplog.records)
-    assert not [r for r in caplog.records if r.levelname == "ERROR"]
-    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+    lines = [r for r in caplog.records if "interrupted by stop" in r.getMessage()]
+    assert len(lines) == 1
+    assert lines[0].levelname == "INFO"
+    assert "speak" in lines[0].getMessage() and "ConnectionError" in lines[0].getMessage()
+    _no_trace_no_error(caplog)
+    assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
+    assert await _records_of(bus, "realization_failed") == []
+    stored = " ".join(str(v) for _id, f in await bus.client.xrange(INTERNAL_STREAM) for v in f.values())
+    assert "hello secret" not in stored and "organ down" not in stored
 
 
 @pytest.mark.asyncio
-async def test_failure_after_module_stop_flag_is_also_a_shutdown(
-    bus: AsyncBus, tmp_path: Path, caplog
-):
+async def test_think_failing_after_stop_writes_no_record(bus: AsyncBus, tmp_path: Path, caplog):
+    language = _make_failing_language(bus, tmp_path)
+    stop_event = asyncio.Event()
+    language.set_stop_event(stop_event)
+    stop_event.set()
+
+    with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+        await language._realize_intent("think", "inner thought")
+
+    _no_trace_no_error(caplog)
+    assert await bus.client.xrange(INTERNAL_STREAM) == []
+
+
+@pytest.mark.asyncio
+async def test_failure_after_module_stop_flag_is_also_an_interruption(bus: AsyncBus, tmp_path: Path, caplog):
     language = _make_failing_language(bus, tmp_path)
     language._stopped.set()
 
     with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
         await language._realize_intent(SPEAK, "hello")
 
-    assert not [r for r in caplog.records if r.levelname == "ERROR"]
-    assert all(r.exc_info is None for r in caplog.records)
-    assert await _realization_failed_records(bus) == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
+    _no_trace_no_error(caplog)
+    assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
+    assert await _records_of(bus, "realization_failed") == []
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", [SPEAK, "think"])
 async def test_failure_while_running_still_logs_error_with_traceback(
-    bus: AsyncBus, tmp_path: Path, caplog
+    bus: AsyncBus, tmp_path: Path, caplog, kind: str
 ):
     language = _make_failing_language(bus, tmp_path)
     language.set_stop_event(asyncio.Event())  # wired but not set: the stack is running
 
     with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
-        await language._realize_intent("think", "inner thought")
+        await language._realize_intent(kind, "inner thought")
 
     errors = [r for r in caplog.records if r.levelname == "ERROR"]
     assert len(errors) == 1
-    assert "failed to realize think intent" in errors[0].getMessage()
+    assert f"failed to realize {kind} intent" in errors[0].getMessage()
     assert errors[0].exc_info is not None
     assert errors[0].exc_info[0] is ConnectionError
-    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+    assert await _records_of(bus, "realization_failed") == [{"mode": kind, "reason_class": "ConnectionError"}]
+    assert await _records_of(bus, "interrupted_by_stop") == []
 
 
 @pytest.mark.asyncio
@@ -1013,8 +1032,78 @@ async def test_supervisor_rebuilt_language_module_gets_the_cycle_stop_event(
     stop_event.set()
 
     with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
-        await rebuilt._realize_intent("think", "inner thought")
+        await rebuilt._realize_intent(SPEAK, "inner thought")
 
-    assert not [r for r in caplog.records if r.levelname == "ERROR"]
-    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+    _no_trace_no_error(caplog)
+    assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
     await rebuilt.shutdown()
+
+
+def _gated_language(bus: AsyncBus, tmp_path: Path) -> tuple[Language, "_GatedChatClient"]:
+    client = _GatedChatClient(responses=["never published"])
+    language = Language(
+        bus,
+        chat_client=client,
+        intent_log=IntentExpressionLog(tmp_path / "intent.jsonl"),
+        model_id="m",
+    )
+    return language, client
+
+
+@pytest.mark.asyncio
+async def test_module_shutdown_cancel_of_a_speak_leaves_an_interruption_record(bus: AsyncBus, tmp_path: Path):
+    language, client = _gated_language(bus, tmp_path)
+    await language.initialize()
+    await _publish_speak(bus, "hanging")
+    await asyncio.wait_for(client.started.wait(), timeout=2.0)
+
+    await language.shutdown()
+
+    assert client.cancelled == 1
+    assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "CancelledError"}]
+    assert await _records_of(bus, "realization_failed") == []
+    assert await bus.client.xrange(EXTERNAL_STREAM) == []
+
+
+@pytest.mark.asyncio
+async def test_module_shutdown_cancel_of_a_think_leaves_no_record(bus: AsyncBus, tmp_path: Path):
+    language, client = _gated_language(bus, tmp_path)
+    await language.initialize()
+    await _publish_intent(bus, "think", "hanging")
+    await asyncio.wait_for(client.started.wait(), timeout=2.0)
+
+    await language.shutdown()
+
+    assert client.cancelled == 1
+    assert await bus.client.xrange(INTERNAL_STREAM) == []
+
+
+@pytest.mark.asyncio
+async def test_an_answer_arriving_after_the_stop_began_is_not_published(bus: AsyncBus, tmp_path: Path, caplog):
+    """The language module keeps running until the modules shut down, after the sidecar
+    and the run recorder have stopped. An utterance that finishes in that window must be
+    discarded, not logged or published."""
+    language, client = _gated_language(bus, tmp_path)
+    stop_event = asyncio.Event()
+    language.set_stop_event(stop_event)
+    await language.initialize()
+    try:
+        await _publish_speak(bus, "hanging")
+        await asyncio.wait_for(client.started.wait(), timeout=2.0)
+        stop_event.set()  # the stop begins while the request is in flight
+        with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+            client.release.set()  # the organ answers normally
+            records = []
+            deadline = asyncio.get_event_loop().time() + 2.0
+            while not records and asyncio.get_event_loop().time() < deadline:
+                await asyncio.sleep(0.02)
+                records = await _records_of(bus, "interrupted_by_stop")
+    finally:
+        await language.shutdown()
+
+    assert client.completed == 1
+    assert records == [{"mode": SPEAK, "reason_class": "shutdown"}]
+    assert await bus.client.xrange(EXTERNAL_STREAM) == []
+    assert await bus.client.xrange("language.out") == []
+    assert not (tmp_path / "intent.jsonl").exists() or (tmp_path / "intent.jsonl").read_text() == ""
+    _no_trace_no_error(caplog)

@@ -6,7 +6,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| language-shutdown-failure-quiet | 4/5 (80%) | A stop interrupts the utterance in flight: one info line, a content-free interrupted_by_stop record for external speech, and no late publish; failures while running are unchanged |
+| language-shutdown-failure-quiet | 7/8 (88%) | A stop interrupts the utterance in flight: one info line, a content-free interrupted_by_stop record for external speech, and no late publish; failures while running are unchanged |
 | control-freeze-lock | 4/4 (100%) | freeze-stack writes to control.json are locked and use unique temp files |
 | dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
 | distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |

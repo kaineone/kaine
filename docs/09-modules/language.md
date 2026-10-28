@@ -129,7 +129,8 @@ The organ's weights have the single direction that mediates refusal projected ou
 |---|---|---|
 | `language.external` | `external_speech` | External speech. The vocal module subscribes here for synthesis |
 | `language.internal` | `internal_speech` | Inner thought. The vocal module never reads this stream |
-| `language.internal` | `realization_failed` | Content-free audit event when a generation fails; carries `mode` and `reason_class` only, never text, and is not mirrored |
+| `language.internal` | `realization_failed` | Content-free audit event when a generation fails while the system is running; carries `mode` and `reason_class` only, never text, and is not mirrored |
+| `language.internal` | `interrupted_by_stop` | Content-free audit event when a stop cuts an external utterance (the generation is cancelled, fails after the stop began, or answers after it); carries `mode` and `reason_class` only, never text, and is not mirrored. An inner thought cut by a stop leaves no record |
 | `language.out` | `external_speech`, `internal_speech` | A mirror of every speech event, so one subscription sees both, and the copy the cycle reads as a candidate |
 
 Both speech events carry `text`, `mode`, `model`, `prompt_length`, `latency_ms`, `record_id`, `origin` (when the intent had one) and `faithful_rendering`. The published `faithful_rendering` is redacted: heard speech in it is replaced by `[heard speech]`, as in the intent log. `external_speech` carries `user_input` only for felt and event intents, with any heard text in it redacted. Under the default `self_initiated_report` policy that field is the policy's own description of the leading candidate. A reply to heard speech never carries `user_input`, so the A/B divergence sidecar measures only felt- and event-triggered replies and records replies to heard speech as content-free skips.
