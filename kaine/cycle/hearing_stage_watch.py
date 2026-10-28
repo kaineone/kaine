@@ -90,6 +90,20 @@ class HearingStageWatch:
             return None
         return dict(self._current)
 
+    @property
+    def runtime_reading(self) -> dict[str, Any] | None:
+        """The newest reading with the run's dwell bounds, for the runtime file.
+
+        The bounds are fixed for the run; the dashboard shows the stage's dwell against
+        them. The published event and ``current`` do not carry them.
+        """
+        reading = self.current
+        if reading is None:
+            return None
+        reading["min_dwell_seconds"] = self._state.params.min_dwell_seconds
+        reading["max_dwell_seconds"] = self._state.params.max_dwell_seconds
+        return reading
+
     async def run(self, stop_event: asyncio.Event) -> None:
         try:
             await self._run_loop(stop_event)

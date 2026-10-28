@@ -5,7 +5,7 @@
 
 Two routes under /diagnostics:
 
-  GET  /diagnostics/maturation.json  - current maturation request/ack state plus developmental progress and hearing stage.
+  GET  /diagnostics/maturation.json  - current maturation request/ack state plus developmental progress and hearing stage (with its dwell, read from state/lifecycle/hearing_stage.json).
   POST /diagnostics/maturation/ack   — operator acknowledges the maturation
 
 The maturation gate writes ``state/lifecycle/maturation_request.json``; the dashboard writes
@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from kaine import legacy_names
 from kaine.dashboard.auth import require_operator_token
+from kaine.lifecycle import stage as lifecycle_stage
 from kaine.lifecycle.maturation_ack import (
     MaturationAck,
     is_acknowledged,
@@ -83,7 +84,32 @@ def read_development(runtime_path: Path | None = None) -> dict | None:
     return {k: block[k] for k in block if k in _DEVELOPMENT_KEYS}
 
 
-def read_hearing_stage(runtime_path: Path | None = None) -> dict | None:
+def _read_hearing_dwell(stage: int, hearing_stage_path: Path | None) -> float | None:
+    """Awake seconds in ``stage``, from the stage's single owner file, or None.
+
+    The owner file holds the stage and its dwell. A dwell is returned only when the
+    file names the same stage as the runtime reading, so a step between the two
+    writes never shows the old stage's dwell against the new stage.
+    """
+    if hearing_stage_path is None:
+        hearing_stage_path = Path(lifecycle_stage.STAGE_PATH).parent / "hearing_stage.json"
+    try:
+        raw = json.loads(resolve(hearing_stage_path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, dict) or raw.get("stage") != stage:
+        return None
+    dwell = raw.get("dwell_seconds")
+    if isinstance(dwell, bool) or not isinstance(dwell, (int, float)):
+        return None
+    if not math.isfinite(dwell) or dwell < 0:
+        return None
+    return dwell
+
+
+def read_hearing_stage(
+    runtime_path: Path | None = None, hearing_stage_path: Path | None = None
+) -> dict | None:
     if runtime_path is None:
         runtime_path = RUNTIME_PATH
     runtime_path = resolve(runtime_path)
@@ -123,6 +149,9 @@ def read_hearing_stage(runtime_path: Path | None = None) -> dict | None:
         "low_hz": _finite(block.get("low_hz")),
         "high_hz": _finite(block.get("high_hz")),
         "awake_seconds": _finite(block.get("awake_seconds")),
+        "dwell_seconds": _read_hearing_dwell(stage, hearing_stage_path),
+        "min_dwell_seconds": _finite(block.get("min_dwell_seconds")),
+        "max_dwell_seconds": _finite(block.get("max_dwell_seconds")),
     }
 
 
@@ -131,6 +160,7 @@ def maturation_snapshot(
     request_path: Path | None = None,
     ack_path: Path | None = None,
     runtime_path: Path | None = None,
+    hearing_stage_path: Path | None = None,
 ) -> dict:
     request = read_request(path=request_path)
     ack = read_ack(path=ack_path)
@@ -156,7 +186,9 @@ def maturation_snapshot(
             "acknowledged_at": None,
         }
     snapshot["development"] = read_development(runtime_path=runtime_path)
-    snapshot["hearing"] = read_hearing_stage(runtime_path=runtime_path)
+    snapshot["hearing"] = read_hearing_stage(
+        runtime_path=runtime_path, hearing_stage_path=hearing_stage_path
+    )
     return snapshot
 
 
@@ -165,6 +197,7 @@ def build_maturation_router(
     request_path: Path | None = None,
     ack_path: Path | None = None,
     runtime_path: Path | None = RUNTIME_PATH,
+    hearing_stage_path: Path | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/diagnostics")
 
@@ -178,6 +211,7 @@ def build_maturation_router(
                 request_path=request_path,
                 ack_path=ack_path,
                 runtime_path=runtime_path,
+                hearing_stage_path=hearing_stage_path,
             ),
             headers=NO_CACHE,
         )
@@ -207,6 +241,7 @@ def build_maturation_router(
                 request_path=request_path,
                 ack_path=ack_path,
                 runtime_path=runtime_path,
+                hearing_stage_path=hearing_stage_path,
             ),
             headers=NO_CACHE,
         )

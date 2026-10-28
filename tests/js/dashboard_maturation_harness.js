@@ -615,6 +615,150 @@ var scenarios = [
     }
   },
   {
+    name: "hearing dwell renders hours against the dwell bounds",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: 4320, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      var expected = "stage 3 of 4, below 1732.1 Hz, 1.2 h of 1.5 to 7 h";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+      if (feedHearing.textContent !== expected) {
+        throw new Error("unexpected feed hearing: " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing without a dwell field shows no dwell",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: null, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      var expected = "stage 3 of 4, below 1732.1 Hz";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+      if (feedHearing.textContent !== expected) {
+        throw new Error("unexpected feed hearing: " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing without dwell bounds shows no dwell",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: 4320 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      var expected = "stage 3 of 4, below 1732.1 Hz";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+      if (feedHearing.textContent !== expected) {
+        throw new Error("unexpected feed hearing: " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
+    name: "hearing at the open stage shows no dwell",
+    setup: function (sandbox) {
+      makePanelElements(sandbox);
+      sandbox._setResponse({
+        status: 200,
+        json: async function () {
+          return {
+            pending: false,
+            request_id: null,
+            development: {
+              stage: "development",
+              lived_seconds: 0,
+              sleep_count: 0,
+              consolidation_passes: 0,
+              readiness: { ready: false, passed: [], unmet: [] },
+              readout: {}
+            },
+            hearing: { stage: 4, previous_stage: 3, low_hz: null, high_hz: null, awake_seconds: 9, dwell_seconds: 0, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+          };
+        }
+      });
+    },
+    run: async function (sandbox) {
+      await tick();
+      var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
+      var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
+      var expected = "stage 4 of 4, open";
+      if (hearingValue.textContent !== expected) {
+        throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
+      }
+      if (feedHearing.textContent !== expected) {
+        throw new Error("unexpected feed hearing: " + JSON.stringify(feedHearing.textContent));
+      }
+    }
+  },
+  {
     name: "hearing stage 4 renders open",
     setup: function (sandbox) {
       makePanelElements(sandbox);

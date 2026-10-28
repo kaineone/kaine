@@ -161,7 +161,7 @@ The development panel appears while the entity is in the developmental phase or 
 - the consolidation passes when consolidation is required, and "consolidation: not required" when the gate's `conditions.c2_consolidation_required` is false (no sleep module or no world model module);
 - each readiness marker as met (✓), unmet (✗) or not applicable (–), with its readout value where there is one;
 - the gate decision and, with operator acknowledgement on, the acknowledgement control;
-- the hearing band's stage, for example "stage 1 of 4, 158.1 to 707.1 Hz", "below 707.1 Hz" once the lower edge is gone, or "open" at stage 4.
+- the hearing band's stage, for example "stage 1 of 4, 158.1 to 707.1 Hz", "below 707.1 Hz" once the lower edge is gone, or "open" at stage 4. Before stage 4 it adds the stage's dwell, the awake time spent in the stage against the stage's bounds, for example "stage 3 of 4, below 1732.1 Hz, 1.2 h of 1.5 to 7 h". The dwell comes from `state/lifecycle/hearing_stage.json`, the stage's single owner (saved about every 30 s of dwell), and the bounds are the configured `min_dwell_seconds` and `max_dwell_seconds`; the panel leaves the dwell out when the file or a bound is missing.
 
 In stimulus-source mode the perception feed panel lists the configured stimulus: the base heartbeat rate and its drift, the colour's hue gain (colour follows the hearing stage), whether the maternal voice is on, and the hearing band's saturation window and dwell bounds with its current stage. They are the configured values. The heartbeat drifts around its base rate with the simulated maternal state, and the panel does not show the rate of the moment. See [developmental phase](06-operation/development.md) for what each one does.
 

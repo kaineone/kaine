@@ -349,3 +349,22 @@ async def test_run_keeps_a_failed_stage_when_the_next_one_arrives() -> None:
     assert stages[:2] == [0, 1]
     assert stages[-1] == 4
     assert bus.events[1].payload["previous_stage"] == 0
+
+
+def test_runtime_reading_adds_the_dwell_bounds_and_leaves_the_event_alone() -> None:
+    watch = HearingStageWatch(_FakeBus(), _Clock(), _state(), lambda stage: LOW)
+
+    assert watch.runtime_reading is None
+
+    payload = watch.check()
+    assert payload is not None
+    reading = watch.runtime_reading
+    assert reading == {
+        **payload,
+        "min_dwell_seconds": PARAMS.min_dwell_seconds,
+        "max_dwell_seconds": PARAMS.max_dwell_seconds,
+    }
+    assert "min_dwell_seconds" not in payload
+    assert "min_dwell_seconds" not in watch.current
+    reading["stage"] = 99
+    assert watch.runtime_reading["stage"] == 0
