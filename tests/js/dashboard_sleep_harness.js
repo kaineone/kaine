@@ -12,6 +12,13 @@ const TEXT_IDS = [
 ];
 const HIDDEN_IDS = ["sleep-aborted"];
 
+// The dashboard reads Date.now() for "time so far". The sandbox gets a Date whose now() is
+// fixed, so no case depends on how slow the runner is.
+const NOW_MS = 1800000000000;
+class FixedDate extends Date {
+  static now() { return NOW_MS; }
+}
+
 function makeSandbox(payload) {
   var elements = {};
   TEXT_IDS.forEach(function (id) {
@@ -35,7 +42,7 @@ function makeSandbox(payload) {
       });
     },
     Promise: globalThis.Promise,
-    Date: globalThis.Date,
+    Date: FixedDate,
     Math: globalThis.Math,
     JSON: globalThis.JSON,
     Object: globalThis.Object,
@@ -92,7 +99,7 @@ var scenarios = [
       sleeping: true,
       sleep: {
         asleep: true, trigger: "requested",
-        started_at: Date.now() / 1000 - 60,
+        started_at: NOW_MS / 1000 - 60,
         duration_s: null, rest_seconds: null, aborted: false, completed_at: null
       },
     },
@@ -100,7 +107,7 @@ var scenarios = [
       expectEqual(s, "sleep-state", "asleep");
       expectEqual(s, "sleep-trigger", "requested");
       var d = s._elements["sleep-duration"].textContent;
-      if (d !== "1 min 0 s so far" && d !== "1 min 1 s so far") {
+      if (d !== "1 min 0 s so far") {
         throw new Error("duration: got " + JSON.stringify(d));
       }
       expectEqual(s, "sleep-rest-length", "n/a");
