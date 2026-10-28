@@ -54,7 +54,7 @@ from kaine.bus.config import load_bus_config, load_secrets_doc
 from kaine.bus.schema import Event
 from kaine.cycle.affect_state import AffectStateProvider
 from kaine.cycle.boot_context import BootContext
-from kaine.cycle.control_state import read_control, unfreeze
+from kaine.cycle.control_state import read_control, unfreeze_for_boot
 from kaine.cycle.engine import CognitiveCycle
 from kaine.cycle.escalation_state import clear_escalation, read_escalation
 from kaine.cycle.ignition_log import (
@@ -2606,13 +2606,21 @@ async def _phase_signals(ctx: BootContext) -> int | None:
             # Windows / restricted env — fall through to KeyboardInterrupt path.
             pass
 
-    # A fresh launch always starts running: clear any stale operator freeze the
-    # previous run may have left behind (freeze is a runtime control, not a boot
-    # state).
+    # A fresh launch starts running: clear any stale freeze the previous run
+    # may have left behind (freeze is a runtime control, not a boot state),
+    # except a welfare freeze, which only a named override lifts. A restart,
+    # an automatic one included, must not answer the protective response.
     try:
-        unfreeze()
+        boot_control = unfreeze_for_boot()
     except Exception:
         log.debug("could not clear freeze control at startup", exc_info=True)
+    else:
+        if boot_control.frozen:
+            log.warning(
+                "entity is frozen at boot (source=%s); "
+                "it will stay frozen until a human releases it with an explicit override",
+                boot_control.source,
+            )
     # A deliberate fresh launch also clears any prior escalation halt.
     try:
         clear_escalation()
@@ -2750,8 +2758,34 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         )
 
 
+async def _pause_if_frozen_at_launch(cycle, playlist_clock) -> None:
+    """Pause before the first tick when a freeze stands (a welfare freeze survives a
+    restart), so the cycle never runs ahead of the freeze-watch loop."""
+    try:
+        control = read_control()
+        if control.frozen:
+            await cycle.pause()
+        else:
+            return
+    except Exception:
+        log.warning("launch: could not apply a standing freeze before the first tick", exc_info=True)
+        return
+    if playlist_clock is not None:
+        try:
+            playlist_clock.pause("freeze")
+        except Exception:
+            log.warning("launch: playlist clock pause failed", exc_info=True)
+
+
 async def _phase_launch(ctx: BootContext) -> int | None:
     """Start the cycle, freeze-watch, supervisor, divergence and welfare tasks."""
+
+    await _pause_if_frozen_at_launch(
+        ctx.cycle,
+        (ctx.kaine_config.get("perception_feed") or {}).get(
+            "_shared_playlist_clock"
+        ),
+    )
 
     ctx.cycle_task = asyncio.create_task(ctx.cycle.run_forever(), name="cycle.run_forever")
     ctx.freeze_task = asyncio.create_task(

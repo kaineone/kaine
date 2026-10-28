@@ -176,6 +176,22 @@ def test_override_inactive_source_is_409(tmp_path):
     assert cs.read_control(ctrl).frozen is True
 
 
+def test_resume_on_corrupt_control_file_returns_welfare_holder(tmp_path):
+    app, ctrl, _ = _app(tmp_path)
+    ctrl.write_text("{not json")
+    client = TestClient(app)
+    r = client.post(
+        "/diagnostics/cycle/freeze",
+        json={"frozen": False},
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["frozen"] is True
+    assert [h["source"] for h in data["holders"]] == ["welfare"]
+    assert ctrl.read_text() == "{not json"
+
+
 def test_override_refused_in_read_only_mode():
     # Read-only mode is enforced by the real app's middleware, before any route.
     from unittest.mock import AsyncMock

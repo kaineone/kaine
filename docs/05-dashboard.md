@@ -241,7 +241,7 @@ POST /diagnostics/cycle/override
 
 `confirm` must repeat the sources. The supervisor and preservation freezes release themselves and cannot be overridden. Each override is recorded, without content, in `state/cycle/override_audit.jsonl`.
 
-Freeze state lives in `state/cycle/control.json`. A freeze-watch task in the cycle entrypoint polls it every 250 ms and applies it, and a fresh launch clears any stale freeze.
+Freeze state lives in `state/cycle/control.json`. A freeze-watch task in the cycle entrypoint polls it every 250 ms and applies it, and a fresh launch clears any stale freeze except a `welfare` one.
 
 Freeze holders stack: `operator` (dashboard or API), `supervisor` (the module supervisor), `welfare` (the preservation monitor), `preserve`, `development` and `programme_end`. Each holder pushes its own entry and pops only its own, so a supervisor recovery never lifts an operator or welfare freeze, and the cycle stays frozen until the stack is empty. A welfare-protective pause lifts only through an operator override that names it or an explicit welfare stand-down; resume does not lift it.
 
