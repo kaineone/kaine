@@ -91,7 +91,10 @@ jobs:
             # torchvision from the same CPU index as torch, pinned for the package
             # install below: a PyPI torchvision built against another torch breaks
             # transformers' lazy model imports (torchvision::nms does not exist).
-            python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+            # The newest torch inside the range pyproject declares for the core extra, so a
+            # new torch release past the cap cannot conflict with the package install below.
+            TORCH_SPEC=$(python -c "import sys,tomllib; deps=tomllib.load(open('pyproject.toml','rb')).get('project',{}).get('optional-dependencies',{}).get('core',[]); sys.stdout.write(next(x for x in deps if x.startswith('torch') and any(c in x for c in '<>=!~')))")
+            python -m pip install "${TORCH_SPEC}" torchvision --index-url https://download.pytorch.org/whl/cpu
             TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
             TV_VERSION=$(python -c "import torchvision; print(torchvision.__version__)")
             printf "torch==%s\ntorchvision==%s\n" "${TORCH_VERSION}" "${TV_VERSION}" > /tmp/torch-constraints.txt
