@@ -5,43 +5,6 @@ Divergence-assessment defines the content-free divergence metric emitted wheneve
 
 ## Requirements
 
-### Requirement: Consolidation divergence metric
-The voice-alignment consolidation phase SHALL emit a content-free divergence
-metric whenever it builds preference pairs — including when training is skipped,
-disabled, or the resulting adapter is rejected — carrying `records_scanned`,
-`usable_pairs`, `divergence_rate` (usable / scanned), and a semantic
-`divergence_magnitude` (mean cosine distance over the kept pairs, null when the
-semantic embedder is unavailable). The metric SHALL contain only aggregate numbers
-— never the prompt, chosen, or rejected utterance text.
-
-#### Scenario: Divergent utterances produce a nonzero metric
-- **WHEN** an intent-expression log contains records whose conditioned output differs from the bare organ output
-- **THEN** the emitted metric's `usable_pairs` counts exactly those records and `divergence_rate` is `usable_pairs / records_scanned`
-
-#### Scenario: Metric is emitted even when training does not run
-- **WHEN** voice-alignment is skipped (disabled / not approved) or the adapter is rejected by the capability/abliteration gates
-- **THEN** the consolidation divergence metric is still emitted (the divergence occurred independent of training)
-
-#### Scenario: Metric carries no utterance content
-- **WHEN** the consolidation divergence event/record is produced
-- **THEN** it contains only numeric aggregates and no prompt/chosen/rejected text
-
-### Requirement: Divergence assessment incorporates the consolidation signal
-The divergence assessment SHALL treat the consolidation divergence metric as a
-graded organ-level divergence input — `divergence_rate` or `divergence_magnitude`
-crossing a configured threshold marks organ-level divergence — alongside the
-individuation permutation test and the self-model module's drift. The accepted-adapter boolean
-SHALL be retained only as a weaker secondary signal, and the numeric consolidation
-values SHALL appear in the assessment's signals.
-
-#### Scenario: Consolidation divergence over threshold marks diverged
-- **WHEN** the latest consolidation `divergence_rate`/`divergence_magnitude` exceeds the configured threshold
-- **THEN** `assess_divergence()` reports diverged, with the numeric consolidation values in its signals, independent of the individuation test and adapter presence
-
-#### Scenario: Below threshold does not, by itself, mark diverged
-- **WHEN** the consolidation divergence is below the configured threshold and no other divergence condition holds
-- **THEN** the assessment does not report organ-level divergence from this signal alone
-
 ### Requirement: Preservation and decommission share one warmed-up, architecture-effect-free signal
 
 The system SHALL ensure the live preservation trigger (`entity-preservation`) and
@@ -68,16 +31,16 @@ be treated as mature if unsure.
 - **THEN** it returns `diverged == false` with a summary noting insufficient lived
   experience and advising the entity be treated as mature if unsure
 
-### Requirement: Live preservation and decommission use the same consolidation thresholds
-The live divergence monitor SHALL assess divergence with the consolidation thresholds configured in `[sleep.voice_alignment]` (`consolidation_divergence_rate_threshold`, `consolidation_divergence_magnitude_threshold`), read the same way the decommission CLI reads them, so the two consumers reach the same verdict on the same records.
-
-#### Scenario: A lowered rate threshold is honoured live
-- **WHEN** `consolidation_divergence_rate_threshold = 0.2` and the latest consolidation record has `divergence_rate = 0.3`
-- **THEN** the live monitor's assessment reports organ-level divergence, as the decommission CLI's does
-
 ### Requirement: Unreadable intent-log lines count as spoken evidence
 The divergence assessment's spoken-evidence check SHALL treat an intent-log or corpus line that cannot be decrypted or parsed as evidence that the entity has spoken, so the voice arm votes diverged rather than abstaining.
 
 #### Scenario: A log holding only an undecryptable line
 - **WHEN** the only line in the intent log is an envelope that fails authentication
 - **THEN** the voice arm votes diverged and the entity is assessed as diverged
+
+### Requirement: An old consolidation record marks nothing
+`assess_divergence` SHALL NOT read `state/sleep/consolidation_divergence.json`, and its signals SHALL carry no `consolidation_*` keys. The preservation monitor SHALL have no `consolidation` arm. A record left by an earlier boot SHALL remain a known state file for decommission, renames and lived-artifact checks.
+
+#### Scenario: A record from an earlier boot
+- **WHEN** the state tree holds a consolidation divergence record with rate 1.0 and no other arm is active
+- **THEN** the assessment reports not diverged

@@ -437,3 +437,150 @@ Any metrics or health endpoint that can expose module-internal details (e.g. raw
 #### Scenario: Metrics endpoint without token is rejected in dev mode
 - **WHEN** `dev_content_override` is true and a client requests a metrics endpoint without a token
 - **THEN** the server responds with HTTP 401
+
+### Requirement: The entity name is always shown and kept current
+Every dashboard page SHALL show the entity's name in its shared header, whether or not the conversation surface is enabled. The dashboard SHALL re-read the name from the self-model document and the identity file when either changes, so a name assigned after the dashboard started is shown without a restart. Before a name exists the header SHALL show the placeholder.
+
+#### Scenario: The first configuration
+- **WHEN** the dashboard runs with `conversation_enabled = false` and the identity holds "Kaine Whipple"
+- **THEN** the diagnostics page header shows "Kaine Whipple"
+
+#### Scenario: A name minted after startup
+- **WHEN** the dashboard starts before the identity file exists and the cycle then writes a named identity
+- **THEN** the header shows the name without a dashboard restart
+
+### Requirement: Dashboard welfare counts honour restart resets
+The dashboard SHALL compute welfare counts with the reset-aware reader, so a count after a restart reset is not raised by records from before it. The evaluation tab SHALL read only the rollups the cycle writes, and SHALL NOT report counters from a sidecar registry the dashboard process never starts.
+
+#### Scenario: Dashboard welfare counts honour restart resets
+- **WHEN** the welfare JSONL holds a count of 5, then a restart reset, then a count of 0
+- **THEN** the dashboard shows 0
+
+#### Scenario: No registry stands in for the cycle
+- **WHEN** the dashboard builds the evaluation tab
+- **THEN** it builds no sidecar registry and no panel reports a source of live
+
+### Requirement: Backend load failures come from the cycle
+The cycle SHALL write the content-free records of its runtime-backend load failures (`module`, `backend`, `reason`, `fallback`, `ts`) into `state/cycle/runtime.json` as `backend_failures`, an empty list when every selected backend loaded. The dashboard's `backends` block SHALL report those records together with any recorded in the dashboard's own process, and SHALL carry `source`: `cycle` when the runtime file holds the list, `cycle_not_running` when there is no runtime file, `not_reported` when the file lacks the key. `ok` SHALL be false when any failure is reported, true when the cycle reported an empty list and the dashboard recorded none, and null otherwise. The health board SHALL show the block.
+
+#### Scenario: The cycle fell back
+- **WHEN** the cycle recorded that the language module's `llama_cpp` backend failed and `ollama` was used instead
+- **THEN** the backends block has `ok` false and that record, and the health board shows it with its fallback
+
+#### Scenario: No cycle running
+- **WHEN** there is no runtime file and the dashboard recorded no failure
+- **THEN** the block has `ok` null and `source` "cycle_not_running", and the board says the cycle is not running
+
+#### Scenario: Every backend loaded
+- **WHEN** the runtime file holds an empty `backend_failures` list
+- **THEN** the block has `ok` true and `source` "cycle"
+
+### Requirement: The console shows the entity's name
+The dashboard SHALL show the entity's name in the console's page title and left rail. At start it SHALL read the name from the self-model file at `[self_model].persistence_path` through the self-model document loader, and when that file holds no name, from an optional `name` field of the identity file. While running it SHALL take the name from the `name` field of each `self_model.document` event on `self_model.out`, read by a bridge observer whether or not a browser is connected, and when the app starts it SHALL read the newest such event already on the stream. When no source gives a non-empty name the console SHALL show "KAINE". A missing, unreadable or undecryptable file and a bus error SHALL leave the name as it was and SHALL NOT stop the dashboard. The observer SHALL read no other field of the event.
+
+#### Scenario: The persisted launch name is shown
+- **WHEN** the self-model file holds the name "Kaine Voxel" and the dashboard starts
+- **THEN** the console's title and left rail show "Kaine Voxel"
+
+#### Scenario: A rename arrives on the bus
+- **WHEN** a `self_model.document` event with the name "Lyra" is read from `self_model.out` and no browser is connected
+- **THEN** the next console page shows "Lyra"
+
+#### Scenario: No name anywhere
+- **WHEN** the self-model file and the identity file are absent and the bus holds no `self_model.document` event
+- **THEN** the console shows "KAINE"
+
+### Requirement: The status chip starts from the server's sleep state
+The dashboard SHALL follow `sleep.sleep.started` and `sleep.sleep.completed` on `sleep.out` through a bridge observer and, when the app starts, SHALL read the newest of the two among the stream's last 500 entries. The console SHALL render that state on the status chip as a `data-sleeping` attribute, and the chip script SHALL start from it, so a page opened during a sleep shows "sleeping" once the cycle reports running.
+
+#### Scenario: A page opened during a sleep
+- **WHEN** the newest sleep lifecycle event is `sleep.sleep.started` and the console is loaded
+- **THEN** the chip carries `data-sleeping="true"` and reads "sleeping" after the first metrics snapshot reports the cycle running
+
+#### Scenario: An observer error does not stop the bridge
+- **WHEN** an observer raises on an event
+- **THEN** the error is logged and the bridge still delivers that event and later ones
+
+### Requirement: The welfare board shows the affect welfare record
+The health snapshot's `welfare` block SHALL carry `affect_welfare`: the newest `affect_welfare` record in the welfare rollup, holding only its timestamp and these numeric measures (each a finite number or null): `awake_seconds`, `negative_valence_bar`, `negative_valence_share`, and for each of `boredom`, `social_drive` and `restlessness` the `_uncontrolled_share`, `_uncontrolled_per_awake_hour`, `_deprivation_share`, `_sleep_reset_ends` and `_open_crossings` measures, and `curiosity_interest_share`, together with `current_run`, true when no observer start follows the record in the rollup. Any other field SHALL be dropped. With no record the value SHALL be null. The welfare board SHALL show the measures per drive, the record's time, and a note when the record predates the observer's latest start.
+
+#### Scenario: A record since the latest start
+- **WHEN** the rollup's newest affect welfare record follows its latest reset advisory
+- **THEN** the panel shows its measures per drive and `current_run` is true
+
+#### Scenario: Only an older record
+- **WHEN** a reset advisory follows the newest affect welfare record
+- **THEN** the panel shows that record with a note that it predates the observer's latest start
+
+### Requirement: The welfare board shows the sleep trigger, the rest and rest requests
+The dashboard SHALL follow `sleep.sleep.started`, `sleep.sleep.completed` and `affect.rest_request` through a bridge observer and, when the app starts, SHALL read the newest of them from the last 2000 entries of `sleep.out` and `affect.out`. `GET /diagnostics/sleep.json` SHALL return whether the entity sleeps, the current or last sleep's trigger, start time, duration, developmental rest length and abort flag, and the last rest request's reason, drive, stall length and time. The trigger SHALL be the one the sleep module states (`developmental_rest` on the completion, or `developmental_rest` or `requested` on the start). For a sleep whose start the dashboard saw without a trigger, it SHALL be `backstop` when the completion carries `fatigue_triggered` false and `fatigue_or_backstop` when it carries true, since that flag stays true after the first fatigue sleep. Otherwise it SHALL be null. Labels read from the bus SHALL be kept only when they are lower-case identifiers of at most 40 characters.
+
+#### Scenario: A developmental rest
+- **WHEN** `sleep.sleep.started` carries `trigger` "developmental_rest" and the completion carries `rest_seconds` 1260
+- **THEN** sleep.json reports the trigger "developmental_rest" and the rest length 1260 s
+
+#### Scenario: An interval sleep
+- **WHEN** a sleep starts without a trigger and completes with `fatigue_triggered` false
+- **THEN** sleep.json reports the trigger "backstop"
+
+#### Scenario: A sleep after an earlier fatigue sleep
+- **WHEN** a sleep starts without a trigger and completes with `fatigue_triggered` true
+- **THEN** sleep.json reports the trigger "fatigue_or_backstop"
+
+#### Scenario: A spent stimulus
+- **WHEN** `affect.rest_request` arrives with reason "stimulus_spent", drive "boredom" and `stall_s` 612
+- **THEN** sleep.json reports that request with its time
+
+### Requirement: The development panel shows the hearing stage's dwell
+`/diagnostics/maturation.json` SHALL carry, in `hearing`, `dwell_seconds` read from `state/lifecycle/hearing_stage.json` (null when the file is missing, unusable, or names a different stage than the runtime reading) and the configured `min_dwell_seconds` and `max_dwell_seconds`. The development panel SHALL show the dwell in hours against the bounds, for example "1.2 h of 1.5 to 7 h", after the band, and SHALL show no dwell when the dwell or a bound is missing or the stage is 4.
+
+#### Scenario: Stage 3 with 4320 s of dwell
+- **WHEN** the owner file holds stage 3 and dwell 4320 s, and the bounds are 5400 s and 25200 s
+- **THEN** the panel shows "stage 3 of 4, below 1732.1 Hz, 1.2 h of 1.5 to 7 h"
+
+#### Scenario: The owner file is missing
+- **WHEN** `hearing_stage.json` cannot be read
+- **THEN** `dwell_seconds` is null and the panel shows the stage and band without a dwell
+
+### Requirement: The development panel shows the hearing stage and the gate's conditions
+`/diagnostics/maturation.json` SHALL return the runtime file's `hearing_stage` as `hearing` (or null), and its `development` object SHALL keep the gate status's `world` and `conditions` beside the existing keys. The development panel SHALL show the hearing stage as "stage N of 4" with its band (both edges, "below" the upper edge, or "open"), the world, each readiness marker the gate reports as not applicable, and the consolidation passes only when `conditions.c2_consolidation_required` is true; when it is false the panel SHALL say that consolidation is not required.
+
+#### Scenario: A perceptual world without a world model
+- **WHEN** the gate reports `world` "perceptual", `c2_sleep_required` and `c2_consolidation_required` false and the marker `C2_reality_model_consolidated` as not applicable
+- **THEN** the panel shows the world, marks C2 not applicable and says consolidation is not required, with no pass count
+
+#### Scenario: The hearing band in its second step
+- **WHEN** runtime.json holds `hearing_stage` with stage 1 and the band 158.1 to 707.1 Hz
+- **THEN** the panel shows "stage 1 of 4" and "158.1 to 707.1 Hz"
+
+### Requirement: The perception-feed panel describes the developmental feed
+In stimulus-source mode the perception-feed block SHALL carry a `stimulus_source` summary with the base heartbeat rate and drift, the colour ramp's time constant and hue gain, whether the maternal voice is on (null when its parameters cannot be read), and the hearing band's span and whether it is on, all read from the feed configuration. The panel SHALL show them and the current hearing stage. The summary SHALL hold only numbers and booleans.
+
+#### Scenario: The shipped stimulus source
+- **WHEN** the feed is `stimulus_source` with the shipped parameters
+- **THEN** the panel shows a 70 bpm heartbeat, a 3600 s colour ramp, the maternal voice on and a 43200 s hearing span
+
+### Requirement: The module grid shows the perception modules on a deterministic feed as capturing
+The module grid SHALL mark the vision and audition modules capturing when the running cycle has them and the feed mode is `seeded`, `playlist`, `screen` or `stimulus_source`, or when their live sensor is active, and SHALL name the feed (the mode, or "live").
+
+#### Scenario: The stimulus-source feed
+- **WHEN** the cycle runs with the vision module and the feed mode is `stimulus_source`
+- **THEN** the vision row reads capturing with the feed "stimulus_source"
+
+#### Scenario: Feed off and no live sensor
+- **WHEN** the feed mode is `off` and the camera is not live
+- **THEN** the vision row is not capturing
+
+### Requirement: The sleep panel names the state-cycle rest
+The dashboard's sleep panel SHALL label a sleep with trigger `state_cycle` as a state-cycle rest and SHALL show its rest length.
+
+#### Scenario: A state-cycle rest
+- **WHEN** the latest sleep has trigger `state_cycle` and `rest_seconds` 1410
+- **THEN** the sleep panel shows a state-cycle rest of 1410 s
+
+### Requirement: Earlier records stay readable and the rest-request line is gone
+The sleep panel SHALL label a sleep with trigger `developmental_rest`, recorded under the earlier rule, as a developmental rest of the earlier rule, and SHALL show no rest-request line, because the affect module no longer publishes `affect.rest_request`.
+
+#### Scenario: An earlier developmental rest
+- **WHEN** the latest sleep has trigger `developmental_rest`
+- **THEN** the sleep panel labels it as a developmental rest (earlier rule)

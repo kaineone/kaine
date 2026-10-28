@@ -5,4 +5,4 @@
 
 ## 2. Archive
 
-- [ ] 2.1 Archive after merge
+- [x] 2.1 Archive after merge

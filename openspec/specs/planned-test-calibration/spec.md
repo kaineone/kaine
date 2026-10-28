@@ -1,7 +1,7 @@
 # planned-test-calibration Specification
 
 ## Purpose
-TBD - created by archiving change tone-analysis-inputs. Update Purpose after archive.
+The calibration tooling for the planned tests: the tone analysis of pilot runs, its minimum effect, and the robust bias-corrected regression discontinuity estimate it uses.
 
 ## Requirements
 

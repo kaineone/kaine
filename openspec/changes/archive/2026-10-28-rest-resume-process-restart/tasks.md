@@ -8,4 +8,4 @@
 
 ## 2. Archive
 
-- [ ] 2.1 Archive this change after developmental-state-cycle is archived (its sleep requirement is the one this change modifies)
+- [x] 2.1 Archive this change after developmental-state-cycle is archived (its sleep requirement is the one this change modifies)

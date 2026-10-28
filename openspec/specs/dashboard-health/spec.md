@@ -1,7 +1,7 @@
 # dashboard-health Specification
 
 ## Purpose
-TBD - created by archiving change boot-and-health-fixes. Update Purpose after archive.
+How the dashboard web UI's health page decides which modules are enabled, using the same configuration loader as the cycle.
 
 ## Requirements
 
