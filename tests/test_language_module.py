@@ -993,3 +993,28 @@ async def test_failure_while_running_still_logs_error_with_traceback(
     assert errors[0].exc_info is not None
     assert errors[0].exc_info[0] is ConnectionError
     assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+
+
+@pytest.mark.asyncio
+async def test_supervisor_rebuilt_language_module_gets_the_cycle_stop_event(
+    bus: AsyncBus, tmp_path: Path, caplog
+):
+    from kaine.boot import build_registry
+    from kaine.cycle.__main__ import _make_rebuild_module
+
+    config = {"modules": {"language": True}, "language": {"intent_log_path": str(tmp_path / "intent.jsonl")}}
+    registry = build_registry(bus, config)
+    stop_event = asyncio.Event()
+    rebuild = _make_rebuild_module(bus, config, registry, None, stop_event_source=lambda: stop_event)
+
+    rebuilt = rebuild("language")
+    assert rebuilt is not registry.get("language")
+    rebuilt._chat_client = _FailingChatClient()
+    stop_event.set()
+
+    with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+        await rebuilt._realize_intent("think", "inner thought")
+
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+    await rebuilt.shutdown()
