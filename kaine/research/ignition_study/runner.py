@@ -56,6 +56,19 @@ MATURATION_BLOOM_MAX_SECONDS = 30.0
 #: welfare safety net, so ``status`` can show it before the step ends.
 WELFARE_FREEZE_FILE = ".study_welfare_freeze.json"
 
+#: How long the runner waits, after the maturation bloom ends, for the individuation
+#: maturation reference (reference document plus ledger) before it preserves the seed
+#: without it.  The capture is 12 prompts x 16 answers of up to 160 tokens, 192 sequential
+#: organ requests: at a slow 20 tokens/s about 26 minutes, and the scheduler's own limit for
+#: one capture attempt is ``capture_deadline_s`` = 5400 s.  The wait is that limit plus 1800 s
+#: for the scheduler's blocked retry (300 s) and a restart of an attempt cut by a sleep.
+MATURATION_REFERENCE_WAIT_SECONDS = 7200.0
+
+#: ``maturation_reference`` values in a development step record.
+REFERENCE_COMPLETE = "complete"
+REFERENCE_MISSING = "missing"
+REFERENCE_NOT_ENABLED = "not_enabled"
+
 
 class StudyComplete(Exception):
     """Raised when every planned step is already recorded as complete."""
@@ -96,6 +109,7 @@ class StudyRunner:
         poll_seconds: float = 5.0,
         preserve_wait_seconds: float = 600.0,
         maturation_bloom_margin_seconds: float = 2.0,
+        maturation_reference_wait_seconds: float = MATURATION_REFERENCE_WAIT_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
@@ -124,6 +138,7 @@ class StudyRunner:
         self.poll_seconds = poll_seconds
         self.preserve_wait_seconds = preserve_wait_seconds
         self.maturation_bloom_margin_seconds = maturation_bloom_margin_seconds
+        self.maturation_reference_wait_seconds = maturation_reference_wait_seconds
         self.clock = clock
         self.wall_clock = wall_clock
         self.sleep = sleep
@@ -365,6 +380,21 @@ class StudyRunner:
         if deadline is not None:
             return now >= deadline
         return now - first_embodied_wall >= fallback_seconds
+
+    @staticmethod
+    def _maturation_reference_complete(line_dir: Path) -> bool:
+        """Whether the child's individuation maturation reference is complete:
+        the reference document and its ledger are both on disk.  The producer
+        writes the reference first and the ledger second, each atomically, and
+        treats a reference without a ledger as an incomplete capture, so both
+        files together mean the capture finished."""
+        root = line_dir / "state" / "individuation"
+        try:
+            return (root / "reference.json").stat().st_size > 0 and (
+                root / "ledger.json"
+            ).stat().st_size > 0
+        except OSError:
+            return False
 
     def _maturation_bloom_fallback_seconds(self, line_dir: Path, env: Mapping[str, str]) -> float:
         """How long to wait after the embodied stage when the stage file does
@@ -647,6 +677,11 @@ class StudyRunner:
         # poll).  The runner never lifts it: it names it and leaves the decision.
         welfare_freeze: dict[str, Any] | None = None
         (line_dir / WELFARE_FREEZE_FILE).unlink(missing_ok=True)
+        # Whether the child runs the individuation producer, which captures the
+        # maturation reference; the overlay's [individuation].enabled decides.
+        expect_reference = _individuation_enabled(repo_root, overlay)
+        reference_state: str | None = None
+        reference_wait_started: float | None = None
         first_embodied_wall: float | None = None
         unviable_verdict: dict[str, Any] | None = None
         unviable_terminated = False
@@ -690,6 +725,30 @@ class StudyRunner:
                         if self._maturation_bloom_over(
                             line_dir, first_embodied_wall, bloom_fallback
                         ):
+                            # The individuation maturation reference is part of
+                            # the seed and cannot be regenerated, so the seed is
+                            # preserved only once the reference and its ledger are
+                            # on disk, or the bounded wait has run out.
+                            if not expect_reference:
+                                reference_state = REFERENCE_NOT_ENABLED
+                            elif self._maturation_reference_complete(line_dir):
+                                reference_state = REFERENCE_COMPLETE
+                            else:
+                                if reference_wait_started is None:
+                                    reference_wait_started = now
+                                if (
+                                    now - reference_wait_started
+                                    >= self.maturation_reference_wait_seconds
+                                ):
+                                    reference_state = REFERENCE_MISSING
+                                    log.error(
+                                        "The maturation reference of %s did not complete "
+                                        "within %.0f s; the seed is preserved without it "
+                                        "and the step is recorded as failed.",
+                                        line,
+                                        self.maturation_reference_wait_seconds,
+                                    )
+                        if reference_state is not None:
                             maturation_requested = True
                             _, _, _, ok = self._request_preserve(
                                 line_dir,
@@ -860,6 +919,9 @@ class StudyRunner:
             disk_low_preserved=disk_low_preserved,
         )
 
+        if reference_state == REFERENCE_MISSING and outcome == "complete":
+            outcome = "failed:maturation_reference_missing"
+
         if unviable_verdict is not None and not maturation_requested:
             outcome = "failed:development_unviable"
             extra_viability = unviable_verdict
@@ -925,6 +987,9 @@ class StudyRunner:
 
         if disk_low_requested:
             record["disk_low_preserved"] = bool(disk_low_preserved)
+
+        if reference_state is not None:
+            record["maturation_reference"] = reference_state
 
         return self._finish_record(record)
 
@@ -1177,6 +1242,19 @@ class StudyRunner:
                 f"({self.last_failed['line']} step {self.last_failed['step']})"
             )
         return "\n".join(lines)
+
+
+def _individuation_enabled(repo_root: Path, overlay: Mapping[str, Any]) -> bool:
+    """Whether the child's resolved configuration (the shipped file layered
+    with the step overlay) enables the individuation producer."""
+    from kaine.config import deep_merge
+
+    try:
+        base = tomllib.loads((repo_root / "config" / "kaine.toml").read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        base = {}
+    section = deep_merge(base, dict(overlay)).get("individuation")
+    return isinstance(section, dict) and section.get("enabled") is True
 
 
 def _redis_client_from_url(url: str) -> Any:

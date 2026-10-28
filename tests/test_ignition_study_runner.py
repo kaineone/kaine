@@ -7,6 +7,7 @@ import hashlib
 import json
 import sys
 import textwrap
+import time
 import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -100,6 +101,13 @@ STANDIN_SCRIPT = textwrap.dedent(
             data = {"world_model_captured": False}
         write_json(bundle_dir / "manifest.json", data)
 
+    def write_reference(cwd):
+        root = cwd / "state" / "individuation"
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "reference.json").write_text("{}")
+        (root / "ledger.json").write_text("{}")
+        (cwd.parent / "reference_at.txt").write_text(str(time.time()))
+
     def cycle(args):
         cwd = Path.cwd()
         if cwd.parent.name == "branch":
@@ -183,6 +191,20 @@ STANDIN_SCRIPT = textwrap.dedent(
             if bloom != "none":
                 ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
                 stage["maturation_bloom_ends_at"] = ends.isoformat()
+            reference_mode = os.environ.get("IGNITION_STANDIN_REFERENCE", "none")
+            if reference_mode == "present":
+                write_reference(cwd)
+            elif reference_mode == "late":
+                import threading
+
+                threading.Timer(
+                    float(os.environ["IGNITION_STANDIN_REFERENCE_DELAY"]),
+                    write_reference,
+                    [cwd],
+                ).start()
+            elif reference_mode == "reference_only":
+                (cwd / "state" / "individuation").mkdir(parents=True, exist_ok=True)
+                (cwd / "state" / "individuation" / "reference.json").write_text("{}")
             write_json(lifecycle_dir / "stage.json", stage)
             wait_for_request(state_dir, "maturation", True, bundle_dir)
             return
@@ -307,6 +329,8 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_MANIFEST",
         "IGNITION_STANDIN_BLOOM_SECONDS",
         "IGNITION_STANDIN_WELFARE",
+        "IGNITION_STANDIN_REFERENCE",
+        "IGNITION_STANDIN_REFERENCE_DELAY",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -1116,6 +1140,76 @@ def test_an_unreadable_welfare_freeze_marker_is_reported_in_status(
         marker.write_text(marker_content)
     status = runner.status()
     assert "Welfare freeze marker unreadable: development step 0" in status
+
+
+def _enable_individuation(study_dir: Path) -> None:
+    """The step's resolved config runs the individuation producer."""
+    with open(study_dir.parent / "repo" / "config" / "kaine.toml", "a") as fh:
+        fh.write("[individuation]\nenabled = true\n")
+
+
+def test_maturation_preservation_waits_for_a_late_reference(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    _enable_individuation(study_dir)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "late")
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE_DELAY", "1.0")
+    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=20.0)) == "complete"
+
+    reference_at = float((study_dir / "reference_at.txt").read_text())
+    assert _maturation_request_time(study_dir) >= reference_at
+    first = _load_steps(study_dir)[0]
+    assert first["outcome"] == "complete"
+    assert first["maturation_reference"] == "complete"
+
+
+def test_maturation_preservation_with_the_reference_already_present(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    _enable_individuation(study_dir)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "present")
+    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=20.0)) == "complete"
+
+    first = _load_steps(study_dir)[0]
+    assert first["outcome"] == "complete"
+    assert first["maturation_reference"] == "complete"
+
+
+@pytest.mark.parametrize("mode", ["none", "reference_only"])
+def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
+    tmp_path: Path, known_modules, monkeypatch, mode
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    _enable_individuation(study_dir)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", mode)
+    started = time.monotonic()
+    record = _run(_runner(study_dir, script, maturation_reference_wait_seconds=0.6))
+    assert time.monotonic() - started >= 0.6
+
+    # The seed is still preserved before the child stops, and the study halts on it.
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:maturation_reference_missing"
+    assert record["maturation_reference"] == "missing"
+    assert record["bundle"] and Path(record["bundle"]).exists()
+    assert _load_steps(study_dir)[0]["outcome"] == "failed:maturation_reference_missing"
+
+
+def test_no_wait_when_the_child_does_not_run_the_individuation_producer(
+    tmp_path: Path, known_modules
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=0.0)) == "complete"
+    assert _load_steps(study_dir)[0]["maturation_reference"] == "not_enabled"
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
