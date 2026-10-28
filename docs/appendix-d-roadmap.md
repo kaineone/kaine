@@ -13,6 +13,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
 | ci-torch-within-pin | 2/3 (67%) | The latest-torch test job installs the newest torch inside the range pyproject declares, so a release past the cap cannot break the install |
+| study-overlay-individuation | 4/5 (80%) | The ignition study overlay enables the individuation producer on every step, so the research gate no longer refuses the study boot; a test checks each step config against the gate. |
 | rest-resume-process-restart | 5/6 (83%) | A state-cycle rest cut by a process restart resumes for its remaining time; the resume checkpoint updates only the sleep module's state_cycle entry during a rest |
 | developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
 | hearing-stage-saturation | 11/11 (100%) | Release each hearing stage by audition's saturated learning progress between a minimum and maximum dwell, colour k/5 per stage, and C3 as schedule completion (paper A.7, Table A1). |
@@ -105,6 +106,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 80 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 81 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
