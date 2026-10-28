@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The welfare response re-arms after its pause is lifted
-The protective welfare monitor SHALL release its action latch when a pause it placed, or found standing at its first poll, has been lifted, meaning the control file readably holds no `welfare` entry. It SHALL NOT re-arm after an `end`, while a `welfare` entry remains, or when the control file is unreadable. On re-arming it SHALL empty its sustained-distress tracker and repeat window and move its stream cursors to the stream tail, so that a condition still present must accrue a full new episode before the monitor acts again.
+The protective welfare monitor SHALL release its action latch when a pause it placed, or found standing at its first poll, has been lifted, meaning the control file readably holds no `welfare` entry. It SHALL NOT re-arm after an enacted `end`, while a `welfare` entry remains, or when the control file is unreadable. On re-arming it SHALL empty its sustained-distress tracker and repeat window and move its stream cursors to the stream tail, so that a condition still present must accrue a full new episode before the monitor acts again.
 
 #### Scenario: Act, clear, re-arm, act again
 - **WHEN** the monitor pauses the entity, a person lifts the welfare freeze, and sustained distress then accrues again for the full duration

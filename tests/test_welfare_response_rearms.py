@@ -488,9 +488,91 @@ async def test_end_action_finds_standing_welfare_freeze_at_first_poll(bus):
     assert ended == []
     assert len(mon._fork_manager.calls) == 0
 
-    # An end never re-arms, even after the welfare freeze is lifted.
+    # The standing freeze is a pause, not an enacted end: once a person lifts
+    # it, the monitor re-arms so the running entity is protected again.
     control_state.override(["welfare"])
     await mon._poll_once(stop)
-    assert mon._acted is True
+    assert mon._acted is False
     assert ended == []
     assert len(mon._fork_manager.calls) == 0
+
+
+@pytest.mark.parametrize("content", ["null", "[]"])
+def test_read_frozen_state_returns_none_for_non_object_control(content):
+    control_state.CONTROL_PATH.write_text(content)
+    assert control_state.read_frozen_state() is None
+
+
+@pytest.mark.asyncio
+async def test_pause_if_frozen_at_launch_applies_standing_freeze():
+    from kaine.cycle import __main__ as cycle_main
+
+    control_state.push_freeze(reason="distress", source="welfare")
+
+    class FakeCycle:
+        def __init__(self):
+            self.paused = False
+
+        async def pause(self):
+            self.paused = True
+
+    class FakeClock:
+        def __init__(self):
+            self.calls = []
+
+        def pause(self, reason):
+            self.calls.append(reason)
+
+    cycle = FakeCycle()
+    clock = FakeClock()
+    await cycle_main._pause_if_frozen_at_launch(cycle, clock)
+    assert cycle.paused is True
+    assert clock.calls == ["freeze"]
+
+
+@pytest.mark.asyncio
+async def test_pause_if_frozen_at_launch_no_control_file_does_not_pause():
+    from kaine.cycle import __main__ as cycle_main
+
+    class FakeCycle:
+        def __init__(self):
+            self.paused = False
+
+        async def pause(self):
+            self.paused = True
+
+    class FakeClock:
+        def __init__(self):
+            self.calls = []
+
+        def pause(self, reason):
+            self.calls.append(reason)
+
+    cycle = FakeCycle()
+    clock = FakeClock()
+    await cycle_main._pause_if_frozen_at_launch(cycle, clock)
+    assert cycle.paused is False
+    assert clock.calls == []
+
+
+@pytest.mark.asyncio
+async def test_pause_fallback_rearms_after_override(bus):
+    u = _Mono(0.0)
+    mon = _monitor(bus, u, cfg=_cfg(action="end"), on_end=None)
+
+    await _act(mon, bus, u)
+    assert "welfare" in control_state.read_holder_sources()
+
+    control_state.override(["welfare"])
+    stop = asyncio.Event()
+    await mon._poll_once(stop)
+    assert mon._acted is False
+
+
+def test_run_override_replaces_unreadable_control_file(capsys):
+    from kaine.cycle import control
+
+    control_state.CONTROL_PATH.write_text("{not json")
+    assert control.run_override(["welfare"]) == 0
+    captured = capsys.readouterr()
+    assert "The control file was unreadable and was replaced with a clean one" in captured.out

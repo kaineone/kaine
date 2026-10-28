@@ -234,12 +234,8 @@ def read_frozen_state(path: Path | None = None) -> bool | None:
     if not target.exists():
         return False
     try:
-        data = json.loads(target.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    try:
-        control = CycleControl.from_dict(data)
-    except (ValueError, TypeError, KeyError, AttributeError):
+        control = _parse_control(target.read_text())
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
     if control.stack:
         return True

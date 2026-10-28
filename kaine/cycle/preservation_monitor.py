@@ -986,8 +986,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         ``pause``, a ``pause_fallback``, or a welfare freeze found at the first
         poll), and the control file now readably holds no ``welfare`` entry,
         which only a named override (:func:`control_state.override`) removes. An
-        ``end`` never re-arms: the process is stopping. An unreadable control
-        file is not a release.
+        enacted ``end`` never re-arms, because it placed no pause. An unreadable
+        control file is not a release.
 
         Re-arming starts a new episode: the sustained-distress tracker and the
         repeat window are emptied and both stream cursors move to the stream
@@ -997,8 +997,6 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         time (or a full new repeat window) before it acts again, and the
         counted-episode memory is kept so one old episode is not counted twice.
         """
-        if self._config.action == "end":
-            return
         if not self._pause_placed:
             return
         try:

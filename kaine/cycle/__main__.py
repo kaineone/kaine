@@ -2758,8 +2758,34 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         )
 
 
+async def _pause_if_frozen_at_launch(cycle, playlist_clock) -> None:
+    """Pause before the first tick when a freeze stands (a welfare freeze survives a
+    restart), so the cycle never runs ahead of the freeze-watch loop."""
+    try:
+        control = read_control()
+        if control.frozen:
+            await cycle.pause()
+        else:
+            return
+    except Exception:
+        log.warning("launch: could not apply a standing freeze before the first tick", exc_info=True)
+        return
+    if playlist_clock is not None:
+        try:
+            playlist_clock.pause("freeze")
+        except Exception:
+            log.warning("launch: playlist clock pause failed", exc_info=True)
+
+
 async def _phase_launch(ctx: BootContext) -> int | None:
     """Start the cycle, freeze-watch, supervisor, divergence and welfare tasks."""
+
+    await _pause_if_frozen_at_launch(
+        ctx.cycle,
+        (ctx.kaine_config.get("perception_feed") or {}).get(
+            "_shared_playlist_clock"
+        ),
+    )
 
     ctx.cycle_task = asyncio.create_task(ctx.cycle.run_forever(), name="cycle.run_forever")
     ctx.freeze_task = asyncio.create_task(

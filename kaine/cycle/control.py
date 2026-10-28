@@ -65,6 +65,7 @@ def run_override(sources: list[str]) -> int:
     Returns 0 on success, 1 when a source is not overridable or holds no
     active entry, and 2 on an OS-level failure such as a permission error.
     """
+    was_unreadable = control_state.control_file_unreadable()
     try:
         state = control_state.override(sources)
     except (ValueError, LookupError) as exc:
@@ -75,6 +76,8 @@ def run_override(sources: list[str]) -> int:
         return 2
     remaining = ", ".join(h["source"] for h in state.holders) or "none"
     print(f"Lifted: {', '.join(sorted(sources))}; still frozen by: {remaining}")
+    if was_unreadable:
+        print("The control file was unreadable and was replaced with a clean one; any other freeze holders it held were discarded.")
     return 0
 
 
