@@ -2580,6 +2580,10 @@ async def _phase_signals(ctx: BootContext) -> int | None:
 
     loop = asyncio.get_running_loop()
     ctx.stop_event = asyncio.Event()
+    # The language module reads the stop event to tell a shutdown from a fault when a
+    # realization fails; its own stop flag is set only when the modules shut down.
+    if "language" in ctx.registry:
+        ctx.registry.get("language").set_stop_event(ctx.stop_event)
 
     def _signal_handler():
         log.info("signal received; shutting down")

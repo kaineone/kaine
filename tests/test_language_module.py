@@ -929,3 +929,67 @@ async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncB
         assert "[heard speech]" in whole
     finally:
         await language.shutdown()
+
+
+# --- failure during shutdown versus while running ------------------------------
+
+
+async def _realization_failed_records(bus: AsyncBus) -> list[dict]:
+    entries = await bus.client.xrange(INTERNAL_STREAM)
+    return [json.loads(fields["payload"]) for _entry_id, fields in entries if fields["type"] == "realization_failed"]
+
+
+@pytest.mark.asyncio
+async def test_failure_after_cycle_stop_logs_one_line_without_traceback(
+    bus: AsyncBus, tmp_path: Path, caplog
+):
+    language = _make_failing_language(bus, tmp_path)
+    stop_event = asyncio.Event()
+    language.set_stop_event(stop_event)
+    stop_event.set()  # the signal arrived; the module's own flag is not set yet
+    assert not language._stopped.is_set()
+
+    with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+        await language._realize_intent("think", "inner thought")
+
+    failures = [r for r in caplog.records if "not realized" in r.getMessage()]
+    assert len(failures) == 1
+    assert failures[0].levelname == "WARNING"
+    assert "think" in failures[0].getMessage()
+    assert "ConnectionError" in failures[0].getMessage()
+    assert all(r.exc_info is None for r in caplog.records)
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]
+
+
+@pytest.mark.asyncio
+async def test_failure_after_module_stop_flag_is_also_a_shutdown(
+    bus: AsyncBus, tmp_path: Path, caplog
+):
+    language = _make_failing_language(bus, tmp_path)
+    language._stopped.set()
+
+    with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+        await language._realize_intent(SPEAK, "hello")
+
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert all(r.exc_info is None for r in caplog.records)
+    assert await _realization_failed_records(bus) == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
+
+
+@pytest.mark.asyncio
+async def test_failure_while_running_still_logs_error_with_traceback(
+    bus: AsyncBus, tmp_path: Path, caplog
+):
+    language = _make_failing_language(bus, tmp_path)
+    language.set_stop_event(asyncio.Event())  # wired but not set: the stack is running
+
+    with caplog.at_level("DEBUG", logger="kaine.modules.language.module"):
+        await language._realize_intent("think", "inner thought")
+
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1
+    assert "failed to realize think intent" in errors[0].getMessage()
+    assert errors[0].exc_info is not None
+    assert errors[0].exc_info[0] is ConnectionError
+    assert await _realization_failed_records(bus) == [{"mode": "think", "reason_class": "ConnectionError"}]

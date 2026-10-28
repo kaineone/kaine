@@ -244,11 +244,21 @@ class Language(BaseModule):
         # generation bookkeeping for the individuation probe's yield-to-speech rule
         self._produce_in_flight = 0
         self._last_produce_end: Optional[float] = None
+        self._cycle_stop_event: Optional[asyncio.Event] = None
 
     def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         """Inject a read-only accessor for the self-model (wired in
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
+
+    def set_stop_event(self, stop_event: asyncio.Event) -> None:
+        """Give the module the cycle's stop event (wired at boot, where the signal handler creates it). A realization that fails once it is set is a shutdown, not a fault. The module's own ``_stopped`` flag is set only when the modules shut down, late in the cycle's shutdown order."""
+        self._cycle_stop_event = stop_event
+
+    def _shutting_down(self) -> bool:
+        """True once the cycle's stop event or this module's own stop flag is set."""
+        event = self._cycle_stop_event
+        return self._stopped.is_set() or (event is not None and event.is_set())
 
     def set_expects_self_model(self, expected: bool) -> None:
         """Whether a self-model is part of this entity; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
@@ -717,7 +727,15 @@ class Language(BaseModule):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.exception("language failed to realize %s intent", kind)
+            if self._shutting_down():
+                # The model server went away with the stack: one line, no traceback.
+                log.warning(
+                    "language: %s intent not realized during shutdown (%s)",
+                    kind,
+                    type(exc).__name__,
+                )
+            else:
+                log.exception("language failed to realize %s intent", kind)
             # C3: content-free realization-failed audit event — mode and
             # reason class ONLY; never the text, prompt, or any payload that
             # was headed for generation. Guards are cleared by the
