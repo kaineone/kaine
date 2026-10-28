@@ -16,7 +16,7 @@ import asyncio
 import base64
 import json
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -211,7 +211,15 @@ async def _awake_checkpoint(sleep: Any, other: Other, ident: Any, directory: Pat
     assert await save_checkpoint(Registry(sleep, other), ident, reason="periodic", directory=directory)
 
 
-async def _to_mid_rest(bus: Any, tmp_path: Path, sim: SimClock, directory: Path, ident: Any, into_rest: float):
+@dataclass
+class MidRest:
+    sleep: Any
+    cp: ResumeCheckpointer
+    seen: list
+    began: float
+
+
+async def _to_mid_rest(bus: Any, tmp_path: Path, sim: SimClock, directory: Path, ident: Any, into_rest: float) -> MidRest:
     """Run an awake stretch, take the awake checkpoint, then run ``into_rest`` s of rest."""
     sleep = _make(bus, tmp_path, sim, Probe(True))
     seen = _record(sleep, sim)
@@ -224,7 +232,7 @@ async def _to_mid_rest(bus: Any, tmp_path: Path, sim: SimClock, directory: Path,
     began = _starts(seen, "state_cycle")[0][0]
     await _drive(sleep, cp, sim, began + into_rest)
     assert sleep.is_sleeping
-    return sleep, cp, other, seen, began
+    return MidRest(sleep, cp, seen, began)
 
 
 def _fresh_process(bus: Any, tmp_path: Path, directory: Path, ident: Any, clock: HoldClock):
@@ -264,7 +272,8 @@ async def test_a_shutdown_mid_rest_resumes_the_remainder_after_a_process_restart
         set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    sleep, cp, _other, _seen, _began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 710.0)
+    mid = await _to_mid_rest(bus, tmp_path, sim, d, ident, 710.0)
+    sleep, cp = mid.sleep, mid.cp
     before = read_checkpoint(d)
 
     # Shutdown during the rest, in the boot's order: final checkpoint, then the modules.
@@ -309,7 +318,7 @@ async def test_a_shutdown_mid_rest_resumes_the_remainder_after_a_process_restart
 async def test_a_crash_mid_rest_loses_at_most_one_interval_of_rest(bus, tmp_path, sim):
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    sleep, _cp, _other, _seen, _began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 710.0)
+    sleep = (await _to_mid_rest(bus, tmp_path, sim, d, ident, 710.0)).sleep
     live = sleep._export_state_cycle()["rest_spent_s"]
     # No clean shutdown: the process just dies. Only what is on disk survives.
     stored = read_checkpoint(d).modules["sleep"]["state_cycle"]
@@ -329,7 +338,7 @@ async def test_a_crash_mid_rest_loses_at_most_one_interval_of_rest(bus, tmp_path
 async def test_the_rest_entry_is_written_when_the_rest_starts(bus, tmp_path, sim):
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    _sleep, _cp, _other, _seen, _began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 5.0)
+    await _to_mid_rest(bus, tmp_path, sim, d, ident, 5.0)
     entry = read_checkpoint(d).modules["sleep"]["state_cycle"]
     assert entry["phase"] == "resting"
     assert entry["rest_spent_s"] < 60.0
@@ -338,7 +347,8 @@ async def test_the_rest_entry_is_written_when_the_rest_starts(bus, tmp_path, sim
 async def test_a_crash_right_after_the_rest_resumes_no_rest(bus, tmp_path, sim):
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    sleep, cp, _other, seen, began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 100.0)
+    mid = await _to_mid_rest(bus, tmp_path, sim, d, ident, 100.0)
+    sleep, cp, seen, began = mid.sleep, mid.cp, mid.seen, mid.began
     await _drive(sleep, cp, sim, began + REST_S + 15)
     assert [k for _, k, _ in seen if k == "sleep.sleep.completed"]
     assert not sleep.is_sleeping
@@ -356,7 +366,8 @@ async def test_a_crash_right_after_the_rest_resumes_no_rest(bus, tmp_path, sim):
 async def test_other_modules_stay_byte_for_byte_through_a_whole_rest(bus, tmp_path, sim):
     ident = mint_identity()
     d = tmp_path / "ckpt"
-    sleep, cp, _other, _seen, began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 5.0)
+    mid = await _to_mid_rest(bus, tmp_path, sim, d, ident, 5.0)
+    sleep, cp, began = mid.sleep, mid.cp, mid.began
     first = read_checkpoint(d)
     await _drive(sleep, cp, sim, began + REST_S + 15)
     last = read_checkpoint(d)
@@ -377,7 +388,7 @@ async def test_rest_progress_is_written_each_interval_not_each_poll(bus, tmp_pat
         return real(identity, entry, directory)
 
     monkeypatch.setattr("kaine.lifecycle.resume_checkpoint.update_state_cycle_entry", counting)
-    sleep, cp, _other, _seen, _began = await _to_mid_rest(bus, tmp_path, sim, d, ident, 600.0)
+    await _to_mid_rest(bus, tmp_path, sim, d, ident, 600.0)
     # One at the start, then one per 60 s of rest: about ten, not one per second.
     assert 8 <= len(writes) <= 12
     assert all(b - a >= 59.0 for a, b in zip(writes, writes[1:]))
