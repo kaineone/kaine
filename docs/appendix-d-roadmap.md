@@ -109,8 +109,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 81 active changes, 366 archived changes and 109 capability specs.
-The roadmap contains 79 active changes, 366 archived changes and 109 capability specs.
-The roadmap contains 80 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 83 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
