@@ -107,6 +107,9 @@ def build_overlay(
             "divergence_monitor": {"enabled": True},
             "welfare_response": {"enabled": True},
         },
+        # The research gate refuses a boot without the individuation producer,
+        # so every step enables it whatever the operator config says.
+        "individuation": {"enabled": True},
         "world_model": {"training_enabled": True, "persist_weights": True},
         "vision": {"encoder_local_dir": encoder_dir},
         # Greedy decoding and the competitive arm in every study step (paper §5.4,

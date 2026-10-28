@@ -283,13 +283,12 @@ def _logging_active(config: dict[str, Any]) -> bool:
     return evaluation_on or rel_on
 
 
-def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
-    """Run the research safety net conditions over the resolved config.
+def config_requirements(config: dict[str, Any]) -> dict[str, bool]:
+    """The safety-net conditions that the resolved config alone decides.
 
-    Reads the [preservation] toggles, the [individuation] toggle, the logging
-    toggles, performs the real dry preserve→revive self-check, and returns the
-    combined :class:`GateResult`. This is the same evaluator used by unattended
-    mode.
+    Pure over the config: no self-check, no boot. Returns the keyword inputs of
+    :func:`evaluate_research_gate` other than ``self_check_passed``, so a caller
+    can verify a layered config meets the gate before any process starts.
     """
     from kaine.cycle.individuation_runtime import IndividuationConfig
     from kaine.cycle.preservation_monitor import PreservationConfig
@@ -315,24 +314,42 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     encryption_enabled = bool(
         ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
     )
-    self_check_ok, self_check_reason = run_preflight_self_check(
-        require_encryption=preservation_cfg.require_encryption and encryption_enabled
-    )
-    if not self_check_ok and self_check_reason:
-        log.error("research-gate self-check failed: %s", self_check_reason)
     # require_encryption is enforced at the runtime write boundary (preserve_live
     # fails closed). The gate additionally refuses the boot up-front when
     # encryption is required but [security.state_encryption] is off, so the run
     # never starts with a net that cannot persist. The key-present half is
     # enforced separately by install_state_encryption (fail-closed at boot).
     encryption_satisfied = (not preservation_cfg.require_encryption) or encryption_enabled
+    return {
+        "preservation_enabled": preservation_cfg.divergence_monitor.enabled,
+        "welfare_response_wired": preservation_cfg.welfare_response.enabled,
+        "logging_active": _logging_active(config),
+        "encryption_satisfied": encryption_satisfied,
+        "individuation_enabled": individuation_enabled,
+    }
+
+
+def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
+    """Run the research safety net conditions over the resolved config.
+
+    Reads the [preservation] toggles, the [individuation] toggle, the logging
+    toggles, performs the real dry preserve→revive self-check, and returns the
+    combined :class:`GateResult`. This is the same evaluator used by unattended
+    mode.
+    """
+    from kaine.cycle.preservation_monitor import PreservationConfig
+
+    preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
+    encryption_enabled = bool(
+        ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
+    )
+    self_check_ok, self_check_reason = run_preflight_self_check(
+        require_encryption=preservation_cfg.require_encryption and encryption_enabled
+    )
+    if not self_check_ok and self_check_reason:
+        log.error("research-gate self-check failed: %s", self_check_reason)
     return evaluate_research_gate(
-        preservation_enabled=preservation_cfg.divergence_monitor.enabled,
-        welfare_response_wired=preservation_cfg.welfare_response.enabled,
-        logging_active=_logging_active(config),
-        self_check_passed=self_check_ok,
-        encryption_satisfied=encryption_satisfied,
-        individuation_enabled=individuation_enabled,
+        self_check_passed=self_check_ok, **config_requirements(config)
     )
 
 
@@ -368,5 +385,6 @@ __all__ = [
     "GateResult",
     "evaluate_research_gate",
     "run_preflight_self_check",
+    "config_requirements",
     "evaluate_safety_net",
 ]
