@@ -533,3 +533,246 @@ def test_stale_verdict_rejected(
 
     assert proc.terminate_calls == 0
     assert record["outcome"] != "failed:development_unviable"
+
+
+def test_a_downgraded_capture_fails_the_step_at_once(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script, maturation_reference_wait_seconds=3600.0)
+
+    proc = _FakeProc(exit_after_polls=6)
+    runner.popen = lambda *args, **kwargs: proc
+
+    monkeypatch.setattr(
+        runner,
+        "_read_child_runtime",
+        lambda *args, **kwargs: {
+            "run_id": "r1",
+            "developmental_stage": {"stage": "embodied"},
+            "individuation": {"reference_kind": "capture", "reference_complete": True},
+        },
+    )
+    monkeypatch.setattr(runner, "_maturation_bloom_over", lambda *args, **kwargs: True)
+
+    reasons: list[str] = []
+    bundle_dir = study_dir / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    state_dir = study_dir / "development" / "state" / "cycle"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_preserve(*args, **kwargs):
+        if len(args) >= 2:
+            reasons.append(args[1])
+        req_id = "test-req-downgraded"
+        (state_dir / "preserve_request.json").write_text(
+            json.dumps({"reason": "maturation", "request_id": req_id})
+        )
+        (state_dir / "preserve_result.json").write_text(
+            json.dumps(
+                {
+                    "request_id": req_id,
+                    "ok": True,
+                    "bundle": str(bundle_dir),
+                    "finished_at": "2026-10-28T12:00:00+00:00",
+                }
+            )
+        )
+        return (None, None, None, True)
+
+    monkeypatch.setattr(runner, "_request_preserve", fake_preserve)
+
+    calls = 0
+
+    def fake_sleep(seconds: float) -> None:
+        nonlocal calls
+        calls += 1
+
+    runner.sleep = fake_sleep
+
+    try:
+        record = runner._run_step(
+            {"line": "development", "k": 0, "revived_from": None, "is_retry": False}
+        )
+    except StudyHalted as exc:
+        record = exc.record
+
+    assert proc.terminate_calls == 0
+    assert "maturation" in reasons
+    # The fake preserve writes no result; the reference state is what matters here.
+    assert record["maturation_reference"] == "missing"
+    assert calls < 20
+
+
+def test_the_reference_wait_and_the_preserve_hold_during_a_welfare_freeze(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script, maturation_reference_wait_seconds=0.0)
+
+    proc = _FakeProc(exit_after_polls=6)
+    runner.popen = lambda *args, **kwargs: proc
+
+    monkeypatch.setattr(
+        runner,
+        "_read_child_runtime",
+        lambda *args, **kwargs: {
+            "run_id": "r1",
+            "developmental_stage": {"stage": "embodied"},
+            "individuation": {"reference_kind": None, "reference_complete": False},
+        },
+    )
+    monkeypatch.setattr(runner, "_maturation_bloom_over", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        runner,
+        "_welfare_freeze_entry",
+        lambda *args, **kwargs: {
+            "source": "welfare",
+            "reason": "welfare: test",
+            "frozen_at": "2026-10-28T12:00:00+00:00",
+        },
+    )
+
+    reasons: list[str] = []
+
+    def fake_preserve(*args, **kwargs):
+        if len(args) >= 2:
+            reasons.append(args[1])
+        return (None, None, None, True)
+
+    monkeypatch.setattr(runner, "_request_preserve", fake_preserve)
+
+    calls = 0
+
+    def fake_sleep(seconds: float) -> None:
+        nonlocal calls
+        calls += 1
+
+    runner.sleep = fake_sleep
+
+    try:
+        record = runner._run_step(
+            {"line": "development", "k": 0, "revived_from": None, "is_retry": False}
+        )
+    except StudyHalted as exc:
+        record = exc.record
+
+    assert "maturation" not in reasons
+    assert calls < 20
+    # The step ends with the welfare freeze still held, so a person decides.
+    assert record["outcome"] == "failed:welfare"
+
+
+def test_a_verdict_during_the_reference_wait_does_not_end_a_matured_entity(
+    tmp_path: Path, known_modules, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=5.0)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script, maturation_reference_wait_seconds=3600.0)
+
+    proc = _FakeProc(exit_after_polls=10)
+    runner.popen = lambda *args, **kwargs: proc
+
+    monkeypatch.setattr(
+        runner,
+        "_read_child_runtime",
+        lambda *args, **kwargs: {
+            "run_id": "r1",
+            "developmental_stage": {"stage": "embodied"},
+            "individuation": {"reference_kind": "maturation", "reference_complete": False},
+        },
+    )
+    monkeypatch.setattr(runner, "_maturation_bloom_over", lambda *args, **kwargs: True)
+
+    reasons: list[str] = []
+
+    def fake_preserve(*args, **kwargs):
+        if len(args) >= 2:
+            reasons.append(args[1])
+        return (None, None, None, True)
+
+    monkeypatch.setattr(runner, "_request_preserve", fake_preserve)
+
+    calls = 0
+
+    def fake_sleep(seconds: float) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            path = (
+                study_dir
+                / "development"
+                / "state"
+                / "lifecycle"
+                / "development_viability.json"
+            )
+            path.write_text(
+                json.dumps({"verdict": "unviable", "rule": "R3", "reason": "test"})
+            )
+
+    runner.sleep = fake_sleep
+    line_dir = study_dir / "development"
+    (line_dir / "state" / "lifecycle").mkdir(parents=True, exist_ok=True)
+
+    try:
+        record = runner._run_step(
+            {"line": "development", "k": 0, "revived_from": None, "is_retry": False}
+        )
+    except StudyHalted as exc:
+        record = exc.record
+
+    assert proc.terminate_calls == 0
+    assert "maturation" not in reasons
+    assert record["outcome"] != "failed:development_unviable"
+
+
+def test_adoption_reads_the_maturation_reference_marker(
+    tmp_path: Path, known_modules
+) -> None:
+    from kaine.research.ignition_study.runner import MATURATION_REFERENCE_FILE
+
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "dummy.py"
+    script.write_text("")
+    runner = _runner(study_dir, script)
+
+    line_dir = study_dir / "development"
+    state = line_dir / "state" / "cycle"
+    state.mkdir(parents=True, exist_ok=True)
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+
+    from kaine.cycle.preserve_watch import new_request, write_request, write_result
+
+    req = new_request("maturation", stop=True)
+    write_request(req, state / "preserve_request.json")
+    write_result(
+        {
+            "request_id": req.request_id,
+            "ok": True,
+            "bundle": str(bundle_dir),
+            "finished_at": "2026-10-28T12:00:00+00:00",
+        },
+        state / "preserve_result.json",
+    )
+
+    for marker_content, expected_reference, expected_outcome in (
+        ('{"state": "missing"}', "missing", "failed:maturation_reference_missing"),
+        ('{"state": "complete"}', "complete", "complete"),
+        (None, "missing", "failed:maturation_reference_missing"),
+    ):
+        marker = line_dir / MATURATION_REFERENCE_FILE
+        if marker_content is not None:
+            marker.write_text(marker_content)
+        elif marker.exists():
+            marker.unlink()
+
+        record = runner._adopt_maturation_preservation(line_dir, set())
+        assert record is not None
+        assert record["maturation_reference"] == expected_reference
+        assert record["outcome"] == expected_outcome

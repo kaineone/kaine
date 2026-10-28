@@ -1208,7 +1208,7 @@ def test_maturation_preservation_with_the_reference_already_present(
 
 @pytest.mark.parametrize(
     "mode",
-    ["none", "reference_only", "ledger_only", "invalid_json", "capture", "incomplete"],
+    ["none", "reference_only", "ledger_only", "invalid_json", "incomplete"],
 )
 def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
     tmp_path: Path, known_modules, monkeypatch, mode
@@ -1227,6 +1227,24 @@ def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
     assert record["maturation_reference"] == "missing"
     assert record["bundle"] and Path(record["bundle"]).exists()
     assert _load_steps(study_dir)[0]["outcome"] == "failed:maturation_reference_missing"
+
+
+def test_a_capture_reference_fails_the_step_without_waiting_out_the_bound(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "capture")
+    started = time.monotonic()
+    record = _run(_runner(study_dir, script, maturation_reference_wait_seconds=60.0))
+    # A sleep made the maturation capture a plain capture, which can never become
+    # the maturation reference, so the runner does not wait out the bound.
+    assert time.monotonic() - started < 30.0
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:maturation_reference_missing"
+    assert record["maturation_reference"] == "missing"
+    assert record["bundle"] and Path(record["bundle"]).exists()
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
@@ -1830,11 +1848,17 @@ def test_resume_adopts_an_unrecorded_maturation_preservation(tmp_path: Path, kno
     seed = study_dir / "backups" / "seed"
     seed.mkdir(parents=True)
     _write_pair(study_dir / "development", "maturation", seed)
+    # The runner writes the reference state just before it requests the maturation
+    # preservation.
+    (study_dir / "development" / ".study_maturation_reference.json").write_text(
+        json.dumps({"state": "complete"})
+    )
 
     flush_log: list[str] = []
     assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
     steps = _load_steps(study_dir)
     assert steps[0]["line"] == "development" and steps[0]["outcome"] == "complete"
+    assert steps[0]["maturation_reference"] == "complete"
     assert steps[0]["bundle"] == str(seed)
     assert steps[0]["preservation_id"] == "p-born"
     assert steps[0]["adopted"] is True

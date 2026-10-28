@@ -10,7 +10,7 @@ Prior work found: `individuation-rebuild` parts 1 to 3 (#324, #330, #331), `unat
 - The wait is a state in the existing poll loop, so the disk, timeout and viability checks keep running while it lasts. It is bounded by `maturation_reference_wait_seconds` = 7200 s: one capture attempt's own limit (5400 s) plus 1800 s for a blocked retry (300 s) and an attempt restarted after a sleep. The real cost is about 26 minutes at a slow 20 tokens/s.
 - When the bound runs out the runner still preserves the entity before stopping it (a run stops only after the state is saved), and records the step as `failed:maturation_reference_missing`, so the study halts for the operator instead of carrying a seed without its reference as `complete`.
 - The development step record gains `maturation_reference`: `complete`, `missing` or `not_enabled`.
-- A check that the capture starts in a study child: `gate_runner` calls `individuation_runtime.on_maturation` on the maturation transition, which writes `maturation_pending` and requests a `maturation` capture; the cycle builds the runtime whenever `[individuation].enabled`. After #609 the overlay enables it on every step, so the capture starts. A sleep before it finishes downgrades the capture to kind `capture` (scheduler), and the wait is then released by that reference.
+- A check that the capture starts in a study child: `gate_runner` calls `individuation_runtime.on_maturation` on the maturation transition, which writes `maturation_pending` and requests a `maturation` capture; the cycle builds the runtime whenever `[individuation].enabled`. After #609 the overlay enables it on every step, so the capture starts. A sleep before it finishes downgrades the capture to kind `capture` (scheduler), which can never become the maturation reference, so the runner fails the step at once instead of waiting out the bound.
 
 ## Capabilities
 
@@ -20,5 +20,7 @@ Prior work found: `individuation-rebuild` parts 1 to 3 (#324, #330, #331), `unat
 
 ## Impact
 
-- `kaine/research/ignition_study/runner.py`, `tests/test_ignition_study_runner.py`, `docs/15-experiments/ignition-study.md`, `docs/appendix-d-roadmap.md`.
+- `kaine/research/ignition_study/runner.py`, `kaine/cycle/__main__.py` (the runtime.json `individuation` block), `kaine/cycle/boot_context.py`.
+- `tests/test_ignition_study_runner.py`, `tests/test_ignition_study_viability.py`, `tests/test_runtime_individuation_block.py`.
+- `docs/15-experiments/ignition-study.md`, `docs/appendix-d-roadmap.md`.
 - Paper: PR pending.

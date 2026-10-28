@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The seed is preserved only with its maturation reference
-When a step's resolved configuration enables the individuation producer, the study runner SHALL request the developmental phase's maturation preservation only after the cycle reports the individuation maturation reference complete, or after a bounded wait has run out. The reference and its ledger are encrypted, so the runner SHALL read only the content-free `individuation` block of the child's `state/cycle/runtime.json`, which carries the reference kind and whether the reference and its ledger are both saved; it is complete when the kind is `maturation` and both are saved. The runner SHALL NOT read the individuation store. When the wait runs out the runner SHALL preserve the entity before it stops it, SHALL record the step with the outcome `failed:maturation_reference_missing`, and SHALL halt the study.
+When a step's resolved configuration enables the individuation producer, the study runner SHALL request the developmental phase's maturation preservation only after the cycle reports the individuation maturation reference complete, or after a bounded wait has run out. The reference and its ledger are encrypted, so the runner SHALL read only the content-free `individuation` block of the child's `state/cycle/runtime.json`, which carries the reference kind and whether the reference and its ledger are both saved; it is complete when the kind is `maturation` and both are saved. The runner SHALL NOT read the individuation store. A complete reference of kind `capture` SHALL fail the step at once. While a welfare freeze is held, the wait SHALL NOT count down and the runner SHALL NOT request the maturation preservation. When the wait runs out the runner SHALL preserve the entity before it stops it, SHALL record the step with the outcome `failed:maturation_reference_missing`, and SHALL halt the study.
 
 #### Scenario: The reference arrives after the bloom ends
 - **WHEN** the maturation bloom has ended and the reference and ledger appear later within the bound
@@ -22,3 +22,15 @@ When a step's resolved configuration enables the individuation producer, the stu
 #### Scenario: The runner never reads the encrypted reference
 - **WHEN** the reference and ledger on disk are ciphertext
 - **THEN** the wait still releases on the runtime block alone
+
+#### Scenario: A sleep downgrades the capture
+- **WHEN** the runtime block reports a complete reference of kind `capture`
+- **THEN** the runner preserves the entity and records `failed:maturation_reference_missing` without waiting out the bound
+
+#### Scenario: A welfare freeze during the wait
+- **WHEN** the welfare safety net holds a freeze while the runner waits for the reference
+- **THEN** the wait does not count down and the runner does not request the maturation preservation
+
+#### Scenario: A restarted runner adopts the seed
+- **WHEN** the runner restarts after requesting the maturation preservation
+- **THEN** the adopted record carries the reference state written before the request, and a missing or absent state fails the step

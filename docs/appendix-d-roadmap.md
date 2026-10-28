@@ -18,7 +18,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ci-torch-within-pin | 2/3 (67%) | The latest-torch test job installs the newest torch inside the range pyproject declares, so a release past the cap cannot break the install |
 | study-overlay-individuation | 4/5 (80%) | The ignition study overlay enables the individuation producer on every step, so the research gate no longer refuses the study boot; a test checks each step config against the gate. |
 | hearing-dwell-panel | 6/6 (100%) | The development panel and maturation.json show the hearing stage's dwell against its minimum and maximum dwell |
-| maturation-reference-before-seed | 6/6 (100%) | The study runner preserves the seed only after its individuation maturation reference and ledger are on disk, within a bounded wait, and fails the step if they never arrive |
+| maturation-reference-before-seed | 6/6 (100%) | The study runner preserves the seed only after the cycle reports its individuation maturation reference complete, within a bounded wait, and fails the step if it never arrives |
 | rest-resume-process-restart | 5/6 (83%) | A state-cycle rest cut by a process restart resumes for its remaining time; the resume checkpoint updates only the sleep module's state_cycle entry during a rest |
 | developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
 | hearing-stage-saturation | 11/11 (100%) | Release each hearing stage by audition's saturated learning progress between a minimum and maximum dwell, colour k/5 per stage, and C3 as schedule completion (paper A.7, Table A1). |
