@@ -249,7 +249,9 @@ class Language(BaseModule):
         # generation bookkeeping for the individuation probe's yield-to-speech rule
         self._produce_in_flight = 0
         self._last_produce_end: Optional[float] = None
-        self._cycle_stop_event: Optional[asyncio.Event] = None
+
+    # The cycle's stop event; None until the boot wires it (see ``set_stop_event``).
+    _cycle_stop_event: Optional[asyncio.Event] = None
 
     def set_self_model_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         """Inject a read-only accessor for the self-model (wired in
