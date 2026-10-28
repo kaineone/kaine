@@ -224,7 +224,7 @@ Captures registry state (via a `state_provider`) on `sleep.sleep.started` and ag
 - **Toggle:** `[evaluation].voice_tracking` (default `true`)
 - **Output:** `data/evaluation/voice_tracking/voice_tracking-<YYYY-MM-DD>.jsonl`
 
-Captures per-sleep-cycle voice-alignment stats: pairs processed, pairs above threshold, DPO loss, whether the adapter was accepted, and capability/mean intent-expression-similarity scores before and after the cycle.
+Captures per-sleep-cycle voice-alignment stats (empty while `preference_source` is `"none"`, because no pairs are built): pairs processed, pairs above threshold, DPO loss, whether the adapter was accepted, and capability/mean intent-expression-similarity scores before and after the cycle.
 
 ### `AffectCorrelationRecorder`
 

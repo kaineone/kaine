@@ -56,7 +56,7 @@ system
   + heard-speech guard (only when the prompt holds heard material)
 
 prompt (the opening of the entity's own turn)
-  = "## What I know about my situation\n<facts>\n\n" (when any are recorded and the situation is due, see below)
+  = "## What I know about my situation\n<facts>\n\n" (when any are recorded)
   + "## How I feel and what I notice\n<coalition rendering>\n\n"
   + input heading and <about>
       external, heard input:        "## What was just said to me"
@@ -120,7 +120,7 @@ The organ's weights have the single direction that mediates refusal projected ou
 |---|---|---|
 | `action_selection.out` | `_intent_loop` | `speak` intents (external speech) and `think` intents (inner thought); `intent.rest` is ignored |
 | `workspace.broadcast` | `_snapshot_cache_loop` | Caches the latest accessed coalition for the prompt; never triggers speech |
-| `self_model.out`, `self_model.document` | bus subscription | Persona name, values, norms and situation facts, when the self-model module is enabled |
+| `self_model.out`, `self_model.document` | bus subscription | Values, norms and situation facts, when the self-model module is enabled; the entity's name is not carried |
 | `sleep.out` | bus subscription | The completed-sleep count recorded as `sleep_index` |
 
 ## Outputs

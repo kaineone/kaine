@@ -209,7 +209,7 @@ Limits:
 - sherpa-onnx publishes `audition.transcription` with `"backend": "sherpa_onnx"`.
 - The dashboard health surface probes Speaches only when `backend = "speaches"`. For sherpa-onnx it loads the model and runs one real inference once per process, then reports the remembered result with its age; a failure is retried after 60 s.
 - A missing `sherpa-onnx` package refuses boot through the extras check (`pip install "kaine[speech-edge]"`) only when transcription is enabled.
-- A missing or corrupt model, with either backend, disables transcription only. The audition module keeps hearing and reporting tone, the reason is logged, and the Dashboard row shows DOWN.
+- A missing or corrupt model, with either backend, disables transcription only. The audition module keeps hearing and reporting tone, the reason is logged, and the dashboard's health row shows DOWN.
 
 ## Emotion classification
 

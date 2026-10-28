@@ -8,10 +8,13 @@
   var POLL_MS = 5000;
 
   var TRIGGER_LABELS = {
+    fatigue: "fatigue",
+    maintenance_request: "maintenance request",
+    affect_regulation: "emotion regulation",
     state_cycle: "state-cycle rest",
-    developmental_rest: "developmental rest (earlier rule)",
     requested: "requested",
     backstop: "backstop (an hour awake)",
+    developmental_rest: "developmental rest (earlier rule)",
     fatigue_or_backstop: "fatigue or backstop (not stated)"
   };
 

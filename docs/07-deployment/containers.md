@@ -173,12 +173,12 @@ Jobs pass through the `kaine-trainer-jobs` volume. The cycle, the study runner a
 | `kaine-redis-data` | `/data` | `kaine-redis` |
 | `kaine-qdrant-data` | `/qdrant/storage` | `kaine-qdrant` |
 | `kaine-models` | `/models` (read-only except for `kaine-provision`) | model server, speech services, cycle, study, trainer |
-| `kaine-state` | `/app/state` | cycle and Dashboard: forks, preservation, individuation, world and self models, control state, audit and incident logs |
-| `kaine-eval-data` | `/app/data/evaluation` | cycle and Dashboard: run manifests under `runs/` and the evaluation observers' output |
+| `kaine-state` | `/app/state` | cycle and the dashboard web UI: forks, preservation, individuation, world and self models, control state, audit and incident logs |
+| `kaine-eval-data` | `/app/data/evaluation` | cycle and the dashboard: run manifests under `runs/` and the evaluation observers' output |
 | `kaine-trajectory` | `/app/data/workspace_trajectory` | cycle |
 | `kaine-backups` | `/app/backups` | cycle: preservation bundles from the divergence monitor and the welfare response |
 | `kaine-ignition` | `/app/data/ignition` | cycle: the film-aligned ignition log |
-| `kaine-nexus-record` | `/app/data/nexus_record` | cycle: the local record of what Dashboard displays |
+| `kaine-nexus-record` | `/app/data/nexus_record` | cycle: the local record of what the dashboard displays |
 | `kaine-studies` | `/app/studies` | study runner |
 | `kaine-organ-adapters` | `/organ-adapters` | read-only on the model server, read-write on the cycle and the study runner |
 | `kaine-trainer-jobs` | see [Voice alignment](#voice-alignment) | cycle, study runner, trainer |

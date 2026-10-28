@@ -1,8 +1,8 @@
-# Dashboard, the dashboard
+# The dashboard web UI
 
-The dashboard is the local web dashboard for watching and steering a running KAINE instance. This page covers its address, access modes, read-only view, tailnet access, operator token and main panels. Read it before you open the dashboard for the first time.
+The dashboard web UI is the local web dashboard for watching and steering a running KAINE instance. This page covers its address, access modes, read-only view, tailnet access, operator token and main panels. Read it before you open the dashboard for the first time.
 
-## Where to find Dashboard
+## Where to find the dashboard
 
 Point a browser at:
 
@@ -16,7 +16,7 @@ The evaluation surface is at `/diagnostics/evaluation/`. It is mounted only when
 
 A native dashboard binds `127.0.0.1:8088` (`[dashboard].host` and `port`). In containers it listens on all interfaces inside the container, and the port is published on `127.0.0.1:8088` only. Either way an open dashboard is reachable by anyone who can run code on the same host, and by your tailnet if you serve it there.
 
-## Who can use Dashboard
+## Who can use the dashboard
 
 `[dashboard].access` controls whether a visitor can just view or also control the entity. Override it per launch with `KAINE_DASHBOARD_ACCESS`.
 
@@ -137,7 +137,7 @@ The rows that appear depend on the configured backends:
 | Row | Probe |
 |---|---|
 | Redis | A bus PING. |
-| Qdrant | Episodic memory's `/readyz`, with the API key. | |
+| Qdrant | Episodic memory's `/readyz`, with the API key. |
 | Chat LLM | The model server's `/v1/models`, checked for the configured model. |
 | Speech in | Speaches, or sherpa-onnx (Moonshine) when `[audition].backend = "sherpa_onnx"`. Speaches reports `not configured` while transcription is disabled. |
 | Speech out | Chatterbox when `[vocal].backend = "chatterbox"`, or sherpa-onnx (Kokoro) when `[vocal].backend = "sherpa_onnx"`. |
@@ -200,7 +200,7 @@ For curiosity it shows the interest share, the share of awake time at or above i
 
 ## Sleep and rest
 
-The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a state-cycle rest, the rest's length. The trigger is the one the sleep module states where it states one: `state-cycle rest` (the developmental state cycle, a 1,410 s rest after about 2,996 s awake) or `requested`. A sleep recorded under the earlier rule, trigger `developmental_rest`, shows as `developmental rest (earlier rule)`. Other sleeps start on fatigue or on the one-hour interval, the backstop, and the sleep module does not say which. The panel shows `backstop` while no fatigue sleep has happened since the cycle started and `fatigue or backstop` after one, because the `fatigue_triggered` flag in the sleep summary stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
+The sleep and rest panel reads `/diagnostics/sleep.json` every 5 s. It shows whether the entity sleeps, and for the current or last sleep its trigger, start time, duration (the time so far while it sleeps) and, for a state-cycle rest, the rest's length. The trigger is the one the sleep module records for every sleep: `fatigue`, `maintenance request`, `emotion regulation`, `state-cycle rest` (the developmental state cycle, a 1,410 s rest after about 2,996 s awake), `requested` or `backstop (an hour awake)`. A sleep recorded under the earlier rule, trigger `developmental_rest`, shows as `developmental rest (earlier rule)`. A completion from a cycle that predates the trigger field shows `backstop` or `fatigue or backstop`, from the sleep summary's `fatigue_triggered` flag, which stays set after the first fatigue sleep. A sleep whose start the dashboard did not see shows `not known`, as does an aborted sleep that states no trigger.
 
 ## Live charts and pacing
 

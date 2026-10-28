@@ -270,3 +270,28 @@ When the interest goal factor is selected, the cycle SHALL refresh the affect st
 #### Scenario: Learning progress reaches the scorer
 - **WHEN** an `affect.state` with `vision_learning_progress` 0.6 and curiosity 0.5 is observed
 - **THEN** the interest scorer reads 0.6 for vision and 0.5 for curiosity
+
+### Requirement: Predictive processors report graded intensity
+The vision module, the audition module's acoustic path, the interoception module, the sequence module (once it has a temporal prediction error) and the audition module's neutral tone events SHALL report the module's alert intensity when the report meets the module's alert criterion, and otherwise `I_lo + (I_hi - I_lo) * min(1, r / 2)`, where `r` is the report's prediction error over the running mean of the module's recent errors, so the competition within a tick ranks graded surprise. Each such report's payload SHALL carry a boolean `alert`.
+
+#### Scenario: Intensity rises with the error ratio
+- **WHEN** a vision module report is not an alert and its error ratio is 1.0, with baseline 0.2 and alert level 0.7
+- **THEN** its intensity is 0.45
+
+#### Scenario: An alert takes the alert level
+- **WHEN** a vision module report meets the alert criterion
+- **THEN** its intensity is the alert level and its payload has `alert` true
+
+### Requirement: Broadcasts carry the access threshold
+Every broadcast SHALL record the access threshold in its metadata under `access_threshold`, so that a module can identify its accessed members: the coalition members whose score reaches the threshold. A broadcast is accessed when at least one member is.
+
+#### Scenario: A rider below the threshold is not accessed
+- **WHEN** a broadcast's coalition has members scoring 0.5 and 0.1 with an access threshold of 0.35
+- **THEN** its metadata records the threshold 0.35, and only the member scoring 0.5 is accessed content
+
+### Requirement: Processors hold the accessed broadcast as context
+The context a processor holds SHALL be the featurization, weighted by intensity, of the accessed members of the latest accessed broadcast it has received, with the entity time elapsed since it received that broadcast. An inhibited broadcast SHALL leave the context unchanged, and before the first accessed broadcast there SHALL be no context.
+
+#### Scenario: An inhibited broadcast does not replace the context
+- **WHEN** a processor holds the context of an accessed broadcast and then receives an inhibited one
+- **THEN** its context is unchanged apart from its age

@@ -15,4 +15,4 @@
 
 ## 4. Docs
 
-- [ ] 4.1 Module pages and the cognitive-cycle chapter describe the context.
+- [x] 4.1 Module pages and the cognitive-cycle chapter describe the context.

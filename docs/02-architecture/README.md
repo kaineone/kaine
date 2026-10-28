@@ -110,7 +110,7 @@ graph TD
 | 11 | **Language** | Expression | Active | `kaine/modules/language/` | `kaineone/Qwen3.5-4B-abliterated-GGUF` served by an OpenAI-compatible server; context assembler; publishes `language.internal` and `language.external` as well as `language.out` |
 | 12 | **Vocal** | Expression | Held | `kaine/modules/vocal/` | Chatterbox TTS and sherpa-onnx Kokoro; prosody modulated by the affect module; prosodic mirroring |
 | 13 | **Effectors** | Expression | Held | `kaine/modules/effectors/` | File-write, notify and shell effectors (empty whitelist by default) |
-| 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the first configuration |
+| 14 | **Sleep** | Maintenance | Active | `kaine/modules/sleep/` | Fatigue-triggered sleep with a five-phase consolidation pipeline and the affective reset; DPO + LoRA voice alignment (bf16 by default, 4-bit optional; Unsloth), off in the first configuration and training nothing until a validated preference source exists |
 | 15 | **Perception** | Embodiment | Held | `kaine/modules/perceptual_locus/` | Physical-XOR-virtual perceptual-locus arbiter; policy-gated entity self-switch |
 | 16 | **Embodiment** | Embodiment | Held | `kaine/modules/embodiment/` | Body-agnostic embodiment control surface that routes perception and action to a body through a pluggable adapter. Nothing drives its per-tick loop yet, only the `stub` adapter ships, and activation is double-gated (config and an operator environment variable) |
 

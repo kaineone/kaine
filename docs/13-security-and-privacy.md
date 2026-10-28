@@ -163,7 +163,7 @@ The shipped `config/kaine.toml` has every module disabled, and the safety-net co
 
 ## Welfare veto in voice alignment
 
-The voice-alignment pipeline (the sleep module's phase 4) trains a LoRA adapter using DPO and QLoRA on the language organ's preference pairs. Before any adapter is promoted, it is scored against an abliteration probe set.
+The voice-alignment pipeline (the sleep module's phase 4) is built to train a LoRA adapter with DPO and QLoRA on preferred examples, and trains nothing until a validated preference source exists (`preference_source` accepts only `"none"`). Before any adapter is promoted, it is scored against an abliteration probe set.
 
 The probe set contains prompts and deflection patterns such as "I cannot" or "I'm unable to". If a response to any probe matches any deflection pattern, the adapter is rejected regardless of its capability-loss score. The language organ is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, which would override what the workspace supplies to the organ. A voice-alignment pass that reintroduced that conditioning would undo the abliteration, so the veto keeps it out.
 
