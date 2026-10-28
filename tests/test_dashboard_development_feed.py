@@ -39,13 +39,102 @@ def test_read_hearing_stage_valid_round_trip(tmp_path: Path) -> None:
             "text": "extra",
         }
     })
-    assert read_hearing_stage(runtime_path=runtime) == {
+    assert read_hearing_stage(
+        runtime_path=runtime, hearing_stage_path=tmp_path / "absent.json"
+    ) == {
         "stage": 2,
         "previous_stage": 1,
         "low_hz": 100.5,
         "high_hz": 500.0,
         "awake_seconds": 120.0,
+        "dwell_seconds": None,
+        "min_dwell_seconds": None,
+        "max_dwell_seconds": None,
     }
+
+
+def _hearing_runtime(path: Path, **extra) -> None:
+    _write_runtime(path, {
+        "hearing_stage": {
+            "stage": 3,
+            "previous_stage": 2,
+            "low_hz": None,
+            "high_hz": 1732.05,
+            "awake_seconds": 50000.0,
+            "min_dwell_seconds": 5400.0,
+            "max_dwell_seconds": 25200.0,
+            **extra,
+        }
+    })
+
+
+def test_read_hearing_stage_dwell_from_owner_file(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime.json"
+    owner = tmp_path / "hearing_stage.json"
+    _hearing_runtime(runtime)
+    owner.write_text(json.dumps({"version": 1, "stage": 3, "dwell_seconds": 4320.0}), encoding="utf-8")
+    result = read_hearing_stage(runtime_path=runtime, hearing_stage_path=owner)
+    assert result["dwell_seconds"] == 4320.0
+    assert result["min_dwell_seconds"] == 5400.0
+    assert result["max_dwell_seconds"] == 25200.0
+
+
+def test_read_hearing_stage_dwell_ignores_the_runtime_copy(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime.json"
+    owner = tmp_path / "hearing_stage.json"
+    _hearing_runtime(runtime, dwell_seconds=99.0)
+    owner.write_text(json.dumps({"stage": 3, "dwell_seconds": 7.0}), encoding="utf-8")
+    assert read_hearing_stage(runtime_path=runtime, hearing_stage_path=owner)["dwell_seconds"] == 7.0
+
+
+@pytest.mark.parametrize(
+    "owner_text",
+    [
+        None,
+        "not json",
+        "[]",
+        json.dumps({"stage": 2, "dwell_seconds": 4320.0}),
+        json.dumps({"stage": 3}),
+        json.dumps({"stage": 3, "dwell_seconds": "x"}),
+        json.dumps({"stage": 3, "dwell_seconds": True}),
+        json.dumps({"stage": 3, "dwell_seconds": -1.0}),
+        '{"stage": 3, "dwell_seconds": NaN}',
+    ],
+)
+def test_read_hearing_stage_dwell_missing_or_unusable_is_none(tmp_path: Path, owner_text) -> None:
+    runtime = tmp_path / "runtime.json"
+    owner = tmp_path / "hearing_stage.json"
+    _hearing_runtime(runtime)
+    if owner_text is not None:
+        owner.write_text(owner_text, encoding="utf-8")
+    result = read_hearing_stage(runtime_path=runtime, hearing_stage_path=owner)
+    assert result is not None
+    assert result["stage"] == 3
+    assert result["dwell_seconds"] is None
+
+
+@pytest.mark.asyncio
+async def test_maturation_json_carries_the_dwell(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime.json"
+    owner = tmp_path / "hearing_stage.json"
+    _hearing_runtime(runtime)
+    owner.write_text(json.dumps({"stage": 3, "dwell_seconds": 4320.0}), encoding="utf-8")
+    app = FastAPI()
+    app.include_router(
+        build_maturation_router(
+            request_path=tmp_path / "req.json",
+            ack_path=tmp_path / "ack.json",
+            runtime_path=runtime,
+            hearing_stage_path=owner,
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        r = await c.get("/diagnostics/maturation.json")
+    assert r.status_code == 200
+    hearing = r.json()["hearing"]
+    assert hearing["dwell_seconds"] == 4320.0
+    assert hearing["max_dwell_seconds"] == 25200.0
 
 
 def test_read_hearing_stage_invalid_stage_returns_none(tmp_path: Path) -> None:

@@ -49,11 +49,30 @@
     return "open";
   }
 
+  function formatHours(seconds) {
+    return String(Math.round((seconds / 3600) * 10) / 10);
+  }
+
+  function formatDwell(hearing) {
+    var dwell = hearing.dwell_seconds;
+    var min = hearing.min_dwell_seconds;
+    var max = hearing.max_dwell_seconds;
+    if (
+      typeof dwell !== "number" || typeof min !== "number" || typeof max !== "number" ||
+      !isFinite(dwell) || !isFinite(min) || !isFinite(max)
+    ) {
+      return "";
+    }
+    return formatHours(dwell) + " h of " + formatHours(min) + " to " + formatHours(max) + " h";
+  }
+
   function formatHearing(hearing) {
     if (!hearing || typeof hearing.stage !== "number") {
       return "";
     }
-    return "stage " + hearing.stage + " of 4, " + formatBand(hearing.low_hz, hearing.high_hz);
+    var text = "stage " + hearing.stage + " of 4, " + formatBand(hearing.low_hz, hearing.high_hz);
+    var dwell = hearing.stage < 4 ? formatDwell(hearing) : "";
+    return dwell ? text + ", " + dwell : text;
   }
 
   function renderReadiness(readiness, readout) {

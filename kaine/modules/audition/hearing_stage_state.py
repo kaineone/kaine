@@ -160,6 +160,10 @@ class HearingStageState:
         return stage, float(dwell)
 
     @property
+    def params(self) -> HearingBandParams:
+        return self._params
+
+    @property
     def stage(self) -> int:
         with self._lock:
             return self._stage

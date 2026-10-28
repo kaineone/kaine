@@ -3059,7 +3059,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             gate_status=ctx.gate_runner.status if ctx.staging_enabled else None,
             staging_enabled=ctx.staging_enabled,
             revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
-            hearing_stage=ctx.hearing_stage_watch.current if ctx.hearing_stage_watch is not None else None,
+            hearing_stage=ctx.hearing_stage_watch.runtime_reading if ctx.hearing_stage_watch is not None else None,
         )
         try:
             await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)
