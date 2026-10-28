@@ -1732,6 +1732,10 @@ class Sleep(BaseModule):
             awake += max(0.0, (now - last) - max(0.0, self._paused_now() - self._cycle_tick_paused))
         return {"phase": "awake", "awake_s": awake, "rest_spent_s": 0.0}
 
+    def state_cycle_progress(self) -> dict[str, Any]:
+        """The state cycle entry for the rest-progress checkpoint writer."""
+        return self._export_state_cycle()
+
     def _restore_state_cycle(self, raw: Any) -> None:
         def _num(value: Any) -> Optional[float]:
             if isinstance(value, bool) or not isinstance(value, (int, float)):

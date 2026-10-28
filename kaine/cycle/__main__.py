@@ -2956,11 +2956,20 @@ async def _phase_checkpoint(ctx: BootContext) -> int | None:
         except Exception:
             return False
 
+    def _rest_source() -> dict | None:
+        # Read through the registry so a rebuilt sleep module is still read.
+        if "sleep" not in ctx.registry:
+            return None
+        module = ctx.registry.get("sleep")
+        progress = getattr(module, "state_cycle_progress", None)
+        return progress() if callable(progress) else None
+
     ctx.checkpointer = ResumeCheckpointer(
         ctx.registry,
         ctx.identity,
         awake_seconds=_awake_seconds,
         can_write=_can_write,
+        rest_source=_rest_source,
     )
     ctx.checkpoint_task = ctx.checkpointer.start()
     return None
