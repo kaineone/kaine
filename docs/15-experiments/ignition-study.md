@@ -104,6 +104,12 @@ Nothing is deleted. A verdict file older than the step, such as one left by an e
 
 The runner never flushes a database or starts a cycle while a cycle the study started is still running. It checks `/proc/<pid>/cmdline` as well as the pid. Stop that entity yourself first.
 
+### Notices and welfare freezes
+
+Each study child builds the caretaker from `[caretaker]` in the operator configuration, which the step overlay passes through unchanged, so a welfare response, a lost stimulus source, lost input and a stalled individuation assessment reach the configured channels. A channel token has to come from the environment (`KAINE_CARETAKER_TOKEN_<NAME>`), because a step directory has no `config/secrets.toml`.
+
+Every poll the runner reads the child's `state/cycle/control.json`. When the welfare safety net holds a freeze, the runner logs it at critical level, keeps `.study_welfare_freeze.json` in the step directory while the freeze is held, and shows it in `status`. The entity was preserved before it was frozen. The runner never lifts the freeze and does not end the step early: a person answers it by overriding the welfare freeze by name (see [Operation](../06-operation/README.md)). A step that ends while the welfare freeze is still held is recorded as `failed:welfare`, with the freeze's start and reason under `welfare_freeze` and `held_at_end` true, in place of the `failed:timeout` it would otherwise get. A freeze noticed on the running child and lifted before the step ends is recorded under `welfare_freeze` with `held_at_end` false and does not change the outcome.
+
 ### Retry a failed step
 
 ```bash

@@ -21,6 +21,7 @@ from urllib.parse import quote, urlsplit
 from kaine import legacy_aliases, legacy_names
 from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
+from kaine.cycle.control_state import read_control
 from kaine.cycle.preserve_watch import read_request, read_result
 from kaine.research.ignition_study.overlay import IGNITION_LOG_DIR, build_overlay
 from kaine.research.ignition_study.plan import (
@@ -50,6 +51,10 @@ CHILD_FILE = ".study_child.json"
 #: The longest maturation bloom the stimulus source accepts (``StimulusSourceParams`` and
 #: ``StimulusSourceClock.begin_maturation`` both bound ``maturation_transition_seconds`` to (0, 30]).
 MATURATION_BLOOM_MAX_SECONDS = 30.0
+
+#: Written into a step's working directory while the child's cycle is frozen by the
+#: welfare safety net, so ``status`` can show it before the step ends.
+WELFARE_FREEZE_FILE = ".study_welfare_freeze.json"
 
 
 class StudyComplete(Exception):
@@ -638,6 +643,10 @@ class StudyRunner:
         disk_low_requested = False
         disk_low_preserved: bool | None = None
         maturation_requested = False
+        # The welfare safety net froze the child (read from its control.json each
+        # poll).  The runner never lifts it: it names it and leaves the decision.
+        welfare_freeze: dict[str, Any] | None = None
+        (line_dir / WELFARE_FREEZE_FILE).unlink(missing_ok=True)
         first_embodied_wall: float | None = None
         unviable_verdict: dict[str, Any] | None = None
         unviable_terminated = False
@@ -693,6 +702,11 @@ class StudyRunner:
                                     "Maturation preservation request did not succeed for %s",
                                     line,
                                 )
+
+                if runtime:
+                    welfare_freeze = self._note_welfare_freeze(
+                        line, k, line_dir, welfare_freeze
+                    )
 
                 usage = self.disk_usage(self.study_dir)
                 floor = self._disk_floor_bytes(float(usage.total))
@@ -864,6 +878,18 @@ class StudyRunner:
                     k,
                     exc_info=True,
                 )
+        # A welfare freeze still held when the step ends names the outcome: the
+        # step did not fail on time or disk, the entity was frozen for its welfare
+        # and a person has to answer it.  An earlier freeze that has since been
+        # lifted by a named override is recorded and does not change the outcome.
+        # Only a freeze noticed on the running child counts: a control file left
+        # by an earlier child must not rename the failure of one that never booted.
+        welfare_held = (
+            self._welfare_freeze_entry(line_dir) if welfare_freeze is not None else None
+        )
+        if welfare_held is not None and outcome != "complete":
+            outcome = "failed:welfare"
+        (line_dir / WELFARE_FREEZE_FILE).unlink(missing_ok=True)
         world_model_captured: bool | None = None
         if "world_model" in modules_set:
             world_model_captured = False
@@ -894,6 +920,9 @@ class StudyRunner:
         if extra_viability is not None:
             record["viability"] = extra_viability
 
+        if welfare_freeze is not None:
+            record["welfare_freeze"] = dict(welfare_freeze, held_at_end=welfare_held is not None)
+
         if disk_low_requested:
             record["disk_low_preserved"] = bool(disk_low_preserved)
 
@@ -902,6 +931,50 @@ class StudyRunner:
     # --------------------------------------------------------------------- #
     # Helpers
     # --------------------------------------------------------------------- #
+
+    @staticmethod
+    def _welfare_freeze_entry(line_dir: Path) -> dict[str, Any] | None:
+        """The ``welfare`` entry of the child's freeze stack, or ``None``."""
+        control = read_control(line_dir / "state" / "cycle" / "control.json")
+        for entry in control.stack:
+            if entry.get("source") == "welfare":
+                return entry
+        return None
+
+    @staticmethod
+    def _welfare_freeze_summary(entry: dict[str, Any]) -> dict[str, Any]:
+        return {"since": entry.get("frozen_at"), "reason": entry.get("reason")}
+
+    def _note_welfare_freeze(
+        self,
+        line: str,
+        k: int,
+        line_dir: Path,
+        seen: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Surface a welfare freeze on the running child; never lift it.
+
+        Logs it once, and keeps ``WELFARE_FREEZE_FILE`` in the step directory
+        while it is held, for ``status``.  Returns the first summary seen."""
+        entry = self._welfare_freeze_entry(line_dir)
+        marker = line_dir / WELFARE_FREEZE_FILE
+        if entry is None:
+            marker.unlink(missing_ok=True)
+            return seen
+        summary = self._welfare_freeze_summary(entry)
+        if seen is None:
+            log.critical(
+                "The welfare safety net froze %s step %s (since %s: %s). The entity was "
+                "preserved first and stays frozen; the runner does not lift it. A person "
+                "must answer it (override the welfare freeze by name, or stop the step).",
+                line,
+                k,
+                summary["since"],
+                summary["reason"],
+            )
+            _write_text_atomic(marker, json.dumps(summary))
+            return summary
+        return seen
 
     def _read_runtime(self, line_dir: Path) -> dict[str, Any] | None:
         path = line_dir / "state" / "cycle" / "runtime.json"
@@ -1066,6 +1139,25 @@ class StudyRunner:
             last = failed[-1]
             lines.append(
                 f"Halted: {last['outcome']} at {last['line']} step {last['step']}"
+            )
+            freeze = last.get("welfare_freeze")
+            if last.get("outcome") == "failed:welfare" and isinstance(freeze, dict):
+                lines.append(
+                    f"Welfare freeze: held by the welfare safety net since "
+                    f"{freeze.get('since')} ({freeze.get('reason')}); the entity was "
+                    f"preserved first and the runner does not lift it. Override the "
+                    f"welfare freeze by name, then retry the step."
+                )
+        for line_name, step_k in self._step_sequence():
+            marker = self._line_dir(line_name, step_k) / WELFARE_FREEZE_FILE
+            try:
+                live = json.loads(marker.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            lines.append(
+                f"Welfare freeze (running): {line_name} step {step_k} is frozen by the "
+                f"welfare safety net since {live.get('since')} ({live.get('reason')}); "
+                f"it waits for a person."
             )
         try:
             nxt = self._next_step()

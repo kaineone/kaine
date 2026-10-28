@@ -2638,6 +2638,17 @@ async def _phase_supervisor(ctx: BootContext) -> int | None:
     )
 
 
+def _caretaker_config_error(config: dict) -> str | None:
+    """The reason the ``[caretaker]`` section is invalid, or ``None``."""
+    from kaine.cycle.caretaker import CaretakerConfig, CaretakerConfigError
+
+    try:
+        CaretakerConfig.from_section(config.get("caretaker") or {})
+    except CaretakerConfigError as exc:
+        return str(exc)
+    return None
+
+
 async def _phase_safety_net(ctx: BootContext) -> int | None:
     """Build the divergence monitor, the caretaker and the welfare-protective monitor."""
 
@@ -2679,13 +2690,26 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             adapter_output_dir=adapter_dir,
             voice_paths=voice_paths,
         )
-    if ctx.supervision_mode == "unattended":
+    # An unattended or research run has no person watching the dashboard, so the
+    # caretaker is how a welfare event, a lost stimulus or lost input reaches one
+    # (CAL 4.7). Both modes read the same [caretaker] section (the operator
+    # configuration supplies the channels) and send the same notices.
+    if ctx.supervision_mode in ("unattended", "research"):
         from kaine.cycle.caretaker import CaretakerConfig
         from kaine.cycle.caretaker_runtime import CaretakerNotifier
 
-        ctx.caretaker = CaretakerNotifier(
-            CaretakerConfig.from_section(ctx.kaine_config.get("caretaker") or {})
+        # Validated before the boot (main) for a research run and by the gate for an
+        # unattended one, so this cannot raise here.
+        caretaker_cfg = CaretakerConfig.from_section(
+            ctx.kaine_config.get("caretaker") or {}
         )
+        if not caretaker_cfg.channels:
+            log.warning(
+                "no [caretaker] channel is configured: welfare, stimulus-loss and "
+                "input-loss notices have no recipient in this %s run",
+                ctx.supervision_mode,
+            )
+        ctx.caretaker = CaretakerNotifier(caretaker_cfg)
         await ctx.caretaker.start()
     else:
         ctx.caretaker = None
@@ -3601,6 +3625,12 @@ def main(argv: list[str] | None = None) -> int:
         supervision_mode = "unattended"
         gate_checks = dict(result.checks)
     elif mode == "research":
+        # A research run builds the caretaker too, so an invalid [caretaker]
+        # section refuses the boot before anything starts.
+        caretaker_error = _caretaker_config_error(config)
+        if caretaker_error is not None:
+            sys.stderr.write(f"kaine.cycle: configuration error: {caretaker_error}\n")
+            return 1
         # Unsupervised research boot: the operator-present requirement is
         # REPLACED by the safety-net-present gate (preservation + welfare
         # response + logging + a passing dry preserve→revive self-check).
