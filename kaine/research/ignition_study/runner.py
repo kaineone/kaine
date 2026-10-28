@@ -962,7 +962,11 @@ class StudyRunner:
             marker.unlink(missing_ok=True)
             return seen
         summary = self._welfare_freeze_summary(entry)
-        if seen is None:
+        if (
+            seen is None
+            or summary.get("since") != seen.get("since")
+            or summary.get("reason") != seen.get("reason")
+        ):
             log.critical(
                 "The welfare safety net froze %s step %s (since %s: %s). The entity was "
                 "preserved first and stays frozen; the runner does not lift it. A person "
@@ -1150,9 +1154,12 @@ class StudyRunner:
                 )
         for line_name, step_k in self._step_sequence():
             marker = self._line_dir(line_name, step_k) / WELFARE_FREEZE_FILE
+            if not marker.exists():
+                continue
             try:
                 live = json.loads(marker.read_text())
             except (OSError, json.JSONDecodeError):
+                lines.append(f"Welfare freeze marker unreadable: {line_name} step {step_k}")
                 continue
             lines.append(
                 f"Welfare freeze (running): {line_name} step {step_k} is frozen by the "

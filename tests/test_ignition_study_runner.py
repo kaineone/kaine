@@ -1056,6 +1056,68 @@ def test_a_stale_welfare_freeze_does_not_rename_a_child_that_never_booted(
     assert "welfare_freeze" not in record
 
 
+def test_a_new_welfare_freeze_replaces_the_marker_and_summary(tmp_path: Path, known_modules):
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _runner(study_dir, tmp_path / "unused.py")
+    line_dir = study_dir / "development"
+    control_path = line_dir / "state" / "cycle" / "control.json"
+    control_path.parent.mkdir(parents=True)
+    control_path.write_text(
+        json.dumps(
+            {
+                "stack": [
+                    {
+                        "source": "welfare",
+                        "reason": "welfare: sustained_distress",
+                        "frozen_at": "2026-10-28T12:00:00+00:00",
+                    }
+                ]
+            }
+        )
+    )
+
+    seen = runner._note_welfare_freeze("development", 0, line_dir, None)
+    assert seen == {"since": "2026-10-28T12:00:00+00:00", "reason": "welfare: sustained_distress"}
+    marker = line_dir / ".study_welfare_freeze.json"
+    assert json.loads(marker.read_text()) == seen
+
+    control_path.write_text(
+        json.dumps(
+            {
+                "stack": [
+                    {
+                        "source": "welfare",
+                        "reason": "welfare: repeated_gray_zone",
+                        "frozen_at": "2026-10-28T13:00:00+00:00",
+                    }
+                ]
+            }
+        )
+    )
+    new_seen = runner._note_welfare_freeze("development", 0, line_dir, seen)
+    assert new_seen == {
+        "since": "2026-10-28T13:00:00+00:00",
+        "reason": "welfare: repeated_gray_zone",
+    }
+    assert json.loads(marker.read_text()) == new_seen
+
+
+@pytest.mark.parametrize("marker_content", ["not json", None])
+def test_an_unreadable_welfare_freeze_marker_is_reported_in_status(
+    tmp_path: Path, known_modules, marker_content
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _runner(study_dir, tmp_path / "unused.py")
+    line_dir = study_dir / "development"
+    marker = line_dir / ".study_welfare_freeze.json"
+    if marker_content is None:
+        marker.mkdir()
+    else:
+        marker.write_text(marker_content)
+    status = runner.status()
+    assert "Welfare freeze marker unreadable: development step 0" in status
+
+
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
     study_dir = _create_study(tmp_path, viewings=1)
     script = tmp_path / "standin.py"

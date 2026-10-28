@@ -6,7 +6,12 @@ unattended run, so welfare notices reach a person (CAL 4.7)."""
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
+import subprocess
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -15,11 +20,12 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.bus.schema import validate_event
 from kaine.cycle import __main__ as cycle_main
-from kaine.cycle import caretaker_runtime, control_state
+from kaine.cycle import caretaker, caretaker_runtime, control_state
 from kaine.cycle.preservation_monitor import PreservationConfig
 from kaine.lifecycle.preservation import PreservationResult
 from kaine.modules.registry import ModuleRegistry
 from kaine.research.ignition_study.overlay import build_overlay
+from kaine.security import crypto
 
 CARETAKER_SECTION = {
     "install_label": "study-box",
@@ -198,3 +204,80 @@ def test_the_study_overlay_passes_the_operator_caretaker_section_to_children(tmp
         "install_label": "study-box",
         "channels": [{"kind": "desktop"}],
     }
+
+
+_SHIPPED_CONFIG = Path(__file__).resolve().parent.parent / "config" / "kaine.toml"
+
+
+def _hermetic_cwd(tmp_path: Path, monkeypatch) -> None:
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir(parents=True)
+    shutil.copy2(_SHIPPED_CONFIG, cfg_dir / "kaine.toml")
+    monkeypatch.chdir(tmp_path)
+
+
+def test_an_invalid_caretaker_section_refuses_a_research_boot_before_any_state(
+    tmp_path: Path, monkeypatch, capsys
+):
+    _hermetic_cwd(tmp_path, monkeypatch)
+    cfg_path = tmp_path / "config" / "kaine.toml"
+    cfg_path.write_text(
+        cfg_path.read_text() + '\n[caretaker]\ninstall_label = "study-box"\nbogus_key = 1\n'
+    )
+    monkeypatch.setenv("KAINE_RESEARCH_MODE", "1")
+    monkeypatch.setenv("KAINE_STATE_KEY", "11" * 32)
+    monkeypatch.setattr(crypto, "_load_key_from_keyring", lambda: None)
+    calls: list = []
+
+    async def _fake_boot(**kwargs):
+        calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cycle_main, "_boot_and_run", _fake_boot)
+    rc = cycle_main.main([])
+    assert rc == 1
+    assert calls == []
+    captured = capsys.readouterr()
+    assert "configuration error" in captured.err
+    assert "bogus_key" in captured.err
+
+
+def test_caretaker_ack_cli_writes_matching_ack_for_a_step_directory(tmp_path: Path, monkeypatch):
+    step_dir = tmp_path / "development" / "0"
+    state_dir = step_dir / "state" / "cycle"
+    state_dir.mkdir(parents=True)
+    start_id = "abcd1234" * 4
+    (state_dir / "caretaker_start.json").write_text(
+        json.dumps({"start_id": start_id, "started_at": "2026-10-28T12:00:00+00:00"})
+    )
+    rc = caretaker.main(["ack", "--data-root", str(step_dir)])
+    assert rc == 0
+    ack = json.loads((state_dir / "caretaker_ack.json").read_text())
+    assert ack["start_id"] == start_id
+    assert "acknowledged_at" in ack
+
+
+def test_caretaker_ack_cli_refuses_when_no_start_record_exists(tmp_path: Path, capsys):
+    step_dir = tmp_path / "development" / "0"
+    rc = caretaker.main(["ack", "--data-root", str(step_dir)])
+    assert rc == 1
+    assert "no start record" in capsys.readouterr().err
+
+
+def test_caretaker_ack_runs_as_a_module(tmp_path: Path):
+    step_dir = tmp_path / "development" / "0"
+    state_dir = step_dir / "state" / "cycle"
+    state_dir.mkdir(parents=True)
+    start_id = "0123abcd" * 4
+    (state_dir / "caretaker_start.json").write_text(
+        json.dumps({"start_id": start_id, "started_at": "2026-10-28T12:00:00+00:00"})
+    )
+    proc = subprocess.run(
+        [sys.executable, "-m", "kaine.cycle.caretaker", "ack", "--data-root", str(step_dir)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    ack = json.loads((state_dir / "caretaker_ack.json").read_text())
+    assert ack["start_id"] == start_id
