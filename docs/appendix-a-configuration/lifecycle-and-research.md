@@ -158,7 +158,7 @@ The maturation gate's third condition, C3, is that the sensory schedule is compl
 
 ## `[caretaker]`
 
-Content-free notices for unattended runs (`kaine/cycle/caretaker.py`). The caretaker reports refused starts, supervisor escalations, lost supervision and lost input through each configured channel, and repeats a reminder every `reminder_interval_s` while a refused start is unacknowledged. The section is commented out in the shipped `config/kaine.toml`; unknown keys are rejected.
+Content-free notices for unattended and research runs (`kaine/cycle/caretaker.py`). Both modes build the caretaker from this section; an operator-present run does not. In a research run it is the only way a welfare response, a lost stimulus source, lost input or a stalled individuation assessment reaches a person, because nobody watches the dashboard. A research run with no channel configured boots and logs a warning that these notices have no recipient. The caretaker reports refused starts, supervisor escalations, lost supervision and lost input through each configured channel, and repeats a reminder every `reminder_interval_s` while a refused start is unacknowledged. The section is commented out in the shipped `config/kaine.toml`; unknown keys are rejected.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

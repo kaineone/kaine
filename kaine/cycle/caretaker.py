@@ -13,6 +13,7 @@ secrets helpers.
 """
 from __future__ import annotations
 
+import argparse
 import ipaddress
 import json
 import logging
@@ -22,6 +23,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,7 +32,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from kaine.config import require_known_keys
+from kaine.cycle.caretaker_state import (
+    ACK_PATH,
+    START_PATH,
+    CaretakerAck,
+    read_start,
+    write_ack,
+)
 from kaine.secrets_file import read_toml_field
+from kaine.storage import set_data_root
 
 log = logging.getLogger("kaine.cycle.caretaker")
 
@@ -630,6 +640,41 @@ def send_refusal_notice(
         log.warning("failed to send caretaker refusal notice: %s", type(exc).__name__)
 
 
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _cmd_ack(args: argparse.Namespace) -> int:
+    """Acknowledge the current caretaker start for a data root or step directory."""
+    if args.data_root:
+        set_data_root(Path(args.data_root))
+    start = read_start(START_PATH)
+    if start is None:
+        sys.stderr.write("caretaker: no start record to acknowledge\n")
+        return 1
+    write_ack(
+        CaretakerAck(start_id=start.start_id, acknowledged_at=_utc_iso()),
+        path=ACK_PATH,
+    )
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI for caretaker operations outside the dashboard."""
+    parser = argparse.ArgumentParser(prog="python -m kaine.cycle.caretaker")
+    sub = parser.add_subparsers(dest="command", required=True)
+    ack = sub.add_parser("ack", help="acknowledge the current caretaker start")
+    ack.add_argument(
+        "--data-root",
+        required=True,
+        help="data root (or step directory) where state/cycle/caretaker_start.json lives",
+    )
+    args = parser.parse_args(argv)
+    if args.command == "ack":
+        return _cmd_ack(args)
+    return 2
+
+
 __all__ = [
     "CaretakerConfigError",
     "ChannelConfig",
@@ -647,4 +692,9 @@ __all__ = [
     "notify",
     "check_caretaker_condition",
     "send_refusal_notice",
+    "main",
 ]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

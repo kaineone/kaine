@@ -12,6 +12,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
 | distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
+| caretaker-in-research-runs | 6/6 (100%) | Research runs build the caretaker from the same [caretaker] section so welfare, stimulus-loss and input-loss notices reach a person, and the study runner surfaces a welfare freeze in status and the outcome |
 | ci-torch-within-pin | 2/3 (67%) | The latest-torch test job installs the newest torch inside the range pyproject declares, so a release past the cap cannot break the install |
 | study-overlay-individuation | 4/5 (80%) | The ignition study overlay enables the individuation producer on every step, so the research gate no longer refuses the study boot; a test checks each step config against the gate. |
 | hearing-dwell-panel | 6/6 (100%) | The development panel and maturation.json show the hearing stage's dwell against its minimum and maximum dwell |
@@ -108,7 +109,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 81 active changes, 366 archived changes and 109 capability specs.
-The roadmap contains 79 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 83 active changes, 366 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

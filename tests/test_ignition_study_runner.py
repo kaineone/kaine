@@ -156,6 +156,21 @@ STANDIN_SCRIPT = textwrap.dedent(
         }
         write_json(state_dir / "runtime.json", runtime)
 
+        if not is_viewing and os.environ.get("IGNITION_STANDIN_WELFARE"):
+            # The welfare safety net froze this child; it stays frozen and waits.
+            write_json(state_dir / "runtime.json", {
+                "pid": os.getpid(),
+                "run_id": run_id,
+                "developmental_stage": {"stage": "developing"},
+            })
+            write_json(state_dir / "control.json", {"stack": [{
+                "source": "welfare",
+                "reason": "welfare: repeated_gray_zone",
+                "frozen_at": utc_iso(),
+            }]})
+            wait_for_request(state_dir, None, True, bundle_dir)
+            return
+
         if not is_viewing:
             # Matured: the stage file names when the maturation bloom ends (already
             # over unless IGNITION_STANDIN_BLOOM_SECONDS puts it ahead), or
@@ -291,6 +306,7 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_SCENARIO",
         "IGNITION_STANDIN_MANIFEST",
         "IGNITION_STANDIN_BLOOM_SECONDS",
+        "IGNITION_STANDIN_WELFARE",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -968,6 +984,138 @@ def test_maturation_preservation_waits_the_fallback_without_a_bloom_end(
     assert "maturation_bloom_ends_at" not in stage
     embodied_at = float((study_dir / "embodied_at.txt").read_text())
     assert _maturation_request_time(study_dir) - embodied_at >= 0.4 + 0.3
+
+
+def test_a_welfare_freeze_names_the_outcome_and_is_never_lifted(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1, development_budget_seconds=1.5)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_WELFARE", "1")
+    runner = _runner(study_dir, script)
+    record = _run(runner)
+
+    # The step would otherwise be recorded as a plain timeout.
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:welfare"
+    assert record["welfare_freeze"]["reason"] == "welfare: repeated_gray_zone"
+    assert record["welfare_freeze"]["held_at_end"] is True
+    assert record["bundle"] and Path(record["bundle"]).exists()
+    assert _load_steps(study_dir)[0]["outcome"] == "failed:welfare"
+
+    # The runner reports it and leaves the freeze where the safety net put it.
+    status = runner.status()
+    assert "Halted: failed:welfare at development step 0" in status
+    assert "Welfare freeze: held by the welfare safety net" in status
+    control = json.loads(
+        (study_dir / "development" / "state" / "cycle" / "control.json").read_text()
+    )
+    assert [e["source"] for e in control["stack"]] == ["welfare"]
+    assert not (study_dir / "development" / ".study_welfare_freeze.json").exists()
+
+
+def test_a_running_welfare_freeze_shows_in_status_until_it_is_lifted(
+    tmp_path: Path, known_modules
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _runner(study_dir, tmp_path / "unused.py")
+    line_dir = study_dir / "development"
+    control_path = line_dir / "state" / "cycle" / "control.json"
+    control_path.parent.mkdir(parents=True)
+    control_path.write_text(
+        json.dumps(
+            {"stack": [{"source": "welfare", "reason": "welfare: sustained_distress",
+                        "frozen_at": "2026-10-28T12:00:00+00:00"}]}
+        )
+    )
+
+    seen = runner._note_welfare_freeze("development", 0, line_dir, None)
+    assert seen == {"since": "2026-10-28T12:00:00+00:00", "reason": "welfare: sustained_distress"}
+    assert "Welfare freeze (running): development step 0" in runner.status()
+
+    # A named override lifts it; the runner's note goes, the first sighting is kept.
+    control_path.write_text(json.dumps({"stack": []}))
+    assert runner._note_welfare_freeze("development", 0, line_dir, seen) == seen
+    assert "Welfare freeze" not in runner.status()
+
+
+def test_a_stale_welfare_freeze_does_not_rename_a_child_that_never_booted(
+    tmp_path: Path, known_modules
+):
+    # A control file left by an earlier child, and a child that exits at once.
+    study_dir = _create_study(tmp_path, viewings=1)
+    control_path = study_dir / "development" / "state" / "cycle" / "control.json"
+    control_path.parent.mkdir(parents=True)
+    control_path.write_text(json.dumps({"stack": [{"source": "welfare", "reason": "old"}]}))
+    script = tmp_path / "exit5.py"
+    script.write_text("raise SystemExit(5)\n")
+    record = _run(_runner(study_dir, script))
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:exit:5"
+    assert "welfare_freeze" not in record
+
+
+def test_a_new_welfare_freeze_replaces_the_marker_and_summary(tmp_path: Path, known_modules):
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _runner(study_dir, tmp_path / "unused.py")
+    line_dir = study_dir / "development"
+    control_path = line_dir / "state" / "cycle" / "control.json"
+    control_path.parent.mkdir(parents=True)
+    control_path.write_text(
+        json.dumps(
+            {
+                "stack": [
+                    {
+                        "source": "welfare",
+                        "reason": "welfare: sustained_distress",
+                        "frozen_at": "2026-10-28T12:00:00+00:00",
+                    }
+                ]
+            }
+        )
+    )
+
+    seen = runner._note_welfare_freeze("development", 0, line_dir, None)
+    assert seen == {"since": "2026-10-28T12:00:00+00:00", "reason": "welfare: sustained_distress"}
+    marker = line_dir / ".study_welfare_freeze.json"
+    assert json.loads(marker.read_text()) == seen
+
+    control_path.write_text(
+        json.dumps(
+            {
+                "stack": [
+                    {
+                        "source": "welfare",
+                        "reason": "welfare: repeated_gray_zone",
+                        "frozen_at": "2026-10-28T13:00:00+00:00",
+                    }
+                ]
+            }
+        )
+    )
+    new_seen = runner._note_welfare_freeze("development", 0, line_dir, seen)
+    assert new_seen == {
+        "since": "2026-10-28T13:00:00+00:00",
+        "reason": "welfare: repeated_gray_zone",
+    }
+    assert json.loads(marker.read_text()) == new_seen
+
+
+@pytest.mark.parametrize("marker_content", ["not json", None])
+def test_an_unreadable_welfare_freeze_marker_is_reported_in_status(
+    tmp_path: Path, known_modules, marker_content
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _runner(study_dir, tmp_path / "unused.py")
+    line_dir = study_dir / "development"
+    marker = line_dir / ".study_welfare_freeze.json"
+    if marker_content is None:
+        marker.mkdir()
+    else:
+        marker.write_text(marker_content)
+    status = runner.status()
+    assert "Welfare freeze marker unreadable: development step 0" in status
 
 
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
