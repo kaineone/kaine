@@ -450,6 +450,7 @@ def test_c3_realization_failed_event_is_content_free():
     mod = object.__new__(Language)  # bypass heavy __init__
     mod.name = "language"
     mod._gen_task = None  # no held generation on this bare instance
+    mod._stopped = asyncio.Event()  # running: no stop has begun
     published: list[tuple[str, str, dict]] = []
 
     async def fake_write_mode_record(stream, type_, payload):

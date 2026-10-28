@@ -1244,9 +1244,14 @@ def _make_rebuild_module(
     kaine_config: dict[str, Any],
     registry: Any,
     intent_secret: bytes | None,
+    stop_event_source: Callable[[], Any] | None = None,
 ) -> Any:
     """Return the supervisor's heavy-restart constructor, bound to this boot's bus,
-    configuration, registry and the effectors module's intent secret."""
+    configuration, registry and the effectors module's intent secret.
+
+    ``stop_event_source`` returns the cycle's stop event (it is created in a later boot
+    phase than this closure, so it is read at rebuild time). A rebuilt module that
+    accepts the event gets it, as the module built at boot does."""
 
     def rebuild_module(name: str) -> Any:
         """Rebuild a single module exactly as build_registry would, for the supervisor's
@@ -1272,6 +1277,9 @@ def _make_rebuild_module(
         )
         if result is None:
             raise RuntimeError(f"cannot rebuild {name}: its configured backend could not load")
+        stop_event = stop_event_source() if stop_event_source is not None else None
+        if stop_event is not None and hasattr(result, "set_stop_event"):
+            result.set_stop_event(stop_event)
         return result
 
     return rebuild_module
@@ -2426,7 +2434,9 @@ async def _phase_supervision(ctx: BootContext) -> int | None:
         ),
     )
 
-    ctx.rebuild_module = _make_rebuild_module(ctx.bus, ctx.kaine_config, ctx.registry, ctx.intent_secret)
+    ctx.rebuild_module = _make_rebuild_module(
+        ctx.bus, ctx.kaine_config, ctx.registry, ctx.intent_secret, stop_event_source=lambda: ctx.stop_event
+    )
 
 
 async def _phase_runtime_state(ctx: BootContext) -> int | None:
@@ -2580,6 +2590,10 @@ async def _phase_signals(ctx: BootContext) -> int | None:
 
     loop = asyncio.get_running_loop()
     ctx.stop_event = asyncio.Event()
+    # The language module reads the stop event to tell a shutdown from a fault when a
+    # realization fails; its own stop flag is set only when the modules shut down.
+    if "language" in ctx.registry:
+        ctx.registry.get("language").set_stop_event(ctx.stop_event)
 
     def _signal_handler():
         log.info("signal received; shutting down")
