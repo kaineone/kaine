@@ -7,6 +7,7 @@ import hashlib
 import json
 import sys
 import textwrap
+import time
 import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -100,6 +101,28 @@ STANDIN_SCRIPT = textwrap.dedent(
             data = {"world_model_captured": False}
         write_json(bundle_dir / "manifest.json", data)
 
+    def write_encrypted_placeholder(path):
+        # The real cycle writes these files encrypted; the runner must never
+        # try to parse them as JSON.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(bytes([0]) + b"ciphertext")
+
+    def write_runtime_individuation(cwd, block):
+        state_dir = cwd / "state" / "cycle"
+        runtime_path = state_dir / "runtime.json"
+        runtime = json.loads(runtime_path.read_text())
+        runtime["individuation"] = block
+        write_json(runtime_path, runtime)
+
+    def write_reference(cwd):
+        root = cwd / "state" / "individuation"
+        write_encrypted_placeholder(root / "reference.json")
+        write_encrypted_placeholder(root / "ledger.json")
+        write_runtime_individuation(
+            cwd, {"reference_kind": "maturation", "reference_complete": True}
+        )
+        (cwd.parent / "reference_at.txt").write_text(str(time.time()))
+
     def cycle(args):
         cwd = Path.cwd()
         if cwd.parent.name == "branch":
@@ -183,6 +206,38 @@ STANDIN_SCRIPT = textwrap.dedent(
             if bloom != "none":
                 ends = datetime.fromtimestamp(time.time() + float(bloom), timezone.utc)
                 stage["maturation_bloom_ends_at"] = ends.isoformat()
+            # The study overlay runs the individuation producer on every step, so
+            # by default the child captures its maturation reference as the cycle does.
+            reference_mode = os.environ.get("IGNITION_STANDIN_REFERENCE", "present")
+            if reference_mode == "present":
+                write_reference(cwd)
+            elif reference_mode == "late":
+                import threading
+
+                threading.Timer(
+                    float(os.environ["IGNITION_STANDIN_REFERENCE_DELAY"]),
+                    write_reference,
+                    [cwd],
+                ).start()
+            elif reference_mode == "reference_only":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+            elif reference_mode == "ledger_only":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+            elif reference_mode == "invalid_json":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+            elif reference_mode == "capture":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+                write_runtime_individuation(
+                    cwd, {"reference_kind": "capture", "reference_complete": True}
+                )
+            elif reference_mode == "incomplete":
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "reference.json")
+                write_encrypted_placeholder(cwd / "state" / "individuation" / "ledger.json")
+                write_runtime_individuation(
+                    cwd, {"reference_kind": "maturation", "reference_complete": False}
+                )
             write_json(lifecycle_dir / "stage.json", stage)
             wait_for_request(state_dir, "maturation", True, bundle_dir)
             return
@@ -307,6 +362,8 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_MANIFEST",
         "IGNITION_STANDIN_BLOOM_SECONDS",
         "IGNITION_STANDIN_WELFARE",
+        "IGNITION_STANDIN_REFERENCE",
+        "IGNITION_STANDIN_REFERENCE_DELAY",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -1118,6 +1175,78 @@ def test_an_unreadable_welfare_freeze_marker_is_reported_in_status(
     assert "Welfare freeze marker unreadable: development step 0" in status
 
 
+def test_maturation_preservation_waits_for_a_late_reference(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "late")
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE_DELAY", "1.0")
+    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=20.0)) == "complete"
+
+    reference_at = float((study_dir / "reference_at.txt").read_text())
+    assert _maturation_request_time(study_dir) >= reference_at
+    first = _load_steps(study_dir)[0]
+    assert first["outcome"] == "complete"
+    assert first["maturation_reference"] == "complete"
+
+
+def test_maturation_preservation_with_the_reference_already_present(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "present")
+    assert _run(_runner(study_dir, script, maturation_reference_wait_seconds=20.0)) == "complete"
+
+    first = _load_steps(study_dir)[0]
+    assert first["outcome"] == "complete"
+    assert first["maturation_reference"] == "complete"
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["none", "reference_only", "ledger_only", "invalid_json", "incomplete"],
+)
+def test_a_reference_that_never_completes_fails_the_step_after_the_bound(
+    tmp_path: Path, known_modules, monkeypatch, mode
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", mode)
+    started = time.monotonic()
+    record = _run(_runner(study_dir, script, maturation_reference_wait_seconds=0.6))
+    assert time.monotonic() - started >= 0.6
+
+    # The seed is still preserved before the child stops, and the study halts on it.
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:maturation_reference_missing"
+    assert record["maturation_reference"] == "missing"
+    assert record["bundle"] and Path(record["bundle"]).exists()
+    assert _load_steps(study_dir)[0]["outcome"] == "failed:maturation_reference_missing"
+
+
+def test_a_capture_reference_fails_the_step_without_waiting_out_the_bound(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_REFERENCE", "capture")
+    started = time.monotonic()
+    record = _run(_runner(study_dir, script, maturation_reference_wait_seconds=60.0))
+    # A sleep made the maturation capture a plain capture, which can never become
+    # the maturation reference, so the runner does not wait out the bound.
+    assert time.monotonic() - started < 30.0
+    assert isinstance(record, dict)
+    assert record["outcome"] == "failed:maturation_reference_missing"
+    assert record["maturation_reference"] == "missing"
+    assert record["bundle"] and Path(record["bundle"]).exists()
+
+
 def test_runner_refuses_the_operator_bus_database(tmp_path: Path, known_modules, monkeypatch):
     study_dir = _create_study(tmp_path, viewings=1)
     script = tmp_path / "standin.py"
@@ -1719,11 +1848,17 @@ def test_resume_adopts_an_unrecorded_maturation_preservation(tmp_path: Path, kno
     seed = study_dir / "backups" / "seed"
     seed.mkdir(parents=True)
     _write_pair(study_dir / "development", "maturation", seed)
+    # The runner writes the reference state just before it requests the maturation
+    # preservation.
+    (study_dir / "development" / ".study_maturation_reference.json").write_text(
+        json.dumps({"state": "complete"})
+    )
 
     flush_log: list[str] = []
     assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
     steps = _load_steps(study_dir)
     assert steps[0]["line"] == "development" and steps[0]["outcome"] == "complete"
+    assert steps[0]["maturation_reference"] == "complete"
     assert steps[0]["bundle"] == str(seed)
     assert steps[0]["preservation_id"] == "p-born"
     assert steps[0]["adopted"] is True

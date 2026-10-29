@@ -856,6 +856,32 @@ def _numeric_or(value: Any, default: Any) -> Any:
     return default
 
 
+def _individuation_runtime_reading(runtime: Any) -> dict | None:
+    """Content-free individuation status for runtime.json.
+
+    Returns only the reference kind and whether the reference and ledger are
+    complete. The maturation reference itself is encrypted and never leaves the
+    individuation store.
+    """
+    if runtime is None or getattr(runtime, "scheduler", None) is None:
+        return None
+    try:
+        state = runtime.scheduler.state
+    except Exception:
+        log.debug("could not read individuation scheduler state for runtime.json", exc_info=True)
+        return None
+    try:
+        return {
+            "reference_kind": state.reference_kind,
+            "reference_complete": bool(
+                state.reference_present and state.ledger_readable and runtime.paths.ledger.exists()
+            ),
+        }
+    except Exception:
+        log.debug("could not build individuation runtime reading", exc_info=True)
+        return None
+
+
 async def _write_runtime_state(
     cycle: CognitiveCycle,
     registry,
@@ -867,6 +893,7 @@ async def _write_runtime_state(
     gate_status: dict | None = None,
     revived_from: str | None = None,
     hearing_stage: dict | None = None,
+    individuation: dict | None = None,
 ) -> None:
     runtime_path = resolve(RUNTIME_PATH)
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
@@ -938,6 +965,9 @@ async def _write_runtime_state(
     # The hearing band's current stage from the hearing-stage watch, content-free.
     if hearing_stage is not None:
         payload["hearing_stage"] = dict(hearing_stage)
+    # Individuation status from the scheduler: kind and completeness only.
+    if individuation is not None:
+        payload["individuation"] = dict(individuation)
     # Per-run identity (RunContext) — non-content run metadata. Read via the
     # process-global accessor; inert (no fields added) when no run is set.
     try:
@@ -2854,6 +2884,7 @@ async def _phase_maturation(ctx: BootContext) -> int | None:
     )
     if _maturation_hook is not None:
         ctx.gate_runner.set_maturation_hook(_maturation_hook)
+    ctx.individuation_runtime = individuation_runtime
     ctx.gate_task = (
         asyncio.create_task(ctx.gate_runner.run(ctx.stop_event), name="cycle.maturation_gate")
         if ctx.staging_enabled and ctx.stage_state.is_developing
@@ -3141,6 +3172,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
             staging_enabled=ctx.staging_enabled,
             revived_from=ctx.revive.revived_from if ctx.revive is not None else None,
             hearing_stage=ctx.hearing_stage_watch.runtime_reading if ctx.hearing_stage_watch is not None else None,
+            individuation=_individuation_runtime_reading(ctx.individuation_runtime),
         )
         try:
             await asyncio.wait_for(ctx.stop_event.wait(), timeout=1.0)

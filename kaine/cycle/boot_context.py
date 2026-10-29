@@ -74,6 +74,7 @@ class BootContext:
     welfare_task: Any = None  # set by _phase_launch
     gate_task: Any = None  # set by _phase_maturation
     individuation_task: Any = None  # set by _phase_maturation
+    individuation_runtime: Any = None  # set by _phase_maturation
     stimulus_source_watch_task: Any = None  # set by _phase_stimulus_source_watch
     caretaker_task: Any = None  # set by _phase_caretaker
     input_watch_task: Any = None  # set by _phase_caretaker
