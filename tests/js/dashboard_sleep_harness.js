@@ -143,6 +143,48 @@ var scenarios = [
     }
   },
   {
+    name: "a fatigue sleep shows its trigger",
+    payload: {
+      sleeping: false,
+      sleep: {
+        asleep: false, trigger: "fatigue", started_at: null,
+        duration_s: 1, rest_seconds: null, aborted: false, completed_at: null
+      },
+    },
+    check: function (s) {
+      expectEqual(s, "sleep-trigger", "fatigue");
+      expectHidden(s, "sleep-aborted", true);
+    }
+  },
+  {
+    name: "a maintenance-request sleep shows its trigger",
+    payload: {
+      sleeping: false,
+      sleep: {
+        asleep: false, trigger: "maintenance_request", started_at: null,
+        duration_s: 1, rest_seconds: null, aborted: false, completed_at: null
+      },
+    },
+    check: function (s) {
+      expectEqual(s, "sleep-trigger", "maintenance request");
+      expectHidden(s, "sleep-aborted", true);
+    }
+  },
+  {
+    name: "an emotion-regulation sleep shows its trigger",
+    payload: {
+      sleeping: false,
+      sleep: {
+        asleep: false, trigger: "affect_regulation", started_at: null,
+        duration_s: 1, rest_seconds: null, aborted: false, completed_at: null
+      },
+    },
+    check: function (s) {
+      expectEqual(s, "sleep-trigger", "emotion regulation");
+      expectHidden(s, "sleep-aborted", true);
+    }
+  },
+  {
     name: "an earlier-rule developmental rest keeps a label",
     payload: {
       sleeping: false,

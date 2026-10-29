@@ -11,4 +11,4 @@
 
 - [x] 3.1 Intensity grades with the error ratio and saturates at the alert level; alerts take the alert level.
 - [x] 3.2 A graded non-alert report at intensity 0.6 leaves the access rate at rest; an alert raises it.
-- [ ] 3.3 Docs updated (in the documentation sweep).
+- [x] 3.3 Docs updated (in the documentation sweep).

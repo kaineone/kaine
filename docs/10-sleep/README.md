@@ -61,13 +61,15 @@ sequenceDiagram
     Note over Sleep: Phase 2: replay in EpisodicMemory's replay window; downscale; prune
     Note over Sleep: Phase 3: associate related pairs as links; prune; sleep.association
     Note over Sleep: Phase 4: voice-alignment gates (no pairs, no training); intent-log rotation, voice measures
+    Note over Sleep: State-cycle rest: hold until the rest's time has run
+    Note over Sleep: Housekeeping: reclaim regenerable data within the disk budget
     Note over Sleep: Phase 5: affect.affective_reset()
     Note over Sleep: Intent audit
     Sleep->>Bus: sleep.sleep.completed
     Bus->>Interoception: reset fatigue and regulation
 ```
 
-Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next. Phases 1 to 4 run inside a `try` whose `finally` runs the affective reset, so a sleep that raises or is cancelled still ends with it. The reset runs as its own task behind `asyncio.shield`, so a second cancel cannot interrupt it. On any exception, including a cancel, the sleep module publishes an aborted `sleep.sleep.completed` and re-raises, so the interoception and episodic memory modules always see the sleep end.
+Each phase returns a `PhaseResult` with `phase`, `success`, `elapsed_ms`, `error` and `metadata`, and catches its own errors, so the phases always run in order and a failure in one does not stop the next. Phases 1 to 4, the state-cycle rest hold and housekeeping run inside a `try` whose `finally` runs the affective reset, so a sleep that raises or is cancelled still ends with it. The reset runs as its own task behind `asyncio.shield`, so a second cancel cannot interrupt it. On any exception, including a cancel, the sleep module publishes an aborted `sleep.sleep.completed` and re-raises, so the interoception and episodic memory modules always see the sleep end.
 
 ### Phase 1: light consolidation
 
@@ -85,6 +87,10 @@ Phase 3 runs only when `[sleep.consolidation].associative_replay = true` and oth
 
 Phase 4 checks the voice-alignment gates. No validated preference source exists yet, so the phase builds no preference pairs, computes no organ-level divergence and trains nothing, even with both operator gates open (paper section 3.5). The sleep module then moves the waking intent log `state/language/intent_expression.jsonl` into the per-sleep corpus under `state/language/intent_log/`. The move never overwrites a file, and a disk check warns at 80% of `corpus_ceiling_gb` and never deletes. It computes content-free voice measures from the rotated file. See [Voice alignment](voice-alignment.md).
 
+### State-cycle rest and housekeeping
+
+A state-cycle rest (trigger `state_cycle`) holds after phase 4 until the rest's time has run; a rest resumed after a restart holds only for its remaining time. Every sleep that reaches the end of phase 4 then runs housekeeping (paper 3.5 and A.5): it deletes rotated process-log backups and exports closed study records to the archive while the study records exceed the disk budget, and never touches memory or identity. A failed pass is logged and the sleep goes on. The report is in the completed summary's `housekeeping` field. See [Housekeeping](../09-modules/sleep.md#housekeeping).
+
 ### Phase 5: affective reset
 
 The sleep module ends with the affective reset (paper §3.5). Phase 5 calls `affect.affective_reset()`. It returns valence, arousal and dominance to baseline, resets every drive, sets the emotion to neutral, clears any perceived emotion, and publishes `affect.state` with `reset: true`. Wellness, the record of the last heard voice, the learning-progress and alert-rate trackers and the intent rate are kept; the trackers and the intent rate change through the sleep only by their own rules (paper A.4 item 4). See the [affect module](../09-modules/affect.md#sleep-reset).
@@ -97,12 +103,12 @@ The sleep module runs the sleep-time intent audit (`sleep.ignition_audit`) and p
 
 | Event | Stream | When |
 |---|---|---|
-| `sleep.sleep.started` | `sleep.out` | A sleep begins; carries `sleep_index` and `trigger` |
+| `sleep.sleep.started` | `sleep.out` | A sleep begins; carries `sleep_index` and `trigger`, and for a state-cycle rest `rest_seconds` and `resumed` |
 | `sleep.rest_request` | `sleep.out` | Answer to a rest request |
 | `sleep.association` | `sleep.out` | Each phase-3 co-replayed pair: point ids and weight |
 | `affect.state` | `affect.out` | Phase 5, with `reset: true` |
 | `sleep.ignition_audit` | `sleep.out` | Every sleep, after the phases; also merged into the completed summary |
-| `sleep.sleep.completed` | `sleep.out` | The sleep ends; carries `trigger`, the phase results and the audit, or `{"aborted": true, "reason": ..., "trigger": ...}` if the pipeline itself aborted |
+| `sleep.sleep.completed` | `sleep.out` | The sleep ends; carries `trigger`, the phase results, the audit, the `housekeeping` report and, for a state-cycle rest, `rest_seconds`, or `{"aborted": true, "reason": ..., "trigger": ...}` if the pipeline itself aborted |
 | `interoception.fatigue` | `interoception.out` | Fatigue crossed its threshold; a trigger |
 | `interoception.regulation` | `interoception.out` | The regulator requests maintenance; a trigger |
 

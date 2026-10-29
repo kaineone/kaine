@@ -44,7 +44,7 @@ python -m kaine.research.ignition_study status --study-dir <study-dir>
 python -m kaine.research.ignition_study analyse --study-dir <study-dir>
 ```
 
-Without `--voice-alignment-step`, one voice-alignment step is registered by default, on the accumulate line at its last step (`k = 6` with the default order). The study overlay enables voice alignment, with the `job_queue` trainer backend and `organ_adapter` hot-swap mode, only on registered steps and disables it elsewhere. `run` also accepts `--retry-failed`. The CLI is `kaine/research/ignition_study/__main__.py`. See [The module-addition study](15-experiments/ignition-study.md).
+Without `--voice-alignment-step`, one voice-alignment step is registered by default, on the accumulate line at its last step (`k = 6` with the default order). The study overlay enables voice alignment, with the `job_queue` trainer backend and `organ_adapter` hot-swap mode, only on registered steps and disables it elsewhere. While `preference_source` is `"none"`, the only accepted value, a registered step trains nothing. `run` also accepts `--retry-failed`. The CLI is `kaine/research/ignition_study/__main__.py`. See [The module-addition study](15-experiments/ignition-study.md).
 
 ## The two paths
 

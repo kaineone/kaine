@@ -462,3 +462,14 @@ Every update of the cycle-control file SHALL take an exclusive lock, read the cu
 #### Scenario: Freeze-stack updates are serialized
 - **WHEN** the cycle pushes a welfare freeze while the dashboard concurrently applies an operator resume of a different freeze
 - **THEN** the welfare freeze is still in the stack
+
+### Requirement: The access rate's phasic input counts alerts only
+The phasic input to the access rate SHALL be computed from the highest intensity among the tick's module reports whose payload has `alert` true; reports without it SHALL NOT count, so with no alert the access rate rests at its resting value.
+
+#### Scenario: A graded report does not raise the rate
+- **WHEN** a tick's only module report has intensity 0.6 and no alert flag, at baseline arousal
+- **THEN** the phasic input is 0 and the access rate is the resting rate
+
+#### Scenario: An alert raises the rate
+- **WHEN** a tick's module reports include one with intensity 0.8 and `alert` true
+- **THEN** the phasic input is greater than 0

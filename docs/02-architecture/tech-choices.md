@@ -144,9 +144,9 @@ Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queu
 
 ## Voice alignment
 
-During the sleep module's phase 4, voice alignment performs DPO+QLoRA fine-tuning on the language organ using `unsloth`, `trl`, `peft`, and `datasets`. Direct Preference Optimization trains on ranked pairs drawn from the entity's own intent log (`intent_log_path`).
+During the sleep module's phase 4, voice alignment is built to fine-tune the language organ with DPO and QLoRA, using `unsloth`, `trl`, `peft` and `datasets`, on preferred examples from a validated source. No such source exists yet: `[sleep.voice_alignment].preference_source` accepts only `"none"`, so the phase builds no pairs and trains nothing, whatever the other gates say (see [Voice alignment](../10-sleep/voice-alignment.md)).
 
-Two gates must be open for real training: `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
+Once a source exists, two more gates must be open for real training: `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 
 Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter whose capability score (0 to 1) falls more than `capability_loss_threshold` (0.05) below its pre-training score is rejected. An adapter that triggers any abliteration deflection pattern is rejected unconditionally.
 

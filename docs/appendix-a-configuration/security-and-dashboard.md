@@ -77,7 +77,7 @@ These environment variables override the matching TOML keys. Boolean overrides a
 
 ### Loading scope
 
-Dashboard loads only `config/kaine.toml`, `config/kaine.operator.toml` and `config/secrets.toml`; a secrets file it cannot read counts as absent. The profile, tier and `KAINE_DATA_ROOT` path normalisation used by the rest of KAINE do not apply to the dashboard configuration.
+The dashboard web UI loads only `config/kaine.toml`, `config/kaine.operator.toml` and `config/secrets.toml`; a secrets file it cannot read counts as absent. The profile, tier and `KAINE_DATA_ROOT` path normalisation used by the rest of KAINE do not apply to the dashboard configuration.
 
 ### Related security settings
 
