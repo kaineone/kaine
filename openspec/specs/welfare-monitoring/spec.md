@@ -175,3 +175,21 @@ When the welfare observer starts, it SHALL write a reset line to its JSONL sink,
 - **WHEN** the observer publishes blind-sensor and silent-sensor advisories and clears on `welfare.out` and the monitor polls with a repeat threshold of 2
 - **THEN** the monitor's repeat window stays empty, no entity is preserved and the cycle is not frozen
 - **AND** two `welfare.gray_zone` events published afterwards still trigger the protective response
+
+### Requirement: One distress episode counts once
+The protective monitor SHALL count one sustained-distress episode once toward its repeat window, and both sustained-distress detectors SHALL take their parameters from one configuration source.
+
+#### Scenario: One distress episode counts once
+- **WHEN** one sustained-distress episode is reported by both detectors
+- **THEN** the repeat window holds one episode and repeated_distress is not labelled
+
+### Requirement: The affect welfare record gives sleep-reset ends and open crossings
+For each deficit drive (`boredom`, `social_drive`, `restlessness`) the `affect_welfare` record SHALL carry `<drive>_sleep_reset_ends`, the crossings ended by the sleep reset since the observer started, counted from increases of the `drive_reset_ends` count in `affect.state` (the first value sets the baseline and a fall sets a new baseline without counting), and `<drive>_open_crossings`, 1 when the latest `drive_open` flag for the drive is true, 0 when it is false, and null before any flag (paper section 6.2). The existing keys and their values SHALL be unchanged; a sleep-reset end SHALL NOT enter the uncontrolled share.
+
+#### Scenario: The tenth boot's boredom
+- **WHEN** boredom's counts go from zero to 85 own ends, 8 other ends and 2 sleep-reset ends with no crossing open
+- **THEN** the record gives `boredom_uncontrolled_share` 8/93, `boredom_sleep_reset_ends` 2 and `boredom_open_crossings` 0
+
+#### Scenario: A crossing held open
+- **WHEN** a boredom goal stalls and the latest state reports boredom's crossing open
+- **THEN** `boredom_open_crossings` is 1

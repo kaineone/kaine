@@ -58,6 +58,8 @@ The audit SHALL classify each realized speech/action/rest into exactly one categ
   - **drive-triggered:** `affect.drive` is in the coalition path.
   - **self-initiated:** none of the above.
 
+The audit SHALL link each realization to the intent it realized: through the realization payload's `entry_id` when present, else through the language module's `record_id`, joined to the `intent_entry_id` of the intent-log record with that id. Only a requested sleep, whose `sleep.sleep.started` carries neither, SHALL be linked to the last `intent.rest` of the window. A speech or action realization with no link SHALL count as self-initiated and SHALL add no entry id; the audit SHALL NOT give it the provenance of another intent. If the intent log cannot be read, the audit SHALL run unlinked.
+
 The audit SHALL count the planning module's proposals realized, declined and forwarded from `action_selection.proposal_outcome` events. A `forwarded` rest outcome SHALL count only as forwarded, never as declined, because the sleep module decides it. It SHALL also count separately, as unrealizable and never among executed actions, any `intent.*` event published on `planning.out`. The planning module itself publishes none, so this is a guard counter that should read zero.
 
 The audit payload SHALL contain only counts, entry_ids, event types, salience values, and sleep_index; it SHALL NOT contain text, transcripts, or latent vectors.
@@ -93,6 +95,14 @@ The audit payload SHALL contain only counts, entry_ids, event types, salience va
 #### Scenario: audit runs every sleep and rides sleep.completed
 - **WHEN** any sleep runs
 - **THEN** `sleep.ignition_audit` is emitted on sleep.out with sleep_index, and the audit is merged into PhaseResult metadata so it persists via `sleep.sleep.completed` into the sleep_snapshots JSONL
+
+#### Scenario: each utterance is linked to its own intent
+- **WHEN** two speak intents E1 (coalition with `affect.drive`) and E2 (coalition without one) are realized as `external_speech` events carrying record ids R1 and R2, and the intent log maps R1 to E1 and R2 to E2
+- **THEN** the audit reports one drive-triggered realization with entry id E1 and one self-initiated realization with entry id E2, whatever the order of the two realizations
+
+#### Scenario: an unlinked utterance never takes another intent's provenance
+- **WHEN** a realization carries no `entry_id` and a `record_id` that the intent log does not hold, and the last speak intent of the window had `affect.drive` in its coalition
+- **THEN** the realization counts as self-initiated and no entry id is recorded for it
 
 ### Requirement: Phase-3 associative replay links related traces
 When `[sleep.consolidation].associative_replay` is true, phase 2 SHALL downscale without pruning, and phase 3 SHALL call the episodic memory module's `associate()` and then its `prune()`, the latter also when `associate()` fails. Phase 3 SHALL publish one `sleep.association` event per co-replayed pair carrying only the pair's two point ids (`a`, `b`) and its new weight (`weight`). Phase 3 SHALL NOT cue the world model module. When the flag is false, phase 3 SHALL be a successful no-op and phase 2 SHALL call `downscale` exactly as before, which prunes.

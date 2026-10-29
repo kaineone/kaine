@@ -393,30 +393,34 @@ The stimulus source clock SHALL resume each boot from its own elapsed time, pers
 - **THEN** the stimulus source clock resumes at `lived_seconds`, as before
 
 ### Requirement: The stimulus-source audio passes a hearing band that widens in the order of fetal hearing
-When `[perception_feed.stimulus_source.hearing].enabled` is true (the default), every stimulus-source audio block SHALL be the soundscape plus the maternal voice, filtered by a band-pass whose edges depend only on the awake time, then scaled, limited and quantized as before. The edges SHALL follow the tone grid 100, 250, 500, 1000 and 3000 Hz of Hepper and Shahidullah (1994): each edge lies at the geometric mean of the outermost tested tone heard and the next tested tone not heard, and there is no edge on a side with no unheard tested tone. With `W` = `maturation_seconds` and awake time `T`, the band SHALL be 353.6 to 707.1 Hz for `T < W/4`, 158.1 to 707.1 Hz for `W/4 <= T < W/2`, a low-pass at 707.1 Hz for `W/2 <= T < 3W/4`, a low-pass at 1732.1 Hz for `3W/4 <= T < W`, and open from `T >= W` on; a non-finite or negative `T` SHALL give the first band. The filter SHALL be a 1,025-tap Hamming-windowed sinc design, a band-pass with unity gain at the band's geometric centre, a low-pass with unity DC gain, or the unit impulse at the centre tap when open, so every stage delays by 512 samples, convolved over the unfiltered mix of the preceding blocks and the current one (blocks before index 0 are silent), so a block SHALL be a pure function of the seed, the block index, the awake time and the voice plan, whatever blocks were rendered before. When the band is enabled the maternal voice SHALL load with its low-pass at 3,000 Hz; the bed SHALL keep `lowpass_hz`. When the band is disabled, every audio block SHALL be byte-identical to the stream without it. The hearing parameters SHALL NOT enter the stimulus-source parameter digest.
+When `[perception_feed.stimulus_source.hearing].enabled` is true (the default), every stimulus-source audio block SHALL be the soundscape plus the maternal voice, filtered by a band-pass whose edges depend only on the hearing stage (see the stage requirement below), then scaled, limited and quantized as before. The edges SHALL follow the tone grid 100, 250, 500, 1000 and 3000 Hz of Hepper and Shahidullah (1994): each edge lies at the geometric mean of the outermost tested tone heard and the next tested tone not heard, and there is no edge on a side with no unheard tested tone. The band SHALL be 353.6 to 707.1 Hz in stage 0, 158.1 to 707.1 Hz in stage 1, a low-pass at 707.1 Hz in stage 2, a low-pass at 1732.1 Hz in stage 3, and open in stage 4. The filter SHALL be a 1,025-tap Hamming-windowed sinc design, a band-pass with unity gain at the band's geometric centre, a low-pass with unity DC gain, or the unit impulse at the centre tap when open, so every stage delays by 512 samples, convolved over the unfiltered mix of the preceding blocks and the current one (blocks before index 0 are silent), so a block SHALL be a pure function of the seed, the block index, the hearing stage and the voice plan, whatever blocks were rendered before. When the band is enabled the maternal voice SHALL load with its low-pass at 3,000 Hz; the bed SHALL keep `lowpass_hz`. When the band is disabled, every audio block SHALL be byte-identical to the stream without it. The hearing parameters SHALL NOT enter the stimulus-source parameter digest.
 
 #### Scenario: Disabled band leaves the audio unchanged
 - **WHEN** `enabled` is false, with or without the maternal voice
 - **THEN** every block equals, byte for byte, the block the stream produced before the band existed
 
 #### Scenario: The band starts at 500 Hz and widens down first, then up
-- **WHEN** blocks are rendered at awake times in each of the five stages
+- **WHEN** blocks are rendered in each of the five stages
 - **THEN** the power below the stage's low edge divided by √2 and above its high edge times √2, where the stage has those edges, is at least 40 dB below the in-band power, the low edge moves twice and goes before the high edge moves, and the 45 to 55 Hz heartbeat thud is at least 40 dB down in the first two stages and within 1 dB of the band-off stream from the third on
 
 #### Scenario: A block does not depend on the blocks rendered before it
-- **WHEN** one stream renders block `k` first and another renders blocks `k - 10` to `k` in order, with the same seed and awake time
+- **WHEN** one stream renders block `k` first and another renders blocks `k - 10` to `k` in order, with the same seed and stage
 - **THEN** both produce the same bytes for block `k`
 
 #### Scenario: A restart resumes the band
-- **WHEN** a stream is rebuilt with an awake-time provider that resumes from the stage file's lived seconds
-- **THEN** its band edges equal the edges before the restart at the same awake time
+- **WHEN** a stream is rebuilt with a stage owner restored from its file
+- **THEN** its band edges equal the edges before the restart
 
 ### Requirement: The colour ramp spans the developmental phase
-The shipped configuration SHALL set `colour_ramp_seconds` to the hearing band's `maturation_seconds` (86,400 s, the paper's Table A1), so that colour saturation keeps rising across the developmental phase. The `StimulusSourceParams` default SHALL stay 3,600 s so the parameter digest of the defaults is unchanged.
+During the developmental phase the visual source's schedule saturation SHALL be k/5 in hearing stage k, scaled by the maternal-state hue gain as before; the exponential ramp is retired. `colour_ramp_seconds` SHALL be accepted in the configuration with a warning and ignored. The `StimulusSourceParams` field SHALL stay, at its code default of 3,600 s, so the parameter digest of the defaults is unchanged.
 
 #### Scenario: Colour still rises late in the phase
-- **WHEN** the shipped configuration is loaded
-- **THEN** the colour saturation at 12 awake hours is below its value at 24 awake hours by at least 0.05 of full saturation
+- **WHEN** the hearing stage is 0, 2 or 4
+- **THEN** the schedule saturation is 0, 0.4 or 0.8 before the hue gain
+
+#### Scenario: A retired key boots with a warning
+- **WHEN** `colour_ramp_seconds` is set
+- **THEN** boot succeeds and logs that the key is retired and ignored
 
 ### Requirement: A withdrawal waits for a scorable window
 Besides the existing probe bounds, a drive-withdrawal probe SHALL NOT start until `entrainment_window_seconds` has passed since the readout owner started or since the last end of a pause (sleep or freeze). A perturbation probe SHALL keep its existing bounds only.
@@ -457,3 +461,71 @@ The maturation gate's period-variability floor `hrv_variability_floor` SHALL def
 #### Scenario: An entrained rhythm passes the floor
 - **WHEN** the readout reports a period variability of 0.06 and every other C1 condition holds
 - **THEN** C1 passes
+
+### Requirement: Hearing-band stages advance by saturation
+The hearing band SHALL widen through five stages in the existing fetal order. One persisted owner SHALL decide the stage; the audio stream, the visual source, the affect module and the maturation gate SHALL read that stage and SHALL NOT compute one from time. Stage k SHALL end when audition's learning progress, restarted at the step, has stayed below lp_0 for `saturation_window_seconds` (W_sat, 600) of awake time once the stage has run `min_dwell_seconds` (d_min, 5400) of awake time, or when the stage has run `max_dwell_seconds` (d_max, 25200) of awake time. A missing learning-progress reading SHALL count as unsaturated. Dwell SHALL advance only with awake time, so rests add none, SHALL persist across restarts, and the saturation window SHALL restart fresh after a restart.
+
+#### Scenario: Saturation advances the stage after the minimum dwell
+- **WHEN** learning progress stays below lp_0 for 600 awake seconds and the stage has run at least 5400 awake seconds
+- **THEN** the stage advances by one
+
+#### Scenario: Saturation before the minimum dwell does not advance
+- **WHEN** learning progress has been below lp_0 for 600 awake seconds but the stage has run 5399 awake seconds
+- **THEN** the stage does not advance until the minimum dwell has run
+
+#### Scenario: The maximum dwell caps the stage
+- **WHEN** a stage has run 25200 awake seconds with learning progress never saturated
+- **THEN** the stage advances
+
+#### Scenario: A missing reading is unsaturated
+- **WHEN** no learning-progress reading is available for the whole of the minimum dwell and beyond
+- **THEN** the stage advances only at the maximum dwell
+
+#### Scenario: A reading at or above lp_0 resets the window
+- **WHEN** learning progress is below lp_0 for 500 seconds, reaches lp_0, and then stays below for 500 seconds
+- **THEN** the stage does not advance
+
+#### Scenario: Restart keeps dwell and restarts the window
+- **WHEN** the entity restarts 400 saturated seconds into the window after 6000 seconds of dwell
+- **THEN** dwell resumes at 6000 seconds and the stage advances only after a further 600 saturated awake seconds
+
+#### Scenario: Rests add no dwell
+- **WHEN** the awake time does not advance across a rest
+- **THEN** dwell and the saturation window do not advance
+
+### Requirement: The hearing keys are retired and the new ones validated
+`[perception_feed.stimulus_source.hearing]` SHALL accept `enabled`, `saturation_window_seconds`, `min_dwell_seconds` and `max_dwell_seconds`, and SHALL accept `maturation_seconds` with a warning, ignored. The dwell bounds SHALL satisfy `0 < saturation_window_seconds` and `saturation_window_seconds <= min_dwell_seconds <= max_dwell_seconds`.
+
+#### Scenario: Inverted dwell bounds are refused
+- **WHEN** `min_dwell_seconds` exceeds `max_dwell_seconds`
+- **THEN** boot fails naming the keys
+
+### Requirement: Hearing-band stage transitions are logged and published
+When the perception feed runs in stimulus-source mode with the audition module and the hearing band enabled, the cycle SHALL read the awake time from the same provider the stimulus-source audio stream reads, at least once a second, and SHALL compute the stage with the same `hearing_stage` function. On the first reading and on every change of stage it SHALL log the stage, its band and the awake time at INFO level, and SHALL publish a `development.hearing_stage` event with source `development` on `development.out` carrying `stage`, `previous_stage`, `low_hz`, `high_hz` and `awake_seconds`. A failed publish SHALL be retried on the next reading. Reporting SHALL NOT change the stage clock, the filter or the audio.
+
+#### Scenario: The first stage is reported at start
+- **WHEN** the watch first reads an awake time of 0
+- **THEN** it publishes stage 0 with `previous_stage` null and the band 353.6 to 707.1 Hz, and logs it
+
+#### Scenario: A transition is reported once
+- **WHEN** the awake time crosses a quarter of `maturation_seconds`
+- **THEN** one event with stage 1 and `previous_stage` 0 is published, and later readings in the same stage publish nothing
+
+#### Scenario: A failed publish is not lost
+- **WHEN** the publish of a stage-0 event fails
+- **THEN** the stage-0 event is published on the next reading
+
+#### Scenario: No watch without the audition module
+- **WHEN** the audition module is disabled
+- **THEN** no `development.hearing_stage` event is published
+
+### Requirement: The runtime file carries the current hearing stage
+While the hearing-stage watch runs, the cycle SHALL write the watch's newest reading into `state/cycle/runtime.json` as `hearing_stage`, an object with `stage`, `previous_stage`, `low_hz`, `high_hz` and `awake_seconds`, on every runtime write. The reading SHALL be the one the watch last computed with `hearing_stage` and `band_edges`. Without the watch the key SHALL be absent. Writing it SHALL NOT change the published `development.hearing_stage` events, the stage clock, the filter or the audio.
+
+#### Scenario: The stage is in the runtime file
+- **WHEN** the watch has read stage 1 with the band 158.1 to 707.1 Hz
+- **THEN** the next runtime.json holds `hearing_stage` with `stage` 1, `low_hz` about 158.1 and `high_hz` about 707.1
+
+#### Scenario: No watch, no key
+- **WHEN** the feed is not in stimulus-source mode
+- **THEN** runtime.json has no `hearing_stage` key

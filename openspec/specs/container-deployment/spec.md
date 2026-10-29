@@ -1,7 +1,7 @@
 # container-deployment Specification
 
 ## Purpose
-TBD - created by archiving change boot-and-health-fixes. Update Purpose after archive.
+How the runtime image and its Compose and Quadlet units mount state, so a first bring-up on fresh volumes is race free and no container creates an anonymous volume.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # vision-foveation Specification
 
 ## Purpose
-TBD - created by archiving change topos-tile-precision-real-clips. Update Purpose after archive.
+How the vision module chooses where to look and what it encodes there: precision-weighted bottom-up saliency per tile, and foveal and peripheral views encoded as real clips.
 
 ## Requirements
 

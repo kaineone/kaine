@@ -112,8 +112,8 @@ The default individuation disclosure SHALL be "I am periodically and privately a
 - **WHEN** the new disclosure is already present and no legacy text is
 - **THEN** ensuring it again returns false and leaves the facts unchanged
 
-### Requirement: The disclosure is given on waking and with every probe
-The entity SHALL be told the individuation disclosure, as a situation fact in its own notes, in the first organ call after each boot and after each completed sleep, and in every individuation probe request. The probe SHALL fail closed with `disclosure_not_ready` while the disclosure is not among the self-model's situation facts.
+### Requirement: The disclosure is given in every organ request and every probe
+The entity SHALL be told the individuation disclosure, as a situation fact in its own notes, in every organ call once it is recorded, and in every individuation probe request. The probe SHALL fail closed with `disclosure_not_ready` while the disclosure is not among the self-model's situation facts.
 
 #### Scenario: Each assessed answer is given knowing about the assessment
 - **WHEN** the producer samples an answer from the probe

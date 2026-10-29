@@ -6,52 +6,8 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| language-shutdown-failure-quiet | 7/8 (88%) | A stop interrupts the utterance in flight: one info line, a content-free interrupted_by_stop record for external speech, and no late publish; failures while running are unchanged |
-| js-sleep-duration-clock | 3/4 (75%) | The dashboard sleep test reads a fixed clock, so a slow runner cannot change the time so far |
-| control-freeze-lock | 4/4 (100%) | freeze-stack writes to control.json are locked and use unique temp files |
-| dashboard-welfare-reset-aware | 5/5 (100%) | the dashboard's welfare counts honour restart resets, and the dead live evaluation branch is fixed |
-| distress-episode-once | 4/4 (100%) | one sustained-distress episode counts once, and both detectors read one config source |
 | welfare-response-rearms | 7/7 (100%) | The protective welfare response re-arms once its pause is lifted, a welfare freeze survives a restart, and a control command lifts a named freeze |
-| stream-tail-cursors | 4/4 (100%) | every module's stream consumer starts at the stream tail through one shared helper |
-| caretaker-in-research-runs | 6/6 (100%) | Research runs build the caretaker from the same [caretaker] section so welfare, stimulus-loss and input-loss notices reach a person, and the study runner surfaces a welfare freeze in status and the outcome |
-| ci-torch-within-pin | 2/3 (67%) | The latest-torch test job installs the newest torch inside the range pyproject declares, so a release past the cap cannot break the install |
-| study-overlay-individuation | 4/5 (80%) | The ignition study overlay enables the individuation producer on every step, so the research gate no longer refuses the study boot; a test checks each step config against the gate. |
-| hearing-dwell-panel | 6/6 (100%) | The development panel and maturation.json show the hearing stage's dwell against its minimum and maximum dwell |
-| rest-resume-process-restart | 5/6 (83%) | A state-cycle rest cut by a process restart resumes for its remaining time; the resume checkpoint updates only the sleep module's state_cycle entry during a rest |
-| developmental-state-cycle | 16/16 (100%) | The fetal state cycle times developmental sleep; fatigue sets no sleep in the phase; a boredom stall starts no rest (paper 3.5, Table A1) |
-| hearing-stage-saturation | 11/11 (100%) | Release each hearing stage by audition's saturated learning progress between a minimum and maximum dwell, colour k/5 per stage, and C3 as schedule completion (paper A.7, Table A1). |
-| dashboard-name-always-shown | 4/4 (100%) | The entity name is shown on every dashboard page and refreshed when it appears |
-| preflight-launch-name-quiet | 3/3 (100%) | Preflight self-models no longer log launch names that read as renames |
-| floor-missing-sink-once | 2/2 (100%) | The awake floor warns once per missing volume, not every check |
-| identity-leak-role-article | 4/4 (100%) | Definite and possessive role claims ("the assistant", "your assistant") are leakage (paper 3.5) |
-| duplicate-method-guard | 3/3 (100%) | The duplicate-name guard also checks methods in classes and nested functions |
-| nexus-backend-failures | 5/5 (100%) | Read runtime-backend load failures from the cycle through runtime.json, since the dashboard's own registry is always empty, say where the answer comes from, and show it on the health board. |
-| nexus-development-feed | 6/6 (100%) | Show the hearing stage, the gate's world, conditions and not-applicable markers in the development panel, describe the stimulus-source feed, and mark the perception modules capturing under a deterministic feed. |
-| self-facts-replay | 6/6 (100%) | Replay the tenth boot's requests and a self-referential provocation set with the launch name and identity facts as situation facts, under a leakage rule committed before the run; no arm won and the prompt stays as shipped (paper 3.5). |
-| launch-name-at-first-boot | 6/6 (100%) | Every entity is named at its first boot, in its identity file, whichever modules run (paper 3.5) |
-| persona-without-name | 4/4 (100%) | The organ's request carries no name; persona_name is retired (paper 3.5) |
-| boot-identity-dedup | 2/2 (100%) | Remove the dead duplicate boot-identity helpers; each module defines a top-level name once |
-| sleep-trigger-per-sleep | 5/5 (100%) | Each sleep records the trigger that started it (paper 3.5) |
-| identity-leak-negation | 4/4 (100%) | Negated and questioned identity predicates are not leakage (paper 3.5) |
-| nexus-welfare-rest | 5/5 (100%) | Show the affect welfare record per drive in the welfare board, and each sleep's trigger, the developmental rest's length and the affect module's rest requests. |
-| identity-leak-whole | 6/6 (100%) | Identity leakage is the organ speaking as itself rather than as the whole entity: predicate forms with reason codes, a self_description reason for the whole describing itself, both kept out of voice-alignment pairs, one classifier shared with the replay tool (paper 3.5). |
-| nexus-entity-name | 5/5 (100%) | Show the entity's name on the console, read from the self-model file and its `self_model.document` events, and start the status chip from the server's sleep state. |
-| persona-v6 | 5/5 (100%) | Replay the tenth boot's own organ requests with broader AI and echo classifiers and per-case seeds under a decision rule fixed before the run; no candidate won (paper 3.5). |
-| sleep-housekeeping | 7/7 (100%) | Every sleep runs housekeeping last before the affective reset: process-log backups are deleted and study records exported to an operator archive under a checksum, oldest first within budgets; awake fatigue builds at nu_act (1 + P^hk), and an awake floor keeps free space above a reserve, suspending the study record with a gap marker when it must (paper 3.5, A.5). |
-| persona-v0 | 4/4 (100%) | Restore the self-category persona ("I am this entity") and the situation in every organ request, the prompt the corrected ninth-boot replay kept (paper 3.5); persona template version 6. |
-| lp-max-pooling | 6/6 (100%) | Pool learning progress as the largest per-processor value, restart audition's bins at each hearing band step, and set the floor lp_0 to 0.20 as calibrated for this pooling (paper A.4, Table A1). |
-| voice-adaptation-idle | 5/5 (100%) | Voice adaptation builds no preference pairs and computes no organ-level divergence until a validated preference source exists; the consolidation arm leaves the divergence assessment and the preservation monitor (paper 3.5). |
-| developmental-rest | 5/5 (100%) | In the developmental phase a boredom goal that stalls with no learning progress or alert excess throughout the stall brings a sleep that lasts Delta_rest = 1,260 s; other sleeps unchanged (paper 3.5). |
-| welfare-open-crossings | 5/5 (100%) | Give each deficit's crossings ended by the sleep reset and its crossings still open in the affect welfare record, so a deficit held above threshold past the stall horizon is no longer missing from it (paper 6.2). |
-| identity-leak-marker | 5/5 (100%) | Mark identity leakage (the organ asserting its training origin, maker or assistant role, or denying a state its own request reports) in the intent log and keep marked records out of voice-alignment pairs; the entity's text is never changed (paper 3.5). |
-| hearing-band-12h | 4/4 (100%) | Set the hearing band's span to 12 awake hours (a step every 3 h) and correct the colour ramp's comment; A.7's entrainment validation re-run at the new span holds (paper A.7, Table A1). |
-| replay-guard-test-wait | 4/4 (100%) | Make the effectors replay-guard tests wait for the state they assert instead of sleeping a fixed time, which failed under CI load. |
-| hearing-stage-published | 4/4 (100%) | Log and publish each stage the developmental hearing band enters, read from the same awake time the audio uses, so operators and analyses can see which band the entity hears; the band itself is unchanged. |
-| cycle-slip-start-to-start | 4/4 (100%) | Measure the cycle's slip from tick start to tick start, so the work after a tick and the oversleep of the pacing wait show; the pacing itself is unchanged. |
-| sleep-index-restored | 4/4 (100%) | Restore the sleep module's sleep index after a restart from its resume-checkpoint state and stage.json, so sleep events and corpus file names continue the count instead of repeating it. |
-| ignition-audit-record-link | 4/4 (100%) | Link each utterance in the sleep-time intent audit to the intent it realized through the intent log's record id, instead of to the last intent of the window, so drive-led speech is counted as drive-triggered. |
 | docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
-| docs-roadmap-hygiene | 6/6 (100%) | Archive every completed change, refresh the deltas that conflict with the current specs, state the k1-jev-decision-model blocker plainly, and document the organ replay tool and the planned action path. |
 | organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | interface-roles-and-launcher | 0/3 (0%) | Fieldtrip is the basic interface for entities, remote or local on smaller devices such as phones, with a few minor admin and operator actions; the dashboard web UI is the deeper operator control plane; bringing up an entity or a research study run, the seed included, is a scripted task started in a click or two of a small GUI. Design only: not scheduled. |
@@ -87,9 +43,6 @@ This page shows the engineering work in flight, the operator and on-device steps
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
-| docs-style-pass-2026-10-19 | 3/3 (100%) | Revise the prose added on 2026-10-19 in the replay tool, effectors and roadmap text and in the six action-path proposals against the writing rules, with every fact and requirement kept. |
-| plain-test-wording | 5/5 (100%) | Replace the old testing word for scaffolding with plainer terms in prose, because it now names the software around an agent; identifiers and file names stay. |
-| emotion-progress-bar-off | 3/3 (100%) | Build the vocal-emotion classifier's funasr model with progress bars off, so classification stops filling the cycle log; results are unchanged. |
 
 ## Open operator and device steps
 
@@ -110,6 +63,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 84 active changes, 366 archived changes and 109 capability specs.
+The roadmap contains 37 active changes, 414 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

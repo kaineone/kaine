@@ -812,19 +812,23 @@ Every `affect.state` payload, periodic or after an affective reset, SHALL carry,
 - **THEN** it counts in `signed_progress` and the payload's key set is unchanged
 
 ### Requirement: Learning progress compares windowed error means
-For each perceptual source the affect module SHALL sum the raw `prediction_error` of its reports, counted from the source's first positive error, into consecutive bins of `learning_progress_bin_s` of entity time. With `k` the number of the latest completed bins, at most `learning_progress_span_s / learning_progress_bin_s` and rounded down to an even number, the source's learning progress SHALL be `clip(1 - mean_new / mean_old, -1, 1)`, where `mean_old` and `mean_new` are the report-weighted mean errors of the older and newer halves of those `k` bins, and it SHALL be undefined while `k < 2`, while either half holds no report, or while `mean_old <= 1e-9`. The pooled learning progress `lp` SHALL be the mean over sources with a defined value, 0.0 if none, and `lp+ = max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` SHALL be the curiosity relief strength and `1 - lp+` its build input (paper A.4). The fast and slow time-decayed error means and their pooled relative fall SHALL keep setting the pleasantness check, unchanged.
+For each perceptual source the affect module SHALL sum the raw `prediction_error` of its reports, counted from the source's first positive error, into consecutive bins of `learning_progress_bin_s` of entity time. With `k` the number of the latest completed bins, at most `learning_progress_span_s / learning_progress_bin_s` and rounded down to an even number, the source's learning progress SHALL be `clip(1 - mean_new / mean_old, -1, 1)`, where `mean_old` and `mean_new` are the report-weighted mean errors of the older and newer halves of those `k` bins, and it SHALL be undefined while `k < 2`, while either half holds no report, or while `mean_old <= 1e-9`. The pooled learning progress `lp` SHALL be the largest value over sources with a defined value, 0.0 if none, and `lp+ = max(0, lp - learning_progress_floor) / (1 - learning_progress_floor)` SHALL be the curiosity build input and boredom's learning-progress relief (paper A.4). The fast and slow time-decayed error means and their pooled relative fall, a mean over sources, SHALL keep setting the pleasantness check, unchanged.
 
 #### Scenario: Falling error gives progress
 - **WHEN** a source reports an error that falls 30 percent from the older to the newer half of the span
-- **THEN** its learning progress is 0.3 and `lp+` relieves curiosity
+- **THEN** its learning progress is 0.3
 
 #### Scenario: Flat error gives none
 - **WHEN** a source reports a constant error for longer than the span
-- **THEN** its learning progress is 0 and curiosity is not relieved
+- **THEN** its learning progress is 0
 
 #### Scenario: The span grows from the first report
 - **WHEN** a source has completed one bin
 - **THEN** its learning progress is undefined, and after two completed bins it compares the first bin with the second
+
+#### Scenario: One processor progresses
+- **WHEN** vision's learning progress is 0.5 and audition's is 0.0
+- **THEN** the pooled `lp` is 0.5, not their mean
 
 #### Scenario: Valence is unchanged
 - **WHEN** the same reports arrive as in the build before this change
@@ -897,3 +901,43 @@ The affect state SHALL carry `curiosity_scheme` 2. Restoring state without it SH
 #### Scenario: A deficit-era checkpoint
 - **WHEN** a state without `curiosity_scheme` holds curiosity 0.9, latched, with 3 own ends and an active curiosity goal
 - **THEN** after restore curiosity is 0, unlatched, with 0 own and 0 other ends, and no curiosity goal is active
+
+### Requirement: A spent stimulus requests a developmental rest
+The affect module SHALL record the latest entity time at which, on an update, the learning progress above the floor (`lp+`) or the alert excess was above zero. When a boredom goal is abandoned as stalled, the module SHALL publish `affect.rest_request` on `affect.out` with `reason` `"stimulus_spent"`, `drive` `"boredom"` and `stall_s` the stall length, if and only if the development probe reports the entity as developing and that latest time is before the start of the stall or does not exist (paper section 3.5). A probe that raises SHALL count as developing; with no probe no request SHALL be published. The time since the latest engagement SHALL persist in the snapshot as a duration, and a snapshot without it SHALL count as engaged at the restore.
+
+#### Scenario: A spent stimulus
+- **WHEN** a developing entity's boredom stays at or above its threshold for the stall horizon with `lp+` and the alert excess zero throughout
+- **THEN** the boredom goal is abandoned as stalled and one `affect.rest_request` with reason `stimulus_spent` is published
+
+#### Scenario: Progress during the stall
+- **WHEN** `lp+` was above zero at any update during the stall
+- **THEN** the goal is abandoned as stalled and no rest request is published
+
+#### Scenario: After maturation
+- **WHEN** the development probe reports the entity as matured
+- **THEN** no rest request is published
+
+### Requirement: The state event carries sleep-reset ends and open crossings
+Each deficit drive SHALL count the crossings the sleep reset ends: when `DriveSet.reset_deficits()` resets a deficit whose crossing latch is set, its `reset_ends` count SHALL rise by one. Every `affect.state` payload, periodic or after a sleep reset, SHALL carry `drive_reset_ends`, each deficit's count, and `drive_open`, whether each deficit's latch is set. The counts SHALL persist in the snapshot under `drive_reset_ends`; a missing or malformed entry SHALL leave the count at 0. `drive_ends` SHALL keep its `own` and `other` keys only.
+
+#### Scenario: A sleep reset ends an open crossing
+- **WHEN** boredom has crossed its threshold and not fallen back, and the sleep reset runs
+- **THEN** the reset `affect.state` carries `drive_reset_ends.boredom` 1 and `drive_open.boredom` false
+
+### Requirement: Audition's bins restart at each hearing band step
+The affect module SHALL read `development.out` and, on a `development.hearing_stage` event whose `stage` is an integer from 0 to 4 and higher than the last stage it knows, SHALL drop audition's windowed learning-progress estimator, so audition's progress restarts from its next report and counts only bins after the step (paper A.4, A.7). The first stage it reads SHALL be stored without a restart. An equal or lower stage, a malformed stage and any other `development.out` event SHALL change nothing. Vision's estimator and the error means SHALL be untouched. The last known stage SHALL persist in the snapshot under `hearing_stage`; a missing or malformed value SHALL restore as unknown.
+
+#### Scenario: A band step
+- **WHEN** the module knows stage 0 and a stage 1 event arrives
+- **THEN** audition's learning progress is undefined until two bins have completed after the step, and vision's is unchanged
+
+#### Scenario: A restart after a missed step
+- **WHEN** the snapshot holds stage 1 and the first event after the restart reports stage 2
+- **THEN** audition's bins restart
+
+### Requirement: A boredom stall starts no rest
+When a boredom goal is abandoned as stalled, the affect module SHALL publish the goal's abandonment as before and SHALL NOT publish `affect.rest_request`. An affect snapshot that carries the former engagement field SHALL restore without error and the field SHALL be ignored.
+
+#### Scenario: A stall in the developmental phase
+- **WHEN** a boredom goal stalls with no learning progress throughout the stall
+- **THEN** the goal is abandoned with reason `stalled` and no `affect.rest_request` is published

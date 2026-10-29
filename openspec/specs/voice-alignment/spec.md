@@ -105,3 +105,24 @@ With `trainer_backend = "subprocess"`, the training subprocess SHALL run without
 #### Scenario: The cycle keeps ticking during subprocess training
 - **WHEN** a subprocess training run takes several seconds
 - **THEN** other coroutines on the cycle's event loop keep running during it
+
+### Requirement: The pair builder skips identity leakage
+The voice-alignment pair builder SHALL build no pair from an intent-log record whose `extra.identity_leak` is true. Such a record SHALL count as scanned and not as usable.
+
+#### Scenario: A marked record
+- **WHEN** the log holds one marked and one unmarked record that would each give a pair
+- **THEN** the builder returns only the unmarked record's pair
+
+### Requirement: Voice adaptation idles without a validated preference source
+The voice-alignment phase SHALL build preference pairs only when it is enabled, operator approval is granted and its configured preference source is a validated training source. Otherwise it SHALL build no pairs and SHALL compute, publish and persist no organ-level divergence: no `sleep.consolidation_divergence` event, no `state/sleep/consolidation_divergence.json` and no `consolidation_divergence` key in the phase metadata (paper section 3.5). The sleep index SHALL advance once per sleep, at its start, and `sleep.sleep.started` SHALL carry it as `sleep_index`, so listeners learn it whether or not the sleep-time intent audit succeeds.
+
+#### Scenario: The first configuration
+- **WHEN** a sleep runs with voice alignment disabled and an intent log of 100 records
+- **THEN** no pairs are built, no consolidation divergence record or event exists, and the sleep index rises by one and appears on `sleep.sleep.started`
+
+### Requirement: The pair builder skips every text that says what the entity is
+The voice-alignment pair builder SHALL build no pair from an intent-log record whose `extra.identity_leak` or `extra.self_description` is true, so voice adaptation trains self-description in neither direction (paper section 3.5). Such a record SHALL count as scanned and not as usable.
+
+#### Scenario: A self-description
+- **WHEN** a record carries `extra.self_description = true`
+- **THEN** the builder returns no pair for it
