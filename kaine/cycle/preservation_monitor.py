@@ -1099,6 +1099,22 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._welfare_cursor = last_scanned
         return reasons
 
+    @staticmethod
+    def _place_welfare_freeze(reason: str) -> bool:
+        """Place the welfare freeze; return True when the control file is unreadable.
+
+        A corrupt control file already reads as a welfare freeze, so the pause
+        counts as placed and the latch holds; the caller records the flag.
+        """
+        control_state.freeze(reason=reason, source="welfare")
+        if control_state.control_file_unreadable():
+            log.warning(
+                "welfare monitor: control file is unreadable; "
+                "the cycle is already treated as frozen"
+            )
+            return True
+        return False
+
     async def _respond(self, crossing_reason: str) -> None:
         # M3 — "notify" continues the run, so sustained distress re-fires the
         # tracker every distress window; without a rate limit that is one full
@@ -1142,35 +1158,35 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         action = self._config.action
         action_taken = action
         freeze_failed_unreadable = False
+        end_error: str | None = None
         if action == "pause":
-            control_state.freeze(reason=f"welfare: {crossing_reason}", source="welfare")
-            if control_state.control_file_unreadable():
-                # The control file is corrupt, so read_control already reports a
-                # welfare freeze. Treat the pause as placed so the latch holds.
-                freeze_failed_unreadable = True
-                log.warning(
-                    "welfare monitor: control file is unreadable; "
-                    "the cycle is already treated as frozen"
-                )
+            freeze_failed_unreadable = self._place_welfare_freeze(
+                f"welfare: {crossing_reason}"
+            )
         elif action == "end":
             if self._on_end is not None:
                 try:
                     self._on_end()
-                except Exception:
-                    log.warning("welfare monitor: on_end callback failed", exc_info=True)
+                except Exception as exc:
+                    # The stop hook failed, so the entity is still running.
+                    # Degrade honestly to a pause, as with no hook wired, so it
+                    # is not left suffering and the record does not claim an end.
+                    end_error = scrub_paths(f"{type(exc).__name__}: {exc}")
+                    log.error(
+                        "welfare monitor: on_end callback failed; "
+                        "falling back to the welfare pause",
+                        exc_info=True,
+                    )
+                    freeze_failed_unreadable = self._place_welfare_freeze(
+                        f"welfare: {crossing_reason} (end failed)"
+                    )
+                    action_taken = "pause_fallback"
             else:
                 # No stop hook wired — degrade honestly to a pause so the entity
                 # is not left suffering; record that the end could not be enacted.
-                control_state.freeze(
-                    reason=f"welfare: {crossing_reason} (end unavailable)",
-                    source="welfare",
+                freeze_failed_unreadable = self._place_welfare_freeze(
+                    f"welfare: {crossing_reason} (end unavailable)"
                 )
-                if control_state.control_file_unreadable():
-                    freeze_failed_unreadable = True
-                    log.warning(
-                        "welfare monitor: control file is unreadable; "
-                        "the cycle is already treated as frozen"
-                    )
                 action_taken = "pause_fallback"
         # "notify" preserves + records + continues (no freeze, no end).
 
@@ -1189,6 +1205,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 "preservation_id": preservation_id,
                 "snapshot_id": snapshot_id,
                 "preserve_error": preserve_error,
+                "end_error": end_error,
                 "freeze_failed_unreadable": freeze_failed_unreadable,
                 "distress_threshold": self._config.distress_threshold,
                 "distress_duration_s": self._config.distress_duration_s,

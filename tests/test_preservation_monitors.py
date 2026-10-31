@@ -620,6 +620,46 @@ async def test_welfare_action_end_without_on_end_falls_back_to_pause(bus, tmp_pa
     await eid.shutdown()
 
 
+@pytest.mark.asyncio
+async def test_welfare_action_end_hook_failure_falls_back_to_pause(bus, tmp_path):
+    """action='end' whose on_end hook raises must degrade to the welfare pause
+    like the no-hook case: the entity is frozen, the record says
+    'pause_fallback' (never a false 'end') and carries the hook's error."""
+    reg, eid = await _entity(bus, tmp_path)
+    fm = _StubFM()
+    cfg = WelfareResponseConfig(
+        enabled=True, action="end", distress_threshold=0.5,
+        distress_duration_s=1.0, out_root=str(tmp_path / "backups"),
+    )
+
+    def _failing_end() -> None:
+        raise RuntimeError("stop failed")
+
+    clock = {"t": 0.0}
+    mon = _welfare_monitor(
+        bus, reg, fm, cfg, on_end=_failing_end, clock=lambda: clock["t"]
+    )
+    stop = asyncio.Event()
+    await _push_interoception_report(bus, 0.9)
+    await mon._poll_once(stop)
+    clock["t"] = 5.0
+    await mon._poll_once(stop)
+    assert len(fm.calls) == 1
+    control = control_state.read_control()
+    assert control.frozen is True            # fell back to the welfare pause
+    assert control.source == "welfare"
+    assert mon._acted is True
+    assert mon._pause_placed is True         # so a named override re-arms it
+    welfare_events = [
+        e for e in (await _drain(bus, "preservation.out"))
+        if e.type == "welfare.protective_action"
+    ]
+    payload = welfare_events[-1].payload
+    assert payload.get("action") == "pause_fallback"
+    assert "stop failed" in (payload.get("end_error") or "")
+    await eid.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # individuation-instrument-gate — welfare cold-start warm-up (Task 4.2)
 # ---------------------------------------------------------------------------

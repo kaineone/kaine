@@ -569,6 +569,27 @@ async def test_pause_fallback_rearms_after_override(bus):
     assert mon._acted is False
 
 
+@pytest.mark.asyncio
+async def test_failed_end_hook_pause_fallback_rearms_after_override(bus):
+    def _failing_end() -> None:
+        raise RuntimeError("stop failed")
+
+    u = _Mono(0.0)
+    mon = _monitor(bus, u, cfg=_cfg(action="end"), on_end=_failing_end)
+
+    await _act(mon, bus, u)
+    assert "welfare" in control_state.read_holder_sources()
+    assert mon._acted is True
+
+    stop = asyncio.Event()
+    await mon._poll_once(stop)
+    assert mon._acted is True            # still latched while the freeze stands
+
+    control_state.override(["welfare"])
+    await mon._poll_once(stop)
+    assert mon._acted is False
+
+
 def test_run_override_replaces_unreadable_control_file(capsys):
     from kaine.cycle import control
 
