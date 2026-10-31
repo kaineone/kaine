@@ -719,7 +719,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
         )
         assert len(refused) == 1
         refused_path, reason = refused[0]
-        assert str(refused_path) == path
+        assert refused_path == Path(path).resolve()
         assert reason == expected_reason
 
     roots, refused = delete_roots(
@@ -762,7 +762,7 @@ def test_allow_list_refuses_dangerous_entries(tmp_path):
         )
         assert len(refused) == 1
         refused_path, reason = refused[0]
-        assert str(refused_path) == path
+        assert refused_path == Path(path).resolve()
         assert reason == "a top-level directory"
 
     config = {"sleep": {"voice_alignment": {"trainer_jobs_dir": "/trainer-jobs2"}}}
