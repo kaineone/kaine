@@ -10,4 +10,5 @@
 ## 1. Program record
 
 - [x] 1.1 `design.md` with the per-module audit, the phase plan, and the model ladder with sources and licence notes.
-- [ ] 1.2 Open one design-first change per later phase when its turn comes.
+- [x] 1.2 Open one design-first change per later phase when its turn comes.
+  *Closed as a standing rule, not open work: each later phase is opened as its own design-first change when its turn comes, from the phase plan in this change's archived `design.md`. The remaining phases (on-device Termux, Orin residency) come after the first module-ignition study.*
