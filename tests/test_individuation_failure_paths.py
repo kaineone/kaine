@@ -1283,6 +1283,49 @@ async def test_unreadable_capture_stretch_does_not_silence_the_alert(tmp_path):
     assert len(_stretch_alerts(rig)) == 1
 
 
+async def test_start_removes_a_stale_stretch_so_a_later_one_alerts(tmp_path):
+    """A stretch left behind by a crash after a capture must not silence a later one."""
+    from kaine.cycle.individuation_runtime import IndividuationConfig, IndividuationRuntime
+    from kaine.lifecycle.individuation_store import CaptureStretch, save_capture_stretch
+
+    rig = make_rig(tmp_path, with_scheduler=True)
+    await captured(rig)
+    save_capture_stretch(
+        rig.paths,
+        CaptureStretch(since="2025-01-01T00:00:00+00:00", alerted=True, last_reason="organ_resting"),
+    )
+
+    async def ensure_fact(_fact: str, *, replaces: tuple[str, ...] = ()) -> bool:
+        return True
+
+    runtime = IndividuationRuntime(
+        config=IndividuationConfig.from_dict(None),
+        paths=rig.paths,
+        scheduler=rig.sched,
+        core=rig.core,
+        bus=None,
+        notify=None,
+        ensure_fact=ensure_fact,
+        is_developing=lambda: False,
+        sleeping=None,
+    )
+    await runtime.start()
+    assert not rig.paths.capture_stretch.exists()
+    assert rig.paths.reference.exists()
+    assert rig.sched._capture_kind is None
+
+    # The reference is later lost and its recapture keeps failing: a new stretch alerts.
+    rig.paths.reference.unlink()
+    rig.paths.ledger.unlink()
+    rig.organ.fail_from(rig.organ.calls + 1, "resting")
+    rig.sched.request_capture("capture")
+    await _fail_captures(rig, 0, 600)
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    assert alerts[0]["inconclusive_since"] == WallClock(Clock(0.0))().isoformat()
+    assert (alerts[0]["last_reason"], alerts[0]["capture_reason"]) == ("no_reference", "organ_resting")
+
+
 async def test_capture_stretch_is_encrypted_and_content_free(tmp_path, monkeypatch):
     _enable_encryption(monkeypatch)
     rig = make_rig(tmp_path, with_scheduler=True)
