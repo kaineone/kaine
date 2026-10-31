@@ -755,9 +755,13 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # When set, preserve_live refuses to write an unencrypted bundle
         # (fail-closed). Threaded from [preservation].require_encryption.
         require_encryption: bool = False,
-        # Called with the action taken after every protective response, so an
-        # unattended run can tell its caretaker. Never allowed to break the
-        # response itself.
+        # Called with the transition of every protective response record
+        # ("protective_action", "protective_action_preserve_failed" or
+        # "protective_action_freeze_failed"), and once more with
+        # "protective_action_freeze_placed" when a freeze that could not be
+        # written is finally placed, so an unattended or research run can tell
+        # its caretaker whether the entity is paused. Never allowed to break
+        # the response itself.
         on_response: Callable[[str], None] | None = None,
         # Clock that discounts time the cycle spends frozen. Time-based arms
         # (sustained distress, warm-up) use this; the repeat window stays on
@@ -1148,9 +1152,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
         A corrupt control file already reads as a welfare freeze, so the pause
         counts as placed and the latch holds; the caller records the
-        ``unreadable`` flag. When writing the freeze itself fails (the lock
-        cannot be taken, the disk is full), the outcome is not placed and
-        carries the error; the caller logs it and keeps the freeze pending.
+        ``unreadable`` flag. When writing the freeze itself fails (the disk is
+        full, or the control file or its lock file cannot be opened), the
+        outcome is not placed and carries the error; the caller logs it and
+        keeps the freeze pending.
         """
         try:
             control_state.freeze(reason=reason, source="welfare")
@@ -1175,10 +1180,30 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         per failed attempt. A still-failing retry is logged at error level at
         most once per ``_FREEZE_RETRY_LOG_INTERVAL_S``. When the freeze is
         finally written, the pause counts as placed (so a named override
-        re-arms the monitor) and one record says so.
+        re-arms the monitor), one record says so and the caretaker is told.
+
+        Before each retry the freeze holders are read. A ``welfare`` holder
+        already in place (a write that landed but reported failure) counts as
+        the freeze placed: no second freeze is written, so a later override
+        that lifts it is not undone. Unreadable holders fall through to the
+        normal retry.
         """
         pending = self._pending_freeze
         if pending is None:
+            return
+        try:
+            holders = self._read_holders()
+        except Exception:
+            holders = None
+        if holders is not None and "welfare" in holders:
+            log.warning(
+                "welfare monitor: the welfare freeze is already in place after "
+                "%d failed attempt(s); the entity is paused",
+                pending.attempts,
+            )
+            await self._freeze_now_placed(
+                pending, unreadable=False, found_in_place=True
+            )
             return
         pending.attempts += 1
         outcome = self._place_welfare_freeze(pending.freeze_reason)
@@ -1199,13 +1224,21 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     outcome.error,
                 )
             return
-        self._pending_freeze = None
-        self._pause_placed = True
         log.warning(
             "welfare monitor: the welfare freeze was written on attempt %d; "
             "the entity is paused",
             pending.attempts,
         )
+        await self._freeze_now_placed(
+            pending, unreadable=outcome.unreadable, found_in_place=False
+        )
+
+    async def _freeze_now_placed(
+        self, pending: _PendingFreeze, *, unreadable: bool, found_in_place: bool
+    ) -> None:
+        """Latch a pending freeze as a placed pause, record it once, tell the caretaker."""
+        self._pending_freeze = None
+        self._pause_placed = True
         await self._record(
             {
                 "monitor": "welfare",
@@ -1216,11 +1249,22 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 "run_id": self._run_id(),
                 "freeze_attempts": pending.attempts,
                 "freeze_error": None,
-                "freeze_failed_unreadable": outcome.unreadable,
+                "freeze_failed_unreadable": unreadable,
+                "freeze_found_in_place": found_in_place,
                 "poll_index": self.poll_index,
             },
             event_type="welfare.protective_action",
         )
+        self._notify_response("protective_action_freeze_placed")
+
+    def _notify_response(self, transition: str) -> None:
+        """Tell ``on_response`` the record's transition; a failing callback is only logged."""
+        if self._on_response is None:
+            return
+        try:
+            self._on_response(transition)
+        except Exception:
+            log.warning("welfare monitor: on_response callback failed", exc_info=True)
 
     async def _respond(self, crossing_reason: str) -> None:
         # M3 — "notify" continues the run, so sustained distress re-fires the
@@ -1354,11 +1398,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             action_taken if freeze_error is None
             else f"{action_taken} (freeze FAILED, retrying)",
         )
-        if self._on_response is not None:
-            try:
-                self._on_response(action_taken)
-            except Exception:
-                log.warning("welfare monitor: on_response callback failed", exc_info=True)
+        self._notify_response(transition)
 
 
 __all__ = [

@@ -669,8 +669,8 @@ async def test_freeze_write_failure_is_recorded_notified_and_retried(
     assert "OSError" in records[0]["freeze_error"]
     assert "No space left on device" in records[0]["freeze_error"]
     assert records[0]["preservation_id"] == "pid1"
-    # The caretaker hears of the response exactly as on success.
-    assert notices == [action_taken]
+    # The caretaker is told the freeze failed, not that a pause was placed.
+    assert notices == ["protective_action_freeze_failed"]
 
     # The next poll retries only the freeze, and this time it is written.
     u.value += 1.0
@@ -689,7 +689,9 @@ async def test_freeze_write_failure_is_recorded_notified_and_retried(
     assert placed["action"] == action_taken
     assert placed["freeze_attempts"] == 2
     assert placed["freeze_error"] is None
-    assert notices == [action_taken]
+    assert placed["freeze_found_in_place"] is False
+    # The caretaker hears once more that the pending freeze is now placed.
+    assert notices == ["protective_action_freeze_failed", "protective_action_freeze_placed"]
 
     # Latched like a normal pause: still latched while the freeze stands, and
     # re-armed only by the named override.
@@ -736,7 +738,7 @@ async def test_freeze_failing_every_poll_retries_without_new_responses(
     assert len(mon._fork_manager.calls) == 1  # no second preservation bundle
     records = await _protective_records(bus)
     assert [r["transition"] for r in records] == ["protective_action_freeze_failed"]
-    assert notices == [action_taken]
+    assert notices == ["protective_action_freeze_failed"]
     assert mon._acted is True
     assert mon._pause_placed is False
     assert control_state.read_holder_sources() == frozenset()
@@ -758,3 +760,89 @@ async def test_successful_freeze_records_no_freeze_error(bus):
     assert records[0]["transition"] == "protective_action"
     assert records[0]["freeze_error"] is None
     assert mon._pause_placed is True
+
+
+def _welfare_entries() -> int:
+    return sum(
+        1 for e in control_state.read_control().stack if e.get("source") == "welfare"
+    )
+
+
+@pytest.mark.asyncio
+async def test_freeze_that_landed_but_raised_is_found_in_place_not_written_twice(
+    bus, monkeypatch
+):
+    # The first freeze writes the welfare entry and then raises, as a write
+    # that landed but reported failure would.
+    real_freeze = control_state.freeze
+    attempts: list[str] = []
+
+    def _freeze(reason=None, path=None, *, source="operator"):
+        attempts.append(reason)
+        result = real_freeze(reason=reason, path=path, source=source)
+        if len(attempts) == 1:
+            raise OSError(28, "No space left on device")
+        return result
+
+    monkeypatch.setattr(control_state, "freeze", _freeze)
+    notices: list[str] = []
+    u = _Mono(0.0)
+    mon = _monitor(bus, u, on_response=notices.append)
+    stop = asyncio.Event()
+
+    await _act(mon, bus, u)
+    assert len(attempts) == 1
+    assert _welfare_entries() == 1
+    assert mon._pause_placed is False
+    assert notices == ["protective_action_freeze_failed"]
+
+    # Later polls find the welfare holder already in place: no second freeze.
+    for _ in range(3):
+        u.value += 1.0
+        await _distress(bus)
+        await mon._poll_once(stop)
+    assert len(attempts) == 1
+    assert _welfare_entries() == 1
+    assert mon._pending_freeze is None
+    assert mon._pause_placed is True
+    records = await _protective_records(bus)
+    assert [r["transition"] for r in records] == [
+        "protective_action_freeze_failed",
+        "protective_action_freeze_placed",
+    ]
+    assert records[-1]["freeze_found_in_place"] is True
+    assert records[-1]["freeze_attempts"] == 1
+    assert notices == ["protective_action_freeze_failed", "protective_action_freeze_placed"]
+
+    # The named override re-arms, and the monitor does not put the freeze back.
+    control_state.override(["welfare"])
+    for _ in range(3):
+        u.value += 1.0
+        await mon._poll_once(stop)
+    assert mon._acted is False
+    assert control_state.read_holder_sources() == frozenset()
+    assert len(attempts) == 1
+    assert [r["transition"] for r in await _protective_records(bus)] == [
+        "protective_action_freeze_failed",
+        "protective_action_freeze_placed",
+        "rearmed",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unreadable_holders_fall_through_to_the_normal_retry(bus, monkeypatch):
+    attempts = _freeze_failing(monkeypatch, failures=1)
+    u = _Mono(0.0)
+    mon = _monitor(bus, u)
+    stop = asyncio.Event()
+
+    await _act(mon, bus, u)
+    assert len(attempts) == 1
+    mon._read_holders = lambda: None
+    u.value += 1.0
+    await mon._poll_once(stop)
+    assert len(attempts) == 2
+    assert mon._pause_placed is True
+    records = await _protective_records(bus)
+    assert records[-1]["transition"] == "protective_action_freeze_placed"
+    assert records[-1]["freeze_found_in_place"] is False
