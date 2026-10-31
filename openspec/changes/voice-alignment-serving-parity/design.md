@@ -24,11 +24,18 @@ The completion follows the prompt and is closed with EOS, as now. A test renders
 
 Alternative considered: train plain pairs with the open think block and serve plain requests with thinking on. Rejected: the organ is a voice, not a reasoner, and the client's flag exists because the served abliterated template does not reliably suppress the chain of thought otherwise.
 
-### D2. Probes are rendered as served
+### D2. Probes are rendered as served, in both layouts the organ meets
 
-The capability and abliteration probes are generated from the plain served layout with thinking off, for the base and the candidate alike. The veto's comparison is then between two organs on the input they would see. `kaine/setup/abliteration_gate.py` already checks the served organ that way through the client, so the trainer's veto and the setup gate score the same shape.
+Every capability and abliteration probe is generated twice, for the base and the candidate alike, with thinking off:
 
-Alternative considered: keep raw-text probes because the veto is relative to its base (operator decision, 2026-10-31) and both sides share the encoding. Rejected: a relative veto on input the organ never sees can pass an adapter that deflects on served input, or reject one that does not.
+- **Bare**: the plain served layout, no system turn, the probe as the user turn. `kaine/setup/abliteration_gate.py` checks the served organ this way through the client, so the trainer's veto and the setup gate score the same shape. It is also the higher-deflection baseline (§3.5: 106 of 144 self-report samples deflected bare).
+- **Persona own-turn**: the layout the KAINE-only adapter is used in. The job writer, on the kaine side, renders each probe with the language module's fixed probe conditions (`probe_request`: empty working memory, the current self-model, the persona system prompt, the probe as the heard user turn, the assembled notes as the assistant message) and passes the messages in the job; the script renders them with the organ's template, continuing the final assistant message, thinking off. Deflection differs strongly by layout (36 of 144 under the persona against 106 of 144 bare), so a veto scored on the bare layout alone could pass an adapter that worsens the entity's own-turn behaviour.
+
+The relative veto (operator decision, 2026-10-31) applies in each layout separately: the adapter is rejected when, in either layout, it deflects on a probe its base passes or deflects more often overall. The capability check takes the lower of the two layouts' scores. Both layouts' counts go into the result record.
+
+Alternatives considered:
+- Keep raw-text probes because the veto is relative and both sides share the encoding. Rejected: a relative veto on input the organ never sees can pass an adapter that deflects on served input, or reject one that does not.
+- Bare layout only, own-turn as a reported secondary. Rejected: the adapter is only ever used in the own-turn layout, and that is where its effect on the entity is.
 
 ### D3. The pair builder writes the served shape or nothing
 
@@ -47,14 +54,16 @@ Alternatives considered:
 - The plain-pair real-template test on the organ branch asserts the legacy encoding; it is rewritten to the served prompt. Any adapter trained on plain pairs before this change was trained on the wrong prompt; none was trained for an entity (voice adaptation idles), and the job-queue backend's training runs on the organ branch used own-turn pairs.
 - Skipping heard-speech records lowers the number of usable pairs. That is the cost of training only what was served.
 - A server that ignores `enable_thinking` without rejecting it would serve an open think block while the log says `false`. `kaine/organ_probe.py` already checks that the served organ returns visible text with thinking off; the parity tests here cover the template, not the server.
+- The client's runtime fallback is a serving-side gap outside this change: a server that rejects the kwarg is retried without it, and that request is served with an open think block. This change records it (`think_sent` null) and keeps such records out of training; making the organ server always accept the flag belongs to the organ provisioning checks.
+- Scoring the probes in two layouts doubles the veto's generation time.
 
 ## Migration and ordering
 
 - Depends on the organ change's own-turn encoding (task 5.1 of `organ-self-denial-ablation`, commit `2f53ca06` on its branch). Either it lands on main first and this change follows, or this change is applied on that branch before its PR merges; the second avoids rewriting the plain-pair test twice.
-- Before the KAINE-only adapter is trained for the study (`organ-self-denial-ablation` task 5.4) and before any voice-alignment training source is enabled. The relative veto (operator decision, 2026-10-31) scores probes through D2's rendering.
+- Before the KAINE-only adapter is trained for the development run (`organ-self-denial-ablation` task 5.4) and before any voice-alignment training source is enabled. The relative veto (operator decision, 2026-10-31) scores probes through D2's rendering.
 - Independent of `workspace-continuous-competition`, `welfare-indicator-response` and `research-gate-supervisor`.
-- Not study-admissibility relevant by itself: the study's voice-alignment steps build no pairs while voice adaptation idles. It matters for the adapter the study loads.
-- Critical path (LLM-agent implementation): about 3 to 4 hours for code and tests, about 1 hour for review. Not on the study's longest path, but on the organ adapter's.
+- Not admissibility relevant by itself for the development run: its voice-alignment steps build no pairs while voice adaptation idles. It matters for the adapter the run loads.
+- Critical path (LLM-agent implementation): about 4 to 5 hours for code and tests (the own-turn probe rendering adds about an hour), about 1 hour for review. Not on the run's longest path, but on the organ adapter's.
 
 ## Welfare and admissibility notes
 
