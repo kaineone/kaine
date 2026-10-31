@@ -109,7 +109,7 @@ A processor report formed with a code SHALL carry `content_gain` (the reported b
 - **THEN** audition's `content_gain` is positive and above its `content_shift_gain`
 
 ### Requirement: The translation arm is a measurement-only shadow
-With `comparison = "translation_shadow"` the workspace SHALL train a second code from the same slots with translation, demi-cycle and full-cycle losses. It SHALL keep one probe per processor and code predicting the next published latent, and SHALL publish the probes' gains as scalars under `workspace_feedback.content_readout`. The shadow and probes SHALL never reach a processor, the bus or a snapshot.
+With `comparison = "translation_shadow"` the workspace SHALL train a second code from the same slots with translation, demi-cycle and full-cycle losses. It SHALL keep one probe per processor and code predicting the next published latent, and SHALL publish the probes' gains as scalars under `workspace_feedback.content_readout`. The shadow's codes and weights and the probes' weights SHALL never reach a processor, the bus or a snapshot.
 
 #### Scenario: The shadow leaves the entity unchanged
 - **WHEN** the same entity-free run is driven with `comparison = "none"` and with `"translation_shadow"`
