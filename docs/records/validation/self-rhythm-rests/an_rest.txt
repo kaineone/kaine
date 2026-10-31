@@ -1,0 +1,31 @@
+valF_v:70 seed0            rep3 14.8h wall / 10.1h awake single 81/128 (63.3%) viab=None lastfw=1.196 fbeat=1.162
+valF_v:70 seed1            rep3 16.2h wall / 11.1h awake single 88/128 (68.8%) viab=None lastfw=1.137 fbeat=1.126
+valF_v:70 seed2            rep3 13.0h wall / 9.1h awake  single 74/128 (57.8%) viab=None lastfw=1.167 fbeat=1.132
+valF_v:70 seed3            rep3 13.0h wall / 9.1h awake  single 83/128 (64.8%) viab=None lastfw=1.188 fbeat=1.169
+valF_v:70 seed4            rep3 16.2h wall / 11.1h awake single 74/128 (57.8%) viab=None lastfw=1.171 fbeat=1.129
+valC_t:70 seed5            rep3 12.5h wall / 8.6h awake  single 76/128 (59.4%) viab=None lastfw=1.190 fbeat=1.216
+valC_t:70 seed6            rep3 13.9h wall / 9.6h awake  single 91/128 (71.1%) viab=None lastfw=1.133 fbeat=1.115
+valC_t:70 seed7            rep3 11.1h wall / 7.6h awake  single 79/128 (61.7%) viab=None lastfw=1.209 fbeat=1.172
+valC_t:70 seed8            rep3 13.0h wall / 9.1h awake  single 73/128 (57.0%) viab=None lastfw=1.167 fbeat=1.089
+valC_t:70 seed9            rep3 16.2h wall / 11.1h awake single 87/128 (68.0%) viab=None lastfw=1.178 fbeat=1.194
+valC_t:60 seed7            rep3 14.8h wall / 10.1h awake single 62/90 (68.9%) viab=None lastfw=1.008 fbeat=1.005
+valC_t:80 seed8            rep3 45.6h wall / 31.1h awake single 43/128 (33.6%) viab=None lastfw=1.322 fbeat=1.245
+valF_v:60 seed0            rep3 32.3h wall / 22.1h awake single 67/91 (73.6%) viab=None lastfw=1.015 fbeat=0.996
+valF_v:60 seed1            rep3 13.9h wall / 9.6h awake  single 52/75 (69.3%) viab=None lastfw=0.954 fbeat=0.965
+valF_v:66 seed0            rep3 7.5h wall / 5.1h awake   single 92/128 (71.9%) viab=None lastfw=1.107 fbeat=1.095
+valF_v:66 seed1            rep3 8.8h wall / 6.1h awake   single 92/128 (71.9%) viab=None lastfw=1.063 fbeat=1.062
+valF_v:72 seed0            rep3 16.2h wall / 11.1h awake single 77/128 (60.2%) viab=None lastfw=1.218 fbeat=1.195
+valF_v:72 seed1            rep3 24.0h wall / 16.6h awake single 76/128 (59.4%) viab=None lastfw=1.185 fbeat=1.158
+valF_v:80 seed0            rep3 44.7h wall / 30.6h awake single 50/128 (39.1%) viab=None lastfw=1.380 fbeat=1.328
+valF_v:80 seed1            rep3 40.5h wall / 27.6h awake single 57/128 (44.5%) viab=None lastfw=1.333 fbeat=1.287
+valF_v:no drive            rep3 never                    single 0/128 (0.0%) viab=('R1', 24.102) lastfw=0.878 fbeat=1.162
+valF_v:foreign 0->1        rep3 never                    single 6/128 (4.7%) viab=('R3', 60.21) lastfw=1.187 fbeat=1.126
+valF_v:foreign 2->3        rep3 never                    single 11/128 (8.6%) viab=('R3', 60.21) lastfw=1.148 fbeat=1.169
+valF_v:jittered beat       rep3 never                    single 0/128 (0.0%) viab=('R1', 30.102) lastfw=0.907 fbeat=1.162
+valF_v:eta 0               rep3 never                    single 0/128 (0.0%) viab=('R1', 24.102) lastfw=0.884 fbeat=1.162
+valC_c:foreign 5->6        rep3 never                    single 8/128 (6.2%) viab=('R3', 60.21) lastfw=1.175 fbeat=1.115
+valC_c:foreign 7->8        rep3 never                    single 4/128 (3.1%) viab=('R3', 60.21) lastfw=1.200 fbeat=1.089
+valC_c:foreign 9->10       rep3 never                    single 7/128 (5.5%) viab=('R3', 60.21) lastfw=1.172 fbeat=1.189
+valC_c:foreign 11->12      rep3 never                    single 4/128 (3.1%) viab=('R3', 60.21) lastfw=1.187 fbeat=1.156
+valC_c:eta0 s11            rep3 never                    single 0/128 (0.0%) viab=('R1', 24.102) lastfw=0.872 fbeat=1.175
+valC_c:eta0 scale1 s12     rep3 never                    single 0/128 (0.0%) viab=('R1', 26.602) lastfw=0.886 fbeat=1.156

@@ -1,0 +1,8 @@
+valF_v:70 seed0            rep3 13.0h wall / 13.0h awake single 129/190 (67.9%) viab=None lastfw=1.192 fbeat=1.186
+valF_v:60 seed0            rep3 3.0h wall / 3.0h awake   single 144/167 (86.2%) viab=None lastfw=1.025 fbeat=1.016
+valF_v:80 seed0            rep3 46.5h wall / 46.5h awake single 65/190 (34.2%) viab=None lastfw=1.366 fbeat=1.355
+valF_v:no drive            rep3 never                    single 0/190 (0.0%) viab=('R1', 27.497) lastfw=0.897 fbeat=1.186
+valF_v:foreign 0->1        rep3 never                    single 11/190 (5.8%) viab=('R3', 60.498) lastfw=1.189 fbeat=1.102
+valF_v:foreign 2->3        rep3 never                    single 17/190 (8.9%) viab=('R3', 60.498) lastfw=1.154 fbeat=1.224
+valF_v:jittered beat       rep3 never                    single 0/190 (0.0%) viab=('R1', 25.997) lastfw=0.933 fbeat=1.186
+valC_c:foreign 5->6        rep3 never                    single 8/190 (4.2%) viab=('R3', 60.498) lastfw=1.199 fbeat=1.125
