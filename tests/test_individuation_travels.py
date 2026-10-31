@@ -332,6 +332,7 @@ def test_research_gate_requires_individuation(monkeypatch):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
         individuation_enabled=False,
     )
     assert not result.ok

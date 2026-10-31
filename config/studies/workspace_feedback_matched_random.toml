@@ -16,3 +16,8 @@ enabled = true
 # matched_random: same conflict detector, but gain moves target two random
 # processors.
 arm = "matched_random"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

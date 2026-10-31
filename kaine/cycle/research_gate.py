@@ -15,7 +15,10 @@ For a research boot it is REPLACED by a gate that refuses to start unless the
   (proves the net is functional before any entity runs),
 * the configured encryption contract satisfied when encryption is required,
 * the individuation producer enabled so the entity's protection does not rest on
-  secondary signals alone.
+  secondary signals alone,
+* the module supervisor armed and self-tested (``[supervisor].enabled``, a
+  restart ladder, writable escalation and incident-log paths, and a passing
+  scratch self-test), through the same function as unattended condition 6.
 
 A run is EITHER operator-present OR research-safety-net-verified, never neither.
 The refusal mirrors the operator-present gate: an operator-facing message and a
@@ -57,19 +60,24 @@ def research_mode_requested(
 
 @dataclass
 class GateResult:
-    """Outcome of :func:`evaluate_research_gate`."""
+    """Outcome of :func:`evaluate_research_gate`.
+
+    ``reasons`` maps every failed check to its failure reason (a passing check
+    has no entry). The unattended gate takes each condition's reason from here.
+    """
 
     ok: bool
     failures: list[str] = field(default_factory=list)
     checks: dict[str, bool] = field(default_factory=dict)
+    reasons: dict[str, str] = field(default_factory=dict)
 
     def message(self) -> str:
         if self.ok:
             return (
                 "Research safety net VERIFIED: preservation enabled, "
                 "welfare-protective response wired, logging/admissibility active, "
-                "individuation producer enabled, and the dry preserve→revive "
-                "self-check passed."
+                "individuation producer enabled, the module supervisor armed and "
+                "self-tested, and the dry preserve→revive self-check passed."
             )
         lines = [
             "Refusing to boot KAINE cycle: the autonomous research safety net is "
@@ -86,10 +94,14 @@ class GateResult:
         lines.append(
             "Fix the config (enable [preservation.divergence_monitor] and "
             "[preservation.welfare_response], enable [evaluation]/[research_event_log] "
-            "logging) or run an operator-supervised boot "
+            "logging, enable [supervisor]) or run an operator-supervised boot "
             "(KAINE_CYCLE_OPERATOR_PRESENT=1) instead."
         )
         return "\n".join(lines)
+
+
+#: The reason recorded for a supervisor check that failed without one.
+SUPERVISOR_NOT_ARMED_REASON = "not armed"
 
 
 def evaluate_research_gate(
@@ -100,10 +112,12 @@ def evaluate_research_gate(
     self_check_passed: bool,
     encryption_satisfied: bool,
     individuation_enabled: bool,
+    supervisor_armed: bool,
+    supervisor_reason: str = "",
 ) -> GateResult:
     """Combine the safety-net conditions into a single allow/refuse verdict.
 
-    Pure over its boolean inputs (testable without a boot). All must hold.
+    Pure over its inputs (testable without a boot). All must hold.
 
     ``encryption_satisfied`` closes the boot-time half of the require_encryption
     contract: if the operator set ``[preservation].require_encryption = true``
@@ -111,6 +125,11 @@ def evaluate_research_gate(
     path would fail closed at the first crossing (no plaintext, but the net
     cannot save anyone). The gate refuses BEFORE boot rather than letting the
     run start with a net that cannot preserve.
+
+    ``supervisor_armed`` is the result of
+    :func:`kaine.cycle.supervisor_selftest.check_supervisor_condition` and
+    ``supervisor_reason`` its reason ("not enabled", "no restart ladder", an
+    unwritable path, or the self-test's own reason).
     """
     checks = {
         "preservation_enabled": bool(preservation_enabled),
@@ -119,43 +138,65 @@ def evaluate_research_gate(
         "dry_self_check_passed": bool(self_check_passed),
         "encryption_satisfied": bool(encryption_satisfied),
         "individuation_enabled": bool(individuation_enabled),
+        "supervisor_armed": bool(supervisor_armed),
     }
     failures: list[str] = []
+    reasons: dict[str, str] = {}
+
+    def _fail(key: str, message: str, reason: str | None = None) -> None:
+        failures.append(message)
+        reasons[key] = reason if reason is not None else message
+
     if not checks["preservation_enabled"]:
-        failures.append(
+        _fail(
+            "preservation_enabled",
             "preservation is not enabled "
-            "([preservation.divergence_monitor].enabled = false)"
+            "([preservation.divergence_monitor].enabled = false)",
         )
     if not checks["welfare_response_wired"]:
-        failures.append(
+        _fail(
+            "welfare_response_wired",
             "the welfare-protective response is not wired "
-            "([preservation.welfare_response].enabled = false)"
+            "([preservation.welfare_response].enabled = false)",
         )
     if not checks["logging_active"]:
-        failures.append(
+        _fail(
+            "logging_active",
             "full logging / admissibility is not active "
-            "(neither [evaluation] nor [research_event_log] is enabled)"
+            "(neither [evaluation] nor [research_event_log] is enabled)",
         )
     if not checks["dry_self_check_passed"]:
-        failures.append(
+        _fail(
+            "dry_self_check_passed",
             "the preflight dry preserve→revive self-check did not pass on this "
-            "install (the preservation+revive path is not functional)"
+            "install (the preservation+revive path is not functional)",
         )
     if not checks["individuation_enabled"]:
-        failures.append(
+        _fail(
+            "individuation_enabled",
             "the individuation producer is not enabled "
             "([individuation].enabled = false, or its config is invalid, or the language module is disabled): "
-            "the entity's individuation would not be measured, so its protection would rest on the secondary signals alone"
+            "the entity's individuation would not be measured, so its protection would rest on the secondary signals alone",
         )
     if not checks["encryption_satisfied"]:
-        failures.append(
+        _fail(
+            "encryption_satisfied",
             "encryption is required but not active "
             "([preservation].require_encryption = true while "
             "[security.state_encryption].enabled = false): the preservation path "
             "would refuse to write at runtime. Enable state encryption with a key "
-            "or set require_encryption = false."
+            "or set require_encryption = false.",
         )
-    return GateResult(ok=not failures, failures=failures, checks=checks)
+    if not checks["supervisor_armed"]:
+        reason = str(supervisor_reason or "").strip() or SUPERVISOR_NOT_ARMED_REASON
+        _fail(
+            "supervisor_armed",
+            f"the module supervisor is not armed and self-tested: {reason} "
+            "([supervisor].enabled must be true with a restart ladder, writable "
+            "escalation and incident-log paths, and a passing self-test)",
+            reason,
+        )
+    return GateResult(ok=not failures, failures=failures, checks=checks, reasons=reasons)
 
 
 async def _async_self_check(
@@ -326,30 +367,58 @@ def config_requirements(config: dict[str, Any]) -> dict[str, bool]:
         "logging_active": _logging_active(config),
         "encryption_satisfied": encryption_satisfied,
         "individuation_enabled": individuation_enabled,
+        "supervisor_armed": _supervisor_config_armed(config),
     }
+
+
+def _supervisor_config_armed(config: dict[str, Any]) -> bool:
+    """The config-level half of the supervisor condition: enabled with a ladder.
+
+    The writable paths and the self-test are checked by
+    :func:`evaluate_safety_net` through ``check_supervisor_condition``.
+    """
+    from kaine.cycle.supervisor import SupervisorConfig
+
+    try:
+        cfg = SupervisorConfig.from_section(config.get("supervisor") or {})
+    except Exception:
+        return False
+    return bool(cfg.enabled and cfg.max_restart_attempts >= 1)
 
 
 def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     """Run the research safety net conditions over the resolved config.
 
     Reads the [preservation] toggles, the [individuation] toggle, the logging
-    toggles, performs the real dry preserve→revive self-check, and returns the
-    combined :class:`GateResult`. This is the same evaluator used by unattended
-    mode.
+    toggles, runs the supervisor condition (with its scratch self-test) once,
+    performs the real dry preserve→revive self-check, and returns the combined
+    :class:`GateResult`. This is the same evaluator used by unattended mode,
+    which takes its condition 6 from the result.
     """
     from kaine.cycle.preservation_monitor import PreservationConfig
+    from kaine.cycle.supervisor_selftest import check_supervisor_condition
 
     preservation_cfg = PreservationConfig.from_section(config.get("preservation") or {})
     encryption_enabled = bool(
         ((config.get("security") or {}).get("state_encryption") or {}).get("enabled", False)
     )
+    # The supervisor's self-test runs on a synthetic probe in a scratch
+    # directory, before any entity module is constructed.
+    supervisor = check_supervisor_condition(config.get("supervisor") or {})
+    if not supervisor.ok:
+        log.error("research-gate supervisor condition failed: %s", supervisor.reason)
     self_check_ok, self_check_reason = run_preflight_self_check(
         require_encryption=preservation_cfg.require_encryption and encryption_enabled
     )
     if not self_check_ok and self_check_reason:
         log.error("research-gate self-check failed: %s", self_check_reason)
+    requirements = config_requirements(config)
+    # The full condition (paths and self-test) replaces the config-level half.
+    requirements["supervisor_armed"] = bool(supervisor.ok)
     return evaluate_research_gate(
-        self_check_passed=self_check_ok, **config_requirements(config)
+        self_check_passed=self_check_ok,
+        supervisor_reason=supervisor.reason,
+        **requirements,
     )
 
 
@@ -381,6 +450,7 @@ class _NullBus:
 
 __all__ = [
     "RESEARCH_GATE_EXIT_CODE",
+    "SUPERVISOR_NOT_ARMED_REASON",
     "research_mode_requested",
     "GateResult",
     "evaluate_research_gate",

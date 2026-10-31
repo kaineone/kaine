@@ -14,3 +14,8 @@ arm = "competitive"
 enabled = true
 # The arm selector "off" makes this the current build; the switch is still on.
 arm = "off"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

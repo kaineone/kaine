@@ -15,3 +15,8 @@ enabled = true
 # full: gain moves only on conflicts that meet the disagreement and error-ratio
 # thresholds.
 arm = "full"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

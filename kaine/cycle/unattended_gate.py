@@ -4,9 +4,9 @@
 """Unattended boot gate: nine-condition safety net.
 
 The unattended supervision mode is *not* a research run: it reuses the
-research safety net's evaluator for conditions 1 to 5 and 9 (every check the net
-makes), then adds three more gates (the supervisor, caretaker notice, continuous input)
-before the entity may start without a person present.
+research safety net's evaluator for conditions 1 to 6 and 9 (every check the net
+makes, the supervisor's self-test included), then adds two more gates (caretaker
+notice, continuous input) before the entity may start without a person present.
 
 This module is pure over its inputs except for the research-net round-trip,
 which is executed by :func:`kaine.cycle.research_gate.evaluate_safety_net`.
@@ -104,8 +104,12 @@ SAFETY_NET_CONDITIONS: dict[str, int] = {
     "logging_active": 3,
     "dry_self_check_passed": 4,
     "encryption_satisfied": 5,
+    "supervisor_armed": 6,
     "individuation_enabled": 9,
 }
+
+#: Conditions supplied outside the research net.
+BUILT_CONDITIONS: tuple[int, ...] = (7, 8)
 
 
 @dataclass(frozen=True)
@@ -133,30 +137,45 @@ def not_built(number: int) -> Condition:
     )
 
 
+#: Fallback failure reason per research-net check, used when the net gives none.
+_FALLBACK_REASONS: dict[str, str] = {
+    "preservation_enabled": "[preservation.divergence_monitor].enabled is false",
+    "welfare_response_wired": "[preservation.welfare_response].enabled is false",
+    "logging_active": "neither [evaluation] nor [research_event_log] is enabled",
+    "dry_self_check_passed": "the dry preserve→revive round-trip did not pass on this install",
+    "encryption_satisfied": "[preservation].require_encryption is true but [security.state_encryption] is off",
+    "supervisor_armed": "the supervisor is not armed and self-tested",
+    "individuation_enabled": "[individuation].enabled is false, its configuration is invalid, or the language module is disabled",
+}
+
+
 def conditions_from_safety_net(net: GateResult) -> list[Condition]:
-    """Map every check of the shared research net to unattended conditions 1 to 5 and 9.
+    """Map every check of the shared research net to its numbered unattended condition.
 
     The mapping uses the net's ``checks`` dict; a missing key is treated as
-    failed.  Failure reasons are short and config-key specific so an operator
-    knows what to fix.
+    failed. A condition that several checks map to holds only when all of them
+    hold. Each failed check's reason comes from the net's ``reasons`` when it
+    gives one (condition 6 carries the supervisor self-test's own reason) and
+    from a fixed, config-key specific table otherwise.
     """
-    reasons = {
-        1: "[preservation.divergence_monitor].enabled is false",
-        2: "[preservation.welfare_response].enabled is false",
-        3: "neither [evaluation] nor [research_event_log] is enabled",
-        4: "the dry preserve→revive round-trip did not pass on this install",
-        5: "[preservation].require_encryption is true but [security.state_encryption] is off",
-        9: "[individuation].enabled is false, its configuration is invalid, or the language module is disabled",
-    }
-    out: list[Condition] = []
+    net_reasons = getattr(net, "reasons", None) or {}
+    by_number: dict[int, list[str]] = {}
     for key, number in SAFETY_NET_CONDITIONS.items():
-        ok = bool(net.checks.get(key, False))
+        by_number.setdefault(number, []).append(key)
+    out: list[Condition] = []
+    for number in sorted(by_number):
+        failed_reasons: list[str] = []
+        for key in by_number[number]:
+            if bool(net.checks.get(key, False)):
+                continue
+            reason = str(net_reasons.get(key) or "").strip() or _FALLBACK_REASONS[key]
+            failed_reasons.append(reason)
         out.append(
             Condition(
                 number=number,
                 name=CONDITION_NAMES[number],
-                ok=ok,
-                reason="" if ok else reasons[number],
+                ok=not failed_reasons,
+                reason="; ".join(failed_reasons),
             )
         )
     return out
@@ -217,26 +236,27 @@ def evaluate_unattended_gate(
 ) -> UnattendedGateResult:
     """Combine the shared safety net with the unattended-specific conditions.
 
-    Conditions 1 to 5 and 9 come from the research net.  Conditions 6–8 come
-    from ``built`` when supplied by a later slice; until then they fail with
+    Conditions 1 to 6 and 9 come from the research net (condition 6 is the
+    supervisor's self-test, run once inside the net).  Conditions 7 and 8 come
+    from ``built`` when supplied; until then they fail with
     :data:`NOT_BUILT_REASON`.
 
-    ``built`` may only contain keys ``6``, ``7`` or ``8``, and each supplied
+    ``built`` may only contain keys ``7`` or ``8``, and each supplied
     :class:`Condition` must carry the matching number.
     """
     base = conditions_from_safety_net(net)
     built = built or {}
 
     for number in built:
-        if number not in (6, 7, 8):
+        if number not in BUILT_CONDITIONS:
             raise ValueError(
-                f"only conditions 6, 7 and 8 may be supplied by later slices, "
+                f"only conditions 7 and 8 may be supplied outside the research net, "
                 f"got {number}"
             )
 
     conditions: list[Condition] = []
     conditions.extend(base)
-    for number in (6, 7, 8):
+    for number in BUILT_CONDITIONS:
         if number in built:
             condition = built[number]
             if condition.number != number:
@@ -259,6 +279,7 @@ __all__ = [
     "resolve_supervision_mode",
     "CONDITION_NAMES",
     "SAFETY_NET_CONDITIONS",
+    "BUILT_CONDITIONS",
     "Condition",
     "NOT_BUILT_REASON",
     "not_built",

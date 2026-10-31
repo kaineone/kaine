@@ -696,12 +696,75 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
     for entry in comparisons["familiarity_and_history"]:
         _emit(f"Accumulate {entry['k']} − branch {entry['k']}", entry)
 
+    lines.append("## Supervisor restarts")
+    lines.append("")
+    restart_rows = report.get("supervisor_restarts") or []
+    if not restart_rows:
+        lines.append("No completed step had a supervisor restart.")
+    else:
+        lines.append(
+            "Completed steps in which the supervisor restarted a module, which then "
+            "resumed from its last good snapshot (unknown: the incident log could not "
+            "be read):"
+        )
+        lines.append("")
+        lines.append("| Line | Step | Restarts |")
+        lines.append("|---|---|---|")
+        for row in restart_rows:
+            count = row.get("supervisor_restarts")
+            lines.append(
+                f"| {row['line']} | {row['step']} | "
+                f"{'unknown' if count is None else count} |"
+            )
+    lines.append("")
+
     lines.append("## Limits")
     lines.append("")
     for lim in report["limits"]:
         lines.append(f"- {lim}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _step_dir(study_dir: Path, line: Any, step: Any) -> Path:
+    if line == "branch":
+        return study_dir / "branch" / str(step)
+    return study_dir / str(line)
+
+
+def _supervisor_restart_steps(
+    study_dir: Path, steps: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Completed steps with at least one supervisor restart, or an unknown count.
+
+    A count the runner could not read (an encrypted incident log) is counted
+    again here, with the operator's state key installed when it is available.
+    """
+    from kaine.research.ignition_study.runner import (
+        SUPERVISOR_INCIDENT_DIR,
+        count_supervisor_restarts,
+    )
+
+    rows: list[dict[str, Any]] = []
+    for step in steps:
+        if step.get("outcome") != "complete" or "supervisor_restarts" not in step:
+            continue
+        count = step.get("supervisor_restarts")
+        if count is None:
+            count, _ = count_supervisor_restarts(
+                _step_dir(study_dir, step.get("line"), step.get("step"))
+                / SUPERVISOR_INCIDENT_DIR,
+                since_iso=step.get("started_at"),
+            )
+        if count is None or count >= 1:
+            rows.append(
+                {
+                    "line": step.get("line"),
+                    "step": step.get("step"),
+                    "supervisor_restarts": count,
+                }
+            )
+    return rows
 
 
 def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
@@ -741,6 +804,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         step.pop("_study_dir", None)
 
     comparisons = _build_comparisons(viewings, module_count)
+    restart_steps = _supervisor_restart_steps(study_dir, steps)
 
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -751,6 +815,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         "faculty_modules": faculty_modules,
         "per_viewing": [_viewing_to_dict(v) for v in viewings],
         "comparisons": comparisons,
+        "supervisor_restarts": restart_steps,
         "limits": LIMITS,
     }
 

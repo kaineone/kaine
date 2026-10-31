@@ -569,7 +569,7 @@ class Supervisor:
                 None,
                 message=(
                     f"Supervisor's supervision stopped ({reason}). Entity state saved "
-                    f"(snapshot {snapshot_id}). An unattended entity does not run "
+                    f"(snapshot {snapshot_id}). An unattended or research entity does not run "
                     f"without its supervisor. Restart the cycle once Supervisor is healthy."
                 ),
             )

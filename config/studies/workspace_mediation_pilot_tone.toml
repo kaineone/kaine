@@ -23,3 +23,8 @@ tone_rule = "error_ratio"
 [planned_test]
 # A pilot run of the tone variant (paper A.8).
 role = "pilot"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

@@ -170,7 +170,7 @@ In stimulus-source mode the perception feed panel lists the configured stimulus:
 The run-identity panel is read-only. It reads from `state/cycle/runtime.json` and shows:
 
 - the supervision mode: `operator`, `research` or `unattended`;
-- in research mode, the result of the research gate's six conditions: preservation enabled, the welfare response wired, logging active, the dry preserve-and-revive self-check passed, encryption satisfied, and the individuation producer enabled (which needs the language module);
+- in research mode, the result of the research gate's seven conditions: preservation enabled, the welfare response wired, logging active, the dry preserve-and-revive self-check passed, encryption satisfied, the individuation producer enabled (which needs the language module), and the module supervisor armed and self-tested;
 - the run identity minted at boot (`run_id`, `seed`, `git_sha`, `kaine_version`), so live charts can be tied to a specific run;
 - a deterministic-mode indicator when `[experiment].deterministic` is on, in which case chart timestamps are logical instead of wall-clock.
 

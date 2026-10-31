@@ -29,7 +29,7 @@ def test_refusal_table_keeps_2_and_5_and_adds_6():
     )
     assert rows["5"] == (
         "| `5` | Research safety net not live and verified "
-        "(one or more of the six conditions failed) |"
+        "(one or more of the seven conditions failed) |"
     )
     assert rows["6"] == "| `6` | Unattended gate: one or more of its nine conditions failed |"
     # The organ content gate and the individuation refusal have their own codes.

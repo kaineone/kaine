@@ -70,12 +70,16 @@ STUDY_ALLOWED_TABLES: frozenset[str] = frozenset(
         "planned_test",
         "positive_control",
         "audition",
+        "supervisor",
     }
 )
 
 # Tables a study may set only partly, and the keys it may set in them.
 STUDY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
     "audition": frozenset({"tone_rule"}),
+    # A research run has no person present: a study may switch the module
+    # supervisor on (the research gate requires it), never off or retune it.
+    "supervisor": frozenset({"enabled"}),
 }
 
 # A profile/tier name is a filesystem-safe slug (no path traversal): lowercase
@@ -661,6 +665,12 @@ def _load_merged_config(
                     raise ProfileError(
                         f"study {study!r} may set only {', '.join(sorted(keys))} in [{table}]; it also sets {', '.join(bad)}"
                     )
+        supervisor_section = study_raw.get("supervisor")
+        if isinstance(supervisor_section, dict) and supervisor_section.get("enabled", True) is not True:
+            raise ProfileError(
+                f"study {study!r} may only switch the module supervisor on "
+                "([supervisor].enabled = true)"
+            )
         merged = deep_merge(merged, study_raw)
 
     validate_config_shape(merged)

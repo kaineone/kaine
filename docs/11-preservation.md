@@ -82,6 +82,9 @@ Selecting research mode (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`)
 4. Full logging and admissibility are active (`[evaluation]` or `[research_event_log]`).
 5. A dry `preserve_live` and `revive` self-check passes on this install. The cycle installs the configured state encryptor before the gate, so when encryption is required the self-check writes and reads an encrypted bundle.
 6. If `[preservation].require_encryption` is true, `[security.state_encryption]` is enabled.
+7. The module supervisor is armed and self-tested: `[supervisor].enabled` is true, at least one restart attempt is configured, the escalation and incident-log directories are writable, and the supervisor's self-test passes within `selftest_timeout_s`. The self-test drives a synthetic module through detect, freeze, snapshot, restart and release in a scratch directory, before any entity module is built. It is the same check as unattended condition 6 below and runs once per boot.
+
+The refusal names each failed condition with its reason, for example "the module supervisor is not armed and self-tested: not enabled". A research run has no person present, so it also escalates when supervision is lost: when the supervisor's task never starts, ends early, or its poll loop raises, the supervisor takes a final snapshot, shuts every module down, writes `state/cycle/escalation.json` and the caretaker is told, as in an unattended run. The shipped `config/kaine.toml` keeps `[supervisor].enabled = false` for operator-present boots; every study file under `config/studies/` and the module-ignition study's overlay switch it on, and a study file may switch it on but never off.
 
 The standalone pre-boot dry-run (`python -m kaine.preboot`) reports the same conflict independently, so a broken key or disabled encryptor surfaces before any entity boots.
 
@@ -139,7 +142,7 @@ Unattended starts run a full entity with nobody present, for example after the h
 Every unattended start checks nine conditions and refuses with exit `6`, naming each failed condition on stderr, with no override:
 
 1 to 5. Research-gate conditions 1, 2, 4, 5 and 6 above: the divergence monitor, the welfare response, logging, the dry self-check and encryption.
-6. **Supervisor armed and self-tested.** `[supervisor].enabled`, at least one restart attempt configured, writable escalation and incident-log directories, and a self-test in a scratch directory that drives a synthetic module through detect, freeze, snapshot, restart and release. The self-test never touches entity state or a running entity.
+6. **Supervisor armed and self-tested.** Research-gate condition 7 above, taken from the research net's result with its reason, so the self-test runs once: `[supervisor].enabled`, at least one restart attempt configured, writable escalation and incident-log directories, and a self-test in a scratch directory that drives a synthetic module through detect, freeze, snapshot, restart and release. The self-test never touches entity state or a running entity.
 7. **Caretaker told.** A content-free "starting unattended" notice is accepted by at least one `[caretaker]` channel.
 8. **Continuous input.** `[perception_feed].mode` is `live`, `seeded`, `screen` or `stimulus_source`; `vision` or `audition` is enabled to perceive it (with `capture_enabled` for `live`); and a probe reads one frame or audio block and discards it.
 9. **Individuation wired.** Research-gate condition 3 above: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled. The condition checks that the individuation producer will run. It does not require the entity to have individuated.

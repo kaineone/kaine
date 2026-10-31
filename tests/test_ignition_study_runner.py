@@ -133,6 +133,12 @@ STANDIN_SCRIPT = textwrap.dedent(
             study_dir = cwd.parent
         state_dir = cwd / "state" / "cycle"
         state_dir.mkdir(parents=True, exist_ok=True)
+        # The real cycle clears any escalation at every boot (_phase_signals).
+        if not os.environ.get("IGNITION_STANDIN_KEEP_ESCALATION"):
+            write_json(state_dir / "escalation.json", {
+                "escalated": False, "module": None, "attempts": 0,
+                "snapshot_id": None, "escalated_at": None, "message": "",
+            })
         backups_dir = study_dir / "backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
         bundle_dir = backups_dir / secrets.token_hex(8)
@@ -178,6 +184,31 @@ STANDIN_SCRIPT = textwrap.dedent(
             "developmental_stage": {"stage": "embodied"},
         }
         write_json(state_dir / "runtime.json", runtime)
+
+        supervisor_mode = os.environ.get("IGNITION_STANDIN_SUPERVISOR")
+        if supervisor_mode == "escalate" and not is_viewing:
+            # The supervisor ran out of restarts: final snapshot, shutdown,
+            # escalation.json, exit 70 (no maturation preservation).
+            write_json(state_dir / "escalation.json", {
+                "escalated": True, "module": "language", "attempts": 5,
+                "snapshot_id": "snap-final", "escalated_at": utc_iso(),
+                "message": "Module 'language' failed to recover after 5 attempts.",
+            })
+            (state_dir / "runtime.json").unlink(missing_ok=True)
+            sys.exit(70)
+        if supervisor_mode == "restarts":
+            incidents = state_dir / "incidents"
+            incidents.mkdir(parents=True, exist_ok=True)
+            day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            with open(incidents / f"incidents-{day}.jsonl", "a") as f:
+                # A restart from an earlier attempt is not this step's.
+                print(json.dumps({"ts": "2020-01-01T00:00:00+00:00", "module": "vision",
+                                  "transition": "restart", "outcome": "recovered"}), file=f)
+                for _ in range(2):
+                    print(json.dumps({"ts": utc_iso(), "module": "vision",
+                                      "transition": "detect"}), file=f)
+                    print(json.dumps({"ts": utc_iso(), "module": "vision",
+                                      "transition": "restart", "outcome": "recovered"}), file=f)
 
         if not is_viewing and os.environ.get("IGNITION_STANDIN_WELFARE"):
             # The welfare safety net froze this child; it stays frozen and waits.
@@ -364,6 +395,8 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_WELFARE",
         "IGNITION_STANDIN_REFERENCE",
         "IGNITION_STANDIN_REFERENCE_DELAY",
+        "IGNITION_STANDIN_SUPERVISOR",
+        "IGNITION_STANDIN_KEEP_ESCALATION",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -1882,3 +1915,142 @@ def test_resume_gestates_when_the_pair_is_not_a_maturation(tmp_path: Path, known
     assert "adopted" not in steps[0]
     assert steps[0]["bundle"] != str(old)
     assert _load_jsonl(study_dir / "env_log.jsonl")[0]["line"] == "development"
+
+
+# --------------------------------------------------------------------------- #
+# Supervisor outcomes (research-gate-supervisor)
+# --------------------------------------------------------------------------- #
+
+
+def test_a_supervisor_escalation_is_its_own_outcome(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_SUPERVISOR", "escalate")
+    runner = _runner(study_dir, script)
+    record = _run(runner)
+
+    assert isinstance(record, dict)
+    assert record["exit_code"] == 70
+    assert record["outcome"] == "failed:supervisor"
+    assert record["supervisor_escalation"] == {
+        "module": "language",
+        "attempts": 5,
+        "snapshot_id": "snap-final",
+        "escalated_at": record["supervisor_escalation"]["escalated_at"],
+    }
+    assert "message" not in record["supervisor_escalation"]
+    steps = _load_steps(study_dir)
+    assert [s["outcome"] for s in steps] == ["failed:supervisor"]
+    # The next step does not start: the run halts for the operator.
+    with pytest.raises(StudyHalted):
+        runner._next_step()
+    status = runner.status()
+    assert "Halted: failed:supervisor at development step 0" in status
+    assert "Supervisor escalation: module language after 5 restart attempt(s)" in status
+
+
+def test_a_retry_after_an_escalation_is_not_failed_supervisor_once_cleared(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_SUPERVISOR", "escalate")
+    runner = _runner(study_dir, script)
+    assert _run(runner)["outcome"] == "failed:supervisor"
+
+    # The retried boot clears the previous attempt's escalation, as the cycle does.
+    monkeypatch.delenv("IGNITION_STANDIN_SUPERVISOR")
+    retry = _runner(study_dir, script)
+    assert retry._next_step(retry_failed=True)["is_retry"] is True
+    _run(retry, retry=True)
+    steps = _load_steps(study_dir)
+    assert steps[1]["line"] == "development"
+    assert steps[1]["outcome"] == "complete", steps[1]
+    assert "supervisor_escalation" not in steps[1]
+
+
+def test_a_stale_escalation_that_was_not_cleared_is_not_this_boots(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    """Even if a boot never cleared it, an escalation dated before the step is ignored."""
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    line_dir = study_dir / "development"
+    escalation = line_dir / "state" / "cycle" / "escalation.json"
+    escalation.parent.mkdir(parents=True, exist_ok=True)
+    escalation.write_text(json.dumps({
+        "escalated": True, "module": "language", "attempts": 5,
+        "snapshot_id": "old", "escalated_at": "2020-01-01T00:00:00+00:00", "message": "",
+    }))
+    monkeypatch.setenv("IGNITION_STANDIN_KEEP_ESCALATION", "1")
+    _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+    assert steps[0]["outcome"] == "complete"
+    assert "supervisor_escalation" not in steps[0]
+
+
+def test_an_escalation_dated_before_the_step_is_not_this_boots(tmp_path: Path):
+    from kaine.research.ignition_study.runner import read_step_escalation
+
+    line_dir = tmp_path / "development"
+    path = line_dir / "state" / "cycle" / "escalation.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "escalated": True, "module": "language", "attempts": 5,
+        "snapshot_id": "old", "escalated_at": "2026-10-30T10:00:00+00:00",
+        "message": "old",
+    }))
+    assert read_step_escalation(line_dir, since_iso="2026-10-31T10:00:00+00:00") is None
+    current = read_step_escalation(line_dir, since_iso="2026-10-30T09:00:00+00:00")
+    assert current is not None and current["snapshot_id"] == "old"
+    path.write_text("{not json")
+    assert read_step_escalation(line_dir, since_iso="2026-10-31T10:00:00+00:00") == {
+        "unreadable": True
+    }
+    path.write_text(json.dumps({"escalated": False}))
+    assert read_step_escalation(line_dir, since_iso=None) is None
+
+
+def test_a_completed_step_records_its_supervisor_restarts(
+    tmp_path: Path, known_modules, monkeypatch
+):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_SUPERVISOR", "restarts")
+    runner = _runner(study_dir, script)
+    _run(runner)
+    steps = _load_steps(study_dir)
+    development = steps[0]
+    assert development["outcome"] == "complete"
+    # Two restarts of this step; the one dated before the step is not counted.
+    assert development["supervisor_restarts"] == 2
+
+
+def test_a_step_without_restarts_records_zero(tmp_path: Path, known_modules):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    _run(_runner(study_dir, script))
+    steps = _load_steps(study_dir)
+    assert steps[0]["outcome"] == "complete"
+    assert steps[0]["supervisor_restarts"] == 0
+
+
+def test_an_unreadable_incident_log_makes_the_count_unknown(tmp_path: Path):
+    from kaine.research.ignition_study.runner import count_supervisor_restarts
+
+    incidents = tmp_path / "incidents"
+    incidents.mkdir()
+    (incidents / "incidents-2026-10-31.jsonl").write_text(
+        json.dumps({"ts": "2026-10-31T10:00:01+00:00", "transition": "restart"})
+        + "\nAAECAwQFBgcICQ==ciphertext\n"
+    )
+    count, unreadable = count_supervisor_restarts(
+        incidents, since_iso="2026-10-31T10:00:00+00:00"
+    )
+    assert count is None
+    assert unreadable == 1

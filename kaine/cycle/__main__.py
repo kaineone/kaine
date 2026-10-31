@@ -2783,8 +2783,21 @@ async def _phase_supervisor(ctx: BootContext) -> int | None:
         # Best-effort tick<->poll bridge: lets a supervisor.incident annotation be
         # located within the run by cycle tick, not just the supervisor's poll index.
         tick_index_provider=lambda: ctx.cycle.tick_index,
-        escalate_on_crash=(ctx.supervision_mode == "unattended"),
+        # A crashed poll loop preserves the entity and writes escalation.json
+        # before the halt in every mode whose gate requires the supervisor.
+        escalate_on_crash=_supervision_loss_escalates(ctx.supervision_mode),
     )
+
+
+def _supervision_loss_escalates(supervision_mode: str | None) -> bool:
+    """True in the modes whose boot gate requires the supervisor.
+
+    An unattended and a research boot both refuse to start without the
+    supervisor armed and self-tested, so both escalate when supervision is lost:
+    final snapshot, shutdown of every module, ``escalation.json`` and a
+    caretaker notice. An operator-present boot does not.
+    """
+    return supervision_mode in ("unattended", "research")
 
 
 def _caretaker_config_error(config: dict) -> str | None:
@@ -3267,7 +3280,7 @@ async def _run_until_stopped(ctx: BootContext) -> None:
         await _supervise_welfare_producer(
             ctx.welfare_producer, _welfare_supervision, time.monotonic()
         )
-        if ctx.supervision_mode == "unattended":
+        if _supervision_loss_escalates(ctx.supervision_mode):
             if ctx.supervisor_task is None:
                 log.critical(
                     "Supervisor supervision task was never started; escalating"
@@ -3581,29 +3594,27 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the nine-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5 and 9.  Condition 6
-    comes from the supervisor's selftest.  Condition 8 requires a continuous perception
-    input.  Condition 7 runs last and needs the outcome of conditions 1–6,
-    8 and 9 as prerequisites.
+    Reuses the research safety net for conditions 1–6 and 9; condition 6 is
+    the supervisor's self-test, which the net runs once.  Condition 8 requires a
+    continuous perception input.  Condition 7 runs last and needs the outcome of
+    conditions 1–6, 8 and 9 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
     from kaine.cycle.input_check import check_input_condition
-    from kaine.cycle.supervisor_selftest import check_supervisor_condition
     from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
-    supervisor = check_supervisor_condition(config.get("supervisor") or {})
     eight = check_input_condition(config)
 
     # Condition 7 must report on 1–6 and 8, but must not include itself.
-    checks = dict(evaluate_unattended_gate(net, built={6: supervisor, 8: eight}).checks)
+    checks = dict(evaluate_unattended_gate(net, built={8: eight}).checks)
     checks.pop("7_caretaker_told", None)
     prerequisites_ok = all(checks.values())
 
     seven = check_caretaker_condition(
         config.get("caretaker"), prerequisites_ok=prerequisites_ok, conditions=checks
     )
-    return evaluate_unattended_gate(net, built={6: supervisor, 7: seven, 8: eight})
+    return evaluate_unattended_gate(net, built={7: seven, 8: eight})
 
 
 def _record_unattended_gate(

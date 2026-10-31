@@ -23,7 +23,11 @@ from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
 from kaine.cycle.control_state import read_control
 from kaine.cycle.preserve_watch import read_request, read_result
-from kaine.research.ignition_study.overlay import IGNITION_LOG_DIR, build_overlay
+from kaine.research.ignition_study.overlay import (
+    IGNITION_LOG_DIR,
+    SUPERVISOR_INCIDENT_DIR,
+    build_overlay,
+)
 from kaine.research.ignition_study.plan import (
     LOCK_FILE,
     STEPS_FILE,
@@ -1026,6 +1030,13 @@ class StudyRunner:
         # lifted by a named override is recorded and does not change the outcome.
         # Only a freeze noticed on the running child counts: a control file left
         # by an earlier child must not rename the failure of one that never booted.
+        # A supervisor escalation of this boot names the outcome: the supervisor
+        # preserved the entity, shut it down and wrote escalation.json. The cycle
+        # clears the file at every boot and the record must be dated inside this
+        # step, so a previous attempt's escalation is never read as this one's.
+        supervisor_escalation = read_step_escalation(line_dir, since_iso=started_at)
+        if supervisor_escalation is not None:
+            outcome = "failed:supervisor"
         welfare_held = (
             self._welfare_freeze_entry(line_dir) if welfare_freeze is not None else None
         )
@@ -1064,6 +1075,19 @@ class StudyRunner:
 
         if welfare_freeze is not None:
             record["welfare_freeze"] = dict(welfare_freeze, held_at_end=welfare_held is not None)
+
+        if supervisor_escalation is not None:
+            record["supervisor_escalation"] = supervisor_escalation
+
+        if outcome == "complete":
+            # A module restart is the architecture's own fault handling and does
+            # not fail the step; the count is recorded so the analysis lists it.
+            restarts, unreadable = count_supervisor_restarts(
+                line_dir / SUPERVISOR_INCIDENT_DIR, since_iso=started_at
+            )
+            record["supervisor_restarts"] = restarts
+            if unreadable:
+                record["supervisor_restarts_unreadable_lines"] = unreadable
 
         if disk_low_requested:
             record["disk_low_preserved"] = bool(disk_low_preserved)
@@ -1289,6 +1313,21 @@ class StudyRunner:
             lines.append(
                 f"Halted: {last['outcome']} at {last['line']} step {last['step']}"
             )
+            escalation = last.get("supervisor_escalation")
+            if last.get("outcome") == "failed:supervisor" and isinstance(escalation, dict):
+                if escalation.get("unreadable"):
+                    lines.append(
+                        "Supervisor escalation: the step's escalation record exists but "
+                        "cannot be read. Check the step's state/cycle/escalation.json and "
+                        "the supervisor's incident log before retrying the step."
+                    )
+                else:
+                    lines.append(
+                        f"Supervisor escalation: module {escalation.get('module')} after "
+                        f"{escalation.get('attempts')} restart attempt(s); the entity was "
+                        f"preserved first (snapshot {escalation.get('snapshot_id')}) and shut "
+                        f"down. Check the host and the module, then retry the step."
+                    )
             freeze = last.get("welfare_freeze")
             if last.get("outcome") == "failed:welfare" and isinstance(freeze, dict):
                 lines.append(
@@ -1469,6 +1508,116 @@ def _cycle_process_alive(pid: int) -> bool:
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+#: A step's escalation record, relative to its working directory.
+ESCALATION_FILE = "state/cycle/escalation.json"
+
+#: Slack for comparing a record's timestamp with the step's start (clock tick).
+_STEP_TIME_SLACK_S = 2.0
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _not_before(value: datetime, since_iso: str | None) -> bool:
+    """True when ``value`` is not earlier than the step's start (with slack)."""
+    since = _parse_iso(since_iso)
+    if since is None:
+        return True
+    return (value - since).total_seconds() >= -_STEP_TIME_SLACK_S
+
+
+def read_step_escalation(line_dir: Path, *, since_iso: str | None) -> dict[str, Any] | None:
+    """The content-free fields of this boot's supervisor escalation, or ``None``.
+
+    The cycle clears ``escalation.json`` at every boot and the supervisor writes
+    it only when it escalates, so a record with ``escalated`` true and an
+    ``escalated_at`` inside the step is this boot's. A record dated before the
+    step belongs to an earlier attempt and is ignored. A file that exists but
+    cannot be read, or an escalation without a readable time, counts as this
+    boot's (fail closed: the run halts for the operator). The free-text message
+    is left out.
+    """
+    path = Path(line_dir) / ESCALATION_FILE
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return {"unreadable": True}
+    if not isinstance(data, dict):
+        return {"unreadable": True}
+    if data.get("escalated") is not True:
+        return None
+    escalated_at = _parse_iso(data.get("escalated_at"))
+    if escalated_at is not None and not _not_before(escalated_at, since_iso):
+        return None
+    attempts = data.get("attempts")
+    module = data.get("module")
+    snapshot_id = data.get("snapshot_id")
+    return {
+        "module": module if isinstance(module, str) else None,
+        "attempts": attempts if isinstance(attempts, int) and not isinstance(attempts, bool) else None,
+        "snapshot_id": snapshot_id if isinstance(snapshot_id, str) else None,
+        "escalated_at": data.get("escalated_at") if escalated_at is not None else None,
+    }
+
+
+def count_supervisor_restarts(
+    incident_dir: Path, *, since_iso: str | None
+) -> tuple[int | None, int]:
+    """Count the supervisor's ``restart`` transitions in a step's incident log.
+
+    Returns ``(count, unreadable_lines)``. Only records stamped at or after the
+    step's start count, because the incident log is never cleared and keeps an
+    earlier attempt's records. Lines are read through the process's state
+    encryptor: a line it cannot decrypt or parse makes the count unknown
+    (``None``), never a silent zero. The analysis, which installs the operator's
+    state key, counts again for a step whose count is unknown.
+    """
+    from kaine.security.crypto import get_state_encryptor
+
+    incident_dir = Path(incident_dir)
+    if not incident_dir.is_dir():
+        return 0, 0
+    encryptor = get_state_encryptor()
+    restarts = 0
+    unreadable = 0
+    for path in sorted(incident_dir.glob("incidents-*.jsonl")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            unreadable += 1
+            continue
+        for raw in lines:
+            if not raw.strip():
+                continue
+            try:
+                record = json.loads(encryptor.decrypt_text(raw))
+            except Exception:
+                unreadable += 1
+                continue
+            if not isinstance(record, dict) or record.get("transition") != "restart":
+                continue
+            ts = _parse_iso(record.get("ts"))
+            if ts is None:
+                unreadable += 1
+                continue
+            if _not_before(ts, since_iso):
+                restarts += 1
+    if unreadable:
+        return None, unreadable
+    return restarts, 0
 
 
 def _check_world_model_manifest(bundle_path: str) -> tuple[str | None, bool | None]:

@@ -18,3 +18,8 @@ salience_goal_factor = "static"
 
 [planned_test]
 role = "pilot"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true
