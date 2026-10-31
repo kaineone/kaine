@@ -136,59 +136,54 @@ def test_merge_rejected_allowed_keeps_parents_uncombined(tmp_path: Path):
     assert set(merged.adapters) == {"adapters/a", "adapters/b"}
 
 
-def test_merge_checks_not_called_for_fake_or_auto_fallback(monkeypatch):
-    calls: list[bool] = []
+def test_real_merger_runs_merge_and_checks_in_a_child_process():
+    """merger_from_name wires probe paths into the config and a child runner;
+    it loads nothing (no evaluators, no loader, no backend) in this process."""
+    from kaine.lifecycle.adapter_merge import ChildMergeRunner
 
-    def factory():
-        calls.append(True)
-        return (object(), object())
+    m = merger_from_name(
+        "ties_dare",
+        config_section={
+            "base_model_path": "/models/base",
+            "capability_probe_path": "/p/cap.jsonl",
+            "abliteration_probe_path": "/p/abl.jsonl",
+            "merge_timeout_s": 90,
+        },
+    )
+    assert isinstance(m, TiesDareAdapterMerger)
+    assert isinstance(m._runner, ChildMergeRunner)
+    assert m._backend is None
+    assert m._capability_eval is None
+    assert m._abliteration_scorer is None
+    assert m._model_loader is None
+    assert m._config.capability_probe_path == "/p/cap.jsonl"
+    assert m._config.abliteration_probe_path == "/p/abl.jsonl"
+    assert m._config.merge_timeout_s == 90.0
 
-    assert isinstance(merger_from_name("fake", merge_checks=factory), FakeAdapterMerger)
-    assert calls == []
 
+def test_empty_probe_paths_select_the_bundled_sets():
+    m = merger_from_name(
+        "ties_dare",
+        config_section={
+            "base_model_path": "/models/base",
+            "capability_probe_path": "",
+            "abliteration_probe_path": "  ",
+        },
+    )
+    assert m._config.capability_probe_path is None
+    assert m._config.abliteration_probe_path is None
+
+
+def test_fake_and_auto_fallback_build_no_real_merger(monkeypatch):
+    assert isinstance(merger_from_name("fake"), FakeAdapterMerger)
     monkeypatch.setattr(
         "kaine.lifecycle.adapter_merge.check_peft_available",
         lambda: "peft is unavailable",
     )
     assert isinstance(
-        merger_from_name(
-            "auto",
-            config_section={"base_model_path": "/models/base"},
-            merge_checks=factory,
-        ),
+        merger_from_name("auto", config_section={"base_model_path": "/models/base"}),
         FakeAdapterMerger,
     )
-    assert calls == []
-
-
-def test_merge_checks_called_for_ties_dare_and_wires_deps():
-    class _EvalMarker:
-        pass
-
-    class _ScorerMarker:
-        pass
-
-    def factory():
-        return (_EvalMarker(), _ScorerMarker())
-
-    m = merger_from_name(
-        "ties_dare",
-        config_section={"base_model_path": "/models/base"},
-        merge_checks=factory,
-    )
-    assert isinstance(m, TiesDareAdapterMerger)
-    assert isinstance(m._capability_eval, _EvalMarker)
-    assert isinstance(m._abliteration_scorer, _ScorerMarker)
-    assert callable(m._model_loader)
-
-
-def test_merge_checks_without_base_model_path_leaves_loader_none():
-    def factory():
-        return (object(), object())
-
-    m = merger_from_name("ties_dare", config_section={}, merge_checks=factory)
-    assert isinstance(m, TiesDareAdapterMerger)
-    assert m._model_loader is None
 
 
 async def _make_dashboard_client(*, fork_manager: ForkManager | None = None):

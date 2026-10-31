@@ -562,7 +562,6 @@ def merger_from_name(
     name: str,
     *,
     config_section: dict[str, Any] | None = None,
-    merge_checks: Callable[[], tuple[Any, Any]] | None = None,
 ) -> AdapterMerger:
     """Resolve `adapter_merger` config key to a concrete instance.
 
@@ -581,22 +580,19 @@ def merger_from_name(
     table, parsed into a `TiesDareMergeConfig` (consulted for `"ties_dare"`
     and `"auto"`; ignored for `"fake"`).
 
-    The optional `merge_checks` is a callable that returns a
-    ``(capability_eval, abliteration_scorer)`` pair.  It is called only
-    when a real ``TiesDareAdapterMerger`` is about to be constructed;
-    it is never called for ``"fake"`` and never called for ``"auto"``
-    when the availability check forces a ``FakeAdapterMerger`` fallback.
-    When it is called, its return values are wired into the real merger
-    together with a model loader derived from ``base_model_path``.
+    The real merger runs the merge and both merged-adapter checks in a
+    child process; the section's ``capability_probe_path`` and
+    ``abliteration_probe_path`` (empty selects the bundled probe sets) and
+    ``merge_timeout_s`` configure it. Nothing is loaded in this process.
     """
     if name == "fake":
         return FakeAdapterMerger()
     if name in ("ties_dare", "auto"):
         from kaine.lifecycle.adapter_merge import (
+            DEFAULT_MERGE_TIMEOUT_S,
             TiesDareAdapterMerger,
             TiesDareMergeConfig,
             check_peft_available,
-            peft_model_loader,
         )
 
         if name == "auto":
@@ -626,23 +622,18 @@ def merger_from_name(
                 if section.get("base_model_path") is not None
                 else None
             ),
+            capability_probe_path=(
+                str(section.get("capability_probe_path", "")).strip() or None
+            ),
+            abliteration_probe_path=(
+                str(section.get("abliteration_probe_path", "")).strip() or None
+            ),
+            merge_timeout_s=float(
+                section.get("merge_timeout_s", DEFAULT_MERGE_TIMEOUT_S)
+            ),
         )
 
-        capability_eval: Any = None
-        abliteration_scorer: Any = None
-        if merge_checks is not None:
-            capability_eval, abliteration_scorer = merge_checks()
-
-        model_loader: Any = None
-        if cfg.base_model_path:
-            model_loader = peft_model_loader(cfg.base_model_path)
-
-        return TiesDareAdapterMerger(
-            cfg,
-            capability_eval=capability_eval,
-            abliteration_scorer=abliteration_scorer,
-            model_loader=model_loader,
-        )
+        return TiesDareAdapterMerger(cfg)
     raise ValueError(
         f"unknown adapter_merger {name!r}: known values are 'fake', 'ties_dare', 'auto'"
     )

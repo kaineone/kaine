@@ -1857,6 +1857,10 @@ base_model_path = ""
 # Empty = the bundled probe sets (as in [sleep.voice_alignment]).
 capability_probe_path = ""
 abliteration_probe_path = ""
+# Wall-clock ceiling for one merge, in seconds. The merge and both checks run
+# in a child process (kaine.lifecycle.adapter_merge_worker); a child that is
+# still running at this point is killed and the merge is refused.
+merge_timeout_s = 7200
 
 [preservation]
 # Autonomous welfare safety net (entity-preservation-on-divergence). Two
