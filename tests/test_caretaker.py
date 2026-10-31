@@ -248,7 +248,7 @@ def test_welfare_freeze_notices_are_distinct_and_content_free():
     )
     assert failed_message == f"Dashboard: {cfg.dashboard_url}"
     placed_title, _ = render_text(placed)
-    assert placed_title == "KAINE kaine: welfare freeze placed after retry: the entity is paused"
+    assert placed_title == "KAINE kaine: welfare freeze now in place: the entity is paused"
     plain_title, _ = render_text(build_notice("welfare_response", cfg))
     assert len({failed_title, placed_title, plain_title}) == 3
 

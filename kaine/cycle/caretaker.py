@@ -60,7 +60,7 @@ _EVENT_TITLE = {
         "welfare response fired but the freeze could not be written: "
         "the entity is NOT paused, the freeze is being retried"
     ),
-    "welfare_freeze_placed": "welfare freeze placed after retry: the entity is paused",
+    "welfare_freeze_placed": "welfare freeze now in place: the entity is paused",
     "input_lost": "input lost",
     "stimulus_source_lost": "stimulus source lost",
     "boot_failed": "boot failed",
