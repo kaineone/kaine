@@ -294,8 +294,9 @@ async def test_oom_detection_reports_does_not_fit_and_no_fallback(
     fake_training_stack.save_raises = RuntimeError(
         "CUDA out of memory. Tried to allocate 2.00 GiB"
     )
-    with pytest.raises(SubprocessTrainerError, match="does not fit"):
+    with pytest.raises(SubprocessTrainerError, match="does not fit") as excinfo:
         await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
+    assert "Tried to allocate 2.00 GiB" in str(excinfo.value)
 
     adapter_output_dir = tmp_path / "store" / "adapters"
     assert not any(p.name.endswith(".tmp") for p in adapter_output_dir.iterdir())

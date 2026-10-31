@@ -984,16 +984,19 @@ def _train(
 
     tmp_dir: Optional[Path] = None
 
-    def _oom_result() -> dict[str, Any]:
+    def _oom_result(exc: BaseException) -> dict[str, Any]:
+        traceback.print_exception(exc, file=sys.stderr)
         if tmp_dir is not None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         peak_gib, total_gib = _cuda_memory_gib(training_device)
         peak_str = f"{peak_gib:.2f}" if peak_gib is not None else "unknown"
         total_str = f"{total_gib:.2f}" if total_gib is not None else "unknown"
+        detail = str(exc).replace("\n", " ")[:400]
         reason = (
             f"train_precision={precision} does not fit on {training_device}: "
             f"peak {peak_str} GiB allocated of {total_str} GiB total; "
-            "no fallback was attempted"
+            "no fallback was attempted; "
+            f"error: {type(exc).__name__}: {detail}"
         )
         return {
             "ok": False,
@@ -1062,7 +1065,7 @@ def _train(
                     model.set_adapter(TRAINED_ADAPTER)
     except Exception as exc:
         if _is_oom(exc):
-            return _oom_result()
+            return _oom_result(exc)
         raise
 
     # Vision-language processors wrap an underlying text tokenizer; use that
@@ -1197,7 +1200,7 @@ def _train(
         if tmp_dir is not None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         if _is_oom(exc):
-            return _oom_result()
+            return _oom_result(exc)
         raise
 
 
@@ -1333,7 +1336,21 @@ def main(argv: list[str]) -> int:
                 f"base model path {base_model_path} is not a local directory"
             )
 
-        result = _train(job, kept_pairs, load_kwargs, prev_adapter, job_dir)
+        # The training GPU is shared (a desktop, a sleeping organ). Loading reserves
+        # the whole model in one block, which a fragmented card refuses even with
+        # enough free memory; expandable segments map memory in pieces. An
+        # operator's own setting wins, and the in-process backend's environment
+        # is restored afterwards.
+        allocator_before = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
+        if not allocator_before:
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        try:
+            result = _train(job, kept_pairs, load_kwargs, prev_adapter, job_dir)
+        finally:
+            if allocator_before is None:
+                os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+            elif not allocator_before:
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = allocator_before
         # Record peak memory on every outcome, not only on out-of-memory, so a
         # real run shows how close the chosen precision came to the card's limit.
         if result.get("peak_vram_gib") is None and str(
