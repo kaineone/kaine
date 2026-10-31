@@ -236,11 +236,20 @@ def _adapters_present(adapters_dir: Path) -> bool:
 
 
 def _last_inconclusive_reason(reports: list[dict]) -> str | None:
-    """The reason of the newest inconclusive report, for display only."""
+    """The reason of the newest inconclusive report, for display only.
+
+    Only when it is newer than the newest scored report: an older failure
+    shown beside a fresh p-value would describe a look that has since been
+    superseded.
+    """
     inconclusive = [r for r in reports if r.get("outcome") == "inconclusive"]
     if not inconclusive:
         return None
-    reason = max(inconclusive, key=lambda r: r["ts"]).get("inconclusive_reason")
+    newest = max(inconclusive, key=lambda r: r["ts"])
+    scored = [r for r in reports if r.get("outcome") == "scored"]
+    if scored and max(r["ts"] for r in scored) >= newest["ts"]:
+        return None
+    reason = newest.get("inconclusive_reason")
     return reason if isinstance(reason, str) else None
 
 

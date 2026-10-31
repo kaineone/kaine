@@ -912,7 +912,9 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
     individuation archive, so this returns ``False``. Every regular-file member
     whose name starts with ``individuation/`` is written under ``dest`` with the
     ``individuation/`` prefix stripped, files set to mode 0o600 and parent
-    directories to 0o700. Path-traversal members (absolute or containing ``..``)
+    directories to 0o700. The host-local ``capture_stretch.json`` is not
+    restored, so a carried "alerted" flag cannot silence the new host's own
+    failing-capture alert. Path-traversal members (absolute or containing ``..``)
     raise :class:`ReviveError`. The extraction uses a temporary sibling directory
     and an atomic ``os.replace`` at the end, so a failed extraction never leaves
     a half-written tree.
@@ -921,6 +923,7 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
     import shutil
     import tarfile
 
+    from kaine.lifecycle.individuation_store import CAPTURE_STRETCH_NAME
     from kaine.security.crypto import get_state_encryptor
 
     bundle = Path(bundle)
@@ -969,6 +972,10 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
                         f"revive: bundle member {member.name!r} escapes the "
                         f"individuation tree"
                     )
+                if rel_path.parts == (CAPTURE_STRETCH_NAME,):
+                    # Host-local bookkeeping, not evidence: the revived being's
+                    # new host starts its own failing-capture stretch.
+                    continue
                 out = incoming / rel
                 out.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 fh = tf.extractfile(member)

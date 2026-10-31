@@ -130,4 +130,42 @@ def test_openai_chat_client_applies_lora():
 
 def test_research_observer_allow_list_contains_alert():
     assert "individuation.alert" in _TAXONOMY
-    assert _TAXONOMY["individuation.alert"] == frozenset({"inconclusive_since", "days"})
+    assert _TAXONOMY["individuation.alert"] == frozenset(
+        {"kind", "inconclusive_since", "days", "capture_reason"}
+    )
+
+
+def test_research_observer_alert_copies_only_closed_labels():
+    from kaine.evaluation.observers.research_event_observer import _apply_taxonomy_fields
+
+    record = _apply_taxonomy_fields(
+        "individuation.alert",
+        {
+            "kind": "individuation_inconclusive",
+            "capture_reason": "organ_resting",
+            "inconclusive_since": "2026-01-01T00:00:00+00:00",
+            "days": 14.0,
+            "last_reason": "no_reference",
+            "reference_id": "abc",
+        },
+        {},
+    )
+    assert record == {
+        "kind": "individuation_inconclusive",
+        "capture_reason": "organ_resting",
+        "inconclusive_since": "2026-01-01T00:00:00+00:00",
+        "days": 14.0,
+    }
+
+    # Anything outside the closed sets is dropped, never copied as text.
+    smuggled = _apply_taxonomy_fields(
+        "individuation.alert",
+        {
+            "kind": "I remember the garden",
+            "capture_reason": "the entity said: hello",
+            "inconclusive_since": "yesterday, after it spoke",
+            "days": "14",
+        },
+        {},
+    )
+    assert smuggled == {}

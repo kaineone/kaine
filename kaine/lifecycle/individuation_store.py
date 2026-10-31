@@ -78,6 +78,11 @@ class ReportsUnreadable(IndividuationStoreError):
 
 DEFAULT_ROOT = Path("state/individuation")
 
+# Host-local bookkeeping of a failing first capture. It travels in bundles
+# with the rest of the tree but is never restored by a revive: the new host
+# starts its own stretch, and a carried "alerted" flag must not silence it.
+CAPTURE_STRETCH_NAME = "capture_stretch.json"
+
 
 @dataclass(frozen=True)
 class IndividuationPaths:
@@ -107,7 +112,7 @@ class IndividuationPaths:
 
     @property
     def capture_stretch(self) -> Path:
-        return self.root / "capture_stretch.json"
+        return self.root / CAPTURE_STRETCH_NAME
 
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
@@ -594,6 +599,23 @@ INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
         "ledger_reference_mismatch",
         "statistics_failed",
         "unclassified_failure",
+    }
+)
+
+
+# Labels a failing reference capture can carry: the inconclusive reasons
+# above, plus the scheduler's own blocked and error labels. A closed set of
+# fixed strings, so an alert or log record that names one carries no content.
+CAPTURE_FAILURE_LABELS: frozenset[str] = INCONCLUSIVE_REASONS | frozenset(
+    {"adapter_unverifiable", "error"}
+)
+
+# The kinds of operator alert the individuation producer raises.
+ALERT_KINDS: frozenset[str] = frozenset(
+    {
+        "individuation_inconclusive",
+        "individuation_conditions_changed",
+        "individuation_ledger_unreadable",
     }
 )
 

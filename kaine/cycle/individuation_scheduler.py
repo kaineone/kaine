@@ -22,8 +22,8 @@ from typing import Any
 
 from kaine.cycle.individuation_probe import ProbeFailure
 from kaine.lifecycle.individuation_store import (
+    CAPTURE_FAILURE_LABELS,
     CaptureStretch,
-    CaptureStretchUnreadable,
     IndividuationPaths,
     IndividuationStoreError,
     LedgerUnreadable,
@@ -176,7 +176,11 @@ class IndividuationScheduler:
         # the notice is raised once per process (and again after a restart if
         # the ledger is still unreadable), and re-armed once it reads again.
         self._ledger_unreadable_alerted = False
-        self._capture_alerted_since: str | None = None
+        # The failing-capture stretch as this process knows it. It is the
+        # authority within the process; the file only carries it across
+        # restarts, so a failing save (a full disk) cannot restart the stretch.
+        self._stretch: CaptureStretch | None = None
+        self._stretch_since_known = True
 
     def bind(self, core: Any) -> None:
         """Store the core this scheduler drives."""
@@ -386,7 +390,7 @@ class IndividuationScheduler:
         if reason is not None:
             self._capture_at = m + self._settings.blocked_retry_s
             self._note_skip(reason)
-            await self._note_capture_failure(reason)
+            await self._track_capture_failure(reason)
             return
 
         self._flush_lived()
@@ -409,11 +413,6 @@ class IndividuationScheduler:
             return
         except Exception as exc:
             log.exception("individuation capture failed")
-            if isinstance(exc, LedgerUnreadable):
-                await self._alert_ledger_unreadable()
-            await self._note_capture_failure(
-                "ledger_unreadable" if isinstance(exc, LedgerUnreadable) else "error"
-            )
             end = self._monotonic()
             self._capture_at = end + self._capture_backoff
             self._capture_backoff = min(
@@ -421,11 +420,15 @@ class IndividuationScheduler:
                 self._settings.capture_retry_max_s,
             )
             self._maybe_reanchor_after_failed_capture()
+            if isinstance(exc, LedgerUnreadable):
+                await self._alert_ledger_unreadable()
+            await self._track_capture_failure(
+                "ledger_unreadable" if isinstance(exc, LedgerUnreadable) else "error"
+            )
             return
         else:
             if reason is not None:
                 log.info("individuation capture failed: %s", reason)
-                await self._note_capture_failure(reason)
                 end = self._monotonic()
                 self._capture_at = end + self._capture_backoff
                 self._capture_backoff = min(
@@ -433,6 +436,7 @@ class IndividuationScheduler:
                     self._settings.capture_retry_max_s,
                 )
                 self._maybe_reanchor_after_failed_capture()
+                await self._track_capture_failure(reason)
                 return
 
             self._reference_kind = doc.reference_kind
@@ -580,43 +584,46 @@ class IndividuationScheduler:
     async def _note_capture_failure(self, reason: str) -> None:
         """Track a failing reference capture as a long-inconclusive stretch.
 
-        With no reference there is no ledger, so the stretch lives in its own
-        encrypted, content-free record. The alert follows the ledger stretch:
-        once ``inconclusive_alert_s`` has passed it is raised once per stretch,
-        and the record keeps that across restarts. An unreadable record never
-        silences the alert: it is treated as a stretch already due.
+        With no reference there is no ledger, so the stretch lives in memory
+        for this process and in its own encrypted, content-free record across
+        restarts. The record is read once, at the first failure in a process;
+        from then on the in-memory stretch decides and saving is best effort,
+        so elapsed time keeps counting and the alert fires once even when
+        every save fails. An unreadable record never silences the alert: the
+        stretch counts as due, with an unknown start.
         """
         now = self._now_dt()
-        unreadable = False
-        try:
-            stretch = load_capture_stretch(self._paths)
-        except CaptureStretchUnreadable:
-            log.warning("individuation capture stretch unreadable; treating as due")
-            stretch = None
-            unreadable = True
-        if stretch is None:
-            stretch = CaptureStretch(since=now.isoformat())
+        if reason not in CAPTURE_FAILURE_LABELS:
+            reason = "unclassified_failure"
 
-        if unreadable:
-            elapsed = self._settings.inconclusive_alert_s
-        else:
+        if self._stretch is None:
+            since_known = True
+            try:
+                stored = load_capture_stretch(self._paths)
+            except Exception:
+                log.warning("individuation capture stretch unreadable; treating as due")
+                stored = None
+                since_known = False
+            self._stretch = stored or CaptureStretch(since=now.isoformat())
+            self._stretch_since_known = since_known
+
+        stretch = self._stretch
+        elapsed: float | None = None
+        if self._stretch_since_known:
             try:
                 elapsed = (now - datetime.fromisoformat(stretch.since)).total_seconds()
             except Exception:
-                elapsed = self._settings.inconclusive_alert_s
+                elapsed = None
+        due = elapsed is None or elapsed >= self._settings.inconclusive_alert_s
 
-        alerted = stretch.alerted
-        if (
-            elapsed >= self._settings.inconclusive_alert_s
-            and not alerted
-            and stretch.since != self._capture_alerted_since
-        ):
+        if due and not stretch.alerted:
             try:
                 await self._alert(
                     {
                         "kind": "individuation_inconclusive",
-                        "inconclusive_since": stretch.since,
-                        "days": round(elapsed / 86400.0, 1),
+                        # Unknown when the stored start could not be read.
+                        "inconclusive_since": stretch.since if elapsed is not None else None,
+                        "days": round(elapsed / 86400.0, 1) if elapsed is not None else None,
                         "last_reason": "no_reference",
                         "capture_reason": reason,
                     }
@@ -624,19 +631,25 @@ class IndividuationScheduler:
             except Exception:
                 log.warning("individuation no-reference alert failed")
             else:
-                self._capture_alerted_since = stretch.since
-                alerted = True
+                stretch = dataclasses.replace(stretch, alerted=True)
 
+        stretch = dataclasses.replace(stretch, last_reason=reason)
+        self._stretch = stretch
         try:
-            save_capture_stretch(
-                self._paths,
-                CaptureStretch(since=stretch.since, alerted=alerted, last_reason=reason),
-            )
-        except (IndividuationStoreError, OSError) as exc:
+            save_capture_stretch(self._paths, stretch)
+        except Exception as exc:
             log.warning("failed to save the individuation capture stretch: %s", exc)
 
+    async def _track_capture_failure(self, reason: str) -> None:
+        """Stretch bookkeeping that can never stop the capture from backing off."""
+        try:
+            await self._note_capture_failure(reason)
+        except Exception:
+            log.error("individuation capture-stretch bookkeeping failed", exc_info=True)
+
     def _clear_capture_stretch(self) -> None:
-        self._capture_alerted_since = None
+        self._stretch = None
+        self._stretch_since_known = True
         try:
             clear_capture_stretch(self._paths)
         except OSError as exc:

@@ -32,6 +32,7 @@ from kaine.cycle.individuation_probe import adapter_expected_from, build_probe_s
 from kaine.cycle.individuation_producer import IndividuationCore, ProducerSettings
 from kaine.cycle.individuation_scheduler import IndividuationScheduler, SchedulerSettings
 from kaine.lifecycle.individuation_store import (
+    CAPTURE_FAILURE_LABELS,
     IndividuationPaths,
     IndividuationStoreError,
     clear_capture_stretch,
@@ -41,6 +42,13 @@ from kaine.lifecycle.individuation_store import (
 from kaine.modules.language.context import HEARD_QUOTE_LIMIT
 
 log = logging.getLogger(__name__)
+
+
+def _capture_label(value: Any) -> str | None:
+    """A capture-failure label from the closed set, never free text."""
+    if value is None:
+        return None
+    return value if value in CAPTURE_FAILURE_LABELS else "unclassified_failure"
 
 
 def check_battery_quotes(battery: Sequence[str]) -> None:
@@ -299,7 +307,7 @@ class IndividuationRuntime:
                     "last_reason": payload.get("last_reason"),
                     # A failure label such as "organ_resting", set only while
                     # no reference exists because its capture keeps failing.
-                    "capture_reason": payload.get("capture_reason"),
+                    "capture_reason": _capture_label(payload.get("capture_reason")),
                     "inconclusive_since": inconclusive_since,
                     "days": days,
                 },

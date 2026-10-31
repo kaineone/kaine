@@ -371,3 +371,21 @@ def test_individuation_alert_no_reference_carries_the_capture_reason() -> None:
     assert payload["capture_reason"] == "organ_resting"
     assert payload["reference_id"] is None
     assert kinds == ["individuation_inconclusive"]
+
+
+def test_individuation_alert_capture_reason_is_a_closed_label() -> None:
+    events: list = []
+    kinds: list = []
+    runtime = _make_runtime(events, kinds)
+
+    asyncio.run(
+        runtime.alert(
+            {
+                "kind": "individuation_inconclusive",
+                "last_reason": "no_reference",
+                "capture_reason": "free text from somewhere",
+            }
+        )
+    )
+
+    assert events[0].payload["capture_reason"] == "unclassified_failure"

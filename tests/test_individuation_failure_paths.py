@@ -1277,10 +1277,121 @@ async def test_unreadable_capture_stretch_does_not_silence_the_alert(tmp_path):
     rig.organ.fail_from(1, "resting")
     rig.sched.request_capture("capture")
     await rig.sched.tick()
-    assert len(_stretch_alerts(rig)) == 1
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    # The stored start is unknown, and the alert says so instead of inventing one.
+    assert alerts[0]["inconclusive_since"] is None
+    assert alerts[0]["days"] is None
     # Rewritten as a readable, already-alerted stretch, so it does not repeat.
     await _fail_captures(rig, 5, 200)
     assert len(_stretch_alerts(rig)) == 1
+
+
+def _failing_save(exc: BaseException):
+    def save(_paths: Any, _stretch: Any) -> None:
+        raise exc
+
+    return save
+
+
+async def test_stretch_alerts_once_when_every_save_fails(tmp_path, monkeypatch):
+    """A full disk must not restart the stretch at every attempt."""
+    monkeypatch.setattr(
+        "kaine.cycle.individuation_scheduler.save_capture_stretch",
+        _failing_save(OSError(28, "No space left on device")),
+    )
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+
+    await _fail_captures(rig, 0, 5000)  # ten times inconclusive_alert_s
+
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    assert alerts[0]["inconclusive_since"] == WallClock(Clock(0.0))().isoformat()
+    assert alerts[0]["days"] is not None  # a known start, so a real day count
+    assert not rig.paths.capture_stretch.exists()
+
+
+async def test_unreadable_stretch_with_failing_saves_alerts_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "kaine.cycle.individuation_scheduler.save_capture_stretch",
+        _failing_save(OSError(28, "No space left on device")),
+    )
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.paths.root.mkdir(parents=True, exist_ok=True)
+    rig.paths.capture_stretch.write_text("garbage", encoding="utf-8")
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+
+    await _fail_captures(rig, 0, 2000)
+
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    assert (alerts[0]["inconclusive_since"], alerts[0]["days"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["save_raises_runtime_error", "bookkeeping_raises"],
+)
+async def test_stretch_bookkeeping_errors_never_defeat_the_backoff(tmp_path, monkeypatch, failure):
+    if failure == "save_raises_runtime_error":
+        monkeypatch.setattr(
+            "kaine.cycle.individuation_scheduler.save_capture_stretch",
+            _failing_save(RuntimeError("unexpected")),
+        )
+    rig = make_rig(tmp_path, with_scheduler=True)
+    if failure == "bookkeeping_raises":
+        async def boom(_reason: str) -> None:
+            raise RuntimeError("bookkeeping bug")
+
+        rig.sched._note_capture_failure = boom
+    attempts = {"n": 0}
+    capture = rig.core.capture_reference
+
+    async def counted(kind: str, **kw: Any):
+        attempts["n"] += 1
+        return await capture(kind, **kw)
+
+    rig.core.capture_reference = counted
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+
+    for t in range(0, 21):
+        rig.clock.t = float(t)
+        await rig.sched.tick()
+
+    # Backoff 5, 10, 20 s: attempts at 0, 5 and 15, not one per tick.
+    assert attempts["n"] == 3
+    assert rig.sched._capture_at == 35.0
+
+
+async def test_last_inconclusive_reason_hidden_once_a_newer_look_scores(tmp_path):
+    rig = make_rig(tmp_path)
+    await captured(rig)
+    fail = {"on": True}
+
+    async def refresh() -> None:
+        if fail["on"]:
+            raise httpx.ConnectError("organ unreachable")
+
+    rig.core._refresh_conditions = refresh
+    await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+    assert verdict(rig)["last_inconclusive_reason"] == "conditions_unreadable"
+
+    fail["on"] = False
+    scored = await rig.core.look(warmed_up=True, lived_seconds=150.0, lived_ticks=70)
+    assert scored.outcome == "scored"
+    v = verdict(rig)
+    assert v["latest"]["outcome"] == "scored"
+    assert v["last_inconclusive_reason"] is None
+
+    # A failure after the scored look is shown again.
+    rig.core._conditioning_inputs = FakeConditioning(sha="sha-z")
+    fail["on"] = True
+    await rig.core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=90)
+    assert verdict(rig)["last_inconclusive_reason"] == "conditions_unreadable"
 
 
 async def test_start_removes_a_stale_stretch_so_a_later_one_alerts(tmp_path):
