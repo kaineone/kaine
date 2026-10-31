@@ -1127,7 +1127,11 @@ def attribute_merged_adapters(
     children = [
         child
         for child in adapters_dir.iterdir()
-        if child.is_dir() and not child.is_symlink()
+        if child.is_dir()
+        and not child.is_symlink()
+        # A merge's staging directory (".<name>.partial") is unfinished, unchecked
+        # work, never an entity's adapter.
+        and not (child.name.startswith(".") and child.name.endswith(".partial"))
     ]
     children.sort(key=lambda c: c.name)
     referenced_by_kept: set[Path] = set()

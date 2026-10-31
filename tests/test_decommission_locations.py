@@ -328,3 +328,20 @@ def test_cancel_marks_pending_and_waits_for_claimed(tmp_path):
     assert sorted(cancelled) == ["j1", "j2", "j3"]
     assert still_running == ["j3"]
     assert not (jobs_dir / "j4" / "CANCELLED").exists()
+
+
+def test_merge_staging_directories_are_never_attributed(tmp_path):
+    """A stale ".<name>.partial" left by a crashed merge is unfinished, unchecked
+    work: it is neither an entity's adapter nor a kept one. Every other child,
+    dot-directories included, is attributed exactly as before."""
+    fork_root = tmp_path / "forks"
+    merged_dir = fork_root / "merged_adapters"
+    for name in ("adapter0", ".hidden", ".stale-1.partial", "plain.partial"):
+        (merged_dir / name).mkdir(parents=True)
+    snap_dir = fork_root / "kept"
+    snap_dir.mkdir(parents=True)
+    (snap_dir / "snapshot.json").write_text("not valid json")  # keep everything
+
+    own, kept = dl.attribute_merged_adapters(fork_root, [], [snap_dir])
+    assert own == []
+    assert {c.name for c in kept} == {"adapter0", ".hidden", "plain.partial"}

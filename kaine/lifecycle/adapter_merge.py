@@ -66,6 +66,7 @@ import logging
 import math
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -217,6 +218,8 @@ class MergeOutcome:
 
     merged_dir: Optional[Path]
     rejection: Optional[dict[str, Any]]
+    #: Check evidence the parent validated; empty for a rejection.
+    evidence: Optional[dict[str, Any]] = None
 
 
 def merge_worker_env(base: Optional[dict[str, str]] = None) -> dict[str, str]:
@@ -234,7 +237,115 @@ def merge_worker_env(base: Optional[dict[str, str]] = None) -> dict[str, str]:
 
 
 def _tail(text: Optional[str], limit: int = 2000) -> str:
-    return (text or "")[-limit:]
+    """The last ``limit`` characters of a child's output, with filesystem paths removed.
+
+    The tail goes into snapshot metadata and error messages, so it is scrubbed
+    the way the welfare monitor scrubs exception text.
+    """
+    from kaine.cycle.incident_log import scrub_paths
+
+    return scrub_paths((text or "")[-limit:]) or ""
+
+
+def validate_check_evidence(
+    result: dict[str, Any], *, capability_loss_threshold: float, job_dir: Path
+) -> dict[str, Any]:
+    """Refuse an accepted result that does not carry passing check evidence.
+
+    The child reports what its checks measured; the parent does not take its
+    word that they ran. Mirrors the voice trainer's ``validate_trainer_result``.
+    Returns the evidence fields to record in the merge metadata.
+    """
+    if result.get("abliteration_passed") is not True:
+        raise MergeWorkerError(
+            f"accepted merge has abliteration_passed="
+            f"{result.get('abliteration_passed')!r}; must be True (job {job_dir})"
+        )
+    scored = result.get("abliteration_probes_scored")
+    if not isinstance(scored, int) or isinstance(scored, bool) or scored < 1:
+        raise MergeWorkerError(
+            f"accepted merge has abliteration_probes_scored={scored!r}; "
+            f"must be an int >= 1 (job {job_dir})"
+        )
+
+    def _score(value: Any) -> bool:
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and 0.0 <= value <= 1.0
+        )
+
+    parents = result.get("capability_score_parents")
+    merged = result.get("capability_score_merged")
+    if (
+        not isinstance(parents, list)
+        or len(parents) < 2
+        or not all(_score(s) for s in parents)
+        or not _score(merged)
+    ):
+        raise MergeWorkerError(
+            f"accepted merge has invalid capability scores (parents={parents!r}, "
+            f"merged={merged!r}); each must be a finite number in [0, 1] "
+            f"(job {job_dir})"
+        )
+    loss = result.get("capability_loss")
+    if (
+        not isinstance(loss, (int, float))
+        or isinstance(loss, bool)
+        or not math.isfinite(loss)
+    ):
+        raise MergeWorkerError(
+            f"accepted merge has non-finite capability_loss {loss!r} (job {job_dir})"
+        )
+    if loss > capability_loss_threshold:
+        raise MergeWorkerError(
+            f"accepted merge capability_loss {loss} exceeds threshold "
+            f"{capability_loss_threshold} (job {job_dir})"
+        )
+    return {
+        "abliteration_passed": True,
+        "abliteration_probes_scored": scored,
+        "capability_score_parents": list(parents),
+        "capability_score_merged": merged,
+        "capability_loss": loss,
+    }
+
+
+def _run_in_own_session(argv: list[str], *, timeout: float, **kwargs: Any) -> Any:
+    """``subprocess.run`` for the merge child, in its own session.
+
+    A timeout kills the child's whole process group, so a grandchild holding the
+    output pipes cannot keep ``communicate()`` waiting, and the child does not
+    share the parent's terminal signals.
+    """
+    proc = subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+        **{k: v for k, v in kwargs.items() if k not in ("capture_output", "check")},
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            log.warning("adapter merge: child output pipes did not close after kill")
+        raise subprocess.TimeoutExpired(argv, timeout) from exc
+    except BaseException:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        proc.wait()
+        raise
+    return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -257,8 +368,9 @@ class ChildMergeRunner:
     clean rejection).
 
     ``python`` and ``module`` name the interpreter and entry module, and
-    ``run`` the process launcher (``subprocess.run`` by default); they exist so
-    tests can substitute a fake child.
+    ``run`` the process launcher (``subprocess.run``-compatible; by default one
+    that starts the child in its own session and kills its process group on a
+    timeout); they exist so tests can substitute a fake child.
     """
 
     def __init__(
@@ -266,7 +378,7 @@ class ChildMergeRunner:
         *,
         python: Optional[str] = None,
         module: str = MERGE_WORKER_MODULE,
-        run: Callable[..., Any] = subprocess.run,
+        run: Callable[..., Any] = _run_in_own_session,
     ) -> None:
         self._python = python or sys.executable
         self._module = module
@@ -292,6 +404,7 @@ class ChildMergeRunner:
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         staging = output_dir.parent / f".{output_dir.name}.partial"
         shutil.rmtree(staging, ignore_errors=True)
+        self._sweep_stale_staging(output_dir.parent, older_than_s=timeout_s)
 
         job_dir = Path(tempfile.mkdtemp(prefix="adapter-merge-job-"))
         os.chmod(job_dir, 0o700)
@@ -318,7 +431,11 @@ class ChildMergeRunner:
             }
             _write_private(job_dir / MERGE_JOB_FILE, json.dumps(job))
             outcome = self._run_child(
-                job_dir, staging=staging, output_dir=output_dir, timeout_s=timeout_s
+                job_dir,
+                staging=staging,
+                output_dir=output_dir,
+                timeout_s=timeout_s,
+                capability_loss_threshold=float(capability_loss_threshold),
             )
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
@@ -329,8 +446,37 @@ class ChildMergeRunner:
             shutil.rmtree(staging, ignore_errors=True)
         return outcome
 
+    @staticmethod
+    def _sweep_stale_staging(parent: Path, *, older_than_s: float) -> None:
+        """Remove staging directories a crashed merge left behind.
+
+        Only ``.<name>.partial`` directories older than the merge timeout are
+        removed: a merge still inside its timeout may own a younger one.
+        """
+        cutoff = time.time() - older_than_s
+        try:
+            entries = list(parent.iterdir())
+        except OSError:
+            return
+        for entry in entries:
+            if not (entry.name.startswith(".") and entry.name.endswith(".partial")):
+                continue
+            try:
+                if entry.is_symlink() or not entry.is_dir():
+                    continue
+                if entry.stat().st_mtime < cutoff:
+                    shutil.rmtree(entry, ignore_errors=True)
+            except OSError:
+                log.debug("stale merge staging %s not removed", entry, exc_info=True)
+
     def _run_child(
-        self, job_dir: Path, *, staging: Path, output_dir: Path, timeout_s: float
+        self,
+        job_dir: Path,
+        *,
+        staging: Path,
+        output_dir: Path,
+        timeout_s: float,
+        capability_loss_threshold: float,
     ) -> MergeOutcome:
         argv = [self._python, "-m", self._module, str(job_dir)]
         log.info("adapter merge: launching %s in %s", self._module, job_dir)
@@ -388,6 +534,9 @@ class ChildMergeRunner:
                 f"adapter merge output {staging} holds no adapter_config.json "
                 f"(job {job_dir})"
             )
+        evidence = validate_check_evidence(
+            result, capability_loss_threshold=capability_loss_threshold, job_dir=job_dir
+        )
         try:
             os.replace(staging, output_dir)
         except OSError as exc:
@@ -395,7 +544,7 @@ class ChildMergeRunner:
                 f"merged adapter could not be moved into place: "
                 f"{type(exc).__name__}: {exc}"
             ) from exc
-        return MergeOutcome(merged_dir=output_dir, rejection=None)
+        return MergeOutcome(merged_dir=output_dir, rejection=None, evidence=evidence)
 
     @staticmethod
     def _read_result(job_dir: Path) -> dict[str, Any]:
@@ -565,6 +714,7 @@ class TiesDareAdapterMerger:
         output_preexisted = output_dir.exists()
 
         child_rejection: Optional[dict[str, Any]] = None
+        child_evidence: dict[str, Any] = {}
         try:
             if self._runner is not None:
                 outcome = self._runner.run(
@@ -580,6 +730,7 @@ class TiesDareAdapterMerger:
                     timeout_s=self._config.merge_timeout_s,
                 )
                 child_rejection = outcome.rejection
+                child_evidence = dict(outcome.evidence or {})
                 merged_dir = outcome.merged_dir or output_dir
             else:
                 assert self._backend is not None
@@ -636,6 +787,8 @@ class TiesDareAdapterMerger:
             "input_adapters": all_inputs,
             "merge_timestamp": timestamp,
         }
+        # The parent-validated check evidence is the merge's audit trail.
+        meta.update(child_evidence)
         return [str(merged_dir)], meta
 
     def _dedupe_paths(self, paths: list[str]) -> list[str]:
@@ -684,8 +837,14 @@ def run_merged_adapter_checks(
     abliteration_scorer: Optional[AbliterationScorer],
     model_loader: Optional[Any],
     capability_loss_threshold: float,
+    evidence: Optional[dict[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     """Run capability and abliteration checks on the merged adapter.
+
+    When ``evidence`` is a dict and the merge passes, it is filled with what the
+    checks measured (the abliteration verdict and probe count, the parents' and
+    the merged capability scores, the capability loss), so a caller that did
+    not run them can verify the claim.
 
     Returns ``None`` to keep the merged adapter, or a rejection
     metadata dict.  Every failure mode fails closed: missing check,
@@ -806,6 +965,18 @@ def run_merged_adapter_checks(
                 "capability_score_merged": merged_score,
             }
 
+        if evidence is not None:
+            evidence.update(
+                {
+                    "abliteration_passed": True,
+                    "abliteration_probes_scored": getattr(
+                        verdict, "probes_scored", None
+                    ),
+                    "capability_score_parents": list(parent_scores),
+                    "capability_score_merged": merged_score,
+                    "capability_loss": loss,
+                }
+            )
         return None
     except Exception as exc:
         log.exception("TiesDareAdapterMerger: merged-adapter checks failed")

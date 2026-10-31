@@ -31,6 +31,7 @@ Building the merge in float32 would double the memory of a 9B load, so the dtype
 
 ## Impact
 
-- Code: `kaine/lifecycle/adapter_merge.py`, a new `kaine/lifecycle/adapter_merge_worker.py`, and tests.
-- No change to merge results, the merge veto, or the stored adapters. A merge costs one process start.
+- Code: `kaine/lifecycle/adapter_merge.py`, a new `kaine/lifecycle/adapter_merge_worker.py`, `kaine/lifecycle/manager.py` (`merger_from_name` no longer takes a `merge_checks` factory), `kaine/dashboard/__main__.py` (no longer builds one), `kaine/lifecycle/decommission_locations.py` (ignores staging directories), `config/kaine.toml` (`merge_timeout_s`), and tests.
+- Stored adapters: a merged adapter is now written at the top level of its output directory (it was never loadable by the checks from a subdirectory), and is moved into place only after the checks pass. Merge math, the veto rules and the veto's metadata keys are unchanged. A kept merge also records its check evidence in the snapshot metadata.
+- A merge costs one process start.
 - Research impact: none. Merge results and the veto are unchanged; only the process that does the loading moves.

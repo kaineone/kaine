@@ -54,12 +54,25 @@ def _write_result(job_dir: Path, result: Any) -> None:
     )
 
 
-def _ok_result(job: dict[str, Any]) -> dict[str, Any]:
+def _evidence(**over: Any) -> dict[str, Any]:
+    ev: dict[str, Any] = {
+        "abliteration_passed": True,
+        "abliteration_probes_scored": 4,
+        "capability_score_parents": [0.8, 0.6],
+        "capability_score_merged": 0.7,
+        "capability_loss": 0.0,
+    }
+    ev.update(over)
+    return ev
+
+
+def _ok_result(job: dict[str, Any], **evidence_over: Any) -> dict[str, Any]:
     return {
         "schema_version": am.MERGE_SCHEMA_VERSION,
         "ok": True,
         "rejection": None,
         "merged_dir": job["staging_dir"],
+        **_evidence(**evidence_over),
     }
 
 
@@ -242,6 +255,22 @@ def _malformed_rejection(job_dir, job):
     )
 
 
+def _no_evidence(job_dir, job):
+    _stage_adapter(job)
+    result = _ok_result(job)
+    for key in _evidence():
+        del result[key]
+    _write_result(job_dir, result)
+
+
+def _with_evidence(**over):
+    def child(job_dir, job):
+        _stage_adapter(job)
+        _write_result(job_dir, _ok_result(job, **over))
+
+    return child
+
+
 @pytest.mark.parametrize(
     ("behavior", "match"),
     [
@@ -258,6 +287,22 @@ def _malformed_rejection(job_dir, job):
         (_success_without_adapter_config, "no adapter_config.json"),
         (_success_pointing_elsewhere, "not the staging directory"),
         (_malformed_rejection, "malformed rejection"),
+        (_no_evidence, "abliteration_passed=None"),
+        (_with_evidence(abliteration_passed=False), "abliteration_passed=False"),
+        (_with_evidence(abliteration_passed="yes"), "abliteration_passed='yes'"),
+        (_with_evidence(abliteration_probes_scored=0), "probes_scored=0"),
+        (_with_evidence(abliteration_probes_scored=True), "probes_scored=True"),
+        (_with_evidence(abliteration_probes_scored=2.0), "probes_scored=2.0"),
+        (_with_evidence(abliteration_probes_scored=None), "probes_scored=None"),
+        (_with_evidence(capability_score_parents=None), "invalid capability scores"),
+        (_with_evidence(capability_score_parents=[0.5]), "invalid capability scores"),
+        (_with_evidence(capability_score_parents=[0.5, 1.5]), "invalid capability scores"),
+        (_with_evidence(capability_score_merged=None), "invalid capability scores"),
+        (_with_evidence(capability_score_merged=float("nan")), "invalid capability scores"),
+        (_with_evidence(capability_loss=None), "non-finite capability_loss"),
+        (_with_evidence(capability_loss=float("inf")), "non-finite capability_loss"),
+        (_with_evidence(capability_loss=True), "non-finite capability_loss"),
+        (_with_evidence(capability_loss=0.06), "exceeds threshold"),
     ],
 )
 def test_every_failure_raises_and_leaves_nothing_behind(tmp_path, behavior, match):
@@ -265,6 +310,63 @@ def test_every_failure_raises_and_leaves_nothing_behind(tmp_path, behavior, matc
     with pytest.raises(MergeWorkerError, match=match):
         runner.run(**_run_kwargs(tmp_path))
     _assert_nothing_left(tmp_path)
+
+
+def test_valid_evidence_is_recorded_in_the_merge_meta(tmp_path, monkeypatch):
+    merger = _merger(
+        tmp_path,
+        _with_evidence(capability_loss=0.02, abliteration_probes_scored=7),
+        monkeypatch,
+    )
+    paths, meta = merger.merge(*_parents(tmp_path))
+    assert len(paths) == 1
+    assert meta["abliteration_passed"] is True
+    assert meta["abliteration_probes_scored"] == 7
+    assert meta["capability_loss"] == 0.02
+    assert meta["capability_score_parents"] == [0.8, 0.6]
+    assert meta["capability_score_merged"] == 0.7
+
+
+def test_an_accepted_result_without_evidence_is_a_failed_merge(tmp_path, monkeypatch):
+    a, b = _parents(tmp_path)
+    paths, meta = _merger(tmp_path, _no_evidence, monkeypatch).merge(a, b)
+    assert paths == a + b
+    assert "abliteration_passed" in meta["adapter_merge_failed"]
+    merged = tmp_path / "merged"
+    assert not merged.exists() or list(merged.iterdir()) == []
+
+
+def test_stderr_tail_has_paths_scrubbed(tmp_path):
+    def child(job_dir, job):
+        return SimpleNamespace(
+            returncode=1, stdout="", stderr="cannot open /home/erik/secret/model.bin"
+        )
+
+    with pytest.raises(MergeWorkerError) as exc:
+        ChildMergeRunner(run=FakeLauncher(child)).run(**_run_kwargs(tmp_path))
+    assert "/home/erik" not in str(exc.value) and "<PATH>" in str(exc.value)
+
+
+def test_stale_staging_siblings_older_than_the_timeout_are_swept(tmp_path):
+    import time
+
+    out = tmp_path / "out"
+    out.mkdir()
+    old = out / ".old-1.partial"
+    young = out / ".young-1.partial"
+    keep = out / "finished-merge"
+    other = out / ".hidden"
+    for d in (old, young, keep, other):
+        d.mkdir()
+    long_ago = time.time() - 100
+    for d in (old, keep, other):
+        os.utime(d, (long_ago, long_ago))
+
+    ChildMergeRunner(run=FakeLauncher(_ok_child)).run(
+        **_run_kwargs(tmp_path, timeout_s=30.0)
+    )
+    assert not old.exists()
+    assert young.exists() and keep.exists() and other.exists()
 
 
 def test_failure_scrubs_the_job_directory(tmp_path):
@@ -440,6 +542,9 @@ def test_parent_imports_neither_transformers_nor_peft_for_a_merge(tmp_path):
             (job_dir / "result.json").write_text(json.dumps({
                 "schema_version": 1, "ok": True, "rejection": None,
                 "merged_dir": job["staging_dir"],
+                "abliteration_passed": True, "abliteration_probes_scored": 2,
+                "capability_score_parents": [0.5, 0.5],
+                "capability_score_merged": 0.5, "capability_loss": 0.0,
             }))
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -473,6 +578,53 @@ def test_default_dtype_stays_float32_around_a_merge(tmp_path, monkeypatch):
     merger = _merger(tmp_path, _ok_child, monkeypatch)
     merger.merge(*_parents(tmp_path))
     assert torch.get_default_dtype() == torch.float32
+
+
+def test_default_launcher_kills_the_whole_process_group_on_timeout(tmp_path):
+    import time
+
+    pidfile = tmp_path / "grandchild.pid"
+    code = (
+        "import subprocess, sys, time\n"
+        "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"open({str(pidfile)!r}, 'w').write(str(g.pid))\n"
+        "time.sleep(60)\n"
+    )
+    start = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        am._run_in_own_session(
+            [sys.executable, "-c", code],
+            timeout=2,
+            cwd=str(tmp_path),
+            env=dict(os.environ),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    assert time.monotonic() - start < 30  # the pipes did not hang
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+def test_default_launcher_returns_a_completed_process(tmp_path):
+    proc = am._run_in_own_session(
+        [sys.executable, "-c", "import sys; print('out'); sys.stderr.write('err'); sys.exit(3)"],
+        timeout=30,
+        cwd=str(tmp_path),
+        env=dict(os.environ),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == 3 and proc.stdout.strip() == "out" and proc.stderr == "err"
 
 
 def test_check_peft_available_does_not_import_peft(monkeypatch):
@@ -556,6 +708,11 @@ def test_worker_run_job_keeps_a_passing_merge(tmp_path):
     )
     assert result["ok"] is True and result["rejection"] is None
     assert result["merged_dir"] == str(tmp_path / "stage")
+    assert result["abliteration_passed"] is True
+    assert result["abliteration_probes_scored"] == 1
+    assert result["capability_score_parents"] == [0.8, 0.8]
+    assert result["capability_score_merged"] == 0.8
+    assert result["capability_loss"] == 0.0
     assert (tmp_path / "stage" / "adapter_config.json").is_file()
     assert backend.kwargs["output_dir"] == tmp_path / "stage"
     assert backend.kwargs["weights"] == [0.5, 0.5]
@@ -766,4 +923,8 @@ def test_real_merge_of_two_tiny_adapters_in_a_child_process(tmp_path):
     assert (merged / "adapter_model.safetensors").is_file()
     assert not (merged / "merged").exists()
     assert not list((tmp_path / "merged").glob(".*.partial"))
+    assert meta["abliteration_passed"] is True
+    assert meta["abliteration_probes_scored"] >= 1
+    assert meta["capability_loss"] <= 0.99
+    assert len(meta["capability_score_parents"]) == 2
     assert torch.get_default_dtype() == torch.float32

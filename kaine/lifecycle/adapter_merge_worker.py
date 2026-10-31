@@ -231,6 +231,7 @@ def run_job(
     if backend is None:
         backend = PeftBackend()
 
+    evidence: dict[str, Any] = {}
     try:
         merged_dir = backend.merge(
             base_model_path=base_model_path,
@@ -247,6 +248,7 @@ def run_job(
             abliteration_scorer=abliteration_scorer,
             model_loader=model_loader,
             capability_loss_threshold=float(job["capability_loss_threshold"]),
+            evidence=evidence,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -263,6 +265,8 @@ def run_job(
         "ok": True,
         "rejection": None,
         "merged_dir": str(merged_dir),
+        # What the checks measured: the parent verifies it, not the child's word.
+        **evidence,
     }
 
 
