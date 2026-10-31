@@ -19,7 +19,6 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 import pytest
-import torch
 
 from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
@@ -71,69 +70,80 @@ class FakeTensor:
         return self
 
 
-class FakeModel(torch.nn.Module):
-    device = "cpu"
+_FAKE_MODEL_CLASS: Optional[type] = None
 
-    def __init__(self) -> None:
-        super().__init__()
-        torch.manual_seed(0)
-        self.embedding = torch.nn.Embedding(64, 8)
-        self.linear = torch.nn.Linear(8, 64, bias=False)
-        with torch.no_grad():
-            self.linear.weight.zero_()
 
-    def forward(self, input_ids: Any, logits_to_keep: Optional[int] = None, **kwargs: Any) -> SimpleNamespace:
-        if _control is not None:
-            if _control.train_raises is not None:
-                raise _control.train_raises
-            if _control.train_sleep and not getattr(_control, "train_sleep_done", False):
-                _control.train_sleep_done = True
-                time.sleep(_control.train_sleep)
-        logits = self.linear(self.embedding(input_ids))
-        if logits_to_keep is not None:
-            logits = logits[:, -logits_to_keep:, :]
-        return SimpleNamespace(logits=logits)
+def _fake_model_class() -> type:
+    global _FAKE_MODEL_CLASS
+    if _FAKE_MODEL_CLASS is None:
+        import torch
 
-    def generate(self, **inputs: Any) -> list[list[int]]:
-        return [[0]]
+        class FakeModel(torch.nn.Module):
+            device = "cpu"
 
-    def save_pretrained(self, path: str, selected_adapters: Optional[list[str]] = None) -> None:
-        _control.save_paths.append(path)
-        target = Path(path)
-        if selected_adapters:
-            target = target / selected_adapters[0]
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "adapter_config.json").write_text("{}", encoding="utf-8")
-        (target / "adapter_model.safetensors").write_text("fake", encoding="utf-8")
-        if _control.save_raises is not None:
-            raise _control.save_raises
+            def __init__(self) -> None:
+                super().__init__()
+                torch.manual_seed(0)
+                self.embedding = torch.nn.Embedding(64, 8)
+                self.linear = torch.nn.Linear(8, 64, bias=False)
+                with torch.no_grad():
+                    self.linear.weight.zero_()
 
-    def load_adapter(self, *args: Any, **kwargs: Any) -> Any:
-        _control.load_adapter_calls.append({"args": args, "kwargs": kwargs})
-        return SimpleNamespace(
-            missing_keys=[], unexpected_keys=list(_control.load_adapter_unexpected_keys)
-        )
+            def forward(self, input_ids: Any, logits_to_keep: Optional[int] = None, **kwargs: Any) -> SimpleNamespace:
+                if _control is not None:
+                    if _control.train_raises is not None:
+                        raise _control.train_raises
+                    if _control.train_sleep and not getattr(_control, "train_sleep_done", False):
+                        _control.train_sleep_done = True
+                        time.sleep(_control.train_sleep)
+                logits = self.linear(self.embedding(input_ids))
+                if logits_to_keep is not None:
+                    logits = logits[:, -logits_to_keep:, :]
+                return SimpleNamespace(logits=logits)
 
-    def set_adapter(self, *args: Any, **kwargs: Any) -> None:
-        _control.set_adapter_calls.append({"args": args, "kwargs": kwargs})
+            def generate(self, **inputs: Any) -> list[list[int]]:
+                return [[0]]
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None) -> None:
-        _control.gradient_checkpointing_enable_calls.append(
-            gradient_checkpointing_kwargs if gradient_checkpointing_kwargs is not None else {}
-        )
+            def save_pretrained(self, path: str, selected_adapters: Optional[list[str]] = None) -> None:
+                _control.save_paths.append(path)
+                target = Path(path)
+                if selected_adapters:
+                    target = target / selected_adapters[0]
+                target.mkdir(parents=True, exist_ok=True)
+                (target / "adapter_config.json").write_text("{}", encoding="utf-8")
+                (target / "adapter_model.safetensors").write_text("fake", encoding="utf-8")
+                if _control.save_raises is not None:
+                    raise _control.save_raises
 
-    def enable_input_require_grads(self) -> None:
-        _control.enable_input_require_grads_calls.append(True)
+            def load_adapter(self, *args: Any, **kwargs: Any) -> Any:
+                _control.load_adapter_calls.append({"args": args, "kwargs": kwargs})
+                return SimpleNamespace(
+                    missing_keys=[], unexpected_keys=list(_control.load_adapter_unexpected_keys)
+                )
 
-    def disable_adapter(self) -> Any:
-        class _Context:
-            def __enter__(self) -> None:
-                _control.disable_adapter_calls.append(True)
+            def set_adapter(self, *args: Any, **kwargs: Any) -> None:
+                _control.set_adapter_calls.append({"args": args, "kwargs": kwargs})
 
-            def __exit__(self, *exc: Any) -> bool:
-                return False
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None) -> None:
+                _control.gradient_checkpointing_enable_calls.append(
+                    gradient_checkpointing_kwargs if gradient_checkpointing_kwargs is not None else {}
+                )
 
-        return _Context()
+            def enable_input_require_grads(self) -> None:
+                _control.enable_input_require_grads_calls.append(True)
+
+            def disable_adapter(self) -> Any:
+                class _Context:
+                    def __enter__(self) -> None:
+                        _control.disable_adapter_calls.append(True)
+
+                    def __exit__(self, *exc: Any) -> bool:
+                        return False
+
+                return _Context()
+
+        _FAKE_MODEL_CLASS = FakeModel
+    return _FAKE_MODEL_CLASS
 
 
 class FakeTokenizer:
@@ -236,11 +246,11 @@ def fake_training_stack(monkeypatch):
     control = _Control()
     _control = control
 
-    def _from_pretrained(path: str, **kwargs: Any) -> FakeModel:
+    def _from_pretrained(path: str, **kwargs: Any) -> Any:
         if control.from_pretrained_raises is not None:
             raise control.from_pretrained_raises
         control.from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs)})
-        return FakeModel()
+        return _fake_model_class()()
 
     def _tokenizer_from_pretrained(path: str, **kwargs: Any) -> FakeTokenizer:
         control.tokenizer_from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs)})
@@ -264,7 +274,7 @@ def fake_training_stack(monkeypatch):
         def __init__(self, **kwargs: Any) -> None:
             self.__dict__.update(kwargs)
 
-    def _get_peft_model(model: FakeModel, config: Any) -> FakeModel:
+    def _get_peft_model(model: Any, config: Any) -> Any:
         control.get_peft_model_calls.append({"r": config.r, "config": config})
         control.events.append("get_peft_model")
         return model
@@ -273,13 +283,13 @@ def fake_training_stack(monkeypatch):
     class _PeftModel:
         @staticmethod
         def from_pretrained(
-            model: FakeModel,
+            model: Any,
             path: str,
             *,
             adapter_name: Optional[str] = None,
             is_trainable: Optional[bool] = None,
             **kwargs: Any,
-        ) -> FakeModel:
+        ) -> Any:
             control.peft_from_pretrained_calls.append(
                 {
                     "path": path,
