@@ -32,14 +32,23 @@ from kaine.cycle.individuation_probe import adapter_expected_from, build_probe_s
 from kaine.cycle.individuation_producer import IndividuationCore, ProducerSettings
 from kaine.cycle.individuation_scheduler import IndividuationScheduler, SchedulerSettings
 from kaine.lifecycle.individuation_store import (
+    CAPTURE_FAILURE_LABELS,
     IndividuationPaths,
     IndividuationStoreError,
+    clear_capture_stretch,
     conditioning_from_snapshot,
     report_sink,
 )
 from kaine.modules.language.context import HEARD_QUOTE_LIMIT
 
 log = logging.getLogger(__name__)
+
+
+def _capture_label(value: Any) -> str | None:
+    """A capture-failure label from the closed set, never free text."""
+    if value is None:
+        return None
+    return value if value in CAPTURE_FAILURE_LABELS else "unclassified_failure"
 
 
 def check_battery_quotes(battery: Sequence[str]) -> None:
@@ -296,6 +305,9 @@ class IndividuationRuntime:
                     "kind": kind,
                     "reference_id": payload.get("reference_id"),
                     "last_reason": payload.get("last_reason"),
+                    # A failure label such as "organ_resting", set only while
+                    # no reference exists because its capture keeps failing.
+                    "capture_reason": _capture_label(payload.get("capture_reason")),
                     "inconclusive_since": inconclusive_since,
                     "days": days,
                 },
@@ -342,6 +354,13 @@ class IndividuationRuntime:
                     self.paths.maturation_pending.unlink(missing_ok=True)
                 except OSError as exc:
                     log.warning("individuation failed to remove stale maturation marker: %s", exc)
+                # A capture that succeeded just before a crash can leave its
+                # failure stretch behind; with a reference present it is stale,
+                # and its "alerted" flag must not silence a later stretch.
+                try:
+                    clear_capture_stretch(self.paths)
+                except OSError as exc:
+                    log.warning("individuation failed to remove stale capture stretch: %s", exc)
             elif self.paths.maturation_pending.exists():
                 log.info("individuation resuming pending maturation capture")
                 self.scheduler.request_capture("maturation")

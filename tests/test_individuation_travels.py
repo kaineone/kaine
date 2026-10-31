@@ -134,6 +134,68 @@ async def test_bundle_without_evidence(real_encryptor, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_revive_does_not_restore_the_capture_stretch(real_encryptor, tmp_path):
+    """A carried "alerted" flag must not silence the new host's own stretch."""
+    from kaine.lifecycle.individuation_store import (
+        CaptureStretch,
+        load_capture_stretch,
+        save_capture_stretch,
+    )
+
+    reg = await _make_self_model_registry(tmp_path)
+    ind_root = tmp_path / "ind"
+    ipaths = IndividuationPaths(root=ind_root)
+    save_ledger(ipaths, Ledger(reference_id="maturation-ref", individuated=True))
+    save_capture_stretch(
+        ipaths,
+        CaptureStretch(since="2026-01-01T00:00:00+00:00", alerted=True, last_reason="organ_resting"),
+    )
+
+    result = await preserve_live(
+        reg,
+        fork_root=tmp_path / "forks",
+        out_root=tmp_path / "out",
+        entity_name="t",
+        reason="test",
+        individuation_root=ind_root,
+        require_encryption=True,
+    )
+    assert result.ok
+    bundle = bundle_dir_for(tmp_path / "out", result.preservation_id, "t")
+
+    assert extract_bundle_individuation(bundle, tmp_path / "restored") is True
+    restored = IndividuationPaths(root=tmp_path / "restored")
+    assert load_ledger(restored).individuated is True
+    assert not restored.capture_stretch.exists()
+    assert load_capture_stretch(restored) is None
+
+
+@pytest.mark.asyncio
+async def test_bundle_with_only_a_capture_stretch_restores_no_evidence(real_encryptor, tmp_path):
+    from kaine.lifecycle.individuation_store import CaptureStretch, save_capture_stretch
+
+    reg = await _make_self_model_registry(tmp_path)
+    ind_root = tmp_path / "ind"
+    save_capture_stretch(
+        IndividuationPaths(root=ind_root),
+        CaptureStretch(since="2026-01-01T00:00:00+00:00", alerted=True),
+    )
+    result = await preserve_live(
+        reg,
+        fork_root=tmp_path / "forks",
+        out_root=tmp_path / "out",
+        entity_name="t",
+        reason="test",
+        individuation_root=ind_root,
+        require_encryption=True,
+    )
+    assert result.ok
+    bundle = bundle_dir_for(tmp_path / "out", result.preservation_id, "t")
+    assert extract_bundle_individuation(bundle, tmp_path / "restored") is False
+    assert not (tmp_path / "restored").exists()
+
+
+@pytest.mark.asyncio
 async def test_bundle_copy_failure(real_encryptor, monkeypatch, tmp_path):
     reg = await _make_self_model_registry(tmp_path)
 

@@ -66,6 +66,7 @@ _EVENT_TITLE = {
     "boot_failed": "boot failed",
     "individuation_inconclusive": "individuation assessment stalled",
     "individuation_conditions_changed": "individuation conditions changed (looks refused)",
+    "individuation_ledger_unreadable": "individuation ledger unreadable (looks refused)",
 }
 
 EVENT_KINDS = tuple(_EVENT_TITLE)

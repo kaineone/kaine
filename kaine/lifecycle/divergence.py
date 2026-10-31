@@ -235,6 +235,42 @@ def _adapters_present(adapters_dir: Path) -> bool:
         return False
 
 
+def _last_inconclusive_reason(reports: list[dict]) -> str | None:
+    """The reason of the newest inconclusive report, for display only.
+
+    Only when it is newer than the newest scored report: an older failure
+    shown beside a fresh p-value would describe a look that has since been
+    superseded.
+    """
+    inconclusive = [r for r in reports if r.get("outcome") == "inconclusive"]
+    if not inconclusive:
+        return None
+    newest = max(inconclusive, key=lambda r: r["ts"])
+    scored = [r for r in reports if r.get("outcome") == "scored"]
+    if scored and max(r["ts"] for r in scored) >= newest["ts"]:
+        return None
+    reason = newest.get("inconclusive_reason")
+    return reason if isinstance(reason, str) else None
+
+
+def _last_inconclusive_reason_best_effort(paths: IndividuationPaths) -> str | None:
+    """Like ``_last_inconclusive_reason``, read straight from the store.
+
+    Used when the verdict is already fixed as unreadable, so the operator still
+    sees why (for example ``ledger_unreadable``). Never raises.
+    """
+    try:
+        ref = load_reference(paths)
+        if ref is None:
+            return None
+        return _last_inconclusive_reason(
+            read_reports(paths, reference_id=ref.reference_id)
+        )
+    except Exception:
+        log.debug("read_individuation: last inconclusive reason unavailable", exc_info=True)
+        return None
+
+
 def read_individuation(
     state_root: Path,
     *,
@@ -258,12 +294,15 @@ def read_individuation(
         "latest": None,
         "inconclusive_since": None,
         "inconclusive_alerted": False,
+        "last_inconclusive_reason": None,
     }
 
     try:
         ledger = load_ledger(paths)
     except Exception:
         log.debug("read_individuation: ledger unreadable", exc_info=True)
+        # Display only: the verdict above stays "unreadable" (individuated).
+        unreadable["last_inconclusive_reason"] = _last_inconclusive_reason_best_effort(paths)
         return unreadable
 
     if ledger is not None:
@@ -288,6 +327,7 @@ def read_individuation(
                 "latest": None,
                 "inconclusive_since": ledger.inconclusive_since,
                 "inconclusive_alerted": ledger.inconclusive_alerted,
+                "last_inconclusive_reason": None,
             }
         return {
             "state": "no_reference",
@@ -299,6 +339,7 @@ def read_individuation(
             "latest": None,
             "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
             "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
+            "last_inconclusive_reason": None,
         }
 
     try:
@@ -341,6 +382,8 @@ def read_individuation(
         "latest": ev.latest,
         "inconclusive_since": ledger.inconclusive_since if ledger is not None else None,
         "inconclusive_alerted": ledger.inconclusive_alerted if ledger is not None else False,
+        # Display only; the verdict above comes from scored reports and the latch.
+        "last_inconclusive_reason": _last_inconclusive_reason(reports),
     }
 
 
@@ -559,7 +602,7 @@ def assess_divergence(
         "individuation_last_effect_size_h": latest.get("effect_size_h") if latest else None,
         "individuation_last_alpha_k": latest.get("alpha_k") if latest else None,
         "individuation_last_report_ts": latest.get("ts") if latest else None,
-        "individuation_last_inconclusive_reason": latest.get("inconclusive_reason") if latest else None,
+        "individuation_last_inconclusive_reason": ind.get("last_inconclusive_reason"),
         "voice_has_spoken": voice_has_spoken,
         "voice_distinctiveness": voice_distinctiveness,
         "voice_distinctiveness_threshold": float(distinctiveness_threshold),

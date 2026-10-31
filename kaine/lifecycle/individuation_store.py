@@ -68,11 +68,20 @@ class LedgerRegression(IndividuationStoreError):
     """A ledger write attempted to roll back an accumulated value."""
 
 
+class CaptureStretchUnreadable(IndividuationStoreError):
+    """The capture-stretch record cannot be decrypted or parsed."""
+
+
 class ReportsUnreadable(IndividuationStoreError):
     """One or more report lines could not be decrypted or parsed."""
 
 
 DEFAULT_ROOT = Path("state/individuation")
+
+# Host-local bookkeeping of a failing first capture. It travels in bundles
+# with the rest of the tree but is never restored by a revive: the new host
+# starts its own stretch, and a carried "alerted" flag must not silence it.
+CAPTURE_STRETCH_NAME = "capture_stretch.json"
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,10 @@ class IndividuationPaths:
     @property
     def maturation_pending(self) -> Path:
         return self.root / "maturation_pending"
+
+    @property
+    def capture_stretch(self) -> Path:
+        return self.root / CAPTURE_STRETCH_NAME
 
 
 def _write_encrypted_json(path: Path, obj: dict) -> None:
@@ -415,6 +428,65 @@ class Ledger:
             raise LedgerUnreadable(f"Invalid ledger data: {exc}") from exc
 
 
+@dataclass(frozen=True)
+class CaptureStretch:
+    """How long a reference capture has been failing, while no reference exists.
+
+    There is no ledger before the first reference, so this small encrypted
+    record holds the long-inconclusive stretch for that time: when it started,
+    whether the operator was alerted, and the label of the last failure. It is
+    content-free and is removed once a reference is captured.
+    """
+
+    since: str
+    alerted: bool = False
+    last_reason: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "since": self.since,
+            "alerted": self.alerted,
+            "last_reason": self.last_reason,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "CaptureStretch":
+        since = d.get("since")
+        if not isinstance(since, str):
+            raise CaptureStretchUnreadable("since must be a string")
+        try:
+            datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise CaptureStretchUnreadable(f"since is not a timestamp: {exc}") from exc
+        alerted = d.get("alerted", False)
+        if not isinstance(alerted, bool):
+            raise CaptureStretchUnreadable("alerted must be bool")
+        last_reason = d.get("last_reason")
+        if last_reason is not None and (
+            not isinstance(last_reason, str) or len(last_reason) > 64
+        ):
+            raise CaptureStretchUnreadable("last_reason must be a short label or None")
+        return cls(since=since, alerted=alerted, last_reason=last_reason)
+
+
+def load_capture_stretch(paths: IndividuationPaths) -> CaptureStretch | None:
+    """Load the capture stretch, or ``None`` if no capture is failing."""
+    if not paths.capture_stretch.exists():
+        return None
+    d = _read_encrypted_json(paths.capture_stretch, CaptureStretchUnreadable)
+    return CaptureStretch.from_dict(d)
+
+
+def save_capture_stretch(paths: IndividuationPaths, stretch: CaptureStretch) -> None:
+    """Persist the capture stretch atomically through the state encryptor."""
+    _write_encrypted_json(paths.capture_stretch, stretch.to_dict())
+
+
+def clear_capture_stretch(paths: IndividuationPaths) -> None:
+    """Remove the capture stretch once a reference exists."""
+    paths.capture_stretch.unlink(missing_ok=True)
+
+
 def load_ledger(paths: IndividuationPaths) -> Ledger | None:
     """Load the ledger, or ``None`` if it is absent."""
     if not paths.ledger.exists():
@@ -527,6 +599,23 @@ INCONCLUSIVE_REASONS: frozenset[str] = frozenset(
         "ledger_reference_mismatch",
         "statistics_failed",
         "unclassified_failure",
+    }
+)
+
+
+# Labels a failing reference capture can carry: the inconclusive reasons
+# above, plus the scheduler's own blocked and error labels. A closed set of
+# fixed strings, so an alert or log record that names one carries no content.
+CAPTURE_FAILURE_LABELS: frozenset[str] = INCONCLUSIVE_REASONS | frozenset(
+    {"adapter_unverifiable", "error"}
+)
+
+# The kinds of operator alert the individuation producer raises.
+ALERT_KINDS: frozenset[str] = frozenset(
+    {
+        "individuation_inconclusive",
+        "individuation_conditions_changed",
+        "individuation_ledger_unreadable",
     }
 )
 

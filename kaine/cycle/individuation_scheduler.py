@@ -22,13 +22,18 @@ from typing import Any
 
 from kaine.cycle.individuation_probe import ProbeFailure
 from kaine.lifecycle.individuation_store import (
+    CAPTURE_FAILURE_LABELS,
+    CaptureStretch,
     IndividuationPaths,
     IndividuationStoreError,
     LedgerUnreadable,
     ReferenceExists,
     ReferenceUnreadable,
+    clear_capture_stretch,
+    load_capture_stretch,
     load_ledger,
     load_reference,
+    save_capture_stretch,
     save_ledger,
 )
 from kaine.lifecycle.lived_time import LivedTimeAccumulator, TickAccumulator
@@ -167,6 +172,15 @@ class IndividuationScheduler:
         self._on_capture_kind_change = on_capture_kind_change
         self._last_skip: str | None = None
         self._alerted_since: str | None = None
+        # An unreadable ledger cannot record that the operator was told, so
+        # the notice is raised once per process (and again after a restart if
+        # the ledger is still unreadable), and re-armed once it reads again.
+        self._ledger_unreadable_alerted = False
+        # The failing-capture stretch as this process knows it. It is the
+        # authority within the process; the file only carries it across
+        # restarts, so a failing save (a full disk) cannot restart the stretch.
+        self._stretch: CaptureStretch | None = None
+        self._stretch_since_known = True
 
     def bind(self, core: Any) -> None:
         """Store the core this scheduler drives."""
@@ -376,6 +390,7 @@ class IndividuationScheduler:
         if reason is not None:
             self._capture_at = m + self._settings.blocked_retry_s
             self._note_skip(reason)
+            await self._track_capture_failure(reason)
             return
 
         self._flush_lived()
@@ -389,13 +404,14 @@ class IndividuationScheduler:
                 doc, reason = await self._core.capture_reference(self._capture_kind)
         except ReferenceExists:
             log.info("individuation capture skipped: reference already exists")
+            self._clear_capture_stretch()
             self._capture_kind = None
             self._capture_regenerate = False
             self._capture_at = None
             self._notify_capture_kind_change(None)
             self._refresh_state()
             return
-        except Exception:
+        except Exception as exc:
             log.exception("individuation capture failed")
             end = self._monotonic()
             self._capture_at = end + self._capture_backoff
@@ -404,6 +420,11 @@ class IndividuationScheduler:
                 self._settings.capture_retry_max_s,
             )
             self._maybe_reanchor_after_failed_capture()
+            if isinstance(exc, LedgerUnreadable):
+                await self._alert_ledger_unreadable()
+            await self._track_capture_failure(
+                "ledger_unreadable" if isinstance(exc, LedgerUnreadable) else "error"
+            )
             return
         else:
             if reason is not None:
@@ -415,9 +436,11 @@ class IndividuationScheduler:
                     self._settings.capture_retry_max_s,
                 )
                 self._maybe_reanchor_after_failed_capture()
+                await self._track_capture_failure(reason)
                 return
 
             self._reference_kind = doc.reference_kind
+            self._clear_capture_stretch()
             self._capture_kind = None
             self._capture_regenerate = False
             self._capture_at = None
@@ -547,10 +570,96 @@ class IndividuationScheduler:
         except Exception:
             return True
 
+    async def _alert_ledger_unreadable(self) -> None:
+        """Tell the operator the ledger cannot be read, once per process."""
+        if self._ledger_unreadable_alerted:
+            return
+        try:
+            await self._alert({"kind": "individuation_ledger_unreadable"})
+        except Exception:
+            log.warning("individuation ledger-unreadable alert failed")
+        else:
+            self._ledger_unreadable_alerted = True
+
+    async def _note_capture_failure(self, reason: str) -> None:
+        """Track a failing reference capture as a long-inconclusive stretch.
+
+        With no reference there is no ledger, so the stretch lives in memory
+        for this process and in its own encrypted, content-free record across
+        restarts. The record is read once, at the first failure in a process;
+        from then on the in-memory stretch decides and saving is best effort,
+        so elapsed time keeps counting and the alert fires once even when
+        every save fails. An unreadable record never silences the alert: the
+        stretch counts as due, with an unknown start.
+        """
+        now = self._now_dt()
+        if reason not in CAPTURE_FAILURE_LABELS:
+            reason = "unclassified_failure"
+
+        if self._stretch is None:
+            since_known = True
+            try:
+                stored = load_capture_stretch(self._paths)
+            except Exception:
+                log.warning("individuation capture stretch unreadable; treating as due")
+                stored = None
+                since_known = False
+            self._stretch = stored or CaptureStretch(since=now.isoformat())
+            self._stretch_since_known = since_known
+
+        stretch = self._stretch
+        elapsed: float | None = None
+        if self._stretch_since_known:
+            try:
+                elapsed = (now - datetime.fromisoformat(stretch.since)).total_seconds()
+            except Exception:
+                elapsed = None
+        due = elapsed is None or elapsed >= self._settings.inconclusive_alert_s
+
+        if due and not stretch.alerted:
+            try:
+                await self._alert(
+                    {
+                        "kind": "individuation_inconclusive",
+                        # Unknown when the stored start could not be read.
+                        "inconclusive_since": stretch.since if elapsed is not None else None,
+                        "days": round(elapsed / 86400.0, 1) if elapsed is not None else None,
+                        "last_reason": "no_reference",
+                        "capture_reason": reason,
+                    }
+                )
+            except Exception:
+                log.warning("individuation no-reference alert failed")
+            else:
+                stretch = dataclasses.replace(stretch, alerted=True)
+
+        stretch = dataclasses.replace(stretch, last_reason=reason)
+        self._stretch = stretch
+        try:
+            save_capture_stretch(self._paths, stretch)
+        except Exception as exc:
+            log.warning("failed to save the individuation capture stretch: %s", exc)
+
+    async def _track_capture_failure(self, reason: str) -> None:
+        """Stretch bookkeeping that can never stop the capture from backing off."""
+        try:
+            await self._note_capture_failure(reason)
+        except Exception:
+            log.error("individuation capture-stretch bookkeeping failed", exc_info=True)
+
+    def _clear_capture_stretch(self) -> None:
+        self._stretch = None
+        self._stretch_since_known = True
+        try:
+            clear_capture_stretch(self._paths)
+        except OSError as exc:
+            log.warning("failed to clear the individuation capture stretch: %s", exc)
+
     async def _mark_inconclusive(self, reason: str | None = None) -> None:
         try:
             ledger = load_ledger(self._paths)
         except LedgerUnreadable:
+            await self._alert_ledger_unreadable()
             return
         if ledger is None:
             return
@@ -650,6 +759,9 @@ class IndividuationScheduler:
                 state, ledger_readable=False, **overrides
             )
             return
+
+        # The ledger reads again: a later corruption is a new notice.
+        self._ledger_unreadable_alerted = False
 
         state = dataclasses.replace(
             state,

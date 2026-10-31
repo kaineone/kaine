@@ -58,6 +58,8 @@ from kaine.bus.schema import Event, stream_entry_key
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import curated_module_streams
+from kaine.lifecycle.individuation_store import ALERT_KINDS as INDIVIDUATION_ALERT_KINDS
+from kaine.lifecycle.individuation_store import CAPTURE_FAILURE_LABELS
 from kaine.lifecycle.welfare_signal import (
     BLIND_SENSOR_CLEARED_TYPE,
     BLIND_SENSOR_PROCESSORS,
@@ -460,7 +462,8 @@ _TAXONOMY: dict[str, frozenset[str]] = {
     SENSOR_SILENT_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
     SENSOR_SILENT_CLEARED_TYPE: frozenset({"processor"}),  # + numeric scalars via exact allowlist
     "individuation.divergence": frozenset({"divergence_scalar", "significant"}),
-    "individuation.alert": frozenset({"inconclusive_since", "days"}),
+    # Special-cased below: kind and capture_reason only from closed label sets.
+    "individuation.alert": frozenset({"kind", "inconclusive_since", "days", "capture_reason"}),
     "perceptual_locus.changed": frozenset({"locus", "changed_by"}),
     "perceptual_locus.denied": frozenset({"locus_requested", "denied_by", "reason_label"}),
     # embodiment.proprio handled specially (position hash + region label only).
@@ -774,6 +777,27 @@ def _apply_taxonomy_fields(
             v = payload.get(k)
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 record[k] = v
+        return record
+    if event_type == "individuation.alert":
+        # Labels are copied only when they belong to the producer's closed
+        # sets, the timestamp only when it parses, the day count only when
+        # numeric: no field can carry free text from anywhere.
+        kind = payload.get("kind")
+        if kind in INDIVIDUATION_ALERT_KINDS:
+            record["kind"] = kind
+        capture_reason = payload.get("capture_reason")
+        if capture_reason in CAPTURE_FAILURE_LABELS:
+            record["capture_reason"] = capture_reason
+        since = payload.get("inconclusive_since")
+        if isinstance(since, str):
+            try:
+                record["inconclusive_since"] = datetime.fromisoformat(since).isoformat()
+            except ValueError:
+                # An unparseable timestamp is left out of the record.
+                pass
+        days = payload.get("days")
+        if isinstance(days, (int, float)) and not isinstance(days, bool):
+            record["days"] = days
         return record
     # Generic allowlist copy — ONLY named keys.
     for key in allowed:
