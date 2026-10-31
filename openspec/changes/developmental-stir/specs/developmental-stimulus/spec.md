@@ -26,7 +26,7 @@ act and never on its affect directly; scheduled maternal speech SHALL be unchang
 ## ADDED Requirements
 
 ### Requirement: A stir is answered by maternal speech
-On the stir with index `i`, the local stimulus source SHALL answer when a keyed draw on `(seed, i)` is below `answer_probability` (default 0.5), after a keyed delay uniform on `[answer_delay_min_s, answer_delay_max_s]` (default 2 to 10 s), with one keyed utterance from the unlocked items other than the repeated passage, through the hearing band. An answer due during scheduled speech SHALL wait for that utterance to end.
+On the stir with index `i`, the local stimulus source SHALL answer when a keyed draw on `(seed, i)` is below `answer_probability` (default 0.5), after a keyed delay uniform on `[answer_delay_min_s, answer_delay_max_s]` (default 2 to 10 s), with one keyed utterance from the unlocked items other than the repeated passage, through the hearing band. An answer due during scheduled speech or an added sound SHALL wait for it to end.
 
 #### Scenario: The same seed and stir times give the same answers
 - **WHEN** two developmental runs with the same seed stir at the same entity times
