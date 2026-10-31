@@ -54,7 +54,7 @@ from kaine.setup.steps import (
 )
 from kaine.setup.web import guard, job_specs, session, spawn
 from kaine.setup.web.driver import validate_fields
-from kaine.setup.web.jobs import JobRunner
+from kaine.setup.web.jobs import JobConflictError, JobRunner
 from kaine.setup.wizard import ACK_PHRASE
 from kaine.setup.wizard_steps import ack_step, orientation_step, setup_steps
 from kaine.storage import configured_data_root, resolve_under
@@ -842,7 +842,7 @@ def create_setup_app(
 
         try:
             job_id = await request.app.state.runner.start(name, specs[name])
-        except RuntimeError as exc:
+        except JobConflictError as exc:
             return PlainTextResponse(
                 str(exc),
                 status_code=409,
