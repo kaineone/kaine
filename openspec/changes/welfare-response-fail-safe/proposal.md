@@ -15,12 +15,17 @@ The welfare response could leave a distressed entity running with no protection 
 - The monitor's `on_response` callback receives the record's transition instead of the action, and the cycle maps `protective_action_freeze_failed` and `protective_action_freeze_placed` to the two new caretaker notice kinds; every other transition still sends `welfare_response`.
 - `write_control` leaves a control file that exists but is corrupt unchanged, logs the corruption once and writes nothing.
 
+## Design notes
+
+- A known gap is left as a follow-up: if a freeze write lands but reports failure and a named override lifts that welfare freeze before the next poll, the retry finds no `welfare` holder and writes the freeze again, so the entity is paused once more after the override.
+
 ## Capabilities
 
 ### New Capabilities
 
 ### Modified Capabilities
 - `welfare-monitoring`: a failed stop hook falls back to the welfare pause; a welfare freeze that cannot be written is recorded, retried without a second preservation or a duplicate welfare entry, and reported to the caretaker with notices distinct from a placed pause; a pause counts as placed only once its freeze is written; `write_control` never overwrites a control file that reads as a welfare freeze.
+- `unattended-boot`: the running welfare notice of a research run is `welfare_freeze_failed` when the response's freeze cannot be written, and `welfare_freeze_placed` follows when the retried freeze is in place.
 
 ## Impact
 
