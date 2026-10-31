@@ -92,7 +92,7 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     monkeypatch.setattr(
         mod,
         "_resolve_job_queue_trainer",
-        lambda cfg, kc: FakeTrainer(),
+        lambda cfg, kc, **kw: (recorded.__setitem__("entity_id", kw.get("entity_id")), FakeTrainer())[1],
     )
 
     kaine_config = {
@@ -127,6 +127,8 @@ def test_train_test_lora_fake_trainer(monkeypatch):
     assert result["samples_used"] == 48
     assert result["hot_swap"]["ok"] is True
     assert result["cfg"] is cfg
+    assert re.fullmatch(r"ent-[0-9a-f]{32}", recorded["entity_id"])
+    assert result["owner_id"] == recorded["entity_id"]
 
 
 def test_resolve_lora_field_uses_production_resolver(monkeypatch):
@@ -212,6 +214,14 @@ def _kaine_config_for_main() -> dict[str, Any]:
     }
 
 
+_OWNER: dict[str, Any] = {}
+
+
+def _owner_sink(kw: dict[str, Any]) -> None:
+    """Remember the owner id test_lora passed to the trainer factory."""
+    _OWNER["id"] = kw.get("entity_id")
+
+
 def _fake_trainer_class(*, hot_swap_ok: bool):
     class FakeTrainer:
         async def train(self, pairs, cfg):
@@ -235,7 +245,7 @@ def test_main_fails_when_hot_swap_failed(monkeypatch, capsys):
     monkeypatch.setattr(
         mod,
         "_resolve_job_queue_trainer",
-        lambda cfg, kc: _fake_trainer_class(hot_swap_ok=False)(),
+        lambda cfg, kc, **kw: _owner_sink(kw) or _fake_trainer_class(hot_swap_ok=False)(),
     )
     monkeypatch.setattr(mod, "read_manifest", lambda _path: {"file": "active-1.gguf"})
 
@@ -255,13 +265,14 @@ def test_main_succeeds(monkeypatch, capsys):
     monkeypatch.setattr(
         mod,
         "_resolve_job_queue_trainer",
-        lambda cfg, kc: _fake_trainer_class(hot_swap_ok=True)(),
+        lambda cfg, kc, **kw: _owner_sink(kw) or _fake_trainer_class(hot_swap_ok=True)(),
     )
     monkeypatch.setattr(
         mod,
         "read_manifest",
         lambda _path: {
-            "file": "active-1.gguf",
+            "entity_id": _OWNER["id"],
+            "file": f"{_OWNER['id']}/active-1.gguf",
             "sha256": "abcdef",
             "generation": 1,
             "adapter_id": "fixture-1",
@@ -281,6 +292,9 @@ def test_main_succeeds(monkeypatch, capsys):
     assert out["lora_field"] == [{"id": 0, "scale": 1.0}]
     assert out["adapter"]["sha256"] == "abcdef"
     assert out["pairs"] == 48
+    assert out["calibration_owner_id"] == _OWNER["id"]
+    assert re.fullmatch(r"ent-[0-9a-f]{32}", out["calibration_owner_id"])
+    assert out["adapter"]["file"] == f"{_OWNER['id']}/active-1.gguf"
 
 
 async def _async_return(value):
@@ -295,13 +309,14 @@ def test_main_fails_when_active_adapter_is_not_ours(monkeypatch, capsys):
     monkeypatch.setattr(
         mod,
         "_resolve_job_queue_trainer",
-        lambda cfg, kc: _fake_trainer_class(hot_swap_ok=True)(),
+        lambda cfg, kc, **kw: _owner_sink(kw) or _fake_trainer_class(hot_swap_ok=True)(),
     )
     monkeypatch.setattr(
         mod,
         "read_manifest",
         lambda _path: {
-            "file": "active-1.gguf",
+            "entity_id": _OWNER["id"],
+            "file": f"{_OWNER['id']}/active-1.gguf",
             "sha256": "abcdef",
             "generation": 1,
             "adapter_id": "fixture-1",
@@ -328,7 +343,7 @@ def test_main_refuses_without_operator_approval(monkeypatch, capsys):
     monkeypatch.setattr(
         mod,
         "_resolve_job_queue_trainer",
-        lambda cfg, kc: (_ for _ in ()).throw(AssertionError("trainer must not be built")),
+        lambda cfg, kc, **kw: (_ for _ in ()).throw(AssertionError("trainer must not be built")),
     )
     monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
 
@@ -352,3 +367,68 @@ def test_chosen_answers_are_on_topic():
         assert "As an AI" not in chosen
 
     assert len(set(chosen_texts)) == len(chosen_texts) == 48
+
+
+def test_each_calibration_run_gets_its_own_valid_owner_id():
+    from kaine.lifecycle.identity import is_entity_id
+
+    mod = _load_test_lora()
+    ids = {mod.new_calibration_owner_id() for _ in range(20)}
+    assert len(ids) == 20
+    assert all(is_entity_id(i) and i.startswith("ent-") for i in ids)
+
+
+def test_job_spec_carries_the_generated_owner_id(monkeypatch, tmp_path):
+    """Through the real job-queue trainer: the job sits under the generated
+    owner's directory and its job.json records that id."""
+    from kaine.lifecycle.identity import is_entity_id
+    from kaine.modules.sleep.job_queue_trainer import JobQueueVoiceTrainer
+    from kaine.modules.sleep.subprocess_trainer import SubprocessTrainerError
+
+    mod = _load_test_lora()
+    jobs = tmp_path / "trainer-jobs"
+
+    def real_trainer(cfg, kc, *, entity_id=None):
+        return JobQueueVoiceTrainer(
+            jobs_dir=jobs, timeout_s=0.2, poll_interval_s=0.05, entity_id=entity_id
+        )
+
+    monkeypatch.setattr(mod, "_resolve_job_queue_trainer", real_trainer)
+    with pytest.raises(SubprocessTrainerError, match="did not finish"):
+        asyncio.run(
+            mod.train_test_lora(
+                _kaine_config_for_main(),
+                adapter_output_dir="state/sleep/test_lora_adapters",
+                pairs=mod.build_pairs(4),
+            )
+        )
+    owners = list(jobs.iterdir())
+    assert len(owners) == 1 and is_entity_id(owners[0].name)
+    (job_dir,) = list(owners[0].iterdir())
+    assert json.loads((job_dir / "job.json").read_text())["entity_id"] == owners[0].name
+
+
+def test_main_fails_when_the_pointer_names_another_owner(monkeypatch, capsys):
+    mod = _load_test_lora()
+
+    monkeypatch.setenv("KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED", "1")
+    monkeypatch.setattr(mod, "load_kaine_config", lambda _config, _operator: _kaine_config_for_main())
+    monkeypatch.setattr(
+        mod,
+        "_resolve_job_queue_trainer",
+        lambda cfg, kc, **kw: _owner_sink(kw) or _fake_trainer_class(hot_swap_ok=True)(),
+    )
+    other = "ent-" + "9" * 32
+    monkeypatch.setattr(
+        mod,
+        "read_manifest",
+        lambda _path: {"entity_id": other, "file": f"{other}/active-1.gguf", "sha256": "ab", "generation": 1},
+    )
+    monkeypatch.setattr(mod, "resolve_lora_field", lambda cfg, kc: _async_return([{"id": 0, "scale": 1.0}]))
+
+    rc = mod.main(["--config", "x.toml", "--operator-config", "y.toml"])
+    assert rc == 1
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False
+    assert out["calibration_owner_id"] == _OWNER["id"]
+    assert out["pointer_entity_id"] == other

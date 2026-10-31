@@ -470,6 +470,16 @@ def test_job_queue_backend_selects_job_queue_trainer(tmp_path, _approved, monkey
     assert trainer._organ_api_key == "boot-secret"
 
 
+def test_job_queue_factory_passes_an_explicit_owner(tmp_path, _approved):
+    from kaine.boot.factories.sleep import _resolve_job_queue_trainer
+
+    owner = "ent-" + "c" * 32
+    trainer = _resolve_job_queue_trainer(_cfg(tmp_path), entity_id=owner)
+    assert trainer._entity_id == owner
+    # The cycle passes none: the trainer reads the identity file when it trains.
+    assert _resolve_job_queue_trainer(_cfg(tmp_path))._entity_id is None
+
+
 def test_job_queue_timeout_zero_raises_config_error(tmp_path, _approved):
     with pytest.raises(VoiceAlignmentConfigError, match="trainer_timeout_s"):
         _resolve_trainer(_cfg(tmp_path, trainer_timeout_s=0.0))
