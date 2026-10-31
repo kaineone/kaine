@@ -50,8 +50,11 @@ from kaine.lifecycle.decommission_locations import (
     checkpoint_sqlite,
     delete_roots,
     entity_locations,
+    read_pointer_owner,
     read_snapshot_json,
+    shared_volume_roots,
     within_delete_roots,
+    within_entity_dir,
 )
 from kaine.lifecycle.divergence import DivergenceAssessment
 from kaine.lifecycle.identity import IdentityError, load_identity
@@ -1225,6 +1228,11 @@ def delete_entity_state(
     roots, refused_roots = delete_roots(
         qdrant_cfg, state_root=state_root, data_root=data_root, fork_root=fork_root
     )
+    # A shared volume's root holds other entities' directories; it is never
+    # removed itself, whatever a location lists.
+    protected.update(
+        shared_volume_roots(qdrant_cfg, state_root=state_root, data_root=data_root)
+    )
     for path, reason in refused_roots:
         result.errors.append(f"refused allow-list entry {path}: {reason}")
     # Resolve every location before anything is removed: one location can sit
@@ -1260,6 +1268,18 @@ def delete_entity_state(
             if path.resolve() in protected:
                 if not skip_disk_deletion:
                     result.errors.append(f"refused to delete {path}: protected root")
+                continue
+            if loc.pointer_owner is not None and read_pointer_owner(path) != loc.pointer_owner:
+                if not skip_disk_deletion:
+                    result.errors.append(
+                        f"refused to delete {path}: it no longer names this entity"
+                    )
+                continue
+            if loc.owner_dirs is not None and not within_entity_dir(path, loc.owner_dirs):
+                if not skip_disk_deletion:
+                    result.errors.append(
+                        f"refused to delete {path}: not inside this entity's own directory of a shared volume"
+                    )
                 continue
             if dry_run:
                 result.would_remove_paths.append(str(path))

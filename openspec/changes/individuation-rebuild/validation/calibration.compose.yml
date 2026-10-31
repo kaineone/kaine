@@ -12,6 +12,13 @@
 #   4. Recreate the organ WITHOUT this override afterwards, so the study never
 #      sees the test adapter.
 #
+# The adapter and job volumes are partitioned by entity id. test_lora.py runs
+# without an identity file, so each run generates a throwaway owner id
+# (ent-<uuid4 hex>, printed as calibration_owner_id) that belongs to no entity.
+# Its job and adapter directories (<id>/...) and the organ pointer naming it
+# live only in the calibration volumes below, never in the real
+# kaine-organ-adapters or kaine-trainer-jobs volumes.
+#
 # Paths resolve relative to the compose/ directory.
 
 services:

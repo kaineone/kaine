@@ -52,6 +52,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.modules.sleep import adapter_store
+from kaine.modules.sleep.entity_volume import (
+    EntityVolumeError,
+    current_entity_id,
+    entity_subdir,
+    require_entity_id,
+)
 from kaine.modules.sleep.hot_swap import dispatch as dispatch_hot_swap
 from kaine.modules.sleep.voice_alignment import (
     DPOPair,
@@ -204,6 +210,31 @@ def _sweep_stale_workdir(
                 shutil.rmtree(entry, ignore_errors=True)
 
 
+def job_owner(entity_id: Optional[str]) -> str:
+    """The entity a job belongs to: ``entity_id`` when given, else the one in
+    ``state/identity/entity.json`` (read at train time, so a revive that lands
+    after boot is followed). Refuses to train without a valid entity id.
+    """
+    owner = entity_id if entity_id is not None else current_entity_id()
+    try:
+        return require_entity_id(owner)
+    except EntityVolumeError as exc:
+        raise SubprocessTrainerError(
+            f"refusing to write a voice-alignment job: {exc}"
+        ) from exc
+
+
+def entity_jobs_dir(jobs_root: Path, entity_id: str) -> Path:
+    """Create and return ``<jobs_root>/<entity_id>/``, the entity's own job directory."""
+    jobs_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    try:
+        return entity_subdir(jobs_root, entity_id, create=True)
+    except EntityVolumeError as exc:
+        raise SubprocessTrainerError(
+            f"refusing to write a voice-alignment job: {exc}"
+        ) from exc
+
+
 def validate_trainer_result(
     result: dict[str, Any],
     *,
@@ -324,12 +355,16 @@ def write_job_spec(
     *,
     base_path: str,
     adapter_output_dir: str,
+    entity_id: str,
 ) -> None:
     """Write the filesystem job spec consumed by the external trainer.
 
     ``adapter_output_dir`` is written verbatim (the caller decides whether it is
     an absolute host path or a path relative to the job directory).
+    ``entity_id`` is the owning entity, recorded in ``job.json`` as well as by
+    the job's place under ``<jobs_dir>/<entity_id>/``.
     """
+    entity_id = require_entity_id(entity_id)
     lines = [
         json.dumps(
             {"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected, "system": p.system}
@@ -375,6 +410,7 @@ def write_job_spec(
 
     job = {
         "schema_version": SCHEMA_VERSION,
+        "entity_id": entity_id,
         "base_model_path": str(base_path),
         "adapter_output_dir": str(adapter_output_dir),
         "previous_adapter_dir": previous_adapter_dir,
@@ -489,6 +525,7 @@ class SubprocessVoiceTrainer:
         run_in_process: bool = False,
         entry_script: Path | str = EXTERNAL_ENTRY_SCRIPT,
         timeout_s: float = DEFAULT_TIMEOUT_S,
+        entity_id: Optional[str] = None,
     ) -> None:
         if not run_in_process and trainer_python is None:
             raise ValueError("trainer_python is required when run_in_process is False")
@@ -498,6 +535,7 @@ class SubprocessVoiceTrainer:
         self._entry_script = Path(entry_script)
         self._timeout_s = float(timeout_s)
         self._inprocess_module: Any = None
+        self._entity_id = entity_id
         _sweep_stale_workdir(self._trainer_workdir)
 
     async def train(
@@ -520,11 +558,14 @@ class SubprocessVoiceTrainer:
                 "[sleep.voice_alignment].base_model_path"
             )
 
+        entity_id = job_owner(self._entity_id)
+        entity_jobs = entity_jobs_dir(self._trainer_workdir, entity_id)
         _sweep_stale_workdir(
             self._trainer_workdir, Path(config.adapter_output_dir)
         )
+        _sweep_stale_workdir(entity_jobs)
 
-        job_dir = self._make_job_dir()
+        job_dir = self._make_job_dir(entity_jobs)
         try:
             write_job_spec(
                 job_dir,
@@ -532,6 +573,7 @@ class SubprocessVoiceTrainer:
                 config,
                 base_path=base_path,
                 adapter_output_dir=str(Path(config.adapter_output_dir).resolve()),
+                entity_id=entity_id,
             )
             run = self._run_in_process if self.run_in_process else self._run_subprocess
             result = await run(
@@ -594,10 +636,9 @@ class SubprocessVoiceTrainer:
     # --------------------------------------------------------------------- #
     # job-spec writing
     # --------------------------------------------------------------------- #
-    def _make_job_dir(self) -> Path:
+    def _make_job_dir(self, entity_jobs: Path) -> Path:
         stamp = time.strftime("%Y%m%dT%H%M%S")
-        job_dir = self._trainer_workdir / f"job-{stamp}-{int(time.time() * 1000) % 1000:03d}"
-        self._trainer_workdir.mkdir(parents=True, mode=0o700, exist_ok=True)
+        job_dir = entity_jobs / f"job-{stamp}-{int(time.time() * 1000) % 1000:03d}"
         job_dir.mkdir(mode=0o700, exist_ok=True)
         os.chmod(job_dir, 0o700)
         return job_dir

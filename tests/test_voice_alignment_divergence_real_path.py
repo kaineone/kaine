@@ -68,6 +68,7 @@ def _build_sleep(bus: AsyncBus, tmp_path: Path, *, enabled: bool, fake_training_
         trainer_workdir=str(tmp_path / "jobs"),
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=None,
         trainer_workdir=tmp_path / "jobs",
         run_in_process=True,

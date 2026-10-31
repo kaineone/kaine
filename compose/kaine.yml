@@ -159,7 +159,9 @@ services:
   # (compose/kaine.organ-host.yml).
   # The organ loads a per-entity GGUF LoRA from the read-only organ-adapters
   # volume via docker/organ-launcher.sh and restarts when the cycle promotes a
-  # new adapter. The launcher passes the remaining command line to llama-server.
+  # new adapter. The volume-root active.json points at <entity_id>/active-N.gguf;
+  # the launcher loads it only when its real path is inside that entity's own
+  # directory. The launcher passes the remaining command line to llama-server.
   # The organ unloads after KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS idle
   # seconds (default 600; -1 keeps it loaded) and reloads on the next request;
   # a KAINE_MODEL_SERVER_CMD override must pass --sleep-idle-seconds itself.
@@ -361,11 +363,14 @@ services:
       # Provisioned weights (InternVideo-Next encoder, MiniLM embedder, emotion2vec)
       # read-only from the shared model volume; HF_HOME=/models/hf is baked in.
       - kaine-models:/models:ro
-      # Shared organ-adapters volume: the cycle writes promoted GGUF LoRAs here
-      # (organ_adapter mode) for the launcher to load. Read/write here.
+      # Shared organ-adapters volume: the cycle writes promoted GGUF LoRAs under
+      # /organ-adapters/<entity_id>/ (organ_adapter mode) for the launcher to load.
+      # Read/write here.
       - kaine-organ-adapters:/organ-adapters
-      # Job-queue backend for voice-alignment training: the cycle writes READY jobs,
-      # kaine-trainer claims and runs them. The jobs volume is mounted outside the
+      # Job-queue backend for voice-alignment training: the cycle writes READY jobs
+      # under /trainer-jobs/<entity_id>/<job_id>/, kaine-trainer claims and runs
+      # them. Decommission deletes only the entity's own <entity_id>/ directories
+      # in both volumes. The jobs volume is mounted outside the
       # state volume so the runtime never creates a root-owned directory inside the
       # state tree, and the cycle finds it through KAINE_TRAINER_JOBS_DIR.
       - kaine-trainer-jobs:/trainer-jobs
@@ -468,12 +473,14 @@ services:
       - ../config/kaine.operator.toml:/app/config/kaine.operator.toml:ro
       # Provisioned weights, read-only from the shared model volume.
       - kaine-models:/models:ro
-      # Shared organ-adapters volume: study writes promoted GGUF LoRAs here
-      # (organ_adapter mode) for the launcher to load. Read/write here.
+      # Shared organ-adapters volume: each study line writes promoted GGUF LoRAs
+      # under /organ-adapters/<entity_id>/ (organ_adapter mode) for the launcher
+      # to load. Read/write here.
       - kaine-organ-adapters:/organ-adapters
       # Job-queue backend for voice-alignment training. Study steps that enable
       # voice alignment set [sleep.voice_alignment].trainer_jobs_dir = "/trainer-jobs"
-      # (the overlay does this); kaine-trainer claims and runs jobs from here.
+      # (the overlay does this); each line writes its jobs under
+      # /trainer-jobs/<entity_id>/, and kaine-trainer claims and runs them.
       - kaine-trainer-jobs:/trainer-jobs
       # No kaine-state, perception tmpfs, kaine-eval-data or kaine-trajectory: every step runs inside /app/studies/<id>, so a study never touches a live entity's volumes.
       # Durable study directories (study.json, steps.jsonl, line directories,
@@ -558,11 +565,14 @@ volumes:
   # NEVER an image layer.
   kaine-models:
     name: kaine-models
-  # Per-entity GGUF LoRAs promoted by the sleep module; read by the organ launcher.
+  # Per-entity GGUF LoRAs promoted by the sleep module, one <entity_id>/
+  # directory per entity, plus the root active.json pointer and generation
+  # counter; read by the organ launcher.
   kaine-organ-adapters:
     name: kaine-organ-adapters
   # Shared job directory for the voice-alignment trainer. The cycle/study write
-  # READY jobs here; kaine-trainer claims and runs them. NEVER entity state.
+  # READY jobs under <entity_id>/<job_id>/; kaine-trainer claims and runs them
+  # (it still runs jobs left at the root by earlier builds). NEVER entity state.
   kaine-trainer-jobs:
     name: kaine-trainer-jobs
   # The entity's life: CAL-gated forks, preservation bundles, individuation,

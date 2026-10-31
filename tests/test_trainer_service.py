@@ -91,6 +91,92 @@ def test_find_ready_jobs(tmp_path: Path) -> None:
     assert found == [a, b]
 
 
+EID_A = "ent-" + "a" * 32
+EID_B = "legacy-" + "b" * 32
+
+
+def _job(parent: Path, name: str, *, ready: bool = True) -> Path:
+    job = parent / name
+    job.mkdir(parents=True)
+    if ready:
+        (job / "READY").write_text("")
+    return job
+
+
+def test_find_ready_jobs_in_entity_dirs_and_at_the_root(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    root_job = _job(jobs, "20261001T000003Z-legacy0")
+    a_job = _job(jobs / EID_A, "20261001T000001Z-aaaaaaaa")
+    b_job = _job(jobs / EID_B, "20261001T000002Z-bbbbbbbb")
+    a_claimed = _job(jobs / EID_A, "20261001T000000Z-claimed0")
+    (a_claimed / "CLAIMED").touch()
+    a_cancelled = _job(jobs / EID_A, "20261001T000000Z-cancel00")
+    (a_cancelled / "CANCELLED").touch()
+    _job(jobs / EID_B, "20261001T000000Z-notready", ready=False)
+
+    assert find_ready_jobs(jobs) == [a_job, b_job, root_job]
+
+
+def test_find_ready_jobs_skips_symlinks_at_both_levels(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    outside = tmp_path / "outside"
+    outside_job = _job(outside / EID_B, "20261001T000000Z-outside0")
+
+    # A symlinked entity directory is not searched.
+    (jobs / EID_B).symlink_to(outside / EID_B)
+    # A symlinked job directory inside a real entity directory is skipped.
+    (jobs / EID_A).mkdir()
+    (jobs / EID_A / "20261001T000000Z-linkjob0").symlink_to(outside_job)
+    # A job whose READY is a symlink is not ready, at either level.
+    linked_ready = jobs / EID_A / "20261001T000001Z-linkredy"
+    linked_ready.mkdir()
+    (linked_ready / "READY").symlink_to(outside_job / "READY")
+    root_linked_ready = jobs / "20261001T000002Z-rootlink"
+    root_linked_ready.mkdir()
+    (root_linked_ready / "READY").symlink_to(outside_job / "READY")
+
+    assert find_ready_jobs(jobs) == []
+
+
+def test_find_ready_jobs_searches_only_entity_named_dirs(tmp_path: Path) -> None:
+    """A subdirectory that is not named by an entity id is not a level to search."""
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    _job(jobs / "not-an-entity", "20261001T000000Z-hidden00")
+    _job(jobs / "ent-xyz", "20261001T000000Z-hidden01")
+    # Two levels down is not a job either.
+    _job(jobs / EID_A / "nested", "20261001T000000Z-hidden02")
+
+    assert find_ready_jobs(jobs) == []
+
+
+def test_serve_runs_an_entity_dir_job(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    job = _job(jobs / EID_A, "20261001T000000Z-aaaaaaaa")
+    ran: list[Path] = []
+
+    def fake_run_job(job_dir, *args):
+        ran.append(Path(job_dir))
+        return {"ok": True, "reason": "ran"}
+
+    clock = _Clock()
+    serve(
+        _config(jobs_dir=jobs),
+        once=True,
+        run_job_fn=fake_run_job,
+        sleep=_Sleep(clock),
+        clock=clock,
+        runner=lambda *a, **k: None,
+        organ_probe=lambda: True,
+        vram_probe=lambda: 99999,
+    )
+    assert ran == [job]
+    assert (job / "CLAIMED").is_file()
+    assert not (job / "READY").exists()
+
+
 def test_claim_atomic(tmp_path: Path) -> None:
     d = tmp_path / "job"
     d.mkdir()

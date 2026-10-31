@@ -68,6 +68,7 @@ from kaine.lifecycle.decommission_locations import (
     BACKUP_RETAIN,
     DELETE,
     RETAIN,
+    cancel_entity_dir_jobs,
     cancel_voice_alignment_jobs,
     entity_locations,
 )
@@ -664,6 +665,36 @@ def main(
             )
             return 8
 
+    # --- Cancel this entity's jobs in its own job directories ---------------
+    # A job under <jobs_dir>/<entity_id>/ is this entity's by its place, so it
+    # is cancelled, and a claimed one waited for, before the backup copies it:
+    # nothing of the entity is still training when it is copied and removed.
+    # A dry run changes nothing, so it cancels nothing.
+    if not args.dry_run:
+        own_dir_locs = entity_locations(
+            qcfg,
+            state_root=state_root,
+            data_root=data_dir,
+            fork_root=fork_root,
+            entity_id=_entity_id(state_root),
+        )
+        cancelled_own, training_own = cancel_entity_dir_jobs(
+            own_dir_locs, wait_s=0.0 if args.trainer_stopped else 60.0
+        )
+        for path in cancelled_own:
+            out.write(f"  cancelled voice-alignment job: {path}\n")
+        if training_own:
+            if args.trainer_stopped:
+                for path in training_own:
+                    out.write(f"  trainer asserted stopped; claimed job not waited for: {path}\n")
+            else:
+                err.write(
+                    "Refusing to decommission: a voice-alignment job of this entity is still training:\n"
+                    + "".join(f"  {path}\n" for path in training_own)
+                    + "If the trainer has crashed and is not running, run again with --trainer-stopped. Nothing was backed up or deleted.\n"
+                )
+                return 3
+
     # --- Gate 3: capture backup (blocking) -----------------------------
     backup = capture_backup(
         state_root=state_root,
@@ -902,7 +933,7 @@ def main(
             state_root=state_root,
             data_root=data_dir,
             fork_root=fork_root,
-            entity_id=None,
+            entity_id=_entity_id(state_root),
         )
         still_training: list[str] = []
         cancelled_names: list[str] = []
@@ -924,6 +955,12 @@ def main(
             cancelled_names.extend(c)
             for name in s:
                 still_training.append(str(parent / name))
+        # Jobs that reached the entity's own job directories since the backup.
+        c_own, s_own = cancel_entity_dir_jobs(
+            voice_locs, wait_s=0.0 if args.trainer_stopped else 60.0
+        )
+        cancelled_names.extend(c_own)
+        still_training.extend(s_own)
         for name in cancelled_names:
             out.write(f"  cancelled voice-alignment job: {name}\n")
         if still_training:

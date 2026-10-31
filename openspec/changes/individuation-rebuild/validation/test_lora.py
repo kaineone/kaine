@@ -7,6 +7,15 @@ This module is validation tooling, not part of the ``kaine`` package; it may
 import ``kaine`` freely. It never reads or writes entity data. The training
 pairs are synthetic and public.
 
+The shared adapter and job volumes are partitioned by entity id, and the
+``kaine-study`` container this runs in has no identity file. Each run therefore
+generates a throwaway owner id (``ent-`` plus a uuid4's 32 hex digits) and
+passes it explicitly to the trainer and the organ hot swap. That id belongs to
+no entity: it names only this run's job directory and adapter directory, which
+live in the separate calibration volumes of ``calibration.compose.yml``, never
+in the real ones. The id is printed as ``calibration_owner_id``, and the
+adapter's ``file`` (``<id>/active-N.gguf``) shows which pointer the organ loaded.
+
 Usage:
     1. Bring up the organ and trainer with ``calibration.compose.yml`` and
        ``KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1``.
@@ -25,6 +34,7 @@ import argparse
 import asyncio
 import json
 import random
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +43,7 @@ from kaine.boot.factories.sleep import (
     voice_alignment_config_from_section,
 )
 from kaine.config import OPERATOR_CONFIG_PATH, load_kaine_config
+from kaine.lifecycle.identity import is_entity_id
 from kaine.defaults import language_section_api_key
 from kaine.modules.sleep.organ_adapter import (
     OrganAdapterResolver,
@@ -285,13 +296,27 @@ def build_pairs(n: int = 48, seed: int = 20261005) -> list[DPOPair]:
     return pairs
 
 
+def new_calibration_owner_id() -> str:
+    """A throwaway owner id for one calibration run; it belongs to no entity."""
+    owner_id = f"ent-{uuid.uuid4().hex}"
+    if not is_entity_id(owner_id):
+        raise RuntimeError(f"generated calibration owner id {owner_id!r} is not an entity id")
+    return owner_id
+
+
 async def train_test_lora(
     kaine_config: dict[str, Any],
     *,
     adapter_output_dir: str,
     pairs: list[DPOPair],
+    owner_id: str | None = None,
 ) -> dict[str, Any]:
-    """Write a job-queue training job and return the trainer result + manifest."""
+    """Write a job-queue training job and return the trainer result + manifest.
+
+    ``owner_id`` names the calibration run's job and adapter directories; a
+    fresh one is generated when it is not given.
+    """
+    owner_id = owner_id or new_calibration_owner_id()
     section = dict(kaine_config.get("sleep", {}).get("voice_alignment") or {})
     section.update(
         {
@@ -307,7 +332,7 @@ async def train_test_lora(
     if cfg is None:
         raise RuntimeError("Voice alignment config parsed to None after overrides")
 
-    trainer = _resolve_job_queue_trainer(cfg, kaine_config)
+    trainer = _resolve_job_queue_trainer(cfg, kaine_config, entity_id=owner_id)
     result = await trainer.train(pairs, cfg)
 
     manifest = read_manifest(Path(cfg.organ_adapters_dir))
@@ -320,6 +345,7 @@ async def train_test_lora(
         "manifest": manifest,
         "hot_swap": dict(result.metadata.get("hot_swap") or {}),
         "cfg": cfg,
+        "owner_id": owner_id,
     }
 
 
@@ -351,10 +377,12 @@ async def _main_async(args: argparse.Namespace) -> int:
     kaine_config = load_kaine_config(Path(args.config), operator_path)
 
     pairs = build_pairs(args.pairs, args.seed)
+    owner_id = new_calibration_owner_id()
     result = await train_test_lora(
         kaine_config,
         adapter_output_dir=args.adapter_output_dir,
         pairs=pairs,
+        owner_id=owner_id,
     )
 
     if not result["accepted"]:
@@ -363,6 +391,7 @@ async def _main_async(args: argparse.Namespace) -> int:
                 {
                     "ok": False,
                     "accepted": False,
+                    "calibration_owner_id": owner_id,
                     "reason": result["reason"],
                     "capability_loss": result["capability_loss"],
                     "samples_used": result["samples_used"],
@@ -376,6 +405,7 @@ async def _main_async(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "ok": False,
+                    "calibration_owner_id": owner_id,
                     "reason": "organ did not load the adapter",
                     "hot_swap": result["hot_swap"],
                 }
@@ -385,7 +415,19 @@ async def _main_async(args: argparse.Namespace) -> int:
 
     manifest = result["manifest"]
     if not manifest:
-        print(json.dumps({"ok": False, "reason": "training produced no adapter manifest"}))
+        print(json.dumps({"ok": False, "calibration_owner_id": owner_id, "reason": "training produced no adapter manifest"}))
+        return 1
+    if manifest.get("entity_id") != owner_id:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "calibration_owner_id": owner_id,
+                    "reason": "the organ pointer names another owner than this calibration run",
+                    "pointer_entity_id": manifest.get("entity_id"),
+                }
+            )
+        )
         return 1
 
     field = await resolve_lora_field(result["cfg"], kaine_config)
@@ -394,6 +436,7 @@ async def _main_async(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "ok": False,
+                    "calibration_owner_id": owner_id,
                     "reason": "the organ's active adapter is not the one this run trained",
                 }
             )
@@ -410,6 +453,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "ok": True,
+                "calibration_owner_id": owner_id,
                 "lora_field": field,
                 "adapter": adapter_info,
                 "pairs": args.pairs,

@@ -230,6 +230,7 @@ async def test_subprocess_dispatches_hot_swap_after_accepted_adapter(tmp_path, m
     )
 
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -274,6 +275,7 @@ async def test_subprocess_does_not_dispatch_when_rejected(tmp_path, monkeypatch)
     )
 
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -305,6 +307,7 @@ async def test_subprocess_hot_swap_failure_keeps_result_accepted(tmp_path, monke
     )
 
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,

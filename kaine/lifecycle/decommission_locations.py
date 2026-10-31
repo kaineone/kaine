@@ -15,7 +15,7 @@ from typing import Any
 
 from kaine import legacy_names
 from kaine.legacy_aliases import map_module_key, name_forms
-from kaine.lifecycle.identity import IdentityError, read_identity_sidecar
+from kaine.lifecycle.identity import IdentityError, is_entity_id, read_identity_sidecar
 from kaine.storage import trainer_jobs_dir
 
 BACKUP_DELETE = "backup+delete"
@@ -73,11 +73,148 @@ def _current_adapter_checksum(
     return None
 
 
+def entity_dir_is_contained(entity_dir: Path) -> bool:
+    """True when ``entity_dir`` is a real directory, named by an entity id, directly under its volume.
+
+    Its real path must be a direct child of the volume's real path with the
+    same name, so it is neither the volume root, nor a link to another
+    entity's directory, nor anything outside the volume.
+    """
+    if entity_dir.is_symlink() or not entity_dir.is_dir() or not is_entity_id(entity_dir.name):
+        return False
+    try:
+        real = entity_dir.resolve(strict=True)
+        volume_real = entity_dir.parent.resolve(strict=True)
+    except OSError:
+        return False
+    return real.parent == volume_real and real.name == entity_dir.name
+
+
+def own_entity_dir(volume: Path, entity_id: str | None) -> tuple[Path | None, list[str]]:
+    """Return ``<volume>/<entity_id>`` when it is provably this entity's own directory.
+
+    The id must be in the identity format and the entry must pass
+    :func:`entity_dir_is_contained`. Returns ``(None, notes)`` otherwise; the
+    notes say why when the entry exists but is refused.
+    """
+    notes: list[str] = []
+    if entity_id is None or not is_entity_id(entity_id):
+        return None, notes
+    candidate = volume / entity_id
+    if candidate.is_symlink():
+        notes.append(
+            f"{candidate} is a symlink, not this entity's directory; it is kept and its target is not touched"
+        )
+        return None, notes
+    if not candidate.exists():
+        return None, notes
+    if not entity_dir_is_contained(candidate):
+        notes.append(
+            f"{candidate} is not a directory directly under {volume}; it is kept"
+        )
+        return None, notes
+    return candidate, notes
+
+
+def read_pointer_owner(pointer: Path) -> str | None:
+    """The ``entity_id`` a volume-root organ pointer names, or ``None``.
+
+    ``None`` for a missing, symlinked, unreadable or legacy (ownerless)
+    manifest, and for an owner that is not in the identity format.
+    """
+    if pointer.is_symlink() or not pointer.is_file():
+        return None
+    try:
+        with pointer.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    owner = data.get("entity_id")
+    return owner if is_entity_id(owner) else None
+
+
+def own_root_pointer(volume: Path, entity_id: str | None) -> Path | None:
+    """``<volume>/active.json`` when it is a pointer naming this entity, else ``None``.
+
+    The pointer belongs to the entity it names and points into that entity's
+    directory, which decommission deletes. The organ launcher treats a missing
+    pointer as "no adapter", so removing it leaves the organ starting cleanly.
+    """
+    if entity_id is None or not is_entity_id(entity_id):
+        return None
+    pointer = volume / "active.json"
+    if read_pointer_owner(pointer) != entity_id:
+        return None
+    return pointer
+
+
+def attribute_entity_jobs(
+    entity_dir: Path, entity_id: str
+) -> tuple[list[Path], list[Path], list[str]]:
+    """Split the entries of this entity's job directory into its own and the ones kept.
+
+    A job is kept, and flagged, when its ``job.json`` names another entity or
+    cannot be read to say whom it names, and any symlink is kept. A job
+    without ``job.json`` (its spec was never written) or whose ``job.json``
+    records no owner belongs to the entity its directory names. Returns
+    ``(own, kept, notes)``.
+    """
+    own: list[Path] = []
+    kept: list[Path] = []
+    notes: list[str] = []
+    for entry in sorted(entity_dir.iterdir(), key=lambda p: p.name):
+        if entry.is_symlink():
+            kept.append(entry)
+            notes.append(
+                f"{entry} is a symlink in this entity's job directory; it is kept and its target is not touched"
+            )
+            continue
+        if not entry.is_dir():
+            own.append(entry)
+            continue
+        job_json = entry / "job.json"
+        if not job_json.exists() and not job_json.is_symlink():
+            own.append(entry)
+            continue
+        data: Any = None
+        if job_json.is_file() and not job_json.is_symlink():
+            try:
+                with job_json.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                data = None
+        if not isinstance(data, dict):
+            kept.append(entry)
+            notes.append(
+                f"job {entry} has a job.json that cannot be read, so its owner cannot be checked; it is kept"
+            )
+            continue
+        recorded = data.get("entity_id")
+        if recorded is None or recorded == entity_id:
+            own.append(entry)
+        else:
+            kept.append(entry)
+            notes.append(
+                f"job {entry} sits in this entity's directory but its job.json names entity {recorded!r}; it is kept, not deleted"
+            )
+    return own, kept, notes
+
+
 def attribute_organ_volume(
     volume: Path,
     own: set[str],
     current: tuple[str, str] | None = None,
+    *,
+    entity_id: str | None = None,
 ) -> tuple[list[Path], list[Path], list[str]]:
+    """Attribute the volume-root entries (the earlier flat layout) of the organ-adapters volume.
+
+    Entries named by an entity id are never attributed by checksum: this
+    entity's own subdirectory is left out (see :func:`own_entity_dir`), and
+    every other one is kept.
+    """
     own_paths: list[Path] = []
     shared_paths: list[Path] = []
     notes: list[str] = []
@@ -85,9 +222,24 @@ def attribute_organ_volume(
         return own_paths, shared_paths, notes
 
     found_current = False
+    legacy_kept = 0
+    own_dir, _ = own_entity_dir(volume, entity_id)
+    if own_dir is not None and current is not None:
+        for candidate in sorted(own_dir.glob("active-*.gguf")):
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            if _sha256(candidate) == current[1]:
+                found_current = True
+                break
     for entry in sorted(volume.iterdir(), key=lambda p: p.name):
+        if own_dir is not None and entry == own_dir:
+            continue
+        if is_entity_id(entry.name):
+            shared_paths.append(entry)
+            continue
         if entry.is_symlink() or not entry.is_file():
             shared_paths.append(entry)
+            legacy_kept += 1
             continue
         if re.fullmatch(r"active-\d+\.gguf", entry.name):
             digest = _sha256(entry)
@@ -97,20 +249,29 @@ def attribute_organ_volume(
                     found_current = True
             else:
                 shared_paths.append(entry)
+                legacy_kept += 1
         elif entry.name == "active.json":
             try:
                 with entry.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
                 data = None
-            if isinstance(data, dict) and data.get("sha256") in own:
+            if isinstance(data, dict) and "entity_id" in data:
+                # A pointer names its entity: this entity's pointer is left to
+                # own_root_pointer(); any other entity's is kept untouched,
+                # whatever its checksum.
+                if entity_id is None or data.get("entity_id") != entity_id:
+                    shared_paths.append(entry)
+            elif isinstance(data, dict) and data.get("sha256") in own:
                 own_paths.append(entry)
             else:
                 shared_paths.append(entry)
+                legacy_kept += 1
         else:
             shared_paths.append(entry)
+            legacy_kept += 1
 
-    if not own_paths and shared_paths:
+    if not own_paths and legacy_kept:
         notes.append(
             f"nothing in {volume} could be attributed to this entity from its records; everything there is kept"
         )
@@ -132,7 +293,14 @@ def attribute_job_dirs(
     store_dirs: tuple[Path, ...],
     *,
     old_jobs_mounts: tuple[str, ...] | None = None,
+    entity_id: str | None = None,
 ) -> tuple[list[Path], list[Path], list[str]]:
+    """Attribute the volume-root job directories (the earlier flat layout).
+
+    Entries named by an entity id are never attributed by recorded path or
+    checksum: this entity's own subdirectory is left out (see
+    :func:`own_entity_dir`), and every other one is kept.
+    """
     if old_jobs_mounts is None:
         old_jobs_mounts = _OLD_JOBS_MOUNTS
     own_paths: list[Path] = []
@@ -141,10 +309,18 @@ def attribute_job_dirs(
     if not jobs_dir.exists():
         return own_paths, shared_paths, notes
 
+    legacy_kept = 0
+    own_dir, _ = own_entity_dir(jobs_dir, entity_id)
     resolved_stores = {d.resolve() for d in store_dirs if d.exists()}
     for entry in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
+        if own_dir is not None and entry == own_dir:
+            continue
+        if is_entity_id(entry.name):
+            shared_paths.append(entry)
+            continue
         if entry.is_symlink() or not entry.is_dir():
             shared_paths.append(entry)
+            legacy_kept += 1
             continue
 
         attributed = False
@@ -186,8 +362,9 @@ def attribute_job_dirs(
             own_paths.append(entry)
         else:
             shared_paths.append(entry)
+            legacy_kept += 1
 
-    if not own_paths and shared_paths:
+    if not own_paths and legacy_kept:
         notes.append(
             f"nothing in {jobs_dir} could be attributed to this entity from its records; everything there is kept"
         )
@@ -248,6 +425,15 @@ class Location:
     bundle_dir: str | None = None
     contents_only: bool = False
     notes: tuple[str, ...] = ()
+    # Set for a location in a shared volume: every path must lie inside one of
+    # these entity directories (or be one), and deletion checks again, just
+    # before it removes anything, that the directory is still a real child of
+    # its volume.
+    owner_dirs: tuple[Path, ...] | None = None
+    # Set for the organ-adapters pointer: deletion reads the pointer again just
+    # before removing it and refuses unless it still names this entity, so a
+    # pointer another entity wrote in the meantime is never removed.
+    pointer_owner: str | None = None
 
     def existing(self) -> list[Path]:
         """Return the candidate paths that currently exist, in order, without duplicates."""
@@ -637,10 +823,51 @@ def entity_locations(
     for jobs_dir in job_dirs:
         if not jobs_dir.exists():
             continue
-        own_j, shared_j, notes_j = attribute_job_dirs(jobs_dir, own_checksums, store_dirs)
+        own_j, shared_j, notes_j = attribute_job_dirs(
+            jobs_dir, own_checksums, store_dirs, entity_id=entity_id
+        )
         own_job_paths.extend(own_j)
         shared_job_paths.extend(shared_j)
         job_notes.extend(notes_j)
+
+    # This entity's own subdirectory of each jobs directory. It is backed up and
+    # deleted whole unless it holds an entry that must be kept; then only its
+    # own entries are, each checked to lie inside it.
+    entity_job_paths: list[Path] = []
+    entity_job_dirs: list[Path] = []
+    mismatched_jobs: list[Path] = []
+    mismatched_notes: list[str] = []
+    for jobs_dir in job_dirs:
+        if not jobs_dir.exists():
+            continue
+        entity_dir, dir_notes = own_entity_dir(jobs_dir, entity_id)
+        job_notes.extend(dir_notes)
+        if entity_dir is None or entity_id is None:
+            continue
+        own_e, kept_e, notes_e = attribute_entity_jobs(entity_dir, entity_id)
+        entity_job_dirs.append(entity_dir)
+        entity_job_paths.extend([entity_dir] if not kept_e else own_e)
+        mismatched_jobs.extend(kept_e)
+        mismatched_notes.extend(notes_e)
+    locations.append(
+        Location(
+            "sleep.voice_jobs.entity_dir",
+            BACKUP_DELETE,
+            tuple(entity_job_paths),
+            "this entity's own directory in the voice-alignment jobs volume, with its jobs and their training pairs",
+            bundle_dir="locations/sleep.voice_jobs.entity_dir",
+            owner_dirs=tuple(entity_job_dirs),
+        )
+    )
+    locations.append(
+        Location(
+            "sleep.voice_jobs.mismatched",
+            RETAIN,
+            tuple(mismatched_jobs),
+            "kept: a job in this entity's directory whose owner record names another entity or cannot be read",
+            notes=tuple(mismatched_notes),
+        )
+    )
 
     locations.append(
         Location(
@@ -672,11 +899,42 @@ def entity_locations(
     own_organ_paths: list[Path] = []
     shared_organ_paths: list[Path] = []
     organ_notes: list[str] = []
+    organ_entity_dirs: list[Path] = []
+    organ_pointers: list[Path] = []
     for organ_dir in organ_paths:
-        own_o, shared_o, notes_o = attribute_organ_volume(organ_dir, own_checksums, current)
+        own_o, shared_o, notes_o = attribute_organ_volume(
+            organ_dir, own_checksums, current, entity_id=entity_id
+        )
         own_organ_paths.extend(own_o)
         shared_organ_paths.extend(shared_o)
         organ_notes.extend(notes_o)
+        entity_dir, dir_notes = own_entity_dir(organ_dir, entity_id)
+        organ_notes.extend(dir_notes)
+        if entity_dir is not None:
+            organ_entity_dirs.append(entity_dir)
+        pointer = own_root_pointer(organ_dir, entity_id)
+        if pointer is not None:
+            organ_pointers.append(pointer)
+    locations.append(
+        Location(
+            "organ_adapters.pointer",
+            BACKUP_DELETE,
+            tuple(organ_pointers),
+            "the organ-adapters volume's active.json pointer naming this entity (it points into this entity's directory)",
+            bundle_dir="locations/organ_adapters.pointer",
+            pointer_owner=entity_id if organ_pointers else None,
+        )
+    )
+    locations.append(
+        Location(
+            "organ_adapters.entity_dir",
+            BACKUP_DELETE,
+            tuple(organ_entity_dirs),
+            "this entity's own directory in the shared organ-adapters volume (its promoted adapters and manifest)",
+            bundle_dir="locations/organ_adapters.entity_dir",
+            owner_dirs=tuple(organ_entity_dirs),
+        )
+    )
 
     live_organ_paths: list[Path] = []
     live_organ_set: set[Path] = set()
@@ -1231,6 +1489,53 @@ def cancel_voice_alignment_jobs(
     return cancelled, still_running
 
 
+def entity_dir_job_groups(
+    locations: list[Location],
+) -> dict[Path, set[str] | None]:
+    """Where to cancel this entity's jobs inside its own job directories.
+
+    Maps each of the entity's job directories to the job names to cancel
+    there, or to ``None`` when the whole directory is the entity's (every job
+    in it). A job kept because its owner record disagrees is never listed.
+    """
+    groups: dict[Path, set[str] | None] = {}
+    for loc in locations:
+        if loc.key != "sleep.voice_jobs.entity_dir" or not loc.owner_dirs:
+            continue
+        for path in loc.existing():
+            if path in loc.owner_dirs:
+                groups[path] = None
+                continue
+            parent = path.parent
+            if parent not in loc.owner_dirs or not path.is_dir() or path.is_symlink():
+                continue
+            names = groups.setdefault(parent, set())
+            if names is not None:
+                names.add(path.name)
+    return groups
+
+
+def cancel_entity_dir_jobs(
+    locations: list[Location],
+    *,
+    wait_s: float = 60.0,
+    **kwargs: Any,
+) -> tuple[list[str], list[str]]:
+    """Cancel and wait for this entity's jobs inside its own job directories.
+
+    Returns ``(cancelled, still_running)`` with each job as a path string.
+    """
+    cancelled: list[str] = []
+    still_running: list[str] = []
+    for entity_dir, names in entity_dir_job_groups(locations).items():
+        if not entity_dir_is_contained(entity_dir):
+            continue
+        c, s = cancel_voice_alignment_jobs(entity_dir, only=names, wait_s=wait_s, **kwargs)
+        cancelled.extend(str(entity_dir / n) for n in c)
+        still_running.extend(str(entity_dir / n) for n in s)
+    return cancelled, still_running
+
+
 def delete_roots(
     config: Mapping[str, Any] | None,
     *,
@@ -1326,6 +1631,48 @@ def delete_roots(
         add(trainer_jobs_path)
 
     return tuple(roots), tuple(refused)
+
+
+def shared_volume_roots(
+    config: Mapping[str, Any] | None,
+    *,
+    state_root: Path,
+    data_root: Path,
+) -> set[Path]:
+    """The resolved roots of the volumes several entities may share (organ adapters, trainer jobs)."""
+    values = (
+        _cfg(config, "sleep.voice_alignment.organ_adapters_dir", "/organ-adapters"),
+        _cfg(config, "sleep.voice_alignment.trainer_workdir", "state/sleep/voice_align_jobs"),
+        trainer_jobs_dir(config),
+    )
+    roots: set[Path] = set()
+    for value in values:
+        path = _rebase(str(value), state_root=state_root, data_root=data_root)
+        for form in _path_forms(path, state_root):
+            roots.add(form.resolve())
+    return roots
+
+
+def within_entity_dir(path: Path, owner_dirs: tuple[Path, ...]) -> bool:
+    """True when ``path`` is one of ``owner_dirs`` or lies inside one, checked now.
+
+    Each owner directory must still pass :func:`entity_dir_is_contained` (a
+    real directory named by an entity id directly under its volume), so a
+    directory swapped for a symlink after the locations were listed is
+    refused. ``path`` itself is judged by its own location when it is a
+    symlink (only the link is ever removed), else by its real path.
+    """
+    if path.is_symlink():
+        judged = path.parent.resolve() / path.name
+    else:
+        judged = path.resolve()
+    for owner in owner_dirs:
+        if not entity_dir_is_contained(owner):
+            continue
+        owner_real = owner.resolve()
+        if judged == owner_real or judged.is_relative_to(owner_real):
+            return True
+    return False
 
 
 def within_delete_roots(path: Path, roots: tuple[Path, ...]) -> bool:
