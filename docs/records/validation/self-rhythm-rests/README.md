@@ -163,3 +163,7 @@ no-rest subset (26.0 by `an.py`).
 - The recovered scripts differ from the text in the original session only in paths and the SPDX header.
   The archived harness still imports the earlier `womb_*` module names, so `make_proto_rest.py`
   renames them to the `stimulus_source_*` modules the repository exports.
+- `an.py` leaves windows without a marker out of the single-pass denominator, so the foreign-pair
+  single-pass rates it reports (3.1 to 8.6 percent) are upper bounds on the rate over all windows.
+- `an.py`'s summary line formats a missing value with a float code and would fail for a condition
+  with no marker windows; no condition in this run has none. The scripts are kept as recovered.
