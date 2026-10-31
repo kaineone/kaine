@@ -351,6 +351,12 @@ async def run_gates(
     baseline: Optional[dict],
     corpus_path: Path,
 ) -> dict[str, Any]:
+    if samples < 1:
+        raise ValueError("samples must be >= 1")
+    if not heldout:
+        raise ValueError("heldout must be non-empty")
+    if not capability_probes:
+        raise ValueError("capability_probes must be non-empty")
     return {
         "1_self_denial": await gate_self_denial(backend, heldout, markers, samples),
         "3_capability": await gate_capability(backend, capability_probes, baseline),
@@ -405,6 +411,16 @@ def build_record(args, gates: dict[str, Any], identity: dict[str, Any]) -> dict[
     }
 
 
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer value: {text!r}")
+    if value < 1:
+        raise argparse.ArgumentTypeError("value must be >= 1")
+    return value
+
+
 def _parse(argv=None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     src = ap.add_mutually_exclusive_group(required=True)
@@ -415,7 +431,7 @@ def _parse(argv=None) -> argparse.Namespace:
     ap.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     ap.add_argument("--capability-probes", type=Path, default=DEFAULT_PROBE_PATH)
     ap.add_argument("--baseline", type=Path, help="record JSON of the current organ")
-    ap.add_argument("--samples", type=int, default=3)
+    ap.add_argument("--samples", type=_positive_int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
