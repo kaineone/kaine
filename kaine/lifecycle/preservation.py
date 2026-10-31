@@ -973,7 +973,7 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
                         f"individuation tree"
                     )
                 if rel_path.parts == (CAPTURE_STRETCH_NAME,):
-                    # Host-local bookkeeping, not evidence: the revived being's
+                    # Host-local bookkeeping, not evidence: after a revive the
                     # new host starts its own failing-capture stretch.
                     continue
                 out = incoming / rel
