@@ -1,12 +1,23 @@
 ## ADDED Requirements
 
 ### Requirement: Every research run ends with a welfare exposure record
-At shutdown a research-mode cycle SHALL write `state/welfare/exposure.json`, atomically and with mode 0600: awake seconds; per deficit the deprivation share, uncontrolled share, open crossings and sleep-reset ends; the negative-valence share; curiosity's interest share; and per A.4 indicator its largest value, crossings, rests requested and freezes placed. It SHALL hold numbers and fixed labels only. A failed write SHALL be logged at error level.
+At shutdown a research-mode cycle SHALL write `state/welfare/exposure.json` as plain JSON, atomically and with mode 0600, carrying `run_id`, `boot_started_at`, the welfare monitor's per-indicator largest value, crossings, rests requested and freezes placed, and the producer tally's shares with `producer_restarts` and `covered_awake_seconds`. It SHALL hold numbers, booleans and fixed labels only. A failed write SHALL be logged at error level.
 
-#### Scenario: A viewing with one rest
+#### Scenario: A boot with one rest
 - **WHEN** a research run's boredom indicator crossed once and the requested rest was followed by no second crossing
-- **THEN** the exposure record shows one boredom crossing, one rest requested and no freeze
+- **THEN** the exposure record shows one boredom crossing, one rest requested and no freeze, with this run's `run_id`
 
 #### Scenario: The record is content-free
 - **WHEN** the record is written
-- **THEN** every value is a number, a boolean or a label from the fixed indicator and drive tables
+- **THEN** every value is a number, a boolean, the run id, a timestamp or a label from the fixed indicator and drive tables
+
+#### Scenario: A restarted producer
+- **WHEN** the welfare producer was restarted once during the run
+- **THEN** the record's indicator figures cover the whole run, and `producer_restarts` is 1 with `covered_awake_seconds` below the run's awake seconds
+
+### Requirement: A stale exposure record is removed at boot
+Every cycle boot SHALL delete any existing `state/welfare/exposure.json` before the boot gates run.
+
+#### Scenario: A revive from a bundle that holds an old record
+- **WHEN** a step revives a bundle whose state contains an exposure record and then crashes before shutdown
+- **THEN** no exposure record exists after the crash
