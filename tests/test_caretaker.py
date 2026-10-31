@@ -233,6 +233,26 @@ def test_render_text_without_conditions():
     assert notice["dashboard_url"] in message
 
 
+def test_welfare_freeze_notices_are_distinct_and_content_free():
+    """A freeze that could not be written must not read like a placed pause."""
+    cfg = CaretakerConfig()
+    failed = build_notice("welfare_freeze_failed", cfg)
+    placed = build_notice("welfare_freeze_placed", cfg)
+    for notice in (failed, placed):
+        assert set(notice.keys()) == set(NOTICE_FIELDS)
+        assert notice["conditions"] is None
+    failed_title, failed_message = render_text(failed)
+    assert failed_title == (
+        "KAINE kaine: welfare response fired but the freeze could not be written: "
+        "the entity is NOT paused, the freeze is being retried"
+    )
+    assert failed_message == f"Dashboard: {cfg.dashboard_url}"
+    placed_title, _ = render_text(placed)
+    assert placed_title == "KAINE kaine: welfare freeze now in place: the entity is paused"
+    plain_title, _ = render_text(build_notice("welfare_response", cfg))
+    assert len({failed_title, placed_title, plain_title}) == 3
+
+
 def _gvariant_string(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 

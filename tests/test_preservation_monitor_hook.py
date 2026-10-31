@@ -42,7 +42,8 @@ async def test_welfare_on_response_called():
 
     monitor = _make_monitor(on_response=cb)
     await monitor._respond("sustained_distress")
-    assert called == ["notify"]
+    # The callback gets the record's transition.
+    assert called == ["protective_action"]
 
 
 @pytest.mark.asyncio

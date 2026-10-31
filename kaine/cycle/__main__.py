@@ -2754,12 +2754,17 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
 
     ctx._caretaker_tasks = set()
 
-    def _on_welfare_response(action: str) -> None:
+    def _on_welfare_response(transition: str) -> None:
+        # The monitor passes its record's transition. The caretaker must be able
+        # to tell a response whose freeze could not be written (the entity is
+        # NOT paused) from a placed pause, and hear when a pending freeze is
+        # finally placed; every other response is the plain welfare notice.
         if ctx.caretaker is None:
             return
+        event = _WELFARE_TRANSITION_NOTICE.get(transition, "welfare_response")
         try:
             task = asyncio.get_running_loop().create_task(
-                ctx.caretaker.send_event("welfare_response")
+                ctx.caretaker.send_event(event)
             )
         except RuntimeError:
             return
@@ -2786,6 +2791,14 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             on_response=_on_welfare_response,
             unfrozen_clock=ctx.unfrozen_clock,
         )
+
+
+# Caretaker notice for a welfare-monitor record transition; any other
+# transition sends "welfare_response".
+_WELFARE_TRANSITION_NOTICE = {
+    "protective_action_freeze_failed": "welfare_freeze_failed",
+    "protective_action_freeze_placed": "welfare_freeze_placed",
+}
 
 
 async def _pause_if_frozen_at_launch(cycle, playlist_clock) -> None:

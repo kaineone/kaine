@@ -12,17 +12,31 @@ When the welfare response's action is `end` and the stop hook is not wired or ra
 - **WHEN** the response's action is `end` and no stop hook is wired
 - **THEN** the welfare freeze is placed and the record has action `pause_fallback`
 
-### Requirement: A welfare freeze that cannot be written is recorded and notified
-When writing the welfare freeze raises, for a `pause` or a `pause_fallback`, the protective welfare monitor SHALL NOT let the error end the response. It SHALL log the error, record the response with the transition `protective_action_freeze_failed` and the error, with paths scrubbed, in `freeze_error`, and notify the caretaker as for a response whose freeze was written. A record whose freeze was written SHALL carry `freeze_error` as null.
+### Requirement: A welfare freeze that cannot be written is recorded
+When writing the welfare freeze raises, for a `pause` or a `pause_fallback`, the protective welfare monitor SHALL NOT let the error end the response. It SHALL log the error and record the response with the transition `protective_action_freeze_failed` and the error, with paths scrubbed, in `freeze_error`. A record whose freeze was written SHALL carry `freeze_error` as null.
 
 #### Scenario: The freeze cannot be written
 - **WHEN** the response preserves the entity and writing the welfare freeze raises an `OSError`
 - **THEN** the response is recorded as `protective_action_freeze_failed` with the error in `freeze_error`
-- **AND** the caretaker is notified
 
 #### Scenario: The freeze is written
 - **WHEN** the response writes the welfare freeze
 - **THEN** the record carries `freeze_error` as null
+
+### Requirement: The caretaker can tell a failed welfare freeze from a placed pause
+A response whose welfare freeze could not be written SHALL send the caretaker the `welfare_freeze_failed` notice, saying the entity is NOT paused and the freeze is being retried, instead of `welfare_response`. When the pending freeze is placed, the monitor SHALL send `welfare_freeze_placed` once. Both notices SHALL carry no entity content and no paths.
+
+#### Scenario: The freeze cannot be written
+- **WHEN** a response's welfare freeze raises
+- **THEN** the caretaker is sent the `welfare_freeze_failed` notice, not the `welfare_response` notice
+
+#### Scenario: The pending freeze is placed
+- **WHEN** a retried welfare freeze is written or found in place
+- **THEN** the caretaker is sent the `welfare_freeze_placed` notice
+
+#### Scenario: The freeze is written at once
+- **WHEN** the response writes the welfare freeze
+- **THEN** the caretaker is sent the `welfare_response` notice
 
 ### Requirement: A welfare freeze that cannot be written is retried without a second preservation
 After a response whose welfare freeze could not be written, the monitor SHALL stay latched for the episode and SHALL NOT count the pause as placed. Each later poll SHALL retry only the freeze, with no new preservation and no new record per failed attempt, and SHALL log a still-failing retry at error level at most once a minute. When the retried freeze is written, the monitor SHALL write one `protective_action_freeze_placed` record and latch as for a pause it placed.
@@ -35,6 +49,18 @@ After a response whose welfare freeze could not be written, the monitor SHALL st
 #### Scenario: The freeze keeps failing
 - **WHEN** writing the welfare freeze raises on every poll while distress continues
 - **THEN** every poll retries the freeze, no second preservation bundle and no second record are made, and the pause does not count as placed
+
+### Requirement: A pending welfare freeze already in place is not written again
+Before each retry of a pending welfare freeze, the monitor SHALL read the freeze holders. When a `welfare` holder is already present, the monitor SHALL treat the freeze as placed without writing it again, write one `protective_action_freeze_placed` record with `freeze_found_in_place` true, and latch as for a pause it placed. When the holders cannot be read, it SHALL retry the write.
+
+#### Scenario: The freeze landed but reported failure
+- **WHEN** writing the welfare freeze adds the `welfare` entry and then raises
+- **THEN** the next poll finds the `welfare` holder, records one `protective_action_freeze_placed` with `freeze_found_in_place` true, and writes no second welfare entry on any later poll
+- **AND** a named override that lifts the welfare freeze re-arms the monitor, which does not place the freeze again
+
+#### Scenario: The holders cannot be read before a retry
+- **WHEN** a freeze is pending and the freeze holders cannot be read
+- **THEN** the monitor retries writing the freeze
 
 ## MODIFIED Requirements
 
