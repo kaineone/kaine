@@ -6,7 +6,8 @@
 
 ## 2. Probes
 
-- [ ] 2.1 `_capability_score` and `_abliteration_verdict` render each probe with the chat template (plain, no system, thinking off) before `_generate`. Test with the fake stack that generation receives the rendered ids, and a real-template test that a probe's ids equal the served prompt.
+- [ ] 2.1 `_capability_score` and `_abliteration_verdict` render each probe with the chat template in both layouts, thinking off: bare (plain, no system) and persona own-turn (messages from the job, rendered by the job writer through `LanguageModule.probe_request`'s fixed conditions and `chat_messages`, the final assistant message continued). Test with the fake stack that generation receives the rendered ids in each layout, and a real-template test that a probe's ids equal the served prompt in each.
+- [ ] 2.3 The relative veto per layout and the lower capability score. Tests: an adapter worse only under the persona is rejected; one worse only bare is rejected; both layouts' counts are in the result.
 - [ ] 2.2 Mutation check: reverting to raw-text tokenization makes a test fail.
 
 ## 3. Log and pair builder
