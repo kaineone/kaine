@@ -4,11 +4,12 @@
 """Out-of-process voice-alignment trainer entry point.
 
 This script runs INSIDE an operator-configured external Python environment
-(e.g. the Unsloth Studio interpreter, or an unsloth-core env on AMD hosts) —
+(any environment with torch, transformers, peft and bitsandbytes, such as the
+trainer image's venv or an Unsloth Studio interpreter) —
 NEVER in the KAINE entity-runtime venv. It is invoked by path as a subprocess
 by ``kaine.modules.sleep.subprocess_trainer.SubprocessVoiceTrainer``.
 
-Hard boundary: this file imports ONLY unsloth / trl / peft / datasets / torch /
+Hard boundary: this file imports ONLY torch / transformers / peft / bitsandbytes /
 the standard library. It MUST NOT import ``kaine`` — the runtime
 import-linter contracts depend on it staying out of the ``kaine`` import graph,
 and the two environments share nothing but the filesystem (different Python
@@ -141,7 +142,7 @@ def split_pairs_by_system(pairs: list[dict[str, Any]]) -> tuple[list[dict[str, A
 
 
 def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert kept pairs into TRL's conversational DPO format."""
+    """Convert kept pairs into conversational DPO rows (prompt, chosen, rejected)."""
     rows: list[dict[str, Any]] = []
     for p in pairs:
         rows.append(
@@ -906,7 +907,7 @@ def _promote(tmp_dir: Path, final_dir: Path, job_dir: Path) -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# the real unsloth DPO run
+# the real DPO run
 # --------------------------------------------------------------------------- #
 def _cuda_memory_gib(device: str) -> tuple[Optional[float], Optional[float]]:
     """Measure peak/total CUDA memory in GiB, or None if unavailable."""
