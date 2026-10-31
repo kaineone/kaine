@@ -296,6 +296,9 @@ class IndividuationRuntime:
                     "kind": kind,
                     "reference_id": payload.get("reference_id"),
                     "last_reason": payload.get("last_reason"),
+                    # A failure label such as "organ_resting", set only while
+                    # no reference exists because its capture keeps failing.
+                    "capture_reason": payload.get("capture_reason"),
                     "inconclusive_since": inconclusive_since,
                     "days": days,
                 },

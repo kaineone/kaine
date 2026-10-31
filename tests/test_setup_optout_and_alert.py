@@ -329,3 +329,45 @@ def test_caretaker_has_conditions_changed_title() -> None:
         "individuation_conditions_changed", caretaker.CaretakerConfig()
     )
     assert notice["event"] == "individuation_conditions_changed"
+
+
+def test_individuation_alert_ledger_unreadable_reaches_the_caretaker() -> None:
+    events: list = []
+    kinds: list = []
+    runtime = _make_runtime(events, kinds)
+
+    asyncio.run(runtime.alert({"kind": "individuation_ledger_unreadable"}))
+
+    assert len(events) == 1
+    assert events[0].payload["kind"] == "individuation_ledger_unreadable"
+    assert kinds == ["individuation_ledger_unreadable"]
+    notice = caretaker.build_notice(
+        "individuation_ledger_unreadable", caretaker.CaretakerConfig()
+    )
+    assert caretaker.render_text(notice)[0].endswith(
+        "individuation ledger unreadable (looks refused)"
+    )
+
+
+def test_individuation_alert_no_reference_carries_the_capture_reason() -> None:
+    events: list = []
+    kinds: list = []
+    runtime = _make_runtime(events, kinds)
+
+    asyncio.run(
+        runtime.alert(
+            {
+                "kind": "individuation_inconclusive",
+                "inconclusive_since": "2024-01-01T00:00:00",
+                "days": 14.0,
+                "last_reason": "no_reference",
+                "capture_reason": "organ_resting",
+            }
+        )
+    )
+
+    payload = events[0].payload
+    assert payload["last_reason"] == "no_reference"
+    assert payload["capture_reason"] == "organ_resting"
+    assert payload["reference_id"] is None
+    assert kinds == ["individuation_inconclusive"]

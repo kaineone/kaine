@@ -299,7 +299,9 @@ def _aggregate_individuation(config: EvaluationConfig) -> dict[str, Any] | None:
         "p_value": latest.get("p_value"),
         "alpha_k": latest.get("alpha_k"),
         "warmed_up": latest.get("warmed_up"),
-        "inconclusive_reason": latest.get("inconclusive_reason"),
+        "inconclusive_reason": (
+            raw.get("last_inconclusive_reason") or latest.get("inconclusive_reason")
+        ),
         "inconclusive_since": raw.get("inconclusive_since"),
         "inconclusive_alerted": raw.get("inconclusive_alerted"),
     }

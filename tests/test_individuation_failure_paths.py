@@ -542,7 +542,7 @@ async def _setup_alpha_unresolvable(rig: Rig) -> None:
 
 PRE_SAMPLING = [
     # (setup, expected reason, expected shared-verdict state)
-    # Recorded under reference_id "unknown"; the unreadable ledger reads as individuated.
+    # The unreadable ledger reads as individuated, whatever the reports say.
     (_setup_ledger_unreadable, "ledger_unreadable", "unreadable"),
     (_setup_reference_unreadable, "reference_unreadable", "unreadable"),
     (_setup_no_reference, "no_reference", "no_reference"),
@@ -551,8 +551,8 @@ PRE_SAMPLING = [
     (_setup_battery_changed, "battery_changed", "inconclusive"),
     (_setup_conditions_changed, "conditions_changed", "inconclusive"),
     (_setup_conditions_unreadable, "conditions_unreadable", "inconclusive"),
-    # Recorded under reference_id "unknown", so the shared reader shows no report.
-    (_setup_refresh_conditions_fails, "conditions_unreadable", "none"),
+    # Bound to the readable reference, so the shared reader shows it.
+    (_setup_refresh_conditions_fails, "conditions_unreadable", "inconclusive"),
     (_setup_conditioning_unreadable, "conditioning_unreadable", "inconclusive"),
     (_setup_alpha_unresolvable, "alpha_unresolvable", "inconclusive"),
 ]
@@ -1075,55 +1075,332 @@ async def test_failure_reports_are_encrypted_and_content_free_on_disk(tmp_path, 
     assert verdict(rig)["state"] == "inconclusive"
 
 
-# --- known gaps (bugs), pinned until fixed ----------------------------------
+# --- a corrupt ledger notifies the operator ---------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: a corrupt ledger raises no operator notice. The spec scenario 'A corrupt "
-        "ledger fails closed' requires one, but IndividuationScheduler._mark_inconclusive "
-        "returns early on LedgerUnreadable, and the long-inconclusive alert keeps its "
-        "stretch in the unreadable ledger, so the operator is never alerted."
-    ),
-)
+def _ledger_alerts(rig: Rig) -> list[dict]:
+    return [a for a in rig.alerts if a["kind"] == "individuation_ledger_unreadable"]
+
+
+async def _run_stretch(rig: Rig, start: float, end: float, step: float = 50.0) -> None:
+    t = start
+    while t <= end:
+        rig.clock.t = t
+        await rig.sched.tick()
+        t += step
+
+
 async def test_corrupt_ledger_raises_an_operator_notice(tmp_path):
     rig = make_rig(tmp_path, with_scheduler=True)
     await captured(rig)
     warm(rig.paths)
     _corrupt(rig.paths.ledger)
+    corrupt_bytes = rig.paths.ledger.read_bytes()
 
     await rig.sched.tick()
-    t = 10.0
-    while t <= 600:
-        rig.clock.t = t
-        await rig.sched.tick()
-        t += 50
+    await _run_stretch(rig, 10, 600)
 
     assert rig.sink.writes and all(
         r["inconclusive_reason"] == "ledger_unreadable" for r in rig.sink.writes
     )
-    assert rig.alerts, "no operator notice for an unreadable ledger"
+    # Raised at the first failed look, once for this process, and content-free.
+    assert rig.alerts == [{"kind": "individuation_ledger_unreadable"}]
+    # Never reset: the corrupt file is left exactly as it was.
+    assert rig.paths.ledger.read_bytes() == corrupt_bytes
+    assert rig.pub.published == []
+    assert verdict(rig)["individuated"] is True
+    assert_no_content(rig)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: a reference capture that keeps failing never alerts the operator. The "
-        "'Long inconclusive stretches raise an operator alert' requirement counts 'no "
-        "reference exists' as a due look, but _attempt_capture only backs off and "
-        "_attempt_look skips no_reference without _mark_inconclusive, so no alert fires."
-    ),
-)
+async def test_corrupt_ledger_notice_while_the_look_is_blocked(tmp_path):
+    paused = [False]
+    rig = make_rig(tmp_path, with_scheduler=True, sched_overrides={"paused": lambda: paused[0]})
+    await captured(rig)
+    warm(rig.paths)
+    _corrupt(rig.paths.ledger)
+    paused[0] = True
+
+    await rig.sched.tick()
+    rig.clock.t = 10
+    await rig.sched.tick()
+
+    assert rig.sink.writes == []
+    assert _ledger_alerts(rig) == [{"kind": "individuation_ledger_unreadable"}]
+
+
+async def test_corrupt_ledger_notice_repeats_after_restart_and_after_repair(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    ledger = await captured(rig)
+    warm(rig.paths)
+    good = load_ledger(rig.paths)
+    _corrupt(rig.paths.ledger)
+    await rig.sched.tick()
+    await _run_stretch(rig, 10, 200)
+    assert len(_ledger_alerts(rig)) == 1
+
+    # A fresh process with the ledger still corrupt tells the operator again, once.
+    rig2 = make_rig(tmp_path, with_scheduler=True, clock=Clock(0.0))
+    await rig2.sched.tick()
+    await _run_stretch(rig2, 10, 200)
+    assert len(_ledger_alerts(rig2)) == 1
+
+    # Repaired, then corrupt again in the same process: a new notice.
+    rig2.paths.ledger.unlink()
+    save_ledger(rig2.paths, good)
+    rig2.core._conditioning_inputs = FakeConditioning(sha="sha-a")  # unchanged: a skip
+    rig2.clock.t = 2000
+    await rig2.sched.tick()
+    assert rig2.sched.state.ledger_readable is True
+    _corrupt(rig2.paths.ledger)
+    await _run_stretch(rig2, 3000, 3200)
+    assert len(_ledger_alerts(rig2)) == 2
+    assert ledger.reference_id == good.reference_id
+
+
+async def test_corrupt_ledger_notice_retried_when_delivery_fails(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    await captured(rig)
+    warm(rig.paths)
+    _corrupt(rig.paths.ledger)
+    attempts: list[dict] = []
+
+    async def flaky(payload: dict) -> None:
+        attempts.append(payload)
+        if len(attempts) == 1:
+            raise RuntimeError("caretaker unreachable")
+
+    rig.sched._alert = flaky
+    await rig.sched.tick()
+    await _run_stretch(rig, 10, 300)
+    assert len(attempts) == 2  # one failure, one delivery, then quiet
+
+
+async def test_capture_hitting_a_corrupt_ledger_notifies(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.paths.root.mkdir(parents=True, exist_ok=True)
+    _corrupt(rig.paths.ledger)
+    rig.sched.request_capture("capture")
+    await rig.sched.tick()
+    assert _ledger_alerts(rig) == [{"kind": "individuation_ledger_unreadable"}]
+    assert rig.paths.ledger.read_text(encoding="utf-8") == "{not json"
+
+
+# --- a capture that keeps failing raises the long-inconclusive alert -------
+
+
+def _stretch_alerts(rig: Rig) -> list[dict]:
+    return [a for a in rig.alerts if a["kind"] == "individuation_inconclusive"]
+
+
+async def _fail_captures(rig: Rig, start: float, end: float) -> None:
+    t = start
+    while t <= end:
+        rig.clock.t = t
+        await rig.sched.tick()
+        t += 5
+
+
 async def test_failing_capture_alerts_after_the_inconclusive_stretch(tmp_path):
     rig = make_rig(tmp_path, with_scheduler=True)
     rig.organ.fail_from(1, "resting")
     rig.sched.request_capture("capture")
 
-    t = 0.0
-    while t <= 2000:  # four times inconclusive_alert_s
-        rig.clock.t = t
-        await rig.sched.tick()
-        t += 5
+    await _fail_captures(rig, 0, 495)
+    assert _stretch_alerts(rig) == []  # inconclusive_alert_s = 500 not reached
+
+    await _fail_captures(rig, 500, 2000)
     assert not rig.paths.reference.exists()
-    assert rig.alerts, "no operator notice while the entity has no reference"
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    assert alerts[0]["last_reason"] == "no_reference"
+    assert alerts[0]["capture_reason"] == "organ_resting"
+    assert alerts[0]["inconclusive_since"] == WallClock(Clock(0.0))().isoformat()
+    assert set(alerts[0]) == {"kind", "inconclusive_since", "days", "last_reason", "capture_reason"}
+    assert rig.sink.writes == []
+    assert rig.pub.published == []
+    assert not rig.paths.ledger.exists()
+    assert verdict(rig)["individuated"] is False
+    assert_no_content(rig)
+
+
+async def test_blocked_capture_counts_toward_the_stretch(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True, sched_overrides={"paused": lambda: True})
+    rig.sched.request_capture("capture")
+    await _run_stretch(rig, 0, 600, step=20)
+    alerts = _stretch_alerts(rig)
+    assert len(alerts) == 1
+    assert (alerts[0]["last_reason"], alerts[0]["capture_reason"]) == ("no_reference", "paused")
+    assert rig.organ.calls == 0
+
+
+async def test_capture_stretch_survives_restart_without_realerting(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+    await _fail_captures(rig, 0, 300)
+    assert _stretch_alerts(rig) == []
+
+    # The restart does not restart the stretch: it still alerts at 500 s.
+    rig2 = make_rig(tmp_path, with_scheduler=True, clock=Clock(300.0))
+    rig2.organ.fail_from(1, "resting")
+    rig2.sched.request_capture("capture")
+    await _fail_captures(rig2, 300, 600)
+    assert len(_stretch_alerts(rig2)) == 1
+
+    # And a second restart in the same stretch does not alert again.
+    rig3 = make_rig(tmp_path, with_scheduler=True, clock=Clock(600.0))
+    rig3.organ.fail_from(1, "resting")
+    rig3.sched.request_capture("capture")
+    await _fail_captures(rig3, 600, 1200)
+    assert _stretch_alerts(rig3) == []
+
+
+async def test_successful_capture_clears_the_stretch(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+    await _fail_captures(rig, 0, 600)
+    assert len(_stretch_alerts(rig)) == 1
+    assert rig.paths.capture_stretch.exists()
+
+    rig.organ.fault = None
+    await _fail_captures(rig, 605, 700)
+    assert rig.paths.reference.exists()
+    assert not rig.paths.capture_stretch.exists()
+    assert load_ledger(rig.paths).inconclusive_since is None
+
+
+async def test_unreadable_capture_stretch_does_not_silence_the_alert(tmp_path):
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.paths.root.mkdir(parents=True, exist_ok=True)
+    rig.paths.capture_stretch.write_text("garbage", encoding="utf-8")
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+    await rig.sched.tick()
+    assert len(_stretch_alerts(rig)) == 1
+    # Rewritten as a readable, already-alerted stretch, so it does not repeat.
+    await _fail_captures(rig, 5, 200)
+    assert len(_stretch_alerts(rig)) == 1
+
+
+async def test_capture_stretch_is_encrypted_and_content_free(tmp_path, monkeypatch):
+    _enable_encryption(monkeypatch)
+    rig = make_rig(tmp_path, with_scheduler=True)
+    rig.organ.fail_from(1, "resting")
+    rig.sched.request_capture("capture")
+    await _fail_captures(rig, 0, 600)
+    raw = rig.paths.capture_stretch.read_bytes()
+    assert b"organ_resting" not in raw and b"since" not in raw
+    from kaine.lifecycle.individuation_store import load_capture_stretch
+
+    stretch = load_capture_stretch(rig.paths)
+    assert stretch.alerted is True
+    assert stretch.last_reason == "organ_resting"
+
+
+# --- early inconclusive reports are visible, and never a verdict -----------
+
+
+async def test_refresh_failure_report_is_visible_to_the_shared_reader(tmp_path):
+    rig = make_rig(tmp_path)
+    await _setup_refresh_conditions_fails(rig)
+    ledger = load_ledger(rig.paths)
+
+    outcome = await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+
+    assert outcome.report["reference_id"] == ledger.reference_id
+    assert outcome.report["look_index"] is None
+    reports = read_reports(rig.paths, reference_id=ledger.reference_id)
+    assert [r["inconclusive_reason"] for r in reports] == ["conditions_unreadable"]
+    v = verdict(rig)
+    assert (v["state"], v["individuated"], v["latched"]) == ("inconclusive", False, False)
+    assert v["last_inconclusive_reason"] == "conditions_unreadable"
+    assert v["looks_completed"] == 0
+
+
+@pytest.mark.parametrize("variant", ["maturation", "drifted"], ids=["not_significant", "latched"])
+@pytest.mark.parametrize("failure", ["refresh", "ledger"])
+async def test_early_inconclusive_report_never_changes_the_verdict(tmp_path, variant, failure):
+    rig = make_rig(tmp_path)
+    await captured(rig)
+    rig.organ.variant = variant
+    if failure == "refresh":
+        refreshes = {"fail": False}
+
+        async def refresh() -> None:
+            if refreshes["fail"]:
+                raise httpx.ConnectError("organ unreachable")
+
+        rig.core._refresh_conditions = refresh
+    scored = await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+    assert scored.outcome == "scored"
+    rig.organ.variant = "maturation"
+    before = verdict(rig)
+    ledger_before = load_ledger(rig.paths)
+
+    if failure == "refresh":
+        refreshes["fail"] = True
+        expected = "conditions_unreadable"
+    else:
+        rig.paths.ledger.write_text("{not json", encoding="utf-8")
+        expected = "ledger_unreadable"
+    outcome = await rig.core.look(warmed_up=True, lived_seconds=200.0, lived_ticks=90)
+    assert outcome.reason == expected
+
+    after = verdict(rig)
+    assert after["last_inconclusive_reason"] == expected
+    if failure == "refresh":
+        # Same verdict, same latest scored look; only the display field moved.
+        assert {k: v for k, v in after.items() if k != "last_inconclusive_reason"} == {
+            k: v for k, v in before.items() if k != "last_inconclusive_reason"
+        }
+        assert after["latest"]["outcome"] == "scored"
+        assert load_ledger(rig.paths) == ledger_before
+    else:
+        # An unreadable ledger is individuated whatever the reports say.
+        assert (after["state"], after["individuated"]) == ("unreadable", True)
+
+
+async def test_reference_unreadable_report_stays_unbound(tmp_path):
+    rig = make_rig(tmp_path)
+    await _setup_reference_unreadable(rig)
+    outcome = await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+    assert outcome.report["reference_id"] == "unknown"
+    v = verdict(rig)
+    assert (v["state"], v["individuated"]) == ("unreadable", True)
+    assert v["last_inconclusive_reason"] is None
+
+
+async def test_dashboard_and_decommission_show_the_early_inconclusive_reason(tmp_path, monkeypatch):
+    from kaine.evaluation.config import EvaluationConfig
+    from kaine.evaluation.dashboard_tab import _aggregate_individuation
+    from kaine.lifecycle.divergence import assess_divergence
+    from kaine.storage import set_data_root
+
+    set_data_root(None)
+    monkeypatch.chdir(tmp_path)
+    try:
+        rig = make_rig(tmp_path / "state")
+        await _setup_refresh_conditions_fails(rig)
+        await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+
+        panel = _aggregate_individuation(EvaluationConfig.from_mapping({}))
+        assert panel["state"] == "inconclusive"
+        assert panel["inconclusive_reason"] == "conditions_unreadable"
+        assert panel["p_value"] is None and panel["effect_size_h"] is None
+
+        assessment = assess_divergence(state_root=tmp_path / "state")
+        assert assessment.signals["individuation_individuated"] is False
+        assert assessment.signals["individuation_last_inconclusive_reason"] == "conditions_unreadable"
+        assert "INCONCLUSIVE" in assessment.summary
+
+        rig.core._refresh_conditions = None
+        rig.paths.ledger.write_text("{not json", encoding="utf-8")
+        await rig.core.look(warmed_up=True, lived_seconds=100.0, lived_ticks=50)
+        panel = _aggregate_individuation(EvaluationConfig.from_mapping({}))
+        assert panel["state"] == "unreadable"
+        assert panel["inconclusive_reason"] == "ledger_unreadable"
+        assessment = assess_divergence(state_root=tmp_path / "state")
+        assert assessment.diverged is True
+    finally:
+        set_data_root(None)

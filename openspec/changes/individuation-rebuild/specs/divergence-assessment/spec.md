@@ -38,7 +38,8 @@ The system SHALL provide one reader of individuation reports in `kaine/lifecycle
 
 - decrypt each line with the state encryptor, passing legacy plaintext through;
 - skip undecryptable lines, non-objects, lines whose `kind` is not `individuation_report`, and lines whose `schema_version` is not 2;
-- keep only reports whose `reference_id` equals the current reference's;
+- keep only reports whose `reference_id` equals the current reference's (an inconclusive report written before the ledger or the probe conditions could be read is bound to the reference when the reference itself is readable, with no look index, so it is shown; only a report written when the reference is unreadable stays unbound);
+- expose the newest inconclusive report's reason for display only; inconclusive reports never count as scored evidence, so they cannot change the verdict;
 - order reports by `ts`, not by file name;
 - treat a non-latched scored report as "not individuated" evidence only if the current conditioning digest equals the ledger's `last_look_conditions_digest` and the report's age is at most `max_report_age_s` (default 1209600 s, 14 days); otherwise the evidence is stale and the decommission summary SHALL read "STALE: the entity has changed since the last measurement; treat it as mature if unsure".
 

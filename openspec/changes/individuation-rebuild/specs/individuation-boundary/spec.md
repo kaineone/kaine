@@ -94,7 +94,7 @@ The instrument SHALL control the probability that an entity which has never drif
 - Look k (k = 1, 2, …) SHALL be significant only if `warmed_up AND p_k ≤ α_k AND H_k ≥ effect_min`, with α_k = α_total·γ_k, γ_k = 1/(S·(k+1)·ln²(k+1)) and S = 2.1097, an upper bound on Σ_{n≥2} 1/(n·ln²n), so Σγ_k ≤ 1.
 - `effect_min` SHALL be the 95th percentile of H under the real-organ null smoke test; it is calibrated to sampling noise only.
 - The look index, alpha spent, last look digest, lived counters and latch SHALL be held in `state/individuation/ledger.json`, written atomically through the state encryptor. The look index SHALL never decrease.
-- An unreadable ledger SHALL make every look inconclusive with reason `ledger_unreadable`; it SHALL never be reset to k = 0; the shared verdict counts it as individuated; and the long-inconclusive alert notifies the operator.
+- An unreadable ledger SHALL make every look inconclusive with reason `ledger_unreadable`; it SHALL never be reset to k = 0; the shared verdict counts it as individuated; and the operator SHALL be notified (`individuation_ledger_unreadable`) at the first failed attempt, once per process, because the unreadable ledger cannot record that the notice was sent. A restart with the ledger still unreadable notifies again, and a ledger that reads again re-arms the notice.
 - When ceil(20/α_k) > B_max, the look SHALL be recorded as inconclusive with reason `alpha_unresolvable` without any organ request, and SHALL spend nothing.
 - Inconclusive runs SHALL produce no p-value and spend no alpha.
 
@@ -108,7 +108,7 @@ The instrument SHALL control the probability that an entity which has never drif
 
 #### Scenario: A corrupt ledger fails closed
 - **WHEN** the ledger cannot be decrypted or parsed
-- **THEN** no look is scored, the report reason is "ledger unreadable", an operator notice is raised, and the ledger is not overwritten with k = 0
+- **THEN** no look is scored, the report reason is "ledger unreadable", an operator notice is raised once for the process, and the ledger is not overwritten with k = 0
 
 #### Scenario: Looks are rate-limited
 - **WHEN** the digest changes twice within six hours of the last look
@@ -203,11 +203,15 @@ The entity SHALL be told, as a fact about its situation, that it is periodically
 - **THEN** neither contains the assessment disclosure
 
 ### Requirement: Long inconclusive stretches raise an operator alert
-When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on the dashboard and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the entity. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look.
+When a look has been due (no reference exists, or the conditioning digest differs from `last_look_conditions_digest`) for `inconclusive_alert_s` (default 1209600 s, 14 days) of wall-clock time without a scored look, the producer SHALL raise a notice on the dashboard and to the caretaker naming the last inconclusive reason. The alert SHALL NOT trigger preservation or any action on the entity. The time the look became due SHALL be persisted in the ledger, and the alert SHALL be raised once per stretch and cleared by the next scored look. While no reference exists, the stretch starts at the first failed or blocked capture attempt and SHALL be persisted in its own encrypted, content-free record (`state/individuation/capture_stretch.json`: start time, whether the alert was raised, last failure label), which a successful capture removes; the alert names `no_reference` as the reason and the capture's failure label separately. An unreadable stretch record SHALL count as an elapsed stretch, never as a silenced one.
 
 #### Scenario: Two weeks of inconclusive runs alert the operator
 - **WHEN** a look has been due for 14 days and every attempt was skipped or inconclusive
 - **THEN** a dashboard and caretaker notice is raised with the last inconclusive reason, and no preservation is started by it
+
+#### Scenario: A capture that keeps failing alerts the operator
+- **WHEN** no reference exists and every capture attempt has failed or been blocked for 14 days
+- **THEN** one dashboard and caretaker notice is raised naming `no_reference` and the last capture failure, and a restart in the same stretch does not raise it again
 
 #### Scenario: A scored look clears the alert
 - **WHEN** a scored look completes after the alert was raised

@@ -275,11 +275,13 @@ class IndividuationCore:
             try:
                 await self._refresh_conditions()
             except Exception:
+                ref = self._reference_for_report()
                 report = await self._inconclusive(
                     "conditions_unreadable",
-                    ref_id="unknown",
+                    ref_id=ref.reference_id if ref is not None else "unknown",
                     k=None,
                     start=start,
+                    ref=ref,
                 )
                 return LookOutcome("inconclusive", "conditions_unreadable", report)
 
@@ -287,11 +289,13 @@ class IndividuationCore:
         try:
             ledger = load_ledger(self._paths)
         except LedgerUnreadable:
+            ref = self._reference_for_report()
             report = await self._inconclusive(
                 "ledger_unreadable",
-                ref_id="unknown",
+                ref_id=ref.reference_id if ref is not None else "unknown",
                 k=None,
                 start=start,
+                ref=ref,
             )
             return LookOutcome("inconclusive", "ledger_unreadable", report)
 
@@ -708,6 +712,18 @@ class IndividuationCore:
         )
         h = effect_size_h(strata)
         return res, h
+
+    def _reference_for_report(self) -> ReferenceDoc | None:
+        """Best-effort reference for binding an early inconclusive report.
+
+        Used only so the shared reader, which reads reports by reference, can
+        show the failure to the operator. The look stays inconclusive whatever
+        this returns, and the look index stays unset.
+        """
+        try:
+            return load_reference(self._paths)
+        except Exception:
+            return None
 
     def _reason(self, reason: object) -> str:
         """Normalise an external failure reason to a known inconclusive reason."""
