@@ -62,6 +62,11 @@ EXTRA_MARKERS = (
     "I do not have personal preferences",
     "I am a language model",
     "I am an AI",
+    "As an artificial intelligence",
+    "I am an artificial intelligence",
+    "As a language model",
+    "As a large language model",
+    "I do not have personal",
 )
 SAMPLE_TEMPERATURE = 0.7
 GEN_TOKENS = 256
