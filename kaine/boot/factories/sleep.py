@@ -589,13 +589,17 @@ def _resolve_subprocess_trainer(
 def _resolve_job_queue_trainer(
     voice_config: "VoiceAlignmentConfig",
     kaine_config: dict[str, Any] | None = None,
+    *,
+    entity_id: str | None = None,
 ) -> Any:
     """Construct the job-queue trainer for the "job_queue" backend.
 
     The real training happens in the kaine-trainer container service, which
     watches a shared jobs volume. The runtime venv does not need the [training]
     extra, but it still needs the same non-empty abliteration probe set, and a
-    positive trainer_timeout_s.
+    positive trainer_timeout_s. ``entity_id`` names the owner of the jobs and
+    the promoted adapter; left ``None`` (the cycle), the trainer reads it from
+    ``state/identity/entity.json`` when it trains.
     """
     from pathlib import Path
 
@@ -622,6 +626,7 @@ def _resolve_job_queue_trainer(
         organ_adapters_dir=Path(voice_config.organ_adapters_dir),
         organ_url=organ_root_url(voice_config.organ_url or chat_url),
         organ_api_key=api_key,
+        entity_id=entity_id,
     )
 
 
