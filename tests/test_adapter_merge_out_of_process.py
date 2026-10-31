@@ -524,16 +524,27 @@ def test_invalid_merge_timeout_is_refused(tmp_path):
 # --------------------------------------------------------------------------- #
 # the parent stays clean
 # --------------------------------------------------------------------------- #
-def test_parent_imports_neither_transformers_nor_peft_for_a_merge(tmp_path):
-    """Run in a fresh interpreter so earlier tests cannot mask an import."""
+@pytest.mark.parametrize("hide_peft", [False, True], ids=["peft-as-installed", "peft-hidden"])
+def test_parent_imports_neither_transformers_nor_peft_for_a_merge(tmp_path, hide_peft):
+    """Run in a fresh interpreter so earlier tests cannot mask an import.
+
+    Passes whether or not peft is installed (``hide_peft`` blocks it, as in a
+    CI environment without the training extra)."""
     code = textwrap.dedent(
         """
         import sys, json
+        if sys.argv[2] == "hide":
+            sys.modules["peft"] = None
         from pathlib import Path
         from types import SimpleNamespace
         from kaine.lifecycle.adapter_merge import (
             ChildMergeRunner, TiesDareAdapterMerger, TiesDareMergeConfig,
         )
+
+        import kaine.lifecycle.adapter_merge as am
+        # Report the extras as present whether or not this environment has
+        # them: the test is about what the merge imports, not what is installed.
+        am.check_peft_available = lambda: None
 
         root = Path(sys.argv[1])
 
@@ -560,13 +571,13 @@ def test_parent_imports_neither_transformers_nor_peft_for_a_merge(tmp_path):
         )
         paths, meta = merger.merge([str(root / "pa")], [str(root / "pb")])
         assert len(paths) == 1, meta
-        bad = [m for m in ("transformers", "peft") if m in sys.modules]
+        bad = [m for m in ("transformers", "peft") if sys.modules.get(m) is not None]
         assert not bad, bad
         print("CLEAN")
         """
     )
     proc = subprocess.run(
-        [sys.executable, "-c", code, str(tmp_path)],
+        [sys.executable, "-c", code, str(tmp_path), "hide" if hide_peft else "keep"],
         env={**os.environ, "PYTHONPATH": str(REPO_ROOT), "CUDA_VISIBLE_DEVICES": ""},
         capture_output=True,
         text=True,
