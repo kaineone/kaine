@@ -8,14 +8,14 @@
 
 ## 3. One heard rule (PR 1)
 
-- [ ] 3.1 Move `_heard_texts` and `_is_heard_event` to `kaine/faithful/external_input.py`; the language module imports them with no behaviour change
-- [ ] 3.2 The episodic memory module stores heard members as `<heard omitted>` and `heard: true`
-- [ ] 3.3 Tests: `tests/test_external_input_heard_rule.py` (language module's results unchanged on its existing cases); `tests/test_episodic_memory_heard_not_stored.py` (`embodiment.chat`, `audition.transcription`, a nested heard-text field)
+- [x] 3.1 Move `_heard_texts` and `_is_heard_event` to `kaine/faithful/external_input.py` (as `heard_texts` and `is_heard_event`, beside `HEARD_TEXT_FIELDS`); the language module imports them with no behaviour change
+- [x] 3.2 The episodic memory module stores heard members as `<heard omitted>` in the trace text (the `heard: true` member entry is part of 4.1, since traces have no members before PR 2)
+- [x] 3.3 Tests: `tests/test_external_input_heard_rule.py` (language module's results unchanged on its existing cases); `tests/test_episodic_memory_heard_not_stored.py` (`embodiment.chat`, `audition.transcription`, a nested heard-text field)
 - [ ] 3.4 Worker first-pass review, lead review, independent second review (privacy boundary)
 
 ## 4. Members, search and the recall event (PR 2)
 
-- [ ] 4.1 `FELT_FIELDS` per felt template in `kaine/faithful/felt.py`; `members` on new traces
+- [ ] 4.1 `FELT_FIELDS` per felt template in `kaine/faithful/felt.py`; `members` on new traces, a heard member as `{source, type, heard: true}` with no payload (classified with `is_heard_event`)
 - [ ] 4.2 Live recall over the persisted collection and the short-term buffer with `recall_exclude_recent_s`
 - [ ] 4.3 `top_similarity` on every recall; `content` behind `recall_content`; republication filter
 - [ ] 4.4 Config keys `recall_content = false`, `recall_exclude_recent_s = 30.0`, `recall_render_max = 3`, `familiarity_window = 100`

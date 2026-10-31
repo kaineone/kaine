@@ -13,6 +13,7 @@ from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.faithful.external_input import is_heard_event
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -564,18 +565,22 @@ class EpisodicMemory(BaseModule):
 
 # Raw-perceptual event types whose verbatim payload must NEVER be persisted into
 # memory text at the encoding site. The episodic memory module is legitimately persistent
-# cognitive state, but a raw transcript / raw visual frame selected into the
-# workspace is RAW sense data — covered by the project's zero-raw-sense-data
-# persistence invariant. This denylist is defence-in-depth at the SOURCE,
-# independent of any downstream redaction (replay observer etc.). The
-# event's metadata (source/type/entry_id) is still recorded; only its payload
-# is dropped.
+# cognitive state, but a raw visual frame selected into the workspace is RAW
+# sense data, covered by the project's zero-raw-sense-data persistence
+# invariant. This denylist is defence-in-depth at the SOURCE, independent of any
+# downstream redaction (replay observer etc.). The event's source and type are
+# still recorded; only its payload is dropped. Heard words (a transcript, a chat
+# message, a heard-text field at any depth) are kept out by the shared heard
+# rule instead (``is_heard_event``, below).
 _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
     {
-        "audition.transcription",
         "embodiment.visual.raw",
     }
 )
+
+# Stored in place of a heard event's payload: the trace records that something
+# was heard, never the words.
+HEARD_OMITTED_MARKER = "<heard omitted>"
 
 
 def _affect_intensity(affect: dict[str, Any] | None) -> float:
@@ -610,8 +615,11 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     either stored in the payload or meaningless after stream trimming). Every
     payload that is kept passes through ``strip_vectors``, so memory text never
     carries perceptual embeddings; raw-perceptual payloads are not kept at all.
-    Replay events are recorded by id only; storing the replayed text would nest
-    the old trace inside the new one on every sleep.
+    A heard event, classified by the shared heard rule the language module uses
+    (``kaine.faithful.external_input.is_heard_event``), is kept as its source
+    and type with ``<heard omitted>``, never its words. Replay events from this
+    module are recorded by id only; storing the replayed text would nest the old
+    trace inside the new one on every sleep.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
@@ -621,9 +629,16 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             # its verbatim payload (raw sense data must not persist into memory).
             pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
             continue
-        if event.type == "episodic_memory.replay":
-            # Storing the text would nest the old trace inside the new one on every sleep.
-            pieces.append(f"{event.source}:{event.type}=<replay of {event.payload.get('memory_id')}>")
+        if event.source == EpisodicMemory.name and event.type == "episodic_memory.replay":
+            # Storing the text would nest the old trace inside the new one on every
+            # sleep. Checked before the heard rule, which counts the replay's
+            # ``text`` field as heard; only the point id is kept.
+            memory_id = event.payload.get("memory_id")
+            shown = memory_id if isinstance(memory_id, str) else None
+            pieces.append(f"{event.source}:{event.type}=<replay of {shown}>")
+            continue
+        if is_heard_event(event):
+            pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
             continue
         pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
     return " | ".join(pieces) if pieces else ""

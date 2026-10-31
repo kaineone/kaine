@@ -42,7 +42,7 @@ When `[vision].capture_enabled = true`, `LiveCamera` opens `cv2.VideoCapture(dev
 
 What does persist from live perception:
 
-- Processed perceptions flowing through the bus and into the episodic memory module as ordinary memories. The episodic memory module strips vectors from kept payloads, and transcription payloads are stored as `<raw-perceptual omitted>`.
+- Processed perceptions flowing through the bus and into the episodic memory module as ordinary memories. The episodic memory module strips vectors from kept payloads. Heard input (transcriptions, in-world chat, and heard-text fields nested in other modules' events) is stored as `<heard omitted>`, never its words, and raw visual frames as `<raw-perceptual omitted>`.
 - `state/perceptual_locus/runtime.json` and `state/perceptual_locus/desired.json`, which hold booleans and ISO timestamps only and no sensory content.
 - Standard logger lines for capture state transitions, never transcribed text.
 - The optional **external-utterance log** (`[research_event_log.external_utterances]`, `state/research/external_utterances/`). It holds the entity's spoken text and timestamps. It never holds inner speech or bystander input. It is local-only and never exported.

@@ -12,7 +12,8 @@ from __future__ import annotations
 import math
 from typing import Any, Callable, Optional
 
-from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
+# HEARD_TEXT_FIELDS lives with the heard rule; it stays importable from here.
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, HEARD_TEXT_FIELDS
 
 TemplateFn = Callable[[dict[str, Any]], str]
 
@@ -59,24 +60,6 @@ def felt_drive_phrase(drive: str, value: object) -> str:
 
 
 HEARD_SPEECH_PLACEHOLDER = "[heard speech]"
-
-HEARD_TEXT_FIELDS = frozenset({
-    "text",
-    "user_input",
-    "user_text",
-    "transcription",
-    "heard_text",
-    "faithful_rendering",
-})
-"""Field names that may contain heard speech.
-`text` is treated as heard speech only for `audition.transcription`; for every
-other event type it is not. `faithful_rendering` is included because a rendering
-can embed earlier heard lines.
-
-External-input event types (``audition.transcription`` and ``embodiment.chat``) are
-redacted wholesale by type; on all other types, these fields are redacted at
-any depth.
-"""
 
 
 def _replace_text_leaves(value):

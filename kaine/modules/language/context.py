@@ -31,7 +31,7 @@ from typing import Any, Optional
 from kaine.bus import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful import FaithfulRenderer
-from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, heard_texts, is_heard_event
 from kaine.faithful.felt import felt_fallback, felt_renderer, redact_heard_speech_felt
 from kaine.faithful.templates import (
     HEARD_SPEECH_PLACEHOLDER,
@@ -233,24 +233,6 @@ def _contains_non_empty_heard_text(obj: Any, fields: frozenset[str]) -> bool:
     return False
 
 
-def _string_leaves(value: Any) -> list[str]:
-    """Return every non-empty (after strip) string found recursively in dicts, lists and tuples."""
-    if isinstance(value, str):
-        stripped = value.strip()
-        return [stripped] if stripped else []
-    if isinstance(value, dict):
-        leaves: list[str] = []
-        for item in value.values():
-            leaves.extend(_string_leaves(item))
-        return leaves
-    if isinstance(value, (list, tuple)):
-        leaves: list[str] = []
-        for item in value:
-            leaves.extend(_string_leaves(item))
-        return leaves
-    return []
-
-
 def _quote_heard(text: str, *, limit: int = HEARD_QUOTE_LIMIT) -> str:
     """One line of heard words, quoted, that can neither close its quote nor start a heading of the entity's notes."""
     text = " ".join(text.split())
@@ -266,40 +248,6 @@ def _quote_heard(text: str, *, limit: int = HEARD_QUOTE_LIMIT) -> str:
 def heard_utterance_line(text: str) -> str:
     """The attributed, quoted user-turn line for a heard trigger."""
     return HEARD_ATTRIBUTION_SAID + _quote_heard(text)
-
-
-def _heard_texts(event: Event) -> list[str]:
-    """Return the outside words an event carries."""
-    payload = event.payload
-    if not isinstance(payload, dict):
-        return []
-    if event.type in EXTERNAL_INPUT_TYPES:
-        return _string_leaves(payload)
-    if event.source == "language":
-        return []
-
-    def _collect(obj: Any) -> list[str]:
-        if isinstance(obj, dict):
-            leaves: list[str] = []
-            for key, value in obj.items():
-                if key in HEARD_TEXT_FIELDS:
-                    leaves.extend(_string_leaves(value))
-                else:
-                    leaves.extend(_collect(value))
-            return leaves
-        if isinstance(obj, (list, tuple)):
-            leaves: list[str] = []
-            for value in obj:
-                leaves.extend(_collect(value))
-            return leaves
-        return []
-
-    return _collect(payload)
-
-
-def _is_heard_event(event: Event) -> bool:
-    """Decided per event, before any rendering."""
-    return event.type in EXTERNAL_INPUT_TYPES or bool(_heard_texts(event))
 
 
 def _holds_outside_material(snapshot: Optional[WorkspaceSnapshot]) -> bool:
@@ -403,7 +351,7 @@ class ContextAssembler:
         )
         lines: list[str] = []
         running_chars = 0
-        for text in _heard_texts(ev):
+        for text in heard_texts(ev):
             line = attribution + _quote_heard(text) + "."
             if not lines:
                 lines.append(line)
@@ -426,8 +374,8 @@ class ContextAssembler:
         about_is_heard: bool = True,
     ) -> AssembledContext:
         events = list(snapshot.selected_events) if snapshot is not None else []
-        own_events = [(eid, ev) for eid, ev in events if not _is_heard_event(ev)]
-        heard_events = [(eid, ev) for eid, ev in events if _is_heard_event(ev)]
+        own_events = [(eid, ev) for eid, ev in events if not is_heard_event(ev)]
+        heard_events = [(eid, ev) for eid, ev in events if is_heard_event(ev)]
 
         if heard_events:
             heard_events = sorted(
@@ -529,12 +477,12 @@ class ContextAssembler:
         numeric_working_memory = None
         if self._numeric_renderer is not None and snapshot is not None:
             def _numeric_log_line(ev: Event) -> str:
-                if _is_heard_event(ev) and ev.type not in EXTERNAL_INPUT_TYPES:
+                if is_heard_event(ev) and ev.type not in EXTERNAL_INPUT_TYPES:
                     return HEARD_ATTRIBUTION_SAID + _quote_heard(HEARD_SPEECH_PLACEHOLDER) + "."
                 if (
                     (ev.source, ev.type) not in INTERNAL_EVENT_TYPES
                     and ev.type not in EXTERNAL_INPUT_TYPES
-                    and not _is_heard_event(ev)
+                    and not is_heard_event(ev)
                 ):
                     return _sanitize_line(felt_fallback(ev.source, ev.type, {}))
                 return redact_heard_speech(ev)
