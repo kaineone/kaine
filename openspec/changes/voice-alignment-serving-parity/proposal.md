@@ -8,7 +8,7 @@ Three more mismatches sit next to it:
 - The intent log stores heard speech only as a placeholder (paper §5.4), so the user turn and sometimes the prompt of a served request cannot be rebuilt from the log.
 - The trainer's capability and abliteration probes are tokenized as raw text with no chat template at all, so the veto that decides whether an adapter is promoted scores the organ on input it is never served.
 
-The KAINE-only LoRA adapter (operator decision, 2026-10-31) is trained with this trainer before the module-ignition study and is loaded in the entity's own-turn context during it. Its own-turn pairs are already encoded as served on the organ branch; its veto probes are not. Voice adaptation in sleep idles today (no validated preference source), so no entity has trained on the mismatched plain encoding.
+The KAINE-only LoRA adapter (operator decision, 2026-10-31) is trained with this trainer before the development run (the converted module-ignition study) and is loaded in the entity's own-turn context during it. Its own-turn pairs are already encoded as served on the organ branch; its veto probes are not. Voice adaptation in sleep idles today (no validated preference source), so no entity has trained on the mismatched plain encoding.
 
 ## What Changes
 
