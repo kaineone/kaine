@@ -22,6 +22,7 @@ Building the merge in float32 would double the memory of a 9B load, so the dtype
   
   The inputs go in a private job file (0600, in a 0700 directory), and the parent reads back a result file. The base model, the adapters and the checks load only in the child, so the parent's default dtype is never touched.
 - **The result keeps today's contract.** The merged adapter path and its check outcome are unchanged, and the merge-veto rule still fails closed. A child that crashes, times out, or writes an unreadable or partial result counts as a failed merge, never as an unchecked success. The child's environment is an allowlist, with Hugging Face offline, the same as the voice trainer's.
+- **The merged adapter is written to the output directory's top level.** PEFT saves a non-default adapter in a subdirectory named for it, so the checks (which load the output directory as an adapter) could not open it. The worker saves only the merged adapter and lifts it to the top level, which is the layout the docs describe. The merged adapter is written to a staging directory and renamed into place only after both checks pass, so a reader never finds a half-written adapter.
 - **Tests:**
   - the parent never imports `transformers` or `peft` during a merge;
   - `torch.get_default_dtype()` stays float32 around a merge;

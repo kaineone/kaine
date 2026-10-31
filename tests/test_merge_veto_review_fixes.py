@@ -280,7 +280,7 @@ def test_threshold_validation(tmp_path: Path, threshold: float, ok: bool):
             _cfg(tmp_path, capability_loss_threshold=threshold)
 
 
-def test_dashboard_factory_requires_probes(tmp_path: Path, monkeypatch):
+def test_dashboard_merger_runs_checks_in_the_child_with_configured_probes(tmp_path: Path, monkeypatch):
     import kaine.security.crypto as _crypto
     from kaine.dashboard.__main__ import _build_fork_manager
 
@@ -292,6 +292,8 @@ def test_dashboard_factory_requires_probes(tmp_path: Path, monkeypatch):
             "adapter_merge": {
                 "base_model_path": "/models/base",
                 "output_dir": str(tmp_path / "m"),
+                "capability_probe_path": "/p/cap.jsonl",
+                "abliteration_probe_path": "/p/abl.jsonl",
             },
             "snapshots_path": str(tmp_path / "forks"),
         },
@@ -300,4 +302,10 @@ def test_dashboard_factory_requires_probes(tmp_path: Path, monkeypatch):
 
     assert reason is None
     assert manager is not None
-    assert manager._adapter_merger._capability_eval._require_probes is True
+    merger = manager._adapter_merger
+    # The checks (with require_probes=True, see the worker tests) run in the
+    # child; this process holds no evaluator, scorer or loader.
+    assert merger._runner is not None
+    assert merger._capability_eval is None and merger._model_loader is None
+    assert merger._config.capability_probe_path == "/p/cap.jsonl"
+    assert merger._config.abliteration_probe_path == "/p/abl.jsonl"
