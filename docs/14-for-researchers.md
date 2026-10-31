@@ -95,7 +95,7 @@ Besides the six research-safety-net conditions (unattended conditions 1 to 5 and
 
 The gate is implemented in `kaine/cycle/unattended_gate.py`.
 
-A refused start sends a best-effort refusal notice. While a start is unacknowledged, every [dashboard](05-dashboard.md) page shows a banner with an Acknowledge button. With the default open access no operator session is needed, but a read-only dashboard refuses the POST. The caretaker gets a reminder every `reminder_interval_s`. While the entity runs, the caretaker is notified on supervisor escalation, lost supervision, a welfare-protective response, a boot that fails after admission, and input going quiet for `input_loss_after_s`. None of these notices changes the entity.
+A refused start sends a best-effort refusal notice. While a start is unacknowledged, every [dashboard](05-dashboard.md) page shows a banner with an Acknowledge button. With the default open access no operator session is needed, but a read-only dashboard refuses the POST. The caretaker gets a reminder every `reminder_interval_s`. While the entity runs, the caretaker is notified on supervisor escalation, lost supervision, a welfare-protective response (with its own notices when the response's freeze cannot be written and when the retried freeze is placed), a boot that fails after admission, and input going quiet for `input_loss_after_s`. None of these notices changes the entity.
 
 Read [Before you boot](#before-you-boot), then [Getting started](04-getting-started/README.md).
 
