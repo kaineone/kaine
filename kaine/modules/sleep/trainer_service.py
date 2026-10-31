@@ -33,28 +33,46 @@ LOGGER = logging.getLogger("kaine_trainer_service")
 # --------------------------------------------------------------------------- #
 # public API used by the service loop and by tests
 # --------------------------------------------------------------------------- #
-def find_ready_jobs(jobs_dir: Path | str) -> list[Path]:
-    """Return direct, non-symlinked job directories that are ready to run.
+def _is_ready(entry: Path) -> bool:
+    """True for a non-symlinked job directory with a regular READY file and no end marker."""
+    if not entry.is_dir() or entry.is_symlink():
+        return False
+    ready_file = entry / "READY"
+    if not ready_file.is_file() or ready_file.is_symlink():
+        return False
+    return not (
+        (entry / "CLAIMED").exists()
+        or (entry / "CANCELLED").exists()
+        or (entry / "result.json").exists()
+    )
 
+
+def find_ready_jobs(jobs_dir: Path | str) -> list[Path]:
+    """Return non-symlinked job directories that are ready to run.
+
+    Jobs live under ``<jobs_dir>/<entity_id>/<job_id>/``; jobs written before
+    the volume was partitioned by entity sit directly under ``<jobs_dir>`` and
+    are still found. Only subdirectories named by an entity id are searched,
+    and a symlinked entity directory is skipped like a symlinked job directory.
     A directory is ready when it contains a regular (non-symlink) ``READY`` file
     and does not contain ``CLAIMED``, ``CANCELLED`` or ``result.json``.
     """
+    from kaine.lifecycle.identity import is_entity_id
+
     root = Path(jobs_dir)
     ready: list[Path] = []
     for entry in root.iterdir():
         if not entry.is_dir() or entry.is_symlink():
             continue
-        ready_file = entry / "READY"
-        if not ready_file.is_file() or ready_file.is_symlink():
+        if _is_ready(entry):
+            ready.append(entry)
             continue
-        if (
-            (entry / "CLAIMED").exists()
-            or (entry / "CANCELLED").exists()
-            or (entry / "result.json").exists()
-        ):
+        if not is_entity_id(entry.name):
             continue
-        ready.append(entry)
-    return sorted(ready, key=lambda p: p.name)
+        for job in entry.iterdir():
+            if _is_ready(job):
+                ready.append(job)
+    return sorted(ready, key=lambda p: (p.name, str(p)))
 
 
 def claim(job_dir: Path | str) -> bool:

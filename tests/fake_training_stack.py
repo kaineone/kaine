@@ -371,6 +371,7 @@ async def run_inprocess(
     config = VoiceAlignmentConfig(**defaults)
 
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=None,
         trainer_workdir=tmp_path / "jobs",
         run_in_process=True,

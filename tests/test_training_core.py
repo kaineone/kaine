@@ -54,7 +54,7 @@ async def test_rejects_when_capability_loss_above_threshold(tmp_path, fake_train
     adapter_output_dir = tmp_path / "store" / "adapters"
     assert not any(p.name.endswith(".tmp") for p in adapter_output_dir.iterdir())
 
-    job_dirs = [d for d in (tmp_path / "jobs").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
     latest_job_dir = max(job_dirs, key=lambda d: d.stat().st_mtime)
     result_json = json.loads((latest_job_dir / "result.json").read_text(encoding="utf-8"))
     assert result_json["capability_loss"] == pytest.approx(1.0)
@@ -348,6 +348,7 @@ async def test_peak_vram_recorded_on_accepted_run(tmp_path, fake_training_stack,
     )
 
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=None,
         trainer_workdir=tmp_path / "jobs",
         run_in_process=True,
@@ -362,7 +363,7 @@ async def test_peak_vram_recorded_on_accepted_run(tmp_path, fake_training_stack,
     result2 = await trainer.train([_pair()], config)
     assert result2.accepted is True
 
-    job_dirs = [d for d in (tmp_path / "jobs").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
     latest_job_dir = max(job_dirs, key=lambda d: d.stat().st_mtime)
     result_json = _json.loads((latest_job_dir / "result.json").read_text(encoding="utf-8"))
     assert result_json["peak_vram_gib"] == 3.5

@@ -106,6 +106,7 @@ async def test_round_trip_accepted(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -149,6 +150,7 @@ async def test_job_spec_written_for_external_process(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -192,6 +194,7 @@ async def test_clean_rejection_is_not_an_error(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -220,6 +223,7 @@ async def test_nonzero_exit_raises(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -232,6 +236,7 @@ async def test_nonzero_exit_raises(tmp_path):
 async def test_missing_result_json_raises(tmp_path):
     stub = _write_stub(tmp_path, "return 0  # writes no result.json")
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -254,6 +259,7 @@ async def test_result_ok_false_raises(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -278,6 +284,7 @@ async def test_accepted_but_missing_adapter_raises(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -302,6 +309,7 @@ async def test_accepted_but_empty_adapter_dir_raises(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -314,6 +322,7 @@ async def test_accepted_but_empty_adapter_dir_raises(tmp_path):
 async def test_timeout_raises(tmp_path):
     stub = _write_stub(tmp_path, "import time; time.sleep(30); return 0")
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -326,6 +335,7 @@ async def test_timeout_raises(tmp_path):
 @pytest.mark.asyncio
 async def test_missing_entry_script_raises(tmp_path):
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=tmp_path / "nope.py",
@@ -338,6 +348,7 @@ async def test_missing_entry_script_raises(tmp_path):
 async def test_no_pairs_returns_clean_result(tmp_path):
     """No pairs → an honest non-accepted result, no subprocess launched."""
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=tmp_path / "unused.py",
@@ -360,6 +371,7 @@ async def test_missing_base_model_raises(tmp_path):
         trainer_workdir=str(tmp_path / "jobs"),
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=tmp_path / "unused.py",

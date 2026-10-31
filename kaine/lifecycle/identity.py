@@ -69,6 +69,15 @@ class IdentityError(RuntimeError):
     """The identity file, sidecar or metadata is missing, malformed or inconsistent."""
 
 
+def is_entity_id(value: object) -> bool:
+    """True when ``value`` is an entity ID in the frozen identity format.
+
+    A value that passes holds no path separator, no ``.`` and nothing else that
+    could name a place outside a directory, so it is safe as one path segment.
+    """
+    return isinstance(value, str) and _ENTITY_ID_RE.fullmatch(value) is not None
+
+
 def _valid_name(name: object) -> bool:
     """The shared name check (see ``is_valid_name`` in the self-model document)."""
     from kaine.modules.self_model.document import is_valid_name
