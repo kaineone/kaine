@@ -34,6 +34,28 @@ def test_control_corrupt_file_fails_closed_as_welfare_freeze(tmp_path):
     assert "unreadable" in (state.reason or "")
 
 
+@pytest.mark.parametrize("corrupt", [b"{ not json", b"[1, 2]", b'{"stack": 5}'])
+def test_write_control_leaves_corrupt_file_untouched(tmp_path, corrupt):
+    """write_control must not overwrite a corrupt file, which reads as a
+    fail-closed welfare freeze; only a named override may replace it."""
+    p = tmp_path / "control.json"
+    p.write_bytes(corrupt)
+    cs.write_control(cs.CycleControl(), path=p)
+    assert p.read_bytes() == corrupt
+    state = cs.read_control(p)
+    assert state.frozen is True
+    assert state.source == "welfare"
+
+
+def test_write_control_writes_missing_and_readable_files(tmp_path):
+    p = tmp_path / "control.json"
+    assert not p.exists()
+    cs.write_control(cs.CycleControl(frozen=True, reason="first"), path=p)
+    assert cs.read_control(p).reason == "first"
+    cs.write_control(cs.CycleControl(), path=p)
+    assert cs.read_control(p).frozen is False
+
+
 # ---- freeze-watch loop ------------------------------------------------------
 
 

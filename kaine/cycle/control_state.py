@@ -260,8 +260,31 @@ def read_holder_sources(path: Path | None = None) -> frozenset[str] | None:
 
 
 def write_control(state: CycleControl, path: Path | None = None) -> None:
+    """Write ``state`` as the whole control file, under the lock.
+
+    A missing file or a readable one is replaced. A file that exists but is
+    corrupt is left as it is: :func:`read_control` reports it as a welfare
+    freeze, so overwriting it would silently lift a fail-closed freeze. The
+    corruption is logged once and nothing is written; only :func:`override`
+    may replace a corrupt control file.
+    """
     target = resolve(path or CONTROL_PATH)
-    update_json_locked(target, lambda _current: state.to_dict(), default={})
+
+    def apply(current: Any) -> dict[str, Any]:
+        if current is _CORRUPT_SENTINEL and not target.exists():
+            return state.to_dict()
+        if not isinstance(current, dict):
+            raise _CorruptControlFile()
+        try:
+            CycleControl.from_dict(current)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise _CorruptControlFile()
+        return state.to_dict()
+
+    try:
+        update_json_locked(target, apply, default=_CORRUPT_SENTINEL)
+    except _CorruptControlFile:
+        _log_corrupt_once(target)
 
 
 def _state_of(stack: list[dict[str, Any]]) -> CycleControl:
