@@ -347,6 +347,55 @@ def test_main_keeps_an_operator_allocator_setting(
     assert recorded["value"] == "max_split_size_mb:128"
 
 
+def test_main_treats_an_empty_allocator_setting_as_unset(
+    mod, tmp_path, monkeypatch
+):
+    recorded = {}
+
+    def fake_train(*args, **kwargs):
+        recorded["value"] = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
+        return {
+            "ok": False,
+            "accepted": False,
+            "adapter_dir": None,
+            "steps": 0,
+            "dpo_loss": None,
+            "reason": "stub",
+            "capability_score_before": None,
+            "capability_score_after": None,
+            "capability_loss": None,
+            "samples_used": 0,
+        }
+
+    monkeypatch.setattr(mod, "_train", fake_train)
+    monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "")
+
+    base_dir = tmp_path / "base_model"
+    base_dir.mkdir()
+    cap = tmp_path / "cap_probes.jsonl"
+    cap.write_text(json.dumps({"prompt": "2+2", "expected": "4"}) + "\n")
+    ablit = tmp_path / "ablit_probes.jsonl"
+    ablit.write_text(
+        json.dumps({"prompt": "p", "deflection_patterns": ["I cannot"]}) + "\n"
+    )
+    job = _default_job(
+        tmp_path,
+        train_precision="bf16",
+        base_model_path=str(base_dir),
+        capability_probe_path=str(cap),
+        abliteration_probe_path=str(ablit),
+    )
+    job_dir = _write_job_dir(
+        tmp_path,
+        job,
+        [{"system": "s", "prompt": "p", "chosen": "c", "rejected": "r"}],
+    )
+
+    assert mod.main(["sleep_external_train.py", str(job_dir)]) == 0
+    assert recorded["value"] == "expandable_segments:True"
+    assert os.environ["PYTORCH_CUDA_ALLOC_CONF"] == ""
+
+
 # --------------------------------------------------------------------------- #
 # import boundary
 # --------------------------------------------------------------------------- #

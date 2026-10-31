@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: The trainer tolerates a shared GPU
-The voice-alignment trainer SHALL set `PYTORCH_CUDA_ALLOC_CONF` to `expandable_segments:True` before any CUDA allocation, unless `PYTORCH_CUDA_ALLOC_CONF` is already set, in which case it SHALL leave the existing value unchanged.
+The voice-alignment trainer SHALL set `PYTORCH_CUDA_ALLOC_CONF` to `expandable_segments:True` before any CUDA allocation, unless `PYTORCH_CUDA_ALLOC_CONF` is already set to a non-empty value, in which case it SHALL leave that value unchanged. An empty value counts as unset.
 
 #### Scenario: Allocator not configured
 - **WHEN** the trainer starts and `PYTORCH_CUDA_ALLOC_CONF` is unset

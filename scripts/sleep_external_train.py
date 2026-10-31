@@ -1341,13 +1341,16 @@ def main(argv: list[str]) -> int:
         # enough free memory; expandable segments map memory in pieces. An
         # operator's own setting wins, and the in-process backend's environment
         # is restored afterwards.
-        allocator_preset = "PYTORCH_CUDA_ALLOC_CONF" in os.environ
-        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        allocator_before = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
+        if not allocator_before:
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         try:
             result = _train(job, kept_pairs, load_kwargs, prev_adapter, job_dir)
         finally:
-            if not allocator_preset:
+            if allocator_before is None:
                 os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+            elif not allocator_before:
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = allocator_before
         # Record peak memory on every outcome, not only on out-of-memory, so a
         # real run shows how close the chosen precision came to the card's limit.
         if result.get("peak_vram_gib") is None and str(
