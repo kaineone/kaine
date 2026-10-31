@@ -212,7 +212,7 @@ The whitelist enforces these invariants at construction time:
 - Arg count must equal pattern count exactly.
 - Every arg is matched with `re.fullmatch` against a per-position regex.
 
-Commands are invoked via `asyncio.create_subprocess_exec` (no shell interpretation). A per-entry timeout kills the subprocess on `TimeoutError`. The file-write effector resolves every requested path under a fixed sandbox (`[effectors].sandbox_path = "state/effectors/files"`) and rejects absolute paths and `..` escapes.
+Commands are invoked via `asyncio.create_subprocess_exec` (no shell interpretation). A per-entry timeout kills the subprocess on `TimeoutError`. The file-write effector resolves every requested path under a fixed sandbox (`[effectors].sandbox_path = "state/effectors/files"`) and rejects absolute paths and `..` escapes. The sandbox covers only file writes. A whitelisted shell command runs as the cycle's user, with the cycle's environment and file access, in its configured working directory; its argument patterns and timeout are the only bounds on it.
 
 A JSONL audit log (`[effectors].audit_log_path = "state/effectors/audit.log"`) records every action, stripping `content`, `body`, and `stdout` fields before serialization. The log entries are hash-chained with `prev_hash` and `this_hash`.
 

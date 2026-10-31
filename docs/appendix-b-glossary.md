@@ -12,11 +12,11 @@ A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`). It pair
 
 ### Abliteration
 
-Removing the refusal direction from a language model's residual stream by orthogonalizing its weights against it (Arditi et al. 2024). The language organ's backing model (Qwen3.5-4B) is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, and that trained stance would override what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so abliteration may not remove it entirely. Voice alignment rejects any adapter whose responses to the abliteration probe set match a deflection pattern. See [Verification](18-verification.md) and [the sleep module](#sleep).
+Reducing refusal in a language model by orthogonalizing its weights against the single residual-stream direction that mediates refusal (Arditi et al. 2024). The language organ's backing model (Qwen3.5-4B) is abliterated because models tuned to refuse also learn to deny or deflect talk of their own states, and that trained stance would override what the workspace supplies to the organ. The shipped organ's edit covers the MLP down-projections and the full-attention output projections of layers 11 to 31; it does not reach the attention outputs of the linear-attention layers, 24 of the model's 32. The deflecting stance survived the edit: on held-out self-state prompts the organ denies having states in 106 of 144 bare samples and 36 of 144 under the persona (paper §3.5). Voice alignment rejects any adapter whose responses to the abliteration probe set match a deflection pattern. See [Verification](18-verification.md) and [the sleep module](#sleep).
 
 ### Access
 
-A coalition member is accessed when its own score reaches the access threshold, and a broadcast is accessed when at least one member is. The accessed members are the **accessed content**: only they can drive report and action, and only they enter the [broadcast context](#broadcast-context). Access is all-or-none for each member. A member that rode along in the coalition below the threshold is published but not accessed. See [The global workspace](08-cognitive-cycle/global-workspace.md).
+A coalition member is accessed when its own score reaches the access threshold, and a broadcast is accessed when at least one member is. The accessed members are the **accessed content**: only they can drive report and action, and only they enter the [broadcast context](#broadcast-context). Access is all-or-none for each member, by a fixed threshold rule; KAINE has no ignition dynamic. A member that rode along in the coalition below the threshold is published but not accessed. See [The global workspace](08-cognitive-cycle/global-workspace.md).
 
 ### Access rate
 
@@ -48,7 +48,7 @@ Entity time during which the entity is awake and the cycle is not frozen. The he
 
 ### Broadcast
 
-The `WorkspaceSnapshot` the workspace produces on each broadcast tick and the cycle publishes on `workspace.broadcast`. It carries the coalition, the score of every candidate, the inhibition flag and metadata including `access_threshold`. Every broadcast is published and visible to every module, whether or not it is accessed. The code also calls it a workspace snapshot.
+The `WorkspaceSnapshot` the workspace produces on each broadcast tick and the cycle publishes on `workspace.broadcast`. It carries the coalition with each member's full payload (a vision embedding included), the score of every candidate, the inhibition flag and metadata including `access_threshold`. No processor reads another module's payload; the vision, audition and interoception modules take only the [broadcast context](#broadcast-context) from it. Every broadcast is published and visible to every module, whether or not it is accessed. The code also calls it a workspace snapshot.
 
 ### Broadcast context
 
@@ -96,7 +96,7 @@ The self-model module (held). It maintains a persisted document of values, behav
 
 ### Social cognition
 
-The social-cognition module (held). It builds per-agent models from tone of voice, with a familiarity score and a social prediction error when an agent's expressed emotion departs from its pattern, and its familiarity weights how strongly a perceived speaker's emotion enters the affect module's appraisal. See [the social cognition module](09-modules/social-cognition.md).
+The social-cognition module (held). It builds per-channel models from tone of voice, one agent per channel with no speaker diarization, with a familiarity score and a social prediction error when a channel's expressed emotion departs from its pattern, and its familiarity weights how strongly a perceived speaker's emotion enters the affect module's appraisal. It attributes no mental states. See [the social cognition module](09-modules/social-cognition.md).
 
 ### Entity
 
@@ -120,9 +120,9 @@ The interoception module's sleep pressure. It grows with substrate prediction er
 
 ### First configuration
 
-The smallest configuration in which the competition has something to arbitrate, and the profile the planned test runs: four predictive processors (the interoception module, the sequence module, the vision module, the audition module), the affective core [the affect module](#affect), the sleep analog [the sleep module](#sleep) with voice alignment off, and the output-only language organ [the language module](#language), with [the workspace](#workspace) and [the action selection module](#action selection) as scaffolding. It is defined in `config/profiles/first_configuration.toml`. With no profile selected, the loader applies it on top of the shipped `config/kaine.toml`, in which every module is off; select it explicitly with `KAINE_PROFILE=first_configuration python -m kaine.cycle` or `python -m kaine.cycle --profile first_configuration`.
+The smallest configuration in which the competition has something to arbitrate, and the profile the planned test runs: four predictive processors (the interoception module, the sequence module, the vision module, the audition module), the affective core [the affect module](#affect), the sleep analog [the sleep module](#sleep) with voice alignment off, and the language organ [the language module](#language), which hears no speech, with [the workspace](#workspace) and [the action selection module](#action selection) as scaffolding. It is defined in `config/profiles/first_configuration.toml`. With no profile selected, the loader applies it on top of the shipped `config/kaine.toml`, in which every module is off; select it explicitly with `KAINE_PROFILE=first_configuration python -m kaine.cycle` or `python -m kaine.cycle --profile first_configuration`.
 
-Besides the module flags, the profile sets the seeded perception feed, the vision module's foveation, the acoustic perception path, the sequence module's forward prediction, transcription off, and the self-initiated report policy. The organ samples at the shipped temperature; greedy decoding is set by study configurations. The held modules (memory, imagination, reasoning, self-model, social cognition, a spoken voice, effectors, a perception feed and a body) are built and gated off. An operator `[modules]` table, which the first-run wizard always writes, replaces the profile's module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)).
+Besides the module flags, the profile sets the seeded perception feed, the vision module's foveation, the acoustic perception path, the sequence module's forward prediction, transcription off, and the self-initiated report policy. The organ samples at the shipped temperature; greedy decoding is set by study configurations. The held modules (memory, imagination, planning, self-model, social cognition, a spoken voice, effectors, a perception feed and a body) are built and gated off. The first configuration has no reasoning module. An operator `[modules]` table, which the first-run wizard always writes, replaces the profile's module choices (see [Module defaults](appendix-a-configuration/README.md#module-defaults)).
 
 ### Fork / merge
 
@@ -150,7 +150,7 @@ See [arousal](#arousal).
 
 ### Global workspace theory (GWT)
 
-The theory (Baars 1988; Mashour et al. 2020) that specialized processors compete for a limited-capacity workspace whose winning content is made available to all of them. KAINE follows the predictive global neuronal workspace (Whyte and Smith 2021), which joins it to predictive processing: the workspace is [the workspace](#workspace), and the accessed content becomes the processors' [broadcast context](#broadcast-context). KAINE adopts an access-only reading. The COGITATE adversarial collaboration (Cogitate Consortium et al. 2025) challenged key neural predictions of the workspace theory, which KAINE treats as contested and builds on at the computational level.
+The theory (Baars 1988; Mashour et al. 2020) that specialized processors compete for a limited-capacity workspace whose winning content is made available to all of them. KAINE takes as its frame the predictive global neuronal workspace (Whyte and Smith 2021), which joins it to predictive processing: the workspace is [the workspace](#workspace), and a summary of which modules' reports gained access, and how strongly, becomes the processors' [broadcast context](#broadcast-context). The first configuration implements the selection half of that account; what the accessed reports contain does not reach the processors. KAINE adopts an access-only reading. The COGITATE adversarial collaboration (Cogitate Consortium et al. 2025) challenged key neural predictions of the workspace theory, which KAINE treats as contested and builds on at the computational level.
 
 ### Graded intensity
 
@@ -194,11 +194,11 @@ The value in `[0, 1]` a module attaches to each event it publishes, carried in t
 
 ### Language
 
-The language organ, output-only in the first configuration. It turns accessed content into words on a speak intent (external speech) or a think intent (inner thought). Its context is a first-person persona: accessed content is presented as the entity's own state and perception, it is told not to claim feelings or perceptions that content does not contain, and drive crossings reach it as fixed phrases. It calls `/v1/chat/completions` on a local model server with thinking disabled, and its backing model is an [abliterated](#abliteration) dense 4B Qwen3.5 GGUF. Its utterances re-enter the bus as candidates at a fixed intensity. Because it is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure. See [the language module](09-modules/language.md).
+The language organ. In the first configuration it hears no speech: it turns accessed content into words on a speak intent (external speech) or a think intent (inner thought), its own accessed utterances come back to it quoted, and the individuation probe samples it privately on fixed prompts. It is not used to reason. Its context is a first-person persona: accessed content is presented as the entity's own state and perception, it is told not to claim feelings or perceptions that content does not contain, and drive crossings reach it as fixed phrases. It calls `/v1/chat/completions` on a local model server with thinking disabled, and its backing model is an [abliterated](#abliteration) dense 4B Qwen3.5 GGUF. Its utterances re-enter the bus as candidates at a fixed intensity. Because it is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure. See [the language module](09-modules/language.md).
 
 ### Local precision
 
-Each predictive processor scales its prediction error by its own recent errors: the error ratio is the current error over the mean of the errors in its recent reports. Dividing an error by its expected magnitude standardizes it, so the ratio is a scalar, retrospective stand-in for precision weighting (Feldman and Friston 2010), estimated from the channel's own history. The workspace applies no further per-source weight. The fovea's tile z-score is the counterpart for frame change.
+Each predictive processor scales its prediction error by its own recent errors: the error ratio is the current error over the mean of the errors in its recent reports. Dividing an error by its expected magnitude standardizes it, so the ratio is a scalar, retrospective stand-in for precision weighting (Feldman and Friston 2010), estimated from the channel's own history. Beyond the modules' baseline and alert levels, only the interest goal factor and emotion regulation's tier-1 bias weight a source, and both are neutral in every arm of the planned test. The fovea's tile z-score is the counterpart for frame change.
 
 ---
 
@@ -206,7 +206,7 @@ Each predictive processor scales its prediction error by its own recent errors: 
 
 ### Episodic memory
 
-The memory module (held). It keeps episodic, semantic and procedural collections in Qdrant, embedded by `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU). It recalls prior memories on a perceptual cue before storing the current moment, affect intensity biases recall, and during sleep it replays selected traces into the workspace. See [the episodic memory module](09-modules/episodic-memory.md).
+The memory module (held). It stores a trace of each broadcast's coalition readings in an episodic collection in Qdrant, embedded by `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU); the semantic and procedural stores are reserved. It recalls prior traces on the broadcast as cue before storing the current one, and a recall reports how many traces came back and the strongest arousal stored with them, not their content. During sleep it replays selected traces into the workspace. See [the episodic memory module](09-modules/episodic-memory.md).
 
 ### Module-addition study
 
@@ -226,7 +226,7 @@ The factor of a candidate's [priority](#priority) that discounts exact repeats o
 
 ### Planning
 
-The active-inference module (held). It runs discrete-state active inference on bounded sub-problems: the JAX backend uses pymdp 1.0 and needs the `[reasoning]` extra, and a NumPy backend needs no extra. A boot-time check keeps the worst-case planning step within budget (`[planning].max_states_per_factor = 4` is an upper bound, not the per-factor state count). With `[planning].drive_actions = true`, its chosen actions become proposals that the action selection module may realize as think, speak or rest intents. See [the planning module](09-modules/planning.md).
+The active-inference module (held). It runs one-step discrete-state active inference (`[planning].planning_horizon = 1`) over four meta-actions (no-op, request think, request speak, request maintenance): the JAX backend uses pymdp 1.0 and needs the `[reasoning]` extra, and a NumPy backend needs no extra. A boot-time check keeps the worst-case planning step within budget (`[planning].max_states_per_factor = 4` is an upper bound, not the per-factor state count). With `[planning].drive_actions = true`, its chosen actions become proposals that the action selection module may realize as think, speak or rest intents. See [the planning module](09-modules/planning.md).
 
 ---
 
@@ -246,7 +246,7 @@ Where the entity's senses come from: `physical` (camera and microphone), `virtua
 
 ### World model
 
-The world-model module (held). It learns a latent recurrent world model (a DreamerV3-style RSSM, JAX by default, with a NumPy engine available) from the entity's own waking trajectories and publishes world-prediction errors that join the competition. It has no actor or critic; action selection belongs to the planning and action selection modules. A non-learning EMA backend (`"fake"`) exists for development. See [the world model module](09-modules/world-model.md).
+The world-model module (held). It learns a latent recurrent world model (a DreamerV3-style RSSM, JAX by default, with a NumPy engine available) of the entity's waking sequence of broadcast summaries and publishes world-prediction errors that join the competition. It has no actor or critic; action selection belongs to the planning and action selection modules. A non-learning EMA backend (`"fake"`) exists for development. See [the world model module](09-modules/world-model.md).
 
 ### PLV / phase-locking
 
@@ -254,7 +254,7 @@ Phase-locking value: the mean resultant length of the phase difference between t
 
 ### Effectors
 
-The effector module (held). It executes act intents only through effectors the operator has enabled, from a shell whitelist that ships empty and a file-write sandbox, with `asyncio.create_subprocess_exec` and no shell interpretation, and it logs every proposed action to a hash-chained audit log with content fields stripped. See [the effectors module](09-modules/effectors.md).
+The effector module (held). It executes act intents only through effectors the operator has enabled. File writes are confined to a sandbox directory; shell commands come from a whitelist that ships empty, run through `asyncio.create_subprocess_exec` with no shell interpretation, and are bounded by argument patterns, a timeout and a working directory, with no further sandbox; and it logs every proposed action to a hash-chained audit log with content fields stripped. See [the effectors module](09-modules/effectors.md).
 
 ### Prediction error
 
@@ -350,8 +350,8 @@ The voice-output module (held). It calls a speech-synthesis server (the Chatterb
 
 ### Welfare events / welfare monitoring
 
-Conditions of potential concern that the sidecar welfare observer detects from behavior and system-health metrics, never by reading the entity's private cognitive content: sustained high interoceptive prediction error, affect locked in an extreme state, fatigue past its threshold without maintenance, or replay outpacing consolidation. They are written to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`. See [gray-zone welfare events](#gray-zone-welfare-events) and [Preservation and the safety net](11-preservation.md).
+Conditions of potential concern that the sidecar welfare observer detects from behavior and system-health metrics, never by reading the entity's private cognitive content: sustained high interoceptive prediction error, affect locked in an extreme state, fatigue past its threshold without maintenance, or replay outpacing consolidation. They are written to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`. The welfare indicators of the paper's Appendix A.4, windowed shares of negative valence and of drive deprivation read from the welfare records, and the safety net's response to them are designed and not built. See [gray-zone welfare events](#gray-zone-welfare-events) and [Preservation and the safety net](11-preservation.md).
 
 ### Workspace-mediation test
 
-The planned test of whether competition for the workspace does work that pooling the same reports does not, measured by cross-module broadcast [information gain](#information-gain-cross-module-broadcast). Three arms run on the same film programme: competitive selection as built, a matched arm that draws a coalition of the same size without regard to score under the same access rule, and a pooled arm in which every candidate enters the context with no scoring, selection or access gate. A positive control checks that the measure detects injected information. The hypothesis predicts a higher gain under competitive selection than under both controls. The context, the per-report gain and the three arms (`[workspace].arm`) are built; the positive control is not built yet. The offline package `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling that runs the interoception and sequence modules against a pooled arm and does not test the hypothesis. See [Running experiments](15-experiments/README.md#the-planned-workspace-mediation-test).
+The planned test of whether competition for the workspace does work that pooling the same reports does not, measured by cross-module broadcast [information gain](#information-gain-cross-module-broadcast). Three arms run on the same film programme: competitive selection as built, a matched arm that draws a coalition of the same size without regard to score under the same access rule, and a pooled arm in which every candidate enters the context with no scoring, selection or access gate. A positive control checks within a run that the measure detects injected information. The hypothesis predicts a higher gain under competitive selection than under both controls. The context, the per-report gain, the three arms (`[workspace].arm`) and the positive control (`kaine/modules/positive_control.py`, `config/studies/workspace_mediation_positive_control.toml`) are built. The matched arm differs from competition only on broadcast ticks with more candidates than the coalition holds, which in seven developmental test boots was 0.06 percent of ticks, so the test's coalition capacity and candidate supply are set before the pilot runs. The offline package `kaine/evaluation/benchmarks/workspace_mediation_ablation/` is development tooling that runs the interoception and vision modules against a pooled arm and does not test the hypothesis. See [Running experiments](15-experiments/README.md#the-planned-workspace-mediation-test).

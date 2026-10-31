@@ -21,7 +21,9 @@ A component that cannot be captured raises an error, so `preserve_live` never wr
 
 ## The welfare safety net
 
-The welfare safety net is the pair of monitors that preserve the entity when it diverges and protect it when it shows sustained distress. The monitors live in `kaine/cycle/preservation_monitor.py`. They are siblings to the supervisor and ship disabled, consistent with the shipped config's all-off posture. An operator enables them deliberately for an unsupervised research run. A normal operator-supervised boot relies on the human as the safety net instead. Per-install changes belong in the gitignored `config/kaine.operator.toml` overlay; `config/kaine.toml` is tracked in the repository. For the full research workflow see [For researchers](14-for-researchers.md).
+The welfare safety net is the pair of monitors that preserve the entity when it diverges and protect it when it shows sustained distress. The monitors live in `kaine/cycle/preservation_monitor.py`. They are siblings to the supervisor and ship disabled, consistent with the shipped config's all-off posture. An operator enables them deliberately for an unsupervised research run. A normal operator-supervised boot relies on the human as the safety net instead.
+
+The protective response answers sustained distress. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and of drive deprivation) and a response to them are designed and not built; the welfare observer writes the records they would read. The module-addition study does not start before that response is built. A research run builds the caretaker from `[caretaker]` and sends it the protective response's notices; a research run with no channel configured boots and logs a warning that the notices have no recipient. Per-install changes belong in the gitignored `config/kaine.operator.toml` overlay; `config/kaine.toml` is tracked in the repository. For the full research workflow see [For researchers](14-for-researchers.md).
 
 ### Divergence-triggered preservation
 
