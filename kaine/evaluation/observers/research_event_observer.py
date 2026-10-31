@@ -793,6 +793,7 @@ def _apply_taxonomy_fields(
             try:
                 record["inconclusive_since"] = datetime.fromisoformat(since).isoformat()
             except ValueError:
+                # An unparseable timestamp is left out of the record.
                 pass
         days = payload.get("days")
         if isinstance(days, (int, float)) and not isinstance(days, bool):
