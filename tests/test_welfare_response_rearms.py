@@ -85,7 +85,9 @@ def _cfg(**overrides) -> WelfareResponseConfig:
     return WelfareResponseConfig(**values)
 
 
-def _monitor(bus, u: _Mono, cfg=None, on_end=None) -> WelfareProtectiveMonitor:
+def _monitor(
+    bus, u: _Mono, cfg=None, on_end=None, on_response=None
+) -> WelfareProtectiveMonitor:
     return WelfareProtectiveMonitor(
         registry=ModuleRegistry(),
         fork_manager=_StubFM(),
@@ -94,6 +96,7 @@ def _monitor(bus, u: _Mono, cfg=None, on_end=None) -> WelfareProtectiveMonitor:
         incident_log=IncidentLog(enabled=False, path="unused"),
         clock=u,
         on_end=on_end,
+        on_response=on_response,
         unfrozen_clock=UnfrozenClock(
             control_state.read_frozen_state, unknown_counts_as="unfrozen", monotonic=u
         ),
@@ -597,3 +600,161 @@ def test_run_override_replaces_unreadable_control_file(capsys):
     assert control.run_override(["welfare"]) == 0
     captured = capsys.readouterr()
     assert "The control file was unreadable and was replaced with a clean one" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# A welfare freeze that cannot be written is recorded, notified and retried
+# ---------------------------------------------------------------------------
+
+
+def _failing_end_hook() -> None:
+    raise RuntimeError("stop failed")
+
+
+# The three branches that place the welfare freeze: the pause, an end with no
+# stop hook wired, and an end whose stop hook fails.
+_FREEZE_PATHS = [
+    pytest.param("pause", None, "pause", id="pause"),
+    pytest.param("end", None, "pause_fallback", id="end-no-hook"),
+    pytest.param("end", _failing_end_hook, "pause_fallback", id="end-failed-hook"),
+]
+
+
+def _freeze_failing(monkeypatch, failures: int | None) -> list[str]:
+    """Make control_state.freeze raise OSError for the first ``failures`` calls
+    (every call when None); return the list of attempted freeze reasons."""
+    real_freeze = control_state.freeze
+    attempts: list[str] = []
+
+    def _freeze(reason=None, path=None, *, source="operator"):
+        attempts.append(reason)
+        if failures is None or len(attempts) <= failures:
+            raise OSError(28, "No space left on device")
+        return real_freeze(reason=reason, path=path, source=source)
+
+    monkeypatch.setattr(control_state, "freeze", _freeze)
+    return attempts
+
+
+async def _protective_records(bus) -> list[dict]:
+    entries, _ = await bus.read_entries("preservation.out", last_id="0", count=256, block_ms=0)
+    return [e.payload for _, e in entries if e.type == "welfare.protective_action"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("action", "on_end", "action_taken"), _FREEZE_PATHS)
+async def test_freeze_write_failure_is_recorded_notified_and_retried(
+    bus, monkeypatch, action, on_end, action_taken
+):
+    attempts = _freeze_failing(monkeypatch, failures=1)
+    notices: list[str] = []
+    u = _Mono(0.0)
+    mon = _monitor(
+        bus, u, cfg=_cfg(action=action), on_end=on_end, on_response=notices.append
+    )
+    stop = asyncio.Event()
+
+    await _act(mon, bus, u)
+    # The preservation bundle is made once, the freeze failed, and the entity
+    # is not paused: the response is latched but the pause is not placed.
+    assert len(mon._fork_manager.calls) == 1
+    assert len(attempts) == 1
+    assert control_state.read_holder_sources() == frozenset()
+    assert mon._acted is True
+    assert mon._pause_placed is False
+    records = await _protective_records(bus)
+    assert len(records) == 1
+    assert records[0]["transition"] == "protective_action_freeze_failed"
+    assert records[0]["action"] == action_taken
+    assert "OSError" in records[0]["freeze_error"]
+    assert "No space left on device" in records[0]["freeze_error"]
+    assert records[0]["preservation_id"] == "pid1"
+    # The caretaker hears of the response exactly as on success.
+    assert notices == [action_taken]
+
+    # The next poll retries only the freeze, and this time it is written.
+    u.value += 1.0
+    await _distress(bus)
+    await mon._poll_once(stop)
+    assert len(attempts) == 2
+    assert "welfare" in control_state.read_holder_sources()
+    assert len(mon._fork_manager.calls) == 1
+    assert mon._acted is True
+    assert mon._pause_placed is True
+    records = await _protective_records(bus)
+    assert len(records) == 2
+    placed = records[-1]
+    assert placed["transition"] == "protective_action_freeze_placed"
+    assert placed["incident_id"] == records[0]["incident_id"]
+    assert placed["action"] == action_taken
+    assert placed["freeze_attempts"] == 2
+    assert placed["freeze_error"] is None
+    assert notices == [action_taken]
+
+    # Latched like a normal pause: still latched while the freeze stands, and
+    # re-armed only by the named override.
+    u.value += 40.0
+    await _distress(bus)
+    await mon._poll_once(stop)
+    assert mon._acted is True
+    assert len(attempts) == 2
+    assert len(mon._fork_manager.calls) == 1
+    control_state.stand_down(source="operator")
+    await mon._poll_once(stop)
+    assert mon._acted is True
+    control_state.override(["welfare"])
+    await mon._poll_once(stop)
+    assert mon._acted is False
+    assert mon._pause_placed is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("action", "on_end", "action_taken"), _FREEZE_PATHS)
+async def test_freeze_failing_every_poll_retries_without_new_responses(
+    bus, monkeypatch, caplog, action, on_end, action_taken
+):
+    attempts = _freeze_failing(monkeypatch, failures=None)
+    notices: list[str] = []
+    u = _Mono(0.0)
+    mon = _monitor(
+        bus, u, cfg=_cfg(action=action), on_end=on_end, on_response=notices.append
+    )
+    stop = asyncio.Event()
+
+    with caplog.at_level("DEBUG", logger="kaine.cycle.preservation_monitor"):
+        await _act(mon, bus, u)
+        # Distress keeps going and every poll retries the freeze, which keeps
+        # failing. Ten polls inside one log interval, then one past it.
+        for _ in range(10):
+            u.value += 1.0
+            await _distress(bus)
+            await mon._poll_once(stop)
+        u.value += 61.0
+        await mon._poll_once(stop)
+
+    assert len(attempts) == 12               # the first try plus one per poll
+    assert len(mon._fork_manager.calls) == 1  # no second preservation bundle
+    records = await _protective_records(bus)
+    assert [r["transition"] for r in records] == ["protective_action_freeze_failed"]
+    assert notices == [action_taken]
+    assert mon._acted is True
+    assert mon._pause_placed is False
+    assert control_state.read_holder_sources() == frozenset()
+    freeze_errors = [
+        r for r in caplog.records
+        if r.levelname == "ERROR" and "welfare freeze" in r.getMessage()
+    ]
+    # The first failure, then one more only once the log interval has passed.
+    assert len(freeze_errors) == 2
+
+
+@pytest.mark.asyncio
+async def test_successful_freeze_records_no_freeze_error(bus):
+    u = _Mono(0.0)
+    mon = _monitor(bus, u)
+    await _act(mon, bus, u)
+    records = await _protective_records(bus)
+    assert len(records) == 1
+    assert records[0]["transition"] == "protective_action"
+    assert records[0]["freeze_error"] is None
+    assert mon._pause_placed is True

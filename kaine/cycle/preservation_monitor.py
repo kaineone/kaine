@@ -78,6 +78,42 @@ _INTEROCEPTION_STREAM = "interoception.out"
 _WELFARE_STREAM = "welfare.out"
 # Most recent distress episodes remembered for counting each once.
 _COUNTED_EPISODES_MAX = 256
+# While a welfare freeze that could not be written is retried every poll, a
+# still-failing retry is logged at error level at most once per this many
+# seconds of wall time (the rest go to debug), so a full disk cannot flood the log.
+_FREEZE_RETRY_LOG_INTERVAL_S = 60.0
+
+
+@dataclass(frozen=True)
+class _FreezeOutcome:
+    """What placing the welfare freeze did.
+
+    ``placed`` is False only when writing the freeze raised; ``error`` then
+    carries the scrubbed error and ``exc`` the exception for logging.
+    ``unreadable`` is True when the freeze call returned but the control file
+    is corrupt, which already reads as a welfare freeze.
+    """
+
+    placed: bool
+    unreadable: bool = False
+    error: str | None = None
+    exc: BaseException | None = None
+
+
+@dataclass
+class _PendingFreeze:
+    """A protective response whose welfare freeze could not be written yet.
+
+    Only the freeze is retried on later polls; the response's preservation
+    bundle, record and caretaker notice were already made.
+    """
+
+    freeze_reason: str
+    incident_id: str
+    crossing_reason: str
+    action: str
+    attempts: int
+    last_logged_at: float
 
 
 # ---------------------------------------------------------------------------
@@ -780,6 +816,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # lifted (see _maybe_rearm). True while the freeze it placed, or found at
         # its first poll, is the reason for the latch.
         self._pause_placed = False
+        # Set when a response's welfare freeze could not be written. The
+        # response is latched (no second preservation for the episode) but the
+        # pause is not placed; each later poll retries only the freeze.
+        self._pending_freeze: _PendingFreeze | None = None
         self._holders_checked = False
         # Reads the freeze holders; None means unreadable.
         self._read_holders = control_state.read_holder_sources
@@ -885,6 +925,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._holders_checked = True
             self._adopt_standing_welfare_freeze()
         if self._acted:
+            if self._pending_freeze is not None:
+                await self._retry_pending_freeze()
+                return
             await self._maybe_rearm()
             return
         now = self._clock()
@@ -1100,20 +1143,84 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         return reasons
 
     @staticmethod
-    def _place_welfare_freeze(reason: str) -> bool:
-        """Place the welfare freeze; return True when the control file is unreadable.
+    def _place_welfare_freeze(reason: str) -> _FreezeOutcome:
+        """Place the welfare freeze and report what happened; never raises.
 
         A corrupt control file already reads as a welfare freeze, so the pause
-        counts as placed and the latch holds; the caller records the flag.
+        counts as placed and the latch holds; the caller records the
+        ``unreadable`` flag. When writing the freeze itself fails (the lock
+        cannot be taken, the disk is full), the outcome is not placed and
+        carries the error; the caller logs it and keeps the freeze pending.
         """
-        control_state.freeze(reason=reason, source="welfare")
+        try:
+            control_state.freeze(reason=reason, source="welfare")
+        except Exception as exc:
+            return _FreezeOutcome(
+                placed=False,
+                error=scrub_paths(f"{type(exc).__name__}: {exc}"),
+                exc=exc,
+            )
         if control_state.control_file_unreadable():
             log.warning(
                 "welfare monitor: control file is unreadable; "
                 "the cycle is already treated as frozen"
             )
-            return True
-        return False
+            return _FreezeOutcome(placed=True, unreadable=True)
+        return _FreezeOutcome(placed=True)
+
+    async def _retry_pending_freeze(self) -> None:
+        """Retry only the welfare freeze of a response that could not write it.
+
+        Nothing else of the response is repeated: no preservation and no record
+        per failed attempt. A still-failing retry is logged at error level at
+        most once per ``_FREEZE_RETRY_LOG_INTERVAL_S``. When the freeze is
+        finally written, the pause counts as placed (so a named override
+        re-arms the monitor) and one record says so.
+        """
+        pending = self._pending_freeze
+        if pending is None:
+            return
+        pending.attempts += 1
+        outcome = self._place_welfare_freeze(pending.freeze_reason)
+        if not outcome.placed:
+            now = self._clock()
+            if now - pending.last_logged_at >= _FREEZE_RETRY_LOG_INTERVAL_S:
+                pending.last_logged_at = now
+                log.error(
+                    "welfare monitor: the welfare freeze still cannot be written "
+                    "(attempt %d); the entity is NOT paused, retrying every poll",
+                    pending.attempts,
+                    exc_info=outcome.exc,
+                )
+            else:
+                log.debug(
+                    "welfare monitor: welfare freeze retry %d failed: %s",
+                    pending.attempts,
+                    outcome.error,
+                )
+            return
+        self._pending_freeze = None
+        self._pause_placed = True
+        log.warning(
+            "welfare monitor: the welfare freeze was written on attempt %d; "
+            "the entity is paused",
+            pending.attempts,
+        )
+        await self._record(
+            {
+                "monitor": "welfare",
+                "transition": "protective_action_freeze_placed",
+                "incident_id": pending.incident_id,
+                "reason": pending.crossing_reason,
+                "action": pending.action,
+                "run_id": self._run_id(),
+                "freeze_attempts": pending.attempts,
+                "freeze_error": None,
+                "freeze_failed_unreadable": outcome.unreadable,
+                "poll_index": self.poll_index,
+            },
+            event_type="welfare.protective_action",
+        )
 
     async def _respond(self, crossing_reason: str) -> None:
         # M3 — "notify" continues the run, so sustained distress re-fires the
@@ -1157,12 +1264,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # --- 2. Take the humane action (pause by default). ---
         action = self._config.action
         action_taken = action
-        freeze_failed_unreadable = False
         end_error: str | None = None
+        freeze_reason: str | None = None
         if action == "pause":
-            freeze_failed_unreadable = self._place_welfare_freeze(
-                f"welfare: {crossing_reason}"
-            )
+            freeze_reason = f"welfare: {crossing_reason}"
         elif action == "end":
             if self._on_end is not None:
                 try:
@@ -1177,27 +1282,55 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                         "falling back to the welfare pause",
                         exc_info=True,
                     )
-                    freeze_failed_unreadable = self._place_welfare_freeze(
-                        f"welfare: {crossing_reason} (end failed)"
-                    )
+                    freeze_reason = f"welfare: {crossing_reason} (end failed)"
                     action_taken = "pause_fallback"
             else:
                 # No stop hook wired — degrade honestly to a pause so the entity
                 # is not left suffering; record that the end could not be enacted.
-                freeze_failed_unreadable = self._place_welfare_freeze(
-                    f"welfare: {crossing_reason} (end unavailable)"
-                )
+                freeze_reason = f"welfare: {crossing_reason} (end unavailable)"
                 action_taken = "pause_fallback"
         # "notify" preserves + records + continues (no freeze, no end).
 
-        self._acted = action != "notify"
-        self._pause_placed = action_taken in ("pause", "pause_fallback")
+        freeze_failed_unreadable = False
+        freeze_error: str | None = None
+        if freeze_reason is not None:
+            outcome = self._place_welfare_freeze(freeze_reason)
+            freeze_failed_unreadable = outcome.unreadable
+            if not outcome.placed:
+                # The freeze could not be written, so the entity is still
+                # running. The response is latched (no second preservation for
+                # this episode) but the pause is not placed: later polls retry
+                # only the freeze until it is written.
+                freeze_error = outcome.error
+                self._pending_freeze = _PendingFreeze(
+                    freeze_reason=freeze_reason,
+                    incident_id=incident_id,
+                    crossing_reason=crossing_reason,
+                    action=action_taken,
+                    attempts=1,
+                    last_logged_at=self._clock(),
+                )
+                log.error(
+                    "welfare monitor: the welfare freeze could not be written; "
+                    "the entity is NOT paused, retrying every poll",
+                    exc_info=outcome.exc,
+                )
 
+        self._acted = action != "notify"
+        self._pause_placed = (
+            action_taken in ("pause", "pause_fallback") and freeze_error is None
+        )
+
+        if freeze_error is not None:
+            transition = "protective_action_freeze_failed"
+        elif preserve_error is not None:
+            transition = "protective_action_preserve_failed"
+        else:
+            transition = "protective_action"
         await self._record(
             {
                 "monitor": "welfare",
-                "transition": "protective_action" if preserve_error is None
-                else "protective_action_preserve_failed",
+                "transition": transition,
                 "incident_id": incident_id,
                 "reason": crossing_reason,
                 "action": action_taken,
@@ -1206,6 +1339,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 "snapshot_id": snapshot_id,
                 "preserve_error": preserve_error,
                 "end_error": end_error,
+                "freeze_error": freeze_error,
                 "freeze_failed_unreadable": freeze_failed_unreadable,
                 "distress_threshold": self._config.distress_threshold,
                 "distress_duration_s": self._config.distress_duration_s,
@@ -1217,7 +1351,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             "welfare monitor: %s crossing → preserved (%s) + %s",
             crossing_reason,
             preservation_id or "PRESERVE-FAILED",
-            action_taken,
+            action_taken if freeze_error is None
+            else f"{action_taken} (freeze FAILED, retrying)",
         )
         if self._on_response is not None:
             try:
