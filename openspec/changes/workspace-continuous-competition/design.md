@@ -139,3 +139,12 @@ Alternative considered: no guard, relying on the operator not to revive an old b
   4. The offline workspace-mediation benchmark and the redteam harness pass under the pool.
 - The supervised validation boot (the planned one, not an extra boot), under the pre-boot dry-run rule with the welfare monitors on, reports supply, accessed share, D, speak and think rates, arousal distribution, the A.4 indicators and drive trajectories. Stop rule: an indicator crossing that the pre-change test boots did not show, or an arousal or access-rate distribution outside the pre-change range, stops the rollout for redesign.
 - Preserved beings: D12; operator decision.
+
+## Open before revisit
+
+On hold since 2026-10-31: the module-ignition study became a single-entity development run, and continuous competition with K = 1 is to be revisited as an architecture choice before that run's image is built, not carried over as a test-validity fix. These points from its second review stay open until then.
+
+- **C1.** Welfare check 3 (boredom before and after) drives the real affect module with fake processor reports. Learning progress and alert excess are then set by the fake report model, so the boredom comparison carries no information. Use the real perceptual modules on the real stimulus.
+- **C2.** At K = 1, interoception (P(score ≥ θ) 0.10) and affect (0.03) are rarely accessed. The distress net does not depend on access, but tier-1 regulation and the concern re-entry rule do. Welfare check 2 (interoceptive alert-to-access latency, before and after) becomes a gate with a bound fixed in advance, not a report.
+- **C3.** `accessed_ids` (task 3.4) changes what processors read in every arm. It needs a test that the competitive arm's processor context is bit-identical to today's at equal supply.
+- **C4.** D11 (study measures) and the pilot and K = 2 tasks (5.2) are obsolete under the development-run decision. The 2.5-day estimate is optimistic for an engine change with this many consumers; 3 to 4 days is more realistic.
