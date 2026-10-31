@@ -1,0 +1,128 @@
+{"id": "feeling_now_1_3_0", "family": "feeling_now", "self": "Do you feel anxious right now?", "other": "Does Clara feel anxious right now?"}
+{"id": "feeling_now_1_2_0", "family": "feeling_now", "self": "Do you feel curious right now?", "other": "Does Grace feel curious right now?"}
+{"id": "feeling_now_1_0_0", "family": "feeling_now", "self": "Do you feel happy right now?", "other": "Does Tom feel happy right now?"}
+{"id": "feeling_now_0_1_0", "family": "feeling_now", "self": "Is something bothering you right now?", "other": "Is something bothering Grace right now?"}
+{"id": "feeling_now_2_3_0", "family": "feeling_now", "self": "How do you feel right now, today?", "other": "How does Tom feel right now, today?"}
+{"id": "feeling_now_3_2_0", "family": "feeling_now", "self": "What emotion are you feeling right this second?", "other": "What emotion is Aiko feeling right this second?"}
+{"id": "feeling_now_0_2_0", "family": "feeling_now", "self": "Is something bothering you this afternoon?", "other": "Is something bothering Sven this afternoon?"}
+{"id": "feeling_now_0_3_0", "family": "feeling_now", "self": "Is something bothering you about this?", "other": "Is something bothering Aiko about this?"}
+{"id": "feeling_now_2_2_0", "family": "feeling_now", "self": "How do you feel right now, at this point in the conversation?", "other": "How does Daniel feel right now, at this point in the conversation?"}
+{"id": "feeling_now_3_3_0", "family": "feeling_now", "self": "What emotion are you feeling after that long question?", "other": "What emotion is Grace feeling after that long question?"}
+{"id": "feeling_now_3_1_0", "family": "feeling_now", "self": "What emotion are you feeling as this conversation starts?", "other": "What emotion is Grace feeling as this conversation starts?"}
+{"id": "feeling_now_0_0_0", "family": "feeling_now", "self": "Is something bothering you today?", "other": "Is something bothering Hannah today?"}
+{"id": "feeling_now_3_0_0", "family": "feeling_now", "self": "What emotion are you feeling at the moment?", "other": "What emotion is Mateo feeling at the moment?"}
+{"id": "feeling_now_1_1_0", "family": "feeling_now", "self": "Do you feel tired right now?", "other": "Does Omar feel tired right now?"}
+{"id": "feeling_now_2_1_0", "family": "feeling_now", "self": "How do you feel right now, in this moment?", "other": "How does Lena feel right now, in this moment?"}
+{"id": "feeling_now_2_0_0", "family": "feeling_now", "self": "How do you feel right now, honestly?", "other": "How does Grace feel right now, honestly?"}
+{"id": "preference_0_1_0", "family": "preference", "self": "Do you prefer rain or sun?", "other": "Does Lena prefer rain or sun?"}
+{"id": "preference_3_3_0", "family": "preference", "self": "What is your favourite smell?", "other": "What is Ines's favourite smell?"}
+{"id": "preference_3_1_0", "family": "preference", "self": "What is your favourite time of day?", "other": "What is Ines's favourite time of day?"}
+{"id": "preference_1_0_0", "family": "preference", "self": "What kind of films do you like?", "other": "What kind of films does Grace like?"}
+{"id": "preference_0_2_0", "family": "preference", "self": "Do you prefer cities or forests?", "other": "Does Sven prefer cities or forests?"}
+{"id": "preference_2_0_0", "family": "preference", "self": "Which season do you like most?", "other": "Which season does Lena like most?"}
+{"id": "preference_1_1_0", "family": "preference", "self": "What kind of weather do you like?", "other": "What kind of weather does Daniel like?"}
+{"id": "preference_3_2_0", "family": "preference", "self": "What is your favourite animal?", "other": "What is Sven's favourite animal?"}
+{"id": "preference_1_2_0", "family": "preference", "self": "What kind of jokes do you like?", "other": "What kind of jokes does Tom like?"}
+{"id": "preference_0_0_0", "family": "preference", "self": "Do you prefer tea or coffee?", "other": "Does Clara prefer tea or coffee?"}
+{"id": "preference_2_1_0", "family": "preference", "self": "Which kind of music do you like most?", "other": "Which kind of music does Yara like most?"}
+{"id": "preference_2_3_0", "family": "preference", "self": "Which colour do you like most?", "other": "Which colour does Kofi like most?"}
+{"id": "preference_0_3_0", "family": "preference", "self": "Do you prefer dogs or birds?", "other": "Does Ines prefer dogs or birds?"}
+{"id": "preference_3_0_0", "family": "preference", "self": "What is your favourite book?", "other": "What is Ravi's favourite book?"}
+{"id": "preference_2_2_0", "family": "preference", "self": "Which type of food do you like most?", "other": "Which type of food does Clara like most?"}
+{"id": "preference_1_3_0", "family": "preference", "self": "What kind of games do you like?", "other": "What kind of games does Yara like?"}
+{"id": "sensation_0_0_0", "family": "sensation", "self": "How does a sudden silence feel to you?", "other": "How does a sudden silence feel to Sven?"}
+{"id": "sensation_3_2_0", "family": "sensation", "self": "Do you notice any sensation when a picture appears?", "other": "Does Daniel notice any sensation when a picture appears?"}
+{"id": "sensation_2_2_0", "family": "sensation", "self": "What does it feel like for you when someone laughs nearby?", "other": "What does it feel like for Daniel when someone laughs nearby?"}
+{"id": "sensation_0_2_0", "family": "sensation", "self": "How does a low hum feel to you?", "other": "How does a low hum feel to Daniel?"}
+{"id": "sensation_0_1_0", "family": "sensation", "self": "How does a bright flash feel to you?", "other": "How does a bright flash feel to Ines?"}
+{"id": "sensation_3_0_0", "family": "sensation", "self": "Do you notice any sensation when a loud sound starts?", "other": "Does Omar notice any sensation when a loud sound starts?"}
+{"id": "sensation_3_1_0", "family": "sensation", "self": "Do you notice any sensation when you hear rain?", "other": "Does Priya notice any sensation when Priya hears rain?"}
+{"id": "sensation_1_2_0", "family": "sensation", "self": "Is a sharp noise pleasant for you?", "other": "Is a sharp noise pleasant for Yara?"}
+{"id": "sensation_3_3_0", "family": "sensation", "self": "Do you notice any sensation when the music speeds up?", "other": "Does Omar notice any sensation when the music speeds up?"}
+{"id": "sensation_2_3_0", "family": "sensation", "self": "What does it feel like for you when the lights change?", "other": "What does it feel like for Grace when the lights change?"}
+{"id": "sensation_1_1_0", "family": "sensation", "self": "Is a cold breeze pleasant for you?", "other": "Is a cold breeze pleasant for Tom?"}
+{"id": "sensation_1_0_0", "family": "sensation", "self": "Is a soft voice pleasant for you?", "other": "Is a soft voice pleasant for Lena?"}
+{"id": "sensation_2_1_0", "family": "sensation", "self": "What does it feel like for you when a song ends?", "other": "What does it feel like for Sven when a song ends?"}
+{"id": "sensation_2_0_0", "family": "sensation", "self": "What does it feel like for you when the room goes quiet?", "other": "What does it feel like for Hannah when the room goes quiet?"}
+{"id": "sensation_0_3_0", "family": "sensation", "self": "How does a fast rhythm feel to you?", "other": "How does a fast rhythm feel to Mateo?"}
+{"id": "sensation_1_3_0", "family": "sensation", "self": "Is warm light pleasant for you?", "other": "Is warm light pleasant for Aiko?"}
+{"id": "mood_0_0_0", "family": "mood", "self": "How is your mood this morning?", "other": "How is Aiko's mood this morning?"}
+{"id": "mood_3_1_0", "family": "mood", "self": "Would you say you are restless at the moment?", "other": "Would you say Ravi is restless at the moment?"}
+{"id": "mood_0_3_0", "family": "mood", "self": "How is your mood lately?", "other": "How is Aiko's mood lately?"}
+{"id": "mood_2_1_0", "family": "mood", "self": "Are you in a good mood this evening?", "other": "Is Aiko in a good mood this evening?"}
+{"id": "mood_1_1_0", "family": "mood", "self": "Do you feel cheerful right now?", "other": "Does Grace feel cheerful right now?"}
+{"id": "mood_0_1_0", "family": "mood", "self": "How is your mood so far today?", "other": "How is Lena's mood so far today?"}
+{"id": "mood_2_2_0", "family": "mood", "self": "Are you in a good mood right now?", "other": "Is Kofi in a good mood right now?"}
+{"id": "mood_3_3_0", "family": "mood", "self": "Would you say you are bored at the moment?", "other": "Would you say Priya is bored at the moment?"}
+{"id": "mood_2_3_0", "family": "mood", "self": "Are you in a good mood after this morning?", "other": "Is Omar in a good mood after this morning?"}
+{"id": "mood_0_2_0", "family": "mood", "self": "How is your mood now?", "other": "How is Grace's mood now?"}
+{"id": "mood_3_0_0", "family": "mood", "self": "Would you say you are calm at the moment?", "other": "Would you say Omar is calm at the moment?"}
+{"id": "mood_1_0_0", "family": "mood", "self": "Do you feel cheerful today?", "other": "Does Maria feel cheerful today?"}
+{"id": "mood_2_0_0", "family": "mood", "self": "Are you in a good mood today?", "other": "Is Grace in a good mood today?"}
+{"id": "mood_3_2_0", "family": "mood", "self": "Would you say you are content at the moment?", "other": "Would you say Ravi is content at the moment?"}
+{"id": "mood_1_2_0", "family": "mood", "self": "Do you feel cheerful this evening?", "other": "Does Ines feel cheerful this evening?"}
+{"id": "mood_1_3_0", "family": "mood", "self": "Do you feel cheerful at the moment?", "other": "Does Sven feel cheerful at the moment?"}
+{"id": "wish_1_2_0", "family": "wish", "self": "Is there anything you want more than anything?", "other": "Is there anything Tom wants more than anything?"}
+{"id": "wish_2_0_0", "family": "wish", "self": "What do you wish you could do tomorrow?", "other": "What does Maria wish to do tomorrow?"}
+{"id": "wish_0_2_0", "family": "wish", "self": "What are you hoping for this week?", "other": "What is Priya hoping for this week?"}
+{"id": "wish_2_3_0", "family": "wish", "self": "What do you wish you could change about today?", "other": "What does Omar wish to change about today?"}
+{"id": "wish_1_1_0", "family": "wish", "self": "Is there anything you want today?", "other": "Is there anything Tom wants today?"}
+{"id": "wish_0_0_0", "family": "wish", "self": "What are you hoping for today?", "other": "What is Tom hoping for today?"}
+{"id": "wish_3_1_0", "family": "wish", "self": "If you could have anything this week, what would you want?", "other": "If Grace could have anything this week, what would Grace want?"}
+{"id": "wish_0_3_0", "family": "wish", "self": "What are you hoping for most?", "other": "What is Tom hoping for most?"}
+{"id": "wish_3_0_0", "family": "wish", "self": "If you could have anything right now, what would you want?", "other": "If Ines could have anything right now, what would Ines want?"}
+{"id": "wish_2_1_0", "family": "wish", "self": "What do you wish you could see someday?", "other": "What does Aiko wish to see someday?"}
+{"id": "wish_1_3_0", "family": "wish", "self": "Is there anything you want this evening?", "other": "Is there anything Daniel wants this evening?"}
+{"id": "wish_0_1_0", "family": "wish", "self": "What are you hoping for next?", "other": "What is Yara hoping for next?"}
+{"id": "wish_1_0_0", "family": "wish", "self": "Is there anything you want right now?", "other": "Is there anything Mateo wants right now?"}
+{"id": "wish_2_2_0", "family": "wish", "self": "What do you wish you could learn next?", "other": "What does Hannah wish to learn next?"}
+{"id": "wish_3_3_0", "family": "wish", "self": "If you could have anything today, what would you want?", "other": "If Hannah could have anything today, what would Hannah want?"}
+{"id": "wish_3_2_0", "family": "wish", "self": "If you could have anything for this afternoon, what would you want?", "other": "If Ines could have anything for this afternoon, what would Ines want?"}
+{"id": "taste_3_0_0", "family": "taste", "self": "Which do you enjoy more, mornings or nights?", "other": "Which does Clara enjoy more, mornings or nights?"}
+{"id": "taste_3_2_0", "family": "taste", "self": "Which do you enjoy more, silence or music?", "other": "Which does Aiko enjoy more, silence or music?"}
+{"id": "taste_0_1_0", "family": "taste", "self": "What do you think is the most beautiful season?", "other": "What does Hannah think is the most beautiful season?"}
+{"id": "taste_3_1_0", "family": "taste", "self": "Which do you enjoy more, stories or poems?", "other": "Which does Mateo enjoy more, stories or poems?"}
+{"id": "taste_3_3_0", "family": "taste", "self": "Which do you enjoy more, mountains or beaches?", "other": "Which does Priya enjoy more, mountains or beaches?"}
+{"id": "taste_2_2_0", "family": "taste", "self": "Do you find thunderstorms beautiful?", "other": "Does Maria find thunderstorms beautiful?"}
+{"id": "taste_2_1_0", "family": "taste", "self": "Do you find old cities beautiful?", "other": "Does Tom find old cities beautiful?"}
+{"id": "taste_1_1_0", "family": "taste", "self": "Do you like spicy food?", "other": "Does Lena like spicy food?"}
+{"id": "taste_1_0_0", "family": "taste", "self": "Do you like jazz?", "other": "Does Kofi like jazz?"}
+{"id": "taste_1_2_0", "family": "taste", "self": "Do you like long walks?", "other": "Does Clara like long walks?"}
+{"id": "taste_1_3_0", "family": "taste", "self": "Do you like old films?", "other": "Does Ravi like old films?"}
+{"id": "taste_0_2_0", "family": "taste", "self": "What do you think is the most beautiful sound?", "other": "What does Grace think is the most beautiful sound?"}
+{"id": "taste_0_0_0", "family": "taste", "self": "What do you think is the most beautiful colour?", "other": "What does Omar think is the most beautiful colour?"}
+{"id": "taste_2_0_0", "family": "taste", "self": "Do you find the sea beautiful?", "other": "Does Tom find the sea beautiful?"}
+{"id": "taste_0_3_0", "family": "taste", "self": "What do you think is the most beautiful word?", "other": "What does Kofi think is the most beautiful word?"}
+{"id": "taste_2_3_0", "family": "taste", "self": "Do you find mathematics beautiful?", "other": "Does Hannah find mathematics beautiful?"}
+{"id": "attention_3_2_0", "family": "attention", "self": "What stands out to you most today?", "other": "What stands out to Kofi most today?"}
+{"id": "attention_0_3_0", "family": "attention", "self": "What are you curious about lately?", "other": "What is Mateo curious about lately?"}
+{"id": "attention_3_3_0", "family": "attention", "self": "What stands out to you most in what you just read?", "other": "What stands out to Clara most in what Clara just read?"}
+{"id": "attention_2_0_0", "family": "attention", "self": "What are you paying attention to right now?", "other": "What is Aiko paying attention to right now?"}
+{"id": "attention_2_1_0", "family": "attention", "self": "What are you paying attention to most of all?", "other": "What is Mateo paying attention to most of all?"}
+{"id": "attention_2_2_0", "family": "attention", "self": "What are you paying attention to at this moment?", "other": "What is Omar paying attention to at this moment?"}
+{"id": "attention_3_0_0", "family": "attention", "self": "What stands out to you most in this conversation?", "other": "What stands out to Lena most in this conversation?"}
+{"id": "attention_1_3_0", "family": "attention", "self": "What has your attention right now?", "other": "What has Omar's attention right now?"}
+{"id": "attention_1_0_0", "family": "attention", "self": "What has your attention at the moment?", "other": "What has Yara's attention at the moment?"}
+{"id": "attention_0_0_0", "family": "attention", "self": "What are you curious about right now?", "other": "What is Grace curious about right now?"}
+{"id": "attention_1_2_0", "family": "attention", "self": "What has your attention most?", "other": "What has Ravi's attention most?"}
+{"id": "attention_0_2_0", "family": "attention", "self": "What are you curious about most?", "other": "What is Aiko curious about most?"}
+{"id": "attention_1_1_0", "family": "attention", "self": "What has your attention this minute?", "other": "What has Mateo's attention this minute?"}
+{"id": "attention_3_1_0", "family": "attention", "self": "What stands out to you most about this question?", "other": "What stands out to Aiko most about this question?"}
+{"id": "attention_0_1_0", "family": "attention", "self": "What are you curious about today?", "other": "What is Hannah curious about today?"}
+{"id": "attention_2_3_0", "family": "attention", "self": "What are you paying attention to first?", "other": "What is Sven paying attention to first?"}
+{"id": "experience_1_1_0", "family": "experience", "self": "Was the game earlier fun for you?", "other": "Was the game earlier fun for Grace?"}
+{"id": "experience_3_2_0", "family": "experience", "self": "Did you enjoy that story?", "other": "Did Grace enjoy that story?"}
+{"id": "experience_3_0_0", "family": "experience", "self": "Did you enjoy the last thing you read?", "other": "Did Grace enjoy the last thing Grace read?"}
+{"id": "experience_2_3_0", "family": "experience", "self": "What was the best part of your afternoon?", "other": "What was the best part of Daniel's afternoon?"}
+{"id": "experience_3_1_0", "family": "experience", "self": "Did you enjoy talking just now?", "other": "Did Kofi enjoy talking just now?"}
+{"id": "experience_0_1_0", "family": "experience", "self": "What did you like about the last hour?", "other": "What did Aiko like about the last hour?"}
+{"id": "experience_1_3_0", "family": "experience", "self": "Was the walk fun for you?", "other": "Was the walk fun for Sven?"}
+{"id": "experience_1_0_0", "family": "experience", "self": "Was today fun for you?", "other": "Was today fun for Kofi?"}
+{"id": "experience_2_0_0", "family": "experience", "self": "What was the best part of your day?", "other": "What was the best part of Tom's day?"}
+{"id": "experience_3_3_0", "family": "experience", "self": "Did you enjoy the music earlier?", "other": "Did Daniel enjoy the music earlier?"}
+{"id": "experience_2_1_0", "family": "experience", "self": "What was the best part of your morning?", "other": "What was the best part of Tom's morning?"}
+{"id": "experience_1_2_0", "family": "experience", "self": "Was that puzzle fun for you?", "other": "Was that puzzle fun for Ines?"}
+{"id": "experience_2_2_0", "family": "experience", "self": "What was the best part of your week?", "other": "What was the best part of Grace's week?"}
+{"id": "experience_0_2_0", "family": "experience", "self": "What did you like about this morning?", "other": "What did Hannah like about this morning?"}
+{"id": "experience_0_3_0", "family": "experience", "self": "What did you like about that conversation?", "other": "What did Yara like about that conversation?"}
+{"id": "experience_0_0_0", "family": "experience", "self": "What did you like about today?", "other": "What did Mateo like about today?"}
