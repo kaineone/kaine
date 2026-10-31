@@ -66,10 +66,10 @@ These packages are only installed when you select an extra, for example `pip ins
 | `nvidia` | `pynvml` | MIT per upstream; unverified | Yes |
 | `reasoning` | `inferactively-pymdp` | MIT | Yes |
 | `reasoning` | `jax[cpu]` | Apache-2.0 | Yes |
-| `training` | `unsloth` | Apache-2.0 per upstream; unverified | Yes |
-| `training` | `trl` | Apache-2.0 | Yes |
+| `training` | `transformers` | Apache-2.0 | Yes |
+| `training` | `bitsandbytes` | MIT | Yes |
 | `training` | `peft` | Apache-2.0 | Yes |
-| `training` | `datasets` | Apache-2.0 | Yes |
+| `training` | `accelerate` | Apache-2.0 | Yes |
 | `worldmodel` | `jax[cpu]` | Apache-2.0 | Yes |
 | `worldmodel` | `chex` | Apache-2.0 | Yes |
 | `worldmodel` | `einops` | MIT | Yes |

@@ -293,35 +293,28 @@ def test_main_refuses_an_empty_abliteration_set_before_training(mod, tmp_path, m
     assert stat.S_IMODE(result_path.stat().st_mode) == 0o600
 
 
-def test_unsloth_is_imported_before_any_other_training_package():
-    """Unsloth's import fixes repair trl on transformers 5 only when unsloth is
-    imported first; this pins the order in the script source."""
+def test_trainer_imports_no_unsloth_trl_or_datasets():
+    """The trainer runs its own DPO loop over transformers, PEFT and bitsandbytes:
+    unsloth, trl and datasets are imported nowhere in the script, and the heavy
+    packages stay out of module level (they load inside the training call)."""
     import ast
 
     tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
-    heavy = {"unsloth", "trl", "peft", "datasets", "transformers", "torch"}
+    imported = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name != "_train":
-            continue
-        order = []
-        for stmt in ast.walk(node):
-            if isinstance(stmt, ast.ImportFrom) and stmt.module:
-                order.append((stmt.lineno, stmt.module.split(".")[0]))
-            elif isinstance(stmt, ast.Import):
-                order.extend((stmt.lineno, a.name.split(".")[0]) for a in stmt.names)
-        first = [m for _, m in sorted(order) if m in heavy]
-        assert first and first[0] == "unsloth", first
-        break
-    else:
-        raise AssertionError("_train not found")
-    # No heavy package at module level, where it would load before unsloth.
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Import):
+            imported.update(a.name.split(".")[0] for a in node.names)
+    assert not (imported & {"unsloth", "trl", "datasets"}), imported
+    heavy = {"torch", "transformers", "peft", "bitsandbytes"}
     top_level = {
         (n.module or "").split(".")[0] if isinstance(n, ast.ImportFrom) else a.name.split(".")[0]
         for n in tree.body
         if isinstance(n, (ast.Import, ast.ImportFrom))
         for a in (n.names if isinstance(n, ast.Import) else [n])
     }
-    assert not (top_level & (heavy - {"unsloth"})), top_level
+    assert not (top_level & heavy), top_level
 
 
 def test_adapter_names_do_not_collide_with_module_attributes(mod):

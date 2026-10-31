@@ -207,7 +207,7 @@ CMD ["python", "-m", "kaine.cycle"]
 # The trainer image is built only with --target trainer; the default target is
 # the runtime image (see the runtime-default alias at the end of this file).
 # This stage starts from build-base so a source change does not rebuild the
-# trainer torch/unsloth layers.
+# trainer torch layers.
 # =========================================================================
 FROM build-base AS trainer-build
 ARG FLAVOR
@@ -235,8 +235,8 @@ COPY pyproject.toml /src/pyproject.toml
 RUN python3.12 -m venv /opt/trainer
 ENV PATH="/opt/trainer/bin:${PATH}"
 
-# The trainer venv carries its own torch because the training stack (unsloth)
-# supports an older torch than the runtime. The runtime torch is unaffected.
+# The trainer venv carries its own torch because the training stack pins a
+# torch it was built against. The runtime torch is unaffected.
 RUN TORCH_INDEX="$(cd /src && python3.12 -m wheelidx.wheel_index --image-index "${FLAVOR}")" \
  && if [ -n "${TORCH_INDEX}" ]; then \
         /opt/trainer/bin/pip install --index-url "${TORCH_INDEX}" "torch>=2.10,<2.13" torchvision; \
@@ -268,7 +268,7 @@ RUN /opt/trainer/bin/pip install /opt/llama.cpp/gguf-py sentencepiece protobuf
 # =========================================================================
 FROM runtime AS trainer
 
-# Triton (used by unsloth) compiles small kernels at runtime and needs a C
+# Triton (used by bitsandbytes) compiles small kernels at runtime and needs a C
 # compiler and the Python headers. The runtime image stays without a compiler;
 # only the trainer image carries one.
 USER root

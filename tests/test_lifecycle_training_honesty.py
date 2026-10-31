@@ -138,21 +138,21 @@ def test_h8_raises_when_enabled_approved_extras_missing(tmp_path, monkeypatch):
 
     voice_cfg = _make_voice_config(tmp_path, enabled=True)
 
-    # Simulate missing extras by temporarily hiding 'unsloth' from sys.modules
+    # Simulate missing extras by temporarily hiding 'peft' from sys.modules
     # and making the import attempt raise ImportError.
-    orig_unsloth = sys.modules.get("unsloth", None)
-    sys.modules["unsloth"] = None  # type: ignore[assignment]
+    orig_peft = sys.modules.get("peft", None)
+    sys.modules["peft"] = None  # type: ignore[assignment]
     try:
         with pytest.raises(VoiceAlignmentConfigError) as exc_info:
             _resolve_trainer(voice_cfg)
     finally:
-        if orig_unsloth is None:
-            sys.modules.pop("unsloth", None)
+        if orig_peft is None:
+            sys.modules.pop("peft", None)
         else:
-            sys.modules["unsloth"] = orig_unsloth
+            sys.modules["peft"] = orig_peft
 
     msg = str(exc_info.value)
-    assert "training" in msg.lower() or "unsloth" in msg.lower() or "extras" in msg.lower()
+    assert "training" in msg.lower() or "peft" in msg.lower() or "extras" in msg.lower()
     assert "kaine[training]" in msg or "pip install" in msg or "disable" in msg
 
 

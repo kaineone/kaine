@@ -6,7 +6,7 @@
 ``SubprocessVoiceTrainer`` implements the same minimal :class:`Trainer`
 protocol as :class:`~kaine.modules.sleep.voice_alignment.FakeTrainer`,
 so it drops into the same slot in ``boot.py::make_sleep`` and the sleep module calls it
-identically. It runs the real unsloth DPO in an operator-configured EXTERNAL
+identically. It runs the real voice-alignment DPO in an operator-configured EXTERNAL
 Python environment as a subprocess, or loads the same
 ``scripts/sleep_external_train.py`` by path and calls its entry point in a
 worker thread inside this interpreter when ``run_in_process=True``. The two
@@ -628,7 +628,7 @@ class SubprocessVoiceTrainer:
             proc = await asyncio.to_thread(
                 subprocess.run,
                 argv,
-                cwd=str(job_dir),  # unsloth_compiled_cache/ lands in the job dir
+                cwd=str(job_dir),  # the trainer runs inside its own job dir
                 env=trainer_env(),
                 capture_output=True,
                 text=True,

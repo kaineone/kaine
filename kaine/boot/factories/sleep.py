@@ -317,7 +317,7 @@ def make_sleep(
     if entity_clock is not None:
         kwargs["entity_clock"] = entity_clock
     # When the operator has opted in (config + env var) AND the
-    # `[training]` extras importable, wire the real Unsloth-backed
+    # `[training]` extras importable, wire the real
     # trainer. Otherwise FakeTrainer ships the "no backend" reason.
     trainer = _resolve_trainer(voice_config, kaine_config)
     if trainer is not None:
@@ -472,10 +472,9 @@ def _resolve_trainer(
 
     # backend == "in_process"
     try:
-        import datasets  # noqa: F401  # type: ignore[import-untyped]
+        import bitsandbytes  # noqa: F401  # type: ignore[import-untyped]
         import peft  # noqa: F401  # type: ignore[import-untyped]
-        import trl  # noqa: F401  # type: ignore[import-untyped]
-        import unsloth  # noqa: F401  # type: ignore[import-untyped]
+        import transformers  # noqa: F401  # type: ignore[import-untyped]
     except Exception as exc:
         raise VoiceAlignmentConfigError(
             "voice_alignment is enabled and operator-approved with "
@@ -551,7 +550,7 @@ def _resolve_subprocess_trainer(
 ) -> Any:
     """Construct the out-of-process trainer for the "subprocess" backend.
 
-    The heavy unsloth/torch stack lives in an EXTERNAL operator-configured env,
+    The heavy torch/transformers training stack lives in an EXTERNAL operator-configured env,
     so the runtime venv does NOT need the [training] extra. What it does need —
     and what fails the boot loudly when absent (never a silent degrade) — is a
     ``trainer_python`` that is set and points at an existing interpreter, plus

@@ -100,15 +100,15 @@ class VoiceAlignmentConfig:
     #     [training] extra).
     #   "subprocess" — run the same script out-of-process in an
     #     operator-configured external Python env (e.g. Unsloth Studio). Used on
-    #     hosts whose runtime venv cannot host unsloth (different Python ABI /
-    #     torch / CUDA). See SubprocessVoiceTrainer.
+    #     hosts whose runtime venv cannot host the training stack (different
+    #     Python ABI / torch / CUDA). See SubprocessVoiceTrainer.
     trainer_backend: str = "in_process"
     # Path to the external interpreter for the "subprocess" backend (e.g. the
     # Unsloth Studio python). Required when trainer_backend = "subprocess";
     # empty/missing + subprocess = config error at boot (fail closed).
     trainer_python: str = ""
-    # Where the subprocess backend stages job specs + the unsloth compiled
-    # cache. Operators may redirect to a roomier disk.
+    # Where the subprocess backend stages job specs and their results.
+    # Operators may redirect to a roomier disk.
     trainer_workdir: str = "state/sleep/voice_align_jobs"
     # Where the job-queue backend writes ready job directories for the
     # kaine-trainer service. The service and the cycle container share this

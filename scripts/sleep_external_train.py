@@ -4,11 +4,12 @@
 """Out-of-process voice-alignment trainer entry point.
 
 This script runs INSIDE an operator-configured external Python environment
-(e.g. the Unsloth Studio interpreter, or an unsloth-core env on AMD hosts) —
+(any environment with torch, transformers, peft and bitsandbytes, such as the
+trainer image's venv or an Unsloth Studio interpreter) —
 NEVER in the KAINE entity-runtime venv. It is invoked by path as a subprocess
 by ``kaine.modules.sleep.subprocess_trainer.SubprocessVoiceTrainer``.
 
-Hard boundary: this file imports ONLY unsloth / trl / peft / datasets / torch /
+Hard boundary: this file imports ONLY torch / transformers / peft / bitsandbytes /
 the standard library. It MUST NOT import ``kaine`` — the runtime
 import-linter contracts depend on it staying out of the ``kaine`` import graph,
 and the two environments share nothing but the filesystem (different Python
@@ -51,7 +52,7 @@ base model with the adapter disabled.
 """
 from __future__ import annotations
 
-import inspect
+import contextlib
 import json
 import os
 import re
@@ -141,7 +142,7 @@ def split_pairs_by_system(pairs: list[dict[str, Any]]) -> tuple[list[dict[str, A
 
 
 def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert kept pairs into TRL's conversational DPO format."""
+    """Convert kept pairs into conversational DPO rows (prompt, chosen, rejected)."""
     rows: list[dict[str, Any]] = []
     for p in pairs:
         rows.append(
@@ -155,6 +156,159 @@ def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+# DPO loop (no TRL)
+def encode_dpo_row(tokenizer: Any, row: dict[str, Any], max_length: int) -> dict[str, list[int]]:
+
+    prompt_text = tokenizer.apply_chat_template(
+        row["prompt"], tokenize=False, add_generation_prompt=True
+    )
+    prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+
+    def completion_ids(content: str) -> list[int]:
+        ids = tokenizer(content, add_special_tokens=False)["input_ids"]
+        if tokenizer.eos_token_id is not None:
+            ids = ids + [tokenizer.eos_token_id]
+        return list(ids)
+
+    chosen_completion = completion_ids(row["chosen"][0]["content"])
+    rejected_completion = completion_ids(row["rejected"][0]["content"])
+
+    def encode_one(prompt: list[int], completion: list[int]) -> tuple[list[int], list[int]]:
+        completion = list(completion)
+        if len(completion) > max_length - 1:
+            completion = completion[: max_length - 1]
+        if len(prompt) + len(completion) > max_length:
+            keep_prompt = max_length - len(completion)
+            if keep_prompt > 0:
+                prompt = prompt[-keep_prompt:]
+            else:
+                prompt = []
+        input_ids = list(prompt) + completion
+        labels = [-100] * len(prompt) + list(completion)
+        return input_ids, labels
+
+    chosen_input_ids, chosen_labels = encode_one(prompt_ids, chosen_completion)
+    rejected_input_ids, rejected_labels = encode_one(prompt_ids, rejected_completion)
+    return {
+        "chosen_input_ids": chosen_input_ids,
+        "chosen_labels": chosen_labels,
+        "rejected_input_ids": rejected_input_ids,
+        "rejected_labels": rejected_labels,
+    }
+
+
+def enable_gradient_checkpointing(model: Any) -> None:
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+
+
+def check_adapter_loaded(load_result: Any) -> None:
+    if load_result is None:
+        raise TrainerJobError(
+            "previous adapter could not be loaded: PEFT returned no load result; a fresh adapter is never trained in its place"
+        )
+    unexpected_keys = getattr(load_result, "unexpected_keys", None) or []
+    lora_unexpected = [key for key in unexpected_keys if "lora_" in str(key)]
+    if lora_unexpected:
+        raise TrainerJobError(
+            f"previous adapter could not be loaded: {len(lora_unexpected)} of its LoRA weights match no module of the base model (first: {lora_unexpected[0]}); a fresh adapter is never trained in its place"
+        )
+
+
+def completion_logprob(
+    model: Any, input_ids: list[int], labels: list[int], device: str
+) -> Any:
+    import torch
+
+    n = sum(1 for label in labels if label != -100)
+    # The first token has no prediction, so at most len - 1 tokens are scored.
+    # With nothing to score, return 0 (a negative slice of -0 would select the
+    # whole sequence instead of nothing).
+    n = min(n, len(input_ids) - 1)
+    if n <= 0:
+        return torch.zeros((), device=device)
+    ids = torch.tensor([input_ids], device=device)
+    try:
+        out = model(input_ids=ids, logits_to_keep=n + 1)
+    except TypeError:
+        out = model(input_ids=ids)
+    logits = out.logits
+    prediction_logits = logits[:, -(n + 1) : -1, :]
+    log_probs = torch.log_softmax(prediction_logits.float(), dim=-1)
+    target_ids = ids[:, -n:]
+    gathered = log_probs.gather(2, target_ids.unsqueeze(-1)).squeeze(-1)
+    return gathered.sum()
+
+
+def dpo_loss(
+    policy_chosen: Any,
+    policy_rejected: Any,
+    ref_chosen: Any,
+    ref_rejected: Any,
+    beta: float,
+) -> Any:
+    import torch
+
+    return -torch.nn.functional.logsigmoid(
+        beta * ((policy_chosen - policy_rejected) - (ref_chosen - ref_rejected))
+    )
+
+
+def run_dpo_epoch(
+    model: Any,
+    tokenizer: Any,
+    rows: list[dict[str, Any]],
+    *,
+    beta: float,
+    learning_rate: float,
+    seed: int,
+    device: str,
+    reference_ctx: Any,
+    accumulation: int = 4,
+    max_length: int = 768,
+) -> tuple[float, int]:
+    import torch
+
+    torch.manual_seed(seed)
+    model.train()
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(params, lr=learning_rate)
+    optimizer.zero_grad()
+    recorded: list[float] = []
+    steps = 0
+    for index, row in enumerate(rows):
+        enc = encode_dpo_row(tokenizer, row, max_length)
+        with torch.no_grad():
+            with reference_ctx():
+                ref_chosen = completion_logprob(
+                    model, enc["chosen_input_ids"], enc["chosen_labels"], device
+                )
+                ref_rejected = completion_logprob(
+                    model, enc["rejected_input_ids"], enc["rejected_labels"], device
+                )
+        policy_chosen = completion_logprob(
+            model, enc["chosen_input_ids"], enc["chosen_labels"], device
+        )
+        policy_rejected = completion_logprob(
+            model, enc["rejected_input_ids"], enc["rejected_labels"], device
+        )
+        loss = dpo_loss(policy_chosen, policy_rejected, ref_chosen, ref_rejected, beta)
+        (loss / accumulation).backward()
+        recorded.append(float(loss.detach()))
+        if (index + 1) % accumulation == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+            steps += 1
+    if rows and len(rows) % accumulation != 0:
+        optimizer.step()
+        optimizer.zero_grad()
+        steps += 1
+    if not rows:
+        return 0.0, 0
+    return sum(recorded) / len(recorded), steps
 
 
 # --------------------------------------------------------------------------- #
@@ -753,7 +907,7 @@ def _promote(tmp_dir: Path, final_dir: Path, job_dir: Path) -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# the real unsloth DPO run
+# the real DPO run
 # --------------------------------------------------------------------------- #
 def _cuda_memory_gib(device: str) -> tuple[Optional[float], Optional[float]]:
     """Measure peak/total CUDA memory in GiB, or None if unavailable."""
@@ -783,14 +937,17 @@ def _train(
     prev_adapter: Optional[Path],
     job_dir: Path,
 ) -> dict[str, Any]:
-    # Unsloth must be imported before trl, peft, datasets and transformers. Its
-    # import fixes repair trl 0.24 on transformers 5, whose package-availability
-    # helper returns a tuple: without them every optional-dependency flag in trl
-    # is truthy and DPOTrainer fails to import (mergekit).
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]  # noqa: I001 (must load first)
     import torch  # type: ignore[import-untyped]
-    from datasets import Dataset  # type: ignore[import-untyped]
-    from peft import PeftModel  # type: ignore[import-untyped]
+    from peft import (  # type: ignore[import-untyped]
+        LoraConfig,
+        PeftModel,
+        get_peft_model,
+    )
+    from transformers import (  # type: ignore[import-untyped]
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+    )
 
     # Peak memory is per run: an in-process trainer reuses the interpreter, so
     # reset the counter before this run allocates anything.
@@ -803,13 +960,12 @@ def _train(
     except Exception:
         # No usable CUDA device: the run reports its peak as unknown.
         pass
-    from trl import DPOConfig, DPOTrainer  # type: ignore[import-untyped]
-
     base_model_path = job["base_model_path"]
     lora_rank = int(job.get("lora_rank", 8))
     learning_rate = float(job.get("learning_rate", 5e-5))
     dpo_beta = float(job.get("dpo_beta", 0.1))
     seed = int(job.get("seed", 42))
+    torch.manual_seed(seed)
     max_samples = int(job.get("max_samples", 200))
     training_device = str(job.get("training_device", "cuda:0"))
     precision = job.get("train_precision", "bf16")
@@ -855,19 +1011,36 @@ def _train(
 
     # 1. Load base model + tokenizer; attach (or restore) LoRA.
     try:
-        load_kwargs_model = dict(load_kwargs)
-        if load_kwargs_model.get("dtype") == "bfloat16":
-            load_kwargs_model["dtype"] = torch.bfloat16
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            base_model_path,
-            device_map={"": training_device},
-            local_files_only=True,
-            **load_kwargs_model,
-        )
-        if prev_adapter is None:
-            model = FastLanguageModel.get_peft_model(
-                model, r=lora_rank, use_gradient_checkpointing="unsloth"
+        model_kwargs: dict[str, Any] = {
+            "device_map": {"": training_device},
+            "local_files_only": True,
+        }
+        if load_kwargs.get("load_in_4bit"):
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
             )
+            model_kwargs["dtype"] = torch.bfloat16
+        else:
+            model_kwargs["dtype"] = torch.bfloat16
+        model = AutoModelForCausalLM.from_pretrained(base_model_path, **model_kwargs)
+        # prepare_model_for_kbit_training is not used: it upcasts the embeddings and output layer to float32.
+        enable_gradient_checkpointing(model)
+        tokenizer = AutoTokenizer.from_pretrained(base_model_path, local_files_only=True)
+        if prev_adapter is None:
+            model = get_peft_model(
+                model,
+                LoraConfig(
+                    r=lora_rank,
+                    lora_alpha=lora_rank,
+                    lora_dropout=0.0,
+                    target_modules="all-linear",
+                    task_type="CAUSAL_LM",
+                ),
+            )
+            reference_ctx = model.disable_adapter
         else:
             model = PeftModel.from_pretrained(
                 model,
@@ -876,10 +1049,17 @@ def _train(
                 is_trainable=True,
                 local_files_only=True,
             )
-            model.load_adapter(str(prev_adapter), adapter_name=REFERENCE_ADAPTER)
+            load_result = model.load_adapter(str(prev_adapter), adapter_name=REFERENCE_ADAPTER)
+            check_adapter_loaded(load_result)
             model.set_adapter(TRAINED_ADAPTER)
-            if hasattr(model, "gradient_checkpointing_enable"):
-                model.gradient_checkpointing_enable()
+
+            @contextlib.contextmanager
+            def reference_ctx():
+                model.set_adapter(REFERENCE_ADAPTER)
+                try:
+                    yield
+                finally:
+                    model.set_adapter(TRAINED_ADAPTER)
     except Exception as exc:
         if _is_oom(exc):
             return _oom_result()
@@ -899,44 +1079,22 @@ def _train(
     final_dir = adapter_output_dir / timestamp
 
     capped_pairs = kept_pairs[:max_samples]
-    ds = Dataset.from_list(build_dataset_rows(capped_pairs))
-
-    dpo_kwargs_common: dict[str, Any] = {
-        "output_dir": str(tmp_dir),
-        "learning_rate": learning_rate,
-        "beta": dpo_beta,
-        "per_device_train_batch_size": 1,
-        "gradient_accumulation_steps": 4,
-        "num_train_epochs": 1,
-        "seed": seed,
-        "report_to": "none",
-        "save_strategy": "no",
-        "gradient_checkpointing": True,
-    }
-    if precision == "bf16":
-        dpo_kwargs_common["bf16"] = True
-    if prev_adapter is not None:
-        dpo_kwargs_common["model_adapter_name"] = TRAINED_ADAPTER
-        dpo_kwargs_common["ref_adapter_name"] = REFERENCE_ADAPTER
-    args = DPOConfig(**dpo_kwargs_common)
-
-    dpo_kwargs: dict[str, Any] = {
-        "model": model,
-        "args": args,
-        "train_dataset": ds,
-    }
-    if "processing_class" in inspect.signature(DPOTrainer.__init__).parameters:
-        # Pass what from_pretrained returned: for a vision-language base that is
-        # the processor, which TRL's vision-aware DPO row processing requires.
-        dpo_kwargs["processing_class"] = tokenizer
-    else:
-        dpo_kwargs["tokenizer"] = text_tokenizer
+    rows = build_dataset_rows(capped_pairs)
 
     try:
-        trainer = DPOTrainer(**dpo_kwargs)
-        train_output = trainer.train()
-        dpo_loss = float(getattr(train_output, "training_loss", 0.0))
-        steps = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
+        dpo_loss, steps = run_dpo_epoch(
+            model,
+            text_tokenizer,
+            rows,
+            beta=dpo_beta,
+            learning_rate=learning_rate,
+            seed=seed,
+            # Inputs go where the weights are: the configured device for a real
+            # load (device_map pins it), wherever a test double lives otherwise.
+            device=str(getattr(model, "device", training_device)),
+            reference_ctx=reference_ctx,
+        )
+        model.eval()
 
         # 4. Persist adapter weights to tmp_dir before evaluation.
         tmp_dir.mkdir(parents=True, exist_ok=True)

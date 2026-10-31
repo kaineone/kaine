@@ -40,7 +40,7 @@ Several features need a Python extra installed on top of the base package:
 | `[reasoning]` | `pip install -e .[reasoning]` | Active inference engine for the planning module (`inferactively-pymdp`, `jax[cpu]`); needed only for the `pymdp` backend |
 | `[worldmodel]` | `pip install -e .[worldmodel]` | DreamerV3 JAX engine for the world model module (`jax[cpu]`, `chex`, `einops`); the NumPy engine needs no extra |
 | `[oscillator]` | `pip install -e .[oscillator]` | Oscillatory binding layer (`snntorch`, `scipy`) |
-| `[training]` | `pip install -e .[training]` | Voice alignment DPO/QLoRA training (`unsloth`, `trl`, `peft`, `datasets`) |
+| `[training]` | `pip install -e .[training]` | Voice alignment DPO/QLoRA training (`transformers`, `peft`, `bitsandbytes`, `accelerate`) |
 
 Additional grouped extras are available for specific subsystem and hardware paths: `[core]`, `[memory]`, `[memory-edge]`, `[dashboard]`, `[nvidia]`, `[internvideo]`, `[internvideo-flash]`, `[perception]`, and `[full]`.
 

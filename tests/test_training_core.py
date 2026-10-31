@@ -12,6 +12,8 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -68,12 +70,15 @@ async def test_empty_pairs_returns_clean_result(tmp_path, fake_training_stack):
 
 @pytest.mark.asyncio
 async def test_dpo_failure_removes_tmp_dir(tmp_path, fake_training_stack):
-    fake_training_stack.train_raises = RuntimeError("boom")
+    fake_training_stack.save_raises = RuntimeError("boom")
     with pytest.raises(SubprocessTrainerError, match="boom"):
         await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
 
     adapter_output_dir = tmp_path / "store" / "adapters"
     assert not any(p.name.endswith(".tmp") for p in adapter_output_dir.iterdir())
+    saved_tmp = fake_training_stack.save_paths[-1]
+    assert saved_tmp.endswith(".tmp")
+    assert not Path(saved_tmp).exists()
 
 
 @pytest.mark.asyncio
@@ -135,8 +140,8 @@ async def test_precision_and_lora_settings_reach_stack(tmp_path, fake_training_s
         config_overrides={"train_precision": "bf16", "lora_rank": 16},
     )
     load_call = fake_training_stack.from_pretrained_calls[-1]
-    assert load_call["kwargs"]["load_in_4bit"] is False
     assert load_call["kwargs"]["dtype"] is torch.bfloat16
+    assert "quantization_config" not in load_call["kwargs"]
     assert fake_training_stack.get_peft_model_calls[-1]["r"] == 16
 
     await run_inprocess(
@@ -145,12 +150,34 @@ async def test_precision_and_lora_settings_reach_stack(tmp_path, fake_training_s
         config_overrides={"train_precision": "4bit", "lora_rank": 8},
     )
     load_call = fake_training_stack.from_pretrained_calls[-1]
-    assert load_call["kwargs"]["load_in_4bit"] is True
+    assert "quantization_config" in load_call["kwargs"]
+    assert fake_training_stack.bnb_config_calls[-1]["bnb_4bit_quant_type"] == "nf4"
+    assert fake_training_stack.bnb_config_calls[-1]["load_in_4bit"] is True
+    assert {"use_reentrant": False} in fake_training_stack.gradient_checkpointing_enable_calls
+    assert fake_training_stack.enable_input_require_grads_calls
     assert fake_training_stack.get_peft_model_calls[-1]["r"] == 8
 
 
 @pytest.mark.asyncio
-async def test_dpo_config_receives_hyperparams(tmp_path, fake_training_stack):
+async def test_dpo_hyperparams_reach_the_loop(tmp_path, fake_training_stack, monkeypatch):
+    recorded: dict[str, Any] = {"lr": None, "seeds": []}
+    original_adamw = torch.optim.AdamW
+
+    class RecordingAdamW(original_adamw):
+        def __init__(self, params, lr=0.0, **kwargs):
+            recorded["lr"] = lr
+            super().__init__(params, lr=lr, **kwargs)
+
+    monkeypatch.setattr(torch.optim, "AdamW", RecordingAdamW)
+
+    original_seed = torch.manual_seed
+
+    def recording_seed(seed: int) -> None:
+        recorded["seeds"].append(seed)
+        return original_seed(seed)
+
+    monkeypatch.setattr(torch, "manual_seed", recording_seed)
+
     await run_inprocess(
         tmp_path,
         pairs=[_pair()],
@@ -160,12 +187,8 @@ async def test_dpo_config_receives_hyperparams(tmp_path, fake_training_stack):
             "seed": 123,
         },
     )
-    cfg = fake_training_stack.dpo_config_calls[-1]
-    assert cfg["learning_rate"] == pytest.approx(1e-4)
-    assert cfg["beta"] == pytest.approx(0.2)
-    assert cfg["seed"] == 123
-    assert cfg["gradient_checkpointing"] is True
-    assert cfg["bf16"] is True
+    assert recorded["lr"] == pytest.approx(1e-4)
+    assert 123 in recorded["seeds"]
 
 
 @pytest.mark.asyncio
@@ -185,11 +208,15 @@ async def test_previous_adapter_path_loads_named_adapters(tmp_path, fake_trainin
     assert peft_call["is_trainable"] is True
     load_call = fake_training_stack.load_adapter_calls[-1]
     assert load_call["kwargs"]["adapter_name"] == "reference"
-    set_call = fake_training_stack.set_adapter_calls[-1]
-    assert set_call["args"] == ("policy",)
-    cfg = fake_training_stack.dpo_config_calls[-1]
-    assert cfg["model_adapter_name"] == "policy"
-    assert cfg["ref_adapter_name"] == "reference"
+    set_calls = fake_training_stack.set_adapter_calls
+    reference_index = next(
+        i for i, call in enumerate(set_calls) if call["args"] == ("reference",)
+    )
+    assert any(
+        i > reference_index and call["args"] == ("policy",)
+        for i, call in enumerate(set_calls)
+    )
+    assert fake_training_stack.disable_adapter_calls == []
     assert (result.adapter_path / "adapter_config.json").exists()
 
 
@@ -197,11 +224,17 @@ async def test_previous_adapter_path_loads_named_adapters(tmp_path, fake_trainin
 async def test_conversational_dataset_rows_have_system_first(tmp_path, fake_training_stack):
     await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
 
-    rows = fake_training_stack.dataset_rows
-    assert rows
-    first_prompt = rows[0]["prompt"]
-    assert first_prompt[0]["role"] == "system"
-    assert first_prompt[1]["role"] == "user"
+    calls = fake_training_stack.chat_template_calls
+    assert calls
+    assert calls[0][0]["role"] == "system"
+
+
+@pytest.mark.asyncio
+async def test_fresh_adapter_uses_disabled_adapter_as_reference(tmp_path, fake_training_stack):
+    await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
+
+    assert fake_training_stack.disable_adapter_calls
+    assert fake_training_stack.get_peft_model_calls[-1]["config"].lora_dropout == 0.0
 
 
 def test_negative_adapter_retention_rejected(tmp_path):
@@ -258,7 +291,7 @@ async def test_missing_base_model_path_refused_before_training(tmp_path, fake_tr
 async def test_oom_detection_reports_does_not_fit_and_no_fallback(
     tmp_path, fake_training_stack
 ):
-    fake_training_stack.train_raises = RuntimeError(
+    fake_training_stack.save_raises = RuntimeError(
         "CUDA out of memory. Tried to allocate 2.00 GiB"
     )
     with pytest.raises(SubprocessTrainerError, match="does not fit"):
@@ -268,6 +301,9 @@ async def test_oom_detection_reports_does_not_fit_and_no_fallback(
     assert not any(p.name.endswith(".tmp") for p in adapter_output_dir.iterdir())
     assert not (adapter_output_dir / "current").exists()
     assert len(fake_training_stack.from_pretrained_calls) == 1
+    saved_tmp = fake_training_stack.save_paths[-1]
+    assert saved_tmp.endswith(".tmp")
+    assert not Path(saved_tmp).exists()
 
 
 @pytest.mark.asyncio
@@ -339,3 +375,40 @@ async def test_model_load_failure_raises_without_promotion(tmp_path, fake_traini
 
     adapter_output_dir = tmp_path / "store" / "adapters"
     assert not list(adapter_output_dir.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_seed_is_set_before_lora_initialisation(tmp_path, fake_training_stack, monkeypatch):
+    original_seed = torch.manual_seed
+
+    def recording_seed(seed):
+        fake_training_stack.events.append(f"seed:{seed}")
+        return original_seed(seed)
+
+    monkeypatch.setattr(torch, "manual_seed", recording_seed)
+
+    await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={"seed": 123})
+
+    assert fake_training_stack.events.index("seed:123") < fake_training_stack.events.index("get_peft_model")
+
+
+@pytest.mark.asyncio
+async def test_resumed_adapter_that_matches_no_module_is_refused(tmp_path, fake_training_stack):
+    adapter_output_dir = tmp_path / "store" / "adapters"
+    adapter_output_dir.mkdir(parents=True)
+    prev_dir = adapter_output_dir / "20260530T120000"
+    prev_dir.mkdir()
+    (prev_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    os.symlink(str(prev_dir.relative_to(adapter_output_dir)), adapter_output_dir / "current")
+
+    fake_training_stack.load_adapter_unexpected_keys = [
+        "base_model.model.model.language_model.layers.0.self_attn.q_proj.lora_A.weight"
+    ]
+
+    with pytest.raises(SubprocessTrainerError, match="fresh adapter is never trained in its place"):
+        await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
+
+    assert {p.name for p in adapter_output_dir.iterdir()} == {
+        "20260530T120000",
+        "current",
+    }

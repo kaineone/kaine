@@ -348,7 +348,7 @@ Required when `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMEN
 .venv/bin/pip install -e ".[training]"
 ```
 
-Installs `unsloth`, `trl`, `peft`, and `datasets`. Without this extra the sleep cycle's voice-alignment phase logs a clean "extras not installed" message and continues; no other sleep phase is affected.
+Installs `transformers`, `peft`, `bitsandbytes`, and `accelerate`. Without this extra the sleep cycle's voice-alignment phase logs a clean "extras not installed" message and continues; no other sleep phase is affected.
 
 `[sleep.voice_alignment].trainer_backend`, `[sleep.voice_alignment].trainer_python`, and `[sleep.voice_alignment].hot_swap_mode` all live in that section. The shipped defaults are `trainer_backend = "in_process"` and `hot_swap_mode = "manual"`. To run Stage-2 in a separate Python environment, set `trainer_backend = "subprocess"` and point `trainer_python` at that interpreter. On a container host, use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service.
 

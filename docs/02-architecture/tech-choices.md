@@ -37,7 +37,7 @@ The base install contains only the dependencies needed to start the bus and run 
 | OpenAI-compatible model server | Language organ inference | per upstream | GPU (`cuda:0`) | host service |
 | llama.cpp server images | OpenAI-compatible endpoint | per upstream | GPU | host service |
 | KAINE Qwen3.5-4B abliterated GGUF | Language organ weights | Apache-2.0 | GPU (`cuda:0`) | wizard download |
-| `unsloth` + `trl` + `peft` + `datasets` | Voice-alignment training | Apache-2.0 / MIT | GPU (`cuda:0`) | `[training]` |
+| `transformers` + `peft` + `bitsandbytes` + `accelerate` | Voice-alignment training | Apache-2.0 / MIT | GPU (`cuda:0`) | `[training]` |
 | Speaches (faster-Whisper) | Speech-to-text | per upstream / MIT | CPU | host service |
 | sherpa-onnx + Moonshine | Edge STT | per upstream / MIT | CPU | `[speech-edge]` |
 | sherpa-onnx + Kokoro | Edge TTS | per upstream; espeak-ng data is GPL-3.0-or-later | GPU / CPU | `[speech-edge]` |
@@ -144,7 +144,7 @@ Training can run in-process or via `trainer_backend = "subprocess"` / `"job_queu
 
 ## Voice alignment
 
-During the sleep module's phase 4, voice alignment is built to fine-tune the language organ with DPO and QLoRA, using `unsloth`, `trl`, `peft` and `datasets`, on preferred examples from a validated source. No such source exists yet: `[sleep.voice_alignment].preference_source` accepts only `"none"`, so the phase builds no pairs and trains nothing, whatever the other gates say (see [Voice alignment](../10-sleep/voice-alignment.md)).
+During the sleep module's phase 4, voice alignment is built to fine-tune the language organ with DPO and QLoRA, using `transformers`, `peft`, `bitsandbytes` and `accelerate`, on preferred examples from a validated source. No such source exists yet: `[sleep.voice_alignment].preference_source` accepts only `"none"`, so the phase builds no pairs and trains nothing, whatever the other gates say (see [Voice alignment](../10-sleep/voice-alignment.md)).
 
 Once a source exists, two more gates must be open for real training: `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 

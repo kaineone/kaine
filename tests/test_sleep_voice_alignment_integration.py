@@ -10,6 +10,7 @@ the fields the evaluation sidecar's voice_tracking observer consumes.
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 
@@ -60,7 +61,6 @@ def _make_config(tmp_path: Path) -> VoiceAlignmentConfig:
 
 
 def _build_trainer(tmp_path: Path, control):
-    control.dpo_loss = 0.31
     # The same probes _write_probes puts on disk, so the fake model answers them.
     control.set_probes(
         [{"prompt": "2+2", "expected": "4"}],
@@ -109,7 +109,7 @@ async def test_training_result_carries_voice_tracking_fields(
 
     assert phase_result.metadata["pairs"] == 2
     assert voice_result.samples_used == 2
-    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.dpo_loss == pytest.approx(math.log(2))
     assert voice_result.accepted is True
     assert voice_result.capability_score_before == pytest.approx(1.0)
     assert voice_result.capability_score_after == pytest.approx(1.0)
@@ -146,7 +146,7 @@ async def test_training_result_carries_real_dpo_loss(
 
     voice_result, _phase_result = await sleep._train_on_pairs(pairs, start_ms, _meta)
 
-    assert voice_result.dpo_loss == pytest.approx(0.31)
+    assert voice_result.dpo_loss == pytest.approx(math.log(2))
     assert voice_result.accepted is True
     assert voice_result.capability_score_before == pytest.approx(1.0)
     assert voice_result.capability_score_after == pytest.approx(1.0)

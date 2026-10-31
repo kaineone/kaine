@@ -122,7 +122,7 @@ Because the trainer script does not import `kaine`, it cannot compute `mean_inte
 
 ### Subprocess backend
 
-`kaine/modules/sleep/subprocess_trainer.py` runs the trainer stack in an external Python environment. The entry script `scripts/sleep_external_train.py` imports only unsloth, trl, peft, datasets and the standard library, never `kaine`, and is invoked by explicit path. The runtime and trainer environments share only the filesystem.
+`kaine/modules/sleep/subprocess_trainer.py` runs the trainer stack in an external Python environment. The entry script `scripts/sleep_external_train.py` imports only torch, transformers, peft, bitsandbytes and the standard library, never `kaine`, and is invoked by explicit path. The runtime and trainer environments share only the filesystem.
 
 `SubprocessVoiceTrainer` writes a per-job directory under `trainer_workdir` (default `state/sleep/voice_align_jobs`):
 
@@ -131,7 +131,6 @@ Because the trainer script does not import `kaine`, it cannot compute `mean_inte
   pairs.jsonl          ← DPO preference pairs
   job.json             ← base model, hyperparameters, output dir, probe paths
   result.json          ← outcome
-  unsloth_compiled_cache/
 ```
 
 The external script runs the same abliteration and capability gates as the in-process trainer, promotes an accepted adapter atomically, and writes `result.json`. The subprocess bridge runs in a worker thread, so it does not block the event loop.
@@ -155,7 +154,7 @@ On a host with no CUDA/ROCm GPU there is no GPU trainer. The voice-alignment pha
 The trainer environment needs transformers v5. Unsloth Studio ships transformers 4.x, which does not recognize the `qwen3_5` model type, so upgrade inside the trainer environment before the first Qwen3.5 training run:
 
 ```bash
-pip install --upgrade --force-reinstall --no-cache-dir unsloth unsloth_zoo
+pip install --upgrade --force-reinstall --no-cache-dir "transformers>=5.3.0,<6" "peft>=0.21.0,<1" "bitsandbytes>=0.50.2,<1" "accelerate>=1.14.1,<2"
 ```
 
 Prefer `pip install` over `unsloth studio update`, because the Studio update re-runs a llama.cpp prebuilt step that silently falls back to CPU only.

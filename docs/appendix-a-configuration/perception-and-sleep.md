@@ -255,9 +255,9 @@ The retired keys `consolidation_divergence_rate_threshold` and `consolidation_di
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `trainer_backend` | string | `"in_process"` | `"in_process"` runs Unsloth DPO inside the runtime venv (needs the `[training]` extra). `"subprocess"` runs Unsloth out-of-process using `trainer_python`; the subprocess runs in a worker thread so it never blocks the cycle event loop. `"job_queue"` writes job specs into private `0o700` directories under `trainer_jobs_dir` for the `kaine-trainer` service and waits for `result.json` without blocking. |
+| `trainer_backend` | string | `"in_process"` | `"in_process"` runs DPO inside the runtime venv (needs the `[training]` extra). `"subprocess"` runs the trainer out-of-process using `trainer_python`; the subprocess runs in a worker thread so it never blocks the cycle event loop. `"job_queue"` writes job specs into private `0o700` directories under `trainer_jobs_dir` for the `kaine-trainer` service and waits for `result.json` without blocking. |
 | `trainer_python` | string | `""` | Path to the external Python interpreter for `subprocess` mode. Required for that backend; empty + `subprocess` is a config error at boot (fail closed). Set this in `kaine.operator.toml`. |
-| `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Staging directory for `subprocess` job specs (`pairs.jsonl` + `job.json`) and Unsloth's compiled cache. |
+| `trainer_workdir` | string | `"state/sleep/voice_align_jobs"` | Staging directory for `subprocess` job specs (`pairs.jsonl` + `job.json`) and their results. |
 | `trainer_jobs_dir` | string | `"state/sleep/voice_align_jobs"` | Shared job directory for the `job_queue` backend. `KAINE_TRAINER_JOBS_DIR` takes precedence when set; the compose cycle sets it to `/trainer-jobs`. |
 | `trainer_timeout_s` | float | `21600.0` | Longest wait, in seconds, for the `job_queue` trainer service result. |
 

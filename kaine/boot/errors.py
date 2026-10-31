@@ -21,7 +21,7 @@ class ConfigurationError(ValueError):
 
 class VoiceAlignmentConfigError(ConfigurationError):
     """Raised when voice_alignment is enabled and operator-approved but the
-    [training] extras (unsloth, trl, peft, datasets) are not installed.
+    [training] extras (transformers, peft, bitsandbytes) are not installed.
 
     This combination is a configuration error: silently falling back to
     FakeTrainer would produce training cycles that appear to succeed while
