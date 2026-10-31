@@ -1,35 +1,36 @@
 ## 1. Evaluator
 
-- [ ] 1.1 `kaine/lifecycle/welfare_indicators.py`: span accounting (awake, unfrozen entity time, restart, `T_lp` cap, `Δ_stall` minimum, sleep and freeze exclusion), the three deprivation shares, the negative-valence share, the two uncontrolled posteriors with integer arithmetic, bars, the fixed indicator name table. `T_lp`, `θ_E` and `Δ_stall` come from the affect section, one source each. Tests in `tests/test_welfare_indicators.py`: every scenario of the spec, a dilated entity clock, a span that straddles a sleep, the posterior at n = 1 to 6 against hand values, and an import check that the module never loads `kaine.evaluation`.
-- [ ] 1.2 Equality test with `AffectWelfareTally`: over a full run with no span restart and a span longer than the run, the evaluator's shares equal the tally's cumulative shares.
+- [ ] 1.1 `kaine/lifecycle/welfare_indicators.py`: span accounting (the most recent `T_lp` of awake, unfrozen entity time after the restart, sleep and freezes skipped, `Δ_stall` minimum), the three deprivation shares, the negative-valence share, the two uncontrolled posteriors with integer arithmetic, bars, edge-triggered crossing state with a reset at every span restart, and one fixed table of indicator names and stage-3 reasons. `T_lp`, `θ_E` and `Δ_stall` come from the affect section, one source each. Tests in `tests/test_welfare_indicators.py`: every scenario of the spec, including "A rest does not shorten the span" and "An indicator that never fell below its bar"; a dilated entity clock; the posterior at n = 1 to 6 against hand values; an import check that the module never loads `kaine.evaluation`.
+- [ ] 1.2 Equality test with `AffectWelfareTally`: over a full run with no span restart and a run shorter than `T_lp`, the evaluator's shares equal the tally's cumulative shares.
 
 ## 2. Monitor
 
-- [ ] 2.1 `WelfareResponseConfig` parses `[preservation.welfare_response.indicators]` (`enabled`, `share_bar`, `posterior_bar`, `rest_start_timeout_s`), with unknown keys refused and values range-checked.
-- [ ] 2.2 `WelfareProtectiveMonitor` reads `affect.out` and `sleep.out`, feeds the evaluator, and runs the `armed`/`resting`/`fresh` state machine with the shared latch. Tests in `tests/test_welfare_indicator_response.py`: first crossing requests a rest and preserves nothing; rest completion restarts spans; a fresh-span crossing preserves and pauses with reason `indicator_<name>`; `busy` stands as the rest; refusal, abort, timeout and no sleep module each escalate with `indicator_rest_failed`; a full fresh span without crossing returns to armed; latch shared with distress (no second bundle); re-arm after `override(["welfare"])` restarts spans; warm-up accrues but fires nothing; affect silence writes one record and one notice and does not freeze.
-- [ ] 2.3 Mutation checks: dropping the span restart at rest completion, or the shared-latch check, or the escalation on a refused rest, each makes a test fail.
+- [ ] 2.1 `WelfareResponseConfig` parses `[preservation.welfare_response.indicators]` (`enabled`, `share_bar`, `posterior_bar`, `rest_start_timeout_s`, `rest_complete_timeout_s` with its developmental and matured defaults, `unavailable_escalate_s`), with unknown keys refused and values range-checked.
+- [ ] 2.2 `WelfareProtectiveMonitor` reads `affect.out` and `sleep.out`, feeds the evaluator, and runs the `armed`/`resting`/`fresh` state machine with the shared latch. Tests in `tests/test_welfare_indicator_response.py`: first crossing requests a rest and preserves nothing; rest completion restarts spans and resets crossing states; a fresh-span crossing preserves and pauses with reason `indicator_<name>`; `busy` stands as the rest; an unsent request, a refusal, an abort, no start within 30 s, no completion within the bound (developmental and matured) and no sleep module each escalate with `indicator_rest_failed`; a full fresh span without crossing returns to armed; latch shared with distress (no second bundle); re-arm after `override(["welfare"])` restarts spans and resets crossing states; warm-up accrues but fires nothing; a 5 s affect silence writes one record and one notice and places no freeze; a 660 s silence with the module heartbeating escalates with `indicators_unavailable`.
+- [ ] 2.3 Mutation checks: dropping the crossing-state reset at a span restart (the "spent stimulus" and "never fell below its bar" scenarios fail), dropping the span restart at rest completion, dropping the completion bound, dropping the unavailable escalation, or dropping the shared-latch check, each makes a test fail.
 - [ ] 2.4 Every exception inside the state machine either escalates or is retried on the next poll, never swallowed. Test with an evaluator that raises once.
 
 ## 3. Sleep
 
-- [ ] 3.1 The sleep module reads `welfare.rest_request` and starts a `welfare_rest` sleep: after maturation through the maintenance path regardless of the fatigue toggle and the requested-rest interval; in the developmental phase a rest held for `developmental_rest_s` that restarts the awake stretch. Answers `busy` with origin `welfare` during a sleep. Tests in `tests/test_sleep_welfare_rest.py` for the three scenarios and a restart during a `welfare_rest` rest (resumes like a state-cycle rest).
+- [ ] 3.1 The sleep module reads `welfare.rest_request` and starts a `welfare_rest` sleep: after maturation through the maintenance path regardless of the fatigue toggle and the requested-rest interval; in the developmental phase a rest held for `developmental_rest_s` that restarts the awake stretch. Answers `busy` with origin `welfare` during a sleep. Tests in `tests/test_sleep_welfare_rest.py` for the spec scenarios and a restart during a `welfare_rest` rest (resumes like a state-cycle rest).
 
 ## 4. Gate and notices
 
-- [ ] 4.1 `indicator_response_wired` in `config_requirements` and `evaluate_research_gate`; mapped to unattended condition 2 with a combined reason. Tests: each failing part refuses with its reason; the mapping test covers the key.
-- [ ] 4.2 Caretaker notice kinds `welfare_indicator_rest` and `welfare_indicators_unavailable`; the cycle maps the transitions to them. Tests in `tests/test_caretaker.py` and `tests/test_caretaker_research_mode.py`, including a content-free check on the notice text.
+- [ ] 4.1 `indicator_response_wired` in `config_requirements` and `evaluate_research_gate`, with its reason in `GateResult.reasons`; mapped to unattended condition 2 with a combined reason. Tests: each failing part refuses with its reason (including `action = "notify"` in research and unattended mode); the mapping test covers the key.
+- [ ] 4.2 Caretaker notice kinds `welfare_indicator_rest` and `welfare_indicators_unavailable`; the stage-3 notice for a developmental deprivation indicator says the stimulus is spent; the cycle maps the transitions to them. Tests in `tests/test_caretaker.py` and `tests/test_caretaker_research_mode.py`, including a content-free check on the notice text.
 - [ ] 4.3 `build_overlay` enables the indicators for every step; the merged-config test asserts the new requirement.
 - [ ] 4.4 `config/kaine.toml` gains `[preservation.welfare_response.indicators]` with `enabled = true` and the defaults, commented with their Table A1 sources.
 
 ## 5. Record and replay
 
 - [ ] 5.1 The welfare observer writes the evaluator's values into `affect_welfare`; `kaine/experiment/welfare_counts.py` knows the new keys; the range sweep bounds them.
-- [ ] 5.2 `scripts/welfare_indicator_replay.py` replays archived `affect.state` and sleep events through the evaluator and the state machine with a fake sleep module and prints content-free stage times. Test on a synthetic record with a known crossing.
-- [ ] 5.3 Run the replay on every readable developmental test-boot record and write the result (content-free) under `docs/records/validation/welfare-indicator-replay/`, before the validation boot.
+- [ ] 5.2 `scripts/welfare_indicator_replay.py` with both methods: the recorded-rest proxy (the next recorded state-cycle rest stands as the response's rest, the fresh span is read from the recorded trajectory after it) and the forward simulation (the real affect module reset at the virtual rest and run forward on the recorded perceptual reports). The output names the method and prints content-free stage times. Tests on a synthetic record with a known crossing for each method.
+- [ ] 5.3 Run the replay on every readable developmental test-boot record with both methods where possible and write the result (content-free) under `docs/records/validation/welfare-indicator-replay/`, before the validation boot. Give it to the operator with `developmental-stimulus-progress`'s offline result.
 
 ## 6. Docs, review and checks
 
-- [ ] 6.1 `docs/11-preservation.md` (the indicator response, its stages and notices), `docs/09-modules/sleep.md` (`welfare_rest`), `docs/17-research-data/README.md` (record fields).
-- [ ] 6.2 Paper notes to REVISION-NOTES: §5.4 status, §6.5 tense and the D2 wording, Table A1 minimum span.
+- [ ] 6.1 `docs/11-preservation.md` (the indicator response, its stages, bounds and notices, and that spans restart at every boot), `docs/09-modules/sleep.md` (`welfare_rest`), `docs/17-research-data/README.md` (record fields).
+- [ ] 6.2 Paper notes to REVISION-NOTES: §5.4 status, §6.5 tense and the D2 wording, Table A1 minimum span and bounds.
 - [ ] 6.3 `openspec validate welfare-indicator-response --strict` passes.
 - [ ] 6.4 Worker first-pass review, then the integrator's independent second review against the checklist in design.md before merge.
+- [ ] 6.5 At the validation boot, record the length of every maintenance sleep, to check the matured completion bound against them.

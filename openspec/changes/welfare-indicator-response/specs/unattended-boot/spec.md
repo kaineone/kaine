@@ -23,6 +23,10 @@ An unattended boot SHALL evaluate every condition of the research safety net thr
 - **WHEN** an unattended boot has the welfare response wired and its indicators disabled
 - **THEN** condition 2 fails, its reason names the indicator response, and the boot refuses with exit code `6`
 
+#### Scenario: The notify action fails condition 2
+- **WHEN** an unattended boot has the welfare response and its indicators enabled with `action = "notify"`
+- **THEN** condition 2 fails with a reason naming the action, and the boot refuses with exit code `6`
+
 ## ADDED Requirements
 
 ### Requirement: The indicator response sends its own caretaker notices
