@@ -317,6 +317,22 @@ def validate_trainer_result(
     return result
 
 
+def _pair_record(p: DPOPair) -> dict[str, Any]:
+    """One pairs.jsonl record. The own-turn fields are written only for an
+    own-turn pair, so a plain pair's record is unchanged."""
+    record: dict[str, Any] = {
+        "prompt": p.prompt,
+        "chosen": p.chosen,
+        "rejected": p.rejected,
+        "system": p.system,
+    }
+    if p.own_turn:
+        record["own_turn"] = True
+        if p.user_turn is not None:
+            record["user_turn"] = p.user_turn
+    return record
+
+
 def write_job_spec(
     job_dir: Path,
     pairs: list[DPOPair],
@@ -330,12 +346,7 @@ def write_job_spec(
     ``adapter_output_dir`` is written verbatim (the caller decides whether it is
     an absolute host path or a path relative to the job directory).
     """
-    lines = [
-        json.dumps(
-            {"prompt": p.prompt, "chosen": p.chosen, "rejected": p.rejected, "system": p.system}
-        )
-        for p in pairs
-    ]
+    lines = [json.dumps(_pair_record(p)) for p in pairs]
     _write_private(job_dir / "pairs.jsonl", "\n".join(lines) + ("\n" if lines else ""))
 
     # Resolve probe paths to the same defaults every backend uses so the

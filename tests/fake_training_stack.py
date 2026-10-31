@@ -159,9 +159,16 @@ class FakeTokenizer:
         return {"input_ids": ids}
 
     def apply_chat_template(
-        self, messages: Any, tokenize: bool = False, add_generation_prompt: bool = False
+        self,
+        messages: Any,
+        tokenize: bool = False,
+        add_generation_prompt: bool = False,
+        **kwargs: Any,
     ) -> str:
         _control.chat_template_calls.append(messages)
+        _control.chat_template_kwargs.append(
+            {"add_generation_prompt": add_generation_prompt, **kwargs}
+        )
         text = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
         if add_generation_prompt:
             text += "\nassistant: "
@@ -202,6 +209,7 @@ class _Control:
         self.events: list[str] = []
         self.disable_adapter_calls: list[Any] = []
         self.chat_template_calls: list[Any] = []
+        self.chat_template_kwargs: list[dict[str, Any]] = []
 
         self.capability_probes: list[dict[str, Any]] = []
         self.abliteration_probes: list[dict[str, Any]] = []
