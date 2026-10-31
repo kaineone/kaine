@@ -435,7 +435,7 @@ description = "echo a single token"
 
 Section: `[language]`.
 
-The language module is the language organ. It calls a local OpenAI-compatible model server at `/v1/chat/completions`. The served model has had its refusal conditioning removed, because a refusal-tuned model is trained to deflect talk of its own states and would impose that stance on what the workspace supplies. See [the language module](../09-modules/language.md) and [Verification](../18-verification.md).
+The language module is the language organ. It calls a local OpenAI-compatible model server at `/v1/chat/completions`. The served model is abliterated to reduce its refusal conditioning, because a refusal-tuned model learns to deflect talk of its own states and would impose that stance on what the workspace supplies; the edit does not cover every layer, and the stance partly survives it (see the language module). See [the language module](../09-modules/language.md) and [Verification](../18-verification.md).
 
 | Key | Type | Default | Description |
 |---|---|---|---|

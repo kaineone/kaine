@@ -1,6 +1,6 @@
 # Social cognition
 
-The social cognition module is KAINE's social-cognition module. It builds a model of each agent the entity hears from that agent's tone of voice, tracks how familiar the agent is, and reports a social prediction error when an agent's expressed emotion departs from its usual pattern. The construct is theory of mind, the attribution of mental states to others (Premack and Woodruff 1978), and the brain function it draws on is mentalizing (Frith and Frith 2006). This page is for operators who enable the module, tune its thresholds, or connect it to the affect module's affect coupling.
+The social cognition module is KAINE's social-cognition module. It builds a tone-of-voice model of each channel the entity hears, one agent per channel, tracks how familiar the channel is, and reports a social prediction error when a channel's expressed emotion departs from its usual pattern. The construct it is named after is theory of mind, the attribution of mental states to others (Premack and Woodruff 1978), and the brain function it draws on is mentalizing (Frith and Frith 2006); the module itself attributes no mental states. This page is for operators who enable the module, tune its thresholds, or connect it to the affect module's affect coupling.
 
 ## Status
 
@@ -141,7 +141,7 @@ An event with no `source_label` is attributed to the operator agent.
 - `emotion_histogram`, `behavioral_summary` and `reliability` are averaged, weighted by interaction count. A `behavioral_summary` entry missing or null on one branch, such as the `mean_prediction_error` of an agent that never had a defined error, is absent rather than 0, so the merged entry takes the other branch's value; an entry held by neither branch stays absent.
 - `first_seen` takes the earlier value and `last_seen` the later.
 
-The merged profiles travel in the merged snapshot. Restoring it loads them into the store's cache, which `get()` and `all_profiles()` read first, and each profile reaches Qdrant on its next update. See [Forks and merges](../12-forks-and-merges.md#empatheiamergestrategy). For preservation, `export_preservation_state()` captures every profile and `import_preservation_state()` re-embeds and restores them.
+The merged profiles travel in the merged snapshot. Restoring it loads them into the store's cache, which `get()` and `all_profiles()` read first, and each profile reaches Qdrant on its next update. See [Forks and merges](../12-forks-and-merges.md#socialcognitionmergestrategy). For preservation, `export_preservation_state()` captures every profile and `import_preservation_state()` re-embeds and restores them.
 
 ### Affect coupling
 

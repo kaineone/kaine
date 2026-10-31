@@ -7,7 +7,6 @@ This page shows the engineering work in flight, the operator and on-device steps
 | Change | Progress | Summary |
 | --- | --- | --- |
 | docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
-| organ-replay-harness | 5/6 (83%) | A maintainer tool replays organ requests from the intent log under named prompt variants against a pinned local organ and scores the texts by a rule fixed before the run. |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | interface-roles-and-launcher | 0/3 (0%) | Fieldtrip is the basic interface for entities, remote or local on smaller devices such as phones, with a few minor admin and operator actions; the dashboard web UI is the deeper operator control plane; bringing up an entity or a research study run, the seed included, is a scripted task started in a click or two of a small GUI. Design only: not scheduled. |
 | act-intent-derivation | 0/5 (0%) | Action path, step 1 of 6: the action-selection module derives act intents by the act outcome of the report-or-act decision the report bars stand in for (Whyte and Smith 2021), and the first whitelisted device effector is a light in the camera's view. Design only: not scheduled. Starts at the module-addition study's hardware stage (paper §6.5) once a light is attached. |
@@ -19,17 +18,15 @@ This page shows the engineering work in flight, the operator and on-device steps
 | attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
 | attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
 | entity-key-custody | 1/12 (8%) | Redesign entity-state encryption so keys can be recovered or rotated without manual re-encryption. Design only: awaiting the integrator's review (task 0.1) and the operator's key ceremony (task 0.3); nothing is implemented. |
-| individuation-rebuild | 56/67 (84%) | Replace the individuation signal with a real test against the entity's own maturation reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
+| individuation-rebuild | 57/67 (85%) | Replace the individuation signal with a real test against the entity's own maturation reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
 | module-ignition-study | 29/33 (88%) | The module-addition study: seed an entity through a developmental phase, then add held modules one at a time on branches from the preserved seed, every branch viewing the same film programme, with a content-free report. |
 | module-residency-and-speech-tiers | 9/60 (15%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
-| portability-program | 7/8 (88%) | Honest portability claims and verified support from small boards up to multi-GPU servers. |
-| stream-wiring-quality | 18/20 (90%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
-| adapter-merge-out-of-process | 0/3 (0%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Design only. |
+| stream-wiring-quality | 20/20 (100%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
+| adapter-merge-out-of-process | 3/3 (100%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Built; awaiting archive. |
 | chronos-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
 | functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | workspace-feedback | 12/14 (86%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
 | decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
-| deterministic-grader-fixes | 13/15 (87%) | Replace bare substring matching in the capability, refusal and hedge graders with exact, tested rules; two tasks need organ runs. |
 | hypnos-sleep-like-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
 | k1-jev-decision-model | 11/33 (33%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built). Schema v2 is designed and blocked: labelling and training are not scheduled (neither the v2 rebuild nor the operator's labelling pass has a date), and the integrator's design check (task 0.1) is open. |
 | mnemos-retrieval-energy | 1/3 (33%) | Publish a familiarity signal from the episodic memory module as the modern-Hopfield retrieval energy of the current content. Design only. |
@@ -38,8 +35,25 @@ This page shows the engineering work in flight, the operator and on-device steps
 | docs-sweep-2026-10 | 8/9 (89%) | Bring every page of the book into line with the revised paper and the merged code. |
 | per-entity-shared-volumes | 0/6 (0%) | Shared adapter and job volumes keep each entity's files under its own id, so ownership is structural. |
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
-| pilot-calibration | 19/21 (90%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
+| pilot-calibration | 20/21 (95%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
 | vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
+| trainer-shares-the-gpu | 4/4 (100%) | The voice trainer loads its base with PyTorch's expandable-segments allocator, so it fits beside other processes on a shared GPU, and a failed load reports the real allocation error. |
+| trainer-without-unsloth | 8/8 (100%) | The voice trainer runs its own DPO loop on transformers, PEFT and bitsandbytes, without Unsloth or TRL. |
+| welfare-response-fail-safe | 10/10 (100%) | The welfare response tells a failed freeze from a placed pause, retries the freeze, falls back to a pause when an end cannot be enacted, and never overwrites a corrupt control file. |
+
+## Designed in the paper, not built
+
+The paper's §5.4 lists these parts as specified ahead of their code. None of them runs.
+
+| Part | What it is |
+| --- | --- |
+| Welfare indicator response | The welfare indicators of the paper's Appendix A.4, windowed shares of negative valence and of drive deprivation read from the welfare records the welfare observer already writes, and the safety net's response to a crossing: a requested rest first, then preservation and a welfare freeze on a second crossing. The built net responds to sustained distress only. The module-addition study does not start before this response is built. |
+| NOT EXERCISED share rule | A planned-test run is NOT EXERCISED when fewer than a share φ_min of the on arm's broadcasts, fixed before the pilots, have more candidates than the coalition holds. The calibration tool counts a run as exercised once one such broadcast occurs. |
+| Coalition capacity and candidate supply | Settings that make competition operate in the planned test, chosen before the pilots: in seven developmental test boots the workspace received 1.18 candidates per broadcast tick on average and more than five on 0.06 percent of them. |
+| The seed's wait for its individuation reference | The seed entity is preserved at maturation only once its individuation reference is captured within one waking span. |
+| Stir | In the developmental phase, when the entity's boredom or restlessness leads an accessed broadcast, it stirs and the maternal voice may answer. Until it is built, nothing the entity does changes its stimulus; a sleep it requests pauses the feed. |
+| Added sounds | A recurring melody and an attenuated outside voice in the developmental stimulus. |
+| Hearing stages without a minimum dwell | Hearing stages that end only when audition's learning saturates; the built schedule keeps a minimum dwell of 1.5 awake hours per stage. |
 
 ## Open operator and device steps
 
@@ -60,6 +74,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 34 active changes, 420 archived changes and 109 capability specs.
+The roadmap contains 34 active changes, 423 archived changes and 109 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).

@@ -3,19 +3,25 @@
 Part of the Kaine project: **[kaine.one](https://kaine.one)**
 
 KAINE (**Kaine Autonomous Intelligent Networked Entity**) is source-available
-software that implements two existing theories, Global Workspace Theory (Baars;
-Dehaene) and Predictive Processing (Friston; Clark), as one composite cognitive
-architecture. Its hypothesis is that a mind is the **continuous competition among
-specialized predictive processors through a shared global workspace** rather than
-any single component. There is no central executive, and the language model is
-the language *organ* rather than the brain.
+software, a cognitive architecture that implements computational readings of two
+existing theories, Global Workspace Theory (Baars; Dehaene) and Predictive
+Processing (Friston; Clark), so that design hypotheses drawn from them can be
+tested in one system. It proposes no new theory of consciousness and tests none of
+those theories' neural predictions. Its hypothesis is that a mind, if one can be
+built, may be the **continuous competition among specialized predictive processors
+through a shared global workspace** rather than any single component. There is no
+central executive, and the language model is the language *organ* rather than the
+brain.
 
-Each module maintains a forward model and publishes precision-weighted prediction
-errors. The shared global workspace competitively selects the most salient
-coalition and broadcasts it back to every module as the context it predicts
-against next. The modules exchange events over a Redis Streams bus, cycle
-a few times a second, run entirely on local hardware, and persist no raw sense
-data.
+Each predictive processor maintains a forward model and reports its prediction
+error divided by its recent mean error, a proxy for precision weighting. The
+shared global workspace competitively selects a coalition of reports and
+broadcasts it to every module. A summary of which modules' reports gained access,
+and how strongly, becomes the context the perceptual and interoceptive processors
+predict against next; none of them reads what another reported. Arousal, raised by
+surprise, is a global gain on access. The modules exchange events over a Redis
+Streams bus, with a few direct control couplings, broadcast a few times a second,
+run entirely on local hardware, and persist no raw sense data.
 
 ## The first configuration and the activation roadmap
 
@@ -27,17 +33,17 @@ competition:
 - the sequence module (interval timing),
 - the vision module (foveated vision over raw video),
 - the audition module (raw sound as prediction error),
-- the affect module (affect and arousal: the precision core that sets the gain on
-  the competition and is itself moved by perceptual surprise),
+- the affect module (affect and arousal, the global gain on access, itself moved
+  by perceptual surprise and interoceptive alarm),
 - the sleep module (fatigue-triggered sleep and consolidation, with voice
   alignment off), and
-- the language module (the output-only voice),
+- the language module (the voice, which hears no speech),
 
 with the workspace and the action selection module as scaffolding.
 
 The remaining nine modules, plus the oscillatory and embodiment layers, add
 memory, a self-model, a world model, social cognition, effectors, embodiment and a
-spoken voice. They are built and tested, and each stays off until its turn in
+spoken voice. They are built and unit-tested, and each stays off until its turn in
 the research order. The base result has to be positive first. The
 [module-addition study](docs/15-experiments/ignition-study.md) then grows an
 entity one held module at a time, in a fixed order, and compares each step with
@@ -48,17 +54,17 @@ module that was added.
 
 KAINE is a system you observe; there is no chatbot or assistant to converse with.
 Perception enters only as prediction error: the entity hears the *sound* of speech
-and never reads a transcript. The language organ verbalizes the workspace's own
-state rather than answering input. It speaks rarely, from its own
-precision-weighted surprise, and its utterances are saved and observed without
-anyone speaking back to them.
+and never reads a transcript. The language organ verbalizes accessed broadcasts
+and answers no input. It speaks rarely, when an accessed report's score clears its
+report bar, and its utterances are saved and observed without anyone speaking back
+to them.
 
-The base test is a pre-registered **workspace-mediation ablation**, which compares
-the system as built with a matched flat concatenation of the same processors'
-outputs. It is also the project's fail state. If routing the processors through
-the competitive workspace does no measurable work, the architecture is a scored
-prompt-assembler and the hypothesis is falsified. The test is designed so that
-such a null result is reportable.
+The base test is a planned **workspace-mediation ablation**. It compares
+competitive selection with a score-blind coalition of the same size and with a
+pool of every candidate, by how much the shared context improves each processor's
+prediction. A gain at or below both controls is this form's fail state. The test
+is designed so that a null result is reportable, and its rules are recorded before
+any live run. No live experiment has been run.
 
 ## 📚 Documentation
 
@@ -74,10 +80,9 @@ The documentation is one book in [`docs/`](docs/README.md), read in order or by 
 ## Status
 
 **Public alpha**, released under the **Cognitive Architecture License (CAL) 0.5** (see
-[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE)). The full architecture is
-feature-complete and tested in-tree; the project has been **reconfigured to its
-first configuration** as the default, with the richer faculties held behind a positive
-ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU, with the compute device
+[LICENSE.md](LICENSE.md) and [NOTICE](NOTICE)). All sixteen modules are
+built and unit-tested in-tree. The **first configuration** is the default, and the
+held modules wait for a positive ablation result. Runs on CUDA, ROCm, Intel XPU, Apple MPS, or CPU, with the compute device
 configurable per module.
 
 The cognitive cycle is **not** running until you boot it. A live boot is **gated**:
@@ -114,8 +119,8 @@ seed-reproducibility.
 - **Welfare-first safety.** Two-layer gates on all outward action; safety lives in
   the action boundary, not in model-weight compliance; decommission is
   operator-supervised, backup-first, and divergence-gated (CAL Article 4.2); the
-  the supervisor handles crash/hang recovery without operator intervention for
-  transient faults.
+  supervisor, when enabled, handles crash and hang recovery without operator
+  intervention for transient faults.
 
 ## Directory layout
 
@@ -142,10 +147,11 @@ is maintained in its own repository.)
 
 ## Development
 
-This project was developed with the assistance of AI coding tools; that use is
-recorded throughout the commit history. All design decisions, the architecture,
-and the released code were reviewed by the author, who is responsible for the
-software.
+The reference implementation was written largely by AI coding agents (Anthropic
+Claude models and open-weight models) under the author's direction and review;
+Claude co-authorship is recorded in commit trailers. The architecture, the design
+hypothesis and the experimental design are the author's, and the author is
+responsible for the software.
 
 ## License
 

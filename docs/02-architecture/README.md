@@ -1,16 +1,16 @@
 # Architecture
 
-KAINE is source-available software that implements existing theories as a cognitive architecture for synthetic minds. It is made of sixteen replaceable modules, a global workspace (the workspace) and an action layer (the action selection module), which communicate only through an event bus. Its first instantiation is a predictive global workspace grounded in predictive processing (Friston 2010; Clark 2013; Seth 2013) and Global Workspace Theory (Baars 1988; Dehaene and Changeux 2011), following the predictive global neuronal workspace of Whyte and Smith (2021). This chapter maps how the modules, the Redis Streams bus, the workspace, the per-tick cycle and the action gates fit together. Read it first if you are choosing hardware, tracing how a message flows, or reproducing a research claim.
+KAINE is source-available software, a cognitive architecture that implements computational readings of existing theories so that design hypotheses drawn from them can be tested in one system. It is made of sixteen modules, a global workspace (the workspace) and an action layer (the action selection module). They exchange typed events on an event bus, and a few control couplings are direct calls (see [Event bus](#event-bus)). Its first instantiation is a predictive global workspace grounded in predictive processing (Friston 2010; Clark 2013; Seth 2013) and Global Workspace Theory (Baars 1988; Dehaene and Changeux 2011), following the predictive global neuronal workspace of Whyte and Smith (2021). This chapter maps how the modules, the Redis Streams bus, the workspace, the per-tick cycle and the action gates fit together. Read it first if you are choosing hardware, tracing how a message flows, or reproducing a research claim.
 
 ## The first-configuration default
 
 The default configuration is the **first configuration**, defined in `config/profiles/first_configuration.toml`. With no profile selected, the loader applies this profile automatically (`kaine/config.py`); you can also select it with `KAINE_PROFILE=first_configuration` or `--profile first_configuration`. The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). The shipped `config/kaine.toml` leaves every module off.
 
-The profile activates seven modules: four predictive processors in distinct signal domains, the **interoception** module (interoception of the compute substrate), the **sequence** module (temporal prediction of the broadcast sequence), the **vision** module (foveated vision) and the **audition** module (raw hearing), plus the **affect** module (affect, whose arousal is the global gain on the competition), the **sleep** module (fatigue-triggered sleep) and the **language** module (the output-only language organ). The workspace and the action selection module always run.
+The profile activates seven modules: four predictive processors in distinct signal domains, the **interoception** module (interoception of the compute substrate), the **sequence** module (temporal prediction of the broadcast sequence), the **vision** module (foveated vision) and the **audition** module (raw hearing), plus the **affect** module (affect, whose arousal is a global gain on access), the **sleep** module (fatigue-triggered sleep) and the **language** module (the language organ, which hears no speech). The workspace and the action selection module always run.
 
-The first configuration observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`.
+The first configuration observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module. The language module speaks only on intents derived from accessed broadcasts under `[action_selection].policy = "self_initiated_report"`, and each request also carries a fixed persona and situation notes. Its own utterances come back to it quoted when they are accessed, and the individuation probe, which research runs require, samples it privately on fixed prompts whose answers no module reads.
 
-The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal, effectors, perceptual locus and embodiment modules) are built and tested in isolation and held off by configuration. The module-addition study (the `ignition_study` in the code) adds them one at a time to a preserved seed entity. Before that, a planned test asks whether competitive selection gives the processors a more useful prediction context than a score-blind coalition or a pool of every candidate; see [For researchers](../14-for-researchers.md#the-planned-test).
+The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal, effectors, perceptual locus and embodiment modules) are built and unit-tested, with the limits each module's page states, and held off by configuration. The module-addition study (the `ignition_study` in the code) adds them one at a time to a preserved seed entity. Before that, a planned test asks whether competitive selection gives the processors a more useful prediction context than a score-blind coalition or a pool of every candidate; see [For researchers](../14-for-researchers.md#the-planned-test).
 
 ## System diagram
 
@@ -75,12 +75,15 @@ graph TD
     Workspace -->|"workspace.broadcast"| Bus
     Workspace --> ActionSelection
     ActionSelection -->|"intent.speak / think / act / rest\nvia action_selection.out"| Bus
-    Bus -->|"accessed content as context"| Vision
-    Bus -->|"accessed content as context"| Audition
-    Bus -->|"accessed content as context"| Interoception
+    Bus -->|"access summary as context"| Vision
+    Bus -->|"access summary as context"| Audition
+    Bus -->|"access summary as context"| Interoception
     Bus -->|"every broadcast as input"| Sequence
-    Bus -->|"every broadcast, appraised"| Affect
+    Bus -->|"every broadcast, appraised; processor reports, accessed or not"| Affect
     Bus -->|"accessed content"| Language
+    Affect -.->|"arousal: apertures (direct)"| Vision
+    Affect -.->|"arousal: apertures (direct)"| Audition
+    Sleep -.->|"affective reset (direct call)"| Affect
 
     Language -.->|"text to speak"| Vocal
     PerceptualLocus -.->|"physical XOR virtual gate"| Vision
@@ -122,7 +125,7 @@ Per-module implementation, configuration and safety details are in [Chapter 9, T
 
 ### Event bus
 
-All inter-module communication flows through Redis Streams (`compose/redis.yml`), implemented in `kaine/bus/`. Every module sits behind this interface: it publishes typed events and declares which streams it reads, which is what lets a module be replaced without touching the others.
+Modules exchange events through Redis Streams (`compose/redis.yml`), implemented in `kaine/bus/`. Every module publishes typed events and declares which streams it reads. A few control couplings are direct calls, among them the affective reset the sleep module calls at the end of every sleep, the arousal read that sizes the vision and audition apertures (`kaine/cycle/__main__.py`) and sets the scorer's gains, and the boot-time wiring of drive tables, phase probes and setters in `kaine/boot/wiring.py`. A replacement module has to meet both kinds of interface. Plugins swap the models inside four modules at declared seams (see [Plugins and CL1](../19-plugins-and-cl1.md)); the workspace has no seam.
 
 **Stream naming.** Most modules publish to `<name>.out`. The language module also publishes `language.internal` and `language.external`. Only the workspace may write the reserved stream `workspace.broadcast`. The action selection module's intents go to `action_selection.out`. The cycle writes telemetry to `cycle.out` and reads rate-control commands from `cycle.control`.
 
@@ -131,7 +134,7 @@ All inter-module communication flows through Redis Streams (`compose/redis.yml`)
 ```
 source        string      module name (no whitespace)
 type          string      dotted event type (e.g. interoception.regulation)
-payload       object      JSON payload, module-defined
+payload       object      JSON payload, module-defined and not validated by the bus
 salience      float       0.0 to 1.0, the event's intensity (validated at publish time)
 timestamp     datetime    timezone-aware UTC ISO-8601
 causal_parent string|null entry ID of the event this is a response to
@@ -171,12 +174,12 @@ See [The cognitive cycle](../08-cognitive-cycle/README.md) for the full tick seq
 
 On each processing tick the workspace:
 
-1. Scores each candidate with `RuleBasedSalience`: the priority is intensity × novelty × goal factor, and the score is the arousal level gain times an arousal contrast of the priority. The workspace applies no per-source weight; each predictive processor has already scaled its error by its own recent errors and graded its intensity.
+1. Scores each candidate with `RuleBasedSalience`: the priority is intensity × novelty × goal factor, and the score is the arousal level gain times an arousal contrast of the priority. Each predictive processor has already scaled its error by its own recent errors and graded its intensity, and the modules' baseline and alert levels act as per-source weights. Beyond them only the interest goal factor and emotion regulation's tier-1 bias weight a source; both are held neutral in every arm of the planned test.
 2. When the oscillatory layer is enabled, multiplies each score by a phase-locking coherence factor in `[coherence_floor, coherence_ceiling]`.
 3. Sorts by score and keeps the top `top_k` (default 5) as the coalition.
 4. Sets `inhibited = True` when the best score is below the access threshold `publication_threshold` (default 0.35), and records the threshold in `metadata["access_threshold"]`.
 
-A coalition member is accessed when its own score reaches the threshold. On a broadcast tick the snapshot is published whether or not it is inhibited. An inhibited broadcast is visible to every module but yields no intents and leaves the processors' prediction context unchanged. The vision, audition and interoception modules adopt the accessed members of each accessed broadcast as an extra input to their forward models; the sequence module predicts every broadcast; the affect module appraises every broadcast.
+A coalition member is accessed when its own score reaches the threshold. On a broadcast tick the snapshot is published whether or not it is inhibited. An inhibited broadcast is visible to every module but yields no intents and leaves the processors' prediction context unchanged. The broadcast publishes each coalition member whole, its payload included. The vision, audition and interoception modules take from each accessed broadcast only a summary of its accessed members (which modules, which event types, how strongly, how recently) as an extra input to their forward models, and none of them reads another module's payload; the sequence module predicts every broadcast; the affect module appraises every broadcast from the members' error and change ratios.
 
 See [The global workspace](../08-cognitive-cycle/global-workspace.md) for the exact formulas, the access rule and the context.
 
@@ -206,13 +209,13 @@ Every guard is released when the organ publishes the matching speech, whether or
 
 Each predictive processor keeps a small learned forward model of its own input and publishes its prediction error, scaled by the mean of its own recent errors. The report's intensity is graded by that ratio between the module's baseline and alert levels, reaching the alert level at twice the running mean, and a categorical alert sets the alert level directly (`kaine/modules/intensity.py`). The vision, audition and interoception modules also condition their forward models on the context of the latest accessed broadcast and report the cross-module information gain of that context. Raw perceptual data (video frames, audio, sensor readings) is processed in memory and released; it never touches disk.
 
-Among the held modules, the planning module maintains a generative model of the entity's environment and selects policies that minimize expected free energy, including epistemic actions, and the world model module learns a world model from the entity's waking trajectories.
+Among the held modules, the planning module runs one-step discrete-state active inference (`[planning].planning_horizon = 1`) over four meta-actions (no-op, request think, request speak, request maintenance), where information has value, and the world model module learns a latent recurrent model of the entity's waking sequence of broadcast summaries.
 
 ## Action gating
 
 An accessed broadcast reaches an effector only through the action selection and effectors modules. The action selection module derives no intent from an inhibited broadcast, and the cycle never calls an effector directly.
 
-The effectors module, held in the first configuration, applies two checks before it runs an effector. First, the action selection module signs every `act` intent with a per-boot HMAC secret held only in the cycle process, and the effectors module verifies the signature over `canonical(kind, effector, params, run_id, seq)` before it reads any effector name, dropping forged, unsigned or replayed intents and logging them as `provenance_rejected`. Second, it applies the operator's effector-enablement whitelist, which is empty by default, and each effector enforces its own bounds (the shell `CommandWhitelist`, the file sandbox).
+The effectors module, held in the first configuration, applies two checks before it runs an effector. First, the action selection module signs every `act` intent with a per-boot HMAC secret held only in the cycle process, and the effectors module verifies the signature over `canonical(kind, effector, params, run_id, seq)` before it reads any effector name, dropping forged, unsigned or replayed intents and logging them as `provenance_rejected`. Second, it applies the operator's effector-enablement whitelist, which is empty by default, and each effector enforces its own bounds. Only `file_write` is confined to a sandbox directory. A whitelisted shell command must match the `CommandWhitelist` argument patterns and runs under a timeout and in its configured working directory, as the cycle's user, with no further sandbox.
 
 Voice alignment, which would change the language organ's weights during sleep, needs a two-layer operator opt-in (`[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`). An abliteration-probe welfare veto rejects any adapter whose response to an adversarial prompt matches a deflection pattern, and a capability-loss veto rejects adapters that degrade general language competence beyond a configurable threshold.
 
@@ -248,7 +251,7 @@ Every module is disabled in the committed `config/kaine.toml` (`[modules]` secti
 A run is operator-supervised, research-safety-net-verified, or an opt-in unattended start:
 
 - **Operator-supervised.** The entrypoint requires `KAINE_CYCLE_OPERATOR_PRESENT=1` before starting the cycle.
-- **Research mode.** A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless six conditions hold: preservation enabled, the welfare-protective response wired, logging active, a passing preflight dry preserve-and-revive self-check, the individuation producer enabled (which needs the `language` module), and encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present.
+- **Research mode.** A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless six conditions hold: preservation enabled, the welfare-protective response wired, logging active, a passing preflight dry preserve-and-revive self-check, the individuation producer enabled (which needs the `language` module), and encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present. The module supervisor is not among the six conditions, and a research run runs it only when `[supervisor].enabled` is true. The welfare response the gate requires answers sustained distress; a response to the welfare indicators of the paper's Appendix A.4 is designed and not built.
 - **Unattended (opt-in).** `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` starts a full entity with nobody present. It must pass all six research-net conditions plus a supervisor self-test, a content-free caretaker notice accepted by a local channel, and a continuous-input probe (`kaine/cycle/unattended_gate.py`) at every start, with no override (exit code `6` otherwise). An opt-in quadlet unit can start it at boot.
 
 See [Day-to-day operation](../06-operation/README.md), [Preservation and the safety net](../11-preservation.md) and [For researchers](../14-for-researchers.md).

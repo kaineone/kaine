@@ -86,12 +86,15 @@ Any driven oscillator locks while it is driven, so the readout tests at withdraw
 
 The marker, `entrain_then_autonomy`, becomes true after `entrainment_replications` (3) consecutive passing withdrawals. A withdrawal whose result is undefined resets the count to zero. Consecutive withdrawals are correlated, so the joint false-positive rate is not 0.05 cubed.
 
-Offline validation, recorded in [`validation.md`](../../openspec/changes/archive/2026-10-03-self-rhythm-earned-entrainment/validation.md) of the archived OpenSpec change `self-rhythm-earned-entrainment`, found:
+Offline validation without the developmental rest cycle is recorded in [`validation.md`](../../openspec/changes/archive/2026-10-03-self-rhythm-earned-entrainment/validation.md) of the archived OpenSpec change `self-rhythm-earned-entrainment`, and a re-run on the current classes in [`validation.md`](../../openspec/changes/archive/2026-10-28-hearing-band-12h/validation.md) of the archived change `hearing-band-12h`. They found:
 
 - At 70 bpm all 10 seeds entrained, with the first replicated pass at 12.5 to 15.5 hours of awake time (median about 14 hours).
-- The time depends on how far the heartbeat's rate is from the rhythm's own: about 3 hours at 60 bpm and 40 to 48 hours at 80 bpm. Each rate from 60 to 80 bpm pulled the rhythm to its own heartbeat's rate. These times compress the weeks of exposure reported in the literature.
+- The time depends on how far the heartbeat's rate is from the rhythm's own: 3.0 to 7.5 hours at 60 bpm and 41 to 47.5 hours at 80 bpm. Each rate from 60 to 80 bpm pulled the rhythm to its own heartbeat's rate. These times compress the weeks of exposure reported in the literature.
+- At 60 bpm, the rate nearest the rhythm's natural frequency, the rhythm locked as early as 3 hours, earlier than the record's start criterion (no replicated pass before 5.5 hours) allows, so that criterion was not met there. It was met from 66 bpm up.
 - No control passed in 96 hours: no maternal drive, a jittered beat, no adaptation, and six mismatched pairs in which the heartbeat tested as the rhythm's own was a different one from the heartbeat driving it. Their single-withdrawal chance pass rates were 2.6 to 10%.
 - A heartbeat below about 60 bpm is too close to the rhythm's natural rate for the pull to be defined, so entrainment cannot be shown.
+
+> **Pending record.** The validation with the developmental rest cycle that the paper's Appendix A.7 reports belongs in `docs/records/validation/self-rhythm-rests/`, which is not yet in this repository.
 
 #### Viability watch
 

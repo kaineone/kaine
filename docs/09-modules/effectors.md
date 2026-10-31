@@ -1,6 +1,6 @@
 # Effectors
 
-The effectors module is KAINE's action module. It realizes `act` intents from the action selection module through effectors on the host, runs only the effectors the operator has put on its whitelist, confines file writes to a sandbox directory, and logs every proposed action. The paper claims no brain function for it. This page covers what the effectors module can do, how an act intent reaches an effector, the configuration of the whitelist and the sandbox, and the audit log. Read it if you plan to attach effectors, or if you are changing action selection, the effectors or the audit code.
+The effectors module is KAINE's action module. It realizes `act` intents from the action selection module through effectors on the host, runs only the effectors the operator has put on its whitelist, confines file writes to a sandbox directory, and logs every proposed action. Only `file_write` is sandboxed: a whitelisted shell command is bounded by its argument patterns, a timeout and a working directory, and runs as the cycle's user with no further confinement. The paper claims no brain function for it. This page covers what the effectors module can do, how an act intent reaches an effector, the configuration of the whitelist and the sandbox, and the audit log. Read it if you plan to attach effectors, or if you are changing action selection, the effectors or the audit code.
 
 ## Status
 

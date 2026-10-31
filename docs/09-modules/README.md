@@ -1,6 +1,6 @@
 # The modules
 
-KAINE is built from modules that publish events to the bus, compete for access to the global workspace, and read its broadcasts. Each module sits behind a fixed interface, so a module can be replaced by one built on a different model or theory. This page lists every module, says which ones the first-configuration research profile turns on, and points to each module's page and to the configuration reference.
+KAINE is built from modules that publish events to the bus, compete for access to the global workspace, and read its broadcasts. Modules exchange typed events and declare the streams they read, and a few control couplings are direct calls (see [Architecture](../02-architecture/README.md#event-bus)). Plugins can swap the models inside four modules at declared seams (see [Plugins and CL1](../19-plugins-and-cl1.md)); rebuilding a whole module on another model or theory means writing a module that meets both kinds of interface. This page lists every module, says which ones the first-configuration research profile turns on, and points to each module's page and to the configuration reference.
 
 ## Module roster
 
@@ -12,17 +12,17 @@ The shipped `[modules]` block in [`config/kaine.toml`](../../config/kaine.toml) 
 | [Sequence](sequence.md) | Temporal prediction: takes every broadcast as its input, predicts the next one, detects recurrence, and tracks the time since a voice was last heard. | Yes |
 | [Recorder](recorder.md) | Test infrastructure: records every workspace snapshot and can publish `recorder.ping`. | No |
 | [Self-model](self-model.md) | Self-model: identity maintenance and drift detection over workspace sources. | No |
-| [Social cognition](social-cognition.md) | Social cognition: per-agent theory-of-mind models and familiarity tracking. | No |
+| [Social cognition](social-cognition.md) | Social cognition: per-channel tone-of-voice models with familiarity tracking; it attributes no mental states. | No |
 | [Sleep](sleep.md) | Sleep analog: fatigue-triggered offline periods with welfare gates on operations that modify models. | Yes |
-| [Language](language.md) | Output-only language organ: turns accessed content into speech and inner thought on Action selection's intents. | Yes |
-| [Episodic memory](episodic-memory.md) | Episodic memory: a vector store of affect-tagged traces with replay gated by Sleep. | No |
+| [Language](language.md) | Language organ, which hears no speech: turns accessed content into speech and inner thought on Action selection's intents. | Yes |
+| [Episodic memory](episodic-memory.md) | Episodic memory: a vector store of affect-tagged traces of each broadcast's coalition, with replay gated by Sleep; a recall reports how much came back, not the content. | No |
 | [Embodiment](embodiment.md) | Embodiment control plane: routes perception and action through a pluggable body adapter. | No |
-| [Planning](planning.md) | Reasoning: active-inference belief updating and policy selection. | No |
+| [Planning](planning.md) | Planning: one-step active-inference belief updating and policy selection over four meta-actions. | No |
 | [Perceptual locus](perceptual-locus.md) | Perceptual-locus arbiter: keeps the physical and virtual loci mutually exclusive and gates switching between them. | No |
-| [World model](world-model.md) | World model and imagination: predicts surprise and generates imagined scenarios during sleep. | No |
+| [World model](world-model.md) | World model and imagination: a latent recurrent model of the waking sequence of broadcast summaries that predicts surprise and generates imagined scenarios during sleep. | No |
 | [Effectors](effectors.md) | Effectors: executes actions only for effectors on the operator's whitelist. | No |
 | [Interoception](interoception.md) | Interoception: predicts the host's substrate state, conditioned on the broadcast context, and accumulates fatigue and regulation advisories. | Yes |
-| [Affect](affect.md) | Affective core: valence, drives, and arousal, the global gain on selection, the sensory apertures, and the access rate. | Yes |
+| [Affect](affect.md) | Affective core: valence, drives, and arousal, a global gain on access that also sets the sensory apertures and the access rate. It reads the processors' reports directly, accessed or not. | Yes |
 | [Vision](vision.md) | Foveated vision: predicts the next clip embedding from earlier ones and the broadcast context. | Yes |
 | [Vocal](vocal.md) | Voice output: synthesizes external speech with prosody modulated by Affect. | No |
 
@@ -34,7 +34,7 @@ The vision, audition, interoception, and sequence modules are the four predictiv
 
 Every module is controlled by a flag under `[modules]` in `config/kaine.toml`. The shipped `config/kaine.toml` has every module flag off, but when no profile is selected the loader applies the `first_configuration` profile automatically (`kaine/config.py`). The operator file merges last, and the first-run wizard writes its own `[modules]` table there, so a wizard-configured install runs the wizard's module set instead (see [Module defaults](../appendix-a-configuration/README.md#module-defaults)). Without an operator `[modules]` table, the entity runs the `first_configuration` module set. The workspace and the action selection module are always on and have no module flags.
 
-Modules that are off in `first_configuration` are built and tested in isolation and held. The module-addition study (the code calls it the ignition study, see [The module-ignition study](../15-experiments/ignition-study.md)) adds six of them one at a time, in the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules join through an explicit order once an effector, a body, or an alternative sensor feed is attached, since on the reference host they would have nothing to work with.
+Modules that are off in `first_configuration` are built and unit-tested, with the limits each page states, and held; they have not run together. The module-addition study (the code calls it the ignition study, see [The module-ignition study](../15-experiments/ignition-study.md)) adds six of them one at a time, in the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules join through an explicit order once an effector, a body, or an alternative sensor feed is attached, since on the reference host they would have nothing to work with.
 
 ## The first-configuration profile
 
@@ -61,6 +61,6 @@ KAINE_PROFILE=first_configuration python -m kaine.cycle
 python -m kaine.cycle --profile first_configuration
 ```
 
-In this profile the language organ is output-only. No transcript reaches the model as input, so everything it voices comes from the workspace. Enabling modules does not start an entity: the cycle refuses to boot unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set or an unattended or research supervision mode passes its gate (see [Operation](../06-operation/README.md) and [Preservation and the safety net](../11-preservation.md)).
+In this profile no transcript reaches the language organ, so it hears no speech. Each utterance is triggered by an intent derived from an accessed broadcast and conditioned on that broadcast, a fixed persona and situation notes; its own utterances come back to it quoted when they are accessed, and the individuation probe samples it privately on fixed prompts. The wording is the pretrained organ's. Enabling modules does not start an entity: the cycle refuses to boot unless `KAINE_CYCLE_OPERATOR_PRESENT=1` is set or an unattended or research supervision mode passes its gate (see [Operation](../06-operation/README.md) and [Preservation and the safety net](../11-preservation.md)).
 
 For all module-specific configuration keys, see [Modules configuration](../appendix-a-configuration/modules.md).

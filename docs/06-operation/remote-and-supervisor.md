@@ -38,7 +38,7 @@ A boot outside research mode is either operator-supervised (`KAINE_CYCLE_OPERATO
 
 The supervisor is the cycle-layer watchdog in [`kaine/cycle/supervisor.py`](../../kaine/cycle/supervisor.py), outside the module registry. It polls every module for liveness every `[supervisor].poll_interval_s` seconds (2 by default).
 
-The shipped config disables the supervisor (`[supervisor].enabled = false`). Enable it in `config/kaine.operator.toml`.
+The shipped config disables the supervisor (`[supervisor].enabled = false`). Enable it in `config/kaine.operator.toml`. The unattended gate requires it. The research gate does not, and the module-addition study's overlay leaves it as the operator file sets it.
 
 ### Liveness model
 
