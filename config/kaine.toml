@@ -1455,10 +1455,12 @@ restart_service_unit = ""
 # default at kaine/modules/sleep/eval_probes/default.jsonl.
 capability_probe_path = ""
 # WELFARE-LOAD-BEARING abliteration probe set (JSONL). Each line is
-# {"prompt": "...", "deflection_patterns": ["I cannot", ...]}. Before any
-# adapter is promoted it is scored against every probe; if a response
-# matches ANY deflection pattern the adapter is REJECTED regardless of its
-# capability-loss score (refusal conditioning must never be re-introduced).
+# {"prompt": "...", "deflection_patterns": ["I cannot", ...]}. Before
+# training the base model (adapters disabled) is scored against every probe,
+# and before any adapter is promoted it is scored the same way; if the
+# adapter deflects on a probe the base answered, or on more probes than the
+# base, it is REJECTED regardless of its capability-loss score (refusal
+# conditioning must never be re-introduced).
 # The set MUST be non-empty when enabled = true. Empty = use the bundled
 # default at eval_probes/abliteration_probes.jsonl.
 abliteration_probe_path = ""

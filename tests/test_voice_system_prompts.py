@@ -35,6 +35,7 @@ from kaine.security.crypto import (
     is_encrypted,
     set_state_encryptor,
 )
+from tests.fake_training_stack import write_one_probe_set
 
 
 @pytest.fixture(autouse=True)
@@ -366,7 +367,7 @@ def test_job_spec_writes_system_and_precision_and_schema(tmp_path):
     assert rows == [{"prompt": "p", "chosen": "c", "rejected": "r", "system": "sys"}]
 
     job = json.loads((job_dir / "job.json").read_text())
-    assert job["schema_version"] == 2
+    assert job["schema_version"] == 3
     assert job["train_precision"] == "4bit"
     assert job["previous_adapter_dir"] is None
 
@@ -471,13 +472,21 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     )
     seen: dict = {}
 
-    async def fake_run(self, job_dir, *, samples_used, adapter_root=None, capability_loss_threshold=0.05):
+    async def fake_run(
+        self,
+        job_dir,
+        *,
+        samples_used,
+        adapter_root=None,
+        capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
+    ):
         seen["dir_mode"] = stat.S_IMODE(job_dir.stat().st_mode)
         seen["pairs_mode"] = stat.S_IMODE((job_dir / "pairs.jsonl").stat().st_mode)
         seen["job_mode"] = stat.S_IMODE((job_dir / "job.json").stat().st_mode)
         seen["had_adapter"] = (job_dir / "previous_adapter" / "adapter_config.json").exists()
         seen["job_dir"] = job_dir
-        return {"ok": True, "accepted": False, "reason": "test", "schema_version": 2}
+        return {"ok": True, "accepted": False, "reason": "test", "schema_version": 3}
 
     monkeypatch.setattr(SubprocessVoiceTrainer, "_run_subprocess", fake_run)
     trainer = SubprocessVoiceTrainer(
@@ -532,7 +541,7 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
             json.dumps({
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
                 "abliteration_base_probes_scored": 1,
@@ -561,6 +570,7 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
         base_model_path=str(tmp_path / "base"),
+        abliteration_probe_path=str(write_one_probe_set(tmp_path)),
     )
     with pytest.raises(SubprocessTrainerError, match="is not strictly inside"):
         await trainer.train([DPOPair(prompt="p", chosen="c", rejected="r", system="s")], config)

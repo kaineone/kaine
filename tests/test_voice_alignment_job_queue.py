@@ -162,7 +162,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
                         result = {
                             "ok": True,
                             "accepted": True,
-                            "schema_version": 2,
+                            "schema_version": 3,
                             "abliteration_passed": True,
                             "abliteration_probes_scored": 1,
                             "abliteration_base_probes_scored": 1,
@@ -309,7 +309,7 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
                                 {
                                     "ok": True,
                                     "accepted": True,
-                                    "schema_version": 2,
+                                    "schema_version": 3,
                                     "abliteration_passed": True,
                                     "abliteration_probes_scored": 1,
                                     "abliteration_base_probes_scored": 1,
@@ -369,7 +369,7 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
                         result = {
                             "ok": True,
                             "accepted": True,
-                            "schema_version": 2,
+                            "schema_version": 3,
                             "abliteration_passed": True,
                             "abliteration_probes_scored": 1,
                             "abliteration_base_probes_scored": 1,
@@ -441,7 +441,7 @@ async def test_subprocess_backend_does_not_block_event_loop(tmp_path):
         result = {
             'ok': True,
             'accepted': True,
-            'schema_version': 2,
+            'schema_version': 3,
             'abliteration_passed': True,
             'abliteration_probes_scored': 1,
             'abliteration_base_probes_scored': 1,

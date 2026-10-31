@@ -171,7 +171,7 @@ The abliteration probe set must be non-empty when voice alignment is enabled. Th
 
 A capability-loss veto runs in parallel: the adapter is also scored on a general capability probe set before and after the DPO step. If capability drops by more than `[sleep.voice_alignment].capability_loss_threshold` (default `0.05`, i.e. 5%), the adapter is rejected and the temporary directory is removed.
 
-Adapter promotion is atomic (`os.replace` of a `.tmp` directory plus a temp-symlink replace for the `current` pointer). Concurrent readers never see a partial adapter state. Accepted adapter retention is controlled by `[sleep.voice_alignment].adapter_retention`, which defaults to `0` and keeps all accepted adapters; the `current` target is never evicted. There are four hot-swap modes: `manual`, `reload_endpoint`, `restart_service`, and `organ_adapter`.
+The trainer stages each candidate in its job directory, and the kaine side promotes it into the entity's store only after validating the result, so a refused result never changes `current`. Adapter promotion is atomic (`os.replace` of a `.tmp` directory plus a temp-symlink replace for the `current` pointer). Concurrent readers never see a partial adapter state. Accepted adapter retention is controlled by `[sleep.voice_alignment].adapter_retention`, which defaults to `0` and keeps all accepted adapters; the `current` target is never evicted. There are four hot-swap modes: `manual`, `reload_endpoint`, `restart_service`, and `organ_adapter`.
 
 ### Rollback
 

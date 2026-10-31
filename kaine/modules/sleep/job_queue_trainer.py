@@ -20,7 +20,6 @@ import asyncio
 import hashlib
 import logging
 import os
-import shutil
 import time
 import uuid
 from pathlib import Path
@@ -28,10 +27,15 @@ from typing import Any, Optional
 
 from kaine.modules.sleep import adapter_store, hot_swap
 from kaine.modules.sleep.subprocess_trainer import (
+    STAGED_ADAPTER_DIR,
     SubprocessTrainerError,
+    TrainerResultRefusedError,
     _read_result,
     _sweep_stale_workdir,
     audit_abliteration_from_result,
+    audit_trainer_refusal,
+    configured_abliteration_probe_count,
+    promote_staged_adapter,
     result_to_training_result,
     scrub_job_inputs,
     validate_trainer_result,
@@ -92,6 +96,7 @@ class JobQueueVoiceTrainer:
         out_dir = Path(config.adapter_output_dir)
         _sweep_stale_workdir(self._jobs_dir, out_dir)
 
+        probe_count = configured_abliteration_probe_count(config)
         job_dir = self._make_job_dir()
         job_name = job_dir.name
 
@@ -101,7 +106,7 @@ class JobQueueVoiceTrainer:
                 pairs,
                 config,
                 base_path=base_path,
-                adapter_output_dir="out",
+                adapter_output_dir=STAGED_ADAPTER_DIR,
             )
             self._write_ready_atomic(job_dir)
             result = await self._poll_for_result(job_dir, job_name)
@@ -111,9 +116,13 @@ class JobQueueVoiceTrainer:
             result = validate_trainer_result(
                 result,
                 job_dir=job_dir,
-                adapter_root=job_dir / "out",
+                adapter_root=job_dir / STAGED_ADAPTER_DIR,
                 capability_loss_threshold=float(config.capability_loss_threshold),
+                abliteration_probe_count=probe_count,
             )
+        except TrainerResultRefusedError as exc:
+            audit_trainer_refusal(out_dir, str(exc))
+            raise
         finally:
             self._delete_pairs(job_dir)
 
@@ -127,7 +136,11 @@ class JobQueueVoiceTrainer:
                 metadata={"backend": "job_queue"},
             )
 
-        adapter_dir, final = self._promote_adapter(result, job_dir, out_dir)
+        try:
+            adapter_dir, final = self._promote_adapter(result, job_dir, out_dir)
+        except TrainerResultRefusedError as exc:
+            audit_trainer_refusal(out_dir, str(exc))
+            raise
 
         hot_swap_status: dict[str, Any] = {
             "mode": config.hot_swap_mode,
@@ -220,28 +233,33 @@ class JobQueueVoiceTrainer:
     def _resolve_validated_adapter_dir(
         self, result: dict[str, Any], job_dir: Path
     ) -> Path:
+        """The staged adapter of an accepted result, after the job-queue checks.
+
+        Every failure here refuses the accepted result
+        (:class:`TrainerResultRefusedError`); nothing is promoted.
+        """
         job_dir_resolved = job_dir.resolve()
         adapter_dir_rel = result.get("adapter_dir")
         if not adapter_dir_rel:
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported accepted but no adapter_dir "
                 f"(job {job_dir})"
             )
         adapter_dir = (job_dir / str(adapter_dir_rel)).resolve()
         if not adapter_dir.is_relative_to(job_dir_resolved):
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} which is "
                 f"outside the job directory {job_dir_resolved} (job {job_dir})"
             )
         if not adapter_dir.is_dir() or not any(adapter_dir.iterdir()):
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} but it "
                 f"is missing or empty (job {job_dir})"
             )
 
         gguf_file = adapter_dir / "adapter.gguf"
         if not gguf_file.is_file():
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} but it "
                 f"does not contain adapter.gguf (job {job_dir})"
             )
@@ -250,7 +268,7 @@ class JobQueueVoiceTrainer:
         if expected_sha:
             actual_sha = _sha256_file(gguf_file)
             if actual_sha != expected_sha:
-                raise SubprocessTrainerError(
+                raise TrainerResultRefusedError(
                     f"adapter.gguf sha256 mismatch for {adapter_dir}: "
                     f"expected {expected_sha}, got {actual_sha} (job {job_dir})"
                 )
@@ -266,25 +284,7 @@ class JobQueueVoiceTrainer:
         out_dir: Path,
     ) -> tuple[Path, Path]:
         adapter_dir = self._resolve_validated_adapter_dir(result, job_dir)
-        ts = adapter_dir.name
-        tmp = adapter_store.tmp_dir_for(out_dir, ts)
-        final = adapter_store.final_dir_for(out_dir, ts)
-
-        try:
-            shutil.copytree(
-                adapter_dir,
-                tmp,
-                symlinks=False,
-                ignore=shutil.ignore_patterns("checkpoint-*"),
-            )
-            final = adapter_store.promote(tmp, final)
-        except Exception as exc:
-            if tmp.exists():
-                shutil.rmtree(tmp, ignore_errors=True)
-            raise SubprocessTrainerError(
-                f"adapter promotion failed for {adapter_dir}: "
-                f"{type(exc).__name__}: {exc} (job {job_dir})"
-            ) from exc
+        final = promote_staged_adapter(adapter_dir, out_dir, job_dir=job_dir)
         return adapter_dir, final
 
 

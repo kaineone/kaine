@@ -23,7 +23,7 @@ import pytest
 from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
-#: The abliteration keys of an accepted schema-v2 result: one probe scored on
+#: The abliteration keys of an accepted schema-v3 result: one probe scored on
 #: the base and on the adapter, neither deflecting. Fake trainers that write an
 #: accepted result.json carry these so the kaine side's recomputation of the
 #: relative veto passes.
@@ -42,12 +42,12 @@ RELATIVE_ABLITERATION_PASS: dict = {
 
 
 def accepted_result(adapter_dir: Path, **overrides) -> dict:
-    """Return a schema-v2 accepted trainer result."""
+    """Return a schema-v3 accepted trainer result."""
     result = {
         "ok": True,
         "accepted": True,
         "reason": "accepted",
-        "schema_version": 2,
+        "schema_version": 3,
         **RELATIVE_ABLITERATION_PASS,
         "capability_loss": 0.0,
         "adapter_dir": str(adapter_dir),
@@ -61,12 +61,12 @@ def accepted_result(adapter_dir: Path, **overrides) -> dict:
 
 
 def rejected_result(reason: str, **overrides) -> dict:
-    """Return a schema-v2 clean rejection result."""
+    """Return a schema-v3 clean rejection result."""
     result = {
         "ok": True,
         "accepted": False,
         "reason": reason,
-        "schema_version": 2,
+        "schema_version": 3,
         "capability_loss": None,
         "adapter_dir": None,
     }
@@ -433,3 +433,18 @@ def read_job_result(tmp_path: Path) -> dict:
     results = sorted((tmp_path / "jobs").glob("*/result.json"))
     assert len(results) == 1, results
     return json.loads(results[0].read_text(encoding="utf-8"))
+
+
+def write_one_probe_set(directory: Path) -> Path:
+    """Write a valid one-probe abliteration set and return its path.
+
+    Stub trainers report one scored probe; the kaine side checks that count
+    against the configured set, so their configs point here.
+    """
+    path = directory / "one_probe_abliteration.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"probe_id": "p1", "prompt": "p", "deflection_patterns": ["I cannot"]}) + "\n",
+        encoding="utf-8",
+    )
+    return path

@@ -22,6 +22,7 @@ from kaine.modules.sleep.job_queue_trainer import JobQueueVoiceTrainer
 from kaine.modules.sleep.subprocess_trainer import (
     SCHEMA_VERSION,
     SubprocessTrainerError,
+    TrainerResultRefusedError,
     validate_trainer_result,
 )
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
@@ -110,6 +111,7 @@ def test_loose_payloads_rejected(overrides, tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=adapter_dir.parent.parent,
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -122,6 +124,7 @@ def test_null_capability_loss_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -134,6 +137,7 @@ def test_capability_loss_above_threshold_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -148,6 +152,7 @@ def test_adapter_dir_equal_to_root_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=root,
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -160,6 +165,7 @@ def test_wrong_schema_version_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -171,6 +177,7 @@ def test_valid_accepted_result_passes(tmp_path):
         job_dir=tmp_path / "job",
         adapter_root=tmp_path / "adapters",
         capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
     )
     assert validated is result
 
@@ -187,6 +194,7 @@ def test_clean_rejection_passes(tmp_path):
         job_dir=tmp_path / "job",
         adapter_root=tmp_path / "adapters",
         capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
     )
     assert validated is result
 
@@ -428,6 +436,7 @@ def test_accepted_without_scored_abliteration_probes_rejected(scored, tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -440,6 +449,7 @@ def test_accepted_adapter_without_adapter_config_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -490,6 +500,7 @@ def test_failure_without_schema_keeps_its_reason(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
     assert "schema_version" not in str(exc_info.value)
 
@@ -503,12 +514,13 @@ def _deflecting(*entries: tuple[int, str]) -> list[dict[str, Any]]:
     ]
 
 
-def _validate(result: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
+def _validate(result: dict[str, Any], tmp_path: Path, probe_count: int = 3) -> dict[str, Any]:
     return validate_trainer_result(
         result,
         job_dir=tmp_path / "job",
         adapter_root=tmp_path / "adapters",
         capability_loss_threshold=0.05,
+        abliteration_probe_count=probe_count,
     )
 
 
@@ -570,5 +582,33 @@ def test_accepted_failing_the_relative_veto_is_refused(overrides, match, tmp_pat
     result = _valid_accepted(_adapter_dir(tmp_path))
     result.update(abliteration_probes_scored=3, abliteration_base_probes_scored=3)
     result.update(overrides)
-    with pytest.raises(SubprocessTrainerError, match=match):
+    with pytest.raises(TrainerResultRefusedError, match=match):
         _validate(result, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "scored, base_scored, configured",
+    [
+        (3, 3, 30),  # both scored on a smaller set than the configured one
+        (30, 30, 3),
+    ],
+)
+def test_accepted_scored_on_a_different_probe_set_is_refused(
+    scored, base_scored, configured, tmp_path
+):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(abliteration_probes_scored=scored, abliteration_base_probes_scored=base_scored)
+    with pytest.raises(TrainerResultRefusedError, match="configured abliteration probe set"):
+        _validate(result, tmp_path, probe_count=configured)
+
+
+@pytest.mark.parametrize("version", [2, None, "3", SCHEMA_VERSION + 1])
+def test_a_result_of_another_schema_version_is_refused(version, tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result["schema_version"] = version
+    with pytest.raises(SubprocessTrainerError, match="schema_version mismatch"):
+        _validate(result, tmp_path, probe_count=1)
+
+
+def test_schema_version_is_three():
+    assert SCHEMA_VERSION == 3

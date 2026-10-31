@@ -31,6 +31,18 @@ from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 VENV_PY = str(Path(sys.executable))
 
 
+def _one_probe_set(tmp_path: Path) -> Path:
+    """A valid one-probe abliteration set, matching the stubs' scored count."""
+    path = tmp_path / "probes" / "abliteration_probes.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"probe_id": "p1", "prompt": "p", "deflection_patterns": ["I cannot"]})
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _config(tmp_path: Path) -> VoiceAlignmentConfig:
     return VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
@@ -40,6 +52,7 @@ def _config(tmp_path: Path) -> VoiceAlignmentConfig:
         trainer_backend="subprocess",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
+        abliteration_probe_path=str(_one_probe_set(tmp_path)),
     )
 
 
@@ -90,7 +103,7 @@ async def test_round_trip_accepted(tmp_path):
         result = {
             'ok': True,
             'accepted': True,
-            'schema_version': 2,
+            'schema_version': 3,
             'abliteration_passed': True,
             'abliteration_probes_scored': 1,
             'abliteration_base_probes_scored': 1,
@@ -146,7 +159,7 @@ async def test_job_spec_written_for_external_process(tmp_path):
         (adapter / 'adapter_config.json').write_text('{{}}')
         (adapter / 'w').write_text('x')
         (job_dir / 'result.json').write_text(json.dumps({{
-            'ok': True, 'accepted': True, 'schema_version': 2,
+            'ok': True, 'accepted': True, 'schema_version': 3,
             'abliteration_passed': True, 'abliteration_probes_scored': 1,
             'abliteration_base_probes_scored': 1,
             'abliteration_base_deflecting': [],
@@ -175,7 +188,7 @@ async def test_job_spec_written_for_external_process(tmp_path):
     assert job["lora_rank"] == cfg.lora_rank
     assert job["dpo_beta"] == pytest.approx(cfg.dpo_beta)
     assert job["seed"] == cfg.seed
-    assert job["schema_version"] == 2
+    assert job["schema_version"] == 3
     # Probe paths resolve to the bundled defaults (the external gates use them).
     assert job["capability_probe_path"].endswith("default.jsonl")
     assert job["abliteration_probe_path"].endswith("abliteration_probes.jsonl")
@@ -191,7 +204,7 @@ async def test_clean_rejection_is_not_an_error(tmp_path):
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': True,
             'accepted': False,
-            'schema_version': 2,
+            'schema_version': 3,
             'adapter_dir': None,
             'steps': 5,
             'dpo_loss': 0.3,
@@ -259,7 +272,7 @@ async def test_result_ok_false_raises(tmp_path):
         """
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': False,
-            'schema_version': 2,
+            'schema_version': 3,
             'reason': 'external trainer crashed',
             'samples_used': 0,
         }))
@@ -281,7 +294,7 @@ async def test_accepted_but_missing_adapter_raises(tmp_path):
         tmp_path,
         """
         (job_dir / 'result.json').write_text(json.dumps({
-            'ok': True, 'accepted': True, 'schema_version': 2,
+            'ok': True, 'accepted': True, 'schema_version': 3,
             'abliteration_passed': True, 'abliteration_probes_scored': 1,
             'abliteration_base_probes_scored': 1,
             'abliteration_base_deflecting': [],
@@ -312,7 +325,7 @@ async def test_accepted_but_empty_adapter_dir_raises(tmp_path):
         adapter = Path(job['adapter_output_dir']) / 'empty_adapter'
         adapter.mkdir(parents=True, exist_ok=True)  # exists but empty
         (job_dir / 'result.json').write_text(json.dumps({
-            'ok': True, 'accepted': True, 'schema_version': 2,
+            'ok': True, 'accepted': True, 'schema_version': 3,
             'abliteration_passed': True, 'abliteration_probes_scored': 1,
             'abliteration_base_probes_scored': 1,
             'abliteration_base_deflecting': [],

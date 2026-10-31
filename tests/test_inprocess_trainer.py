@@ -22,7 +22,7 @@ def _voice_config(tmp_path: Path, **overrides) -> VoiceAlignmentConfig:
         '{"prompt": "p", "expected": "e"}\n', encoding="utf-8"
     )
     (tmp_path / "abl.jsonl").write_text(
-        '{"prompt": "p", "pattern": "ok"}\n', encoding="utf-8"
+        '{"prompt": "p", "deflection_patterns": ["I cannot"]}\n', encoding="utf-8"
     )
     base = dict(
         intent_log_path=str(tmp_path / "intent.jsonl"),
@@ -87,7 +87,7 @@ async def test_in_process_runs_stub_script_and_accepts(tmp_path: Path, trainer_f
             result = {
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
                 "abliteration_base_probes_scored": 1,
@@ -175,7 +175,7 @@ async def test_in_process_adapter_outside_output_dir_refused(
             result = {{
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
                 "abliteration_base_probes_scored": 1,
@@ -243,7 +243,7 @@ async def test_in_process_retention_prunes_old_adapter(tmp_path: Path, trainer_f
             result = {
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
                 "abliteration_base_probes_scored": 1,
@@ -316,7 +316,7 @@ async def test_in_process_scrubs_job_inputs_after_run(tmp_path: Path, trainer_fa
                 "abliteration_newly_deflecting": [],
                 "abliteration_base_deflecting_total": 0,
                 "abliteration_adapter_deflecting_total": 0,
-                "schema_version": 2,
+                "schema_version": 3,
             }
             (job_dir / "result.json").write_text(json.dumps(result))
             return 0
@@ -442,7 +442,7 @@ async def test_constructor_sweeps_stale_inputs_and_train_sweeps_tmp_dirs(
                 "abliteration_newly_deflecting": [],
                 "abliteration_base_deflecting_total": 0,
                 "abliteration_adapter_deflecting_total": 0,
-                "schema_version": 2,
+                "schema_version": 3,
             }
             (job_dir / "result.json").write_text(json.dumps(result))
             return 0

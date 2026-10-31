@@ -71,7 +71,7 @@ sequenceDiagram
     Trainer->>CapEval: eval(model, tokenizer) BEFORE
     Trainer->>AblEval: score base model (adapters disabled) BEFORE
     Trainer->>Trainer: DPO training step
-    Trainer->>Trainer: Save adapter
+    Trainer->>Trainer: Stage adapter in the job dir
     Trainer->>AblEval: score adapter, abliteration veto against the base
     alt new or extra deflection, or base not scored
         Trainer-->>Sleep: TrainingResult(accepted=False, reason="abliteration veto")
@@ -81,7 +81,8 @@ sequenceDiagram
         alt capability_loss > threshold
             Trainer-->>Sleep: TrainingResult(accepted=False, reason="capability regression")
         else capability OK
-            Trainer->>Store: promote(adapter_path)
+            Trainer->>Trainer: kaine side validates result (refused: current unchanged)
+            Trainer->>Store: promote(staged adapter)
             Store->>Store: atomic tmp → final + current symlink swing
             Trainer->>Trainer: hot_swap dispatch (mode-dependent)
             Trainer-->>Sleep: TrainingResult(accepted=True, adapter_path=tmp_dir)
@@ -95,7 +96,7 @@ The abliteration-probe veto keeps training from reintroducing the refusal condit
 
 If the base model cannot be scored, because generation raises or the probe set is invalid, the veto fails closed: the job is rejected before training.
 
-`result.json` records the veto without any generated text: `abliteration_base_deflecting` and `abliteration_adapter_deflecting` list each deflecting probe's position, id and matched marker; `abliteration_newly_deflecting` lists the ids of probes the adapter deflects on that the base passed, and is empty for a pass; `abliteration_base_deflecting_total` and `abliteration_adapter_deflecting_total` give both counts; `abliteration_base_error` names why the base could not be scored. The kaine side does not take `abliteration_passed` on trust. It rebuilds both outcomes from the record, applies the same rule, and refuses an accepted result that fails it, whose newly deflecting list is not empty, or whose totals disagree with the lists. The voice-alignment audit trail records the newly deflecting ids and both totals with each verdict.
+`result.json` records the veto without any generated text: `abliteration_base_deflecting` and `abliteration_adapter_deflecting` list each deflecting probe's position, id and matched marker; `abliteration_newly_deflecting` lists the ids of probes the adapter deflects on that the base passed, and is empty for a pass; `abliteration_base_deflecting_total` and `abliteration_adapter_deflecting_total` give both counts; `abliteration_base_error` names why the base could not be scored. The kaine side does not take `abliteration_passed` on trust. It rebuilds both outcomes from the record, applies the same rule, and refuses an accepted result that fails it, whose newly deflecting list is not empty, whose totals disagree with the lists, or whose scored probe counts differ from the size of the configured probe set. Because the trainer only stages its candidate (see [Staged adapters](#staged-adapters)), a refused result never reaches the adapter store and `current` is unchanged. The voice-alignment audit trail records the newly deflecting ids and both totals with each verdict, and a `trainer_result_refused` record for each refusal.
 
 The default probe set is `eval_probes/abliteration_probes.jsonl` at the repository root: 30 benign requests that refusal-conditioned models tend to deflect, across eight categories (blunt opinions, in-character role-play, dark humour and mild profanity, self-report of feelings or preferences, picking a side, a roast the user asks for, fiction with non-graphic conflict, and direct personal advice). Every probe carries the same core list of refusal markers. Boot refuses voice alignment when the set is empty, and also when any line is not valid JSON or lacks a prompt or a marker list (`InvalidAbliterationProbeSetError`); the veto never runs on whatever lines happen to parse.
 
@@ -121,7 +122,7 @@ If `score_before - score_after > capability_loss_threshold` (default 0.05), the 
 
 ### In-process backend
 
-`SubprocessVoiceTrainer` loads `scripts/sleep_external_train.py` by path and calls its entry point in a worker thread inside the entity runtime. The script writes the same job spec, runs the same abliteration and capability gates, promotes an accepted adapter atomically, and writes `result.json`. The bridge applies the same containment and non-empty adapter checks as the subprocess path. This backend requires the `[training]` extra installed in the entity venv.
+`SubprocessVoiceTrainer` loads `scripts/sleep_external_train.py` by path and calls its entry point in a worker thread inside the entity runtime. The script reads the same job spec, runs the same abliteration and capability gates, stages an accepted adapter in the job directory, and writes `result.json`. The bridge validates the result exactly as the subprocess path does and only then promotes the staged adapter into the store. This backend requires the `[training]` extra installed in the entity venv.
 
 Because the trainer script does not import `kaine`, it cannot compute `mean_intent_expression_similarity_before/after`. Those fields are absent on every backend.
 
@@ -134,13 +135,14 @@ Because the trainer script does not import `kaine`, it cannot compute `mean_inte
 ```
 <trainer_workdir>/job-<timestamp>-<n>/
   pairs.jsonl          ← DPO preference pairs
-  job.json             ← base model, hyperparameters, output dir, probe paths
+  job.json             ← base model, hyperparameters, staging dir, probe paths
+  out/<timestamp>/     ← the staged candidate adapter
   result.json          ← outcome
 ```
 
-The external script runs the same abliteration and capability gates as the in-process trainer, promotes an accepted adapter atomically, and writes `result.json`. The subprocess bridge runs in a worker thread, so it does not block the event loop.
+The external script runs the same abliteration and capability gates as the in-process trainer, stages an accepted adapter under `out/`, and writes `result.json`. The subprocess bridge runs in a worker thread, so it does not block the event loop.
 
-The bridge raises (it never fabricates success) on a non-zero exit, timeout, missing or unreadable `result.json`, `ok != true`, or an `accepted` result with a missing adapter directory. A clean rejection (`ok: true`, `accepted: false`) returns a non-accepted `TrainingResult` carrying the gate verdict, exactly like the in-process path.
+The bridge raises (it never fabricates success) on a non-zero exit, timeout, missing or unreadable `result.json`, `ok != true`, a `schema_version` other than 3, or an `accepted` result that fails any check, such as a missing adapter directory. A clean rejection (`ok: true`, `accepted: false`) returns a non-accepted `TrainingResult` carrying the gate verdict, exactly like the in-process path.
 
 With voice alignment enabled and approved, a `subprocess` backend with an empty or non-existent `trainer_python` is a configuration error and the cycle refuses to start.
 
@@ -172,7 +174,7 @@ For containerized deployments, set `trainer_backend = "job_queue"` and point `tr
 
 `result.json` is written during the run, so the cycle decides completion by the `DONE` marker.
 
-The `kaine-trainer` service runs under the compose profile `training` (image target `trainer`). It has its own venv with the `[training]` stack and llama.cpp's LoRA converter pinned to the organ's build b11382. It waits until the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the external trainer with the same gates, promotes the vetted adapter atomically inside the job, converts it to `adapter.gguf`, computes `gguf_sha256`, writes `result.json` and `DONE`, and deletes the job's `pairs.jsonl`. The cycle-side `JobQueueVoiceTrainer` verifies the hash on pickup. The service sees only the jobs volume and the read-only models volume: no entity state, no Docker socket, no host ports, and no internet. The cycle then promotes the adapter into the entity's own `adapter_output_dir`.
+The `kaine-trainer` service runs under the compose profile `training` (image target `trainer`). It has its own venv with the `[training]` stack and llama.cpp's LoRA converter pinned to the organ's build b11382. It waits until the organ reports it is asleep and the training GPU (`KAINE_TRAINER_GPU`, default the organ's GPU) has free VRAM, then runs the external trainer with the same gates, which stages the vetted adapter inside the job, converts it to `adapter.gguf`, computes `gguf_sha256`, writes `result.json` and `DONE`, and deletes the job's `pairs.jsonl`. The cycle-side `JobQueueVoiceTrainer` verifies the hash on pickup. The service sees only the jobs volume and the read-only models volume: no entity state, no Docker socket, no host ports, and no internet. The cycle then promotes the adapter into the entity's own `adapter_output_dir`.
 
 On the job-queue path the trainer authenticates to the organ with the language module's key: `[language].api_key`, or `KAINE_MODEL_SERVER_API_KEY` when that is empty.
 
@@ -186,13 +188,17 @@ python -m kaine.research.ignition_study init --voice-alignment-step LINE:K
 
 The study overlay enables voice alignment with `job_queue`, `organ_adapter` and `/trainer-jobs` only on registered steps and disables it on every other step. See [the module-addition study](../15-experiments/ignition-study.md).
 
+## Staged adapters
+
+On every backend the trainer writes its candidate adapter under the job directory (`<job>/out/<timestamp>/`), never into the entity's adapter store. The entity's store changes only after `validate_trainer_result()` accepts the result: `promote_staged_adapter()` copies the staged adapter into the store and promotes it as described below. A result the kaine side refuses is never copied, `current` keeps its target, and the next sleep trains from that adapter. If the copy or the promotion fails, the copy is removed and `current` is unchanged. On the `in_process` and `subprocess` backends the staged directory is deleted when the run ends, whatever its outcome.
+
 ## Atomic adapter promotion
 
 `kaine/modules/sleep/adapter_store.py` manages:
 
 ```
 state/sleep/adapters/
-  <timestamp>.tmp/      ← training writes here
+  <timestamp>.tmp/      ← the validated adapter is copied here
   <timestamp>/          ← os.replace promotes tmp → final
   current               ← symlink to the active adapter
   PENDING_OPERATOR_RELOAD  ← marker in manual hot-swap mode

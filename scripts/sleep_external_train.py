@@ -19,10 +19,13 @@ IPC contract (filesystem job spec):
 
   argv[1] = job directory. It contains:
     job.json    — base-model reference, LoRA/DPO hyper-params, the adapter
-                  output dir, capability + abliteration probe sets,
+                  output dir (a staging dir inside the job directory: the
+                  kaine side promotes an accepted adapter into the entity's
+                  store only after validating result.json), capability +
+                  abliteration probe sets,
                   train_precision ("bf16" or "4bit"),
                   previous_adapter_dir (path string or null),
-                  schema_version (2).
+                  schema_version (3).
     pairs.jsonl — the DPO preference pairs
                   ({"prompt","chosen","rejected","system"}, optionally
                   "own_turn": bool and "user_turn": str; see
@@ -55,7 +58,7 @@ IPC contract (filesystem job spec):
       "abliteration_base_deflecting_total": int | null,
       "abliteration_adapter_deflecting_total": int | null,
       "abliteration_base_error": str | null,
-      "schema_version": 2
+      "schema_version": 3
     }
 
 The abliteration veto is judged relative to the base model. Before training,
@@ -86,7 +89,9 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 
-SCHEMA_VERSION = 2
+# Version 3: results carry the base-relative abliteration record; the kaine
+# side refuses a result of any other version.
+SCHEMA_VERSION = 3
 
 # PEFT keeps adapters in a ModuleDict, so an adapter name must not collide with
 # an nn.Module attribute: "train" fails with "attribute 'train' already exists".
@@ -472,7 +477,7 @@ def _augment_result(
     pairs_without_system: int,
     pairs_with_invalid_turn: int = 0,
 ) -> dict[str, Any]:
-    """Add the schema-v2 reporting keys every result must carry."""
+    """Add the schema-v3 reporting keys every result must carry."""
     result.setdefault("train_precision", train_precision)
     result.setdefault(
         "previous_adapter_dir", str(previous_adapter_dir) if previous_adapter_dir else None

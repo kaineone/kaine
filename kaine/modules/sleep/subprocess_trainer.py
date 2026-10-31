@@ -16,17 +16,23 @@ environments share nothing but the filesystem. See
 This class:
 
   1. writes a job directory under ``trainer_workdir`` — ``pairs.jsonl`` (the DPO
-     preference pairs) + ``job.json`` (base-model ref, hyper-params, adapter
-     output dir, the probe-set paths, a schema version);
+     preference pairs) + ``job.json`` (base-model ref, hyper-params, the
+     staging dir ``<job_dir>/out`` as the adapter output dir, the probe-set
+     paths, a schema version);
   2. either invokes ``trainer_python scripts/sleep_external_train.py <job_dir>``
      as a subprocess with an explicit argv (NO shell), a timeout, and CWD =
      the job dir, or runs ``module.main([entry_script, job_dir])`` in a worker
-     thread when ``run_in_process=True``;
-  3. validates: exit code 0 / return code 0 AND ``result.json.ok`` AND a
-     non-empty adapter dir contained in the configured output dir (when the
-     run reports acceptance) → returns a
+     thread when ``run_in_process=True``; the trainer stages its candidate
+     adapter under ``<job_dir>/out``, never in the entity's store;
+  3. validates: exit code 0 / return code 0 AND ``result.json`` passing
+     :func:`validate_trainer_result` (for an accepted run: every gate verdict,
+     the recomputed abliteration veto, and a non-empty adapter dir inside the
+     staging dir);
+  4. only then promotes the staged adapter into the entity's store and swings
+     ``current`` (:func:`promote_staged_adapter`), and returns a
      :class:`~kaine.modules.sleep.voice_alignment.TrainingResult` of the SAME
-     shape on every backend.
+     shape on every backend. A refused result never reaches the store, and
+     the refusal is written to the voice-alignment audit trail.
 
 Fail loud, never fake: on ANY failure (non-zero exit/return code, timeout,
 missing/!ok ``result.json``, a claimed-accepted run with a missing/empty
@@ -69,7 +75,9 @@ EXTERNAL_ENTRY_SCRIPT = (
 )
 
 #: Job-spec schema version written into job.json and echoed in result.json.
-SCHEMA_VERSION = 2
+#: Version 3: an accepted result carries the base-relative abliteration
+#: record, and a result of any other version is refused.
+SCHEMA_VERSION = 3
 
 #: Default wall-clock ceiling for one training run (seconds). Training is
 #: infrequent (once per consolidation); a generous default avoids killing a
@@ -81,6 +89,21 @@ class SubprocessTrainerError(RuntimeError):
     """Raised when the trainer fails to produce a valid, verifiable adapter.
     Surfaced to the sleep module as a trainer error — never swallowed into a fake success.
     """
+
+
+class TrainerResultRefusedError(SubprocessTrainerError):
+    """The trainer reported an accepted adapter and the kaine side refused it.
+
+    Raised by :func:`validate_trainer_result` for every check of an accepted
+    result. The adapter is staged outside the entity's store and is never
+    promoted; callers write the refusal to the voice-alignment audit trail.
+    """
+
+
+#: Directory inside a job directory where the trainer stages its candidate
+#: adapter. The kaine side promotes from here into the entity's store only
+#: after :func:`validate_trainer_result` accepts the result.
+STAGED_ADAPTER_DIR = "out"
 
 
 #: Environment variables the external trainer may inherit. Everything else,
@@ -157,6 +180,81 @@ def audit_abliteration_from_result(adapter_output_dir: Path | str, result: dict[
         )
     except Exception:
         log.exception("failed to append abliteration verdict to voice audit trail")
+
+
+def audit_trainer_refusal(adapter_output_dir: Path | str, reason: str) -> None:
+    """Write a kaine-side refusal of an accepted trainer result to the audit trail.
+
+    Best-effort, like :func:`audit_abliteration_from_result`: a failing write
+    is logged, and the refusal still propagates to the caller.
+    """
+    try:
+        append_voice_audit(
+            adapter_output_dir,
+            event="trainer_result_refused",
+            accepted=False,
+            reason=reason,
+        )
+    except Exception:
+        log.exception("failed to append trainer refusal to voice audit trail")
+
+
+def configured_abliteration_probe_count(config: VoiceAlignmentConfig) -> int:
+    """Number of probes in the abliteration set this run's job spec names.
+
+    The kaine side checks both scored counts in an accepted result against
+    it. An empty or invalid set raises: the veto cannot run without it.
+    """
+    from kaine.modules.sleep.capability_eval import (
+        DEFAULT_ABLITERATION_PROBE_PATH,
+        EmptyAbliterationProbeSetError,
+        require_non_empty_abliteration_probes,
+    )
+
+    path = config.abliteration_probe_path or str(DEFAULT_ABLITERATION_PROBE_PATH)
+    try:
+        return len(require_non_empty_abliteration_probes(Path(path).resolve()))
+    except EmptyAbliterationProbeSetError as exc:
+        raise SubprocessTrainerError(str(exc)) from exc
+
+
+def promote_staged_adapter(staged_dir: Path, store_dir: Path, *, job_dir: Path) -> Path:
+    """Copy a validated, staged adapter into the entity's store and point `current` at it.
+
+    Call only after :func:`validate_trainer_result` has accepted the result.
+    The copy lands in a ``.tmp`` directory first; :func:`adapter_store.promote`
+    then moves it into place and swings ``current``. On any failure the copy is
+    removed, ``current`` keeps its previous target, and
+    :class:`SubprocessTrainerError` is raised.
+    """
+    ts = staged_dir.name
+    tmp = adapter_store.tmp_dir_for(store_dir, ts)
+    final = adapter_store.final_dir_for(store_dir, ts)
+    final_existed = final.exists()
+    try:
+        shutil.copytree(
+            staged_dir,
+            tmp,
+            symlinks=False,
+            ignore=shutil.ignore_patterns("checkpoint-*"),
+        )
+        return adapter_store.promote(tmp, final)
+    except Exception as exc:
+        if tmp.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+        current = adapter_store.current_path(store_dir)
+        if (
+            not final_existed
+            and final.exists()
+            and (current is None or current != final.resolve())
+        ):
+            # Moved into place but `current` never swung to it: remove it so
+            # the store holds no adapter that was not promoted.
+            shutil.rmtree(final, ignore_errors=True)
+        raise SubprocessTrainerError(
+            f"adapter promotion failed for {staged_dir}: "
+            f"{type(exc).__name__}: {exc} (job {job_dir})"
+        ) from exc
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -273,12 +371,17 @@ def validate_trainer_result(
     job_dir: Path,
     adapter_root: Path,
     capability_loss_threshold: float,
+    abliteration_probe_count: int,
 ) -> dict[str, Any]:
     """Strict, single-point validation for every trainer backend.
 
     A result is accepted only when every gate verdict is exactly what the
     kaine side expects.  A clean rejection (``ok=True, accepted=False``) is
-    returned unchanged.  Anything else raises :class:`SubprocessTrainerError`.
+    returned unchanged.  Anything else raises :class:`SubprocessTrainerError`;
+    a refused accepted result raises its subclass
+    :class:`TrainerResultRefusedError`. ``abliteration_probe_count`` is the
+    size of the configured abliteration probe set: an accepted result must
+    have scored exactly that many probes on the base and on the adapter.
     """
     if not isinstance(result, dict):
         raise SubprocessTrainerError(
@@ -312,7 +415,31 @@ def validate_trainer_result(
             f"(job {job_dir})"
         )
 
-    # From here on the run claims to have produced an accepted adapter.
+    # From here on the run claims to have produced an accepted adapter. Every
+    # check that fails is a kaine-side refusal: the staged adapter is never
+    # promoted.
+    try:
+        _check_accepted_result(
+            result,
+            job_dir=job_dir,
+            adapter_root=adapter_root,
+            capability_loss_threshold=capability_loss_threshold,
+            abliteration_probe_count=abliteration_probe_count,
+        )
+    except SubprocessTrainerError as exc:
+        raise TrainerResultRefusedError(str(exc)) from exc
+    return result
+
+
+def _check_accepted_result(
+    result: dict[str, Any],
+    *,
+    job_dir: Path,
+    adapter_root: Path,
+    capability_loss_threshold: float,
+    abliteration_probe_count: int,
+) -> None:
+    """Every check an accepted result must pass; raises on the first failure."""
     if result.get("abliteration_passed") is not True:
         raise SubprocessTrainerError(
             f"accepted result has abliteration_passed="
@@ -327,6 +454,14 @@ def validate_trainer_result(
         )
 
     _check_relative_abliteration(result, job_dir)
+
+    for key in ("abliteration_probes_scored", "abliteration_base_probes_scored"):
+        if result.get(key) != abliteration_probe_count:
+            raise SubprocessTrainerError(
+                f"accepted result has {key}={result.get(key)!r}; the configured "
+                f"abliteration probe set has {abliteration_probe_count} probes "
+                f"(job {job_dir})"
+            )
 
     cap_loss = result.get("capability_loss")
     if (
@@ -379,7 +514,6 @@ def validate_trainer_result(
             f"adapter_config.json (job {job_dir})"
         )
 
-    return result
 
 
 def _pair_record(p: DPOPair) -> dict[str, Any]:
@@ -600,32 +734,45 @@ class SubprocessVoiceTrainer:
             self._trainer_workdir, Path(config.adapter_output_dir)
         )
 
+        store_dir = Path(config.adapter_output_dir)
+        probe_count = configured_abliteration_probe_count(config)
         job_dir = self._make_job_dir()
-        try:
-            write_job_spec(
-                job_dir,
-                pairs,
-                config,
-                base_path=base_path,
-                adapter_output_dir=str(Path(config.adapter_output_dir).resolve()),
-            )
-            run = self._run_in_process if self.run_in_process else self._run_subprocess
-            result = await run(
-                job_dir,
-                samples_used=len(pairs),
-                adapter_root=Path(config.adapter_output_dir),
-                capability_loss_threshold=float(config.capability_loss_threshold),
-            )
-            audit_abliteration_from_result(Path(config.adapter_output_dir), result)
-        finally:
-            scrub_job_inputs(job_dir)
-
+        # The trainer stages its candidate inside the job directory; the
+        # entity's store and its `current` link change only below, after the
+        # result passes validation.
+        stage_dir = job_dir / STAGED_ADAPTER_DIR
         adapter_path: Optional[Path] = None
-        if result.get("accepted") is True:
-            adapter_dir = result.get("adapter_dir")
-            if adapter_dir:
-                raw = Path(adapter_dir)
-                adapter_path = raw if raw.is_absolute() else (job_dir / raw).resolve()
+        try:
+            try:
+                write_job_spec(
+                    job_dir,
+                    pairs,
+                    config,
+                    base_path=base_path,
+                    adapter_output_dir=str(stage_dir.resolve()),
+                )
+                run = self._run_in_process if self.run_in_process else self._run_subprocess
+                result = await run(
+                    job_dir,
+                    samples_used=len(pairs),
+                    adapter_root=stage_dir,
+                    capability_loss_threshold=float(config.capability_loss_threshold),
+                    abliteration_probe_count=probe_count,
+                )
+                audit_abliteration_from_result(store_dir, result)
+            except TrainerResultRefusedError as exc:
+                audit_trainer_refusal(store_dir, str(exc))
+                raise
+            finally:
+                scrub_job_inputs(job_dir)
+
+            if result.get("accepted") is True:
+                staged = Path(str(result.get("adapter_dir"))).resolve()
+                adapter_path = promote_staged_adapter(staged, store_dir, job_dir=job_dir)
+        finally:
+            # Nothing staged outlives the run: a refused or failed candidate is
+            # gone, and an accepted one now lives in the store.
+            shutil.rmtree(stage_dir, ignore_errors=True)
 
         hot_swap_status: Optional[dict[str, Any]] = None
         if result.get("accepted") is True and config.hot_swap_mode != "organ_adapter":
@@ -688,6 +835,7 @@ class SubprocessVoiceTrainer:
         samples_used: int,
         adapter_root: Path,
         capability_loss_threshold: float,
+        abliteration_probe_count: int,
     ) -> dict[str, Any]:
         assert self._trainer_python is not None
         if not self._entry_script.is_file():
@@ -735,6 +883,7 @@ class SubprocessVoiceTrainer:
             job_dir=job_dir,
             adapter_root=adapter_root,
             capability_loss_threshold=capability_loss_threshold,
+            abliteration_probe_count=abliteration_probe_count,
         )
 
     # --------------------------------------------------------------------- #
@@ -747,6 +896,7 @@ class SubprocessVoiceTrainer:
         samples_used: int,
         adapter_root: Path,
         capability_loss_threshold: float,
+        abliteration_probe_count: int,
     ) -> dict[str, Any]:
         if not self._entry_script.is_file():
             raise SubprocessTrainerError(
@@ -815,4 +965,5 @@ class SubprocessVoiceTrainer:
             job_dir=job_dir,
             adapter_root=adapter_root,
             capability_loss_threshold=capability_loss_threshold,
+            abliteration_probe_count=abliteration_probe_count,
         )

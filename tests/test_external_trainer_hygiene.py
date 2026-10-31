@@ -39,7 +39,7 @@ def _write_job_dir(tmp_path, job, pairs):
 
 def _default_job(tmp_path, **overrides):
     base = {
-        "schema_version": 2,
+        "schema_version": 3,
         "base_model_path": "dummy/base",
         "lora_rank": 8,
         "learning_rate": 5e-5,
@@ -186,7 +186,7 @@ def test_main_no_system_prompts_rejects_without_training(mod, tmp_path, monkeypa
     assert result["ok"] is False
     assert "no pair has a verified system prompt" in result["reason"]
     assert result["pairs_without_system"] == 3
-    assert result["schema_version"] == 2
+    assert result["schema_version"] == 3
     assert result["train_precision"] == "bf16"
     assert result["previous_adapter_dir"] is None
     assert result.get("accepted") is False
