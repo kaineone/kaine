@@ -12,12 +12,12 @@
 - **THEN** the incident log path resolves inside that step's directory
 
 ### Requirement: A supervisor escalation is its own step outcome
-After a step's cycle exits, the study runner SHALL read the step's `state/cycle/escalation.json`. When it exists, the step's outcome SHALL be `failed:supervisor`, the record SHALL carry the escalation record's content-free fields, and the study SHALL halt for the operator. A step that completes SHALL record `supervisor_restarts`, the number of restart transitions in the step's incident log, and the analysis SHALL list viewings with at least one restart.
+After a step's cycle exits, the study runner SHALL read the step's `state/cycle/escalation.json`. When it exists, the step's outcome SHALL be `failed:supervisor`, the record SHALL carry the escalation record's content-free fields, and the run SHALL halt for the operator. A step that completes SHALL record `supervisor_restarts`, the number of restart transitions in the step's incident log, and the analysis SHALL list steps with at least one restart.
 
 #### Scenario: A step escalates
-- **WHEN** the supervisor escalates during a viewing and the cycle exits non-zero
+- **WHEN** the supervisor escalates during a step and the cycle exits non-zero
 - **THEN** the step is recorded as `failed:supervisor`, not `failed:exit:<code>`, and the next step does not start
 
 #### Scenario: A restart that recovered
-- **WHEN** the supervisor restarted one module once during a viewing and the step completed
-- **THEN** the step record carries `supervisor_restarts: 1` and the viewing is listed as having a restart
+- **WHEN** the supervisor restarted one module once during a step and the step completed
+- **THEN** the step record carries `supervisor_restarts: 1` and the step is listed as having a restart

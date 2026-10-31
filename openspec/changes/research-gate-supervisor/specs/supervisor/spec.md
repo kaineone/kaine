@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Loss of supervision escalates during an unattended run
-When the cycle runs in unattended or research mode and the supervisor's supervision task exits for any reason other than shutdown, the cycle SHALL run the supervisor's escalation (final snapshot, shutdown of every module, and `escalation.json`) and SHALL send a caretaker notice. In operator-present mode this requirement SHALL NOT apply.
+When the cycle runs in unattended or research mode and the supervisor's supervision task exits for any reason other than shutdown, never starts, or its poll loop raises, the cycle SHALL run the supervisor's escalation (final snapshot, shutdown of every module, and `escalation.json`) and SHALL send a caretaker notice. In operator-present mode this requirement SHALL NOT apply.
 
 #### Scenario: Supervisor task crashes unattended
 - **WHEN** the supervisor's supervision task raises during an unattended run
@@ -10,6 +10,10 @@ When the cycle runs in unattended or research mode and the supervisor's supervis
 #### Scenario: Supervisor task crashes in a research run
 - **WHEN** the supervisor's supervision task raises during a research run
 - **THEN** the cycle escalates, the entity is preserved and shut down, and a caretaker notice is sent
+
+#### Scenario: The poll loop raises in a research run
+- **WHEN** the supervisor's poll loop raises inside `Supervisor.run` during a research run
+- **THEN** `escalate_supervision_lost` runs before the halt, a final snapshot and `escalation.json` exist, and the study runner records the step as `failed:supervisor`
 
 #### Scenario: Operator-present boot unaffected
 - **WHEN** the supervisor's supervision task exits during an operator-present boot
