@@ -56,6 +56,11 @@ _EVENT_TITLE = {
     "supervisor_escalation": "Supervisor escalation",
     "supervision_lost": "supervision lost",
     "welfare_response": "welfare response fired",
+    "welfare_freeze_failed": (
+        "welfare response fired but the freeze could not be written: "
+        "the entity is NOT paused, the freeze is being retried"
+    ),
+    "welfare_freeze_placed": "welfare freeze placed after retry: the entity is paused",
     "input_lost": "input lost",
     "stimulus_source_lost": "stimulus source lost",
     "boot_failed": "boot failed",

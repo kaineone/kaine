@@ -168,6 +168,41 @@ async def test_a_gray_zone_crossing_in_a_research_run_reaches_the_caretaker(bus,
 
 
 @pytest.mark.asyncio
+async def test_a_freeze_that_cannot_be_written_sends_its_own_notices(
+    bus, tmp_path, monkeypatch
+):
+    real_freeze = control_state.freeze
+    calls: list[str] = []
+
+    def _freeze(reason=None, path=None, *, source="operator"):
+        calls.append(source)
+        if len(calls) == 1:
+            raise OSError(28, "No space left on device")
+        return real_freeze(reason=reason, path=path, source=source)
+
+    monkeypatch.setattr(control_state, "freeze", _freeze)
+    ctx = _ctx(bus, tmp_path, mode="research", caretaker_section=CARETAKER_SECTION)
+    await cycle_main._phase_safety_net(ctx)
+    monitor = ctx.welfare_monitor
+    stop = asyncio.Event()
+
+    await monitor._poll_once(stop)
+    await _gray_zone(bus, "sustained_extreme_vad")
+    await _gray_zone(bus, "unmaintained_fatigue")
+    await monitor._poll_once(stop)
+    await asyncio.gather(*ctx._caretaker_tasks)
+    # Not "welfare response fired": the entity is NOT paused.
+    assert ctx.caretaker.events == ["welfare_freeze_failed"]
+
+    # The next poll retries the freeze, writes it, and says so.
+    await monitor._poll_once(stop)
+    await asyncio.gather(*ctx._caretaker_tasks)
+    assert "welfare" in control_state.read_holder_sources()
+    assert ctx.caretaker.events == ["welfare_freeze_failed", "welfare_freeze_placed"]
+    assert ctx.fork_manager.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_a_research_run_without_a_channel_still_builds_it_and_says_so(
     bus, tmp_path, caplog
 ):
