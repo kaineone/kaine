@@ -62,7 +62,7 @@ If the fresh span reaches `T_lp` of awake time with no indicator crossing, the m
 - **THEN** the monitor is armed again and a later crossing requests a rest before any freeze
 
 ### Requirement: A rest that cannot start escalates at once
-If the rest request is refused for any reason other than a sleep already running, or the sleep is aborted, or no sleep with trigger `welfare_rest` starts within `rest_start_timeout_s` (default 30 s of unfrozen time), or the sleep module is not running, the monitor SHALL take the protective response at once with reason `indicator_rest_failed`. A sleep already running when the request arrives SHALL stand as the rest.
+If the rest request cannot be published, or is refused for any reason other than a sleep already running, or the sleep is aborted, or no sleep with trigger `welfare_rest` starts within `rest_start_timeout_s` (default 30 s of unfrozen time), or the sleep module is not running, the monitor SHALL take the protective response at once with reason `indicator_rest_failed`. A sleep already running when the request arrives SHALL stand as the rest.
 
 #### Scenario: No sleep module
 - **WHEN** an indicator crosses in a run whose sleep module has stopped
@@ -93,6 +93,6 @@ When no `affect.state` arrives for three affect publication periods of awake, un
 ### Requirement: The welfare record carries the live indicators
 The welfare observer's `affect_welfare` record SHALL carry, from its own instance of the same evaluator, each indicator's value, bar, over-bar flag and the span's awake seconds, beside the cumulative fields it already writes.
 
-#### Scenario: The reviewer sees the monitor's numbers
+#### Scenario: The record shows the monitor's numbers
 - **WHEN** the monitor and the observer read the same `affect.state` and sleep events
 - **THEN** the indicator values in the record equal the monitor's at the same span end

@@ -1,6 +1,6 @@
 ## Why
 
-In the developmental phase nothing the entity does changes its stimulus. Paper A.6 and A.7 describe a stir, specified and not built (§5.4): when the entity's own boredom or restlessness drive event leads an accessed broadcast, the entity stirs, and the maternal voice may answer after a short delay. A stir relieves restlessness at once, and the novelty of an answer can relieve boredom, credited to the entity's own response (A.4), so a stirring entity's boredom reads as controlled. TRIAGE T1-8(b) lists finishing it before the study.
+In the developmental phase nothing the entity does changes its stimulus. Paper A.6 and A.7 describe a stir, specified and not built (§5.4): when the entity's own boredom or restlessness drive event leads an accessed broadcast, the entity stirs, and the maternal voice may answer after a short delay. A stir relieves restlessness at once, and the novelty of an answer can relieve boredom, credited to the entity's own response (A.4), so a stirring entity's boredom reads as controlled.
 
 It matters now because of `welfare-indicator-response`. In the replayed eight-hour developmental test boot, boredom's indicator crossed at 2.7 awake hours and stayed over its bar. With the indicator response built, the net will rest such an entity, and when boredom recrosses over the fresh span it will preserve and freeze it for review. The study's seed gestates under that net. Without any instrumental relief, the expected outcome is a developmental phase that the net freezes, possibly more than once, before the seed matures.
 
