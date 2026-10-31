@@ -4,6 +4,7 @@
 import os
 import stat
 import warnings
+from collections import namedtuple
 
 import pytest
 
@@ -38,6 +39,24 @@ def _reset_bus_singleton():
     reset_bus_for_tests()
     yield
     reset_bus_for_tests()
+
+
+_FakeDiskUsage = namedtuple("_FakeDiskUsage", "total used free")
+
+
+@pytest.fixture(autouse=True)
+def _ample_study_disk(monkeypatch):
+    """Pin the study runner's default free-disk probe to ample space, so tests
+    that build a ``StudyRunner`` without injecting ``disk_usage`` never depend
+    on the host's real disk. Tests that inject a probe are unaffected."""
+    from kaine.research.ignition_study import runner
+
+    tib = 1024**4
+    monkeypatch.setattr(
+        runner,
+        "_default_disk_usage",
+        lambda path: _FakeDiskUsage(tib, tib // 10, tib - tib // 10),
+    )
 
 
 @pytest.fixture(autouse=True)

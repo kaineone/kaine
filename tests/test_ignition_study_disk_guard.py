@@ -96,6 +96,34 @@ def _short_cycle_script() -> str:
     )
 
 
+def test_runner_without_injected_probe_uses_module_default(
+    tmp_path, known_modules, monkeypatch
+):
+    """The seam stays wired: with no ``disk_usage`` injected, a runner takes the
+    module-level default probe (which the suite pins away from the real disk)."""
+    from kaine.research.ignition_study import runner as runner_module
+
+    calls: list[Path] = []
+
+    class _Usage:
+        total = 1024**4
+        used = 0
+        free = 1024**4
+
+    def _probe(path):
+        calls.append(path)
+        return _Usage()
+
+    monkeypatch.setattr(runner_module, "_default_disk_usage", _probe)
+    study_dir = _create_study(tmp_path)
+    script = tmp_path / "script.py"
+    script.write_text(_short_cycle_script())
+    runner = _runner(study_dir, script)
+    assert runner.disk_usage is _probe
+    runner.disk_usage(runner.study_dir)
+    assert calls == [runner.study_dir]
+
+
 def test_pre_step_disk_refusal(tmp_path, known_modules):
     study_dir = _create_study(tmp_path, viewing_budget_seconds=60.0)
     script = tmp_path / "cycle.py"
