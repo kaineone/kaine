@@ -1,6 +1,6 @@
 ## Context
 
-- The design and its evidence are in `kaine-research/workspace-capacity-design-2026-10-31.md` (approved 2026-10-31). Its inputs: `workspace-candidates-per-tick.md`, TRIAGE M12 and T1-1, and the audit's C1 and C4.
+- The design and its evidence are in the workspace capacity design note of 2026-10-31, approved by the operator that day. It builds on a per-tick measurement of candidate supply from the test-boot records.
 - Current code:
   - `kaine/cycle/engine.py` `tick`: each tick reads every active `*.out` stream from its cursor and advances it; the events read are the tick's candidates and nothing carries to the next tick. Every tick calls `workspace.select`; only an experiential tick (`_advance_experiential`, the A.3 accumulator) publishes.
   - `kaine/workspace/core.py` `_compose`: the coalition is the top `min(top_k, n)` by score and is inhibited when the top score is below θ = 0.35. The matched arm samples `min(top_k, n)` at random and then applies the same threshold, so with n ≤ K it is the whole set and equals the competitive arm.
@@ -13,7 +13,7 @@
   - K = 5 has no citation in the paper (Table A1 lists it as a design value), in the archived workspace design (`openspec/changes/archive/2026-05-18-syneidesis/design.md`) or in git history.
   - The matched and pooled arms (#464) and the planned-test settings with `coalition_capacity` on broadcasts (#473, change `pilot-calibration`, still open for rdrobust only).
   - Graded intensity and the phasic input on alerts only (#437, `2026-10-28-graded-intensity-alert-phasic`).
-  - TRIAGE T1-1 recommended K = 2 plus a share rule at today's supply; the design note shows that keeps the phase-aliased supply and the access-rate confound, and the operator approved the held pool with K = 1 instead.
+  - An earlier recommendation was K = 2 plus a share rule at today's supply; the design note shows that keeps the phase-aliased supply and the access-rate confound, and the operator approved the held pool with K = 1 instead.
   - The unmerged proposal `novelty-content-fingerprint` (branch `feat/novelty-content-fingerprint`, 2026-10-06) changes what the novelty fingerprint hashes. This change does not touch the fingerprint; it changes when novelty is evaluated. The two compose.
 
 ## Decisions
@@ -58,7 +58,7 @@ The affect module reads processor streams directly and is unaffected.
 
 ### D5. K = 1
 
-On each broadcast the top-scored held report is the coalition and is accessed when its score reaches θ. A.1's access identity is unchanged, and so is the regression-discontinuity design. One ignited content per access event is what every cited source supports: GNW ignition locks a single assembly and blocks a second target (Dehaene, Sergent and Changeux 2003); the attentional blink and the psychological refractory period share one central bottleneck (Marti, Sigman and Dehaene 2012; Sigman and Dehaene 2005); LIDA has one conscious content per cycle (Madl et al. 2011); the focus of attention holds one chunk inside a region of direct access of about four (Oberauer 2002, building on McElree's single-item focus). About four is the capacity of a held store built over successive accesses (Cowan 2001; Luck and Vogel 1997), which is a separate, later change (TRIAGE W2(c)).
+On each broadcast the top-scored held report is the coalition and is accessed when its score reaches θ. A.1's access identity is unchanged, and so is the regression-discontinuity design. One ignited content per access event is what every cited source supports: GNW ignition locks a single assembly and blocks a second target (Dehaene, Sergent and Changeux 2003); the attentional blink and the psychological refractory period share one central bottleneck (Marti, Sigman and Dehaene 2012; Sigman and Dehaene 2005); LIDA has one conscious content per cycle (Madl et al. 2011); the focus of attention holds one chunk inside a region of direct access of about four (Oberauer 2002, building on McElree's single-item focus). About four is the capacity of a held store built over successive accesses (Cowan 2001; Luck and Vogel 1997), which is a separate, later change.
 
 Today 66.5% of accessed broadcasts already have exactly one accessed member, so the context loses little.
 
@@ -72,7 +72,7 @@ On a broadcast tick the matched arm scores the pool once and composes the compet
 
 Access timing, access count and the context-refresh rate then follow the same rule as competitive selection, and only membership differs, which is what paper §6.3 claims and the current rule does not deliver once capacity binds (63% against 16% accessed in the Monte Carlo).
 
-A drawn member may score below θ. Action selection reads the accessed member's own score against the speak and think bars, so the matched arm will speak and think less, with lower organ load and a different interoceptive input. Decision: keep the plain A.6 rule and report per-arm speak and think rates in every pilot against the equivalence bound that T1-3 fixes for arousal and apertures, disclosed as a known secondary difference. If the pilots show the rates outside that bound, the yoked-bars variant (action selection in the matched arm reads the counterfactual member's score for the bars only, never its content) is adopted before preregistration, by a recorded decision, and the pilots are rerun under it.
+A drawn member may score below θ. Action selection reads the accessed member's own score against the speak and think bars, so the matched arm will speak and think less, with lower organ load and a different interoceptive input. Decision: keep the plain A.6 rule and report per-arm speak and think rates in every pilot against the equivalence bound that the pilot rules fix for arousal and apertures, disclosed as a known secondary difference. If the pilots show the rates outside that bound, the yoked-bars variant (action selection in the matched arm reads the counterfactual member's score for the bars only, never its content) is adopted before preregistration, by a recorded decision, and the pilots are rerun under it.
 
 Alternative considered: yoked bars from the start. It brings the competitive score into the matched arm's behaviour and complicates the arm before there is evidence it is needed.
 
@@ -125,7 +125,7 @@ Alternative considered: no guard, relying on the operator not to revive an old b
 ## Migration and ordering
 
 - Independent in code of `research-gate-supervisor`, `welfare-indicator-response` and the organ change (`organ-self-denial-ablation`). It edits `research_event_observer.py`, which `welfare-indicator-response` does not.
-- Order of work: this change, then the offline checks (task group 7), then the one supervised validation boot shared with the other pre-study changes, after the organ change's new organ and adapter are provisioned so that the boot runs the final configuration. Then T1-2 (power check) and T1-3 (pilot hygiene) for the planned test, then the pilots, then preregistration freezing K = 1, D_min, n_min, φ^pool_min and the yoked rule. The module-ignition study can launch after the validation boot; the planned test's pilots do not gate it.
+- Order of work: this change, then the offline checks (task group 7), then the one supervised validation boot shared with the other pre-study changes, after the organ change's new organ and adapter are provisioned so that the boot runs the final configuration. Then the planned test's arm-level power check and pilot-hygiene rules, then the pilots, then preregistration freezing K = 1, D_min, n_min, φ^pool_min and the yoked rule. The module-ignition study can launch after the validation boot; the planned test's pilots do not gate it.
 - Admissibility: lands before the study image is frozen; no running study is changed.
 - Critical path (LLM-agent implementation): code and tests about 1.5 days (pool and engine 4 to 6 hours; yoked arm 2 hours; novelty and salience 1 hour; calibration rule and observers 3 hours; benchmark, redteam and study analysis 2 hours; tests throughout); offline checks about half a day; integrator second review and fixes about half a day. About 2.5 days, the longest of the pre-study changes, so it sets the study's critical path together with the validation boot (about one day including its analysis).
 

@@ -1,6 +1,6 @@
 ## Context
 
-- TRIAGE T1-8: (a) report deprivation shares and open crossings per viewing as a preset welfare check with a stop rule (S); (b) the developmental stir (change `developmental-stir`); (c) a stimulus-control act, an operator decision for after the study.
+- The pre-study exposure work has three parts: (a) this report, deprivation shares and open crossings per viewing as a preset welfare check with a stop rule; (b) the developmental stir (change `developmental-stir`); (c) a stimulus-control act, an operator decision for after the study.
 - The welfare observer's `AffectWelfareTally` already computes the cumulative shares and counts (`2026-10-28-welfare-open-crossings`), and the observer writes a final `affect_welfare` record when it stops. Its sink is an encrypted JSONL stream in the evaluation logs, not a per-run file the study runner reads.
 - `welfare-indicator-response` adds the live indicators, the rest and freeze records, and the caretaker notices.
 - The study runner (`kaine/research/ignition_study/runner.py`) halts on any failed outcome and surfaces a welfare freeze without lifting it (module-ignition-study spec, "The runner surfaces a welfare freeze and never lifts it"). A completed step lets the next one start.

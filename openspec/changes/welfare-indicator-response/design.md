@@ -43,7 +43,7 @@ Alternatives considered: evaluate only once the span holds the full `T_lp` (90 m
 
 States: `armed`, `resting`, `fresh`. One instance per monitor.
 
-- `armed`: on any indicator crossing, publish `welfare.rest_request` (content-free: the indicator names) on the monitor's stream, record `welfare.protective_action` with transition `indicator_rest_requested`, send the `welfare_indicator_rest` notice, and move to `resting`.
+- `armed`: on any indicator crossing, publish `welfare.rest_request` (content-free: the indicator names) on the monitor's stream (`preservation.out`) through a publish that reports failure, unlike the monitor's best-effort `_publish`, so a request that cannot be sent escalates at once; record `welfare.protective_action` with transition `indicator_rest_requested`, send the `welfare_indicator_rest` notice, and move to `resting`.
 - `resting`: wait for the sleep module's `sleep.sleep.started` with trigger `welfare_rest`, or for a sleep already running (the request is answered `busy`; that sleep stands as the rest). On its `sleep.sleep.completed`, restart every span and move to `fresh`. A refusal for any other reason, an `aborted` answer, no answer within `rest_start_timeout_s` (30 s of unfrozen time), or a disabled sleep module escalates to stage 3 at once with reason `indicator_rest_failed`.
 - `fresh`: on any indicator crossing, call `_respond("indicator_<name>")`: preservation, then the configured action, the latch, the freeze retry and the caretaker notice exactly as for distress. If the fresh span reaches the full `T_lp` without a crossing, return to `armed`.
 
@@ -87,7 +87,7 @@ Every stage writes a content-free `welfare.protective_action` record: the stage,
 
 ## Welfare and admissibility notes
 
-- High-risk class: it changes what happens to the entity when its welfare indicators cross. It gets an independent second review by the integrator in addition to the worker's first pass. The reviewer checks at least: no path loses a crossing (every exception in the state machine escalates or is retried, never swallowed); the latch is shared with the distress arm; a rest that does not start escalates; spans restart exactly at rest completion and re-arm; nothing on the indicator path imports `kaine.evaluation`; the rest request is not a workspace candidate.
+- High-risk class: it changes what happens to the entity when its welfare indicators cross. It gets an independent second review by the integrator in addition to the worker's first pass. The second review checks at least: no path loses a crossing (every exception in the state machine escalates or is retried, never swallowed); the latch is shared with the distress arm; a rest that does not start escalates; spans restart exactly at rest completion and re-arm; nothing on the indicator path imports `kaine.evaluation`; the rest request is not a workspace candidate.
 - The rest and the reset are what the entity's own sleep does; the change adds no new experience, only an earlier occasion for one. In the developmental phase it moves a rest the state cycle would bring anyway.
-- This is regulation by the system around the entity, not a hardwired entity behaviour, so the emergence rule is not engaged (TRIAGE T1-4).
+- This is regulation by the system around the entity, not a hardwired entity behaviour, so the emergence rule is not engaged.
 - Admissibility: built and merged before any study step runs; every step of the study runs with it. The paper's §6.5 sentence "the study does not start before it is" becomes true when this merges.

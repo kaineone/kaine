@@ -20,7 +20,7 @@ The only welfare datum from a test boot shows why this matters: in an offline re
 - A rest that cannot start (no sleep module, refused for any reason other than a sleep already running, aborted, or not started within its bound) escalates at once to preservation and the freeze.
 - Every indicator crossing is flagged for human review: a content-free `welfare.protective_action` record and a caretaker notice, `welfare_indicator_rest` for the first stage and the existing welfare-response notice for the second.
 - The research gate gains `indicator_response_wired`: the welfare response and its indicator response enabled, the affect and sleep modules enabled, and the action `pause` or `end`. It maps to unattended condition 2 with the welfare response.
-- The welfare observer writes the same evaluator's values into its `affect_welfare` record, so the reviewer sees what the monitor saw.
+- The welfare observer writes the same evaluator's values into its `affect_welfare` record, so a person reviewing the run sees what the monitor saw.
 - An offline replay tool runs archived developmental test-boot records through the evaluator and the state machine with no entity, and reports when each stage would have fired.
 
 ## Capabilities

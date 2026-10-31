@@ -1,6 +1,6 @@
 ## Why
 
-The module supervisor detects a hung or dead module, freezes the cycle, snapshots the last good state and restarts the module; past its restart limit it snapshots, shuts the cycle down and escalates. Only the unattended boot requires it (unattended condition 6). A research run, which also runs with no person present, starts with the supervisor off unless the operator config turns it on, and the shipped config and the study overlay leave it off. Paper §3.7 and §5.4 therefore describe the supervisor as running "when the operator enables it" (audit item M17, TRIAGE T1-5), and a module that hangs in the middle of a study viewing stays hung until a person looks.
+The module supervisor detects a hung or dead module, freezes the cycle, snapshots the last good state and restarts the module; past its restart limit it snapshots, shuts the cycle down and escalates. Only the unattended boot requires it (unattended condition 6). A research run, which also runs with no person present, starts with the supervisor off unless the operator config turns it on, and the shipped config and the study overlay leave it off. Paper §3.7 and §5.4 therefore describe the supervisor as running "when the operator enables it", and a module that hangs in the middle of a study viewing stays hung until a person looks.
 
 The unattended gate already has the check, its self-test and its failure reasons. The research gate does not call them.
 
