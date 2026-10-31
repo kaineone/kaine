@@ -173,7 +173,7 @@ def test_every_backend_refuses_an_empty_capability_probe_set(tmp_path, monkeypat
 
     monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
     monkeypatch.setenv("KAINE_MODEL_SERVER_API_KEY", "boot-secret")
-    for name in ("unsloth", "trl", "peft", "datasets"):
+    for name in ("transformers", "peft", "bitsandbytes"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     empty = tmp_path / "capability_empty.jsonl"
     empty.write_text("", encoding="utf-8")

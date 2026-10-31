@@ -57,7 +57,7 @@ def test_subprocess_backend_selects_subprocess_trainer(tmp_path, _approved):
 def test_in_process_backend_runs_the_trainer_script(tmp_path, _approved, monkeypatch):
     import types
 
-    for name in ("unsloth", "trl", "peft", "datasets"):
+    for name in ("transformers", "peft", "bitsandbytes"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
 
     trainer = _resolve_trainer(_cfg(tmp_path, trainer_backend="in_process", trainer_python=""))

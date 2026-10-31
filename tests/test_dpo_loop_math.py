@@ -98,8 +98,6 @@ def test_completion_logprob_matches_direct_computation():
     enc = MODULE.encode_dpo_row(tokenizer, row, max_length=768)
     input_ids = enc["chosen_input_ids"]
     labels = enc["chosen_labels"]
-    n = sum(1 for label in labels if label != -100)
-
     got = MODULE.completion_logprob(model, input_ids, labels, "cpu")
 
     with torch.no_grad():
@@ -111,8 +109,6 @@ def test_completion_logprob_matches_direct_computation():
     gathered = token_logp.gather(1, target_ids.unsqueeze(1)).squeeze(1)
     completion_indices = [i for i, label in enumerate(labels) if label != -100]
     direct = sum(gathered[i - 1] for i in completion_indices if i > 0)
-    if n == len(input_ids):
-        direct = direct
     torch.testing.assert_close(got, direct)
 
 
