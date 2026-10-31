@@ -75,7 +75,7 @@ Before publishing, the module applies the heard rule and `strip_vectors` to `con
 
 ## Risks
 
-- **Template similarity.** Serialized traces of different moments look alike to a text embedder because their templates match (audit finding E4, inferred from the format, not measured). Recall may return a moment with the same kind of surprise rather than a related one. That is still a true memory, but the live-path test and a measured recall-precision check on an entity-free run (task 6.1) say how often the returned trace shares its film moment or its own-speech content with the cue.
+- **Template similarity.** Serialized traces of different moments look alike to a text embedder because their templates match (architecture-completeness notes of 2026-10-31, E4, inferred from the format, not measured). Recall may return a moment with the same kind of surprise rather than a related one. That is still a true memory, but the live-path test and a measured recall-precision check on an entity-free run (task 6.1) say how often the returned trace shares its film moment or its own-speech content with the cue.
 - **Legacy traces.** A preserved entity's earlier traces have no members, so its old memories render as familiarity. That is accurate. It is not repaired by parsing.
 - **Store size.** Members add the felt fields of each member, a small fraction of a trace's embedding and text. The storage budget and pruning rules already bound the stores.
 - **Organ load.** A recall line is one more awareness line within the existing caps.
