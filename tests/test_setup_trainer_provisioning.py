@@ -147,7 +147,7 @@ def test_probe_found_when_import_succeeds(tmp_path, monkeypatch):
     assert str(fake_py) in detail
     # Probed the real interpreter with an explicit `import unsloth` argv.
     assert captured["argv"][0] == str(fake_py)
-    assert captured["argv"][-1] == "import unsloth"
+    assert captured["argv"][-1] == "import transformers, peft, bitsandbytes"
 
 
 def test_probe_not_found_when_import_fails(tmp_path, monkeypatch):
@@ -157,14 +157,14 @@ def test_probe_not_found_when_import_fails(tmp_path, monkeypatch):
     class _Proc:
         returncode = 1
         stdout = ""
-        stderr = "ModuleNotFoundError: No module named 'unsloth'"
+        stderr = "ModuleNotFoundError: No module named 'peft'"
 
     monkeypatch.setattr(
         trainer_provisioning.subprocess, "run", lambda *a, **k: _Proc()
     )
     found, detail = trainer_provisioning.probe_trainer(fake_py, backend="cuda")
     assert found is False
-    assert "cannot import unsloth" in detail
+    assert "cannot import the training packages" in detail
 
 
 def test_probe_never_raises_on_os_error(tmp_path, monkeypatch):

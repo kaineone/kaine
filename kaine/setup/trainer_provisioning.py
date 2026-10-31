@@ -39,13 +39,14 @@ This module mirrors the detect-and-guide pattern in
 :mod:`kaine.setup.dependencies`: it maps the detected GPU vendor
 (``kaine.hardware.describe_host()["backend"]``) to honest guidance (a doc URL +
 ordered steps) and runs a **real** detection probe — does the candidate
-interpreter exist AND can it ``import unsloth``? — via an explicit-argv
+interpreter exists AND can it ``import transformers, peft, bitsandbytes``? — via an explicit-argv
 subprocess with no shell and a timeout. It NEVER auto-installs the multi-GB
 trainer environment and NEVER fakes a probe result. A probe that cannot run
 reports not-found honestly rather than guessing.
 
-Nothing here imports ``unsloth`` in the entity-runtime venv (it is not installed
-there); the import check runs only inside the *candidate external interpreter*.
+Nothing here imports the training packages (transformers, peft, bitsandbytes) in
+the entity-runtime venv (they are not installed there); the import check runs
+only inside the *candidate external interpreter*.
 The transformers-version check runs the same way — in the candidate interpreter
 only, never in this venv.
 """
@@ -63,9 +64,9 @@ STUDIO_DEFAULT_INTERPRETER = (
     Path.home() / ".unsloth" / "studio" / "unsloth_studio" / "bin" / "python"
 )
 
-#: Wall-clock ceiling for the ``import unsloth`` probe (seconds). Importing the
-#: heavy trainer stack is slow but bounded; a hung interpreter must not stall
-#: setup.
+#: Wall-clock ceiling for the ``import transformers, peft, bitsandbytes`` probe
+#: (seconds). Importing the heavy trainer stack is slow but bounded; a hung
+#: interpreter must not stall setup.
 PROBE_TIMEOUT_S = 120.0
 
 
@@ -188,8 +189,8 @@ def probe_trainer(
 
     Resolves the candidate interpreter (the given path, else the known Studio
     default for a CUDA host), and reports found iff that interpreter EXISTS and
-    running ``<python> -c "import unsloth"`` with an explicit argv (no shell) and
-    a timeout exits 0. Never imports unsloth in this (KAINE) venv; never raises —
+    running ``<python> -c "import transformers, peft, bitsandbytes"`` with an explicit argv (no shell) and
+    a timeout exits 0. Never imports the training packages in this (KAINE) venv; never raises —
     any failure to launch/run reports not-found with a reason.
 
     Returns ``(found, detail)`` where ``detail`` is the resolved path plus the
@@ -207,22 +208,22 @@ def probe_trainer(
 
     try:
         proc = subprocess.run(
-            [str(candidate), "-c", "import unsloth"],
+            [str(candidate), "-c", "import transformers, peft, bitsandbytes"],
             capture_output=True,
             text=True,
             timeout=timeout_s,
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return (False, f"{candidate}: import unsloth timed out after {timeout_s:.0f}s")
+        return (False, f"{candidate}: import transformers, peft, bitsandbytes timed out after {timeout_s:.0f}s")
     except OSError as exc:
         return (False, f"{candidate}: could not launch ({type(exc).__name__}: {exc})")
 
     if proc.returncode == 0:
-        return (True, f"{candidate}: usable (import unsloth succeeded)")
+        return (True, f"{candidate}: usable (import transformers, peft, bitsandbytes succeeded)")
     tail = (proc.stderr or proc.stdout or "").strip().splitlines()
     reason = tail[-1] if tail else f"exit {proc.returncode}"
-    return (False, f"{candidate}: cannot import unsloth ({reason})")
+    return (False, f"{candidate}: cannot import the training packages ({reason})")
 
 
 #: The minimum transformers major version required for Qwen3.5 support.

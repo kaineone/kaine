@@ -243,7 +243,7 @@ The extras declared in `pyproject.toml` include at least the following. For the 
 | `audio` | `sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av` |
 | `vision` | `opencv-python-headless`, `transformers`, `Pillow` |
 | `reasoning` | `inferactively-pymdp`, `jax[cpu]` |
-| `training` | `unsloth`, `trl`, `peft`, `datasets` |
+| `training` | `transformers`, `peft`, `bitsandbytes`, `accelerate` |
 | `worldmodel` | `jax[cpu]`, `chex`, `einops` |
 | `oscillator` | `snntorch`, `scipy` |
 | `test` | `pytest`, `pytest-asyncio`, `pytest-xdist`, `fakeredis`, `import-linter` |

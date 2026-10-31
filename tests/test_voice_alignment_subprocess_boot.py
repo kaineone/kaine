@@ -65,9 +65,9 @@ def test_in_process_backend_runs_the_trainer_script(tmp_path, _approved, monkeyp
     assert trainer.run_in_process is True
 
 
-def test_in_process_backend_fails_closed_without_training_deps(tmp_path, _approved):
-    for name in ("unsloth", "trl", "peft", "datasets"):
-        sys.modules.pop(name, None)
+def test_in_process_backend_fails_closed_without_training_deps(tmp_path, _approved, monkeypatch):
+    for name in ("transformers", "peft", "bitsandbytes"):
+        monkeypatch.setitem(sys.modules, name, None)
 
     with pytest.raises(VoiceAlignmentConfigError) as excinfo:
         _resolve_trainer(_cfg(tmp_path, trainer_backend="in_process", trainer_python=""))

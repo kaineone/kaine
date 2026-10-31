@@ -98,7 +98,7 @@ If a service is shared with another entity or managed outside KAINE, set `[servi
 
 ## Voice-alignment trainer by GPU vendor
 
-The optional sleep-cycle voice-alignment trainer (the sleep module) runs unsloth in its own environment, separate from the entity-runtime venv. Which unsloth a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
+The optional sleep-cycle voice-alignment trainer (the sleep module) runs in its own environment, separate from the entity-runtime venv. Which trainer interpreter a host can use depends on the GPU vendor reported by `describe_host()["backend"]`:
 
 | Detected backend | Trainer | Notes |
 |---|---|---|
@@ -108,7 +108,7 @@ The optional sleep-cycle voice-alignment trainer (the sleep module) runs unsloth
 
 On native hosts the trainer is driven with `trainer_backend = "subprocess"` and a `trainer_python` path. On container hosts use `trainer_backend = "job_queue"` with the `kaine-trainer` compose service. `trainer_backend` defaults to `"in_process"` and the default `hot_swap_mode` is `"manual"`; it is forced to manual when a model server is shared. See [`config/kaine.toml`](../../config/kaine.toml). For details see [Voice alignment](../10-sleep/voice-alignment.md).
 
-The first-run wizard (`python -m kaine.setup`) surfaces the trainer as an optional Stage-2 step. It reads the detected backend, prints vendor-appropriate guidance, and probes the candidate interpreter with `import unsloth`. It never auto-installs the multi-GB trainer env and never records an interpreter the probe could not verify. When a usable interpreter is found, it offers to set `[sleep.voice_alignment].trainer_python` and `trainer_backend = "subprocess"` in `config/kaine.operator.toml`.
+The first-run wizard (`python -m kaine.setup`) surfaces the trainer as an optional Stage-2 step. It reads the detected backend, prints vendor-appropriate guidance, and probes the candidate interpreter with `import transformers, peft, bitsandbytes`. It never auto-installs the multi-GB trainer env and never records an interpreter the probe could not verify. When a usable interpreter is found, it offers to set `[sleep.voice_alignment].trainer_python` and `trainer_backend = "subprocess"` in `config/kaine.operator.toml`.
 
 ### Qwen3.5 trainer prerequisites
 
@@ -118,10 +118,10 @@ Two extra requirements apply when training against a Qwen3.5 base model.
 
 ```bash
 # Run this inside the Studio env, not the KAINE venv.
-pip install --upgrade --force-reinstall --no-cache-dir unsloth unsloth_zoo
+pip install --upgrade --force-reinstall --no-cache-dir "transformers>=5.3.0,<6" "peft>=0.21.0,<1" "bitsandbytes>=0.50.2,<1" "accelerate>=1.14.1,<2"
 ```
 
-This pulls transformers v5 as a dependency. Use `pip install` directly rather than `unsloth studio update`, because the Studio update command re-triggers a buggy llama.cpp prebuilt step (`--simple-policy` arg error) that silently degrades to CPU-only. The force-reinstall may move torch from a cuXXX build to a PyPI default build (for example cu130 to cu128). The result still works.
+This installs transformers v5. Use `pip install` directly rather than `unsloth studio update`, because the Studio update command re-triggers a buggy llama.cpp prebuilt step (`--simple-policy` arg error) that silently degrades to CPU-only. The force-reinstall may move torch from a cuXXX build to a PyPI default build (for example cu130 to cu128). The result still works.
 
 **Mainline llama.cpp GGUF conversion.** Ollama's internal GGUF converter produces a non-standard `qwen35.rope.dimension_sections` layout that mainline llama.cpp and Unsloth Studio cannot load (length mismatch error). Export Qwen3.5 HF weights with `convert_hf_to_gguf.py` from the mainline [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) repo. Do not copy GGUFs from Ollama's blob store for use outside Ollama.
 

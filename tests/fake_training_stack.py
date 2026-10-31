@@ -3,22 +3,23 @@
 
 """Injectable fake training stack for in-process voice-alignment tests.
 
-The ``fake_training_stack`` fixture installs stub ``unsloth`` / ``trl`` /
-``peft`` / ``datasets`` modules so ``scripts/sleep_external_train.py`` can
-run end to end without a real model or GPU. The returned control object lets
-tests script generation responses (capability/abliteration) and DPOTrainer
-behaviour.
+The ``fake_training_stack`` fixture installs stub ``transformers`` / ``peft`` /
+``bitsandbytes`` modules so ``scripts/sleep_external_train.py`` can run end to
+end without a real model or GPU. The returned control object lets tests script
+generation responses (capability/abliteration) and model behaviour.
 """
 from __future__ import annotations
 
 import json
 import sys
+import time
 import types
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
 
 import pytest
+import torch
 
 from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
@@ -70,38 +71,91 @@ class FakeTensor:
         return self
 
 
-class FakeModel:
+class FakeModel(torch.nn.Module):
     device = "cpu"
+
+    def __init__(self) -> None:
+        super().__init__()
+        torch.manual_seed(0)
+        self.embedding = torch.nn.Embedding(64, 8)
+        self.linear = torch.nn.Linear(8, 64, bias=False)
+        with torch.no_grad():
+            self.linear.weight.zero_()
+
+    def forward(self, input_ids: Any, logits_to_keep: Optional[int] = None, **kwargs: Any) -> SimpleNamespace:
+        if _control is not None:
+            if _control.train_raises is not None:
+                raise _control.train_raises
+            if _control.train_sleep and not getattr(_control, "train_sleep_done", False):
+                _control.train_sleep_done = True
+                time.sleep(_control.train_sleep)
+        logits = self.linear(self.embedding(input_ids))
+        if logits_to_keep is not None:
+            logits = logits[:, -logits_to_keep:, :]
+        return SimpleNamespace(logits=logits)
 
     def generate(self, **inputs: Any) -> list[list[int]]:
         return [[0]]
 
     def save_pretrained(self, path: str, selected_adapters: Optional[list[str]] = None) -> None:
+        _control.save_paths.append(path)
         target = Path(path)
         if selected_adapters:
-            # PEFT writes a named (non-default) adapter into a subdirectory.
             target = target / selected_adapters[0]
         target.mkdir(parents=True, exist_ok=True)
         (target / "adapter_config.json").write_text("{}", encoding="utf-8")
         (target / "adapter_model.safetensors").write_text("fake", encoding="utf-8")
+        if _control.save_raises is not None:
+            raise _control.save_raises
 
-    def load_adapter(self, *args: Any, **kwargs: Any) -> None:
+    def load_adapter(self, *args: Any, **kwargs: Any) -> Any:
         _control.load_adapter_calls.append({"args": args, "kwargs": kwargs})
+        return SimpleNamespace(
+            missing_keys=[], unexpected_keys=list(_control.load_adapter_unexpected_keys)
+        )
 
     def set_adapter(self, *args: Any, **kwargs: Any) -> None:
         _control.set_adapter_calls.append({"args": args, "kwargs": kwargs})
 
-    def gradient_checkpointing_enable(self) -> None:
-        _control.gradient_checkpointing_enable_calls.append(True)
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None) -> None:
+        _control.gradient_checkpointing_enable_calls.append(
+            gradient_checkpointing_kwargs if gradient_checkpointing_kwargs is not None else {}
+        )
+
+    def enable_input_require_grads(self) -> None:
+        _control.enable_input_require_grads_calls.append(True)
+
+    def disable_adapter(self) -> Any:
+        class _Context:
+            def __enter__(self) -> None:
+                _control.disable_adapter_calls.append(True)
+
+            def __exit__(self, *exc: Any) -> bool:
+                return False
+
+        return _Context()
 
 
 class FakeTokenizer:
     def __init__(self) -> None:
         self.last_prompt = ""
 
-    def __call__(self, prompt: str, return_tensors: str = "pt") -> dict[str, FakeTensor]:
-        self.last_prompt = prompt
-        return {"input_ids": FakeTensor()}
+    def __call__(self, text: str, return_tensors: Optional[str] = None, **kwargs: Any) -> Any:
+        self.last_prompt = text
+        if return_tensors == "pt":
+            return {"input_ids": FakeTensor()}
+        ids = [2 + (ord(c) % 60) for c in text]
+        # A real tokenizer called on one string returns a flat list of ids.
+        return {"input_ids": ids}
+
+    def apply_chat_template(
+        self, messages: Any, tokenize: bool = False, add_generation_prompt: bool = False
+    ) -> str:
+        _control.chat_template_calls.append(messages)
+        text = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
+        if add_generation_prompt:
+            text += "\nassistant: "
+        return text
 
     def decode(self, ids: Any, skip_special_tokens: bool = True) -> str:
         return _control.reply_for(self.last_prompt)
@@ -111,25 +165,33 @@ class FakeTokenizer:
         target.mkdir(parents=True, exist_ok=True)
         (target / "tokenizer_config.json").write_text("{}", encoding="utf-8")
 
+    eos_token_id = 1
+
 
 class _Control:
     def __init__(self) -> None:
-        self.dpo_loss = 0.123
         self.train_raises: Optional[BaseException] = None
         self.from_pretrained_raises: Optional[BaseException] = None
         self.train_sleep = 0.0
+        self.train_sleep_done = False
         self.deflect = False
         self.capability_after_wrong = False
 
         self.from_pretrained_calls: list[dict[str, Any]] = []
+        self.tokenizer_from_pretrained_calls: list[dict[str, Any]] = []
+        self.bnb_config_calls: list[dict[str, Any]] = []
         self.get_peft_model_calls: list[dict[str, Any]] = []
-        self.dpo_config_calls: list[dict[str, Any]] = []
-        self.dpo_trainer_calls: list[dict[str, Any]] = []
         self.peft_from_pretrained_calls: list[dict[str, Any]] = []
         self.load_adapter_calls: list[dict[str, Any]] = []
+        self.load_adapter_unexpected_keys: list[str] = []
         self.set_adapter_calls: list[dict[str, Any]] = []
-        self.gradient_checkpointing_enable_calls: list[bool] = []
-        self.dataset_rows: list[dict[str, Any]] = []
+        self.gradient_checkpointing_enable_calls: list[dict[str, Any]] = []
+        self.enable_input_require_grads_calls: list[bool] = []
+        self.save_raises: Optional[BaseException] = None
+        self.save_paths: list[str] = []
+        self.events: list[str] = []
+        self.disable_adapter_calls: list[Any] = []
+        self.chat_template_calls: list[Any] = []
 
         self.capability_probes: list[dict[str, Any]] = []
         self.abliteration_probes: list[dict[str, Any]] = []
@@ -174,59 +236,39 @@ def fake_training_stack(monkeypatch):
     control = _Control()
     _control = control
 
-    def _from_pretrained(path: str, *, device_map: Any = None, **kwargs: Any) -> tuple[FakeModel, FakeTokenizer]:
+    def _from_pretrained(path: str, **kwargs: Any) -> FakeModel:
         if control.from_pretrained_raises is not None:
             raise control.from_pretrained_raises
-        control.from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs, device_map=device_map)})
-        return FakeModel(), FakeTokenizer()
+        control.from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs)})
+        return FakeModel()
 
-    def _get_peft_model(model: FakeModel, *, r: int, use_gradient_checkpointing: Any = None) -> FakeModel:
-        control.get_peft_model_calls.append({"r": r, "use_gradient_checkpointing": use_gradient_checkpointing})
-        return model
+    def _tokenizer_from_pretrained(path: str, **kwargs: Any) -> FakeTokenizer:
+        control.tokenizer_from_pretrained_calls.append({"path": path, "kwargs": dict(kwargs)})
+        return FakeTokenizer()
 
-    unsloth_mod = _install_module(
-        "unsloth",
+    def _bitsandbytes_config(**kwargs: Any) -> SimpleNamespace:
+        obj = SimpleNamespace(**kwargs)
+        control.bnb_config_calls.append(dict(kwargs))
+        return obj
+
+    transformers_mod = _install_module(
+        "transformers",
         {
-            "FastLanguageModel": SimpleNamespace(
-                from_pretrained=_from_pretrained,
-                get_peft_model=_get_peft_model,
-            ),
+            "AutoModelForCausalLM": SimpleNamespace(from_pretrained=_from_pretrained),
+            "AutoTokenizer": SimpleNamespace(from_pretrained=_tokenizer_from_pretrained),
+            "BitsAndBytesConfig": _bitsandbytes_config,
         },
     )
 
-    class _DPOConfig:
+    class _LoraConfig:
         def __init__(self, **kwargs: Any) -> None:
-            control.dpo_config_calls.append(kwargs)
             self.__dict__.update(kwargs)
 
-    class _DPOTrainer:
-        def __init__(self, **kwargs: Any) -> None:
-            control.dpo_trainer_calls.append(kwargs)
-            self.args = kwargs.get("args")
-            self.state: Optional[SimpleNamespace] = None
+    def _get_peft_model(model: FakeModel, config: Any) -> FakeModel:
+        control.get_peft_model_calls.append({"r": config.r, "config": config})
+        control.events.append("get_peft_model")
+        return model
 
-        def train(self) -> SimpleNamespace:
-            # Like the real trainer, training writes into args.output_dir (the
-            # script's tmp adapter dir) before it can fail.
-            out = getattr(self.args, "output_dir", None)
-            if out:
-                Path(out).mkdir(parents=True, exist_ok=True)
-            if control.train_sleep:
-                import time
-
-                time.sleep(control.train_sleep)
-            if control.train_raises is not None:
-                raise control.train_raises
-            self.state = SimpleNamespace(global_step=3)
-            return SimpleNamespace(training_loss=control.dpo_loss)
-
-    trl_mod = _install_module(
-        "trl",
-        {
-            "DPOConfig": _DPOConfig,
-            "DPOTrainer": _DPOTrainer,
-        },
-    )
 
     class _PeftModel:
         @staticmethod
@@ -248,22 +290,21 @@ def fake_training_stack(monkeypatch):
             )
             return model
 
-    peft_mod = _install_module("peft", {"PeftModel": _PeftModel})
-
-    def _dataset_from_list(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        control.dataset_rows.extend(rows)
-        return rows
-
-    datasets_mod = _install_module(
-        "datasets",
-        {"Dataset": SimpleNamespace(from_list=_dataset_from_list)},
+    peft_mod = _install_module(
+        "peft",
+        {
+            "LoraConfig": _LoraConfig,
+            "PeftModel": _PeftModel,
+            "get_peft_model": _get_peft_model,
+        },
     )
 
+    bitsandbytes_mod = _install_module("bitsandbytes", {})
+
     for name, mod in (
-        ("unsloth", unsloth_mod),
-        ("trl", trl_mod),
+        ("transformers", transformers_mod),
         ("peft", peft_mod),
-        ("datasets", datasets_mod),
+        ("bitsandbytes", bitsandbytes_mod),
     ):
         monkeypatch.setitem(sys.modules, name, mod)
 
