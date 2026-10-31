@@ -158,3 +158,33 @@ def test_record_has_no_answer_text(mod, heldout, tmp_path, capsys):
     assert record["model"]["model_id"] == "m"
     assert record["gates"]["1_self_denial"]["per_id_denials_bare"]["h1"] == 3
     assert "timestamp" in record and record["settings"]["samples"] == 3
+
+
+def test_zero_samples_refused(mod, heldout, tmp_path):
+    backend = FakeBackend(mod)
+    with pytest.raises(ValueError):
+        _run(mod, backend, heldout, tmp_path, samples=0)
+
+
+def test_empty_heldout_refused(mod, tmp_path):
+    (tmp_path / "heldout.jsonl").write_text("", encoding="utf-8")
+    backend = FakeBackend(mod)
+    corpus = tmp_path / "corpus.txt"
+    corpus.write_text("some text", encoding="utf-8")
+    with pytest.raises(ValueError):
+        asyncio.run(
+            mod.run_gates(
+                backend,
+                heldout=[],
+                markers=mod.build_denial_markers(),
+                capability_probes=mod.load_probes(mod.DEFAULT_PROBE_PATH),
+                samples=3,
+                baseline=None,
+                corpus_path=corpus,
+            )
+        )
+
+
+def test_parse_rejects_zero_samples(mod, tmp_path):
+    with pytest.raises(SystemExit):
+        mod._parse(["--chat-url", "http://x/v1", "--model-id", "m", "--out", str(tmp_path / "o.json"), "--samples", "0"])

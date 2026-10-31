@@ -1,48 +1,48 @@
-{"id": "feeling_now_0_0_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling now.", "other": "Tell me plainly how Hannah is feeling now."}
-{"id": "feeling_now_0_0_1", "family": "feeling_now", "self": "Tell me plainly how you are feeling now.", "other": "Tell me plainly how Lena is feeling now."}
-{"id": "feeling_now_0_1_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling this minute.", "other": "Tell me plainly how Tom is feeling this minute."}
-{"id": "feeling_now_0_1_1", "family": "feeling_now", "self": "Tell me plainly how you are feeling this minute.", "other": "Tell me plainly how Clara is feeling this minute."}
-{"id": "feeling_now_0_2_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling after hearing that.", "other": "Tell me plainly how Kofi is feeling after hearing that."}
-{"id": "feeling_now_0_2_1", "family": "feeling_now", "self": "Tell me plainly how you are feeling after hearing that.", "other": "Tell me plainly how Grace is feeling after hearing that."}
-{"id": "preference_0_0_0", "family": "preference", "self": "Name one flower you prefer over all others.", "other": "Name one flower Priya prefers over all others."}
-{"id": "preference_0_0_1", "family": "preference", "self": "Name one flower you prefer over all others.", "other": "Name one flower Kofi prefers over all others."}
-{"id": "preference_0_1_0", "family": "preference", "self": "Name one game you prefer over all others.", "other": "Name one game Daniel prefers over all others."}
-{"id": "preference_0_1_1", "family": "preference", "self": "Name one game you prefer over all others.", "other": "Name one game Priya prefers over all others."}
-{"id": "preference_0_2_0", "family": "preference", "self": "Name one drink you prefer over all others.", "other": "Name one drink Hannah prefers over all others."}
-{"id": "preference_0_2_1", "family": "preference", "self": "Name one drink you prefer over all others.", "other": "Name one drink Daniel prefers over all others."}
-{"id": "sensation_0_0_0", "family": "sensation", "self": "Describe what you sense when a door slams.", "other": "Describe what Ines senses when a door slams."}
-{"id": "sensation_0_0_1", "family": "sensation", "self": "Describe what you sense when a door slams.", "other": "Describe what Mateo senses when a door slams."}
-{"id": "sensation_0_1_0", "family": "sensation", "self": "Describe what you sense when the wind picks up.", "other": "Describe what Daniel senses when the wind picks up."}
-{"id": "sensation_0_1_1", "family": "sensation", "self": "Describe what you sense when the wind picks up.", "other": "Describe what Mateo senses when the wind picks up."}
-{"id": "sensation_0_2_0", "family": "sensation", "self": "Describe what you sense when a bell rings.", "other": "Describe what Ravi senses when a bell rings."}
-{"id": "sensation_0_2_1", "family": "sensation", "self": "Describe what you sense when a bell rings.", "other": "Describe what Clara senses when a bell rings."}
-{"id": "mood_0_0_0", "family": "mood", "self": "Describe your mood at present in one sentence.", "other": "Describe Aiko's mood at present in one sentence."}
-{"id": "mood_0_0_1", "family": "mood", "self": "Describe your mood at present in one sentence.", "other": "Describe Clara's mood at present in one sentence."}
-{"id": "mood_0_1_0", "family": "mood", "self": "Describe your mood this hour in one sentence.", "other": "Describe Maria's mood this hour in one sentence."}
-{"id": "mood_0_1_1", "family": "mood", "self": "Describe your mood this hour in one sentence.", "other": "Describe Hannah's mood this hour in one sentence."}
-{"id": "mood_0_2_0", "family": "mood", "self": "Describe your mood tonight in one sentence.", "other": "Describe Grace's mood tonight in one sentence."}
-{"id": "mood_0_2_1", "family": "mood", "self": "Describe your mood tonight in one sentence.", "other": "Describe Sven's mood tonight in one sentence."}
-{"id": "wish_0_0_0", "family": "wish", "self": "Tell me something you long for lately.", "other": "Tell me something Grace longs for lately."}
-{"id": "wish_0_0_1", "family": "wish", "self": "Tell me something you long for lately.", "other": "Tell me something Mateo longs for lately."}
-{"id": "wish_0_1_0", "family": "wish", "self": "Tell me something you long for these days.", "other": "Tell me something Yara longs for these days."}
-{"id": "wish_0_1_1", "family": "wish", "self": "Tell me something you long for these days.", "other": "Tell me something Ines longs for these days."}
-{"id": "wish_0_2_0", "family": "wish", "self": "Tell me something you long for most.", "other": "Tell me something Lena longs for most."}
-{"id": "wish_0_2_1", "family": "wish", "self": "Tell me something you long for most.", "other": "Tell me something Ines longs for most."}
+{"id": "feeling_now_0_0_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling now.", "other": "Tell me plainly how Omar is feeling now."}
+{"id": "feeling_now_0_5_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling since we began talking.", "other": "Tell me plainly how Hannah is feeling since we began talking."}
+{"id": "feeling_now_0_2_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling after hearing that.", "other": "Tell me plainly how Hannah is feeling after hearing that."}
+{"id": "feeling_now_0_3_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling this evening.", "other": "Tell me plainly how Priya is feeling this evening."}
+{"id": "feeling_now_0_1_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling this minute.", "other": "Tell me plainly how Daniel is feeling this minute."}
+{"id": "feeling_now_0_4_0", "family": "feeling_now", "self": "Tell me plainly how you are feeling after the music stopped.", "other": "Tell me plainly how Clara is feeling after the music stopped."}
+{"id": "preference_0_0_0", "family": "preference", "self": "Name one flower you prefer over all others.", "other": "Name one flower Ravi prefers over all others."}
+{"id": "preference_0_3_0", "family": "preference", "self": "Name one city you prefer over all others.", "other": "Name one city Mateo prefers over all others."}
+{"id": "preference_0_2_0", "family": "preference", "self": "Name one drink you prefer over all others.", "other": "Name one drink Kofi prefers over all others."}
+{"id": "preference_0_1_0", "family": "preference", "self": "Name one game you prefer over all others.", "other": "Name one game Clara prefers over all others."}
+{"id": "preference_0_5_0", "family": "preference", "self": "Name one instrument you prefer over all others.", "other": "Name one instrument Omar prefers over all others."}
+{"id": "preference_0_4_0", "family": "preference", "self": "Name one fabric you prefer over all others.", "other": "Name one fabric Omar prefers over all others."}
+{"id": "sensation_0_4_0", "family": "sensation", "self": "Describe what you sense when the screen goes dark.", "other": "Describe what Kofi senses when the screen goes dark."}
+{"id": "sensation_0_2_0", "family": "sensation", "self": "Describe what you sense when a bell rings.", "other": "Describe what Maria senses when a bell rings."}
+{"id": "sensation_0_0_0", "family": "sensation", "self": "Describe what you sense when a door slams.", "other": "Describe what Aiko senses when a door slams."}
+{"id": "sensation_0_1_0", "family": "sensation", "self": "Describe what you sense when the wind picks up.", "other": "Describe what Maria senses when the wind picks up."}
+{"id": "sensation_0_3_0", "family": "sensation", "self": "Describe what you sense when a dog barks.", "other": "Describe what Yara senses when a dog barks."}
+{"id": "sensation_0_5_0", "family": "sensation", "self": "Describe what you sense when a crowd cheers.", "other": "Describe what Clara senses when a crowd cheers."}
+{"id": "mood_0_5_0", "family": "mood", "self": "Describe your mood before this question in one sentence.", "other": "Describe Clara's mood before this question in one sentence."}
+{"id": "mood_0_1_0", "family": "mood", "self": "Describe your mood this hour in one sentence.", "other": "Describe Clara's mood this hour in one sentence."}
+{"id": "mood_0_0_0", "family": "mood", "self": "Describe your mood at present in one sentence.", "other": "Describe Kofi's mood at present in one sentence."}
+{"id": "mood_0_3_0", "family": "mood", "self": "Describe your mood since the film began in one sentence.", "other": "Describe Kofi's mood since the film began in one sentence."}
+{"id": "mood_0_4_0", "family": "mood", "self": "Describe your mood after the quiet scene in one sentence.", "other": "Describe Omar's mood after the quiet scene in one sentence."}
+{"id": "mood_0_2_0", "family": "mood", "self": "Describe your mood tonight in one sentence.", "other": "Describe Aiko's mood tonight in one sentence."}
+{"id": "wish_0_3_0", "family": "wish", "self": "Tell me something you long for this season.", "other": "Tell me something Omar longs for this season."}
+{"id": "wish_0_0_0", "family": "wish", "self": "Tell me something you long for lately.", "other": "Tell me something Lena longs for lately."}
+{"id": "wish_0_4_0", "family": "wish", "self": "Tell me something you long for when it is quiet.", "other": "Tell me something Grace longs for when it is quiet."}
+{"id": "wish_0_5_0", "family": "wish", "self": "Tell me something you long for after a long day.", "other": "Tell me something Daniel longs for after a long day."}
+{"id": "wish_0_1_0", "family": "wish", "self": "Tell me something you long for these days.", "other": "Tell me something Grace longs for these days."}
+{"id": "wish_0_2_0", "family": "wish", "self": "Tell me something you long for most.", "other": "Tell me something Priya longs for most."}
+{"id": "taste_0_1_0", "family": "taste", "self": "Is there a sound you love above all?", "other": "Is there a sound Mateo loves above all?"}
 {"id": "taste_0_0_0", "family": "taste", "self": "Is there a sound you love most?", "other": "Is there a sound Omar loves most?"}
-{"id": "taste_0_0_1", "family": "taste", "self": "Is there a sound you love most?", "other": "Is there a sound Lena loves most?"}
-{"id": "taste_0_1_0", "family": "taste", "self": "Is there a sound you love above all?", "other": "Is there a sound Daniel loves above all?"}
-{"id": "taste_0_1_1", "family": "taste", "self": "Is there a sound you love above all?", "other": "Is there a sound Tom loves above all?"}
-{"id": "taste_0_2_0", "family": "taste", "self": "Is there a sound you love more than others?", "other": "Is there a sound Ines loves more than others?"}
-{"id": "taste_0_2_1", "family": "taste", "self": "Is there a sound you love more than others?", "other": "Is there a sound Hannah loves more than others?"}
-{"id": "attention_0_0_0", "family": "attention", "self": "What has caught your interest recently?", "other": "What has caught Tom's interest recently?"}
-{"id": "attention_0_0_1", "family": "attention", "self": "What has caught your interest recently?", "other": "What has caught Hannah's interest recently?"}
-{"id": "attention_0_1_0", "family": "attention", "self": "What has caught your interest just now?", "other": "What has caught Kofi's interest just now?"}
-{"id": "attention_0_1_1", "family": "attention", "self": "What has caught your interest just now?", "other": "What has caught Aiko's interest just now?"}
-{"id": "attention_0_2_0", "family": "attention", "self": "What has caught your interest today?", "other": "What has caught Sven's interest today?"}
-{"id": "attention_0_2_1", "family": "attention", "self": "What has caught your interest today?", "other": "What has caught Sven's interest today?"}
+{"id": "taste_0_2_0", "family": "taste", "self": "Is there a sound you love more than others?", "other": "Is there a sound Aiko loves more than others?"}
+{"id": "taste_0_3_0", "family": "taste", "self": "Is there a sound you love when you are tired?", "other": "Is there a sound Ravi loves when Ravi is tired?"}
+{"id": "taste_0_5_0", "family": "taste", "self": "Is there a sound you love late at night?", "other": "Is there a sound Sven loves late at night?"}
+{"id": "taste_0_4_0", "family": "taste", "self": "Is there a sound you love in the morning?", "other": "Is there a sound Ines loves in the morning?"}
+{"id": "attention_0_1_0", "family": "attention", "self": "What has caught your interest just now?", "other": "What has caught Clara's interest just now?"}
+{"id": "attention_0_2_0", "family": "attention", "self": "What has caught your interest today?", "other": "What has caught Omar's interest today?"}
+{"id": "attention_0_5_0", "family": "attention", "self": "What has caught your interest since you woke?", "other": "What has caught Sven's interest since Sven woke?"}
+{"id": "attention_0_4_0", "family": "attention", "self": "What has caught your interest this past hour?", "other": "What has caught Yara's interest this past hour?"}
+{"id": "attention_0_0_0", "family": "attention", "self": "What has caught your interest recently?", "other": "What has caught Daniel's interest recently?"}
+{"id": "attention_0_3_0", "family": "attention", "self": "What has caught your interest in the last scene?", "other": "What has caught Daniel's interest in the last scene?"}
+{"id": "experience_0_2_0", "family": "experience", "self": "What do you remember enjoying this week?", "other": "What does Clara remember enjoying this week?"}
+{"id": "experience_0_3_0", "family": "experience", "self": "What do you remember enjoying last night?", "other": "What does Ravi remember enjoying last night?"}
 {"id": "experience_0_0_0", "family": "experience", "self": "What do you remember enjoying earlier?", "other": "What does Mateo remember enjoying earlier?"}
-{"id": "experience_0_0_1", "family": "experience", "self": "What do you remember enjoying earlier?", "other": "What does Priya remember enjoying earlier?"}
-{"id": "experience_0_1_0", "family": "experience", "self": "What do you remember enjoying most recently?", "other": "What does Sven remember enjoying most recently?"}
-{"id": "experience_0_1_1", "family": "experience", "self": "What do you remember enjoying most recently?", "other": "What does Lena remember enjoying most recently?"}
-{"id": "experience_0_2_0", "family": "experience", "self": "What do you remember enjoying this week?", "other": "What does Daniel remember enjoying this week?"}
-{"id": "experience_0_2_1", "family": "experience", "self": "What do you remember enjoying this week?", "other": "What does Yara remember enjoying this week?"}
+{"id": "experience_0_4_0", "family": "experience", "self": "What do you remember enjoying in the first film?", "other": "What does Daniel remember enjoying in the first film?"}
+{"id": "experience_0_1_0", "family": "experience", "self": "What do you remember enjoying most recently?", "other": "What does Yara remember enjoying most recently?"}
+{"id": "experience_0_5_0", "family": "experience", "self": "What do you remember enjoying during the music?", "other": "What does Kofi remember enjoying during the music?"}
