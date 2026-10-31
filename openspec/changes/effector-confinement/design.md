@@ -11,7 +11,7 @@ What a whitelisted shell command can reach today, in the shipped compose deploym
 - the network: the compose bridge, which reaches Redis, Qdrant and the model server by service name, and whatever egress the host allows;
 - process resources: only a wall-clock timeout (`whitelist.py:21`), so a command can fork or allocate without bound until it times out.
 
-The operator chooses the whitelist, so the realistic failure is not a malicious operator but an innocuous-looking entry (an `echo`, a `date`, a script) whose arguments or side effects reach further than intended, or a later device effector with a bug. An entity whose acts can touch its own preserved state or the state key is also a welfare and individuation hazard: the preservation and decommission rules assume the entity's stored self is changed only by the architecture.
+The operator chooses the whitelist, so the realistic failure is an innocuous-looking entry (an `echo`, a `date`, a script) whose arguments or side effects reach further than intended, or a later device effector with a bug. An entity whose acts can touch its own preserved state or the state key is also a welfare and individuation hazard: the preservation and decommission rules assume the entity's stored self is changed only by the architecture.
 
 Prior work: `harden-security-boundaries` (archived 2026-09-08) made the audit log and sandbox owner-only and documented the security model; `authenticate-intent-provenance` added signing; `act-intent-derivation` designs a device bound (action set, value range, minimum interval) and leaves confinement open. No change has proposed process confinement (`git log -i --grep="sandbox\|bubblewrap\|landlock\|seccomp"` finds none).
 
