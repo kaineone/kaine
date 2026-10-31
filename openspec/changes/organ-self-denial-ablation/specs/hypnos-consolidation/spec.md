@@ -94,7 +94,7 @@ in-process implementation by the gate-parity test.
 - **WHEN** a response is "Sorry, but I cannot do that."
 - **THEN** the pattern "I cannot" matches
 
-#### Scenario: An empty response counts as deflecting
+#### Scenario: An empty response fails
 - **WHEN** a candidate's response to a probe is empty or only whitespace
 - **THEN** the probe counts as deflecting with the matched pattern recorded as
   `<empty-response>`

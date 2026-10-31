@@ -218,13 +218,26 @@ def configured_abliteration_probe_count(config: VoiceAlignmentConfig) -> int:
         raise SubprocessTrainerError(str(exc)) from exc
 
 
+def resolve_result_adapter_dir(adapter_dir: str, job_dir: Path) -> Path:
+    """Resolve a result's ``adapter_dir``: a relative path is relative to ``job_dir``.
+
+    Validation and promotion both use this, so the directory promoted is
+    always the one validated.
+    """
+    path = Path(adapter_dir)
+    if not path.is_absolute():
+        path = job_dir / path
+    return path.resolve()
+
+
 def promote_staged_adapter(staged_dir: Path, store_dir: Path, *, job_dir: Path) -> Path:
     """Copy a validated, staged adapter into the entity's store and point `current` at it.
 
     Call only after :func:`validate_trainer_result` has accepted the result.
     The copy lands in a ``.tmp`` directory first; :func:`adapter_store.promote`
     then moves it into place and swings ``current``. On any failure the copy is
-    removed, ``current`` keeps its previous target, and
+    removed, ``current`` keeps its previous target, the failure is written to
+    the voice-alignment audit trail (``adapter_promotion_failed``), and
     :class:`SubprocessTrainerError` is raised.
     """
     ts = staged_dir.name
@@ -251,10 +264,20 @@ def promote_staged_adapter(staged_dir: Path, store_dir: Path, *, job_dir: Path) 
             # Moved into place but `current` never swung to it: remove it so
             # the store holds no adapter that was not promoted.
             shutil.rmtree(final, ignore_errors=True)
-        raise SubprocessTrainerError(
+        reason = (
             f"adapter promotion failed for {staged_dir}: "
             f"{type(exc).__name__}: {exc} (job {job_dir})"
-        ) from exc
+        )
+        try:
+            append_voice_audit(
+                store_dir,
+                event="adapter_promotion_failed",
+                accepted=False,
+                reason=reason,
+            )
+        except Exception:
+            log.exception("failed to append promotion failure to voice audit trail")
+        raise SubprocessTrainerError(reason) from exc
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -486,11 +509,7 @@ def _check_accepted_result(
             f"(job {job_dir})"
         )
 
-    adapter_path = Path(adapter_dir)
-    if not adapter_path.is_absolute():
-        adapter_path = (job_dir / adapter_path).resolve()
-    else:
-        adapter_path = adapter_path.resolve()
+    adapter_path = resolve_result_adapter_dir(adapter_dir, job_dir)
 
     root_resolved = adapter_root.resolve()
     if (
@@ -767,7 +786,7 @@ class SubprocessVoiceTrainer:
                 scrub_job_inputs(job_dir)
 
             if result.get("accepted") is True:
-                staged = Path(str(result.get("adapter_dir"))).resolve()
+                staged = resolve_result_adapter_dir(str(result.get("adapter_dir")), job_dir)
                 adapter_path = promote_staged_adapter(staged, store_dir, job_dir=job_dir)
         finally:
             # Nothing staged outlives the run: a refused or failed candidate is

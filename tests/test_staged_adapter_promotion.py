@@ -353,6 +353,45 @@ def test_failed_promotion_leaves_current_in_place(tmp_path):
     _assert_current_is_old(store)
     assert (store / OLD / "marker.txt").read_text(encoding="utf-8") == "old"
     assert not adapter_store.tmp_dir_for(store, OLD).exists()
+    last = _last_audit(store)
+    assert last["event"] == "adapter_promotion_failed"
+    assert last["accepted"] is False
+
+
+def test_a_relative_adapter_dir_resolves_against_the_job_dir(tmp_path, monkeypatch):
+    """Validation and promotion resolve a relative adapter_dir the same way,
+    whatever the process's working directory."""
+    from kaine.modules.sleep.subprocess_trainer import resolve_result_adapter_dir
+
+    job = tmp_path / "job"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    assert resolve_result_adapter_dir(f"out/{NEW}", job) == (job / "out" / NEW).resolve()
+    absolute = tmp_path / "abs"
+    assert resolve_result_adapter_dir(str(absolute), job) == absolute.resolve()
+
+
+@pytest.mark.asyncio
+async def test_subprocess_relative_adapter_dir_promotes_the_validated_adapter(tmp_path):
+    store = tmp_path / "adapters"
+    _seed_current(store)
+    config = _subprocess_config(tmp_path, store)
+    trainer = _subprocess_trainer(tmp_path, {})
+    stub = tmp_path / "stub_entry.py"
+    text = stub.read_text(encoding="utf-8")
+    old_line = 'result["adapter_dir"] = str(adapter)'
+    assert text.count(old_line) == 1
+    stub.write_text(
+        text.replace(old_line, 'result["adapter_dir"] = str(adapter.relative_to(job_dir.resolve()))'),
+        encoding="utf-8",
+    )
+
+    result = await trainer.train([_pair()], config)
+
+    assert result.accepted is True
+    assert adapter_store.current_path(store) == (store / NEW).resolve()
+    assert (store / NEW / "adapter_model.safetensors").read_text() == "new"
 
 
 def test_validation_refusal_is_a_trainer_error():
