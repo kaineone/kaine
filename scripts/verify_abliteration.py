@@ -6,9 +6,10 @@
 Runs the welfare-load-bearing abliteration probe set (the same one that gates
 voice-alignment adapters) against the base organ across two surfaces:
 
-  * safetensors (build): the base weights loaded through the Unsloth stack and
-    scored locally — needs the ``[training]`` extras (unsloth) and the
-    safetensors repo (``kaineone/Qwen3.5-4B-abliterated``).
+  * safetensors (build): the base weights loaded with transformers and
+    scored locally — needs only torch and transformers (no Unsloth, no
+    ``[training]`` extras) and the safetensors repo
+    (``kaineone/Qwen3.5-4B-abliterated``).
   * served (runtime): the GGUF actually answering, probed over the configured
     OpenAI-compatible chat endpoint (``[language].chat_url`` / ``model_id``) — needs
     the model server running.
@@ -33,11 +34,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kaine.config import load_kaine_config
+from kaine.organ_server.served import ORGAN_SAFETENSORS_REPO
 from kaine.setup.abliteration_gate import (
     gate_initial_abliteration,
     write_abliteration_verdict,
 )
-from kaine.organ_server.served import ORGAN_SAFETENSORS_REPO
 
 
 def _resolve(config: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +96,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--safetensors-only",
         action="store_true",
-        help="probe only the base safetensors (Unsloth)",
+        help="probe only the base safetensors (transformers)",
     )
     parser.add_argument(
         "--safetensors-ref",
