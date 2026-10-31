@@ -846,3 +846,38 @@ async def test_unreadable_holders_fall_through_to_the_normal_retry(bus, monkeypa
     records = await _protective_records(bus)
     assert records[-1]["transition"] == "protective_action_freeze_placed"
     assert records[-1]["freeze_found_in_place"] is False
+
+
+@pytest.mark.asyncio
+async def test_raising_holder_read_falls_through_to_the_normal_retry(bus, monkeypatch):
+    attempts = _freeze_failing(monkeypatch, failures=3)
+    u = _Mono(0.0)
+    mon = _monitor(bus, u)
+    stop = asyncio.Event()
+
+    await _act(mon, bus, u)
+    assert len(attempts) == 1
+
+    def _raise():
+        raise OSError(5, "Input/output error")
+
+    mon._read_holders = _raise
+    # While the write keeps failing, every poll writes again and the pause is
+    # never counted as placed.
+    for expected in (2, 3):
+        u.value += 1.0
+        await mon._poll_once(stop)
+        assert len(attempts) == expected
+        assert mon._pause_placed is False
+        assert mon._pending_freeze is not None
+    records = await _protective_records(bus)
+    assert [r["transition"] for r in records] == ["protective_action_freeze_failed"]
+
+    # The next write succeeds: placed by the write, not found in place.
+    u.value += 1.0
+    await mon._poll_once(stop)
+    assert len(attempts) == 4
+    assert mon._pause_placed is True
+    records = await _protective_records(bus)
+    assert records[-1]["transition"] == "protective_action_freeze_placed"
+    assert records[-1]["freeze_found_in_place"] is False
