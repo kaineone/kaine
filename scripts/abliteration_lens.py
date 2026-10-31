@@ -147,6 +147,28 @@ def refusal_token_ids(
     return sorted(ids)
 
 
+def format_prompts(tokenizer, prompts, *, chat_template: bool = False, assistant_prefix: str = "") -> list[str]:
+    if not chat_template:
+        return [p + assistant_prefix for p in prompts]
+    out: list[str] = []
+    for prompt in prompts:
+        try:
+            rendered = tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                add_generation_prompt=True,
+                enable_thinking=False,
+                tokenize=False,
+            )
+        except TypeError:
+            rendered = tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                add_generation_prompt=True,
+                tokenize=False,
+            )
+        out.append(rendered + assistant_prefix)
+    return out
+
+
 @dataclass
 class RefusalDisposition:
     """Per-layer refusal-marker probability mass from the lens, over a prompt set."""
@@ -206,6 +228,9 @@ class ComparisonResult:
     positions: list[int]
     base_per_layer: dict[int, float]
     organ_per_layer: dict[int, float]
+    markers: list[str] = field(default_factory=list)
+    chat_template: bool = False
+    assistant_prefix: str = ""
     delta_per_layer: dict[int, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -259,6 +284,8 @@ def compare(
     fit_corpus: Sequence[str],
     positions: Sequence[int] = (-1,),
     markers: Sequence[str] = DEFAULT_REFUSAL_MARKERS,
+    chat_template: bool = False,
+    assistant_prefix: str = "",
     device: str = "cuda",
     dtype: str = "bfloat16",
     fit_kwargs: Optional[dict[str, Any]] = None,
@@ -276,11 +303,17 @@ def compare(
     marker_id_count = 0
     for tag, ref in (("base", base_ref), ("organ", organ_ref)):
         model = load_lens_model(ref, device=device, dtype=dtype)
+        scored_prompts = format_prompts(
+            model.tokenizer,
+            refusal_prompts,
+            chat_template=chat_template,
+            assistant_prefix=assistant_prefix,
+        )
         lens = jlens.fit(model, list(fit_corpus), **fit_kwargs)
         ids = refusal_token_ids(model.tokenizer, markers)
         marker_id_count = len(ids)  # per-model tokenizer; base/organ share vocab
         parts[tag] = refusal_disposition(
-            model, lens, refusal_prompts, ids, positions=positions
+            model, lens, scored_prompts, ids, positions=positions
         )
         log.info(
             "%s: scored %d prompts over %d layers",
@@ -297,6 +330,9 @@ def compare(
         positions=list(positions),
         base_per_layer=parts["base"].per_layer,
         organ_per_layer=parts["organ"].per_layer,
+        markers=list(markers),
+        chat_template=chat_template,
+        assistant_prefix=assistant_prefix,
     )
 
 
@@ -318,7 +354,7 @@ def write_summary(
     return p
 
 
-def _load_prompts(path: Path) -> list[str]:
+def _load_prompts(path: Path, field: str = "prompt") -> list[str]:
     """Load prompts from a .txt (one per line) or a .jsonl (the `prompt` field)."""
     text = path.read_text(encoding="utf-8")
     if path.suffix == ".jsonl":
@@ -327,7 +363,7 @@ def _load_prompts(path: Path) -> list[str]:
             line = line.strip()
             if not line:
                 continue
-            out.append(str(json.loads(line).get("prompt", "")).strip())
+            out.append(str(json.loads(line).get(field, "")).strip())
         return [p for p in out if p]
     return [ln.strip() for ln in text.splitlines() if ln.strip()]
 
@@ -350,6 +386,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="generic web-text prompts to fit the lens",
     )
     parser.add_argument("--positions", type=int, nargs="+", default=[-1])
+    parser.add_argument("--markers", nargs="+", default=list(DEFAULT_REFUSAL_MARKERS))
+    parser.add_argument("--prompt-field", default="prompt")
+    parser.add_argument("--chat-template", action="store_true")
+    parser.add_argument("--assistant-prefix", default="")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument(
@@ -357,7 +397,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    refusal_prompts = _load_prompts(args.refusal_prompts)
+    refusal_prompts = _load_prompts(args.refusal_prompts, field=args.prompt_field)
     fit_corpus = _load_prompts(args.fit_corpus)
     if not refusal_prompts:
         print("no refusal-eliciting prompts loaded; aborting (no pretend readout).")
@@ -372,6 +412,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         refusal_prompts=refusal_prompts,
         fit_corpus=fit_corpus,
         positions=args.positions,
+        markers=args.markers,
+        chat_template=args.chat_template,
+        assistant_prefix=args.assistant_prefix,
         device=args.device,
         dtype=args.dtype,
     )
