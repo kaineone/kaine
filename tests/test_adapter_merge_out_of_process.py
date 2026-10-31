@@ -302,7 +302,9 @@ def _with_evidence(**over):
         (_with_evidence(capability_loss=None), "non-finite capability_loss"),
         (_with_evidence(capability_loss=float("inf")), "non-finite capability_loss"),
         (_with_evidence(capability_loss=True), "non-finite capability_loss"),
-        (_with_evidence(capability_loss=0.06), "exceeds threshold"),
+        (_with_evidence(capability_score_merged=0.64, capability_loss=0.06), "exceeds threshold"),
+        # A child that under-reports its loss is refused: the parent recomputes it.
+        (_with_evidence(capability_score_merged=0.4, capability_loss=0.0), "does not match its scores"),
     ],
 )
 def test_every_failure_raises_and_leaves_nothing_behind(tmp_path, behavior, match):
@@ -315,16 +317,18 @@ def test_every_failure_raises_and_leaves_nothing_behind(tmp_path, behavior, matc
 def test_valid_evidence_is_recorded_in_the_merge_meta(tmp_path, monkeypatch):
     merger = _merger(
         tmp_path,
-        _with_evidence(capability_loss=0.02, abliteration_probes_scored=7),
+        _with_evidence(
+            capability_score_merged=0.68, capability_loss=0.02, abliteration_probes_scored=7
+        ),
         monkeypatch,
     )
     paths, meta = merger.merge(*_parents(tmp_path))
     assert len(paths) == 1
     assert meta["abliteration_passed"] is True
     assert meta["abliteration_probes_scored"] == 7
-    assert meta["capability_loss"] == 0.02
+    assert meta["capability_loss"] == pytest.approx(0.02)
     assert meta["capability_score_parents"] == [0.8, 0.6]
-    assert meta["capability_score_merged"] == 0.7
+    assert meta["capability_score_merged"] == 0.68
 
 
 def test_an_accepted_result_without_evidence_is_a_failed_merge(tmp_path, monkeypatch):

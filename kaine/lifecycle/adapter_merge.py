@@ -298,9 +298,17 @@ def validate_check_evidence(
         raise MergeWorkerError(
             f"accepted merge has non-finite capability_loss {loss!r} (job {job_dir})"
         )
-    if loss > capability_loss_threshold:
+    # The parent recomputes the loss from the reported scores rather than
+    # trusting the child's figure, and judges the threshold on its own value.
+    recomputed = sum(parents) / len(parents) - merged
+    if abs(loss - recomputed) > 1e-9:
         raise MergeWorkerError(
-            f"accepted merge capability_loss {loss} exceeds threshold "
+            f"accepted merge capability_loss {loss} does not match its scores "
+            f"(mean parents - merged = {recomputed}) (job {job_dir})"
+        )
+    if recomputed > capability_loss_threshold:
+        raise MergeWorkerError(
+            f"accepted merge capability_loss {recomputed} exceeds threshold "
             f"{capability_loss_threshold} (job {job_dir})"
         )
     return {
