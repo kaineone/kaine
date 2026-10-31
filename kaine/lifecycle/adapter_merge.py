@@ -561,6 +561,8 @@ class TiesDareAdapterMerger:
         weights = self._resolve_weights(len(existing))
         timestamp = time.strftime("%Y%m%dT%H%M%S")
         output_dir = self._config.output_dir / f"{timestamp}-{uuid.uuid4().hex[:8]}"
+        # Cleanup after a failure removes only a directory this merge created.
+        output_preexisted = output_dir.exists()
 
         child_rejection: Optional[dict[str, Any]] = None
         try:
@@ -591,7 +593,8 @@ class TiesDareAdapterMerger:
                 )
         except Exception as exc:
             log.exception("TiesDareAdapterMerger: backend merge failed")
-            shutil.rmtree(output_dir, ignore_errors=True)
+            if not output_preexisted:
+                shutil.rmtree(output_dir, ignore_errors=True)
             merged_paths, meta = self._fake.merge(adapters_a, adapters_b)
             meta = dict(meta)
             meta.update(
