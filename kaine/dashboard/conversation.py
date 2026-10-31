@@ -17,15 +17,12 @@ from fastapi.templating import Jinja2Templates
 
 from kaine import legacy_aliases
 from kaine.bus import Event
+from kaine.bus.streams import LANGUAGE_EXTERNAL_STREAM, SELF_MODEL_STREAM, SLEEP_STREAM
 from kaine.dashboard.diagnostics import asset_url, build_diagnostics_context
 from kaine.dashboard.health import HealthProber
 from kaine.lifecycle.manager import ForkManager
 
 log = logging.getLogger(__name__)
-
-
-LANGUAGE_EXTERNAL_STREAM = "language.external"
-SLEEP_STREAM = "sleep.out"
 
 NAME_REFRESH_INTERVAL_S = 10.0
 
@@ -257,7 +254,7 @@ class ConversationState:
     async def backfill(self, bus: Any, *, scan: int = 2000) -> None:
         """Read recent self-model, sleep and affect events and apply the newest matches."""
         try:
-            entries = await bus.recent("self_model.out", count=scan)
+            entries = await bus.recent(SELF_MODEL_STREAM, count=scan)
         except Exception:
             log.debug("conversation backfill failed for self_model.out", exc_info=True)
         else:
@@ -267,7 +264,7 @@ class ConversationState:
                     break
 
         try:
-            entries = await bus.recent("sleep.out", count=scan)
+            entries = await bus.recent(SLEEP_STREAM, count=scan)
         except Exception:
             log.debug("conversation backfill failed for sleep.out", exc_info=True)
         else:

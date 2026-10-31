@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 
 from kaine import legacy_aliases, perception_state
 from kaine.bus.client import tail_id
+from kaine.bus.streams import LANGUAGE_EXTERNAL_STREAM
 from kaine.modules.base import BaseModule
 from kaine.modules.embodiment.adapter import EmbodimentAdapter, FeedFrame
 from kaine.modules.embodiment.channels import CONTINUOUS_CHANNEL_RANGE
@@ -85,7 +86,7 @@ class Embodiment(BaseModule):
         expose: Optional[dict[str, bool]] = None,
         continuous_expose: Optional[dict[str, bool]] = None,
         mirror_speech: bool = True,
-        speech_stream: str = "language.external",
+        speech_stream: str = LANGUAGE_EXTERNAL_STREAM,
         intent_stream: str = ACTION_SELECTION_STREAM,
         locus_reader: Optional[Callable[[], str]] = None,
         control_surface: Optional["ContinuousMotorSurface"] = None,

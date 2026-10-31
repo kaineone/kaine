@@ -22,12 +22,13 @@ import logging
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import PLANNING_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_PLANNING_STREAM = "planning.out"
+_PLANNING_STREAM = PLANNING_STREAM
 
 
 class PlanningPolicyObserver(StreamSubscriberObserver):

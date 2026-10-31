@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
+from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
@@ -83,8 +84,8 @@ class EpisodicMemory(BaseModule):
         association_n_sch: int = 3,
         association_n_link: int = 8,
         # Peer stream names for the affect module + the sleep module window tracking
-        affect_stream: str = "affect.out",
-        sleep_stream: str = "sleep.out",
+        affect_stream: str = AFFECT_STREAM,
+        sleep_stream: str = SLEEP_STREAM,
         # Shared subjective clock (injected at boot). The spontaneous-recall
         # cooldown is a cognitive throttle, so it runs in subjective time: at
         # time_scale != 1.0 the recall_cooldown_s window dilates with the rest

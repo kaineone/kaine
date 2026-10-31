@@ -19,12 +19,13 @@ import logging
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import INTEROCEPTION_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_INTEROCEPTION_STREAM = "interoception.out"
+_INTEROCEPTION_STREAM = INTEROCEPTION_STREAM
 
 
 class FatigueObserver(StreamSubscriberObserver):

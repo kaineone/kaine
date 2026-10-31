@@ -17,6 +17,12 @@ from typing import Any, Callable, ClassVar, Optional
 from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
+from kaine.bus.streams import (
+    LANGUAGE_EXTERNAL_STREAM,
+    LANGUAGE_INTERNAL_STREAM,
+    SELF_MODEL_STREAM,
+    SLEEP_STREAM,
+)
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
@@ -43,14 +49,14 @@ from kaine.workspace.action_selection import ACTION_SELECTION_STREAM, SPEAK, THI
 
 log = logging.getLogger(__name__)
 
-EXTERNAL_STREAM: str = "language.external"
-INTERNAL_STREAM: str = "language.internal"
+EXTERNAL_STREAM: str = LANGUAGE_EXTERNAL_STREAM
+INTERNAL_STREAM: str = LANGUAGE_INTERNAL_STREAM
 
 #: The bus stream + event type carrying the self-model module's snapshot. The language module
 #: consumes this over the bus to seed its persona, so the language organ can run
 #: in a separate process / on a separate trusted host from the self-model module instead of
 #: holding an in-process reference to it (``distributed-deployment``).
-SELF_MODEL_OUT_STREAM: str = "self_model.out"
+SELF_MODEL_OUT_STREAM: str = SELF_MODEL_STREAM
 SELF_MODEL_SELF_MODEL_TYPE: str = "self_model.document"
 
 
@@ -381,7 +387,7 @@ class Language(BaseModule):
         while not self._stopped.is_set():
             try:
                 entries, last_scanned = await self._bus.read_entries(
-                    "sleep.out", last_id=cursor, count=32, block_ms=0
+                    SLEEP_STREAM, last_id=cursor, count=32, block_ms=0
                 )
             except asyncio.CancelledError:
                 raise
@@ -459,9 +465,9 @@ class Language(BaseModule):
         # Seed the sleep module's sleep-index cursor from the stream tail, then scan
         # the most recent events to catch the latest sleep_index published
         # before boot. Never use "$": a non-blocking read from "$" never returns.
-        self._sleep_cursor = await tail_id(self._bus, "sleep.out")
+        self._sleep_cursor = await tail_id(self._bus, SLEEP_STREAM)
         try:
-            recent_sleep = await self._bus.client.xrevrange("sleep.out", count=200)
+            recent_sleep = await self._bus.client.xrevrange(SLEEP_STREAM, count=200)
         except Exception as exc:
             log.debug("sleep sleep_index backfill failed: %s", exc)
             recent_sleep = []
@@ -483,7 +489,7 @@ class Language(BaseModule):
 
         self._sleep_index = _latest_sleep_index(recent_sleep)
         if self._sleep_index is None:
-            old_sleep_stream = legacy_aliases.old_stream_name("sleep.out")
+            old_sleep_stream = legacy_aliases.old_stream_name(SLEEP_STREAM)
             if old_sleep_stream:
                 try:
                     old_recent_sleep = await self._bus.client.xrevrange(

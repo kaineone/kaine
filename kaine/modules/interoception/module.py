@@ -11,6 +11,7 @@ from collections import deque
 from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
+from kaine.bus.streams import CYCLE_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -73,7 +74,7 @@ class Interoception(BaseModule):
         cycle_latency_window: int = 64,
         baseline_salience: float = 0.1,
         alert_salience: float = 0.7,
-        cycle_stream: str = "cycle.out",
+        cycle_stream: str = CYCLE_STREAM,
         # --- Forward model / fatigue / regulation config ---
         # An injected forward model (a plugin substrate, or a test double)
         # replaces the default SubstrateForwardModel; forward_model_units then
@@ -354,7 +355,7 @@ class Interoception(BaseModule):
         # Start the sleep consumer at the stream tail: replaying past sleeps would
         # reset restored fatigue and regulation, and a replayed started event with
         # no completion would leave the module asleep after a crash mid-sleep.
-        self._sleep_cursor = await tail_id(self._bus, "sleep.out", strict=True)
+        self._sleep_cursor = await tail_id(self._bus, SLEEP_STREAM, strict=True)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(self._produce_loop(), name=f"{self.name}-producer")
@@ -1051,7 +1052,7 @@ class Interoception(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "sleep.out",
+                        SLEEP_STREAM,
                         last_id=self._sleep_cursor,
                         count=32,
                         block_ms=0,

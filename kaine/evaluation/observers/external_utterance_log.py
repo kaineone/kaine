@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import LANGUAGE_EXTERNAL_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.config import ExternalUtterancesConfig
 from kaine.evaluation.sink import AsyncJsonlSink
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 class ExternalUtteranceLog(StreamSubscriberObserver):
     """Local-only recorder for the entity's external speech stream."""
 
-    streams = ("language.external",)
+    streams = (LANGUAGE_EXTERNAL_STREAM,)
     name = "external_utterance_log"
 
     def __init__(

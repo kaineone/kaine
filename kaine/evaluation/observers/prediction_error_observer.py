@@ -32,6 +32,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import (
+    AUDITION_STREAM,
+    INTEROCEPTION_STREAM,
+    SEQUENCE_STREAM,
+    VISION_STREAM,
+    WORLD_MODEL_STREAM,
+)
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.experiment.stats import percentile as _percentile
@@ -42,27 +49,27 @@ log = logging.getLogger(__name__)
 # (stream, accepted_types, error_field)
 _SOURCES: list[tuple[str, frozenset[str], str]] = [
     (
-        "interoception.out",
+        INTEROCEPTION_STREAM,
         frozenset({"interoception.report"}),
         "prediction_error",
     ),
     (
-        "sequence.out",
+        SEQUENCE_STREAM,
         frozenset({"sequence.report"}),
         "temporal_prediction_error",
     ),
     (
-        "vision.out",
+        VISION_STREAM,
         frozenset({"vision.report"}),
         "prediction_error",
     ),
     (
-        "audition.out",
+        AUDITION_STREAM,
         frozenset({"audition.transcription", "audition.emotion", "audition.perception"}),
         "prediction_error",
     ),
     (
-        "world_model.out",
+        WORLD_MODEL_STREAM,
         frozenset({"world_model.world_error"}),
         "world_error",
     ),

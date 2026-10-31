@@ -56,6 +56,7 @@ from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
+from kaine.bus.streams import EPISODIC_MEMORY_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.world_model.backend import (
@@ -106,8 +107,8 @@ class WorldModel(BaseModule):
         persist_weights: bool = False,
         checkpoint_path: str = "state/world_model/world_model.ckpt",
         # Peer streams: episodic_memory.replay cues + the sleep module's window tracking.
-        episodic_memory_stream: str = "episodic_memory.out",
-        sleep_stream: str = "sleep.out",
+        episodic_memory_stream: str = EPISODIC_MEMORY_STREAM,
+        sleep_stream: str = SLEEP_STREAM,
         # Forwarded to the real backend (ignored by the fake).
         world_model_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:

@@ -11,6 +11,13 @@ from typing import Any, ClassVar, Optional
 
 from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus, tail_id
+from kaine.bus.streams import (
+    AFFECT_STREAM,
+    LANGUAGE_EXTERNAL_STREAM,
+    LANGUAGE_INTERNAL_STREAM,
+    PLANNING_STREAM,
+    SLEEP_STREAM,
+)
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.self_model.document import (
@@ -72,8 +79,8 @@ class SelfModel(BaseModule):
         drift_window: int = 100,
         drift_threshold: float = 0.6,
         save_interval_s: float = 30.0,
-        internal_speech_stream: str = "language.internal",
-        external_speech_stream: str = "language.external",
+        internal_speech_stream: str = LANGUAGE_INTERNAL_STREAM,
+        external_speech_stream: str = LANGUAGE_EXTERNAL_STREAM,
         identity_history_cap: int = 0,
         voice_observations_cap: int = 0,
         baseline_salience: float = 0.05,
@@ -210,8 +217,8 @@ class SelfModel(BaseModule):
         self._external_cursor = await self._latest_cursor(self._external_speech_stream)
 
         if self._inference.enabled:
-            self._affect_cursor = await self._latest_cursor("affect.out")
-            self._planning_cursor = await self._latest_cursor("planning.out")
+            self._affect_cursor = await self._latest_cursor(AFFECT_STREAM)
+            self._planning_cursor = await self._latest_cursor(PLANNING_STREAM)
 
         await super().initialize()
         self._tasks.append(
@@ -440,7 +447,7 @@ class SelfModel(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "affect.out",
+                        AFFECT_STREAM,
                         last_id=self._affect_cursor,
                         count=64,
                         block_ms=0,
@@ -466,7 +473,7 @@ class SelfModel(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "planning.out",
+                        PLANNING_STREAM,
                         last_id=self._planning_cursor,
                         count=64,
                         block_ms=0,
@@ -486,12 +493,12 @@ class SelfModel(BaseModule):
 
     async def _sleep_consumer_loop(self) -> None:
         """Subscribe to sleep.out for maintenance cycle end events."""
-        cursor = await self._latest_cursor("sleep.out")
+        cursor = await self._latest_cursor(SLEEP_STREAM)
         try:
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "sleep.out",
+                        SLEEP_STREAM,
                         last_id=cursor,
                         count=32,
                         block_ms=0,

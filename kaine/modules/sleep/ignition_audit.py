@@ -38,6 +38,7 @@ Taxonomy:
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
+from kaine.bus.streams import PLANNING_STREAM
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
 
 # EXTERNAL_INPUT_TYPES (other-initiated coalition member types) is the shared
@@ -59,7 +60,7 @@ INTENT_ACT = "intent.act"
 INTENT_REST = "intent.rest"
 # No effector reads planning.out: act intents published there are unrealizable
 # wiring signals, never executed actions.
-UNREALIZABLE_STREAM = "planning.out"
+UNREALIZABLE_STREAM = PLANNING_STREAM
 
 
 def _member_type(member: Dict[str, Any]) -> Optional[str]:

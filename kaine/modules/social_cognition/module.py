@@ -23,6 +23,7 @@ from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import OPERATOR_SOURCES, Event
+from kaine.bus.streams import AUDITION_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.social_cognition.agent import AgentModel
@@ -111,7 +112,7 @@ class SocialCognition(BaseModule):
             await self._store._embedder.load()
         await self._store.initialize()
         # Seed the audition cursor to "now" so we only process new events.
-        self._audition_cursor = await tail_id(self._bus, "audition.out")
+        self._audition_cursor = await tail_id(self._bus, AUDITION_STREAM)
         await super().initialize()
         self._tasks.append(
             asyncio.create_task(
@@ -152,7 +153,7 @@ class SocialCognition(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "audition.out",
+                        AUDITION_STREAM,
                         last_id=self._audition_cursor,
                         count=32,
                         block_ms=0,

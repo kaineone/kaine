@@ -10,6 +10,7 @@ import math
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
+from kaine.bus.streams import SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -64,7 +65,7 @@ def _finite_or_none(vector: Any) -> Optional[list[float]]:
     return vector
 
 
-_SLEEP_STREAM: str = "sleep.out"
+_SLEEP_STREAM: str = SLEEP_STREAM
 
 
 class Vision(BaseModule):
