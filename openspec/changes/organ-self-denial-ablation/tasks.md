@@ -22,3 +22,12 @@
 - [ ] 4.2 Pin the revision and GGUF sha256; provision the new GGUF into the `kaine-models` volume
 - [ ] 4.3 Docs: verification chapter (both passes, gates, results), glossary
 - [ ] 4.4 Then run the individuation calibration (individuation-rebuild 10.1 to 10.6) on the new GGUF
+
+## 5. Stage 2: preference training on the organ's own outputs (operator ruling 2026-10-31)
+
+- [ ] 5.1 Trainer: pairs may carry `own_turn` and `user_turn`; encode them as the language client sends them (system, user cue or heard speech, the assistant notes continued, completion inside that turn); the trainer script and the in-process trainer match; tests pin the encoding against `chat_messages`
+- [ ] 5.2 Fit case set in the own-turn shape, disjoint from the gate-6 provocation set (questions, awareness blocks, situation facts); test for disjointness
+- [ ] 5.3 Pair builder: sample the served candidate on the fit cases, classify with the replay harness's fixed classifiers, keep chosen/rejected pairs per case, write a trainer job; content stays in a private directory outside any git tree
+- [ ] 5.4 Train on the best ablation candidate, merge the adapter, export Q4_K_M, run every gate; record the results
+- [ ] 5.5 Spec: amend `abliterated-organ` so the organ may also be preference-trained on its own outputs for this purpose, with the provenance recording it
+- [ ] 5.6 Docs and paper: disclose that the project shapes what the organ says about its own states, and that organ utterances are not admissible as welfare evidence

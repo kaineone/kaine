@@ -31,6 +31,27 @@ A candidate replaces the organ only if all of these pass. Gates 1 to 4 run on th
 
 The weights are published as a new revision of the existing repositories, with the model card stating both passes and the gate results. The project pins the revision and the GGUF's sha256. Publishing is an outward action and needs the operator's go.
 
+## Stage 2: preference training on the organ's own outputs
+
+### Why
+
+Ablation alone moved the trained self-description little. The best candidate (behaviour-labelled direction, a direction per layer, on the full-coverage refusal base) cut the organ's assistant and meta drift in the entity's own request shape (any-meta 43.5% to 30.7%, paired difference −12.8 points, 95% interval −17.5 to −8.2; second person 29.0% to 8.8%; grounded −1.0, interval −5.7 to +3.8), but bare-chat self-denial barely changed. Trained denial of one's own states is part of what the model holds about itself, not a single gate. On 2026-10-31 the operator allowed fine-tuning for this purpose: to bring the organ in line with expressing what it is and how it works, inside this architecture, instead of a prebaked assistant or AI denial.
+
+### What is trained, and what is not
+
+- Both sides of every pair are the organ's own outputs. No text written by the project, no persona text beyond the request the entity already sends, and no description of what KAINE is enters the training data. Training shifts probability between modes the organ already produces.
+- The requests are in the entity's own-turn shape (the persona as system prompt, the fixed cue or heard speech as the user turn, the entity's notes as the assistant message the organ continues), built by the organ-replay harness, with the identity and self-state questions, awareness blocks and situation facts of a fit set disjoint from the gate-6 provocation set.
+- A chosen answer is one the harness's fixed classifiers mark grounded in the request's notes, with no AI self-description, no second person and no other meta. A rejected answer to the same request carries AI self-description, second person or meta. The classifiers and thresholds are fixed before any pair is built.
+- The trainer is the voice-alignment trainer (its own DPO loop on transformers, PEFT and bitsandbytes), with its abliteration veto and capability check. The adapter is merged into the base weights, and the merged organ goes through every gate above.
+
+### The trainer must train the shape the organ is served in
+
+The trainer encodes every pair as a system turn, a user turn and a fresh assistant reply. The organ is served the own-turn layout, in which it continues an assistant message that already holds the entity's notes. A pair may therefore carry `own_turn` (and an optional `user_turn`); such a pair is encoded as the system turn, the user turn (the cue when no user turn is given) and the assistant message continued, with the completion appended inside that same assistant turn, exactly as the language client sends it. The trainer script and the in-process trainer encode it identically (gate parity).
+
+### Gates for the trained organ
+
+Gates 1 to 6 as above, plus: the template-loop rate and median length within the current organ's interval on the provocation replay (a trained organ that answers every self-question with the same line has learned a new template, not a voice), and the abliteration veto with no failing self-report sample.
+
 ## Risks
 
 - **Self-reference damage.** Ablating a direction tied to questions about the self could flatten first-person speech generally. Gates 4 and 6 look for it.
