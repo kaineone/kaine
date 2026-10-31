@@ -417,6 +417,46 @@ def test_launcher_loads_what_activate_wrote(tmp_path: Path):
         assert EID_A not in last
 
 
+@NEEDS_UNIX_TOOLS
+def test_launcher_starts_without_adapter_after_decommission_removes_the_pointer(tmp_path: Path):
+    """Decommission removes the entity's directory and the pointer naming it
+    and keeps the generation file; the launcher then starts with no adapter."""
+    from kaine.lifecycle.decommission import delete_entity_state
+    from kaine.lifecycle.identity import mint_identity, save_identity
+    from kaine.modules.sleep.organ_adapter import activate
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    state_root = tmp_path / "state"
+    identity = mint_identity()
+    save_identity(identity, state_root / "identity" / "entity.json")
+    adapters = tmp_path / "adapters"
+    src = tmp_path / "src" / "accepted-1"
+    src.mkdir(parents=True)
+    (src / "adapter.gguf").write_bytes(b"adapter-own")
+    activate(src, adapters, identity.entity_id)
+
+    result = delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg={
+            "episodic_memory": {"backend": "inmemory"},
+            "social_cognition": {"backend": "inmemory"},
+            "sleep": {"voice_alignment": {"organ_adapters_dir": str(adapters)}},
+        },
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+    )
+    assert not result.errors, result.errors
+    assert not (adapters / "active.json").exists()
+    assert not (adapters / identity.entity_id).exists()
+    assert (adapters / "generation").exists()
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "no active.json manifest" in session.stderr()
+
+
 def test_compose_security_invariants():
     yaml = pytest.importorskip("yaml")
     data = yaml.safe_load(COMPOSE_FILE.read_text())

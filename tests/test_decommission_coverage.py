@@ -437,6 +437,113 @@ def test_entity_subdirectories_are_cancelled_backed_up_and_deleted(tmp_path, mon
     assert not result.errors, result.errors
 
 
+def test_own_root_pointer_is_backed_up_and_removed(tmp_path, monkeypatch):
+    """The volume-root pointer naming this entity points into the directory
+    decommission deletes, so it is backed up and removed; the generation
+    counter stays (a missing pointer already means "no adapter")."""
+    state_root, cfg, own_id, other_id, organ, jobs = _shared_volumes(tmp_path, monkeypatch)
+    own_pointer = json.dumps({"entity_id": own_id, "file": f"{own_id}/active-1.gguf"})
+    (organ / "active.json").write_text(own_pointer, encoding="utf-8")
+
+    backup = capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=cfg,
+        out_root=tmp_path / "backups",
+        entity_name="Kaine Nova",
+        assessment=_assessment(),
+    )
+    assert backup.ok, backup.errors
+    assert (
+        backup.backup_path / "locations" / "organ_adapters.pointer" / "active.json"
+    ).read_text() == own_pointer
+
+    result = delete_entity_state(
+        state_root=state_root, qdrant_cfg=cfg, fork_root=tmp_path / "forks", data_root=tmp_path / "data"
+    )
+    assert not (organ / "active.json").exists()
+    assert (organ / "generation").read_text() == "2"
+    assert "organ_adapters.pointer" in result.deleted_locations
+    assert str(organ / "active.json") not in result.live_kept
+    assert not result.errors, result.errors
+
+
+def test_other_entitys_root_pointer_is_untouched(tmp_path, monkeypatch):
+    """A pointer naming another entity is kept byte for byte, even when its
+    checksum matches an adapter in this entity's store (a forked line)."""
+    state_root, cfg, own_id, other_id, organ, jobs = _shared_volumes(tmp_path, monkeypatch)
+    store = state_root / "sleep" / "adapters" / "a1"
+    store.mkdir(parents=True)
+    (store / "adapter.gguf").write_bytes(b"STUDY-ADAPTER")
+    import hashlib
+
+    sha = hashlib.sha256(b"STUDY-ADAPTER").hexdigest()
+    pointer = json.dumps({"entity_id": other_id, "file": f"{other_id}/active-1.gguf", "sha256": sha})
+    (organ / "active.json").write_text(pointer, encoding="utf-8")
+
+    backup = capture_backup(
+        state_root=state_root,
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+        qdrant_cfg=cfg,
+        out_root=tmp_path / "backups",
+        entity_name="Kaine Nova",
+        assessment=_assessment(),
+    )
+    assert backup.ok, backup.errors
+    assert not (backup.backup_path / "locations" / "organ_adapters.pointer").exists()
+    result = delete_entity_state(
+        state_root=state_root, qdrant_cfg=cfg, fork_root=tmp_path / "forks", data_root=tmp_path / "data"
+    )
+    assert (organ / "active.json").read_text() == pointer
+    assert "organ_adapters.pointer" not in result.deleted_locations
+    assert str(organ / "active.json") in result.shared_kept
+    assert str(organ / "active.json") not in result.live_kept
+
+
+def test_pointer_rewritten_for_another_entity_before_deletion_is_kept(tmp_path, monkeypatch):
+    """Deletion reads the pointer again: if another entity's activation
+    replaced it after the locations were listed, it is not removed."""
+    state_root, cfg, own_id, other_id, organ, jobs = _shared_volumes(tmp_path, monkeypatch)
+    (organ / "active.json").write_text(json.dumps({"entity_id": own_id, "file": f"{own_id}/active-1.gguf"}))
+    real = decommission.entity_locations
+    other_pointer = json.dumps({"entity_id": other_id, "file": f"{other_id}/active-1.gguf"})
+
+    def listed_then_rewritten(*args, **kwargs):
+        locs = real(*args, **kwargs)
+        (organ / "active.json").write_text(other_pointer)
+        return locs
+
+    monkeypatch.setattr(decommission, "entity_locations", listed_then_rewritten)
+    result = delete_entity_state(
+        state_root=state_root, qdrant_cfg=cfg, fork_root=tmp_path / "forks", data_root=tmp_path / "data"
+    )
+    assert (organ / "active.json").read_text() == other_pointer
+    assert any("no longer names this entity" in e for e in result.errors)
+
+
+def test_legacy_flat_manifest_keeps_the_checksum_rule(tmp_path, monkeypatch):
+    """An ownerless (flat-layout) active.json whose checksum is this entity's
+    is still backed up and kept as live, as before."""
+    state_root, cfg, own_id, other_id, organ, jobs = _shared_volumes(tmp_path, monkeypatch)
+    store = state_root / "sleep" / "adapters" / "a1"
+    store.mkdir(parents=True)
+    (store / "adapter.gguf").write_bytes(b"LEGACY")
+    import hashlib
+
+    (organ / "active-3.gguf").write_bytes(b"LEGACY")
+    sha = hashlib.sha256(b"LEGACY").hexdigest()
+    (organ / "active.json").write_text(json.dumps({"file": "active-3.gguf", "sha256": sha}))
+    result = delete_entity_state(
+        state_root=state_root, qdrant_cfg=cfg, fork_root=tmp_path / "forks", data_root=tmp_path / "data"
+    )
+    assert (organ / "active.json").exists()
+    assert (organ / "active-3.gguf").exists()
+    assert str(organ / "active.json") in result.live_kept
+    assert "organ_adapters.pointer" not in result.deleted_locations
+
+
 def test_entity_job_dir_without_a_mismatch_is_deleted_whole(tmp_path, monkeypatch):
     state_root, cfg, own_id, other_id, organ, jobs = _shared_volumes(tmp_path, monkeypatch)
     _own_job(jobs, own_id, "20261002T000000Z-done0000", ready=False)

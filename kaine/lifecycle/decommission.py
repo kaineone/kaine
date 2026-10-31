@@ -50,6 +50,7 @@ from kaine.lifecycle.decommission_locations import (
     checkpoint_sqlite,
     delete_roots,
     entity_locations,
+    read_pointer_owner,
     read_snapshot_json,
     shared_volume_roots,
     within_delete_roots,
@@ -1267,6 +1268,12 @@ def delete_entity_state(
             if path.resolve() in protected:
                 if not skip_disk_deletion:
                     result.errors.append(f"refused to delete {path}: protected root")
+                continue
+            if loc.pointer_owner is not None and read_pointer_owner(path) != loc.pointer_owner:
+                if not skip_disk_deletion:
+                    result.errors.append(
+                        f"refused to delete {path}: it no longer names this entity"
+                    )
                 continue
             if loc.owner_dirs is not None and not within_entity_dir(path, loc.owner_dirs):
                 if not skip_disk_deletion:

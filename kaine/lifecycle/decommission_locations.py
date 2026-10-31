@@ -116,6 +116,40 @@ def own_entity_dir(volume: Path, entity_id: str | None) -> tuple[Path | None, li
     return candidate, notes
 
 
+def read_pointer_owner(pointer: Path) -> str | None:
+    """The ``entity_id`` a volume-root organ pointer names, or ``None``.
+
+    ``None`` for a missing, symlinked, unreadable or legacy (ownerless)
+    manifest, and for an owner that is not in the identity format.
+    """
+    if pointer.is_symlink() or not pointer.is_file():
+        return None
+    try:
+        with pointer.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    owner = data.get("entity_id")
+    return owner if is_entity_id(owner) else None
+
+
+def own_root_pointer(volume: Path, entity_id: str | None) -> Path | None:
+    """``<volume>/active.json`` when it is a pointer naming this entity, else ``None``.
+
+    The pointer belongs to the entity it names and points into that entity's
+    directory, which decommission deletes. The organ launcher treats a missing
+    pointer as "no adapter", so removing it leaves the organ starting cleanly.
+    """
+    if entity_id is None or not is_entity_id(entity_id):
+        return None
+    pointer = volume / "active.json"
+    if read_pointer_owner(pointer) != entity_id:
+        return None
+    return pointer
+
+
 def attribute_entity_jobs(
     entity_dir: Path, entity_id: str
 ) -> tuple[list[Path], list[Path], list[str]]:
@@ -220,9 +254,15 @@ def attribute_organ_volume(
             try:
                 with entry.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
                 data = None
-            if isinstance(data, dict) and data.get("sha256") in own:
+            if isinstance(data, dict) and "entity_id" in data:
+                # A pointer names its entity: this entity's pointer is left to
+                # own_root_pointer(); any other entity's is kept untouched,
+                # whatever its checksum.
+                if entity_id is None or data.get("entity_id") != entity_id:
+                    shared_paths.append(entry)
+            elif isinstance(data, dict) and data.get("sha256") in own:
                 own_paths.append(entry)
             else:
                 shared_paths.append(entry)
@@ -390,6 +430,10 @@ class Location:
     # before it removes anything, that the directory is still a real child of
     # its volume.
     owner_dirs: tuple[Path, ...] | None = None
+    # Set for the organ-adapters pointer: deletion reads the pointer again just
+    # before removing it and refuses unless it still names this entity, so a
+    # pointer another entity wrote in the meantime is never removed.
+    pointer_owner: str | None = None
 
     def existing(self) -> list[Path]:
         """Return the candidate paths that currently exist, in order, without duplicates."""
@@ -856,6 +900,7 @@ def entity_locations(
     shared_organ_paths: list[Path] = []
     organ_notes: list[str] = []
     organ_entity_dirs: list[Path] = []
+    organ_pointers: list[Path] = []
     for organ_dir in organ_paths:
         own_o, shared_o, notes_o = attribute_organ_volume(
             organ_dir, own_checksums, current, entity_id=entity_id
@@ -867,6 +912,19 @@ def entity_locations(
         organ_notes.extend(dir_notes)
         if entity_dir is not None:
             organ_entity_dirs.append(entity_dir)
+        pointer = own_root_pointer(organ_dir, entity_id)
+        if pointer is not None:
+            organ_pointers.append(pointer)
+    locations.append(
+        Location(
+            "organ_adapters.pointer",
+            BACKUP_DELETE,
+            tuple(organ_pointers),
+            "the organ-adapters volume's active.json pointer naming this entity (it points into this entity's directory)",
+            bundle_dir="locations/organ_adapters.pointer",
+            pointer_owner=entity_id if organ_pointers else None,
+        )
+    )
     locations.append(
         Location(
             "organ_adapters.entity_dir",
