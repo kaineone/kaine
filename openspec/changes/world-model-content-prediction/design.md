@@ -7,25 +7,21 @@ The world model vendors the DreamerV3 RSSM (spec `world-model`), with a JAX core
 Changes that touch the same module and are not redone here:
 
 - `world-model-action-outcomes` (design only): action input with zero initial weights, a one-step checkpoint migration for both action kinds, optional action-outcome error and imagined acts. Gated on the module-addition study's hardware stage.
-- `latent-workspace-content-level` (specified in parallel, workstream W1): a learned accessed-content code, decoded as descending predictions; its offline decodability check comes first; its privacy rule (latent-derived content only in working state and learned weights) applies here unchanged.
 - The agency workstream's planning change (specified in parallel on `spec/agency-learning-metacognition-2026-10-31`): planning with horizon above one by sophisticated inference (Friston et al. 2021), whose transition model draws on imagined rollouts. `planning-act-proposals` (design only) grows the planner's action space by declared effector actions.
 - `ignition-world-model-check` and `nexus-merge-world-model` (archived): the study's consolidation check and the merge of world-model weights.
 
 ## Decisions
 
-### D1. The observation gains a content code from one declared source
+### D1. The observation gains a content part from the world model's own projection
 
-The observation becomes `[summary | content]`. The summary is today's vector unchanged. The content part comes from the first available of:
+The observation becomes `[summary | content]`. The summary is today's vector unchanged. The content part is a projection learned inside the world model's encoder: each accessed perceptual member's latent (vision's `latent`, audition's encoder embedding) is projected to a small fixed width by an online PCA (incremental, Oja-style) fitted on the waking buffer in sleep and frozen while awake, intensity-weighted and concatenated with interoception's numeric readings. The projection's version is recorded in the checkpoint and on every `world_model.*` event (as the backend already is), and changing it is a migration (D4), never silent.
 
-1. the accessed content code of `latent-workspace-content-level`, read through its declared interface, when that change is enabled;
-2. otherwise, a projection learned inside the world model's encoder: each accessed perceptual member's latent (vision's `latent`, audition's encoder embedding) is projected to a small fixed width by an online PCA (incremental, Oja-style) fitted on the waking buffer, intensity-weighted and concatenated with interoception's numeric readings.
-
-The source is recorded in the checkpoint and on every `world_model.*` event (as the backend already is), and switching source is a migration (D4), never silent.
+Latent-derived values follow the existing privacy rule for vectors: they live in the in-memory buffer and in learned weights only, are privacy-filter vector fields, and are never displayed, logged or stored as an episode.
 
 Alternatives considered:
 - Feed the raw 768-dimensional latents. Rejected: the buffer and the RSSM's encoder grow by an order of magnitude for a model that trains in sleep on CPU-friendly engines, and most of the variance is not predictable at the world model's tick.
-- Wait for `latent-workspace-content-level` only. Rejected as the sole route because that change may stop after its offline check if cross-modal content is weak on the study's stimulus. The projection route still makes the world model predict perception.
 - Train the world model on pixels or audio. Rejected: raw sense data never enters any buffer (zero-persistence rule), and the frozen encoders already supply the representation.
+- Future: a shared content representation built elsewhere in the architecture could replace the projection as the content part, through the same versioned migration.
 
 ### D2. Prediction and error in two parts
 
@@ -61,10 +57,9 @@ Once content is observed and imagined, "simulated scene construction" describes 
 ## Migration and ordering
 
 1. After the module-addition study.
-2. If `latent-workspace-content-level` has run its offline check: use its result to decide between D1's sources for the default.
-3. Content observation and the two-part error, with the migration (tasks 1.x), validated offline on recorded waking trajectories.
-4. The imagination interface (tasks 2.x), usable at once with an empty policy (pure prediction) and by the agency planning change.
-5. `world-model-action-outcomes` adds the action input on its own schedule; the interface then accepts real policies.
+2. Content observation and the two-part error, with the migration (tasks 1.x), validated offline on recorded waking trajectories.
+3. The imagination interface (tasks 2.x), usable at once with an empty policy (pure prediction) and by the agency planning change.
+4. `world-model-action-outcomes` adds the action input on its own schedule; the interface then accepts real policies.
 
 ## Welfare and admissibility notes
 

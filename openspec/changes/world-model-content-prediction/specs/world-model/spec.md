@@ -4,7 +4,7 @@
 The world model module SHALL encode each `WorkspaceSnapshot` to a fixed-width observation
 vector (salience-weighted coalition + affect summary + inhibition flag) using a
 versioned encoder. When `[world_model].content_observation` is true, the observation SHALL
-also carry a content part from the declared content source. No raw audio or image bytes
+also carry a content part from the world model's own projection. No raw audio or image bytes
 SHALL appear in the observation vector or the trajectory buffer.
 
 #### Scenario: Observation vector contains no raw sense data
@@ -22,14 +22,19 @@ SHALL appear in the observation vector or the trajectory buffer.
 
 ## ADDED Requirements
 
-### Requirement: The content source is declared and recorded
+### Requirement: The content part is the world model's own projection
 
-The content part SHALL come from the accessed content code of `latent-workspace-content-level` when that capability is enabled, and otherwise from an online projection of the accessed perceptual members' latents and interoception's readings, fitted in sleep and frozen while awake. The source SHALL be recorded in the checkpoint and on every `world_model.*` event.
+The content part SHALL be an online projection of the accessed perceptual members' latents and interoception's readings, fitted in sleep and frozen while awake. The projection's version SHALL be recorded in the checkpoint and on every `world_model.*` event.
 
-#### Scenario: Source disclosed
+#### Scenario: Projection version disclosed
 
 - **WHEN** a `world_model.content_error` event is published
-- **THEN** its payload names the content source
+- **THEN** its payload names the projection version
+
+#### Scenario: The projection does not change while awake
+
+- **WHEN** the entity is awake between two sleeps
+- **THEN** the projection used for every observation is the one fitted in the last sleep
 
 ### Requirement: The waking error has a summary part and a content part
 

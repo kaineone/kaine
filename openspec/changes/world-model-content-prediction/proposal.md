@@ -12,7 +12,7 @@ This change covers the first and third gaps: content as the world model's observ
 
 ## What Changes
 
-1. A content observation. The world model observes, beside today's summary, a content code of the accessed broadcast: the accessed content code of `latent-workspace-content-level` when that change is enabled, otherwise a learned low-dimensional projection of the accessed perceptual members' latents (vision, audition) and interoception's readings. It predicts both parts. The encoder is versioned; the checkpoint migrates once with zero-initialised new weights so a preserved model predicts the summary exactly as before.
+1. A content observation. The world model observes, beside today's summary, a content part: a low-dimensional projection, learned inside the world model, of the accessed perceptual members' latents (vision, audition) and interoception's readings. It predicts both parts. The encoder is versioned; the checkpoint migrates once with zero-initialised new weights so a preserved model predicts the summary exactly as before.
 2. The waking error splits into a summary part and a content part, each precision-scaled, so the existing test of §4 (whether its error changes the sequence of accessed coalitions) stays measurable and a content error can compete beside it.
 3. An imagination interface. A typed request on the bus asks the world model to roll out candidate action sequences from the current state for a horizon; the reply gives, per step, predicted observations mapped into the requester's discrete observation space, and the predictive uncertainty. It is bounded in latency and policies, carries latent-derived values only between the two modules, and is never logged.
 4. Coordination by reference: `world-model-action-outcomes` supplies the action input the interface needs; the agency planning change consumes the interface. Neither is redesigned here.
@@ -26,7 +26,7 @@ This change covers the first and third gaps: content as the world model's observ
 
 ### Modified Capabilities
 
-- `world-model`: the observation includes a content code; the waking error has summary and content parts; the checkpoint migration.
+- `world-model`: the observation includes a content part; the waking error has summary and content parts; the checkpoint migration.
 
 ## Impact
 

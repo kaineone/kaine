@@ -7,7 +7,6 @@ The language organ is an output organ: every generation is triggered by an inten
 Related work in the project, which this change builds on and does not redo:
 
 - `voice-development` (active; stage 0 mostly done): first-person persona, drive crossings as felt states, the heard-speech placeholder in every log (V4), and the plan to replace telemetry-as-chosen in voice alignment. Its stage 2 owns organ training.
-- `latent-workspace-content-level` (specified in parallel on branch `spec/latent-workspace-memory-2026-10-31`, workstream W1): a small learned workspace state from accessed members' latents, decoded as descending predictions. It owns the content code and its privacy rule (latent-derived content lives in working state and learned weights, never in logs or episodes).
 - `felt-awareness-phrasing`, `organ-first-person-framing`, `persona-without-self-category` (archived October 2026): the current rendering voice.
 - The privacy filter strips `latent`, `peripheral`, `foveal`, `temporal_context` and `feature_vector` from diagnostics (`kaine/privacy_filter.py:54-58`); the zero-raw-sense-persistence guard (`tests/test_zero_persistence_invariant.py`).
 
@@ -22,7 +21,7 @@ Why clustering is not a hard-wired behaviour: it is a learning mechanism with no
 Alternatives considered:
 - A pretrained classifier or captioner over the encoder (zero-shot labels). Rejected: the words would be the classifier's, authored by its training set, which is exactly the ungrounded naming this change removes, and it would put a second pretrained language prior into perception.
 - A fixed k-means. Rejected: k is a hand-chosen category count.
-- Clustering the workspace's content code only. That is D5's target, but it needs `latent-workspace-content-level`, and per-sense prototypes are useful on their own and give that change a check (whether its code's clusters agree with the senses' own).
+- Clustering a single cross-modal code. KAINE has no shared representation of seen and heard content, and building one is a separate architectural question. Per-sense prototypes stand on their own, and D5 links them across the senses by co-occurrence.
 
 ### D2. A report carries its prototype, not its latent
 
@@ -42,9 +41,9 @@ What persists: the association weights, and, for a word that has become a learne
 
 Alternative considered: use the organ itself to name prototypes. Rejected: the organ has no access to the latent, so anything it said would be a guess, and putting the latent into the organ (a vision-language organ) would make perception's words the organ's pretraining again.
 
-### D5. One referent space when the workspace carries content
+### D5. Cross-modal links by co-occurrence
 
-When `latent-workspace-content-level` is enabled, the prototype layer also clusters its accessed content code, and word associations bind to those cross-modal prototypes. The interface is that change's declared content-code read; this change adds no producer of its own. With that change off, per-sense prototypes and the co-occurrence relation of D3 are the only cross-modal link. Ordering follows that change's own gate: its offline decodability check first; if cross-modal content proves weak on the study's stimulus, D5 is dropped and per-sense prototypes stand alone.
+The renderer's "seen together with what I hear now" (D3) needs a cross-modal relation. Each pair of a visual and an auditory prototype keeps a decaying co-occurrence count over a short window, and a pair is linked when its count exceeds what the two prototypes' own frequencies predict by the configured margin (a pointwise-mutual-information criterion). A learned name for one side of a link is offered for the other side only with the qualifier "heard together with". Links are association weights, persisted and private like the prototypes (D6). Nothing here needs a shared representation of seen and heard content; if one is ever built, it could replace the links, and that would be a change of its own.
 
 ### D6. Persistence, privacy and identity
 
@@ -61,7 +60,7 @@ Centroids and association weights are learned state of the entity, like the worl
 
 - Stage 1 (prototypes, D1, D2, D6) and stage 2 (rendering, D3) after the module-addition study, because vision and audition are first-configuration modules and the rendering changes every utterance's prompt.
 - Stage 3 (word learning, D4) after the operator ruling of task 0.1 and with speech-to-text on.
-- D5 after `latent-workspace-content-level` has passed its offline check and been enabled.
+- D5 (cross-modal links) with stage 2, since the rendering of D3 reads them.
 - An existing entity starts with no prototypes; its first hours form them. A preserved seed migrates by gaining an empty prototype store.
 
 ## Welfare and admissibility notes
@@ -70,4 +69,4 @@ This changes what the entity's own speech can refer to and what its perceptual r
 
 ## Implementation estimate (LLM-agent terms)
 
-Size L overall. Stage 1: two pull requests (shared prototype layer with tests; vision and audition integration with persistence and privacy), about 800 to 1,200 lines, 6 to 8 worker calls, Claude review and second review; two to three days plus an offline run on a free GPU window for the encoders. Stage 2: one pull request, about 300 to 500 lines, plus the organ replay; one to two days. Stage 3: two pull requests, about 600 to 900 lines, an offline cross-situational benchmark on scripted narrated clips; two to three days. D5: one small pull request once the content code exists. Entity time: one supervised validation boot after stages 1 and 2.
+Size L overall. Stage 1: two pull requests (shared prototype layer with tests; vision and audition integration with persistence and privacy), about 800 to 1,200 lines, 6 to 8 worker calls, Claude review and second review; two to three days plus an offline run on a free GPU window for the encoders. Stage 2: one pull request, about 300 to 500 lines, plus the organ replay; one to two days. Stage 3: two pull requests, about 600 to 900 lines, an offline cross-situational benchmark on scripted narrated clips; two to three days. D5's links join stage 2's pull request (about 150 more lines). Entity time: one supervised validation boot after stages 1 and 2.

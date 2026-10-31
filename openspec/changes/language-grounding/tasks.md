@@ -23,9 +23,9 @@
 - [ ] 3.2 Store contents: weights and lexicon or hashes only. Tests: no utterance sequence in the store; hashed mode.
 - [ ] 3.3 Offline benchmark on scripted narrated clips (no entity), with a shuffled-pairing control. Record it.
 
-## 4. Shared referent space (after `latent-workspace-content-level` is enabled)
+## 4. Cross-modal links (with stage 2)
 
-- [ ] 4.1 The prototype layer also clusters the accessed content code through that change's declared interface; associations bind to those prototypes. Tests against a fake content-code producer.
+- [ ] 4.1 Decaying co-occurrence counts between visual and auditory prototypes; a link when the pointwise-mutual-information margin is exceeded; links persisted and private like prototypes. Tests: `tests/test_prototype_links.py` (co-occurring pair links; independent pair does not; a learned name crosses a link only with the qualifier).
 
 ## 5. Validation and docs
 

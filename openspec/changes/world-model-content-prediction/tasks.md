@@ -1,13 +1,12 @@
 ## 0. Gates and coordination
 
 - [ ] 0.1 Gate: after the module-addition study; nothing here changes an image a running study uses.
-- [ ] 0.2 Read the result of `latent-workspace-content-level`'s offline decodability check, if it has run, and choose D1's default source.
-- [ ] 0.3 Agree the imagination reply's fields with the agency workstream's planning change before task 2.1; record the agreed contract in both changes.
-- [ ] 0.4 Note in `world-model-action-outcomes` that its action vocabulary is what `world_model.imagine.request` policies use.
+- [ ] 0.2 Agree the imagination reply's fields with the agency workstream's planning change before task 2.1; record the agreed contract in both changes.
+- [ ] 0.3 Note in `world-model-action-outcomes` that its action vocabulary is what `world_model.imagine.request` policies use.
 
 ## 1. Content observation and error
 
-- [ ] 1.1 Encoder version with the content part; online projection fitted in sleep and frozen while awake; the declared content-code source. Tests: extend `tests/test_world_model_encoder.py` (content part present; no raw bytes; version bumped).
+- [ ] 1.1 Encoder version with the content part; online projection fitted in sleep and frozen while awake, with its version recorded. Tests: extend `tests/test_world_model_encoder.py` (content part present; no raw bytes; version bumped).
 - [ ] 1.2 Both engines predict the content part; parity between JAX and NumPy. Tests: extend `tests/test_world_model_numpy_engine.py` and `tests/test_world_model_backend.py`.
 - [ ] 1.3 Two-part error, precision-scaled; `world_model.content_error` with scalars only; the warm-up rule. Tests: extend `tests/test_world_model_module.py`.
 - [ ] 1.4 Checkpoint migration with zero-initialised weights. Tests: extend `tests/test_world_model_persistence.py` and `tests/test_world_model_identity.py` (migrated model predicts the summary identically on a recorded trajectory; forks copy the migrated model).
