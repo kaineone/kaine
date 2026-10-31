@@ -26,6 +26,7 @@ from kaine.workspace.feedback import FEEDBACK_KEY, WorkspaceFeedbackSettings
 
 if TYPE_CHECKING:
     from kaine.modules.vocal.coordination import SpeakingGate
+from kaine.bus.streams import SLEEP_STREAM
 from kaine.modules.audition.acoustic import (
     AcousticEncoder,
     SpectralAcousticEncoder,
@@ -66,7 +67,7 @@ log = logging.getLogger(__name__)
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
-    _SLEEP_STREAM: ClassVar[str] = "sleep.out"
+    _SLEEP_STREAM: ClassVar[str] = SLEEP_STREAM
 
     def holds_external_resources(self) -> bool:
         return True

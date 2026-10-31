@@ -36,12 +36,13 @@ import logging
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import SLEEP_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_SLEEP_STREAM = "sleep.out"
+_SLEEP_STREAM = SLEEP_STREAM
 
 
 def outcome_category(accepted: object, reason: object, samples_used: object) -> str:

@@ -87,6 +87,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from kaine.bus.schema import Event, validate_event
+from kaine.bus.streams import (
+    AFFECT_STREAM,
+    AUDITION_STREAM,
+    EPISODIC_MEMORY_STREAM,
+    INTEROCEPTION_STREAM,
+    SLEEP_STREAM,
+    VISION_STREAM,
+)
 from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
@@ -115,12 +123,12 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
 
 log = logging.getLogger(__name__)
 
-_INTEROCEPTION_STREAM = "interoception.out"
-_SLEEP_STREAM = "sleep.out"
-_AFFECT_STREAM = "affect.out"
-_EPISODIC_MEMORY_STREAM = "episodic_memory.out"
-_VISION_STREAM = "vision.out"
-_AUDITION_STREAM = "audition.out"
+_INTEROCEPTION_STREAM = INTEROCEPTION_STREAM
+_SLEEP_STREAM = SLEEP_STREAM
+_AFFECT_STREAM = AFFECT_STREAM
+_EPISODIC_MEMORY_STREAM = EPISODIC_MEMORY_STREAM
+_VISION_STREAM = VISION_STREAM
+_AUDITION_STREAM = AUDITION_STREAM
 
 # Emitted gray-zone signal: source "welfare" → stream "welfare.out".
 _GRAY_ZONE_SOURCE = "welfare"

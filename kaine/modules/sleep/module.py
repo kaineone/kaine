@@ -14,6 +14,19 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
+from kaine.bus.streams import (
+    ACTION_SELECTION_FEEDBACK_STREAM,
+    ACTION_SELECTION_STREAM,
+    AFFECT_STREAM,
+    EFFECTORS_STREAM,
+    INTEROCEPTION_STREAM,
+    LANGUAGE_EXTERNAL_STREAM,
+    LANGUAGE_INTERNAL_STREAM,
+    PLANNING_STREAM,
+    SLEEP_STREAM,
+    VOCAL_STREAM,
+    WORKSPACE_STREAM,
+)
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.sleep.corpus import (
@@ -274,14 +287,14 @@ class Sleep(BaseModule):
         self._audit_cursors: dict[str, str] = {
             stream: "0"
             for stream in (
-                "action_selection.out",
-                "action_selection_feedback.out",
-                "language.external",
-                "language.internal",
-                "effectors.out",
-                "planning.out",
-                "vocal.out",
-                "sleep.out",
+                ACTION_SELECTION_STREAM,
+                ACTION_SELECTION_FEEDBACK_STREAM,
+                LANGUAGE_EXTERNAL_STREAM,
+                LANGUAGE_INTERNAL_STREAM,
+                EFFECTORS_STREAM,
+                PLANNING_STREAM,
+                VOCAL_STREAM,
+                SLEEP_STREAM,
             )
         }
         self._broadcast_cursor: str = "0"
@@ -341,17 +354,17 @@ class Sleep(BaseModule):
         # since its cursor, bounded to the window since _last_sleep_at.
         for stream in self._audit_cursors:
             self._audit_cursors[stream] = await tail_id(self._bus, stream)
-        self._broadcast_cursor = await tail_id(self._bus, "workspace.broadcast")
+        self._broadcast_cursor = await tail_id(self._bus, WORKSPACE_STREAM)
         # Seed cursor so we only process new action selection module intents from now on.
-        self._action_selection_cursor = await tail_id(self._bus, "action_selection.out")
+        self._action_selection_cursor = await tail_id(self._bus, ACTION_SELECTION_STREAM)
         self._tasks.append(
             asyncio.create_task(self._action_selection_consumer_loop(), name="sleep-action-selection-consumer")
         )
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
-            self._interoception_cursor = await tail_id(self._bus, "interoception.out")
+            self._interoception_cursor = await tail_id(self._bus, INTEROCEPTION_STREAM)
             # Seed cursor so we only process new affect module events from now on.
-            self._affect_cursor = await tail_id(self._bus, "affect.out")
+            self._affect_cursor = await tail_id(self._bus, AFFECT_STREAM)
             self._tasks.append(
                 asyncio.create_task(self._interoception_consumer_loop(), name="sleep-interoception-consumer")
             )
@@ -416,7 +429,7 @@ class Sleep(BaseModule):
                 try:
                     idle = True
                     interoception_entries, interoception_last_scanned = await self._bus.read_entries(
-                        "interoception.out",
+                        INTEROCEPTION_STREAM,
                         last_id=self._interoception_cursor,
                         count=32,
                         block_ms=0,
@@ -460,7 +473,7 @@ class Sleep(BaseModule):
                             await self._start_maintenance_sleep(trigger)
 
                     affect_entries, affect_last_scanned = await self._bus.read_entries(
-                        "affect.out",
+                        AFFECT_STREAM,
                         last_id=self._affect_cursor,
                         count=32,
                         block_ms=0,
@@ -649,7 +662,7 @@ class Sleep(BaseModule):
             while not self._stopped.is_set():
                 try:
                     entries, last_scanned = await self._bus.read_entries(
-                        "action_selection.out",
+                        ACTION_SELECTION_STREAM,
                         last_id=self._action_selection_cursor,
                         count=32,
                         block_ms=0,
@@ -1373,14 +1386,14 @@ class Sleep(BaseModule):
             realizations: list[dict[str, Any]] = []
             proposal_outcomes: list[dict[str, Any]] = []
             for stream in (
-                "action_selection.out",
-                "action_selection_feedback.out",
-                "language.external",
-                "language.internal",
-                "effectors.out",
-                "planning.out",
-                "vocal.out",
-                "sleep.out",
+                ACTION_SELECTION_STREAM,
+                ACTION_SELECTION_FEEDBACK_STREAM,
+                LANGUAGE_EXTERNAL_STREAM,
+                LANGUAGE_INTERNAL_STREAM,
+                EFFECTORS_STREAM,
+                PLANNING_STREAM,
+                VOCAL_STREAM,
+                SLEEP_STREAM,
             ):
                 for entry_id, event in await self._drain_audit_stream(stream):
                     if not _in_window(entry_id):

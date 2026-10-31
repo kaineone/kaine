@@ -7,7 +7,7 @@
 ## 2. Canonical stream names
 
 - [x] 2.1 Add a canonical stream-constants module or extend `kaine/bus/schema.py` to export known stream names; verify `module_stream()` is used by consumers.
-- [ ] 2.2 Replace hard-coded stream literals in `kaine/modules/`, `kaine/dashboard/conversation.py`, `kaine/evaluation/observers/`, and `kaine/evaluation/benchmarks/` with canonical imports.
+- [x] 2.2 Replace hard-coded stream literals in `kaine/modules/`, `kaine/dashboard/conversation.py`, `kaine/evaluation/observers/`, and `kaine/evaluation/benchmarks/` with canonical imports.
 - [x] 2.3 Warn at boot on unknown `[bus.per_stream_maxlen]` keys. `kaine/boot.py` no longer exists; the warning lives in the preflight bus budget (`kaine/preboot.py`), which every boot runs.
 - [x] 2.4 Extend `tests/test_stream_registry_drift.py`: every diagnostics stream from `stream_registry` is a known stream, and `MODULE_STREAMS` is exactly one stream per declared module. The observers still define their own stream literals, so checking those constants against the registry is part of 2.2, when they import the canonical names.
 
@@ -34,8 +34,4 @@
 
 - [x] 6.1 Run `openspec validate stream-wiring-quality --strict` and resolve all issues.
 - [x] 6.2 Run `ruff check kaine tests` and `lint-imports` and verify both pass.
-- [ ] 6.3 Run the affected test suites and verify no regressions.
-
-## Review status (2026-09-22)
-
-Tasks 1.2, 1.3, 2.1, 2.3, 2.4, 3.2 and 5.2 are now done. Task 2.2 (replacing stream literals across module and observer files) is deliberately left open and sequenced after the in-flight module PRs, to avoid merge conflicts. Task 6.3 (running the affected test suites) remains open until those PRs land and the full suite can be exercised.
+- [x] 6.3 Run the affected test suites and verify no regressions.

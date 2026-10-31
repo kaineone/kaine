@@ -11,6 +11,16 @@ from typing import Any, Callable, ClassVar, Mapping, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event, module_stream, split_stream_entry_key
+from kaine.bus.streams import (
+    ACTION_SELECTION_STREAM,
+    AUDITION_STREAM,
+    DEVELOPMENT_STREAM,
+    EPISODIC_MEMORY_STREAM,
+    INTEROCEPTION_STREAM,
+    SEQUENCE_STREAM,
+    SOCIAL_COGNITION_STREAM,
+    VISION_STREAM,
+)
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.affect.appraisal import (
@@ -84,10 +94,10 @@ class Affect(BaseModule):
         goals: Optional[GoalLedger] = None,
         baseline_salience: float = 0.1,
         alert_salience: float = 0.7,
-        interoception_stream: str = "interoception.out",
-        sequence_stream: str = "sequence.out",
-        episodic_memory_stream: str = "episodic_memory.out",
-        action_selection_stream: str = "action_selection.out",
+        interoception_stream: str = INTEROCEPTION_STREAM,
+        sequence_stream: str = SEQUENCE_STREAM,
+        episodic_memory_stream: str = EPISODIC_MEMORY_STREAM,
+        action_selection_stream: str = ACTION_SELECTION_STREAM,
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.20,
@@ -287,16 +297,16 @@ class Affect(BaseModule):
             Callable[[Mapping[str, float]], tuple[str, float] | None]
         ] = None
         # Streams for coupling inputs (populated in initialize).
-        self._audition_emotion_stream = "audition.out"
-        self._social_cognition_agent_model_stream = "social_cognition.out"
+        self._audition_emotion_stream = AUDITION_STREAM
+        self._social_cognition_agent_model_stream = SOCIAL_COGNITION_STREAM
         # Perception→arousal coupling: perceptual surprise (the vision module's scene dynamics,
         # audition acoustic onsets) arouses the entity, scaled by the larger of the
         # normalised prediction error ratio and the normalised change ratio,
         # mirroring the interoception module's alert→arousal path.
         # These streams are read UNCONDITIONALLY (arousal is pre-attentive; a
         # startle does not require the emotion-coupling path to be enabled).
-        self._vision_stream = "vision.out"
-        self._development_stream = "development.out"
+        self._vision_stream = VISION_STREAM
+        self._development_stream = DEVELOPMENT_STREAM
         self._hearing_stage_type = "development.hearing_stage"
         self._hearing_stage: int | None = None
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]

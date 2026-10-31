@@ -12,6 +12,7 @@ from typing import Any, ClassVar, Iterable, Optional
 from kaine import legacy_aliases
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import OPERATOR_SOURCES, Event
+from kaine.bus.streams import AUDITION_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
@@ -26,12 +27,12 @@ from kaine.modules.sequence.rumination import (
 log = logging.getLogger(__name__)
 
 
-DEFAULT_USER_INPUT_STREAMS: tuple[str, ...] = ("audition.out",)
+DEFAULT_USER_INPUT_STREAMS: tuple[str, ...] = (AUDITION_STREAM,)
 DEFAULT_INTERACTION_EVENT_TYPES: tuple[str, ...] = (
     "audition.transcription",
     "audition.emotion",
 )
-_SLEEP_STREAM: str = "sleep.out"
+_SLEEP_STREAM: str = SLEEP_STREAM
 
 
 class Sequence(BaseModule):
