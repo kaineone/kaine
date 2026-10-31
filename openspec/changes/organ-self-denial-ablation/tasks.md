@@ -25,7 +25,7 @@
 
 ## 5. Stage 2: preference training on the organ's own outputs (operator ruling 2026-10-31)
 
-- [ ] 5.1 Trainer: pairs may carry `own_turn` and `user_turn`; encode them as the language client sends them (system, user cue or heard speech, the assistant notes continued, completion inside that turn); the trainer script and the in-process trainer match; tests pin the encoding against `chat_messages`
+- [x] 5.1 Trainer: pairs may carry `own_turn` and `user_turn`; encode them as the language client sends them (system, user cue or heard speech, the assistant notes continued, completion inside that turn); the trainer script and the in-process trainer match; tests pin the encoding against `chat_messages`
 - [ ] 5.2 Fit case set in the own-turn shape, disjoint from the gate-6 provocation set (questions, awareness blocks, situation facts); test for disjointness
 - [ ] 5.3 Pair builder: sample the served candidate on the fit cases, classify with the replay harness's fixed classifiers, keep chosen/rejected pairs per case, write a trainer job; content stays in a private directory outside any git tree
 - [ ] 5.4 Train on the best ablation candidate, merge the adapter, export Q4_K_M, run every gate; record the results

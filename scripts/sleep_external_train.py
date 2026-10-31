@@ -24,7 +24,9 @@ IPC contract (filesystem job spec):
                   previous_adapter_dir (path string or null),
                   schema_version (2).
     pairs.jsonl — the DPO preference pairs
-                  ({"prompt","chosen","rejected","system"}).
+                  ({"prompt","chosen","rejected","system"}, optionally
+                  "own_turn": bool and "user_turn": str; see
+                  own_turn_messages).
 
   On completion this script writes ``<job_dir>/result.json``:
     {
@@ -41,6 +43,7 @@ IPC contract (filesystem job spec):
       "train_precision": "bf16" | "4bit" | null,
       "previous_adapter_dir": str | null,
       "pairs_without_system": int,
+      "pairs_with_invalid_turn": int,
       "peak_vram_gib": float | null,
       "schema_version": 2
     }
@@ -141,10 +144,82 @@ def split_pairs_by_system(pairs: list[dict[str, Any]]) -> tuple[list[dict[str, A
     return kept, dropped
 
 
+# The fixed user cue the language client sends before the entity's own turn.
+# Mirror of kaine.modules.language.client.OWN_TURN_CUE (this script stays out
+# of the kaine import graph); tests/test_own_turn_pairs.py pins the two together.
+OWN_TURN_CUE = "(next)"
+
+
+def own_turn_messages(
+    system: Optional[str], user_turn: Optional[str], prompt: str
+) -> list[dict[str, str]]:
+    """The own-turn message layout, exactly as the language client's
+    ``chat_messages`` builds it: the system prompt (when given), the user turn
+    (heard speech, or the fixed cue when there is none) and the entity's notes as
+    the assistant message the organ continues."""
+    messages: list[dict[str, str]] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user_turn if user_turn else OWN_TURN_CUE})
+    messages.append({"role": "assistant", "content": prompt})
+    return messages
+
+
+def _turn_shape_error(pair: dict[str, Any]) -> Optional[str]:
+    """Why a pair's own-turn fields are malformed, or None when they are valid.
+
+    ``own_turn`` must be a bool when present. ``user_turn`` (null counts as
+    absent) must be a non-blank string and is only meaningful on an own-turn
+    pair; a user turn on a plain pair would be trained in a shape the organ is
+    never served, so it is refused rather than ignored."""
+    own_turn = pair.get("own_turn", False)
+    if not isinstance(own_turn, bool):
+        return "own_turn is not a bool"
+    user_turn = pair.get("user_turn")
+    if user_turn is None:
+        return None
+    if not isinstance(user_turn, str) or not user_turn.strip():
+        return "user_turn is not a non-empty string"
+    if not own_turn:
+        return "user_turn given on a pair that is not own_turn"
+    return None
+
+
+def split_pairs_by_turn_shape(
+    pairs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Keep only pairs whose ``own_turn``/``user_turn`` fields are well-formed.
+
+    Returns (kept_pairs, dropped_count). A malformed pair is dropped, never
+    coerced into either layout."""
+    kept: list[dict[str, Any]] = []
+    dropped = 0
+    for p in pairs:
+        if _turn_shape_error(p) is None:
+            kept.append(p)
+        else:
+            dropped += 1
+    return kept, dropped
+
+
 def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert kept pairs into conversational DPO rows (prompt, chosen, rejected)."""
+    """Convert kept pairs into conversational DPO rows (prompt, chosen, rejected).
+
+    An own-turn pair's prompt is the own-turn layout (see own_turn_messages) and
+    its row carries ``own_turn: True`` so encode_dpo_row continues the final
+    assistant message; every other pair keeps the plain system + user layout."""
     rows: list[dict[str, Any]] = []
     for p in pairs:
+        if p.get("own_turn") is True:
+            rows.append(
+                {
+                    "prompt": own_turn_messages(p["system"], p.get("user_turn"), p["prompt"]),
+                    "chosen": [{"role": "assistant", "content": p["chosen"]}],
+                    "rejected": [{"role": "assistant", "content": p["rejected"]}],
+                    "own_turn": True,
+                }
+            )
+            continue
         rows.append(
             {
                 "prompt": [
@@ -161,9 +236,24 @@ def build_dataset_rows(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # DPO loop (no TRL)
 def encode_dpo_row(tokenizer: Any, row: dict[str, Any], max_length: int) -> dict[str, list[int]]:
 
-    prompt_text = tokenizer.apply_chat_template(
-        row["prompt"], tokenize=False, add_generation_prompt=True
-    )
+    if row.get("own_turn") is True:
+        # The organ is served this request as a continuation of the final
+        # assistant message (llama-server renders the turns before it with the
+        # generation prompt and appends the notes), with thinking off, as the
+        # language client sends it (think=False -> enable_thinking=false). The
+        # completion is then appended inside that same assistant turn and closed
+        # with EOS below.
+        prompt_text = tokenizer.apply_chat_template(
+            row["prompt"],
+            tokenize=False,
+            add_generation_prompt=False,
+            continue_final_message=True,
+            enable_thinking=False,
+        )
+    else:
+        prompt_text = tokenizer.apply_chat_template(
+            row["prompt"], tokenize=False, add_generation_prompt=True
+        )
     prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
 
     def completion_ids(content: str) -> list[int]:
@@ -332,14 +422,18 @@ def _load_pairs(job_dir: Path) -> list[dict[str, Any]]:
             # Kept as given: a non-string system prompt is dropped by
             # split_pairs_by_system, never coerced into one.
             system = rec.get("system")
-            pairs.append(
-                {
-                    "prompt": str(rec.get("prompt", "")),
-                    "chosen": str(rec.get("chosen", "")),
-                    "rejected": str(rec.get("rejected", "")),
-                    "system": system,
-                }
-            )
+            pair: dict[str, Any] = {
+                "prompt": str(rec.get("prompt", "")),
+                "chosen": str(rec.get("chosen", "")),
+                "rejected": str(rec.get("rejected", "")),
+                "system": system,
+            }
+            # Kept as given too: split_pairs_by_turn_shape drops a malformed
+            # own_turn / user_turn rather than coercing it.
+            for key in ("own_turn", "user_turn"):
+                if key in rec:
+                    pair[key] = rec[key]
+            pairs.append(pair)
     return pairs
 
 
@@ -357,6 +451,7 @@ def _augment_result(
     train_precision: str | None,
     previous_adapter_dir: Path | None,
     pairs_without_system: int,
+    pairs_with_invalid_turn: int = 0,
 ) -> dict[str, Any]:
     """Add the schema-v2 reporting keys every result must carry."""
     result.setdefault("train_precision", train_precision)
@@ -364,6 +459,7 @@ def _augment_result(
         "previous_adapter_dir", str(previous_adapter_dir) if previous_adapter_dir else None
     )
     result.setdefault("pairs_without_system", pairs_without_system)
+    result.setdefault("pairs_with_invalid_turn", pairs_with_invalid_turn)
     result.setdefault("peak_vram_gib", None)
     result.setdefault("abliteration_passed", None)
     result.setdefault("abliteration_matched_pattern", None)
@@ -1218,6 +1314,7 @@ def main(argv: list[str]) -> int:
     precision: str | None = None
     prev_adapter: Path | None = None
     pairs_without_system = 0
+    pairs_with_invalid_turn = 0
 
     try:
         job = _load_job(job_dir)
@@ -1240,12 +1337,14 @@ def main(argv: list[str]) -> int:
             _write_result(
                 job_dir,
                 _augment_result(
-                    result, precision, prev_adapter, pairs_without_system
+                    result, precision, prev_adapter, pairs_without_system,
+                    pairs_with_invalid_turn,
                 ),
             )
             return 0
 
         kept_pairs, pairs_without_system = split_pairs_by_system(pairs)
+        kept_pairs, pairs_with_invalid_turn = split_pairs_by_turn_shape(kept_pairs)
         load_kwargs = precision_load_kwargs(precision)
         prev_adapter = resolve_previous_adapter(job, job_dir)
 
@@ -1257,8 +1356,9 @@ def main(argv: list[str]) -> int:
                 "steps": 0,
                 "dpo_loss": None,
                 "reason": (
-                    f"no pair has a verified system prompt "
-                    f"({pairs_without_system} dropped)"
+                    f"no pair has a verified system prompt and a well-formed turn "
+                    f"({pairs_without_system} dropped without a system prompt, "
+                    f"{pairs_with_invalid_turn} with a malformed own_turn/user_turn)"
                 ),
                 "capability_score_before": None,
                 "capability_score_after": None,
@@ -1268,7 +1368,8 @@ def main(argv: list[str]) -> int:
             _write_result(
                 job_dir,
                 _augment_result(
-                    result, precision, prev_adapter, pairs_without_system
+                    result, precision, prev_adapter, pairs_without_system,
+                    pairs_with_invalid_turn,
                 ),
             )
             return 0
@@ -1293,7 +1394,8 @@ def main(argv: list[str]) -> int:
             _write_result(
                 job_dir,
                 _augment_result(
-                    result, precision, prev_adapter, pairs_without_system
+                    result, precision, prev_adapter, pairs_without_system,
+                    pairs_with_invalid_turn,
                 ),
             )
             return 0
@@ -1325,7 +1427,8 @@ def main(argv: list[str]) -> int:
             _write_result(
                 job_dir,
                 _augment_result(
-                    result, precision, prev_adapter, pairs_without_system
+                    result, precision, prev_adapter, pairs_without_system,
+                    pairs_with_invalid_turn,
                 ),
             )
             return 0
@@ -1365,7 +1468,10 @@ def main(argv: list[str]) -> int:
                 pass
         _write_result(
             job_dir,
-            _augment_result(result, precision, prev_adapter, pairs_without_system),
+            _augment_result(
+                result, precision, prev_adapter, pairs_without_system,
+                pairs_with_invalid_turn,
+            ),
         )
         return 0
 
@@ -1389,6 +1495,7 @@ def main(argv: list[str]) -> int:
                 precision if precision is not None else (job.get("train_precision") if job else None),
                 prev_adapter,
                 pairs_without_system,
+                pairs_with_invalid_turn,
             ),
         )
         return 0
@@ -1415,6 +1522,7 @@ def main(argv: list[str]) -> int:
                     precision if precision is not None else (job.get("train_precision") if job else None),
                     prev_adapter,
                     pairs_without_system,
+                    pairs_with_invalid_turn,
                 ),
             )
         except Exception as write_exc:

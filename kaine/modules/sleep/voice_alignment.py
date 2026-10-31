@@ -39,6 +39,12 @@ class DPOPair:
     rejected: str
     metadata: dict[str, Any] = field(default_factory=dict)
     system: Optional[str] = None
+    # When True the pair is in the language client's own-turn layout: ``prompt``
+    # is the entity's notes, which the organ continues as its own assistant
+    # message after ``user_turn`` (heard speech) or the fixed cue. The trainer
+    # encodes it exactly as ``chat_messages`` sends it.
+    own_turn: bool = False
+    user_turn: Optional[str] = None
 
 
 @dataclass(frozen=True)
