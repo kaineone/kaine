@@ -40,6 +40,7 @@ from typing import Any, ClassVar, Optional
 from kaine.backend_state import record_backend_failure
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
+from kaine.bus.streams import AFFECT_STREAM, AUDITION_STREAM, LANGUAGE_EXTERNAL_STREAM
 from kaine.entity_clock import EntityClock
 from kaine.modules.affect.state import DimensionalState
 from kaine.modules.base import BaseModule
@@ -109,14 +110,14 @@ class Vocal(BaseModule):
         request_timeout_s: float = 120.0,
         baseline_salience: float = 0.3,
         alert_salience: float = 0.7,
-        language_external_stream: str = "language.external",
-        affect_state_stream: str = "affect.out",
+        language_external_stream: str = LANGUAGE_EXTERNAL_STREAM,
+        affect_state_stream: str = AFFECT_STREAM,
         # Prosodic mirroring (disabled by default).
         mirroring_enabled: bool = False,
         mirror_strength: float = 0.3,
         mirror_ceiling: float = 0.5,
         mirror_decay_s: float = 10.0,
-        audition_prosody_stream: str = "audition.out",
+        audition_prosody_stream: str = AUDITION_STREAM,
         voice_gender: str = "any",
         default_voice: Optional[str] = None,
         voice_note: Optional[str] = None,

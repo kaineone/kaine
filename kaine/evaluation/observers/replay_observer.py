@@ -24,14 +24,15 @@ import logging
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import EPISODIC_MEMORY_STREAM, WORLD_MODEL_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
 _REDACTED_DROP = frozenset({"text"})
-_EPISODIC_MEMORY_STREAM = "episodic_memory.out"
-_WORLD_MODEL_STREAM = "world_model.out"
+_EPISODIC_MEMORY_STREAM = EPISODIC_MEMORY_STREAM
+_WORLD_MODEL_STREAM = WORLD_MODEL_STREAM
 
 
 class _SingleStreamReplayObserver(StreamSubscriberObserver):

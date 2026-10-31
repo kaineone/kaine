@@ -34,13 +34,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event
+from kaine.bus.streams import AUDITION_STREAM, SOCIAL_COGNITION_STREAM
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 
 log = logging.getLogger(__name__)
 
-_SOCIAL_COGNITION_STREAM = "social_cognition.out"
-_AUDITION_STREAM = "audition.out"
+_SOCIAL_COGNITION_STREAM = SOCIAL_COGNITION_STREAM
+_AUDITION_STREAM = AUDITION_STREAM
 
 
 class SocialCognitionObserver(StreamSubscriberObserver):

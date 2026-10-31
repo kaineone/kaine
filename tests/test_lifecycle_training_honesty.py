@@ -51,9 +51,11 @@ class _FakeRegistry:
 def test_h6_merge_refuses_when_both_parents_have_adapters(tmp_path):
     """ForkManager.merge() MUST raise UnmergedAdaptersError when both parents
     have adapters and only FakeAdapterMerger is available."""
-    from kaine.lifecycle.manager import ForkManager, UnmergedAdaptersError
+    from kaine.lifecycle.manager import FakeAdapterMerger, ForkManager, UnmergedAdaptersError
 
-    mgr = ForkManager(tmp_path)
+    # Pin the no-op merger: the default 'auto' picks the real merger when PEFT is
+    # installed, which depends on the host.
+    mgr = ForkManager(tmp_path, adapter_merger=FakeAdapterMerger())
     reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
     b = mgr.snapshot(reg, adapters=["state/sleep/adapters/b"])
@@ -70,9 +72,11 @@ def test_h6_merge_refuses_when_both_parents_have_adapters(tmp_path):
 
 def test_h6_merge_proceeds_with_allow_flag(tmp_path):
     """allow_unmerged_adapters=True bypasses the refusal and records the skip."""
-    from kaine.lifecycle.manager import ForkManager
+    from kaine.lifecycle.manager import FakeAdapterMerger, ForkManager
 
-    mgr = ForkManager(tmp_path)
+    # Pin the no-op merger: the default 'auto' picks the real merger when PEFT is
+    # installed, which depends on the host.
+    mgr = ForkManager(tmp_path, adapter_merger=FakeAdapterMerger())
     reg = _FakeRegistry([_FakeModule("interoception")])
     a = mgr.snapshot(reg, adapters=["state/sleep/adapters/a"])
     b = mgr.snapshot(reg, adapters=["state/sleep/adapters/b"])

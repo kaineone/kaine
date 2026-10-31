@@ -557,6 +557,10 @@ def test_quadlet_generator_renders_redis_wrapper(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     unit = result.stdout.split("---kaine-redis.service---", 1)[1].split("\n---", 1)[0]
     exec_start = next(ln for ln in unit.splitlines() if ln.startswith("ExecStart="))
+    # Newer generators (podman 5.8+) write the spaces inside the quoted `sh -c`
+    # argument as \x20 escapes; older ones keep literal spaces. Both mean the
+    # same command line, so compare the unescaped form.
+    exec_start = exec_start.replace("\\x20", " ")
     assert "--env KAINE_REDIS_MAXMEMORY=${KAINE_REDIS_MAXMEMORY}" in exec_start
     assert "$${KAINE_REDIS_MAXMEMORY:-4gb}" in exec_start
     assert '--maxmemory \\"$$m\\"' in exec_start
@@ -620,7 +624,7 @@ def test_quadlet_cycle_forwards_operator_presence_and_has_no_install():
 # --------------------------------------------------------------------------
 # 3.1 — setup provisioner plans every model weight (no network in the test)
 # --------------------------------------------------------------------------
-def test_provision_plans_all_models_without_network():
+def test_provision_plans_all_models_without_network(monkeypatch):
     from kaine.setup.internvideo_next import INTERNVIDEO_NEXT_REPO
     from kaine.setup.provision import aux_models, run_provision
 
@@ -636,6 +640,14 @@ def test_provision_plans_all_models_without_network():
     # Selecting the DINOv2 backend swaps in DINOv2 as a plain aux download.
     dino_repos = {m.repo for m in aux_models({"vision": {"encoder_backend": "dinov2"}})}
     assert "facebook/dinov2-small" in dino_repos
+
+    # The provisioner only issues downloads when the `hf` CLI is on PATH, which
+    # depends on whether the venv is activated. Make that deterministic; the
+    # injected runner below keeps everything off the network.
+    real_which = shutil.which
+    monkeypatch.setattr(
+        shutil, "which", lambda cmd, *a, **k: "/usr/bin/hf" if cmd == "hf" else real_which(cmd, *a, **k)
+    )
 
     # Inject a fake runner so NOTHING hits the network.
     calls: list[list[str]] = []

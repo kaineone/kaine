@@ -21,7 +21,7 @@ from starlette.testclient import TestClient
 
 from kaine.setup.web import guard
 from kaine.setup.web.job_specs import build_job_specs
-from kaine.setup.web.jobs import JobRunner, JobSpec, _Job
+from kaine.setup.web.jobs import JobConflictError, JobRunner, JobSpec, _Job
 from kaine.setup.wizard import ACK_PHRASE
 from tests.test_setup_web import _defaults_from_form, _exchange_token, _mk_app
 
@@ -91,13 +91,15 @@ def _wait_for_job(runner: JobRunner, name: str, timeout: float = 5.0) -> dict[st
 
 
 @contextmanager
-def _saved_client(app):
+def _saved_client(app, **client_kwargs):
     """Yield a TestClient whose session has reached the saved /jobs page.
 
     The full wizard step loop is driven with safe defaults, then /save is POSTed
     with the required Host/Origin headers.
     """
-    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+    with TestClient(
+        app, base_url="http://127.0.0.1:8000", **client_kwargs
+    ) as client:
         token = app.state.setup.store.issue()
         r = client.get(
             f"/?token={token}",
@@ -2197,3 +2199,44 @@ def test_events_route_ends_when_the_server_is_exiting(tmp_path, monkeypatch):
                 headers={**h, "Accept": "application/json"},
                 follow_redirects=False,
             )
+
+
+def _start_failing(tmp_path, monkeypatch, error, **client_kwargs):
+    app = _mk_app(tmp_path)
+    harmless = JobSpec(
+        name="harmless",
+        title="Harmless job",
+        argv=(sys.executable, "-c", "pass"),
+        details="print test",
+    )
+    monkeypatch.setattr(
+        "kaine.setup.web.job_specs.build_job_specs",
+        lambda _c, _s, **_kw: [harmless],
+    )
+
+    async def failing_start(name, spec):
+        raise error
+
+    with _saved_client(app, **client_kwargs) as client:
+        monkeypatch.setattr(app.state.runner, "start", failing_start)
+        h = {"Host": "127.0.0.1:8000", "Origin": "http://127.0.0.1:8000"}
+        return client.post("/jobs/harmless/start", headers=h, follow_redirects=False)
+
+
+def test_start_conflict_returns_409_with_runner_message(tmp_path, monkeypatch):
+    r = _start_failing(
+        tmp_path, monkeypatch, JobConflictError("job harmless is already running")
+    )
+    assert r.status_code == 409
+    assert r.text == "job harmless is already running"
+
+
+def test_start_unexpected_runtime_error_is_not_sent_to_the_browser(
+    tmp_path, monkeypatch
+):
+    secret = "internal detail /home/someone/secret/path"
+    r = _start_failing(
+        tmp_path, monkeypatch, RuntimeError(secret), raise_server_exceptions=False
+    )
+    assert r.status_code == 500
+    assert secret not in r.text

@@ -13,7 +13,7 @@ license-files = ["LICENSE.md", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 authors = [{ name = "KAINE contributors" }]
 dependencies = [
     "redis>=8.1.0,<9",
-    "pydantic>=2.6,<3",
+    "pydantic>=2.14.1,<3",
     "psutil>=7.2.2,<8",
     "numpy>=2.4.6,<3",
     "httpx>=0.28.1,<1",
@@ -29,7 +29,7 @@ core = [
     "ncps>=1.0.1,<2",
 ]
 memory = [
-    "sentence-transformers>=2.7,<6",
+    "sentence-transformers>=6.1.0,<7",
     "qdrant-client>=1.19.1,<2",
 ]
 memory-edge = [
@@ -59,7 +59,7 @@ full = [
     "kaine[core,memory,memory-edge,dashboard,nvidia,vision,audio,reasoning,worldmodel,oscillator,internvideo]",
 ]
 test = [
-    "pytest>=8",
+    "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     # Parallel test runs (`pytest -n auto --dist loadfile`), as CI runs them.
     "pytest-xdist>=3.8,<4",
@@ -164,7 +164,7 @@ worldmodel = [
 # spike-rate → phase estimator.
 oscillator = [
     "snntorch>=0.9,<1",
-    "scipy>=1.10",
+    "scipy>=1.17.1",
 ]
 
 [tool.setuptools.packages.find]

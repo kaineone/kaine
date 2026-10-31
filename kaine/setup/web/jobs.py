@@ -24,6 +24,14 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Protocol
 
 
+class JobConflictError(RuntimeError):
+    """The runner refused to start a job because of another running job.
+
+    The message is written by the runner for the operator and is safe to show
+    in the browser; no other exception text is.
+    """
+
+
 class ActivityHold(Protocol):
     activity_hold: int
 
@@ -164,20 +172,20 @@ class JobRunner:
     async def start(self, name: str, spec: JobSpec) -> str:
         running = [j for j in self._jobs.values() if j.status == "running"]
         if spec.exclusive and running:
-            raise RuntimeError(
+            raise JobConflictError(
                 f"job {name} is exclusive; another job is already running"
             )
         running_exclusive = [
             j for j in self._jobs.values() if j.status == "running" and j.spec.exclusive
         ]
         if running_exclusive:
-            raise RuntimeError(
+            raise JobConflictError(
                 f"an exclusive job is running; job {name} cannot start"
             )
 
         existing_id = self._name_to_job_id.get(name)
         if existing_id is not None and self._jobs[existing_id].status == "running":
-            raise RuntimeError(f"job {name} is already running")
+            raise JobConflictError(f"job {name} is already running")
 
         job_id = uuid.uuid4().hex
         job = _Job(job_id=job_id, name=name, spec=spec)

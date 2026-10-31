@@ -184,7 +184,9 @@ def test_merge_falls_back_to_union_for_unknown_module(tmp_path):
 
 
 def test_merge_combines_adapters_via_fake_merger(tmp_path):
-    mgr = ForkManager(tmp_path)
+    # Pin the no-op merger: the default 'auto' picks the real merger when PEFT is
+    # installed, which depends on the host.
+    mgr = ForkManager(tmp_path, adapter_merger=FakeAdapterMerger())
     a = mgr.snapshot(
         FakeRegistry([FakeModule("interoception", {"v": 1})]),
         adapters=["/state/sleep/adapters/a"],

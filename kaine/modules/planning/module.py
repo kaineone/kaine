@@ -39,6 +39,7 @@ import uuid
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.bus.streams import SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.planning.engine import (
@@ -50,7 +51,7 @@ from kaine.modules.planning.engine import (
 from kaine.workspace.action_selection import ACTION_SELECTION_FEEDBACK_STREAM
 
 log = logging.getLogger(__name__)
-SLEEP_OUT_STREAM = "sleep.out"
+SLEEP_OUT_STREAM = SLEEP_STREAM
 
 # Map an engine action name → a proposal kind for the action selection module's proposal path.
 # `request_think` is epistemic (internal elaboration) → a `think` proposal.

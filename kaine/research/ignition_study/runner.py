@@ -102,6 +102,12 @@ class StudyDatabaseClaimed(StudyError):
     """Raised when another study owns a bus database this study would flush."""
 
 
+# The free-disk probe a runner uses when none is injected. A module-level name
+# (resolved when a runner is built) so tests can pin it instead of reading the
+# host's real disk.
+_default_disk_usage = shutil.disk_usage
+
+
 class StudyRunner:
     """Drive a module-ignition study from its plan and recorded steps."""
 
@@ -158,7 +164,7 @@ class StudyRunner:
 
             flush_db = _claim_and_flush
         self.flush_db = flush_db
-        self.disk_usage = disk_usage or shutil.disk_usage
+        self.disk_usage = disk_usage or _default_disk_usage
         self.cycle_alive = cycle_alive or _cycle_process_alive
         self._lock_fd: Any | None = None
         self._move_old_line_dirs()
