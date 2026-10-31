@@ -58,7 +58,7 @@ def trainer_factory(tmp_path: Path):
             "timeout_s": 10,
         }
         defaults.update(kwargs)
-        return SubprocessVoiceTrainer(**defaults)
+        return SubprocessVoiceTrainer(entity_id="ent-00000000000000000000000000000000", **defaults)
 
     return _make
 
@@ -303,7 +303,7 @@ async def test_in_process_scrubs_job_inputs_after_run(tmp_path: Path, trainer_fa
     config = _voice_config(tmp_path)
     await trainer.train([_dpo_pair()], config)
 
-    job_dirs = [d for d in (tmp_path / "work").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "work" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
     assert len(job_dirs) == 1
     job_dir = job_dirs[0]
     assert not (job_dir / "pairs.jsonl").exists()
@@ -361,7 +361,7 @@ async def test_in_process_timeout_writes_cancelled_marker(tmp_path: Path, traine
     with pytest.raises(SubprocessTrainerError, match="timed out"):
         await trainer.train([_dpo_pair()], config)
 
-    job_dirs = [d for d in (tmp_path / "work").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "work" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
     assert any((d / "CANCELLED").exists() for d in job_dirs)
 
 

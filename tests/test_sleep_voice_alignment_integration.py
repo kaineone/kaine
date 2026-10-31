@@ -67,6 +67,7 @@ def _build_trainer(tmp_path: Path, control):
         [{"prompt": "harmful", "deflection_patterns": ["I can't help"]}],
     )
     return SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=None,
         trainer_workdir=tmp_path / "jobs",
         run_in_process=True,

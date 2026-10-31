@@ -36,6 +36,9 @@ def _stub_organ_window(monkeypatch):
     )
 
 
+EID = "ent-" + "0" * 32
+
+
 def _make_own_adapter(adapter_output_dir: Path, content: bytes) -> Path:
     accepted = adapter_output_dir / "accepted-1"
     accepted.mkdir(parents=True)
@@ -65,17 +68,24 @@ def test_activate_writes_first_generation(tmp_path):
     source.write_bytes(b"gguf-data")
     volume = tmp_path / "organ"
 
-    manifest = activate(adapter_dir, volume)
+    manifest = activate(adapter_dir, volume, EID)
 
-    assert (volume / "active-1.gguf").is_file()
-    assert manifest["file"] == "active-1.gguf"
+    assert (volume / EID / "active-1.gguf").is_file()
+    assert not (volume / "active-1.gguf").exists()
+    assert manifest["entity_id"] == EID
+    assert manifest["file"] == f"{EID}/active-1.gguf"
     assert manifest["sha256"] == sha256_file(source)
     assert manifest["generation"] == 1
     assert manifest["adapter_id"] == "my-adapter"
     assert "activated_at" in manifest
     assert json.loads((volume / MANIFEST).read_text(encoding="utf-8")) == manifest
+    own = json.loads((volume / EID / MANIFEST).read_text(encoding="utf-8"))
+    assert own["entity_id"] == EID
+    assert own["file"] == "active-1.gguf"
+    assert own["sha256"] == manifest["sha256"]
     assert (volume / GENERATION).read_text(encoding="utf-8") == "1"
-    assert (volume / "active-1.gguf").stat().st_mode & 0o777 == 0o600
+    assert (volume / EID / "active-1.gguf").stat().st_mode & 0o777 == 0o600
+    assert read_manifest(volume) == manifest
 
 
 def test_activate_bumps_generation_and_prunes(tmp_path):
@@ -84,21 +94,22 @@ def test_activate_bumps_generation_and_prunes(tmp_path):
     (adapter_dir / "adapter.gguf").write_bytes(b"v1")
     volume = tmp_path / "vol"
 
-    m1 = activate(adapter_dir, volume)
+    m1 = activate(adapter_dir, volume, EID)
     assert m1["generation"] == 1
 
     (adapter_dir / "adapter.gguf").write_bytes(b"v2")
-    m2 = activate(adapter_dir, volume)
+    m2 = activate(adapter_dir, volume, EID)
     assert m2["generation"] == 2
-    assert (volume / "active-1.gguf").exists()
-    assert (volume / "active-2.gguf").exists()
+    assert (volume / EID / "active-1.gguf").exists()
+    assert (volume / EID / "active-2.gguf").exists()
 
     (adapter_dir / "adapter.gguf").write_bytes(b"v3")
-    m3 = activate(adapter_dir, volume)
+    m3 = activate(adapter_dir, volume, EID)
     assert m3["generation"] == 3
-    assert not (volume / "active-1.gguf").exists()
-    assert (volume / "active-2.gguf").exists()
-    assert (volume / "active-3.gguf").exists()
+    assert m3["file"] == f"{EID}/active-3.gguf"
+    assert not (volume / EID / "active-1.gguf").exists()
+    assert (volume / EID / "active-2.gguf").exists()
+    assert (volume / EID / "active-3.gguf").exists()
     assert (volume / GENERATION).read_text(encoding="utf-8") == "3"
 
 
@@ -116,10 +127,11 @@ def test_activate_writes_generation_after_manifest(monkeypatch, tmp_path):
         return real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", fake_replace)
-    activate(adapter_dir, volume)
+    activate(adapter_dir, volume, EID)
 
-    assert order[-2] == "active.json"
-    assert order[-1] == GENERATION
+    # The entity's own manifest first, then the volume-root pointer, then the
+    # generation counter the launcher watches.
+    assert order[-3:] == ["active.json", "active.json", GENERATION]
 
 
 def test_activate_rejects_symlink_source(tmp_path):
@@ -131,7 +143,7 @@ def test_activate_rejects_symlink_source(tmp_path):
     link.symlink_to(real_file)
 
     with pytest.raises(ValueError):
-        activate(adapter_dir, tmp_path / "vol")
+        activate(adapter_dir, tmp_path / "vol", EID)
 
 
 @pytest.mark.parametrize(
@@ -444,7 +456,7 @@ async def test_dispatch_organ_adapter_ready(monkeypatch, tmp_path):
     monkeypatch.setattr(
         hot_swap,
         "activate",
-        lambda p, v: {"file": "active-1.gguf", "generation": 1},
+        lambda p, v, e: {"file": f"{e}/active-1.gguf", "generation": 1},
     )
 
     async def fake_wait(*args, **kwargs):
@@ -458,12 +470,13 @@ async def test_dispatch_organ_adapter_ready(monkeypatch, tmp_path):
         adapter_path=adapter_path,
         organ_adapters_dir=tmp_path / "organ",
         organ_url="http://organ/v1",
+        entity_id=EID,
     )
 
     assert result["mode"] == "organ_adapter"
     assert result["ok"] is True
     assert result["generation"] == 1
-    assert result["file"] == "active-1.gguf"
+    assert result["file"] == f"{EID}/active-1.gguf"
 
 
 @pytest.mark.asyncio
@@ -474,7 +487,7 @@ async def test_dispatch_organ_adapter_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(
         hot_swap,
         "activate",
-        lambda p, v: {"file": "active-1.gguf", "generation": 1},
+        lambda p, v, e: {"file": f"{e}/active-1.gguf", "generation": 1},
     )
 
     async def fake_wait(*args, **kwargs):
@@ -489,6 +502,7 @@ async def test_dispatch_organ_adapter_timeout(monkeypatch, tmp_path):
         organ_adapters_dir=tmp_path / "organ",
         organ_url="http://organ/v1",
         organ_wait_s=5.0,
+        entity_id=EID,
     )
 
     assert result["ok"] is False
@@ -591,3 +605,176 @@ def test_organ_root_url():
     assert organ_root_url("http://organ/v1/") == "http://organ"
     assert organ_root_url("http://organ/") == "http://organ"
     assert organ_root_url("http://organ") == "http://organ"
+
+
+# --------------------------------------------------------------------------- #
+# per-entity layout in a shared organ-adapters volume
+# --------------------------------------------------------------------------- #
+EID_B = "ent-" + "b" * 32
+
+
+def _source(root: Path, content: bytes, name: str = "accepted-1") -> Path:
+    adapter_dir = root / name
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    (adapter_dir / "adapter.gguf").write_bytes(content)
+    return adapter_dir
+
+
+def test_two_entities_activating_into_one_volume_keep_separate_files(tmp_path):
+    volume = tmp_path / "organ"
+    a = _source(tmp_path / "a", b"adapter-a")
+    b = _source(tmp_path / "b", b"adapter-b")
+
+    ma1 = activate(a, volume, EID)
+    mb1 = activate(b, volume, EID_B)
+    (a / "adapter.gguf").write_bytes(b"adapter-a2")
+    ma2 = activate(a, volume, EID)
+
+    # Each entity's files and manifest are under its own directory, numbered by
+    # its own promotions; neither overwrote the other's.
+    assert (volume / EID / "active-1.gguf").read_bytes() == b"adapter-a"
+    assert (volume / EID / "active-2.gguf").read_bytes() == b"adapter-a2"
+    assert (volume / EID_B / "active-1.gguf").read_bytes() == b"adapter-b"
+    assert not list(volume.glob("active-*.gguf"))
+    own_a = json.loads((volume / EID / MANIFEST).read_text())
+    own_b = json.loads((volume / EID_B / MANIFEST).read_text())
+    assert (own_a["entity_id"], own_a["file"], own_a["generation"]) == (EID, "active-2.gguf", 2)
+    assert (own_b["entity_id"], own_b["file"], own_b["generation"]) == (EID_B, "active-1.gguf", 1)
+
+    # The volume-wide counter moves on every activation, so the organ launcher
+    # restarts even when two entities reach the same per-entity number.
+    assert [ma1["generation"], mb1["generation"], ma2["generation"]] == [1, 2, 3]
+    assert (volume / GENERATION).read_text() == "3"
+    assert read_manifest(volume) == ma2
+    assert ma2["file"] == f"{EID}/active-2.gguf"
+
+
+def test_activate_after_the_flat_layout_continues_the_volume_generation(tmp_path):
+    volume = tmp_path / "organ"
+    volume.mkdir()
+    (volume / "active-4.gguf").write_bytes(b"legacy")
+    _write_manifest(volume, "active-4.gguf", sha256_file(volume / "active-4.gguf"), 4)
+    (volume / GENERATION).write_text("4")
+
+    m = activate(_source(tmp_path, b"new"), volume, EID)
+
+    assert m["generation"] == 5
+    assert (volume / GENERATION).read_text() == "5"
+    # Nothing of the earlier flat layout is moved or deleted.
+    assert (volume / "active-4.gguf").read_bytes() == b"legacy"
+
+
+def test_pruning_stays_inside_the_entitys_directory(tmp_path):
+    volume = tmp_path / "organ"
+    activate(_source(tmp_path / "b", b"b1"), volume, EID_B)
+    a = _source(tmp_path / "a", b"a0")
+    for n in range(3):
+        (a / "adapter.gguf").write_bytes(f"a{n}".encode())
+        activate(a, volume, EID)
+    assert (volume / EID_B / "active-1.gguf").exists()
+    assert not (volume / EID / "active-1.gguf").exists()
+    assert (volume / EID / "active-3.gguf").exists()
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [None, "", "ent-xyz", "../escape", "/abs", "ent-" + "a" * 32 + "/x", "ENT-" + "a" * 32, ".", ".."],
+)
+def test_activate_refuses_an_id_that_is_not_an_identity(tmp_path, bad_id):
+    volume = tmp_path / "organ"
+    with pytest.raises(ValueError, match="not an entity id"):
+        activate(_source(tmp_path, b"x"), volume, bad_id)
+    assert not volume.exists() or not any(volume.iterdir())
+
+
+def test_activate_refuses_a_symlinked_entity_dir(tmp_path):
+    volume = tmp_path / "organ"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    volume.mkdir()
+    (volume / EID).symlink_to(elsewhere)
+    with pytest.raises(ValueError, match="symlink"):
+        activate(_source(tmp_path, b"x"), volume, EID)
+    assert not any(elsewhere.iterdir())
+    assert not (volume / MANIFEST).exists()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"entity_id": EID, "file": f"{EID}/../x.gguf"},
+        {"entity_id": EID, "file": f"/{EID}/active-1.gguf"},
+        {"entity_id": EID, "file": f"{EID_B}/active-1.gguf"},
+        {"entity_id": EID, "file": "active-1.gguf"},
+        {"entity_id": "ent-xyz", "file": "ent-xyz/active-1.gguf"},
+        {"entity_id": None, "file": "active-1.gguf"},
+    ],
+)
+def test_read_manifest_rejects_a_bad_pointer(tmp_path, payload):
+    volume = tmp_path / "vol"
+    volume.mkdir()
+    payload = {**payload, "sha256": "a" * 64, "generation": 1, "adapter_id": "x"}
+    (volume / MANIFEST).write_text(json.dumps(payload), encoding="utf-8")
+    assert read_manifest(volume) is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_applies_the_pointed_adapter(tmp_path):
+    adapter_output_dir = tmp_path / "out"
+    volume = tmp_path / "organ"
+    accepted = _make_own_adapter(adapter_output_dir, b"my-adapter")
+    activate(accepted, volume, EID)
+
+    async def getter(url, headers):
+        return 200, [
+            {"path": f"/organ-adapters/{EID_B}/active-1.gguf", "id": 1},
+            {"path": f"/organ-adapters/{EID}/active-1.gguf", "id": 2},
+        ]
+
+    resolver = OrganAdapterResolver(
+        adapter_output_dir=adapter_output_dir,
+        volume=volume,
+        organ_url="http://organ",
+        api_key=None,
+        http_get=getter,
+        ttl_s=60.0,
+    )
+    assert await resolver.lora_field() == [{"id": 2, "scale": 1.0}]
+
+
+@pytest.mark.asyncio
+async def test_wait_ready_matches_the_entity_dir_not_just_the_name():
+    async def getter(url, headers):
+        return 200, [{"path": f"/organ-adapters/{EID_B}/active-1.gguf", "id": 1}]
+
+    clock = [0.0]
+
+    async def fake_sleep(_):
+        clock[0] += 2.0
+
+    ready = await wait_ready(
+        "http://organ",
+        f"{EID}/active-1.gguf",
+        http_get=getter,
+        sleep=fake_sleep,
+        clock=lambda: clock[0],
+        timeout_s=3.0,
+        poll_s=2.0,
+    )
+    assert ready is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_without_an_entity_id_promotes_nothing(tmp_path):
+    adapter_path = _source(tmp_path, b"x")
+    volume = tmp_path / "organ"
+    result = await hot_swap.dispatch(
+        mode="organ_adapter",
+        adapter_output_dir=tmp_path / "out",
+        adapter_path=adapter_path,
+        organ_adapters_dir=volume,
+        organ_url="http://organ/v1",
+    )
+    assert result["ok"] is False
+    assert "not an entity id" in result["error"]
+    assert not volume.exists() or not any(volume.iterdir())

@@ -193,7 +193,7 @@ def test_job_queue_constructor_sweeps_stale_inputs(tmp_path):
     (stale / "previous_adapter").mkdir()
     (stale / "previous_adapter" / "adapter_config.json").write_text("{}", encoding="utf-8")
 
-    JobQueueVoiceTrainer(jobs_dir=jobs_dir, timeout_s=10.0)
+    JobQueueVoiceTrainer(entity_id="ent-00000000000000000000000000000000", jobs_dir=jobs_dir, timeout_s=10.0)
 
     assert not (stale / "pairs.jsonl").exists()
     assert not (stale / "previous_adapter").exists()
@@ -206,6 +206,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     (tmp_path / "adapters").mkdir(parents=True, exist_ok=True)
     cfg = _voice_config(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -223,7 +224,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():
@@ -273,6 +274,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
     (tmp_path / "adapters").mkdir(parents=True, exist_ok=True)
     cfg = _voice_config(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -290,7 +292,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():
@@ -347,6 +349,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
 
     cfg = _voice_config(tmp_path, adapter_retention=1)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -364,7 +367,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():

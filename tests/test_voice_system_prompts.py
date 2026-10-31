@@ -360,6 +360,7 @@ def test_job_spec_writes_system_and_precision_and_schema(tmp_path):
         config,
         base_path="/base",
         adapter_output_dir=str(tmp_path / "out"),
+        entity_id="ent-00000000000000000000000000000000",
     )
 
     rows = [json.loads(line) for line in (job_dir / "pairs.jsonl").read_text().splitlines()]
@@ -391,6 +392,7 @@ def test_job_spec_copies_current_adapter(tmp_path):
         config,
         base_path="/base",
         adapter_output_dir=str(tmp_path / "out"),
+        entity_id="ent-00000000000000000000000000000000",
     )
 
     assert (job_dir / "previous_adapter" / "adapter_config.json").exists()
@@ -418,6 +420,7 @@ def test_job_spec_refuses_broken_current_link(tmp_path):
             config,
             base_path="/base",
             adapter_output_dir=str(tmp_path / "out"),
+            entity_id="ent-00000000000000000000000000000000",
         )
 
 
@@ -481,6 +484,7 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
 
     monkeypatch.setattr(SubprocessVoiceTrainer, "_run_subprocess", fake_run)
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python="/nonexistent/python", trainer_workdir=tmp_path / "work"
     )
     pair = DPOPair(prompt="p", chosen="c", rejected="r", system="persona")
@@ -549,6 +553,7 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
     script = tmp_path / "entry.py"
     script.write_text("")
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python="/nonexistent/python", trainer_workdir=tmp_path / "work", entry_script=script
     )
     config = VoiceAlignmentConfig(

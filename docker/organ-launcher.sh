@@ -52,6 +52,54 @@ read_gen() {
     cat "$ADAPTERS_DIR/generation" 2>/dev/null || echo "0"
 }
 
+# Print the llama-server arguments that load $1 (an adapter path already checked).
+# --no-cache-prompt: a request must never reuse KV that another request computed
+# with a different adapter setting (measured at build 9976: base requests after
+# an adapted one were contaminated).
+lora_args() {
+    printf '%s\n' "--lora-scaled $1:0 --no-cache-prompt"
+}
+
+# The volume-root active.json is a pointer {"entity_id", "file":
+# "<entity_id>/active-N.gguf", "sha256", ...} naming the entity whose adapter
+# the organ loads. The pointer is followed only to a regular file whose real
+# path (symlinks resolved) lies under <volume>/<entity_id>/ for the pointer's
+# own entity id, which must match the identity format.
+build_entity_args() {
+    if ! printf '%s' "$entity_id" | grep -Eq '^(ent|legacy)-[0-9a-f]{32}$'; then
+        log "not loading adapter: active.json entity_id '$entity_id' is not an entity id"
+        return
+    fi
+    case "$file" in
+        /*|*..*)
+            log "not loading adapter: active.json file '$file' is absolute or contains '..'"
+            return
+            ;;
+    esac
+    if ! printf '%s' "$file" | grep -Eq '^[^/]+/active-[0-9]+\.gguf$'; then
+        log "not loading adapter: invalid active.json file name '$file'"
+        return
+    fi
+    volume_real=$(readlink -f "$ADAPTERS_DIR" 2>/dev/null || true)
+    real=$(readlink -f "$ADAPTERS_DIR/$file" 2>/dev/null || true)
+    if [ -z "$volume_real" ] || [ -z "$real" ]; then
+        log "not loading adapter: cannot resolve $file"
+        return
+    fi
+    case "$real" in
+        "$volume_real/$entity_id/"*) ;;
+        *)
+            log "not loading adapter: $file resolves to $real, outside $volume_real/$entity_id/"
+            return
+            ;;
+    esac
+    if [ -f "$real" ] && printf '%s  %s\n' "$sha" "$real" | sha256sum -c - >/dev/null 2>&1; then
+        lora_args "$real"
+    else
+        log "not loading adapter: SHA mismatch or missing file for $file"
+    fi
+}
+
 # Build the extra llama-server arguments from active.json, validating the
 # SHA-256 of the referenced GGUF. Uses sed/grep only; the container may lack jq.
 build_extra_args() {
@@ -63,6 +111,13 @@ build_extra_args() {
     file=$(sed -n 's/.*"file":[[:space:]]*"\([^"]*\)".*/\1/p' "$ADAPTERS_DIR/active.json")
     sha=$(sed -n 's/.*"sha256":[[:space:]]*"\([0-9a-fA-F]\{64\}\)".*/\1/p' "$ADAPTERS_DIR/active.json")
 
+    if grep -q '"entity_id"' "$ADAPTERS_DIR/active.json"; then
+        entity_id=$(sed -n 's/.*"entity_id":[[:space:]]*"\([^"]*\)".*/\1/p' "$ADAPTERS_DIR/active.json")
+        build_entity_args
+        return
+    fi
+
+    # The earlier flat layout: active.json names a file beside it.
     case "$file" in
         */*|*..*)
             # A shell case '*' also matches '/': refuse any name that could
@@ -72,10 +127,7 @@ build_extra_args() {
         active-[0-9]*.gguf)
             path="$ADAPTERS_DIR/$file"
             if [ -f "$path" ] && printf '%s  %s\n' "$sha" "$path" | sha256sum -c - >/dev/null 2>&1; then
-                # --no-cache-prompt: a request must never reuse KV that another
-                # request computed with a different adapter setting (measured at
-                # build 9976: base requests after an adapted one were contaminated).
-                printf '%s\n' "--lora-scaled $path:0 --no-cache-prompt"
+                lora_args "$path"
             else
                 log "not loading adapter: SHA mismatch or missing file for $file"
             fi

@@ -1501,3 +1501,124 @@ def test_a_dry_run_refuses_an_old_tree_and_changes_nothing(tmp_path, monkeypatch
     assert rc == 6
     assert "before the module rename" in err.getvalue()
     assert _snapshot_tree(tmp_path / "state") == before
+
+
+# --------------------------------------------------------------------------- #
+# per-entity subdirectories of the shared volumes
+# --------------------------------------------------------------------------- #
+
+
+def _seed_shared_volumes(tmp_path, monkeypatch):
+    """Entity state with an identity, and shared volumes a study line also uses."""
+    from kaine.lifecycle.identity import mint_identity, save_identity
+
+    monkeypatch.delenv("KAINE_TRAINER_JOBS_DIR", raising=False)
+    _seed_state(tmp_path / "state")
+    identity = mint_identity()
+    save_identity(identity, tmp_path / "state" / "identity" / "entity.json")
+    own_id = identity.entity_id
+    other_id = mint_identity().entity_id
+    organ = tmp_path / "organ-adapters"
+    jobs = tmp_path / "trainer-jobs"
+    for eid, content in ((own_id, b"OWN-ADAPTER"), (other_id, b"STUDY-ADAPTER")):
+        (organ / eid).mkdir(parents=True)
+        (organ / eid / "active-1.gguf").write_bytes(content)
+
+    def job(eid, name, *, owner=None, claimed=False):
+        d = jobs / eid / name
+        d.mkdir(parents=True)
+        (d / "job.json").write_text(json.dumps({"entity_id": owner or eid, "adapter_output_dir": "out"}))
+        (d / "pairs.jsonl").write_text(f"SECRET pairs of {name}\n")
+        (d / ("CLAIMED" if claimed else "READY")).write_text("")
+        return d
+
+    extra = (
+        "[sleep.voice_alignment]\n"
+        f'trainer_jobs_dir = "{jobs}"\n'
+        f'organ_adapters_dir = "{organ}"\n'
+    )
+    return own_id, other_id, organ, jobs, job, extra
+
+
+def test_own_dir_job_is_cancelled_before_the_backup_then_deleted(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    own_id, other_id, organ, jobs, job, extra = _seed_shared_volumes(tmp_path, monkeypatch)
+    pending = job(own_id, "20261002T000000Z-pending0")
+    mismatched = job(own_id, "20261002T000001Z-mismatch", owner=other_id)
+    study = job(other_id, "20261001T000000Z-study000")
+
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path, extra_config=extra),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=out,
+        err=err,
+    )
+    assert rc == 0, f"out={out.getvalue()!r} err={err.getvalue()!r}"
+    # Cancelled first, so the backup holds the job with its CANCELLED marker and pairs.
+    assert f"cancelled voice-alignment job: {pending}" in out.getvalue()
+    backed = [p for p in (tmp_path / "backups").rglob(pending.name) if p.is_dir()]
+    assert backed and (backed[0] / "CANCELLED").exists()
+    assert (backed[0] / "pairs.jsonl").read_text() == f"SECRET pairs of {pending.name}\n"
+    # Then deleted with its training pairs; the organ subdirectory goes too.
+    assert not pending.exists()
+    assert not (organ / own_id).exists()
+    # The study line's files survive, and the mismatched job is kept and flagged.
+    assert (study / "pairs.jsonl").exists() and not (study / "CANCELLED").exists()
+    assert (organ / other_id / "active-1.gguf").read_bytes() == b"STUDY-ADAPTER"
+    assert (mismatched / "pairs.jsonl").exists() and not (mismatched / "CANCELLED").exists()
+    assert str(mismatched) in out.getvalue()
+    record = json.loads(
+        (tmp_path / "state" / "audit" / "decommission.jsonl").read_text().strip().splitlines()[-1]
+    )
+    assert record["outcome"] == "deleted"
+    assert "sleep.voice_jobs.entity_dir" in record["deleted_locations"]
+    assert "organ_adapters.entity_dir" in record["deleted_locations"]
+    assert "sleep.voice_jobs.mismatched" in record["retained_locations"]
+    assert any(str(mismatched) in n and other_id in n for n in record["attribution_notes"])
+
+
+def test_own_dir_job_still_training_refuses_before_the_backup(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    own_id, other_id, organ, jobs, job, extra = _seed_shared_volumes(tmp_path, monkeypatch)
+    running = job(own_id, "20261002T000000Z-running0", claimed=True)
+    import kaine.lifecycle.__main__ as cli
+    from kaine.lifecycle import decommission_locations as dl
+
+    real = dl.cancel_entity_dir_jobs
+    monkeypatch.setattr(
+        cli,
+        "cancel_entity_dir_jobs",
+        lambda locs, wait_s=60.0: real(locs, wait_s=min(wait_s, 0.05), poll_s=0.01),
+    )
+    err = io.StringIO()
+    rc = main(
+        _args(tmp_path, extra_config=extra),
+        input_fn=_scripted_input(["I acknowledge the CAL welfare terms", "Kaine Nova"]),
+        out=io.StringIO(),
+        err=err,
+    )
+    assert rc == 3
+    assert str(running) in err.getvalue()
+    assert "Nothing was backed up or deleted" in err.getvalue()
+    assert (running / "pairs.jsonl").exists()
+    assert (organ / own_id / "active-1.gguf").exists()
+    backups = tmp_path / "backups"
+    assert not backups.exists() or not any(backups.rglob("*"))
+
+
+def test_dry_run_cancels_no_own_dir_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
+    own_id, other_id, organ, jobs, job, extra = _seed_shared_volumes(tmp_path, monkeypatch)
+    pending = job(own_id, "20261002T000000Z-pending0")
+    rc = main(
+        _args(tmp_path, dry_run=True, extra_config=extra),
+        input_fn=_scripted_input([]),
+        out=io.StringIO(),
+        err=io.StringIO(),
+    )
+    assert rc == 0
+    assert not (pending / "CANCELLED").exists()
+    assert (pending / "READY").exists()
+    assert (organ / own_id / "active-1.gguf").exists()

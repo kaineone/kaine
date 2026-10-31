@@ -70,6 +70,7 @@ async def dispatch(
     organ_url: Optional[str] = None,
     organ_api_key: Optional[str] = None,
     organ_wait_s: float = 300.0,
+    entity_id: Optional[str] = None,
     http_poster: Optional[HttpPoster] = None,
     service_runner: Optional[ServiceRunner] = None,
 ) -> dict:
@@ -85,6 +86,7 @@ async def dispatch(
             organ_url=organ_url,
             organ_api_key=organ_api_key,
             organ_wait_s=organ_wait_s,
+            entity_id=entity_id,
         )
 
     if mode not in VALID_MODES:
@@ -214,6 +216,7 @@ async def _do_organ_adapter(
     organ_url: Optional[str],
     organ_api_key: Optional[str],
     organ_wait_s: float,
+    entity_id: Optional[str] = None,
 ) -> dict:
     if not organ_adapters_dir:
         log.error("hot_swap_mode=organ_adapter but organ_adapters_dir is unset")
@@ -231,7 +234,9 @@ async def _do_organ_adapter(
         }
 
     try:
-        manifest = activate(adapter_path, Path(organ_adapters_dir))
+        # activate() refuses an entity_id that is not in the identity format, so
+        # an adapter is never promoted without an owner directory.
+        manifest = activate(adapter_path, Path(organ_adapters_dir), entity_id)
     except Exception as exc:
         log.exception("organ_adapter activation failed adapter=%s", adapter_path)
         return {
