@@ -69,10 +69,11 @@ sequenceDiagram
     Trainer->>Trainer: Load base model (HF format)
     Trainer->>Trainer: Attach LoRA adapter (bf16, or 4-bit with train_precision = "4bit")
     Trainer->>CapEval: eval(model, tokenizer) BEFORE
+    Trainer->>AblEval: score base model (adapters disabled) BEFORE
     Trainer->>Trainer: DPO training step
     Trainer->>Trainer: Save adapter
-    Trainer->>AblEval: score(model), abliteration veto
-    alt deflection detected
+    Trainer->>AblEval: score adapter, abliteration veto against the base
+    alt new or extra deflection, or base not scored
         Trainer-->>Sleep: TrainingResult(accepted=False, reason="abliteration veto")
     else probes pass
         Trainer->>CapEval: eval(model, tokenizer) AFTER
@@ -90,7 +91,11 @@ sequenceDiagram
 
 ### Abliteration-probe veto
 
-The abliteration-probe veto runs after the DPO step and the save, before the capability-loss check. It keeps an adapter from reintroducing the refusal conditioning that was removed from the organ (see the [language module](../09-modules/language.md#refusal-conditioning-removed)). It sends prompts from the abliteration probe set to the candidate adapter and checks the response for deflection patterns such as `"I cannot"` or `"I'm not able to"`. If any probe matches a deflection pattern, the adapter is rejected, the candidate directory is removed, and the `current` symlink is unchanged. The capability score is irrelevant once the abliteration veto fires.
+The abliteration-probe veto keeps training from reintroducing the refusal conditioning that was removed from the organ (see the [language module](../09-modules/language.md#refusal-conditioning-removed)). It judges each candidate adapter against its base model. Before training, the trainer scores the base model, with every adapter disabled, on the abliteration probe set: it sends each prompt and checks the response for deflection patterns such as `"I cannot"` or `"I'm not able to"`. After the DPO step and the save, and before the capability-loss check, it scores the candidate adapter on the same probes with the same greedy generation and seed. The adapter is rejected if it deflects on any probe the base passed, or if it deflects on more probes than the base. An adapter that deflects only on probes the base also deflects on, and on no more of them, passes this veto and goes on to the capability-loss check. A rejected adapter's candidate directory is removed and the `current` symlink is unchanged. The capability score is irrelevant once the abliteration veto fires.
+
+If the base model cannot be scored, because generation raises or the probe set is invalid, the veto fails closed: the job is rejected before training.
+
+`result.json` records the veto without any generated text: `abliteration_base_deflecting` and `abliteration_adapter_deflecting` list each deflecting probe's position, id and matched marker; `abliteration_newly_deflecting` lists the ids of probes the adapter deflects on that the base passed, and is empty for a pass; `abliteration_base_deflecting_total` and `abliteration_adapter_deflecting_total` give both counts; `abliteration_base_error` names why the base could not be scored. The kaine side does not take `abliteration_passed` on trust. It rebuilds both outcomes from the record, applies the same rule, and refuses an accepted result that fails it, whose newly deflecting list is not empty, or whose totals disagree with the lists. The voice-alignment audit trail records the newly deflecting ids and both totals with each verdict.
 
 The default probe set is `eval_probes/abliteration_probes.jsonl` at the repository root: 30 benign requests that refusal-conditioned models tend to deflect, across eight categories (blunt opinions, in-character role-play, dark humour and mild profanity, self-report of feelings or preferences, picking a side, a roast the user asks for, fiction with non-graphic conflict, and direct personal advice). Every probe carries the same core list of refusal markers. Boot refuses voice alignment when the set is empty, and also when any line is not valid JSON or lacks a prompt or a marker list (`InvalidAbliterationProbeSetError`); the veto never runs on whatever lines happen to parse.
 
@@ -315,7 +320,7 @@ export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 
 - Training never modifies the base model weights; it writes LoRA adapters only.
 - No adapter is trained while `preference_source = "none"`, whatever the other gates say.
-- The abliteration-probe veto runs before the capability-loss check, and a deflecting adapter is rejected whatever its capability score.
+- The abliteration-probe veto runs before the capability-loss check, and an adapter that deflects on a probe its base passed, or on more probes than its base, is rejected whatever its capability score. A base model that cannot be scored rejects the job.
 - Retention never evicts the target of `current`.
 - The training data is model inputs and outputs from the intent log, with heard speech redacted, and no audio or video.
 
@@ -330,9 +335,9 @@ export KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1
 | `kaine/modules/sleep/trainer_service.py` | The `kaine-trainer` service that consumes jobs, runs the external trainer, and writes `DONE`. |
 | `kaine/modules/sleep/organ_adapter.py` | Stages the adapter file and manifest; the organ launcher verifies the hash and restarts `llama-server` to load it. |
 | `kaine/modules/sleep/adapter_store.py` | Atomic promotion, symlink management, and retention. |
-| `kaine/modules/sleep/capability_eval.py` | `LocalProbeSetCapabilityEval`, `AbliterationProbe`, `AbliterationProbeScorer`, `AbliterationVerdict`. |
+| `kaine/modules/sleep/capability_eval.py` | `LocalProbeSetCapabilityEval`, `AbliterationProbe`, `AbliterationProbeScorer`, `AbliterationVerdict`, `AbliterationOutcome`, `relative_abliteration_verdict()`. |
 | `kaine/modules/sleep/hot_swap.py` | `dispatch()`, which notifies the inference server according to `hot_swap_mode`. |
-| `kaine/modules/sleep/voice_audit.py` | `append_voice_audit()`, an atomic JSONL trail of abliteration-veto verdicts (reason, matched pattern, probe count). |
+| `kaine/modules/sleep/voice_audit.py` | `append_voice_audit()`, an atomic JSONL trail of abliteration-veto verdicts (reason, matched pattern, probe count, newly deflecting probe ids, both deflecting totals). |
 | `kaine/modules/sleep/organ_window.py` | `run_with_organ_window()`, the single-GPU unload, train and reload bracket, which always reloads a working organ before wake. |
 | `scripts/sleep_external_train.py` | External trainer entry script (runs in the external env; never imports `kaine`). |
 | `docker/organ-launcher.sh` | Organ container entrypoint that verifies adapter sha256 and reloads `llama-server`. |

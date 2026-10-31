@@ -112,7 +112,7 @@ External speech looped in 6 of 344 texts on main at temperature 0.7 and 55 of 34
 
 The organ's weights have the single direction that mediates refusal projected out (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so the ablation may not remove it entirely. How the served organ is checked is documented in [Verification](../18-verification.md).
 
-`model_id` must therefore name the published organ or another model treated the same way. The sleep module's voice-alignment phase scores any trained adapter against an abliteration probe set and rejects it if a response deflects (see [Voice alignment](../10-sleep/voice-alignment.md)).
+`model_id` must therefore name the published organ or another model treated the same way. The sleep module's voice-alignment phase scores any trained adapter against an abliteration probe set and rejects it if it deflects on a probe the base model answered, or on more probes than the base (see [Voice alignment](../10-sleep/voice-alignment.md)).
 
 ## Inputs
 

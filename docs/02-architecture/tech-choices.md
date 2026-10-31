@@ -148,7 +148,7 @@ During the sleep module's phase 4, voice alignment is built to fine-tune the lan
 
 Once a source exists, two more gates must be open for real training: `[sleep.voice_alignment].enabled = true` and `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1`. Without the environment variable a `FakeTrainer` runs, so a freshly cloned instance cannot self-modify.
 
-Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter whose capability score (0 to 1) falls more than `capability_loss_threshold` (0.05) below its pre-training score is rejected. An adapter that triggers any abliteration deflection pattern is rejected unconditionally.
+Before any adapter is promoted, a capability-probe battery and an abliteration-probe battery run against it. An adapter whose capability score (0 to 1) falls more than `capability_loss_threshold` (0.05) below its pre-training score is rejected. An adapter that deflects on any abliteration probe its base model answered, or on more probes than its base, is rejected unconditionally.
 
 
 ## Audio

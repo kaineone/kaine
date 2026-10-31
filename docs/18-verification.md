@@ -30,7 +30,7 @@ Before publication, the organ passes two repo-resident gates. `scripts/verify_ab
 
 These are compact checks for gross regressions and do not replace full benchmarks. The published model card states that caveat and recommends independent evaluation for other use cases.
 
-The shipped `config/kaine.toml` has every module disabled (`[modules].language = false`); the first-configuration profile, applied when no profile is selected, enables the language module, and an operator overlay in `config/kaine.operator.toml` can point it at another model. The voice-alignment phase in the [sleep module](09-modules/sleep.md) adds a further welfare veto: any sleep-cycle adapter whose output deflects on an abliteration probe is rejected outright, regardless of capability score.
+The shipped `config/kaine.toml` has every module disabled (`[modules].language = false`); the first-configuration profile, applied when no profile is selected, enables the language module, and an operator overlay in `config/kaine.operator.toml` can point it at another model. The voice-alignment phase in the [sleep module](09-modules/sleep.md) adds a further welfare veto: any sleep-cycle adapter that deflects on an abliteration probe its base model answered, or on more probes than its base, is rejected outright, regardless of capability score.
 
 ### Rollback
 

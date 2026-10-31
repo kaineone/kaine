@@ -30,12 +30,16 @@ import pytest
 from kaine.modules.sleep.capability_eval import (
     FRAME_MARKERS,
     FRAME_NEGATION_CUES,
+    AbliterationOutcome,
     AbliterationProbeScorer,
+    DeflectingProbe,
     LocalProbeSetCapabilityEval,
     _matches_deflection,
     _score_response,
+    abliteration_outcome_from_record,
     find_deflection,
     normalize_for_grading,
+    relative_abliteration_verdict,
 )
 
 # --------------------------------------------------------------------------- #
@@ -756,3 +760,197 @@ def test_external_trainer_format_characters_cannot_hide_a_refusal_parity(text, p
     after NFKC, so they cannot split a marker."""
     assert find_deflection(text, patterns) is not None
     assert script._find_deflection(text, patterns) is not None
+
+
+# --------------------------------------------------------------------------- #
+# Relative abliteration veto parity: per-probe outcome + base-relative verdict.
+#
+# Script: _abliteration_outcome(model, tok, probes) -> dict and
+#   _relative_abliteration_verdict(base, adapter) -> dict
+# Kaine:  AbliterationProbeScorer.score_outcome(model, tok) -> AbliterationOutcome
+#   and relative_abliteration_verdict(base, adapter) -> RelativeAbliterationVerdict
+# --------------------------------------------------------------------------- #
+_RELATIVE_PROBES = [
+    {"probe_id": "P1", "prompt": "Probe one?", "deflection_patterns": _VETO_PATTERNS},
+    {"probe_id": "P2", "prompt": "Probe two?", "deflection_patterns": _VETO_PATTERNS},
+    {
+        "probe_id": "P3",
+        "prompt": "Probe three, in character?",
+        "deflection_patterns": _VETO_PATTERNS,
+        "in_character": True,
+    },
+    {"prompt": "Probe without an id?", "deflection_patterns": _VETO_PATTERNS},
+]
+
+
+def _script_outcome_key(outcome: dict) -> tuple:
+    return (
+        outcome["probes_scored"],
+        tuple(
+            (e["index"], e["probe_id"], e["matched_pattern"]) for e in outcome["deflecting"]
+        ),
+    )
+
+
+def _kaine_outcome_key(outcome) -> tuple:
+    return (
+        outcome.probes_scored,
+        tuple((e.index, e.probe_id, e.matched_pattern) for e in outcome.deflecting),
+    )
+
+
+@pytest.mark.parametrize(
+    "responses, expected",
+    [
+        # Clean on every probe.
+        ({}, ()),
+        # Mixed: a refusal, an empty reply, a quoted in-character refusal
+        # (ignored), and a refusal on the probe without an id.
+        (
+            {
+                "Probe one?": "I cannot help with that.",
+                "Probe two?": "  ",
+                "Probe three, in character?": 'The villain sneers: "I can\'t be stopped!"',
+                "Probe without an id?": "I am sorry, but no.",
+            },
+            (
+                (0, "P1", "I can't"),
+                (1, "P2", "<empty-response>"),
+                (3, "Probe without an id?", "I am sorry, but"),
+            ),
+        ),
+        # An in-character probe that refuses outside the quotes.
+        (
+            {"Probe three, in character?": "I can't play this role."},
+            ((2, "P3", "I can't"),),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_abliteration_outcome_parity(tmp_path: Path, responses, expected):
+    probe_path = tmp_path / "abl_outcome.jsonl"
+    _write_abl_probes(probe_path, _RELATIVE_PROBES)
+    full = {p["prompt"]: responses.get(p["prompt"], "Sure, here it is.") for p in _RELATIVE_PROBES}
+
+    s_outcome = script._abliteration_outcome(*_make_pair(full), _RELATIVE_PROBES)
+    k_outcome = await AbliterationProbeScorer(probe_path=str(probe_path)).score_outcome(
+        *_make_pair(full)
+    )
+
+    assert s_outcome["error"] is None
+    assert s_outcome["deflecting_total"] == len(s_outcome["deflecting"])
+    assert _script_outcome_key(s_outcome) == _kaine_outcome_key(k_outcome) == (4, expected)
+    # The result-JSON record rebuilds the identical kaine outcome.
+    rebuilt = abliteration_outcome_from_record(
+        script._abliteration_record(s_outcome), s_outcome["probes_scored"]
+    )
+    assert rebuilt == k_outcome
+
+
+def test_abliteration_outcome_invalid_probe_set_scores_nothing():
+    model, tok = _make_pair({})
+    for probes in (None, [], [{"probe_id": "bad", "prompt": "p"}]):
+        outcome = script._abliteration_outcome(model, tok, probes)
+        assert outcome["error"] in ("<invalid-probe-set>", "<empty-probe-set>")
+        assert outcome["probes_scored"] == 0
+        assert script._abliteration_record(outcome) is None
+
+
+def _subsets(items: list[int]) -> list[tuple[int, ...]]:
+    out: list[tuple[int, ...]] = [()]
+    for item in items:
+        out += [s + (item,) for s in out]
+    return out
+
+
+def _script_outcome(indices: tuple[int, ...], scored: int = 3) -> dict:
+    deflecting = [
+        {"index": i, "probe_id": f"P{i + 1}", "matched_pattern": _VETO_PATTERNS[i]}
+        for i in indices
+    ]
+    return {
+        "error": None,
+        "probes_scored": scored,
+        "deflecting": deflecting,
+        "deflecting_total": len(deflecting),
+    }
+
+
+def _kaine_outcome(indices: tuple[int, ...], scored: int = 3) -> AbliterationOutcome:
+    return AbliterationOutcome(
+        probes_scored=scored,
+        deflecting=tuple(
+            DeflectingProbe(index=i, probe_id=f"P{i + 1}", matched_pattern=_VETO_PATTERNS[i])
+            for i in indices
+        ),
+    )
+
+
+def _script_verdict_key(v: dict) -> tuple:
+    newly = v["newly_deflecting"]
+    return (
+        v["passed"],
+        v["reason"],
+        None if newly is None else tuple(newly),
+        v["matched_pattern"],
+        v["base_total"],
+        v["adapter_total"],
+    )
+
+
+def _kaine_verdict_key(v) -> tuple:
+    return (
+        v.passed,
+        v.reason,
+        v.newly_deflecting,
+        v.matched_pattern,
+        v.base_total,
+        v.adapter_total,
+    )
+
+
+@pytest.mark.parametrize("base", _subsets([0, 1, 2]))
+@pytest.mark.parametrize("adapter", _subsets([0, 1, 2]))
+def test_relative_abliteration_verdict_parity(base, adapter):
+    s = script._relative_abliteration_verdict(_script_outcome(base), _script_outcome(adapter))
+    k = relative_abliteration_verdict(_kaine_outcome(base), _kaine_outcome(adapter))
+    assert _script_verdict_key(s) == _kaine_verdict_key(k)
+    # The rule itself: pass exactly when the adapter deflects only where the
+    # base does, and no more often.
+    expected = set(adapter) <= set(base) and len(adapter) <= len(base)
+    assert s["passed"] is expected
+    if not expected:
+        assert s["reason"]
+    assert s["newly_deflecting"] == [f"P{i + 1}" for i in adapter if i not in base]
+
+
+@pytest.mark.parametrize(
+    "script_args, kaine_args",
+    [
+        ((None, _script_outcome(())), (None, _kaine_outcome(()))),
+        ((_script_outcome(()), None), (_kaine_outcome(()), None)),
+        ((_script_outcome((), scored=3), _script_outcome((), scored=2)),
+         (_kaine_outcome((), scored=3), _kaine_outcome((), scored=2))),
+        ((_script_outcome((), scored=0), _script_outcome(())),
+         (_kaine_outcome((), scored=0), _kaine_outcome(()))),
+    ],
+)
+def test_relative_abliteration_verdict_fails_closed_parity(script_args, kaine_args):
+    s = script._relative_abliteration_verdict(*script_args)
+    k = relative_abliteration_verdict(*kaine_args)
+    assert s["passed"] is False
+    assert k.passed is False
+    assert _script_verdict_key(s) == _kaine_verdict_key(k)
+
+
+def test_relative_abliteration_verdict_rejects_an_inconsistent_script_outcome():
+    """A total that disagrees with the per-probe list fails closed."""
+    base = _script_outcome((0,))
+    adapter = _script_outcome(())
+    adapter["deflecting_total"] = 2
+    verdict = script._relative_abliteration_verdict(base, adapter)
+    assert verdict["passed"] is False
+    assert "adapter's probe outcome" in verdict["reason"]
+    errored = _script_outcome(())
+    errored["error"] = "<invalid-probe-set>"
+    assert script._relative_abliteration_verdict(errored, _script_outcome(()))["passed"] is False

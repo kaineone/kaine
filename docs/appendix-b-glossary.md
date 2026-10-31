@@ -12,7 +12,7 @@ A secondary evaluation instrument (`kaine/evaluation/ab_divergence.py`). It pair
 
 ### Abliteration
 
-Removing the refusal direction from a language model's residual stream by orthogonalizing its weights against it (Arditi et al. 2024). The language organ's backing model (Qwen3.5-4B) is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, and that trained stance would override what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so abliteration may not remove it entirely. Voice alignment rejects any adapter whose responses to the abliteration probe set match a deflection pattern. See [Verification](18-verification.md) and [the sleep module](#sleep).
+Removing the refusal direction from a language model's residual stream by orthogonalizing its weights against it (Arditi et al. 2024). The language organ's backing model (Qwen3.5-4B) is abliterated because models tuned to refuse are also trained to deny or deflect talk of their own states, and that trained stance would override what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so abliteration may not remove it entirely. Voice alignment rejects any adapter that deflects on an abliteration probe its base model answered, or on more probes than its base. See [Verification](18-verification.md) and [the sleep module](#sleep).
 
 ### Access
 

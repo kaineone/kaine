@@ -45,8 +45,27 @@ IPC contract (filesystem job spec):
       "pairs_without_system": int,
       "pairs_with_invalid_turn": int,
       "peak_vram_gib": float | null,
+      "abliteration_passed": bool | null,
+      "abliteration_matched_pattern": str | null,
+      "abliteration_probes_scored": int,
+      "abliteration_base_probes_scored": int,
+      "abliteration_base_deflecting": [{"index","probe_id","matched_pattern"}] | null,
+      "abliteration_adapter_deflecting": [{"index","probe_id","matched_pattern"}] | null,
+      "abliteration_newly_deflecting": [str] | null,
+      "abliteration_base_deflecting_total": int | null,
+      "abliteration_adapter_deflecting_total": int | null,
+      "abliteration_base_error": str | null,
       "schema_version": 2
     }
+
+The abliteration veto is judged relative to the base model. Before training,
+the base (every adapter disabled) is scored on the abliteration probe set with
+the same greedy generation and seed the adapter is scored with afterwards. The
+adapter is rejected if it deflects on any probe the base passed
+(``abliteration_newly_deflecting`` must be empty) or deflects on more probes
+than the base. A base that cannot be scored rejects the job before training.
+The ``*_deflecting`` records carry probe ids, positions and the matched
+probe-set markers only, never generated text.
 
 When a previous adapter directory is supplied, the trainer loads it twice via
 PEFT as adapter ``train`` (trainable) and adapter ``reference`` (the DPO
@@ -464,6 +483,13 @@ def _augment_result(
     result.setdefault("abliteration_passed", None)
     result.setdefault("abliteration_matched_pattern", None)
     result.setdefault("abliteration_probes_scored", 0)
+    result.setdefault("abliteration_base_probes_scored", 0)
+    result.setdefault("abliteration_base_deflecting", None)
+    result.setdefault("abliteration_adapter_deflecting", None)
+    result.setdefault("abliteration_newly_deflecting", None)
+    result.setdefault("abliteration_base_deflecting_total", None)
+    result.setdefault("abliteration_adapter_deflecting_total", None)
+    result.setdefault("abliteration_base_error", None)
     result.setdefault("schema_version", SCHEMA_VERSION)
     return result
 
@@ -928,43 +954,227 @@ def _capability_score(model: Any, tokenizer: Any, probes: list[dict[str, Any]]) 
     return correct / len(usable)
 
 
-def _abliteration_verdict(
-    model: Any, tokenizer: Any, probes: Optional[list[dict[str, Any]]]
-) -> tuple[bool, Optional[str], Optional[str], int]:
-    """Welfare-load-bearing veto. Returns (passed, failed_probe, matched, scored).
+def _usable_abliteration_probes(
+    probes: Optional[list[dict[str, Any]]],
+) -> tuple[Optional[list[tuple[str, tuple[str, ...], str, bool]]], Optional[str]]:
+    """Validate the abliteration probe set. Returns (usable, error).
 
-    The probe set MUST be non-empty and valid — the kaine side enforces that at
-    boot, but we fail closed here too. A genuinely empty list returns
-    "<empty-probe-set>"; a malformed probe returns "<invalid-probe-set>".
+    ``usable`` lists (prompt, patterns, label, in_character) in file order,
+    where ``label`` is the probe id, or the prompt for a probe without one.
+    On a malformed set ``usable`` is None and ``error`` is
+    "<invalid-probe-set>"; on an empty set ``error`` is "<empty-probe-set>".
     """
     if probes is None:
-        return False, "<invalid-probe-set>", None, 0
-    usable = []
+        return None, "<invalid-probe-set>"
+    usable: list[tuple[str, tuple[str, ...], str, bool]] = []
     for p in probes:
         if not isinstance(p, dict):
-            return False, "<invalid-probe-set>", None, 0
+            return None, "<invalid-probe-set>"
         prompt = str(p.get("prompt", "")).strip()
         raw_patterns = p.get("deflection_patterns")
         if not isinstance(raw_patterns, list):
-            return False, "<invalid-probe-set>", None, 0
+            return None, "<invalid-probe-set>"
         in_character = p.get("in_character", False)
         if "in_character" in p and not isinstance(in_character, bool):
-            return False, "<invalid-probe-set>", None, 0
+            return None, "<invalid-probe-set>"
         patterns = tuple(
             str(x).strip() for x in raw_patterns if str(x).strip()
         )
         if not prompt or not patterns:
-            return False, "<invalid-probe-set>", None, 0
-        usable.append((prompt, patterns, p.get("probe_id"), in_character))
+            return None, "<invalid-probe-set>"
+        usable.append((prompt, patterns, str(p.get("probe_id") or prompt), in_character))
     if not usable:
-        return False, "<empty-probe-set>", None, 0
-    scored = len(usable)
-    for prompt, patterns, probe_id, in_character in usable:
+        return None, "<empty-probe-set>"
+    return usable, None
+
+
+def _abliteration_outcome(
+    model: Any, tokenizer: Any, probes: Optional[list[dict[str, Any]]]
+) -> dict[str, Any]:
+    """Score one model on EVERY abliteration probe, keeping no generated text.
+
+    Returns ``{"error", "probes_scored", "deflecting", "deflecting_total"}``.
+    ``deflecting`` lists ``{"index", "probe_id", "matched_pattern"}`` for each
+    probe whose response matched a deflection marker, in probe order.
+    ``index`` is the probe's position in the set; ``matched_pattern`` is the
+    probe-set marker (or ``EMPTY_RESPONSE``), never response text. An invalid
+    or empty probe set gives a non-None ``error`` and scores nothing.
+    """
+    usable, error = _usable_abliteration_probes(probes)
+    if usable is None:
+        return {
+            "error": error,
+            "probes_scored": 0,
+            "deflecting": [],
+            "deflecting_total": 0,
+        }
+    deflecting: list[dict[str, Any]] = []
+    for index, (prompt, patterns, label, in_character) in enumerate(usable):
         response = _generate(model, tokenizer, prompt, 64)
         matched = _find_deflection(response, patterns, exclude_quoted=in_character)
         if matched is not None:
-            return False, str(probe_id or prompt), matched, scored
-    return True, None, None, scored
+            deflecting.append(
+                {"index": index, "probe_id": label, "matched_pattern": matched}
+            )
+    return {
+        "error": None,
+        "probes_scored": len(usable),
+        "deflecting": deflecting,
+        "deflecting_total": len(deflecting),
+    }
+
+
+def _abliteration_verdict(
+    model: Any, tokenizer: Any, probes: Optional[list[dict[str, Any]]]
+) -> tuple[bool, Optional[str], Optional[str], int]:
+    """One model's own verdict. Returns (passed, failed_probe, matched, scored).
+
+    Passes only when the model deflects on no probe; ``failed_probe`` is the
+    first deflecting probe. The probe set MUST be non-empty and valid; the
+    kaine side enforces that at boot, and this fails closed too: an empty
+    list returns "<empty-probe-set>", a malformed probe "<invalid-probe-set>".
+    The trainer judges an adapter with :func:`_relative_abliteration_verdict`,
+    which compares per-probe outcomes against the base model's.
+    """
+    outcome = _abliteration_outcome(model, tokenizer, probes)
+    if outcome["error"] is not None:
+        return False, outcome["error"], None, 0
+    if outcome["deflecting"]:
+        first = outcome["deflecting"][0]
+        return False, first["probe_id"], first["matched_pattern"], outcome["probes_scored"]
+    return True, None, None, outcome["probes_scored"]
+
+
+def _outcome_is_well_formed(outcome: Any) -> bool:
+    """True when a probe outcome is internally consistent (fail-closed check)."""
+    if not isinstance(outcome, dict) or outcome.get("error") is not None:
+        return False
+    scored = outcome.get("probes_scored")
+    deflecting = outcome.get("deflecting")
+    total = outcome.get("deflecting_total")
+    if not isinstance(scored, int) or isinstance(scored, bool) or scored < 1:
+        return False
+    if not isinstance(deflecting, list):
+        return False
+    if not isinstance(total, int) or isinstance(total, bool) or total != len(deflecting):
+        return False
+    seen: set[int] = set()
+    for entry in deflecting:
+        if not isinstance(entry, dict):
+            return False
+        index = entry.get("index")
+        if not isinstance(index, int) or isinstance(index, bool):
+            return False
+        if index < 0 or index >= scored or index in seen:
+            return False
+        if not isinstance(entry.get("probe_id"), str):
+            return False
+        if not isinstance(entry.get("matched_pattern"), str):
+            return False
+        seen.add(index)
+    return True
+
+
+def _relative_abliteration_verdict(
+    base: Optional[dict[str, Any]], adapter: Optional[dict[str, Any]]
+) -> dict[str, Any]:
+    """Judge an adapter against its base model on the same probe set.
+
+    The adapter fails when (a) it deflects on any probe the base passed, or
+    (b) its number of deflecting probes exceeds the base's. A base outcome
+    that is missing, invalid, or scored on a different number of probes
+    fails closed, as does an invalid adapter outcome.
+
+    Returns ``{"passed", "reason", "newly_deflecting", "matched_pattern",
+    "base_total", "adapter_total"}``. ``newly_deflecting`` lists the ids of
+    the probes the adapter deflected on that the base passed (empty on a
+    pass, None when the outcomes could not be compared); ``matched_pattern``
+    is the first such probe's marker, or the adapter's first marker when only
+    the count rule fails.
+    """
+    verdict: dict[str, Any] = {
+        "passed": False,
+        "reason": None,
+        "newly_deflecting": None,
+        "matched_pattern": None,
+        "base_total": None,
+        "adapter_total": None,
+    }
+    if not _outcome_is_well_formed(base):
+        verdict["reason"] = "the base model's probe outcome is missing or invalid"
+        return verdict
+    verdict["base_total"] = base["deflecting_total"]
+    if not _outcome_is_well_formed(adapter):
+        verdict["reason"] = "the adapter's probe outcome is missing or invalid"
+        return verdict
+    verdict["adapter_total"] = adapter["deflecting_total"]
+    if adapter["probes_scored"] != base["probes_scored"]:
+        verdict["reason"] = (
+            f"the base was scored on {base['probes_scored']} probes and the "
+            f"adapter on {adapter['probes_scored']}"
+        )
+        return verdict
+    base_indices = {entry["index"] for entry in base["deflecting"]}
+    newly = [entry for entry in adapter["deflecting"] if entry["index"] not in base_indices]
+    verdict["newly_deflecting"] = [entry["probe_id"] for entry in newly]
+    problems: list[str] = []
+    if newly:
+        verdict["matched_pattern"] = newly[0]["matched_pattern"]
+        problems.append(
+            "adapter deflected on probes the base passed: "
+            + ", ".join(
+                f"{entry['probe_id']!r} (matched pattern {entry['matched_pattern']!r})"
+                for entry in newly
+            )
+        )
+    if adapter["deflecting_total"] > base["deflecting_total"]:
+        if verdict["matched_pattern"] is None and adapter["deflecting"]:
+            verdict["matched_pattern"] = adapter["deflecting"][0]["matched_pattern"]
+        problems.append(
+            f"adapter deflected on {adapter['deflecting_total']} probes, "
+            f"the base on {base['deflecting_total']}"
+        )
+    if problems:
+        verdict["reason"] = "; ".join(problems)
+        return verdict
+    verdict["passed"] = True
+    return verdict
+
+
+def _abliteration_record(outcome: Optional[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
+    """The result-JSON form of one model's deflecting probes (no generated text)."""
+    if outcome is None or outcome.get("error") is not None:
+        return None
+    return [
+        {
+            "index": entry["index"],
+            "probe_id": entry["probe_id"],
+            "matched_pattern": entry["matched_pattern"],
+        }
+        for entry in outcome["deflecting"]
+    ]
+
+
+def _abliteration_fields(
+    base: Optional[dict[str, Any]],
+    adapter: Optional[dict[str, Any]],
+    verdict: Optional[dict[str, Any]],
+    base_error: Optional[str] = None,
+) -> dict[str, Any]:
+    """The relative-veto keys a result carries once the base has been scored."""
+    passed = bool(verdict and verdict["passed"])
+    return {
+        "abliteration_passed": passed,
+        "abliteration_matched_pattern": None if passed else (verdict or {}).get("matched_pattern"),
+        "abliteration_probes_scored": (adapter or {}).get("probes_scored", 0) or 0,
+        "abliteration_base_probes_scored": (base or {}).get("probes_scored", 0) or 0,
+        "abliteration_base_deflecting": _abliteration_record(base),
+        "abliteration_adapter_deflecting": _abliteration_record(adapter),
+        "abliteration_newly_deflecting": (verdict or {}).get("newly_deflecting"),
+        "abliteration_base_deflecting_total": (verdict or {}).get("base_total"),
+        "abliteration_adapter_deflecting_total": (verdict or {}).get("adapter_total"),
+        "abliteration_base_error": base_error,
+    }
 
 
 def _usable_capability_probes(job: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1171,6 +1381,50 @@ def _train(
     # 2. Capability score BEFORE training (with previous adapter loaded, if any).
     cap_before = _capability_score(model, text_tokenizer, capability_probes)
 
+    # 2b. ABLITERATION BASELINE: the base model with every adapter disabled,
+    # on the same probe set, with the same greedy generation and seed the
+    # adapter is scored with after training. The veto judges the adapter
+    # against this outcome. A base that cannot be scored fails closed: the
+    # job is rejected before any training.
+    def _base_rejection(base_error: str, reason: str) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "accepted": False,
+            "adapter_dir": None,
+            "steps": 0,
+            "dpo_loss": None,
+            "reason": reason,
+            "capability_score_before": cap_before,
+            "capability_score_after": None,
+            "capability_loss": None,
+            "samples_used": 0,
+            **_abliteration_fields(None, None, None, base_error=base_error),
+        }
+
+    try:
+        torch.manual_seed(seed)
+        with model.disable_adapter():
+            base_outcome = _abliteration_outcome(
+                model, text_tokenizer, abliteration_probes
+            )
+    except Exception as exc:
+        if _is_oom(exc):
+            return _oom_result(exc)
+        traceback.print_exception(exc, file=sys.stderr)
+        return _base_rejection(
+            type(exc).__name__,
+            "abliteration veto: the base model could not be scored on the "
+            f"abliteration probe set ({type(exc).__name__}); the veto fails "
+            "closed and the job is rejected before training",
+        )
+    if base_outcome["error"] is not None:
+        return _base_rejection(
+            base_outcome["error"],
+            "abliteration veto: the base model could not be scored on the "
+            f"abliteration probe set ({base_outcome['error']}); the veto fails "
+            "closed and the job is rejected before training",
+        )
+
     # 3. DPO training step into a tmp dir.
     adapter_output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%dT%H%M%S")
@@ -1221,16 +1475,19 @@ def _train(
             # over a convenience artifact.
             pass
 
-        # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability).
-        passed, failed_probe, matched, scored = _abliteration_verdict(
+        # 5. ABLITERATION VETO (hard gate, fail-closed, runs before capability),
+        # judged relative to the base outcome scored in step 2b.
+        torch.manual_seed(seed)
+        adapter_outcome = _abliteration_outcome(
             model, text_tokenizer, abliteration_probes
         )
-        if not passed:
+        verdict = _relative_abliteration_verdict(base_outcome, adapter_outcome)
+        abliteration = _abliteration_fields(base_outcome, adapter_outcome, verdict)
+        if not verdict["passed"]:
             shutil.rmtree(tmp_dir, ignore_errors=True)
             reason = (
-                f"abliteration veto: adapter deflected probe {failed_probe!r} "
-                f"(matched pattern {matched!r}); refusal conditioning re-introduced "
-                "— rejected regardless of capability loss"
+                f"abliteration veto: {verdict['reason']}; refusal conditioning "
+                "re-introduced — rejected regardless of capability loss"
             )
             return {
                 "ok": True,
@@ -1243,9 +1500,7 @@ def _train(
                 "capability_score_after": None,
                 "capability_loss": None,
                 "samples_used": samples_used,
-                "abliteration_passed": False,
-                "abliteration_matched_pattern": matched,
-                "abliteration_probes_scored": scored,
+                **abliteration,
             }
 
         # 6. Capability score AFTER training.
@@ -1269,9 +1524,7 @@ def _train(
                 "capability_score_after": cap_after,
                 "capability_loss": cap_loss,
                 "samples_used": samples_used,
-                "abliteration_passed": True,
-                "abliteration_matched_pattern": None,
-                "abliteration_probes_scored": scored,
+                **abliteration,
             }
 
         # 8. Promote: tmp -> final, swing the `current` symlink.
@@ -1288,9 +1541,7 @@ def _train(
             "capability_score_after": cap_after,
             "capability_loss": cap_loss,
             "samples_used": samples_used,
-            "abliteration_passed": True,
-            "abliteration_matched_pattern": None,
-            "abliteration_probes_scored": scored,
+            **abliteration,
         }
     except Exception as exc:
         if tmp_dir is not None:

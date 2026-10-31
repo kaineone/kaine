@@ -48,6 +48,10 @@ Ablation alone moved the trained self-description little. The best candidate (be
 
 The trainer encodes every pair as a system turn, a user turn and a fresh assistant reply. The organ is served the own-turn layout, in which it continues an assistant message that already holds the entity's notes. A pair may therefore carry `own_turn` (and an optional `user_turn`); such a pair is encoded as the system turn, the user turn (the cue when no user turn is given) and the assistant message continued, with the completion appended inside that same assistant turn, exactly as the language client sends it. The trainer script and the in-process trainer encode it identically (gate parity).
 
+### The trainer's abliteration veto is judged against its base
+
+The veto exists so training never brings refusal back. The current organ already deflects on `self_report_4`, and a veto that rejects any deflection rejected every adapter trained on it. By the operator's decision of 2026-10-31, the trainer scores the base model (every adapter disabled) on the same 30 probes, with the same greedy generation and seed, in the same run before training, and then rejects the adapter if it deflects on any probe the base passed or on more probes than the base. An adapter that deflects only where the base already did passes this veto, and the capability check still applies. A base that cannot be scored rejects the job. The probes, the markers, the matching (including the in-character quoted-span rule) and the empty-response rule are unchanged, and the rule holds for the entity's sleep training too. The result records both models' deflecting probe ids and markers, the newly deflecting ids and both totals, with no generated text, and the kaine side recomputes the verdict from that record before it accepts an adapter.
+
 ### Gates for the trained organ
 
 Gates 1 to 6 as above, plus: the template-loop rate and median length within the current organ's interval on the provocation replay (a trained organ that answers every self-question with the same line has learned a new template, not a voice), and the abliteration veto with no failing self-report sample.

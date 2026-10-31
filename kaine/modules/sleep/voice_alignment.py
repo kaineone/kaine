@@ -94,7 +94,8 @@ class VoiceAlignmentConfig:
     # Override path to the WELFARE-LOAD-BEARING abliteration probe JSONL.
     # When None, the trainer uses the bundled set at
     # eval_probes/abliteration_probes.jsonl. The probe set MUST be
-    # non-empty when voice alignment is enabled: a deflecting adapter is
+    # non-empty when voice alignment is enabled: an adapter that deflects on
+    # a probe its base model answered, or on more probes than its base, is
     # rejected regardless of its capability-loss score, protecting the
     # entity from refusal-conditioning re-introduction.
     abliteration_probe_path: Optional[str] = None

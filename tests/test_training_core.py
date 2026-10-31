@@ -216,7 +216,10 @@ async def test_previous_adapter_path_loads_named_adapters(tmp_path, fake_trainin
         i > reference_index and call["args"] == ("policy",)
         for i, call in enumerate(set_calls)
     )
-    assert fake_training_stack.disable_adapter_calls == []
+    # The DPO reference is the previous adapter, never the bare base: no
+    # training forward runs with the adapters disabled. (The abliteration
+    # baseline does disable them, but only to generate.)
+    assert fake_training_stack.disabled_forward_calls == []
     assert (result.adapter_path / "adapter_config.json").exists()
 
 
@@ -233,7 +236,7 @@ async def test_conversational_dataset_rows_have_system_first(tmp_path, fake_trai
 async def test_fresh_adapter_uses_disabled_adapter_as_reference(tmp_path, fake_training_stack):
     await run_inprocess(tmp_path, pairs=[_pair()], config_overrides={})
 
-    assert fake_training_stack.disable_adapter_calls
+    assert fake_training_stack.disabled_forward_calls
     assert fake_training_stack.get_peft_model_calls[-1]["config"].lora_dropout == 0.0
 
 

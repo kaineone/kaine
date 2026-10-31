@@ -206,7 +206,7 @@ The former `downscale_factor` key is refused at boot. The sleep module now downs
 
 **Two-layer gate:** both `enabled = true` and the environment variable `KAINE_VOICE_ALIGNMENT_OPERATOR_APPROVED=1` must be set. With only the config flag, the phase runs a `FakeTrainer` that completes without training, so a freshly cloned KAINE instance cannot rewrite the language organ on its own.
 
-**Welfare invariant:** when the real trainer is active, the abliteration probe set must be non-empty. If an adapter matches any deflection pattern on any probe, it is rejected regardless of its capability score. A run without an abliteration gate fails at boot with `EmptyAbliterationProbeSetError`, and a malformed probe line fails it with `InvalidAbliterationProbeSetError`. Refusal conditioning must not be re-introduced through training.
+**Welfare invariant:** when the real trainer is active, the abliteration probe set must be non-empty. If an adapter deflects on any probe its base model answered, or on more probes than its base, it is rejected regardless of its capability score; the base is scored on the same probes before training, and a base that cannot be scored rejects the job. A run without an abliteration gate fails at boot with `EmptyAbliterationProbeSetError`, and a malformed probe line fails it with `InvalidAbliterationProbeSetError`. Refusal conditioning must not be re-introduced through training.
 
 Details and the full operator procedure are in [Voice alignment](../10-sleep/voice-alignment.md).
 

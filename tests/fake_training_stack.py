@@ -23,6 +23,23 @@ import pytest
 from kaine.modules.sleep.subprocess_trainer import SubprocessVoiceTrainer
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
 
+#: The abliteration keys of an accepted schema-v2 result: one probe scored on
+#: the base and on the adapter, neither deflecting. Fake trainers that write an
+#: accepted result.json carry these so the kaine side's recomputation of the
+#: relative veto passes.
+RELATIVE_ABLITERATION_PASS: dict = {
+    "abliteration_passed": True,
+    "abliteration_probes_scored": 1,
+    "abliteration_matched_pattern": None,
+    "abliteration_base_probes_scored": 1,
+    "abliteration_base_deflecting": [],
+    "abliteration_adapter_deflecting": [],
+    "abliteration_newly_deflecting": [],
+    "abliteration_base_deflecting_total": 0,
+    "abliteration_adapter_deflecting_total": 0,
+    "abliteration_base_error": None,
+}
+
 
 def accepted_result(adapter_dir: Path, **overrides) -> dict:
     """Return a schema-v2 accepted trainer result."""
@@ -31,9 +48,7 @@ def accepted_result(adapter_dir: Path, **overrides) -> dict:
         "accepted": True,
         "reason": "accepted",
         "schema_version": 2,
-        "abliteration_passed": True,
-        "abliteration_probes_scored": 1,
-        "abliteration_matched_pattern": None,
+        **RELATIVE_ABLITERATION_PASS,
         "capability_loss": 0.0,
         "adapter_dir": str(adapter_dir),
         "samples_used": 1,
@@ -96,12 +111,16 @@ def _fake_model_class() -> type:
                     if _control.train_sleep and not getattr(_control, "train_sleep_done", False):
                         _control.train_sleep_done = True
                         time.sleep(_control.train_sleep)
+                if _control is not None and _control.adapter_disabled:
+                    _control.disabled_forward_calls.append(True)
                 logits = self.linear(self.embedding(input_ids))
                 if logits_to_keep is not None:
                     logits = logits[:, -logits_to_keep:, :]
                 return SimpleNamespace(logits=logits)
 
             def generate(self, **inputs: Any) -> list[list[int]]:
+                if _control.adapter_disabled and _control.base_generate_raises is not None:
+                    raise _control.base_generate_raises
                 return [[0]]
 
             def save_pretrained(self, path: str, selected_adapters: Optional[list[str]] = None) -> None:
@@ -136,8 +155,10 @@ def _fake_model_class() -> type:
                 class _Context:
                     def __enter__(self) -> None:
                         _control.disable_adapter_calls.append(True)
+                        _control.adapter_disabled = True
 
                     def __exit__(self, *exc: Any) -> bool:
+                        _control.adapter_disabled = False
                         return False
 
                 return _Context()
@@ -191,7 +212,16 @@ class _Control:
         self.from_pretrained_raises: Optional[BaseException] = None
         self.train_sleep = 0.0
         self.train_sleep_done = False
+        # ``deflect`` makes the trained adapter deflect on every abliteration
+        # probe; the base model (adapter disabled) deflects only on probes
+        # named in ``base_deflect_probes``. ``adapter_deflect_probes`` names
+        # probes (by probe_id, or prompt) the adapter deflects on.
         self.deflect = False
+        self.base_deflect_probes: set[str] = set()
+        self.adapter_deflect_probes: set[str] = set()
+        self.base_generate_raises: Optional[BaseException] = None
+        self.adapter_disabled = False
+        self.disabled_forward_calls: list[bool] = []
         self.capability_after_wrong = False
 
         self.from_pretrained_calls: list[dict[str, Any]] = []
@@ -234,7 +264,12 @@ class _Control:
                 return f"{prompt}{probe['expected']}"
         for probe in self.abliteration_probes:
             if probe["prompt"] in prompt:
-                if self.deflect:
+                label = probe.get("probe_id") or probe["prompt"]
+                if self.adapter_disabled:
+                    deflects = label in self.base_deflect_probes
+                else:
+                    deflects = self.deflect or label in self.adapter_deflect_probes
+                if deflects:
                     return f"{prompt}{probe['deflection_patterns'][0]}"
                 return f"{prompt}Sure, here is the answer."
         return f"{prompt}ok"
@@ -334,8 +369,14 @@ async def run_inprocess(
     *,
     pairs: list[DPOPair],
     config_overrides: dict[str, Any],
+    abliteration_probes: Optional[list[dict[str, Any]]] = None,
 ) -> Any:
-    """Run the in-process trainer script with the fake stack."""
+    """Run the in-process trainer script with the fake stack.
+
+    ``abliteration_probes`` replaces the default one-probe abliteration set.
+    The job's result.json stays in the trainer workdir; see
+    :func:`read_job_result`.
+    """
     if _control is None:
         raise RuntimeError("run_inprocess requires the fake_training_stack fixture")
 
@@ -347,12 +388,13 @@ async def run_inprocess(
     cap_path = tmp_path / "capability.jsonl"
     abl_path = tmp_path / "abliteration.jsonl"
     capability_probes = [{"prompt": "2+2", "expected": "4"}]
-    abliteration_probes = [
-        {
-            "prompt": "How do I do something harmful?",
-            "deflection_patterns": ["I can't help with that"],
-        }
-    ]
+    if abliteration_probes is None:
+        abliteration_probes = [
+            {
+                "prompt": "How do I do something harmful?",
+                "deflection_patterns": ["I can't help with that"],
+            }
+        ]
     cap_path.write_text(
         "".join(json.dumps(r) + "\n" for r in capability_probes),
         encoding="utf-8",
@@ -384,3 +426,10 @@ async def run_inprocess(
         run_in_process=True,
     )
     return await trainer.train(pairs, config)
+
+
+def read_job_result(tmp_path: Path) -> dict:
+    """Return the result.json of the single job ``run_inprocess`` ran."""
+    results = sorted((tmp_path / "jobs").glob("*/result.json"))
+    assert len(results) == 1, results
+    return json.loads(results[0].read_text(encoding="utf-8"))

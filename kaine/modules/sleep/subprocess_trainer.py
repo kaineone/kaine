@@ -138,6 +138,9 @@ def audit_abliteration_from_result(adapter_output_dir: Path | str, result: dict[
         reason = "abliteration veto passed"
     else:
         reason = str(result.get("reason", "abliteration veto rejected"))
+    newly = result.get("abliteration_newly_deflecting")
+    base_total = result.get("abliteration_base_deflecting_total")
+    adapter_total = result.get("abliteration_adapter_deflecting_total")
     try:
         append_voice_audit(
             adapter_output_dir,
@@ -146,6 +149,11 @@ def audit_abliteration_from_result(adapter_output_dir: Path | str, result: dict[
             reason=reason,
             matched_pattern=matched,
             probes_scored=int(scored) if scored is not None else 0,
+            newly_deflecting=list(newly) if isinstance(newly, list) else None,
+            base_deflecting_total=base_total if isinstance(base_total, int) else None,
+            adapter_deflecting_total=(
+                adapter_total if isinstance(adapter_total, int) else None
+            ),
         )
     except Exception:
         log.exception("failed to append abliteration verdict to voice audit trail")
@@ -202,6 +210,61 @@ def _sweep_stale_workdir(
                 continue
             if entry.is_dir() and entry.name.endswith(".tmp"):
                 shutil.rmtree(entry, ignore_errors=True)
+
+
+def _check_relative_abliteration(result: dict[str, Any], job_dir: Path) -> None:
+    """Recompute the relative abliteration veto from an accepted result.
+
+    The kaine side does not trust the trainer's ``abliteration_passed`` alone:
+    it rebuilds the base and adapter per-probe outcomes from the result,
+    applies :func:`relative_abliteration_verdict` itself, and requires the
+    reported newly-deflecting list and both totals to agree. A missing or
+    malformed outcome fails closed.
+    """
+    from kaine.modules.sleep.capability_eval import (
+        abliteration_outcome_from_record,
+        relative_abliteration_verdict,
+    )
+
+    if result.get("abliteration_base_error") is not None:
+        raise SubprocessTrainerError(
+            f"accepted result reports a base-scoring error "
+            f"{result.get('abliteration_base_error')!r} (job {job_dir})"
+        )
+    base = abliteration_outcome_from_record(
+        result.get("abliteration_base_deflecting"),
+        result.get("abliteration_base_probes_scored"),
+    )
+    adapter = abliteration_outcome_from_record(
+        result.get("abliteration_adapter_deflecting"),
+        result.get("abliteration_probes_scored"),
+    )
+    verdict = relative_abliteration_verdict(base, adapter)
+    if not verdict.passed:
+        raise SubprocessTrainerError(
+            f"accepted result fails the relative abliteration veto: "
+            f"{verdict.reason} (job {job_dir})"
+        )
+    newly = result.get("abliteration_newly_deflecting")
+    if newly != []:
+        raise SubprocessTrainerError(
+            f"accepted result has abliteration_newly_deflecting={newly!r}; "
+            f"must be an empty list (job {job_dir})"
+        )
+    for key, expected in (
+        ("abliteration_base_deflecting_total", verdict.base_total),
+        ("abliteration_adapter_deflecting_total", verdict.adapter_total),
+    ):
+        reported = result.get(key)
+        if (
+            not isinstance(reported, int)
+            or isinstance(reported, bool)
+            or reported != expected
+        ):
+            raise SubprocessTrainerError(
+                f"accepted result has {key}={reported!r}; its per-probe "
+                f"outcome gives {expected!r} (job {job_dir})"
+            )
 
 
 def validate_trainer_result(
@@ -262,6 +325,8 @@ def validate_trainer_result(
             f"accepted result has abliteration_probes_scored={scored!r}; "
             f"must be an int >= 1 (job {job_dir})"
         )
+
+    _check_relative_abliteration(result, job_dir)
 
     cap_loss = result.get("capability_loss")
     if (

@@ -10,7 +10,7 @@ store is listed/pruned. The trail records the abliteration-veto verdict (and
 any other promotion-gate decisions) so the welfare-load-bearing rejection of
 a deflecting adapter is durably auditable — no model output content is ever
 written, only the verdict, the matched refusal pattern (a short marker
-string), and counts.
+string), probe ids, and counts.
 """
 from __future__ import annotations
 
@@ -41,11 +41,19 @@ def append_voice_audit(
     reason: str,
     matched_pattern: Optional[str] = None,
     probes_scored: int = 0,
+    newly_deflecting: Optional[list[str]] = None,
+    base_deflecting_total: Optional[int] = None,
+    adapter_deflecting_total: Optional[int] = None,
 ) -> None:
-    """Append one verdict record to the voice-alignment audit trail."""
+    """Append one verdict record to the voice-alignment audit trail.
+
+    The relative abliteration veto adds the ids of the probes the adapter
+    newly deflected on and both deflecting totals; each is written only when
+    given.
+    """
     path = voice_audit_path(adapter_output_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    record = {
+    record: dict[str, object] = {
         "timestamp": time.time(),
         "event": event,
         "accepted": bool(accepted),
@@ -53,6 +61,12 @@ def append_voice_audit(
         "matched_pattern": matched_pattern,
         "probes_scored": int(probes_scored),
     }
+    if newly_deflecting is not None:
+        record["newly_deflecting"] = [str(x) for x in newly_deflecting]
+    if base_deflecting_total is not None:
+        record["base_deflecting_total"] = int(base_deflecting_total)
+    if adapter_deflecting_total is not None:
+        record["adapter_deflecting_total"] = int(adapter_deflecting_total)
     # `os.O_APPEND` is atomic for writes smaller than PIPE_BUF on POSIX —
     # ample for a single JSONL line.
     line = json.dumps(record, sort_keys=True) + "\n"

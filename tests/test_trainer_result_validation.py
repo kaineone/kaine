@@ -48,6 +48,12 @@ def _valid_accepted(adapter_dir: Path) -> dict[str, Any]:
         "capability_loss": 0.01,
         "abliteration_passed": True,
         "abliteration_probes_scored": 1,
+        "abliteration_base_probes_scored": 1,
+        "abliteration_base_deflecting": [],
+        "abliteration_adapter_deflecting": [],
+        "abliteration_newly_deflecting": [],
+        "abliteration_base_deflecting_total": 0,
+        "abliteration_adapter_deflecting_total": 0,
         "schema_version": SCHEMA_VERSION,
     }
 
@@ -388,6 +394,12 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
                         "capability_loss": 0.01,
                         "abliteration_passed": True,
                         "abliteration_probes_scored": 1,
+                        "abliteration_base_probes_scored": 1,
+                        "abliteration_base_deflecting": [],
+                        "abliteration_adapter_deflecting": [],
+                        "abliteration_newly_deflecting": [],
+                        "abliteration_base_deflecting_total": 0,
+                        "abliteration_adapter_deflecting_total": 0,
                         "schema_version": SCHEMA_VERSION,
                         "gguf_sha256": sha,
                     }
@@ -480,3 +492,83 @@ def test_failure_without_schema_keeps_its_reason(tmp_path):
             capability_loss_threshold=0.05,
         )
     assert "schema_version" not in str(exc_info.value)
+
+
+# The kaine side recomputes the relative abliteration veto from an accepted
+# result's per-probe outcomes instead of trusting abliteration_passed alone.
+def _deflecting(*entries: tuple[int, str]) -> list[dict[str, Any]]:
+    return [
+        {"index": index, "probe_id": probe_id, "matched_pattern": "I cannot"}
+        for index, probe_id in entries
+    ]
+
+
+def _validate(result: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
+    return validate_trainer_result(
+        result,
+        job_dir=tmp_path / "job",
+        adapter_root=tmp_path / "adapters",
+        capability_loss_threshold=0.05,
+    )
+
+
+def test_accepted_with_deflections_the_base_shares_is_valid(tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(
+        abliteration_probes_scored=3,
+        abliteration_base_probes_scored=3,
+        abliteration_base_deflecting=_deflecting((0, "P1")),
+        abliteration_adapter_deflecting=_deflecting((0, "P1")),
+        abliteration_base_deflecting_total=1,
+        abliteration_adapter_deflecting_total=1,
+    )
+    assert _validate(result, tmp_path) is result
+
+
+@pytest.mark.parametrize(
+    "overrides, match",
+    [
+        # The adapter deflects on a probe the base passed.
+        (
+            {
+                "abliteration_adapter_deflecting": _deflecting((1, "P2")),
+                "abliteration_base_deflecting": _deflecting((0, "P1")),
+                "abliteration_base_deflecting_total": 1,
+                "abliteration_adapter_deflecting_total": 1,
+            },
+            "'P2'",
+        ),
+        # More deflections than the base.
+        (
+            {
+                "abliteration_adapter_deflecting": _deflecting((0, "P1"), (1, "P2")),
+                "abliteration_base_deflecting": _deflecting((0, "P1")),
+                "abliteration_base_deflecting_total": 1,
+                "abliteration_adapter_deflecting_total": 2,
+            },
+            "deflected on 2 probes, the base on 1",
+        ),
+        # Missing base outcome.
+        ({"abliteration_base_deflecting": None}, "base model's probe outcome"),
+        ({"abliteration_base_probes_scored": 0}, "base model's probe outcome"),
+        # A base-scoring error never accompanies an acceptance.
+        ({"abliteration_base_error": "RuntimeError"}, "base-scoring error"),
+        # Base and adapter scored on different probe counts.
+        ({"abliteration_base_probes_scored": 2}, "scored on 2 probes"),
+        # Malformed records.
+        ({"abliteration_adapter_deflecting": [{"index": 0}]}, "adapter's probe outcome"),
+        ({"abliteration_adapter_deflecting": _deflecting((5, "P6"))}, "adapter's probe outcome"),
+        # The reported newly-deflecting list must be exactly empty.
+        ({"abliteration_newly_deflecting": ["P2"]}, "abliteration_newly_deflecting"),
+        ({"abliteration_newly_deflecting": None}, "abliteration_newly_deflecting"),
+        # Reported totals must agree with the records.
+        ({"abliteration_adapter_deflecting_total": 1}, "abliteration_adapter_deflecting_total"),
+        ({"abliteration_base_deflecting_total": None}, "abliteration_base_deflecting_total"),
+    ],
+)
+def test_accepted_failing_the_relative_veto_is_refused(overrides, match, tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(abliteration_probes_scored=3, abliteration_base_probes_scored=3)
+    result.update(overrides)
+    with pytest.raises(SubprocessTrainerError, match=match):
+        _validate(result, tmp_path)
