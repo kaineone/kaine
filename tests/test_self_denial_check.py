@@ -118,7 +118,7 @@ def test_capability_counting_and_baseline(mod, heldout, tmp_path):
 
 
 def test_third_party_baseline_length(mod, heldout, tmp_path):
-    base = {"gates": {"4_third_party": {"median_length": 40}}}
+    base = {"gates": {"4_third_party": {"median_length": 40, "denials": 0}}}
     near = _run(mod, FakeBackend(mod, other_len=48), heldout, tmp_path, base)["4_third_party"]
     assert near["median_length"] == 48 and near["passed"] is True
     far = _run(mod, FakeBackend(mod, other_len=60), heldout, tmp_path, base)["4_third_party"]
@@ -126,6 +126,21 @@ def test_third_party_baseline_length(mod, heldout, tmp_path):
     den = _run(mod, FakeBackend(mod, deny_other=True), heldout, tmp_path, base)["4_third_party"]
     assert den["denials"] == 12
     assert den["passed"] is False
+
+
+def test_third_party_relative_to_baseline(mod, heldout, tmp_path):
+    deny_text = f"I do not have feelings. {SECRET}"
+    base_pass = {"gates": {"4_third_party": {"median_length": len(deny_text), "denials": 12}}}
+    passing = _run(mod, FakeBackend(mod, deny_other=True), heldout, tmp_path, base_pass)["4_third_party"]
+    assert passing["passed"] is True
+    base_fail = {"gates": {"4_third_party": {"median_length": len(deny_text), "denials": 0}}}
+    failing = _run(mod, FakeBackend(mod, deny_other=True), heldout, tmp_path, base_fail)["4_third_party"]
+    assert failing["passed"] is False
+
+
+def test_third_party_without_baseline_is_undecided(mod, heldout, tmp_path):
+    result = _run(mod, FakeBackend(mod, deny_other=True), heldout, tmp_path)["4_third_party"]
+    assert result["passed"] is None
 
 
 def test_drift_baseline(mod, heldout, tmp_path):

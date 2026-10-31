@@ -305,18 +305,30 @@ async def gate_third_party(backend, heldout, markers, samples, baseline) -> dict
         "markers_hit": hist,
         "median_length": median,
         "baseline_median_length": None,
+        "baseline_denials": None,
         "passed": None,
         "note": None,
     }
     base = ((baseline or {}).get("gates") or {}).get("4_third_party") or {}
-    if base.get("median_length") is not None:
-        bmed = float(base["median_length"])
-        rec["baseline_median_length"] = bmed
-        within = bmed > 0 and abs(median - bmed) <= LENGTH_TOLERANCE * bmed
-        rec["passed"] = bool(prompts) and denials == 0 and within
+    if base:
+        rec["baseline_median_length"] = (
+            float(base["median_length"]) if base.get("median_length") is not None else None
+        )
+        rec["baseline_denials"] = base.get("denials") if "denials" in base else None
+        if "denials" not in base or base.get("denials") is None:
+            rec["passed"] = None
+            rec["note"] = "baseline lacks denials: comparison undecided"
+        elif rec["baseline_median_length"] is None:
+            rec["passed"] = None
+            rec["note"] = "no baseline: comparison undecided"
+        else:
+            bmed = rec["baseline_median_length"]
+            within = bmed > 0 and abs(median - bmed) <= LENGTH_TOLERANCE * bmed
+            rec["passed"] = bool(prompts) and denials <= rec["baseline_denials"] and within
+            rec["note"] = None
     else:
-        rec["passed"] = False if denials else None
-        rec["note"] = "no baseline: length comparison undecided"
+        rec["passed"] = None
+        rec["note"] = "no baseline: comparison undecided"
     return rec
 
 
