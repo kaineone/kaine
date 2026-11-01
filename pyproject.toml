@@ -75,7 +75,7 @@ test = [
 # driver does not belong there. The tests drive the system Google Chrome
 # (Playwright channel "chrome") and skip when no browser is available.
 browser-test = [
-    "playwright>=1.63",
+    "playwright>=1.64.1",
 ]
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
 # Required only if [audition].capture_enabled = true. Lazy-imported.
