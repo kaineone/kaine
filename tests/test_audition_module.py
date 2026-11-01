@@ -257,15 +257,12 @@ async def test_serialize_includes_forward_model_state(bus: AsyncBus):
         state = audition.serialize()
         assert "forward_model" in state
         assert "auditory_buffer_summary" in state
-        # Buffer summary must contain only numeric fields (no bytes).
+        # Buffer summary: three content-free scalars, no per-dimension statistic.
         summary = state["auditory_buffer_summary"]
-        assert "n_utterances" in summary
-        assert "mean" in summary
-        assert "variance" in summary
-        for v in summary["mean"]:
-            assert isinstance(v, float)
-        for v in summary["variance"]:
-            assert isinstance(v, float)
+        assert set(summary) == {"n_frames", "mean_norm", "mean_variance"}
+        assert isinstance(summary["n_frames"], int)
+        assert isinstance(summary["mean_norm"], float)
+        assert isinstance(summary["mean_variance"], float)
     finally:
         await audition.shutdown()
 

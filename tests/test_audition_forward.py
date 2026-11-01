@@ -9,7 +9,7 @@ Covers:
 - Unexpected tone raises salience
 - Buffer is bounded
 - Serialisation round-trip (weights only — no raw data)
-- buffer_summary contains only numeric statistics
+- buffer_summary holds three content-free scalars
 - Non-finite guard
 - Suspend flag
 """
@@ -280,40 +280,31 @@ def test_state_dict_contains_no_raw_data():
 
 
 def test_buffer_summary_numeric_only():
-    import torch
+    """buffer_summary() holds three content-free scalars and no per-dimension
+    statistic of the buffered vectors (the latent rule)."""
+    import numpy as np
 
     model = AuditoryForwardModel(feature_dim=FEATURE_DIM, units=16, seed=0)
-    for i in range(6):
-        model.step([float(i) * 0.1] * FEATURE_DIM)
+    vectors = [
+        [0.1 * i + 0.02 * j * (-1) ** i for j in range(FEATURE_DIM)] for i in range(6)
+    ]
+    for vec in vectors:
+        model.step(vec)
 
     summary = model.buffer_summary()
-    assert "n_utterances" in summary
-    assert "mean" in summary
-    assert "variance" in summary
-    assert isinstance(summary["n_utterances"], int)
-
-    def _assert_no_tensors(obj, path):
-        if isinstance(obj, torch.Tensor):
-            raise AssertionError(f"Raw tensor in buffer_summary at {path}")
-        if isinstance(obj, (list, tuple)):
-            for i, v in enumerate(obj):
-                _assert_no_tensors(v, f"{path}[{i}]")
-
-    _assert_no_tensors(summary["mean"], "mean")
-    _assert_no_tensors(summary["variance"], "variance")
-
-    for v in summary["mean"]:
-        assert isinstance(v, float) and math.isfinite(v)
-    for v in summary["variance"]:
-        assert isinstance(v, float) and math.isfinite(v)
+    assert set(summary) == {"n_frames", "mean_norm", "mean_variance"}
+    assert type(summary["n_frames"]) is int and summary["n_frames"] == 6
+    arr = np.asarray(vectors)
+    assert summary["mean_norm"] == pytest.approx(float(np.linalg.norm(arr, axis=1).mean()))
+    assert summary["mean_variance"] == pytest.approx(float(arr.var(axis=0).mean()))
+    assert summary["mean_variance"] > 0.0
+    for v in summary.values():
+        assert math.isfinite(v)
 
 
 def test_buffer_summary_empty():
     model = AuditoryForwardModel(feature_dim=FEATURE_DIM, units=8, seed=0)
-    summary = model.buffer_summary()
-    assert summary["n_utterances"] == 0
-    assert summary["mean"] == [0.0] * FEATURE_DIM
-    assert summary["variance"] == [0.0] * FEATURE_DIM
+    assert model.buffer_summary() == {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
 
 
 # ---------------------------------------------------------------------------

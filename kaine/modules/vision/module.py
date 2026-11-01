@@ -992,7 +992,8 @@ class Vision(BaseModule):
         }
         if self._forward_model is not None:
             state["forward_model"] = self._forward_model.state_dict()
-            # Buffer summary: statistical descriptor only — no raw latents.
+            # Buffer summary: three content-free scalars — no raw latents and no
+            # per-dimension statistic of them (the latent rule).
             state["buffer_summary"] = self._forward_model.buffer_summary()
         return state
 

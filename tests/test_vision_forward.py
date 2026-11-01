@@ -205,48 +205,38 @@ def test_state_dict_contains_no_raw_latents():
 
 
 def test_buffer_summary_contains_only_numeric_summaries():
-    """buffer_summary() must contain only numeric (non-tensor) statistics."""
-    import torch
+    """buffer_summary() holds three content-free scalars and no per-dimension
+    statistic of the buffered latents (the latent rule)."""
+    import numpy as np
 
     model = LatentForwardModel(latent_dim=8, units=16, seed=0)
-    for i in range(6):
-        model.step([float(i) * 0.1] * 8)
+    vectors = [[0.1 * i + 0.03 * j * (-1) ** i for j in range(8)] for i in range(6)]
+    for vec in vectors:
+        model.step(vec)
 
     summary = model.buffer_summary()
-
-    # Required keys present
-    assert "n_frames" in summary
-    assert "mean" in summary
-    assert "variance" in summary
-
-    # n_frames is a plain int
-    assert isinstance(summary["n_frames"], int)
-
-    # mean and variance are lists of plain floats — no tensors
-    def _assert_no_tensors(obj, path):
-        if isinstance(obj, torch.Tensor):
-            raise AssertionError(f"Raw tensor in buffer_summary at {path}")
-        if isinstance(obj, (list, tuple)):
-            for i, v in enumerate(obj):
-                _assert_no_tensors(v, f"{path}[{i}]")
-
-    _assert_no_tensors(summary["mean"], "mean")
-    _assert_no_tensors(summary["variance"], "variance")
-
-    # Values are finite floats
-    for v in summary["mean"]:
-        assert isinstance(v, float) and math.isfinite(v)
-    for v in summary["variance"]:
-        assert isinstance(v, float) and math.isfinite(v)
+    assert set(summary) == {"n_frames", "mean_norm", "mean_variance"}
+    assert type(summary["n_frames"]) is int and summary["n_frames"] == 6
+    assert type(summary["mean_norm"]) is float
+    assert type(summary["mean_variance"]) is float
+    arr = np.asarray(vectors)
+    assert summary["mean_norm"] == pytest.approx(float(np.linalg.norm(arr, axis=1).mean()))
+    assert summary["mean_variance"] == pytest.approx(float(arr.var(axis=0).mean()))
+    assert summary["mean_variance"] > 0.0
+    for v in summary.values():
+        assert math.isfinite(v)
 
 
 def test_buffer_summary_empty():
     """buffer_summary() on a fresh model returns a zeroed descriptor."""
     model = LatentForwardModel(latent_dim=4, units=8, seed=0)
-    summary = model.buffer_summary()
-    assert summary["n_frames"] == 0
-    assert summary["mean"] == [0.0] * 4
-    assert summary["variance"] == [0.0] * 4
+    assert model.buffer_summary() == {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
+
+
+def test_buffer_summary_one_frame_has_zero_variance():
+    model = LatentForwardModel(latent_dim=4, units=8, seed=0)
+    model.step([3.0, 4.0, 0.0, 0.0])
+    assert model.buffer_summary() == {"n_frames": 1, "mean_norm": 5.0, "mean_variance": 0.0}
 
 
 # ---------------------------------------------------------------------------

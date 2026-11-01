@@ -91,11 +91,7 @@ class FakeForwardModel:
             self._bias_val = layers[0]["bias"]
 
     def buffer_summary(self) -> dict:
-        return {
-            "n_frames": len(self.steps),
-            "mean": [0.0] * self.latent_dim,
-            "variance": [0.0] * self.latent_dim,
-        }
+        return {"n_frames": len(self.steps), "mean_norm": 0.0, "mean_variance": 0.0}
 
 
 @pytest.fixture
@@ -414,6 +410,10 @@ async def test_serialize_roundtrip_with_forward_model(bus: AsyncBus):
     state = vision.serialize()
     assert "forward_model" in state
     assert "buffer_summary" in state
+    # The real model's summary: three content-free scalars, no per-dimension list.
+    assert set(state["buffer_summary"]) == {"n_frames", "mean_norm", "mean_variance"}
+    assert state["buffer_summary"]["n_frames"] == 5
+    assert state["buffer_summary"]["mean_norm"] == pytest.approx(0.8)
 
     # Restore into a fresh vision module with a new LatentForwardModel.
     fresh_fm = LatentForwardModel(latent_dim=4, units=16, seed=99)
@@ -609,10 +609,9 @@ async def test_serialized_buffer_no_raw_tensors(bus: AsyncBus):
 
     _assert_no_tensors(buf)
 
-    # Must have the expected statistical summary keys.
-    assert "n_frames" in buf
-    assert "mean" in buf
-    assert "variance" in buf
+    # Exactly the three content-free scalars; no per-dimension statistic.
+    assert set(buf) == {"n_frames", "mean_norm", "mean_variance"}
+    assert not any(isinstance(v, (list, tuple, dict)) for v in buf.values())
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,8 @@ Design constraints (matching the sequence module's ForwardPredictionHead pattern
 - CPU-only: all tensors stay on CPU regardless of host hardware.
 - Zero raw-sense-data persistence: ``state_dict()`` / ``load_state_dict()``
   serialise only weight and bias tensors, never raw latent buffers.  The
-  visual buffer is summarised as per-feature mean and variance only.
+  visual buffer is summarised as three scalars (count, mean norm, mean
+  variance), never as a per-dimension statistic.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite, protecting against degenerate inputs. A non-finite input is
   skipped entirely (no buffer append, no weight update, no prediction kept).
@@ -53,7 +54,7 @@ class LatentForwardModel:
     The recurrent visual buffer is a bounded deque of recent latent
     vectors.  Its mean is computed on each step to form the temporal
     context fed to the MLP.  The buffer itself is NEVER serialised raw;
-    only per-feature mean and variance are persisted.
+    only the content-free ``buffer_summary`` (three scalars) is persisted.
     """
 
     def __init__(
@@ -501,39 +502,34 @@ class LatentForwardModel:
                 layer_idx += 1
 
     def buffer_summary(self) -> dict[str, Any]:
-        """Return a statistical descriptor of the visual buffer.
+        """Return a content-free descriptor of the visual buffer.
 
-        Contains only per-feature mean and variance — never raw latent
-        vectors.  This satisfies the zero raw-sense-data persistence
-        requirement.
+        Three scalars only: ``n_frames`` (how many vectors are buffered),
+        ``mean_norm`` (their mean L2 norm) and ``mean_variance`` (the mean over
+        dimensions of their per-dimension population variance). No per-dimension
+        statistic is kept: over a buffer of near-identical latents a per-feature
+        mean is in effect one latent, which the latent rule
+        (``kaine.privacy_filter``) never lets reach a snapshot. Nothing reads
+        the summary back on restore.
         """
-        if not self._buffer:
-            return {
-                "n_frames": 0,
-                "mean": [0.0] * self._latent_dim,
-                "variance": [0.0] * self._latent_dim,
-            }
         n = len(self._buffer)
+        if n == 0:
+            return {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
         dim = self._latent_dim
-
-        # Per-feature mean
         mean = [0.0] * dim
+        norm_sum = 0.0
         for vec in self._buffer:
+            norm_sum += math.sqrt(sum(v * v for v in vec))
             for i, v in enumerate(vec):
                 mean[i] += v
         mean = [v / n for v in mean]
-
-        # Per-feature variance (population)
-        var = [0.0] * dim
-        if n > 1:
-            for vec in self._buffer:
-                for i, v in enumerate(vec):
-                    diff = v - mean[i]
-                    var[i] += diff * diff
-            var = [v / n for v in var]
-
+        var_sum = 0.0
+        for vec in self._buffer:
+            for i, v in enumerate(vec):
+                diff = v - mean[i]
+                var_sum += diff * diff
         return {
             "n_frames": n,
-            "mean": mean,
-            "variance": var,
+            "mean_norm": norm_sum / n,
+            "mean_variance": (var_sum / n) / dim if dim > 0 else 0.0,
         }

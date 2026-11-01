@@ -157,6 +157,61 @@ async def test_switch_encoder_carries_other_encoder_state(bus):
 
 
 @pytest.mark.asyncio
+async def test_carried_acoustic_summary_rewritten_on_restore(bus):
+    """An older snapshot's carried entry for a non-running encoder held the
+    per-feature mean and variance of its buffered embeddings. Restoring it
+    rewrites the summary into the three-scalar form, so it is never re-saved;
+    the learned weights are carried unchanged."""
+    enc_a = FakeAcousticEncoder(8)
+    audition_a = _make_audition(bus, general_audition=True, acoustic_encoder=enc_a)
+    await audition_a.initialize()
+    try:
+        for i in range(3):
+            await audition_a._perceive_acoustic(bytes([i] * 1024), 16000, "seeded")
+        state_a = audition_a.serialize()
+    finally:
+        await _close_module(audition_a)
+    weights = state_a["acoustic_forward_models"][enc_a.model_id]["state_dict"]
+    old = dict(state_a)
+    old["acoustic_forward_models"] = {
+        "fake/old-encoder": {
+            "state_dict": weights,
+            "buffer_summary": {
+                "n_utterances": 7,
+                "mean": [0.123457] * 8,
+                "variance": [0.0042] * 8,
+            },
+        },
+        "fake/older-encoder": {
+            "state_dict": weights,
+            "buffer_summary": {"n_frames": 3, "mean": [0.25] * 8, "variance": [0.5] * 8},
+        },
+    }
+    enc_b = FakeAcousticEncoder(16)
+    audition_b = _make_audition(bus, general_audition=True, acoustic_encoder=enc_b)
+    await audition_b.initialize()
+    try:
+        audition_b.deserialize(old)
+        state_b = audition_b.serialize()
+    finally:
+        await _close_module(audition_b)
+
+    carried = state_b["acoustic_forward_models"]
+    assert carried["fake/old-encoder"]["buffer_summary"] == {
+        "n_frames": 7,
+        "mean_norm": 0.0,
+        "mean_variance": 0.0,
+    }
+    assert carried["fake/older-encoder"]["buffer_summary"] == {
+        "n_frames": 3,
+        "mean_norm": 0.0,
+        "mean_variance": 0.0,
+    }
+    assert carried["fake/old-encoder"]["state_dict"] == weights
+    assert set(carried["fake/old-encoder"]) == {"state_dict", "buffer_summary"}
+
+
+@pytest.mark.asyncio
 async def test_serialized_state_zero_persistence(bus):
     encoder = FakeAcousticEncoder(8)
     audition = _make_audition(bus, general_audition=True, acoustic_encoder=encoder)
@@ -168,7 +223,13 @@ async def test_serialized_state_zero_persistence(bus):
     finally:
         await _close_module(audition)
 
-    mean_len = len(state.get("auditory_buffer_summary", {}).get("mean", []))
+    # The buffer summaries are three scalars, so the only numeric lists in the
+    # state are the forward models' learned weights.
+    for summary in [state["auditory_buffer_summary"]] + [
+        entry["buffer_summary"] for entry in state["acoustic_forward_models"].values()
+    ]:
+        assert set(summary) == {"n_frames", "mean_norm", "mean_variance"}
+    assert state["acoustic_forward_models"][encoder.model_id]["buffer_summary"]["n_frames"] > 0
 
     def _walk(obj, path="root"):
         if isinstance(obj, bytes):
@@ -177,12 +238,10 @@ async def test_serialized_state_zero_persistence(bus):
             if (
                 obj
                 and all(isinstance(v, (int, float)) for v in obj)
-                and len(obj) > mean_len
                 and "layers" not in path
             ):
                 raise AssertionError(
-                    f"unexpected long numeric vector at {path} "
-                    f"({len(obj)} > {mean_len})"
+                    f"unexpected numeric vector at {path} ({len(obj)} numbers)"
                 )
             for i, v in enumerate(obj):
                 _walk(v, f"{path}[{i}]")

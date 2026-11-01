@@ -93,11 +93,7 @@ class FakeForwardModel:
             self._bias_val = layers[0]["bias"]
 
     def buffer_summary(self) -> dict:
-        return {
-            "n_frames": len(self.steps),
-            "mean": [0.0] * self.latent_dim,
-            "variance": [0.0] * self.latent_dim,
-        }
+        return {"n_frames": len(self.steps), "mean_norm": 0.0, "mean_variance": 0.0}
 
 
 async def _reports(bus: AsyncBus, vision: Vision, frames: list) -> list[dict]:

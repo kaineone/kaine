@@ -1180,8 +1180,48 @@ class Audition(BaseModule):
                         continue
                     self._acoustic_forward_model.load_state_dict(entry["state_dict"])
                 else:
-                    # Carry forward snapshots for encoders that are not running now.
-                    self._acoustic_states_carried[encoder_id] = entry
+                    # Carry forward snapshots for encoders that are not running now,
+                    # with the buffer summary in its content-free form: an older
+                    # snapshot's per-dimension mean of acoustic embeddings would
+                    # otherwise be re-saved into every future snapshot.
+                    self._acoustic_states_carried[encoder_id] = _content_free_carried(entry)
+
+
+def _content_free_buffer_summary(summary: Any) -> dict[str, Any]:
+    """The three-scalar form of a restored buffer summary.
+
+    A summary already in that form keeps its values. An older one (per-feature
+    ``mean`` and ``variance`` lists, the count under ``n_frames`` or
+    ``n_utterances``) keeps its count, with zero for ``mean_norm`` and
+    ``mean_variance``, which cannot be recomputed from a mean. Nothing else is
+    kept.
+    """
+
+    def _number(value: Any, *, integer: bool) -> Any:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return 0 if integer else 0.0
+        if not math.isfinite(value):
+            return 0 if integer else 0.0
+        return int(value) if integer else float(value)
+
+    if not isinstance(summary, dict):
+        return {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
+    count = summary.get("n_frames", summary.get("n_utterances", 0))
+    return {
+        "n_frames": max(0, _number(count, integer=True)),
+        "mean_norm": _number(summary.get("mean_norm", 0.0), integer=False),
+        "mean_variance": _number(summary.get("mean_variance", 0.0), integer=False),
+    }
+
+
+def _content_free_carried(entry: Any) -> Any:
+    """A carried acoustic forward-model entry with its ``buffer_summary`` in the
+    three-scalar form; its learned ``state_dict`` is kept as it is."""
+    if not isinstance(entry, dict) or "buffer_summary" not in entry:
+        return entry
+    out = dict(entry)
+    out["buffer_summary"] = _content_free_buffer_summary(entry["buffer_summary"])
+    return out
 
 
 def _estimate_energy(audio_bytes: bytes) -> float:

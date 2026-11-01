@@ -120,7 +120,7 @@ class _FakeForwardModel:
         }
 
     def buffer_summary(self) -> dict[str, Any]:
-        return {"size": 0}
+        return {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
 
     def matches_state_shape(self, data: dict[str, Any]) -> bool:
         # The fake has no tensor shapes; any dict it produced fits it.

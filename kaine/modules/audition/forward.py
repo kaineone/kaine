@@ -15,7 +15,8 @@ ForwardPredictionHead pattern)
 - CPU-only: all tensors stay on CPU regardless of host hardware.
 - Zero raw-sense-data persistence: ``state_dict()`` / ``load_state_dict()``
   serialise only weight and bias tensors.  The auditory buffer is summarised
-  as per-feature mean and variance only — never raw audio or raw embeddings.
+  as three scalars (count, mean norm, mean variance) — never raw audio, raw
+  embeddings or any per-dimension statistic of them.
 - Non-finite guard: adaptation is skipped when the loss or any gradient is
   non-finite, protecting against degenerate inputs. A non-finite input is
   skipped entirely (no buffer append, no weight update, no prediction kept).
@@ -62,7 +63,7 @@ class AuditoryForwardModel:
     The recurrent auditory buffer is a bounded deque of recent feature
     vectors.  Its mean is computed on each step to form the temporal
     context fed to the MLP.  The buffer itself is NEVER serialised raw;
-    only per-feature mean and variance are persisted.
+    only the content-free ``buffer_summary`` (three scalars) is persisted.
     """
 
     def __init__(
@@ -549,41 +550,37 @@ class AuditoryForwardModel:
         return True
 
     def buffer_summary(self) -> dict[str, Any]:
-        """Return a statistical descriptor of the auditory buffer.
+        """Return a content-free descriptor of the auditory buffer.
 
-        Contains only per-feature mean and variance — never raw feature
-        vectors.  This satisfies the zero raw-sense-data persistence
-        requirement.
+        Three scalars only: ``n_frames`` (how many vectors are buffered),
+        ``mean_norm`` (their mean L2 norm) and ``mean_variance`` (the mean over
+        dimensions of their per-dimension population variance). No per-dimension
+        statistic is kept: the acoustic model buffers encoder embeddings, whose
+        per-feature mean is latent-derived and which the latent rule
+        (``kaine.privacy_filter``) never lets reach a snapshot; the tone model
+        is summarised the same way so both summaries have one shape. Nothing
+        reads the summary back on restore.
         """
-        if not self._buffer:
-            return {
-                "n_utterances": 0,
-                "mean": [0.0] * self._feature_dim,
-                "variance": [0.0] * self._feature_dim,
-            }
         n = len(self._buffer)
+        if n == 0:
+            return {"n_frames": 0, "mean_norm": 0.0, "mean_variance": 0.0}
         dim = self._feature_dim
-
-        # Per-feature mean
         mean = [0.0] * dim
+        norm_sum = 0.0
         for vec in self._buffer:
+            norm_sum += math.sqrt(sum(v * v for v in vec))
             for i, v in enumerate(vec):
                 mean[i] += v
         mean = [v / n for v in mean]
-
-        # Per-feature variance (population)
-        var = [0.0] * dim
-        if n > 1:
-            for vec in self._buffer:
-                for i, v in enumerate(vec):
-                    diff = v - mean[i]
-                    var[i] += diff * diff
-            var = [v / n for v in var]
-
+        var_sum = 0.0
+        for vec in self._buffer:
+            for i, v in enumerate(vec):
+                diff = v - mean[i]
+                var_sum += diff * diff
         return {
-            "n_utterances": n,
-            "mean": mean,
-            "variance": var,
+            "n_frames": n,
+            "mean_norm": norm_sum / n,
+            "mean_variance": (var_sum / n) / dim if dim > 0 else 0.0,
         }
 
 
