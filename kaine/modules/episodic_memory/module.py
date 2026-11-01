@@ -18,6 +18,7 @@ from kaine.faithful.external_input import is_heard_event, words_unavailable
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
+from kaine.modules.episodic_memory.identity_bound import stored_payload
 from kaine.modules.episodic_memory.memory import (
     EmotionalRetriggerHook,
     EpisodicMemoryCore,
@@ -251,7 +252,9 @@ class EpisodicMemory(BaseModule):
         # as plain numerics — no raw sense data, per zero-persistence invariant).
         await self._core.store(
             text,
-            payload=payload,
+            # A stored trace holds no latent value except identity-bound content
+            # (kaine.modules.episodic_memory.identity_bound), which no writer sets yet.
+            payload=stored_payload(payload),
             affect=self._cached_affect,
             collection="short_term",
         )
@@ -661,12 +664,15 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
+    # The store-time rules run in a fixed order (latent-content-privacy, the
+    # episodic delta): this module's own replays by id, then the heard rule
+    # (a heard member loses its whole payload: every text field is someone
+    # else's words), then the raw-perceptual omit, then the latent rule
+    # (``strip_vectors``, which removes every LATENT_FIELDS key, latent_derived
+    # included, and keeps the scalar fields a remembered moment needs). Heard
+    # before raw and latent: applying the heard rule later could keep heard
+    # words under a key the other rules do not know.
     for _entry_id, event in snapshot.selected_events or []:
-        if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
-            # Record that a raw-perceptual event was in the workspace, but never
-            # its verbatim payload (raw sense data must not persist into memory).
-            pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
-            continue
         if event.source == EpisodicMemory.name and event.type == "episodic_memory.replay":
             # Storing the text would nest the old trace inside the new one on every
             # sleep. Checked before the heard rule, which counts the replay's
@@ -677,6 +683,11 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             continue
         if is_heard_event(event):
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
+            continue
+        if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
+            # Record that a raw-perceptual event was in the workspace, but never
+            # its verbatim payload (raw sense data must not persist into memory).
+            pieces.append(f"{event.source}:{event.type}=<raw-perceptual omitted>")
             continue
         if event.source == "language" and words_unavailable(event.payload):
             # The entity's own words did not come back from the never-persisted
