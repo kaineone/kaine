@@ -217,7 +217,8 @@ STANDIN_SCRIPT = textwrap.dedent(
                 "run_id": "someone-else" if exposure_mode == "other_run" else run_id,
                 "boot_started_at": boot_started_at,
                 "written_at": utc_iso(),
-                "monitor": {"awake_seconds": 600.0, "awake_wall_seconds": 600.0, "rests_requested": rests,
+                "monitor": {"awake_seconds": 600.0, "awake_wall_seconds": 600.0,
+                            "indicator_poll_failures": 0, "rests_requested": rests,
                             "freezes_placed": 0, "responses": responses, "indicators": indicators},
                 "shares": {"awake_seconds": 600.0, "negative_valence_share": 0.1,
                            "curiosity_interest_share": 0.2,
@@ -1562,12 +1563,21 @@ def test_failed_timeout_preservation_records_a_critical_step(
                 p.kill()
             p.wait()
 
-    # Once the operator has stopped it, the retry runs.  The control CLI waits
-    # long enough for a slowly starting seed to answer the maturation request.
+    # The operator killed the seed, so it never wrote its exposure record: the
+    # retry reads the step's record first, finds none and holds for review.
+    held = _run(_runner(study_dir, script, cycle_alive=alive), retry=True)
+    assert held["held"]["outcome"] == "failed:critical"
+    assert held["held"]["welfare_hold"]["reasons"] == ["missing"]
+    assert held["held"]["exposure_read"] is True
+    StudyRunner(study_dir).acknowledge_welfare("development", 0, "continue")
+
+    # Once answered, the retry runs.  The control CLI waits long enough for a
+    # slowly starting seed to answer the maturation request.
     retry = _runner(study_dir, script, cycle_alive=alive, preserve_wait_seconds=budget)
     assert _run(retry, retry=True) == "complete"
     assert [s["outcome"] for s in _load_steps(study_dir)] == [
-        "failed:critical", "complete", "complete", "complete", "complete", "complete",
+        "failed:critical", "failed:critical", "complete", "complete", "complete", "complete",
+        "complete",
     ]
 
 

@@ -140,3 +140,10 @@ The welfare observer's `affect_welfare` record SHALL carry, from its own instanc
 #### Scenario: The record shows the monitor's numbers
 - **WHEN** the monitor and the observer read the same `affect.state` and sleep events
 - **THEN** the indicator values in the record equal the monitor's at the same span end
+
+### Requirement: An unreadable time scale is never guessed
+When the entity's time scale raises, reads non-finite or reads below zero, the indicator poll SHALL fail and SHALL NOT substitute a scale; a failure that lasts `unavailable_escalate_s` SHALL take the protective response with reason `indicators_unavailable`.
+
+#### Scenario: The scale fails during a rest
+- **WHEN** the time scale cannot be read while a welfare rest is in progress
+- **THEN** after 660 s the entity is preserved and paused with reason `indicators_unavailable`, and no completion bound is counted on a guessed scale

@@ -205,7 +205,8 @@ def _bound_record(line_dir: Path, **monitor_overrides) -> tuple[str, str]:
     names = ["boredom_deprived", "social_drive_deprived", "restlessness_deprived",
              "negative_valence", "boredom_uncontrolled", "restlessness_uncontrolled"]
     monitor = {
-        "awake_seconds": 599.0, "awake_wall_seconds": 599.0, "rests_requested": 0,
+        "awake_seconds": 599.0, "awake_wall_seconds": 599.0, "indicator_poll_failures": 0,
+        "rests_requested": 0,
         "freezes_placed": 0, "responses": {},
         "indicators": {n: {"max_value": 0.1, "crossings": 0, "rests_requested": 0,
                            "freezes_placed": 0} for n in names},
@@ -378,5 +379,125 @@ def test_a_tally_short_in_wall_seconds_still_holds_under_dilation(tmp_path):
     data = json.loads(path.read_text())
     data["covered_awake_seconds"] = 6000.0
     path.write_text(json.dumps(data))
+    _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
+    assert reasons == ["incomplete_coverage"]
+
+
+# --- a critical step's exposure is read before anything boots again -----------------
+
+
+def _critical_step(study_dir: Path, run_id: str) -> tuple[StudyRunner, dict]:
+    """The development step recorded critical while its child still ran."""
+    runner = StudyRunner(study_dir, cycle_alive=lambda pid: False)
+    record = {
+        "line": "development", "step": 0, "modules": [], "world_model_captured": None,
+        "started_at": "2026-10-31T12:00:00+00:00", "ended_at": "2026-10-31T13:00:00+00:00",
+        "exit_code": None, "revived_from": None, "preservation_id": None, "bundle": None,
+        "run_id": run_id, "ignition_log_dir": str(study_dir / "development" / "ignition"),
+        "overlay_sha256": None, "outcome": "failed:critical", "pid": 4_000_000,
+    }
+    runner._append_step(record)
+    runner.last_failed = record
+    return runner, record
+
+
+@pytest.mark.asyncio
+async def test_a_critical_step_that_crossed_is_held_and_its_retry_refused(
+    tmp_path, monkeypatch, known_modules  # noqa: F811
+):
+    """The real exposure writer (the cycle's, at the child's exit) and the
+    runner's real reader: a boot that requested an indicator rest and then
+    failed critical holds, and --retry-failed boots nothing until answered."""
+    from types import SimpleNamespace
+
+    import kaine.cycle.__main__ as cycle_main
+    from kaine import storage
+    from tests.test_welfare_exposure_record import _boot_with_one_rest, _eval_cfg
+
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import BusConfig
+
+    bus = AsyncBus(
+        BusConfig(password="x", audit_required=False),
+        client=fakeredis.FakeRedis(decode_responses=True),
+    )
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner, record = _critical_step(study_dir, "run-critical-01")
+    line_dir = study_dir / "development"
+
+    # The child exits after the runner gave up on it and writes its record.
+    monitor, observer = await _boot_with_one_rest(bus)
+    await bus.close()
+    previous = storage.data_root()
+    storage.set_data_root(line_dir)
+    try:
+        cycle_main._write_exposure_record(
+            run_ctx=SimpleNamespace(run_id="run-critical-01", started_at="2026-10-31T12:00:05+00:00"),
+            welfare_monitor=monitor,
+            welfare_producer=(observer, None),
+            welfare_supervision={"restarts": 0},
+            eval_cfg=_eval_cfg(tmp_path),
+        )
+    finally:
+        storage.set_data_root(previous)
+    assert (line_dir / "state" / "welfare" / "exposure.json").exists()
+
+    assert "Welfare exposure unread: critical development step 0" in runner.status()
+    with pytest.raises(StudyWelfareHold) as exc:
+        runner._next_step(retry_failed=True)
+    held = exc.value.record
+    assert held["exposure_read"] is True
+    assert "indicator_crossing" in held["welfare_hold"]["reasons"]
+    assert held["welfare_exposure"]["run_id"] == "run-critical-01"
+    # The resolution is on disk: a new runner sees the hold without reading again.
+    again = StudyRunner(study_dir, cycle_alive=lambda pid: False)
+    assert again.failed_welfare_hold()["ended_at"] == record["ended_at"]
+    with pytest.raises(StudyWelfareHold):
+        again._next_step(retry_failed=True)
+    status = again.status()
+    assert "Welfare hold: failed development step 0" in status
+    assert "--retry-failed refuses" in status
+    # Answered, the retry may boot.
+    again.acknowledge_welfare("development", 0, "continue")
+    assert StudyRunner(study_dir, cycle_alive=lambda pid: False)._next_step(retry_failed=True)["is_retry"]
+
+
+def test_a_critical_step_with_no_record_holds(tmp_path, known_modules):  # noqa: F811
+    """A child killed before it could write: nothing shows nothing happened."""
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner, _ = _critical_step(study_dir, "run-critical-02")
+    with pytest.raises(StudyWelfareHold) as exc:
+        runner._next_step(retry_failed=True)
+    assert exc.value.record["welfare_hold"]["reasons"] == ["missing"]
+
+
+def test_a_critical_step_is_not_read_while_its_cycle_runs(tmp_path, known_modules):  # noqa: F811
+    study_dir = _create_study(tmp_path, viewings=1)
+    _critical_step(study_dir, "run-critical-03")
+    running = StudyRunner(study_dir, cycle_alive=lambda pid: True)
+    with pytest.raises(StudyError, match="may still be running"):
+        running._next_step(retry_failed=True)
+    assert not any(s.get("exposure_read") for s in _load_steps(study_dir))
+
+
+def test_a_boot_keeps_a_copy_of_the_record_it_will_delete(tmp_path, known_modules):  # noqa: F811
+    study_dir, script = _study(tmp_path)
+    assert _run(_runner(study_dir, script)) == "complete"
+    # accumulate and repeat share no directory with development, but every
+    # boot copies an existing record aside before the cycle deletes it.
+    archive = study_dir / "development" / "welfare_exposure_archive"
+    assert not archive.exists()  # development booted once, over an empty directory
+    runner = StudyRunner(study_dir)
+    runner._archive_exposure(study_dir / "development")
+    copies = list(archive.glob("exposure-*.json"))
+    assert len(copies) == 1
+    assert copies[0].read_bytes() == (study_dir / "development" / "state" / "welfare" / "exposure.json").read_bytes()
+    assert oct(copies[0].stat().st_mode & 0o777) == "0o600"
+
+
+@pytest.mark.parametrize("failures", [1, None, "x"])
+def test_an_indicator_arm_that_failed_during_the_boot_holds_for_coverage(tmp_path, failures):
+    run_id, since = _bound_record(tmp_path, indicator_poll_failures=failures)
     _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
     assert reasons == ["incomplete_coverage"]

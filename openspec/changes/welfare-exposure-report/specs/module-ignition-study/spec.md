@@ -48,3 +48,18 @@ While a failed step's `welfare_hold` names `indicator_crossing` or `protective_r
 #### Scenario: A crash before the record was written
 - **WHEN** a step fails with its exposure record missing
 - **THEN** `status` shows the hold and `--retry-failed` boots the step again
+
+### Requirement: A critical step's exposure is read before the entity boots again
+A step recorded `failed:critical` while its cycle still ran SHALL have its exposure record read, once no cycle of the study runs, before `--retry-failed` boots the step again; every hold reason on a critical step, a missing record included, SHALL block the retry until `ack-welfare` answers it. Before every boot the runner SHALL copy an existing exposure record aside, and SHALL refuse the boot when the copy cannot be made.
+
+#### Scenario: A boot that crossed, then failed critical
+- **WHEN** a step's cycle requested an indicator rest, the step was recorded `failed:critical`, and the cycle wrote its record when it exited
+- **THEN** `--retry-failed` reads the record, holds with `indicator_crossing` and boots nothing until the hold is answered
+
+#### Scenario: A critical cycle killed before it wrote
+- **WHEN** the critical step's cycle was killed and left no exposure record
+- **THEN** `--retry-failed` holds with `missing`
+
+#### Scenario: The cycle still runs
+- **WHEN** the critical step's cycle is still running
+- **THEN** `--retry-failed` refuses and the record is not read

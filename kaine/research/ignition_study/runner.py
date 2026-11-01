@@ -101,6 +101,15 @@ HOLD_REASONS = (
 #: ``status`` but do not block a retry.
 REVIEW_HOLD_REASONS = ("indicator_crossing", "protective_response")
 
+#: A step recorded while its child was still running (a failed timeout or
+#: disk-low preservation). Its child writes the exposure record only when it
+#: exits, so the runner reads the record later, before anything boots again.
+CRITICAL_OUTCOME = "failed:critical"
+
+#: Where the runner keeps a copy of a step's exposure record before a boot in
+#: the same step directory deletes it (relative to the step directory).
+EXPOSURE_ARCHIVE_DIR = "welfare_exposure_archive"
+
 #: ``maturation_reference`` values in a development step record.
 REFERENCE_COMPLETE = "complete"
 REFERENCE_MISSING = "missing"
@@ -328,6 +337,9 @@ class StudyRunner:
                     f"{rec.get('line')} step {rec.get('step')} is not retried: its line "
                     f"was stopped after a welfare review"
                 )
+            # A critical step's child may have crossed after the runner gave up
+            # on it: read its exposure record before the retry boots again.
+            self._resolve_critical_exposure()
             held = self.failed_welfare_hold() or self.pending_welfare_hold()
             if held is not None:
                 raise StudyWelfareHold(held)
@@ -672,10 +684,66 @@ class StudyRunner:
             return rec
         return None
 
+    def critical_exposure_unread(self) -> bool:
+        """True while the last failed step is a critical one whose exposure
+        record the runner has not read yet."""
+        rec = self.last_failed
+        return (
+            rec is not None
+            and rec.get("outcome") == CRITICAL_OUTCOME
+            and not rec.get("exposure_read")
+        )
+
+    def _resolve_critical_exposure(self) -> None:
+        """Read a critical step's exposure record once its child has exited.
+
+        The critical record was written while the child still ran, so it holds
+        no exposure. Once no cycle of the study runs, the child's record is
+        read and bound to the critical record's run and start, and the step is
+        recorded again with it (same line, step and ``ended_at``, so an answer
+        to the hold matches). Any hold reason, a missing or unreadable record
+        included, then blocks the retry until a person answers it.
+        """
+        if not self.critical_exposure_unread():
+            return
+        self._refuse_if_cycle_running()
+        resolved = dict(self.last_failed)
+        resolved.pop("welfare_hold", None)
+        resolved.pop("welfare_exposure", None)
+        self._archive_exposure(self._line_dir(resolved["line"], resolved["step"]))
+        self._apply_exposure(resolved)
+        resolved["exposure_read"] = True
+        self._append_step(resolved)
+        self.last_failed = resolved
+
+    def _archive_exposure(self, line_dir: Path) -> None:
+        """Copy the step directory's exposure record aside before a boot deletes it.
+
+        Every boot deletes ``state/welfare/exposure.json``; the copy keeps a
+        record the runner may not have bound yet. A copy that cannot be made
+        refuses the boot (fail closed: a record must never be lost unread).
+        """
+        source = Path(line_dir) / EXPOSURE_FILE
+        if not source.exists():
+            return
+        archive = Path(line_dir) / EXPOSURE_ARCHIVE_DIR
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        try:
+            archive.mkdir(parents=True, exist_ok=True)
+            target = archive / f"exposure-{stamp}.json"
+            tmp = archive / f".exposure-{stamp}.tmp"
+            tmp.write_bytes(source.read_bytes())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, target)
+        except OSError as exc:
+            raise StudyError(
+                f"cannot keep a copy of {source} before the next boot deletes it: {exc}"
+            ) from exc
+
     def failed_welfare_hold(self) -> dict[str, Any] | None:
         """The failed step record awaiting a retry whose welfare hold must be
-        answered first: one naming a reason in ``REVIEW_HOLD_REASONS``, with no
-        answer recorded for it."""
+        answered first: one naming a reason in ``REVIEW_HOLD_REASONS``, or a
+        critical step with any hold reason, with no answer recorded for it."""
         rec = self.last_failed
         if rec is None or self._welfare_ack_for(rec) is not None:
             return None
@@ -685,6 +753,10 @@ class StudyRunner:
         reasons = hold.get("reasons")
         if not isinstance(reasons, list) or not reasons:
             # A hold whose reasons cannot be read cannot show that nothing happened.
+            return rec
+        if rec.get("outcome") == CRITICAL_OUTCOME:
+            # Its child ran on after the runner gave up on it: a record that is
+            # missing or cannot be bound cannot show that nothing happened.
             return rec
         if any(r in REVIEW_HOLD_REASONS or r not in HOLD_REASONS for r in reasons):
             return rec
@@ -718,6 +790,7 @@ class StudyRunner:
         """
         if decision not in WELFARE_DECISIONS:
             raise StudyError(f"decision must be one of {', '.join(WELFARE_DECISIONS)}")
+        self._resolve_critical_exposure()
         candidates = [
             rec
             for rec in (self.pending_welfare_hold(), self.unanswered_failed_hold())
@@ -776,6 +849,8 @@ class StudyRunner:
         # Nothing is flushed, adopted or started while a cycle the study
         # started may still hold a study database or a step directory.
         self._refuse_if_cycle_running()
+        # The boot deletes the directory's exposure record; keep a copy first.
+        self._archive_exposure(line_dir)
 
         overlay, modules_set, models_dir = build_overlay(
             self.plan,
@@ -1548,6 +1623,14 @@ class StudyRunner:
                 f"kaine.research.ignition_study ack-welfare --study-dir {self.study_dir} "
                 f"--step {held['line']}/{held['step']} --decision continue|stop"
             )
+        if self.critical_exposure_unread():
+            rec = self.last_failed
+            lines.append(
+                f"Welfare exposure unread: critical {rec['line']} step {rec['step']}; its "
+                f"cycle may still run and writes its exposure record when it exits. Stop "
+                f"it; --retry-failed then reads the record first and holds for review "
+                f"when it is missing or shows the welfare net acting."
+            )
         failed_hold = self.unanswered_failed_hold()
         if failed_hold is not None:
             lines.append(failed_hold_line(failed_hold, self.study_dir, self.failed_welfare_hold() is not None))
@@ -1803,6 +1886,9 @@ def read_step_exposure(
         not isinstance(monitor, dict)
         or not _is_number(monitor.get("awake_seconds"))
         or not _is_number(monitor.get("awake_wall_seconds"))
+        # An indicator poll that raised counted nothing for its interval.
+        or not _is_count(monitor.get("indicator_poll_failures"))
+        or monitor["indicator_poll_failures"] > 0
     ):
         reasons.append("incomplete_coverage")
     elif (

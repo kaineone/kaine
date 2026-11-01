@@ -230,7 +230,9 @@ def _content_free(record: dict[str, Any], run_id: str) -> None:
             return
         assert isinstance(value, dict), (key, value)
         for k, v in value.items():
-            if isinstance(v, dict) and k not in ("monitor", "shares", "indicators", "deficits", "responses"):
+            if isinstance(v, dict) and k not in (
+                "monitor", "shares", "indicators", "deficits", "responses", "non_default_settings",
+            ):
                 assert k in labels, k
             check(k, v)
 
@@ -266,6 +268,8 @@ async def test_a_boot_with_one_rest_writes_its_bound_record(bus, tmp_path):
     assert record["covered_awake_seconds"] == pytest.approx(record["shares"]["awake_seconds"])
     assert record["shares"]["deficits"]["boredom"]["deprivation_share"] > 0.5
     assert record["affect_summary_interval_s"] == 300.0
+    assert record["monitor"]["non_default_settings"] == {}
+    assert record["monitor"]["indicator_poll_failures"] == 0
     _content_free(record, "run-0123abcd")
 
 
@@ -476,5 +480,21 @@ async def test_an_unreadable_time_scale_leaves_the_wall_count_unknown(bus, tmp_p
         if step % 20 == 19:
             await monitor._poll_once(stop)
     summary = monitor.exposure_summary()
-    assert summary["awake_seconds"] > 0
-    assert summary["awake_wall_seconds"] is None
+    # The arm counts nothing while the scale is unreadable, and says so.
+    assert summary["indicator_poll_failures"] >= 2
+    assert summary["awake_seconds"] == 0.0
+    assert summary["awake_wall_seconds"] == 0.0
+    # The wall-seconds conversion on its own also refuses to guess.
+    monitor._ind_eval._pos = 10.0
+    monitor._note_awake_wall()
+    assert monitor.exposure_summary()["awake_wall_seconds"] is None
+
+
+def test_non_default_settings_are_carried_into_the_monitor_summary():
+    from kaine.cycle.preservation_monitor import WelfareIndicatorConfig
+
+    cfg = WelfareIndicatorConfig.from_section(
+        {"posterior_bar": 0.9, "rest_complete_timeout_s": {"matured": 7200.0}}
+    )
+    assert cfg.non_default_settings() == {"posterior_bar": 0.9, "rest_complete_matured_s": 7200.0}
+    assert WelfareIndicatorConfig().non_default_settings() == {}

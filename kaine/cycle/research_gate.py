@@ -72,16 +72,24 @@ class GateResult:
     failures: list[str] = field(default_factory=list)
     checks: dict[str, bool] = field(default_factory=dict)
     reasons: dict[str, str] = field(default_factory=dict)
+    #: Indicator bars and bounds that differ from their shipped defaults
+    #: (Table A1 and the design); a change to one is an operator decision.
+    non_default_settings: dict[str, Any] = field(default_factory=dict)
 
     def message(self) -> str:
         if self.ok:
-            return (
+            text = (
                 "Research safety net VERIFIED: preservation enabled, "
                 "welfare-protective response wired, the indicator response wired, "
                 "logging/admissibility active, "
                 "individuation producer enabled, the module supervisor armed and "
                 "self-tested, and the dry preserve→revive self-check passed."
             )
+            if self.non_default_settings:
+                text += " Non-default welfare indicator settings: " + ", ".join(
+                    f"{k} = {v!r}" for k, v in sorted(self.non_default_settings.items())
+                ) + "."
+            return text
         lines = [
             "Refusing to boot KAINE cycle: the autonomous research safety net is "
             + "not live and verified.",
@@ -532,12 +540,14 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     requirements = config_requirements(config)
     # The full condition (paths and self-test) replaces the config-level half.
     requirements["supervisor_armed"] = bool(supervisor.ok)
-    return evaluate_research_gate(
+    result = evaluate_research_gate(
         self_check_passed=self_check_ok,
         supervisor_reason=supervisor.reason,
         indicator_reason=indicator_response_reason(config),
         **requirements,
     )
+    result.non_default_settings = preservation_cfg.welfare_response.indicators.non_default_settings()
+    return result
 
 
 class _NullBus:

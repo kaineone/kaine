@@ -335,6 +335,22 @@ class WelfareIndicatorConfig:
             unavailable_escalate_s=_indicator_number(section, "unavailable_escalate_s", 660.0, low=0.0),
         )
 
+    def non_default_settings(self) -> dict[str, Any]:
+        """The bars and bounds that differ from the shipped defaults, by key."""
+        default = type(self)()
+        out: dict[str, Any] = {}
+        for key in (
+            "share_bar",
+            "posterior_bar",
+            "rest_start_timeout_s",
+            "rest_complete_developmental_s",
+            "rest_complete_matured_s",
+            "unavailable_escalate_s",
+        ):
+            if getattr(self, key) != getattr(default, key):
+                out[key] = getattr(self, key)
+        return out
+
     def rest_complete_bound(self, *, developing: bool, developmental_rest_s: float) -> float:
         """The completion bound for a rest, in unfrozen seconds."""
         if not developing:
@@ -1067,6 +1083,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # like with like under time dilation. None once a conversion failed.
         self._ind_pos_seen = 0.0
         self._ind_awake_wall: float | None = 0.0
+        # Indicator polls (and warm-up accruals) that raised: while one fails
+        # the arm counts nothing, so the record cannot show the boot was watched.
+        self._exposure_poll_failures = 0
 
     def _in_warmup(self, u_now: float, wall_now: float) -> bool:
         """True while still inside the cold-start warm-up window.
@@ -1728,14 +1747,20 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         return value
 
     def _scale_now(self) -> float:
+        """The entity's time scale, for the rest bound counted in entity seconds.
+
+        Without an entity clock (``entity_scale`` not given) the bound runs on
+        unfrozen time at scale 1. A scale that raises, reads non-finite or
+        reads below zero raises here, never a guess: a guessed scale would
+        stretch or shrink a welfare bound. The raise goes to the indicator
+        arm's error path, which escalates as indicators unavailable once the
+        fault lasts ``unavailable_escalate_s``.
+        """
         if self._entity_scale is None:
             return 1.0
-        try:
-            value = float(self._entity_scale())
-        except Exception:
-            return 1.0
+        value = float(self._entity_scale())
         if not math.isfinite(value) or value < 0.0:
-            return 1.0
+            raise ValueError(f"welfare monitor: the time scale read {value!r}")
         return value
 
     def _developing(self) -> bool:
@@ -1892,10 +1917,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         scale: float | None = None
         if self._entity_scale is not None:
             try:
-                scale = float(self._entity_scale())
+                scale = self._scale_now()
             except Exception:
                 scale = None
-        if scale is None or not math.isfinite(scale) or scale <= 0.0:
+        if scale is None or scale <= 0.0:
             log.error("welfare monitor: the time scale is unreadable; exposure coverage is unknown")
             self._ind_awake_wall = None
             return
@@ -1907,6 +1932,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._indicator_tick_rest_clock(u_now)
             await self._indicator_ingest(u_now)
         except Exception:
+            self._exposure_poll_failures += 1
             log.error("welfare monitor: indicator accrual failed during warm-up", exc_info=True)
 
     def _indicator_detail(
@@ -2129,6 +2155,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         try:
             await self._indicator_poll_inner(u_now)
         except Exception:
+            self._exposure_poll_failures += 1
             log.error("welfare monitor: indicator poll failed; retrying next poll", exc_info=True)
             if self._ind_error_since_u is None:
                 self._ind_error_since_u = u_now
@@ -2162,6 +2189,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             "awake_wall_seconds": (
                 None if self._ind_awake_wall is None else float(self._ind_awake_wall)
             ),
+            "indicator_poll_failures": int(self._exposure_poll_failures),
+            # Bars and bounds this boot ran with that differ from the shipped
+            # defaults (an operator decision), so a reviewer sees them.
+            "non_default_settings": self._indicators_cfg.non_default_settings(),
             "rests_requested": int(self._exposure_rests),
             "freezes_placed": int(self._exposure_freezes),
             "responses": dict(self._exposure_responses),

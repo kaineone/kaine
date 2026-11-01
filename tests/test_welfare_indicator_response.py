@@ -769,6 +769,44 @@ async def test_awake_clock_read_jitter_is_not_a_fault(bus, tmp_path):
     assert h.mon._ind_eval.available
 
 
+def _broken_scale(kind: str):
+    def scale() -> float:
+        if kind == "raise":
+            raise RuntimeError("time scale unreadable")
+        return {"nan": float("nan"), "negative": -1.0}[kind]
+
+    return scale
+
+
+@pytest.mark.parametrize("kind", ["raise", "nan", "negative"])
+async def test_an_unreadable_time_scale_is_never_guessed(bus, tmp_path, kind):
+    h = Harness(bus, tmp_path, awake_scale=1.0)
+    h.mon._entity_scale = _broken_scale(kind)
+    with pytest.raises((RuntimeError, ValueError)):
+        h.mon._scale_now()
+
+
+@pytest.mark.parametrize("kind", ["raise", "nan"])
+async def test_an_unreadable_time_scale_during_a_rest_escalates(bus, tmp_path, kind):
+    """The rest bound counts entity seconds; with no readable scale the arm
+    fails each poll and escalates as indicators unavailable after 660 s,
+    long before the completion bound would."""
+    h = Harness(bus, tmp_path, awake_scale=1.0)
+    await _first_crossing(h)
+    await h.sleep_event("sleep.sleep.started", trigger="welfare_rest")
+    await h.poll()
+    assert h.mon._ind_stage == "resting"
+    h.mon._entity_scale = _broken_scale(kind)
+    await h.silent(600, step=20.0)
+    assert h.fm.calls == []
+    await h.silent(80, step=20.0)
+    assert len(h.fm.calls) == 1
+    assert _welfare_frozen()
+    final = [r for r in h.records if r["transition"] == "protective_action"]
+    assert final[-1]["reason"] == "indicators_unavailable"
+    assert "complete_timeout" not in _failures(h)
+
+
 # --- content -----------------------------------------------------------------------------
 
 

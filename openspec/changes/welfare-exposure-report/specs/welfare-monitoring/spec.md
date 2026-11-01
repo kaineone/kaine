@@ -32,3 +32,10 @@ Every cycle boot SHALL delete any existing `state/welfare/exposure.json` before 
 #### Scenario: A revive from a bundle that holds an old record
 - **WHEN** a step revives a bundle whose state contains an exposure record and then crashes before shutdown
 - **THEN** no exposure record exists after the crash
+
+### Requirement: The exposure record shows a failing indicator arm and non-default settings
+The monitor's part of the exposure record SHALL carry `indicator_poll_failures`, the indicator polls that raised during the boot, and `non_default_settings`, the indicator bars and bounds that differ from their shipped defaults. The study runner SHALL hold for incomplete coverage when `indicator_poll_failures` is not 0 or is not a count.
+
+#### Scenario: The indicator arm failed for part of a boot
+- **WHEN** an indicator poll raised during a boot shorter than the unavailable bound
+- **THEN** the record shows the failures and the runner holds for incomplete coverage

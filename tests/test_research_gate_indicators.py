@@ -237,3 +237,15 @@ def test_the_span_bound_follows_the_affect_span(tmp_path):
 def test_settings_at_the_bounds_pass(tmp_path, indicators):
     config = _config(tmp_path, preservation__welfare_response__indicators=indicators)
     assert indicator_response_reason(config) == ""
+
+
+def test_the_gate_result_carries_non_default_settings(tmp_path):
+    config = _config(
+        tmp_path,
+        preservation__welfare_response__indicators={"share_bar": 0.4, "rest_start_timeout_s": 60.0},
+    )
+    result = evaluate_safety_net(config)
+    assert result.ok, result.message()
+    assert result.non_default_settings == {"share_bar": 0.4, "rest_start_timeout_s": 60.0}
+    assert "Non-default welfare indicator settings: rest_start_timeout_s = 60.0, share_bar = 0.4" in result.message()
+    assert evaluate_safety_net(_config(tmp_path)).non_default_settings == {}

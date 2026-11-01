@@ -5,12 +5,15 @@
 
 - [x] 1.3 The monitor's awake time is also counted in wall seconds (`awake_wall_seconds`, the spans' awake entity seconds divided by the time scale per poll; null when the scale cannot be read), and the runner compares the tally's coverage against it. Tests: the real monitor, tally, writer and reader at time scale 1 and 2 give no coverage hold; an unreadable scale leaves the count null; a record without the count, or a short tally under dilation, holds.
 
+- [x] 1.4 `indicator_poll_failures` and `non_default_settings` in the monitor's part of the record; the runner holds for incomplete coverage on any indicator poll failure. Tests in `tests/test_welfare_exposure_record.py` and `tests/test_ignition_study_welfare_hold.py`.
+
 ## 2. Study runner
 
 - [x] 2.1 The runner copies a valid record into the step record and holds before the next step on a missing, unreadable, mismatched or incomplete record, or any indicator crossing. Tests with stand-in step directories for every spec scenario, including a crash after a revive whose bundle held an old record.
 - [x] 2.2 `ack-welfare --step <line>/<k> --decision continue|stop` records the answer and releases the hold or ends the line; `status` shows the hold. Tests: continue starts the next step on `run`; stop ends the line and keeps its preservations; neither touches the step's `state/`.
 - [x] 2.4 A protective response holds: the runner holds with `protective_response` whenever the monitor's `responses` is not empty or is not a dict. Tests: the `action = "end"` boot with an `indicators_unavailable` response and no rest or freeze holds; a malformed response count holds; a clean monitor does not.
 - [x] 2.5 A failed step's hold: `--retry-failed` refuses (exit 4) while the failed record's unanswered hold names `indicator_crossing` or `protective_response`; `ack-welfare` answers a failed step; `stop` on a failed step ends its line and the step is never retried; `status` and the halt message show the hold; a record missing after a crash is shown and does not block the retry. Tests in `tests/test_ignition_study_welfare_hold.py`.
+- [x] 2.6 A `failed:critical` step's exposure is read once its cycle has exited, before a retry or an answer (`_resolve_critical_exposure`), and the step is recorded again with it; any hold reason on a critical step blocks the retry; every boot first copies an existing record to `welfare_exposure_archive/`. Tests: the real writer and reader for a boot that crossed then failed critical (hold, retry refused, answer releases); a critical step with no record holds; a running cycle is not read; the archive copy; the existing critical-retry test now answers the `missing` hold before the retry.
 - [x] 2.3 `analysis.py` prints the per-step exposure table. Test on synthetic step records.
 
 ## 3. Docs and checks
