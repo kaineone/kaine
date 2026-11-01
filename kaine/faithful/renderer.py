@@ -13,6 +13,7 @@ from kaine.faithful.templates import (
     TEMPLATES,
     fallback_template,
 )
+from kaine.privacy_filter import strip_latent
 
 
 class FaithfulRenderer:
@@ -37,8 +38,10 @@ class FaithfulRenderer:
         self._line_prefix = line_prefix
 
     def render_event(self, event: Event) -> str:
-        # No template or fallback sees media metadata (the playlist file name).
-        payload = without_media_metadata(dict(event.payload))
+        # No template or fallback sees media metadata (the playlist file name)
+        # or a latent field (the latent rule): neither reaches the organ's
+        # prompt or the intent log's numeric rendering.
+        payload = strip_latent(without_media_metadata(dict(event.payload)))
         key = (event.source, event.type)
         template = self._templates.get(key)
         if template is None:

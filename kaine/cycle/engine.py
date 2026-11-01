@@ -20,6 +20,7 @@ from kaine.cycle.protocols import (
 from kaine.cycle.time_scale_controller import TimeScaleController
 from kaine.cycle.types import TickResult, WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.privacy_filter import without_latent_derived
 from kaine.workspace.action_selection import (
     OWN_EXTERNAL_SPEECH_SOURCE,
     OWN_EXTERNAL_SPEECH_TYPE,
@@ -1228,6 +1229,10 @@ class CognitiveCycle:
     def _snapshot_to_payload(
         self, snapshot: WorkspaceSnapshot, is_experiential: bool
     ) -> dict[str, Any]:
+        # A member's latent-derived mapping (an ascending error, say) is never
+        # copied into the broadcast (the latent rule, kaine.privacy_filter). The
+        # strip is copy on write: a member without one is embedded as the same
+        # object, so the broadcast is unchanged when nothing carries the key.
         return {
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
@@ -1242,7 +1247,7 @@ class CognitiveCycle:
                     "source": ev.source,
                     "type": ev.type,
                     "salience": ev.salience,
-                    "payload": ev.payload,
+                    "payload": without_latent_derived(ev.payload),
                     "timestamp": ev.timestamp.isoformat(),
                     "causal_parent": ev.causal_parent,
                 }

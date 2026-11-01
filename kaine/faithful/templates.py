@@ -15,6 +15,7 @@ from typing import Any, Callable, Optional
 # HEARD_TEXT_FIELDS lives with the heard rule; it stays importable from here.
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, HEARD_TEXT_FIELDS
 from kaine.faithful.media_metadata import without_media_metadata
+from kaine.privacy_filter import strip_latent
 
 TemplateFn = Callable[[dict[str, Any]], str]
 
@@ -119,8 +120,9 @@ def redact_heard_speech(event, *, templates=None, fallback=None) -> Optional[str
     fall = fallback_template if fallback is None else fallback
 
     payload = event.payload if isinstance(event.payload, dict) else {}
-    # No template or fallback sees media metadata (the playlist file name).
-    payload = without_media_metadata(payload)
+    # No template or fallback sees media metadata (the playlist file name) or a
+    # latent field (the latent rule).
+    payload = strip_latent(without_media_metadata(payload))
 
     if event.type in EXTERNAL_INPUT_TYPES:
         redacted_payload = _replace_text_leaves(payload)
@@ -533,10 +535,12 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
 def fallback_template(source: str, type_: str, payload: dict[str, Any]) -> str:
     """Structured summary for unrecognized (source, type) pairs.
 
-    Fails closed on media metadata: a field in ``MEDIA_METADATA_FIELDS`` (the
-    playlist file name) is never written, at any depth.
+    Fails closed on media metadata and on latent fields: a field in
+    ``MEDIA_METADATA_FIELDS`` (the playlist file name) or in ``LATENT_FIELDS``
+    (a perceptual latent or a ``latent_derived`` mapping) is never written, at
+    any depth.
     """
-    payload = without_media_metadata(payload)
+    payload = strip_latent(without_media_metadata(payload))
     if not payload:
         return f"{source} emitted {type_} with no payload."
     pieces = ", ".join(f"{k}={_fmt(v)}" for k, v in sorted(payload.items()))
