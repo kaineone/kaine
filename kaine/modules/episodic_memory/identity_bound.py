@@ -29,16 +29,13 @@ build item 9(d) are built; this module fixes the rule they follow.
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Mapping
 from typing import Any, Optional
 
+from kaine.privacy_filter import IDENTITY_BOUND_KEY, LATENT_DERIVED_KEY, identity_bound_value
+
 log = logging.getLogger(__name__)
 
-#: The tag every latent-derived value travels under (``kaine.privacy_filter``).
-LATENT_DERIVED_KEY = "latent_derived"
-#: The one subkey of a trace's ``latent_derived`` the store may keep.
-IDENTITY_BOUND_KEY = "identity_bound"
 
 
 class IdentityBoundRefused(RuntimeError):
@@ -74,56 +71,54 @@ def with_identity_bound(
     storage: Any,
     encryptor: Optional[Any] = None,
 ) -> dict[str, Any]:
-    """``payload`` with the identity-bound code attached, or without it (an
-    error logged, by reason only) when the store may not hold one."""
-    out = dict(payload)
-    reasons = identity_bound_refusals(storage, encryptor)
-    if reasons:
-        log.error(
-            "episodic memory: an identity-bound code was not stored: %s", "; ".join(reasons)
-        )
-        return out
-    numbers = list(code) if isinstance(code, (list, tuple)) else None
-    if not numbers or not all(
-        isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in numbers
-    ):
-        log.error("episodic memory: an identity-bound code was not stored: it is not a finite vector")
-        return out
-    latent = dict(out.get(LATENT_DERIVED_KEY) or {})
-    latent[IDENTITY_BOUND_KEY] = {
-        "code": [float(v) for v in numbers],
-        "code_id": str(code_id),
-        "generation": int(generation),
-    }
-    out[LATENT_DERIVED_KEY] = latent
-    return out
+    """``payload`` with the identity-bound code attached, through the store's
+    own rule (``stored_payload``): without it, an error logged by reason only,
+    when the store may not hold one or the code is not a finite vector."""
+    candidate = dict(payload)
+    latent = dict(candidate.get(LATENT_DERIVED_KEY) or {})
+    latent[IDENTITY_BOUND_KEY] = {"code": code, "code_id": code_id, "generation": generation}
+    candidate[LATENT_DERIVED_KEY] = latent
+    return stored_payload(candidate, storage=storage, encryptor=encryptor)
 
 
 def recalled_code(payload: Mapping[str, Any], running_code_id: Optional[str]) -> Optional[list[float]]:
     """The stored code of a trace, or None when it has none, it is malformed,
     or its code id is not the running content code's."""
     latent = payload.get(LATENT_DERIVED_KEY) if isinstance(payload, Mapping) else None
-    bound = latent.get(IDENTITY_BOUND_KEY) if isinstance(latent, Mapping) else None
-    if not isinstance(bound, Mapping) or running_code_id is None:
+    bound = identity_bound_value(latent.get(IDENTITY_BOUND_KEY)) if isinstance(latent, Mapping) else None
+    if bound is None or running_code_id is None or bound["code_id"] != running_code_id:
         return None
-    if bound.get("code_id") != running_code_id:
-        return None
-    code = bound.get("code")
-    if not isinstance(code, list):
-        return None
-    return [float(v) for v in code]
+    return list(bound["code"])
 
 
-def stored_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """A trace payload as the store keeps it: every latent field removed at any
-    depth except a well-formed top-level ``latent_derived.identity_bound``."""
+def stored_payload(
+    payload: Mapping[str, Any], *, storage: Any, encryptor: Optional[Any] = None
+) -> dict[str, Any]:
+    """A trace payload as the store keeps it, enforced at the store
+    (``EpisodicMemoryCore.store`` and the revive import).
+
+    Every latent field is removed at any depth. A top-level
+    ``latent_derived.identity_bound`` is kept only when the store may hold one
+    (``identity_bound_refusals``) and it is exactly a well-formed field, rebuilt
+    from ``code``, ``code_id`` and ``generation`` (anything else inside it,
+    nested latent fields included, is dropped); otherwise it is dropped and an
+    error logged by reason only.
+    """
     from kaine.privacy_filter import strip_latent
 
-    bound = None
     latent = payload.get(LATENT_DERIVED_KEY) if isinstance(payload, Mapping) else None
-    if isinstance(latent, Mapping) and isinstance(latent.get(IDENTITY_BOUND_KEY), Mapping):
-        bound = dict(latent[IDENTITY_BOUND_KEY])
+    has_bound = isinstance(latent, Mapping) and IDENTITY_BOUND_KEY in latent
     out = strip_latent(dict(payload))
-    if bound is not None:
-        out[LATENT_DERIVED_KEY] = {IDENTITY_BOUND_KEY: bound}
+    if not has_bound:
+        return out
+    bound = identity_bound_value(latent[IDENTITY_BOUND_KEY])
+    reasons = identity_bound_refusals(storage, encryptor)
+    if bound is None:
+        reasons.append("it is not a well-formed {code, code_id, generation} field")
+    if reasons:
+        log.error(
+            "episodic memory: an identity-bound code was not stored: %s", "; ".join(reasons)
+        )
+        return out
+    out[LATENT_DERIVED_KEY] = {IDENTITY_BOUND_KEY: bound}
     return out

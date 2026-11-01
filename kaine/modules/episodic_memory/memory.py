@@ -49,6 +49,7 @@ from kaine.modules.episodic_memory.associations import (
     weight,
 )
 from kaine.modules.episodic_memory.embeddings import Embedder
+from kaine.modules.episodic_memory.identity_bound import stored_payload
 from kaine.modules.episodic_memory.storage import (
     MemoryStorage,
     RecalledMemory,
@@ -1155,7 +1156,9 @@ class EpisodicMemoryCore:
         if collection not in DEFAULT_COLLECTIONS:
             raise ValueError(f"unknown collection {collection!r}")
         ts = float(self._clock())
-        payload = dict(payload or {})
+        # The store's own rule: no latent field, and identity-bound content only
+        # when this store may hold it (kaine.modules.episodic_memory.identity_bound).
+        payload = stored_payload(dict(payload or {}), storage=self._storage)
         for key in _RESERVED_PAYLOAD_KEYS:
             payload.pop(key, None)
         payload.setdefault("timestamp", ts)
@@ -1579,6 +1582,18 @@ class EpisodicMemoryCore:
                                 "but no strength record; refusing to revive with meaningless strengths"
                             )
 
+            # The store's own rule applies to imported traces too: a bundle from a
+            # store that held identity-bound content keeps it only where this
+            # store may hold it, and no latent field is ever imported.
+            persisted = {
+                name: [
+                    {**p, "payload": stored_payload(p.get("payload") or {}, storage=self._storage)}
+                    if isinstance(p, dict) else p
+                    for p in points
+                ]
+                for name, points in persisted.items()
+            }
+
             # Validate every point for every mapped kind before writing anything.
             for src_name, target_name in mapping.items():
                 for p in persisted.get(src_name, []):
@@ -1675,7 +1690,7 @@ class EpisodicMemoryCore:
                 self._short_term.append(
                     StoredMemory(
                         text=str(entry.get("text", "")),
-                        payload=dict(entry.get("payload") or {}),
+                        payload=stored_payload(dict(entry.get("payload") or {}), storage=self._storage),
                         affect=dict(affect) if affect else None,
                         timestamp=float(entry.get("timestamp", 0.0)),
                         entity_time=float(entry.get("entity_time", 0.0)),

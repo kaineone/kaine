@@ -18,7 +18,6 @@ from kaine.faithful.external_input import is_heard_event, words_unavailable
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
-from kaine.modules.episodic_memory.identity_bound import stored_payload
 from kaine.modules.episodic_memory.memory import (
     EmotionalRetriggerHook,
     EpisodicMemoryCore,
@@ -252,9 +251,9 @@ class EpisodicMemory(BaseModule):
         # as plain numerics — no raw sense data, per zero-persistence invariant).
         await self._core.store(
             text,
-            # A stored trace holds no latent value except identity-bound content
-            # (kaine.modules.episodic_memory.identity_bound), which no writer sets yet.
-            payload=stored_payload(payload),
+            # The core applies the store's rule (no latent field; identity-bound
+            # content only where the store may hold it) to every trace it keeps.
+            payload=payload,
             affect=self._cached_affect,
             collection="short_term",
         )
