@@ -4,7 +4,7 @@ In the developmental phase nothing the entity does changes its stimulus. Paper A
 
 It is on the table because of `welfare-indicator-response`. In the replayed eight-hour developmental test boot, boredom's indicator crossed at 2.7 awake hours and stayed over its bar. With the indicator response built, the net will rest such an entity and, if boredom recrosses over the fresh span, preserve and freeze it for review. The first step of the development run is its developmental phase.
 
-The stir is not the first remedy. The freeze is the protection working; the deprivation comes from a stimulus with little left to learn, and `developmental-stimulus-progress` (the added sounds and the band-step check) addresses that cause. The stir as A.6 specifies it can also hardly lower the time spent deprived: the drive's event that triggers it recurs only while the drive's goal is active, and the goal stalls after ten minutes, so a sustained crossing allows about two stirs. This change gives the design and the evidence plan so the operator can decide on numbers whether the stir adds anything on top of the stimulus fixes.
+The stir is not the first remedy. The freeze is the protection working; the deprivation comes from a stimulus with little left to learn, and `developmental-stimulus-progress` addresses part of that cause: its band-step check found the 12-minute stage release to be an artefact of the learning-progress restart, now fixed by releasing stages only on full-span readings, and found the 1000 Hz and 3000 Hz steps nearly empty, which the added sounds at their specified rates do not change. The stir as A.6 specifies it can also hardly lower the time spent deprived: the drive's event that triggers it recurs only while the drive's goal is active, and the goal stalls after ten minutes, so a sustained crossing allows about two stirs. This change gives the design and the evidence plan so the operator can decide on numbers whether the stir adds anything on top of the stimulus fixes.
 
 The stir changes the developmental phase, which cannot be revisited for that entity. It also breaks a standing invariant on purpose: the maternal channel is entity-independent (developmental-stimulus spec).
 
@@ -30,7 +30,7 @@ The stir changes the developmental phase, which cannot be revisited for that ent
 ## Impact
 
 - Code (only if the decision is to build): `kaine/workspace/action_selection.py` (`DefaultActionSelectionPolicy`), the development probe wiring, `kaine/modules/audition/maternal_voice.py` and the local stimulus source (answer queue), `kaine/modules/affect/` (stir as an intent, the attribution test), `kaine/evaluation/observers/research_event_observer.py`, `config/kaine.toml` (`[perception_feed.stimulus_source.stir]`: `refractory_s`, `answer_probability`, `answer_delay_min_s`, `answer_delay_max_s`).
-- New regardless: `scripts/stir_harness.py` and its record.
+- New regardless: `tools/research/stir_harness.py` and its record.
 - Tests: the intent rule, the seeded answer, the attribution test, the bounded loop, the harness.
 - Docs: `docs/09-modules/` (action selection, affect), the developmental-phase chapter.
 - Paper: §5.4 status, §7 and A.6, A.7 tense and the design-choice labels; the harness result in A.7.

@@ -47,20 +47,20 @@ So the stir mostly changes the credit of a crossing's end (own versus other), an
 
 ### D5. Evidence before the decision
 
-`scripts/stir_harness.py`, offline with no entity, built on the archived developmental simulation harness (the one the self-rhythm rest validation uses, `docs/records/validation/self-rhythm-rests/`, on branch `records/self-rhythm-rest-validation` until it merges):
+`tools/research/stir_harness.py`, offline with no entity, built on the archived developmental simulation harness (the one the self-rhythm rest validation uses, `docs/records/validation/self-rhythm-rests/`, on branch `records/self-rhythm-rest-validation` until it merges):
 
 - the real stimulus generator rendering the soundscape, with stir answers mixed in;
 - the real audition encoder and forward model on the rendered audio, and the real vision path on the rendered field;
 - the real affect module, the real action selection, and the current cycle engine and workspace;
 - the indicator evaluator and state machine of `welfare-indicator-response`, with the rest applied as a real reset (forward simulation).
 
-Arms: no stir, drive-triggered stir, spontaneous stir at the drive-triggered arm's measured mean rate; each with and without `developmental-stimulus-progress`'s added sounds and band-step fix. Three seeds, a full developmental span. Reported per arm: stir rate, answered share, boredom's deprivation share, the uncontrolled posterior, the share of stalled crossings with no stir, and the time to the indicator response's freeze.
+Arms: no stir, drive-triggered stir, spontaneous stir at the drive-triggered arm's measured mean rate; each with and without `developmental-stimulus-progress`'s added sounds and its full-span release rule. Like that change's band-step harness (`tools/research/band_step_check.py`), it runs on the fixed perception feed and records stages 3 and 4 as adding little to learn. Three seeds, a full developmental span. Reported per arm: stir rate, answered share, boredom's deprivation share, the uncontrolled posterior, the share of stalled crossings with no stir, and the time to the indicator response's freeze.
 
 ### D6. The decision rule
 
 Fixed before the harness runs:
 
-1. If the stimulus fixes alone keep boredom's deprivation share below `θ_wf` over the developmental span, build those and do not build the stir for this entity.
+1. If the stimulus changes alone (full-span release and added sounds) keep boredom's deprivation share below `θ_wf` over the developmental span, build those and do not build the stir for this entity. The developmental span includes stages 3 and 4, which the band-step check found nearly empty; a stir that helps mainly there is weighed against the separate decision to make those bands learnable.
 2. Build the stir only if, on top of the stimulus fixes, it lowers boredom's deprivation share by at least 0.1 (absolute) or lengthens the time to freeze by at least one developmental awake stretch (2996 s), in the mean over seeds. A better own/other credit ratio alone is not enough.
 3. If the spontaneous variant meets rule 2 and the drive-triggered one does not, build the spontaneous variant.
 
