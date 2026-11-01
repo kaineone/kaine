@@ -182,7 +182,7 @@ How the bank behaves:
   - the readout's switch rate;
   - the welfare hold.
 - **[A switch into the operator's room surprises the operator.]**
-  - `operator_room` sources are not entity-selectable unless the operator opts in.
+  - `operator_room` sources are not entity-selectable unless the operator opts in. On the reference host the CTO opted in on 2026-11-01 for the webcam, so there the entity may choose the room. Each such switch still passes every gate of D3, and it is recorded.
   - The on-air state and the camera's light show it.
 - **[The context bank grows the preservation bundle.]** It is bounded by the registered sources, and each context is the size of today's model.
 - **[Interference stays hidden.]** The readout's savings ratio exposes it.
