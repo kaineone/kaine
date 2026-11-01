@@ -1747,7 +1747,7 @@ def test_identity_bound_field_never_in_trace_text():
         "latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "c", "generation": 1},
                            "other": list(LATENT)},
         "nested": {"latent": list(LATENT)},
-    })
+    }, storage=_Store(True), encryptor=_Enc(True))
     assert payload == {"tick_index": 1, "nested": {},
                        "latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "c", "generation": 1}}}
 
@@ -1766,9 +1766,9 @@ def test_preservation_keeps_only_the_identity_bound_field_of_episodic_memory(cap
     from kaine.lifecycle.latent_strip import strip_module_states
 
     bound = {"code": list(CODE), "code_id": "c", "generation": 1}
-    episodic = {"short_term": [{"text": "active", "payload": {"latent_derived": {"identity_bound": bound}}}]}
-    leaky_episodic = {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound, "x": [1.0]},
-                                                  "latent": list(LATENT)}}]}
+    episodic = {"memory_state": {"short_term": [{"text": "active", "payload": {"latent_derived": {"identity_bound": bound}}}]}}
+    leaky_episodic = {"memory_state": {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound, "x": [1.0]},
+                                                                   "latent": list(LATENT)}}]}}
     other = {"latent_derived": {"identity_bound": bound}}
     with caplog.at_level("ERROR"):
         states, meta = strip_module_states(
@@ -1778,5 +1778,276 @@ def test_preservation_keeps_only_the_identity_bound_field_of_episodic_memory(cap
     assert states["vision"] == {}  # no other module has the exemption
     assert meta == {"latent_stripped": ["vision"]}
     states, meta = strip_module_states({"episodic_memory": leaky_episodic}, capture="preservation")
-    assert states["episodic_memory"] == {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound}}}]}
+    assert states["episodic_memory"] == {"memory_state": {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound}}}]}}
     assert meta == {"latent_stripped": ["episodic_memory"]}
+
+
+# ---------------------------------------------------------------------------
+# Second review A: the store path, the exact exemption, capped preservation
+# errors, fork and merge, and objects the sink will not write by str()
+# ---------------------------------------------------------------------------
+
+_BOUND = {"code": [0.25, -0.5, 0.75], "code_id": "c-1", "generation": 2}
+
+
+class _AtRest:
+    """InMemoryStorage that declares encryption at rest (no shipped backend does)."""
+
+
+async def _core(at_rest: bool):
+    from kaine.modules.episodic_memory.embeddings import FakeEmbedder
+    from kaine.modules.episodic_memory.memory import EpisodicMemoryCore
+    from kaine.modules.episodic_memory.storage import InMemoryStorage
+
+    emb = FakeEmbedder(latent_dim=8)
+    await emb.load()
+    storage = InMemoryStorage(latent_dim=8)
+    if at_rest:
+        storage.encrypts_at_rest = True
+    return EpisodicMemoryCore(embedder=emb, storage=storage, short_term_capacity=4)
+
+
+def _messy_bound():
+    return {**_BOUND, "latent": list(LATENT), "latent_derived": {"y": list(CODE)}, "x": {"foveal": list(LATENT)}}
+
+
+@pytest.mark.asyncio
+async def test_store_path_refuses_identity_bound_without_encryption_at_rest(monkeypatch, caplog):
+    _enable_encryption(monkeypatch)
+    core = await _core(at_rest=False)
+    payload = {"tick_index": 1, "latent": list(LATENT), "latent_derived": {"identity_bound": dict(_BOUND), "z": list(CODE)}}
+    with caplog.at_level("ERROR"):
+        await core.store("active", payload=payload)
+    (stored,) = list(core._short_term)
+    assert "latent_derived" not in stored.payload and "latent" not in stored.payload
+    assert any("not encrypted at rest" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_store_path_keeps_only_a_rebuilt_field_where_allowed(monkeypatch):
+    _enable_encryption(monkeypatch)
+    core = await _core(at_rest=True)
+    await core.store("active", payload={"tick_index": 1, "latent_derived": {"identity_bound": _messy_bound()}})
+    (stored,) = list(core._short_term)
+    assert stored.payload["latent_derived"] == {"identity_bound": _BOUND}
+    # Encryption off: the same store refuses.
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    await core.store("active", payload={"latent_derived": {"identity_bound": dict(_BOUND)}})
+    assert "latent_derived" not in list(core._short_term)[-1].payload
+
+
+@pytest.mark.asyncio
+async def test_the_module_store_call_goes_through_the_store_rule(monkeypatch):
+    """M16: the module's own store call reaches the core's rule."""
+    from types import SimpleNamespace
+
+    from kaine.modules.episodic_memory.module import EpisodicMemory
+
+    core = await _core(at_rest=False)
+    module = EpisodicMemory(SimpleNamespace(), core=core)
+    module._recall_on_workspace = False
+    snap = __import__("kaine.cycle.types", fromlist=["x"]).WorkspaceSnapshot(
+        tick_index=3, selected_events=[("1", _ev("affect", "affect.state", {"valence": 0.1}))]
+    )
+    real_store = core.store
+    seen = []
+
+    async def store(text, payload=None, **kw):
+        payload = {**(payload or {}), "latent_derived": {"identity_bound": dict(_BOUND)}, "latent": list(LATENT)}
+        seen.append(payload)
+        return await real_store(text, payload=payload, **kw)
+
+    core.store = store
+    await module.on_workspace(snap)
+    (stored,) = list(core._short_term)
+    assert seen and "latent_derived" not in stored.payload and "latent" not in stored.payload
+
+
+@pytest.mark.asyncio
+async def test_revive_import_applies_the_store_rule(monkeypatch):
+    _enable_encryption(monkeypatch)
+    source = await _core(at_rest=True)
+    await source.store("active", payload={"latent_derived": {"identity_bound": dict(_BOUND)}})
+    state = await source.export_state()
+    state["short_term"][0]["payload"]["latent_derived"]["identity_bound"]["latent"] = list(LATENT)
+    # Into a store that may hold the field: rebuilt from its three keys.
+    allowed = await _core(at_rest=True)
+    await allowed.import_state(state)
+    assert list(allowed._short_term)[0].payload["latent_derived"] == {"identity_bound": _BOUND}
+    # Into a store that may not: dropped.
+    plain = await _core(at_rest=False)
+    await plain.import_state(state)
+    assert "latent_derived" not in list(plain._short_term)[0].payload
+
+
+def test_identity_bound_value_rebuilds_exactly():
+    from kaine.privacy_filter import identity_bound_value
+
+    assert identity_bound_value(_messy_bound()) == _BOUND
+    for bad in (None, [], {"code": [], "code_id": "c", "generation": 1},
+                {"code": [1.0, float("nan")], "code_id": "c", "generation": 1},
+                {"code": [True], "code_id": "c", "generation": 1},
+                {"code": [1.0], "code_id": "", "generation": 1},
+                {"code": [1.0], "code_id": "c", "generation": True},
+                {"code": [1.0], "code_id": "c", "generation": 1.5}):
+        assert identity_bound_value(bad) is None
+
+
+def test_exemption_is_exactly_the_trace_field_path(caplog):
+    """The reviewer's probes E1 and E7."""
+    from kaine.lifecycle.latent_strip import strip_module_states
+
+    st = {"memory_state": {"short_term": [{"payload": {"latent_derived": {"identity_bound": _messy_bound()}}}],
+                           "persisted": {"episodic_memory_episodic": [
+                               {"id": "p", "payload": {"latent_derived": {"identity_bound": dict(_BOUND)}}}]}}}
+    with caplog.at_level("ERROR"):
+        out, meta = strip_module_states({"episodic_memory": st}, capture="preservation")
+    assert out["episodic_memory"]["memory_state"]["short_term"][0]["payload"]["latent_derived"] == {"identity_bound": _BOUND}
+    assert out["episodic_memory"]["memory_state"]["persisted"]["episodic_memory_episodic"][0]["payload"][
+        "latent_derived"] == {"identity_bound": _BOUND}
+    assert meta == {"latent_stripped": ["episodic_memory"]}
+    _assert_no_latent_text(json.dumps(out["episodic_memory"]).replace("latent_derived", "LD"))
+    st2 = {"diagnostics_cache": {"latent_derived": {"identity_bound": list(LATENT)}}}
+    out, meta = strip_module_states({"episodic_memory": st2}, capture="preservation")
+    assert out["episodic_memory"] == {"diagnostics_cache": {}}
+    assert meta == {"latent_stripped": ["episodic_memory"]}
+    # A well-formed state is the same object, with nothing recorded.
+    good = {"memory_state": {"short_term": [{"payload": {"latent_derived": {"identity_bound": dict(_BOUND)}}}]}}
+    out, meta = strip_module_states({"episodic_memory": good}, capture="preservation")
+    assert out["episodic_memory"] is good and meta == {}
+
+
+@pytest.mark.asyncio
+async def test_preservation_error_is_capped_and_unchained(tmp_path):
+    from kaine.lifecycle.preservation import PreservationError, _capture_module_state
+
+    long_message = "0.123457, " * 500
+
+    class Boom:
+        name = "boom"
+
+        def serialize(self):
+            raise ValueError(long_message)
+
+    class BoomExport:
+        name = "boom_export"
+
+        def serialize(self):
+            return {}
+
+        async def export_preservation_state(self):
+            raise RuntimeError(long_message)
+
+    for module, type_name in ((Boom(), "ValueError"), (BoomExport(), "RuntimeError")):
+        with pytest.raises(PreservationError) as info:
+            await _capture_module_state(module)
+        text = str(info.value)
+        assert f"{type_name}: " + long_message[:200] in text
+        assert long_message[:201] not in text
+        assert info.value.__cause__ is None and info.value.__suppress_context__
+
+
+def _old_snapshot_modules():
+    return {
+        "vision": {"forward_model": _WEIGHTS, "buffer_summary": {"n_frames": 16, "mean": list(LATENT), "variance": list(LATENT)}},
+        "audition": {
+            "auditory_buffer_summary": {"n_utterances": 4, "mean": list(CODE), "variance": list(CODE)},
+            "acoustic_forward_models": {"enc": {"state_dict": _WEIGHTS, "buffer_summary": {"n_frames": 3, "mean": list(LATENT), "variance": list(LATENT)}}},
+        },
+        "leaky": {"latent_derived": {"code": list(CODE)}, "k": 1},
+    }
+
+
+def test_fork_and_merge_clean_a_pre_change_snapshot(tmp_path):
+    from kaine.lifecycle.manager import ForkManager
+    from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot, snapshot_dir
+
+    root = tmp_path / "forks"
+    old = ForkSnapshot(label="old", modules=_old_snapshot_modules(), adapters=[], metadata={})
+    save_snapshot(root, old)
+    mgr = ForkManager(root)
+    child = mgr.fork(old.id, label="child")
+    stored = mgr.load(child.id)
+    for snap in (child, stored):
+        assert snap.modules["vision"]["buffer_summary"] == {"n_frames": 16, "mean_norm": 0.0, "mean_variance": 0.0}
+        assert snap.modules["audition"]["auditory_buffer_summary"] == {"n_frames": 4, "mean_norm": 0.0, "mean_variance": 0.0}
+        assert snap.modules["audition"]["acoustic_forward_models"]["enc"]["buffer_summary"]["n_frames"] == 3
+        assert snap.modules["audition"]["acoustic_forward_models"]["enc"]["state_dict"] == _WEIGHTS
+        assert snap.modules["vision"]["forward_model"] == _WEIGHTS
+        assert snap.modules["leaky"] == {"k": 1}
+        assert snap.metadata["latent_stripped"] == ["leaky"]
+    _assert_no_latent_text((snapshot_dir(root, child.id) / "snapshot.json").read_text())
+    other = ForkSnapshot(label="other", modules=_old_snapshot_modules(), adapters=[], metadata={})
+    save_snapshot(root, other)
+    import inspect
+
+    params = inspect.signature(mgr.merge).parameters
+    kwargs = {k: "a" for k in ("world_model_from",) if k in params}
+    merged = mgr.merge(old.id, other.id, label="merged", **kwargs)
+    text = (snapshot_dir(root, merged.id) / "snapshot.json").read_text()
+    _assert_no_latent_text(text)
+    assert '"mean"' not in text and '"variance"' not in text
+
+
+def test_strip_latent_opens_models_dataclasses_deques_sets_and_tensors():
+    """The reviewer's probes E3 and E6."""
+    import collections
+    import datetime as dt
+
+    from kaine.cycle.types import WorkspaceSnapshot
+
+    ev = Event(source="vision", type="vision.report", salience=0.5,
+               timestamp=dt.datetime.now(dt.timezone.utc),
+               payload={"latent": list(LATENT), "latent_derived": {"code": list(CODE)}, "ok": 1})
+    out = strip_latent({
+        "event": ev,
+        "snap": WorkspaceSnapshot(tick_index=1, selected_events=[], metadata={"latent_derived": {"c": list(CODE)}}),
+        "buf": collections.deque([{"latent": list(LATENT), "k": 1}]),
+        "s": {1},
+    })
+    assert out["event"]["payload"] == {"ok": 1}
+    assert out["snap"]["metadata"] == {}
+    assert out["buf"] == [{"k": 1}] and out["s"] == [1]
+    torch = pytest.importorskip("torch")
+    t = strip_latent({"pred": torch.tensor([0.123456789, 0.987654321])})
+    assert t["pred"] == pytest.approx([0.123456789, 0.987654321]) and isinstance(t["pred"], list)
+
+
+def test_sink_refuses_an_object_it_would_write_by_str(tmp_path, caplog):
+    import datetime as dt
+    import enum
+    from pathlib import Path as _P
+
+    from kaine.persistence.jsonl_sink import UnwritableRecordError
+
+    class Opaque:
+        def __repr__(self):
+            return f"Opaque(latent={LATENT!r})"
+
+    sink = AsyncJsonlSink(tmp_path, name="probe")
+    with pytest.raises(UnwritableRecordError):
+        sink.write_sync({"obj": Opaque()})
+    with pytest.raises(UnwritableRecordError):
+        sink.write_sync({"raw": b"\x00\x01"})
+
+    class Color(enum.Enum):
+        RED = 1
+
+    when = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc)
+    sink.write_sync({"when": when, "p": _P("/x"), "c": Color.RED, "n": np.float32(0.5)})
+    (row,) = _sink_rows(tmp_path, "probe")
+    assert row == {"when": str(when), "p": "/x", "c": "Color.RED", "n": "0.5"}
+    _assert_no_latent_text("".join(p.read_text() for p in tmp_path.glob("*.jsonl")))
+
+
+@pytest.mark.asyncio
+async def test_one_unwritable_record_does_not_drop_the_batch(tmp_path, caplog):
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    await sink.write({"a": 1})
+    await sink.write({"bad": object()})
+    await sink.write({"b": 2})
+    with caplog.at_level("ERROR"):
+        await sink.stop()
+    assert [r for r in _sink_rows(tmp_path, "probe")] == [{"a": 1}, {"b": 2}]
+    assert sink.dropped_count == 1
+    assert any("unwritable object" in r.getMessage() for r in caplog.records)
