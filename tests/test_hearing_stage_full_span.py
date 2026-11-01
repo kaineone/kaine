@@ -293,3 +293,63 @@ async def test_the_gate_leaves_drives_state_and_the_rest_reset_unchanged(bus):
     assert polled._drives.to_dict() == quiet._drives.to_dict()
     assert polled._state.to_dict() == quiet._state.to_dict()
     assert polled._progress() == quiet._progress()
+
+
+def _audition_report(err: float, *, awake: bool) -> Event:
+    return Event(
+        source="audition",
+        type="audition.perception",
+        payload={"alert": False, "prediction_error": err, "awake": awake},
+        salience=0.5,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
+async def test_reports_made_during_a_rest_stay_out_of_the_hearing_reading(bus, tmp_path):
+    """Developmental-stimulus spec: a rest inside the span adds no bins.
+
+    A 1410 s rest (reports with ``awake`` false, as audition publishes while its
+    forward model is suspended) begins 2000 s after the step. The full-span reading
+    arrives only after 5400 s of awake reports, and the stage is released no
+    earlier than 6000 awake seconds after the step, as without the rest. The
+    drives' learning progress keeps binning on the entity clock.
+    """
+    clock = _Clock()
+    affect = await _stepped_affect(bus, clock)
+    state = _stage_one_owner(tmp_path, HearingBandParams())
+    awake = _Clock()
+    watch = HearingStageWatch(bus, awake, state, affect.audition_learning_progress)
+    watch.check()
+    step = clock.t
+    first_full_awake = None
+    advanced_awake = None
+    rest = (step + 2000.0, step + 3410.0)
+    while advanced_awake is None and clock.t < step + 9000.0:
+        clock.t += 1.0
+        resting = rest[0] <= clock.t < rest[1]
+        if not resting:
+            awake.t += 1.0
+        await affect._handle_peer_event("audition.out", _audition_report(1.0, awake=not resting))
+        if first_full_awake is None and affect.audition_learning_progress(1) is not None:
+            first_full_awake = awake.t
+        payload = watch.check()
+        if payload is not None and payload["previous_stage"] is not None:
+            advanced_awake = awake.t
+    assert first_full_awake is not None and 5400.0 <= first_full_awake <= 5402.0
+    assert advanced_awake is not None and 6000.0 <= advanced_awake <= 6010.0
+    # The drives' window binned the rest too: it filled on the entity clock, well before.
+    assert affect._lp_windows["audition"].completed_bins(clock.t) == 90
+
+
+async def test_the_hearing_reading_survives_a_restart(bus):
+    clock = _Clock()
+    affect = await _stepped_affect(bus, clock)
+    for _ in range(5500):
+        clock.t += 1.0
+        await affect._handle_peer_event("audition.out", _audition_report(_falling(clock.t), awake=True))
+    before = affect.audition_learning_progress(1)
+    assert before is not None
+    saved = json.loads(json.dumps(affect.serialize()))
+    other = Affect(bus, clock=clock, publish_interval_s=1.0, learning_progress_span_s=SPAN, learning_progress_bin_s=BIN)
+    other.deserialize(saved)
+    assert other.audition_learning_progress(1) == pytest.approx(before)

@@ -67,6 +67,14 @@ They are recorded as "the band adds little": only the maternal voice, about 7% o
 
 The check did not reproduce "never rose" at steps 1 and 2; its margin over `lp_0` is 0.05 to 0.11, and live conditions it left out (the broadcast-context input, the arousal-sized attention window, rests during which adaptation is suspended while errors keep binning) add irreducible error. Before the rule is adopted for the development run, one of these runs: the harness again with an arousal trace, rests that suspend adaptation and a broadcast-context input; or a replay of the test boot's audition errors through the same estimator (its logs need the earlier key). If live noise keeps steps 1 and 2 under `lp_0`, those stages also close at `T_lp + W_sat`, and audition's `lp_0` (calibrated on vision noise, A.4) is the next question, for a separate calibration change.
 
+### D5c. The hearing-stage reading bins awake reports only
+
+The live-gap record (2026-11-01) showed that rests shorten the full span. A developmental entity rests 1410 s after every 2996 awake s, and audition keeps reporting through a rest with its forward model suspended. Binned on the entity clock, the first full-span reading after a step arrived 3991 awake s in, a quarter of its window was rest, and 23 of 24 releases came before 6000 awake s. Rest errors fall by no learning, so they pull the reading toward saturation. The hearing-stage reading therefore has audition bins of its own on audition's awake time: a report with `awake` false is left out and a rest adds no time. The full span is then 5400 s of awake learning. The drives' learning progress keeps its entity-clock bins, so no drive changes.
+
+Alternatives considered:
+- **An awake floor in the stage owner** (no release before span plus window of awake time): it fixes the early release but leaves every later window a quarter rest.
+- **Excluding rests from the drives' bins too**: a change to curiosity and boredom, out of scope here.
+
 ### D6. What this change does not touch
 
 The welfare bars (`θ_wf`, `q_wf`), the rest's affective reset, boredom's build and relief rules, the indicator response, and the drives' thresholds are unchanged. A welfare indicator that crosses on the new stimulus is answered as before; this change only gives the entity more to learn.

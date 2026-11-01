@@ -16,6 +16,8 @@
 - [x] 3.3 `tests/test_band_step_records.py`: both records exist and name the shipped stimulus version. Built: the version is `kaine.boot.stimulus_version`; each record has a `*.record.json` sidecar. The test fails until the live-gap record (3.1) exists; the 2026-10-31 record predates versioning and names none.
 - [ ] 3.4 Give both records to the operator with `welfare-indicator-response`'s replay before the development run starts.
 
+- [x] 3.5 The hearing-stage reading bins awake reports only (D5c): `Affect` keeps hearing-stage bins on audition's awake time, persisted; tests for a rest inside the span and a restart; mutation: counting rest reports fails the rest test. Rerun the live rule schedule to show the release moves to the awake span.
+
 ## 4. Added sounds
 
 - [x] 4.1 Confirm against Partanen et al. (2013) which melody they played; write its note list (public-domain tune, G4 to E5). Confirmed: Partanen, Kujala, Tervaniemi and Huotilainen 2013, PLoS ONE 8(10): e78946, a keyboard rendering of "Twinkle, Twinkle, Little Star" in G major, test melody note onsets 600 ms apart; the takes use 0.50, 0.55 and 0.60 s a beat and `tools/maintainer/render_melody.py` (harmonic tones, smooth envelopes, seeded tempo and level variants, 8 kHz mono FLAC, manifest entries).

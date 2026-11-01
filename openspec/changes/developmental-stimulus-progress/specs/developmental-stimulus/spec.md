@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Hearing-band stages advance by saturation
-The hearing band SHALL widen through five stages in the existing fetal order. One persisted owner SHALL decide the stage; the audio stream, the visual source, the affect module and the maturation gate SHALL read that stage and SHALL NOT compute one from time. Stage k SHALL end when audition's learning progress, restarted at the step and read only over the full span `learning_progress_span_s` (`T_lp`, 5400) of completed bins since the restart, has stayed below lp_0 for `saturation_window_seconds` (W_sat, 600) of awake time, or when the stage has run `max_dwell_seconds` (d_max, 25200) of awake time. A missing reading, including one over less than the full span, SHALL count as unsaturated. Dwell SHALL advance only with awake time, so rests add none, SHALL persist across restarts, and the saturation window SHALL restart fresh after a restart.
+The hearing band SHALL widen through five stages in the existing fetal order. One persisted owner SHALL decide the stage; the audio stream, the visual source, the affect module and the maturation gate SHALL read that stage and SHALL NOT compute one from time. Stage k SHALL end when audition's learning progress, restarted at the step and read only over the full span `learning_progress_span_s` (`T_lp`, 5400) of completed awake bins since the restart (reports made during rests left out), has stayed below lp_0 for `saturation_window_seconds` (W_sat, 600) of awake time, or when the stage has run `max_dwell_seconds` (d_max, 25200) of awake time. A missing reading, including one over less than the full span, SHALL count as unsaturated. Dwell SHALL advance only with awake time, so rests add none, SHALL persist across restarts, and the saturation window SHALL restart fresh after a restart.
 
 #### Scenario: Saturation advances the stage after the minimum dwell
 - **WHEN** the full-span reading has stayed below lp_0 for 600 awake seconds
@@ -10,6 +10,10 @@ The hearing band SHALL widen through five stages in the existing fetal order. On
 #### Scenario: Saturation before the minimum dwell does not advance
 - **WHEN** readings over less than the full span have been below lp_0 for 600 awake seconds, 720 s after the step
 - **THEN** the stage does not advance, because those readings count as missing
+
+#### Scenario: A rest does not shorten the span
+- **WHEN** a 1410 s rest falls inside the first full span after a step and every full-span reading is below lp_0
+- **THEN** the stage advances no earlier than 6000 awake seconds after the step
 
 #### Scenario: The maximum dwell caps the stage
 - **WHEN** a stage has run 25200 awake seconds with learning progress never saturated
