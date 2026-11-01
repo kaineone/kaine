@@ -27,7 +27,12 @@ from kaine.lifecycle.identity import (
     read_identity_sidecar,
     write_identity_sidecar,
 )
-from kaine.lifecycle.latent_strip import strip_module_states
+from kaine.lifecycle.latent_strip import (
+    ERROR_MESSAGE_LIMIT,
+    capped_error_text,
+    content_free_buffer_summaries,
+    strip_module_states,
+)
 from kaine.lifecycle.snapshot import (
     ARTIFACTS_DIRNAME,
     ForkSnapshot,
@@ -116,17 +121,19 @@ def _self_model_state_name(modules: dict[str, Any]) -> str | None:
 
 
 # The longest exception message a snapshot's ``_serialize_error`` record keeps.
-SERIALIZE_ERROR_MESSAGE_LIMIT = 200
+SERIALIZE_ERROR_MESSAGE_LIMIT = ERROR_MESSAGE_LIMIT
+_serialize_error_text = capped_error_text
 
 
-def _serialize_error_text(exc: BaseException) -> str:
-    """The exception type and at most ``SERIALIZE_ERROR_MESSAGE_LIMIT``
-    characters of its message."""
-    try:
-        message = str(exc)
-    except Exception:
-        message = "<message unavailable>"
-    return f"{type(exc).__name__}: {message[:SERIALIZE_ERROR_MESSAGE_LIMIT]}"
+def _clean_for_write(snap: ForkSnapshot, capture: str) -> ForkSnapshot:
+    """A fork or merge writes module states it built from stored ones (a merge
+    strategy is code that makes new state): put every buffer summary in its
+    content-free form and strip latent fields, as every capture does."""
+    modules = content_free_buffer_summaries(snap.modules)
+    modules, latent_meta = strip_module_states(modules, capture=capture)
+    if modules == snap.modules and not latent_meta:
+        return snap
+    return dataclasses.replace(snap, modules=modules, metadata={**snap.metadata, **latent_meta})
 
 
 class ForkManager:
@@ -365,6 +372,7 @@ class ForkManager:
                 child,
                 metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
             )
+        child = _clean_for_write(child, "fork")
         save_snapshot(self._root, child)
         self._write_sidecar(child.id, child_identity)
         return child
@@ -521,6 +529,7 @@ class ForkManager:
                 merged,
                 metadata={**merged.metadata, "artifact_sources": sources},
             )
+        merged = _clean_for_write(merged, "merge")
         save_snapshot(self._root, merged)
         if a_identity is not None:
             self._write_sidecar(merged.id, a_identity)

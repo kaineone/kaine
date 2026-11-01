@@ -51,7 +51,7 @@ from kaine.lifecycle.identity import (
     check_sidecar_agrees,
     identity_of_snapshot,
 )
-from kaine.lifecycle.latent_strip import strip_module_states
+from kaine.lifecycle.latent_strip import capped_error_text, strip_module_states
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.storage import resolve
 
@@ -106,13 +106,17 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
     in. Any failure propagates (fail-loud) — a module that cannot be captured
     aborts the whole preservation.
     """
+    # An exception message can format any value of the module's state, so the
+    # error (which reaches the preservation.failed record and the log) keeps
+    # the exception type and at most 200 characters of its message, and the
+    # original exception is not chained into the traceback.
     try:
         state = copy.deepcopy(module.serialize())
     except Exception as exc:
         raise PreservationError(
             f"module {getattr(module, 'name', module)!r} serialize() failed during "
-            f"preservation: {type(exc).__name__}: {exc}"
-        ) from exc
+            f"preservation: {capped_error_text(exc)}"
+        ) from None
     exporter = getattr(module, "export_preservation_state", None)
     if callable(exporter):
         try:
@@ -120,8 +124,8 @@ async def _capture_module_state(module: Any) -> dict[str, Any]:
         except Exception as exc:
             raise PreservationError(
                 f"module {getattr(module, 'name', module)!r} preservation capture "
-                f"failed: {type(exc).__name__}: {exc}"
-            ) from exc
+                f"failed: {capped_error_text(exc)}"
+            ) from None
         state.update(rich)
     return state
 
