@@ -1645,3 +1645,138 @@ async def test_sweep_trims_exactly(main_bus):
     await main_bus.sweep_companions_once()
     assert calls and all(k.get("approximate") is False and "minid" in k for k in calls)
     assert await volatile.client.xlen("vision.out.companion") == 0
+
+
+# ---------------------------------------------------------------------------
+# Episodic store (PR 4): rule order and the identity-bound field
+# ---------------------------------------------------------------------------
+
+
+def _trace_text(*events):
+    from kaine.cycle.types import WorkspaceSnapshot
+    from kaine.modules.episodic_memory.module import _serialize_snapshot
+
+    return _serialize_snapshot(
+        WorkspaceSnapshot(tick_index=1, selected_events=[(str(i), ev) for i, ev in enumerate(events)])
+    )
+
+
+def test_episodic_store_rule_order():
+    """Heard, then raw-perceptual, then the latent rule: a raw event that also
+    carries a heard field is stored as heard; a raw one as raw; a vision report
+    keeps its scalars and loses its latent fields."""
+    heard_raw = _ev("embodiment", "embodiment.visual.raw", {"frame": "x", "user_text": "hello there"})
+    raw = _ev("embodiment", "embodiment.visual.raw", {"frame": "x"})
+    vision = _vision_event()
+    text = _trace_text(heard_raw, raw, vision)
+    pieces = text.split(" | ")
+    assert pieces[0] == "active"
+    assert pieces[1] == "embodiment:embodiment.visual.raw=<heard omitted>"
+    assert pieces[2] == "embodiment:embodiment.visual.raw=<raw-perceptual omitted>"
+    assert pieces[3].startswith("vision:vision.report=") and "change_score" in pieces[3]
+    _assert_no_latent_text(text)
+    import inspect
+
+    from kaine.modules.episodic_memory import module as episodic_module
+
+    source = inspect.getsource(episodic_module._serialize_snapshot)
+    assert source.index("is_heard_event(event)") < source.index("_RAW_PERCEPTUAL_EVENT_TYPES")
+
+
+def test_episodic_heard_member_with_latent_removed_whole():
+    chat = _ev("embodiment", "embodiment.chat", {"message": "hi", "latent_derived": {"code": list(CODE)}})
+    assert _trace_text(chat) == "active | embodiment:embodiment.chat=<heard omitted>"
+
+
+def test_episodic_short_latent_vector_not_stored():
+    report = _ev("interoception", "interoception.report", {
+        "wellness": 0.8, "alerts": [], "latent_derived": {"residual": list(CODE)}})
+    text = _trace_text(report)
+    assert "wellness" in text
+    _assert_no_latent_text(text)
+
+
+class _Store:
+    def __init__(self, encrypts_at_rest=False):
+        if encrypts_at_rest:
+            self.encrypts_at_rest = True
+
+
+class _Enc:
+    def __init__(self, enabled):
+        self.enabled = enabled
+
+
+def test_identity_bound_field_refused_without_encryption(caplog):
+    from kaine.modules.episodic_memory.identity_bound import (
+        identity_bound_refusals,
+        with_identity_bound,
+    )
+
+    kw = {"code": list(CODE), "code_id": "c-1", "generation": 3}
+    with caplog.at_level("ERROR"):
+        out = with_identity_bound({"tick_index": 1}, storage=_Store(), encryptor=_Enc(True), **kw)
+    assert out == {"tick_index": 1}
+    assert any("not encrypted at rest" in r.getMessage() for r in caplog.records)
+    assert _latent_numbers_in(" ".join(r.getMessage() for r in caplog.records)) == []
+    assert with_identity_bound({}, storage=_Store(True), encryptor=_Enc(False), **kw) == {}
+    # The shipped backends declare no encryption at rest, so the field fails closed.
+    from kaine.modules.episodic_memory.storage import InMemoryStorage
+
+    assert "the episodic store's files are not encrypted at rest" in identity_bound_refusals(
+        InMemoryStorage(latent_dim=4), _Enc(True)
+    )
+    ok = with_identity_bound({"tick_index": 1}, storage=_Store(True), encryptor=_Enc(True), **kw)
+    assert ok["latent_derived"]["identity_bound"] == {"code": list(CODE), "code_id": "c-1", "generation": 3}
+    assert with_identity_bound({}, storage=_Store(True), encryptor=_Enc(True), code=[float("nan")],
+                               code_id="c", generation=1) == {}
+
+
+def test_identity_bound_field_never_in_trace_text():
+    from kaine.modules.episodic_memory.identity_bound import stored_payload
+
+    member = _ev("vision", "vision.report", {
+        "change_score": 0.2,
+        "latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "c", "generation": 1}},
+    })
+    text = _trace_text(member)
+    _assert_no_latent_text(text)
+    assert "identity_bound" not in text
+    payload = stored_payload({
+        "tick_index": 1,
+        "latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "c", "generation": 1},
+                           "other": list(LATENT)},
+        "nested": {"latent": list(LATENT)},
+    })
+    assert payload == {"tick_index": 1, "nested": {},
+                       "latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "c", "generation": 1}}}
+
+
+def test_recall_ignores_a_code_from_another_life():
+    from kaine.modules.episodic_memory.identity_bound import recalled_code
+
+    payload = {"latent_derived": {"identity_bound": {"code": list(CODE), "code_id": "parent-a", "generation": 2}}}
+    assert recalled_code(payload, "parent-a") == list(CODE)
+    assert recalled_code(payload, "parent-b") is None
+    assert recalled_code(payload, None) is None
+    assert recalled_code({"x": 1}, "parent-a") is None
+
+
+def test_preservation_keeps_only_the_identity_bound_field_of_episodic_memory(caplog):
+    from kaine.lifecycle.latent_strip import strip_module_states
+
+    bound = {"code": list(CODE), "code_id": "c", "generation": 1}
+    episodic = {"short_term": [{"text": "active", "payload": {"latent_derived": {"identity_bound": bound}}}]}
+    leaky_episodic = {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound, "x": [1.0]},
+                                                  "latent": list(LATENT)}}]}
+    other = {"latent_derived": {"identity_bound": bound}}
+    with caplog.at_level("ERROR"):
+        states, meta = strip_module_states(
+            {"episodic_memory": episodic, "vision": other}, capture="preservation"
+        )
+    assert states["episodic_memory"] is episodic  # kept, nothing recorded
+    assert states["vision"] == {}  # no other module has the exemption
+    assert meta == {"latent_stripped": ["vision"]}
+    states, meta = strip_module_states({"episodic_memory": leaky_episodic}, capture="preservation")
+    assert states["episodic_memory"] == {"short_term": [{"payload": {"latent_derived": {"identity_bound": bound}}}]}
+    assert meta == {"latent_stripped": ["episodic_memory"]}
