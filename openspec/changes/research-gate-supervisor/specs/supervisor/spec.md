@@ -22,7 +22,7 @@ When the cycle runs in unattended or research mode and the supervisor's supervis
 ## ADDED Requirements
 
 ### Requirement: Loss of the welfare monitor escalates in research and unattended runs
-In research and unattended mode the cycle SHALL watch the welfare monitor as it watches the supervisor. When the welfare response is enabled but its monitor was never built or started, when the monitor's task ends while the run goes on, or when its poll loop raises at least three times in a row with no poll returning for `distress_duration_s` of wall time, the cycle SHALL run the supervisor's escalation with module `welfare_monitor` (final snapshot, shutdown of every module, `escalation.json`) and SHALL send the `supervision_lost` caretaker notice. In operator-present mode this requirement SHALL NOT apply.
+In research and unattended mode, when the enabled welfare monitor was never started, its task ends while the run goes on, or its poll loop raises at least three times in a row with no poll returning for `distress_duration_s`, the cycle SHALL run the supervisor's escalation with module `welfare_monitor` (final snapshot, shutdown, `escalation.json`) and SHALL send the `supervision_lost` caretaker notice. Operator-present mode is exempt.
 
 #### Scenario: The welfare monitor task ends in a research run
 - **WHEN** the welfare monitor's task raises and ends during a research run
