@@ -75,6 +75,13 @@ With `recall_content` true, `content` SHALL hold the best-ranked trace's accesse
 - **WHEN** the best trace has no `members`
 - **THEN** the event carries `top_similarity` and no `content`
 
+### Requirement: Conversation content is the one exception to the heard rule on recall content
+Recall content from the `conversation` collection of the `conversation-memory` change SHALL be the one exception to the heard rule on `content`. It holds the entity's own guarded gists, with no run of more than four normalised tokens of a heard utterance, and SHALL travel only on the volatile bus.
+
+#### Scenario: A gist is not stripped as heard
+- **WHEN** a recall returns a conversation trace whose gist shares three words with what was heard
+- **THEN** `content` holds the gist, and no main-bus entry holds it
+
 ### Requirement: The live path is tested end to end without an entity
 A test SHALL run the episodic memory module, the workspace and the language context assembler with no organ and no entity, plant a distinctive own thought in an early broadcast, cue it later, and check that the accessed recall's rendering in the assembled notes contains the planted words with `recall_content` true and does not with it false.
 

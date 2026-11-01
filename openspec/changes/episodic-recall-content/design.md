@@ -58,7 +58,7 @@ Every `episodic_memory.recall` gains `top_similarity`, the best trace's cosine s
 - `age_band`: `"this_wake"` when the trace's `born_sleep` equals the current sleep count, `"last_wake"` for one sleep before, `"earlier"` otherwise;
 - `trace_ref`: `<collection>:<point id>`, so the workspace's novelty tracker habituates to the same trace recalled again.
 
-Before publishing, the module applies the heard rule and `strip_vectors` to `content` again, so a trace stored before decision 1 can never surface heard words. `content` is already in the privacy filter's `CONTENT_FIELDS` (`kaine/privacy_filter.py`), so the diagnostics surface strips it, and the CI guard on module publishers (`tests/test_dashboard_privacy.py`) covers the new payload. The intensity rule is unchanged: alert salience when the strongest stored arousal is at least 0.5.
+Before publishing, the module applies the heard rule and `strip_vectors` to `content` again, so a trace stored before decision 1 can never surface heard words. One exception is designed in `conversation-memory`: content from its encrypted conversation collection holds the entity's own gists, which that change's overlap guard bounds to runs of at most four normalised heard tokens; that content travels only on the volatile bus. `content` is already in the privacy filter's `CONTENT_FIELDS` (`kaine/privacy_filter.py`), so the diagnostics surface strips it, and the CI guard on module publishers (`tests/test_dashboard_privacy.py`) covers the new payload. The intensity rule is unchanged: alert salience when the strongest stored arousal is at least 0.5.
 
 ### 5. Rendering
 
