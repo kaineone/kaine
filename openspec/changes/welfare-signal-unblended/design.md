@@ -52,7 +52,7 @@ The vision module's stimulus-source error in the development run (`development.p
 
 `read_welfare_prediction_error` returns the reading with its defect, if any: an unreadable report (no key, or not a number) or an own-error fallback. Each reader keeps a `WelfareSignalAccount` of the reports it read, its unreadable reports and their current run, and its fallbacks.
 
-- The welfare response fails its poll, after acting on every readable sample in it, whenever the poll read an unreadable report (`WelfareSignalUnreadable`). The run loop logs every such poll, and on the welfare-gates branch `poll_loop_failing` counts it, so a producer that stops sending a readable error escalates like any other blind net. It writes a `welfare_signal_defects` incident-log record whenever a new defect was read.
+- The welfare response fails its poll, after acting on every readable sample in it, whenever the poll read an unreadable report (`WelfareSignalUnreadable`). The run loop logs every such poll, and on the welfare-gates branch `poll_loop_failing` counts it, so a producer that stops sending a readable error escalates like any other blind net. It writes a cumulative `welfare_signal_defects` incident-log record on the first defect, then at most once per `distress_duration_s` of wall time while defects keep arriving, and at stop, so a persistent defect at a fast poll cadence cannot flood the log.
 - The welfare observer writes a content-free `welfare_signal` record of the counts to its log when a new defect was read, at most once per distress duration and at stop.
 - The development run skips an unreadable report as a sample and puts `interoception_unreadable_reports` and `interoception_own_error_fallbacks` in its readout once either is non-zero.
 

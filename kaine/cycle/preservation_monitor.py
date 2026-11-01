@@ -464,6 +464,9 @@ class _BaseSafetyMonitor(abc.ABC):
         """Run one monitor poll. Subclasses implement the detection/action."""
         ...
 
+    async def _on_stop(self) -> None:
+        """Hook run once when the poll loop ends, before the incident log stops."""
+
     async def run(self, stop_event: asyncio.Event) -> None:
         try:
             await self._incident_log.start()
@@ -487,6 +490,10 @@ class _BaseSafetyMonitor(abc.ABC):
                 except asyncio.TimeoutError:
                     continue
         finally:
+            try:
+                await self._on_stop()
+            except Exception:
+                log.warning("%s stop hook failed", self.source, exc_info=True)
             try:
                 await self._incident_log.stop()
             except Exception:
@@ -814,6 +821,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # Producer defects in the interoception reports this monitor reads:
         # unreadable reports (no key, not a number) and own-error fallbacks.
         self._signal = WelfareSignalAccount()
+        # Wall time of the last welfare_signal_defects record (rate limit).
+        self._signal_record_at: float | None = None
         # Repeated distress episodes within a window (the "and/or" arm).
         self._repeat = WindowedEventCounter(
             window_s=config.repeat_window_s, threshold=config.repeat_threshold
@@ -1041,13 +1050,27 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 f"{self._signal.unreadable_run_s(self._unfrozen.now()):.1f} s)"
             )
 
-    async def _report_signal_defects(self) -> None:
+    async def _report_signal_defects(self, *, final: bool = False) -> None:
         """Write the defect counts to the incident log when a new defect was read.
 
-        The record is content-free (counts only). It is marked reported only
-        once written, so a failed write is retried on the next poll.
+        The record is content-free and cumulative (counts only). It is written
+        on the first defect, then at most once per ``distress_duration_s`` of
+        wall time while defects keep arriving, and once more at stop
+        (``final``): a persistent defect read at a fast poll cadence would
+        otherwise write a record every poll. The bound matches the welfare
+        observer's ``welfare_signal`` record and the time the distress arm
+        needs to fire, so no record is held back longer than one distress
+        episode. It is marked reported only once written, so a failed write is
+        retried on the next poll.
         """
         if not self._signal.changed:
+            return
+        wall = self._clock()
+        if (
+            not final
+            and self._signal_record_at is not None
+            and wall - self._signal_record_at < self._config.distress_duration_s
+        ):
             return
         counts = self._signal.snapshot(self._unfrozen.now())
         log.error(
@@ -1071,8 +1094,12 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 }
             )
             self._signal.mark_reported()
+            self._signal_record_at = wall
         except Exception:
             log.warning("welfare monitor: incident log write failed", exc_info=True)
+
+    async def _on_stop(self) -> None:
+        await self._report_signal_defects(final=True)
 
     @property
     def signal_defects(self) -> dict[str, int | float]:

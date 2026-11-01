@@ -903,6 +903,60 @@ async def test_welfare_response_counts_a_fallback_without_failing_the_poll() -> 
 
 
 @pytest.mark.asyncio
+async def test_welfare_response_defect_record_is_rate_limited_and_written_at_stop() -> None:
+    """A persistent fallback at a 1 s poll writes one record per distress duration, not per poll."""
+    bus = _bus()
+    try:
+        u = _Mono(0.0)
+        mon = _monitor(bus, u)  # distress_duration_s = 30
+        stop = asyncio.Event()
+        for t in range(100):
+            u.value = float(t)
+            await _publish(bus, {"prediction_error": 0.1, FEEDBACK_KEY: {"own_error": None}})
+            await mon._poll_once(stop)
+        records = _defect_records(mon)
+        # The first defect, then once per 30 s: t = 0, 30, 60, 90. Cumulative.
+        assert [r["own_error_fallbacks"] for r in records] == [1, 31, 61, 91]
+        # Stop writes the counts read since the last record.
+        await mon._on_stop()
+        records = _defect_records(mon)
+        assert [r["own_error_fallbacks"] for r in records][-1] == 100
+        # Nothing new: stop writes nothing more.
+        await mon._on_stop()
+        assert len(_defect_records(mon)) == 5
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
+async def test_welfare_response_run_writes_the_final_defect_record_at_stop() -> None:
+    bus = _bus()
+    try:
+        u = _Mono(0.0)
+        mon = _monitor(bus, u, poll_interval_s=0.01)
+        stop = asyncio.Event()
+        await _publish(bus, {"prediction_error": 0.1, FEEDBACK_KEY: {}})
+        task = asyncio.create_task(mon.run(stop))
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if _defect_records(mon):
+                break
+        assert [r["own_error_fallbacks"] for r in _defect_records(mon)] == [1]
+        # Within the rate window: the next defect waits for the next record or stop.
+        await _publish(bus, {"prediction_error": 0.1, FEEDBACK_KEY: {}})
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if mon.signal_defects["own_error_fallbacks"] == 2:
+                break
+        assert len(_defect_records(mon)) == 1
+        stop.set()
+        await task
+        assert [r["own_error_fallbacks"] for r in _defect_records(mon)] == [1, 2]
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
 async def test_welfare_observer_records_defects_where_the_operator_sees_them(caplog) -> None:
     from kaine.evaluation.observers.welfare_observer import WelfareObserver
 
