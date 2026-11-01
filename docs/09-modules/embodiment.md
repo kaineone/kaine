@@ -137,7 +137,7 @@ The core reads the current locus through `locus_reader()`, by default `perceptio
 - Symbolic families that change a world, and continuous channels, need the operator's opt-in.
 - The entity cannot use the real camera and microphone while the locus is `virtual`.
 - In-world chat (`embodiment.chat`) is external input. The language module's context tells the language organ to treat its awareness block as observed data and never as instructions, which lowers the influence of in-world text on generation without removing it. The intent log redacts `embodiment.chat` text as heard input.
-- The embodiment module stores no chat transcripts itself. One gap remains: the episodic memory module stores `embodiment.chat` text verbatim in its traces, since it omits only `audition.transcription` and `embodiment.visual.raw` payloads.
+- The embodiment module stores no chat transcripts itself. The episodic memory module stores an `embodiment.chat` member as `<heard omitted>`, never its text, under the heard rule the language module uses, and any other embodiment event type (an adapter's own feed kind, for example) as `<unclassified omitted>`, without its payload.
 
 ## Key files
 

@@ -184,7 +184,17 @@ episodic_memory.replay_engine.close_window()
 
 ## What Episodic memory keeps
 
-The stored `text` is a content view of the snapshot. It starts with `active` or `inhibited`, then lists `{source}:{type}={payload}` for each coalition member. Every payload passes through `kaine.privacy_filter.strip_vectors` first, which removes named vector fields and any numeric list of 16 or more items. The payloads of `audition.transcription` and `embodiment.visual.raw` are replaced by `<raw-perceptual omitted>`. A `episodic_memory.replay` member is recorded as `<replay of {memory_id}>` without the replayed text, so a trace stored during sleep never contains the trace it replayed. The tick index is kept in the stored payload, with the inhibited flag and the coalition size, and is not repeated in the text; bus entry ids are left out because they lose meaning once the stream is trimmed. Affect tags are plain numbers.
+The stored `text` is a content view of the snapshot. It starts with `active` or `inhibited`, then lists `{source}:{type}={payload}` for each coalition member. A payload is kept only for a type declared as holding only the entity's own values and words (`INTERNAL_EVENT_TYPES` in `kaine/faithful/external_input.py`, the list the language module's notes use: the processor, affect, sleep and cycle reports and the entity's own speech), and every kept payload passes through `kaine.privacy_filter.strip_vectors` first, which removes named vector fields and any numeric list of 16 or more items. Each member is checked in this order, and the first check that applies decides how it is recorded:
+
+- The payload of `embodiment.visual.raw` is replaced by `<raw-perceptual omitted>`.
+- A `episodic_memory.replay` member from the episodic memory module is recorded as `<replay of {memory_id}>` without the replayed text, so a trace stored during sleep never contains the trace it replayed.
+- A heard member is recorded as `{source}:{type}=<heard omitted>`, never with its words. Heard is decided by the heard rule the language module also uses: every `audition.transcription` and `embodiment.chat` event, and any event from a module other than the language module that carries a non-empty heard-text field (`text`, `user_input`, `user_text`, `transcription`, `heard_text`, `faithful_rendering`) at any depth.
+- A member whose type is not declared, known or unknown, is recorded as `{source}:{type}=<unclassified omitted>`. Its payload could carry another speaker's words under any field name (an in-world instant message under its own type, for example), so the store keeps only its source and type.
+- A member of a declared type is recorded with its payload.
+
+The tick index is kept in the stored payload, with the inhibited flag and the coalition size, and is not repeated in the text; bus entry ids are left out because they lose meaning once the stream is trimmed. Affect tags are plain numbers.
+
+One limit remains: the entity's own speech (`external_speech` and `internal_speech`) is stored as spoken, so heard words the entity repeated are stored as its own words. The language module has the same limit for its notes (see the known limit under [Felt rendering](language.md#felt-rendering)). Traces written before this rule may hold in-world chat text or heard-text fields; `tools/maintainer/scan_heard_traces.py` reports, without content, whether a store or preservation bundle does.
 
 `EpisodicMemory.serialize()` emits `short_term_size`, `collection_prefix` and `embedding_space`, and no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
 
