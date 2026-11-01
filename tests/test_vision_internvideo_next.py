@@ -30,6 +30,7 @@ from kaine.modules.vision.internvideo_next_loader import (
     load_internvideo_next,
     vendored_code_dir,
 )
+from tests._companion import attach_test_volatile, joined_entries
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _VENDOR_DIR = _REPO_ROOT / "external" / "internvideo_next"
@@ -327,6 +328,9 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     b = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    # The perceptual latents never enter the persisted vision.out stream; a
+    # declared test consumer reads them from the companion stream instead.
+    attach_test_volatile(b, ("vision.out", "latent"))
     yield b
     await b.close()
 
@@ -553,13 +557,13 @@ async def test_no_report_until_ring_buffer_fills(bus):
     for _ in range(15):  # clip_len - 1
         rid = await vision.process_frame(_frame())
         assert rid == ""  # warmup: nothing published
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out")
     assert entries == []
     assert enc.clip_calls == 0
     # The 16th frame fills the buffer → first report.
     rid = await vision.process_frame(_frame())
     assert rid
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out")
     assert len(entries) == 1
     _, ev = entries[0]
     assert len(ev.payload["latent"]) == 768
@@ -615,7 +619,7 @@ async def test_foveation_composes_with_clip_encoder(bus):
 
     for i in range(17):  # fill the clip_len ring buffer, then emit foveated reports
         await vision.process_frame(_np_frame(i * 9))
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out")
     assert entries, "foveation with a clip encoder emitted no report"
     _, ev = entries[-1]
     # Peripheral + foveal were both encoded through the clip seam (encode_clip) —

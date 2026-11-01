@@ -161,13 +161,21 @@ def test_committed_config_ships_latent_stream_maxlen_caps():
 def test_typical_event_bytes_uses_measured_sizes_and_default():
     from kaine.bus.config import DEFAULT_TYPICAL_EVENT_BYTES, typical_event_bytes
 
-    assert typical_event_bytes("vision.out") == 40_000
+    # The main vision.out entry no longer carries the latents: estimated.
+    assert typical_event_bytes("vision.out") == DEFAULT_TYPICAL_EVENT_BYTES
     assert typical_event_bytes("workspace.broadcast") == 6_600
     assert typical_event_bytes("sequence.out") == 1_300
     assert typical_event_bytes("interoception.out") == 550
     assert typical_event_bytes("cycle.out") == 250
     assert typical_event_bytes("audition.out") == 400
     assert typical_event_bytes("episodic_memory.out") == DEFAULT_TYPICAL_EVENT_BYTES == 2_000
+
+
+def test_typical_companion_bytes():
+    from kaine.bus.config import DEFAULT_TYPICAL_COMPANION_BYTES, typical_companion_bytes
+
+    assert typical_companion_bytes("vision.out.companion") == 40_000
+    assert typical_companion_bytes("audition.out.companion") == DEFAULT_TYPICAL_COMPANION_BYTES
 
 
 def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):

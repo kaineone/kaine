@@ -65,9 +65,12 @@ def test_budget_is_maxlen_times_size_times_headroom():
         },
     }
     total, shares = preboot.bus_budget(cfg)
-    assert total == (1000 * 6_600 + 2000 * 250 + 10 * 40_000) * 2
+    # vision.out carries no latents on the main bus: estimated at 2 KB.
+    assert total == (1000 * 6_600 + 2000 * 250 + 10 * 2_000) * 2
     assert shares[0].stream == "workspace.broadcast"
-    assert all(s.source == preboot.SIZE_TABLE for s in shares)
+    by = {s.stream: s.source for s in shares}
+    assert by.pop("vision.out") == preboot.SIZE_ESTIMATE
+    assert all(source == preboot.SIZE_TABLE for source in by.values())
 
 
 def test_budget_prefers_live_sizes_then_table_then_estimate():
@@ -91,7 +94,7 @@ def test_shipped_config_budget_uses_new_caps():
     cfg["modules"] = {"vision": True, "audition": True}
     _, shares = preboot.bus_budget(cfg)
     by = {s.stream: s.bytes for s in shares}
-    assert by["vision.out"] == 12000 * 40_000
+    assert by["vision.out"] == 12000 * 2_000
     assert by["audition.out"] == 12000 * 400
     assert by["workspace.broadcast"] == 100000 * 6_600
 

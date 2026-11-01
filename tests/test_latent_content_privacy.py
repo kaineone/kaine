@@ -1009,3 +1009,469 @@ async def test_build_registry_runs_the_latent_producer_check(monkeypatch):
             h.bus, {"modules": {}, "security": {"state_encryption": {"enabled": False}}}
         )
     assert seen == [registry]
+
+
+# ---------------------------------------------------------------------------
+# The bus: companion streams on the never-persisted instance (PR 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def main_bus():
+    fakeredis = pytest.importorskip("fakeredis.aioredis")
+    from kaine.bus.client import AsyncBus
+    from kaine.bus.config import BusConfig
+
+    bus = AsyncBus(BusConfig(password="x", audit_required=False), client=fakeredis.FakeRedis(decode_responses=True))
+    yield bus
+    await bus.close()
+
+
+async def _raw_entries(bus, stream: str) -> list[dict]:
+    return [dict(fields) for _eid, fields in await bus.client.xrange(stream)]
+
+
+def _vision_event(**extra) -> Event:
+    payload = {
+        "change_score": 0.31,
+        "latent": list(LATENT),
+        "peripheral": list(LATENT),
+        "foveal": list(LATENT),
+        "fovea": {"x": 0.5, "y": 0.5, "size": 0.2},
+        "nested": {"latent_derived": {"ascending_error": list(ASCENDING)}},
+    }
+    payload.update(extra)
+    return _ev("vision", "vision.report", payload)
+
+
+@pytest.mark.asyncio
+async def test_main_bus_publish_carries_no_latent_field(main_bus):
+    await main_bus.publish(_vision_event())
+    (fields,) = await _raw_entries(main_bus, "vision.out")
+    assert "companion" not in fields  # nothing declared: the latents are dropped
+    _assert_no_latent_text(fields["payload"])
+    assert json.loads(fields["payload"]) == {
+        "change_score": 0.31,
+        "fovea": {"x": 0.5, "y": 0.5, "size": 0.2},
+        "nested": {},
+    }
+
+
+@pytest.mark.asyncio
+async def test_publish_without_latents_is_unchanged(main_bus):
+    from kaine.bus.client import _encode_event
+
+    event = _ev("interoception", "interoception.report", {"wellness": 0.8, "alerts": [], "x": [1, 2]})
+    await main_bus.publish(event)
+    (fields,) = await _raw_entries(main_bus, "interoception.out")
+    assert fields == _encode_event(event)
+
+
+@pytest.mark.asyncio
+async def test_companion_join_by_entry_id(main_bus):
+    from tests._companion import attach_test_volatile
+
+    volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
+    await main_bus.publish(_vision_event())
+    (fields,) = await _raw_entries(main_bus, "vision.out")
+    _assert_no_latent_text(fields["payload"])
+    stream, _sep, entry_id = fields["companion"].rpartition(":")
+    assert stream == "vision.out.companion"
+    assert await volatile.get(stream, entry_id) is not None
+    ((_eid, event),) = await main_bus.read("vision.out")
+    assert event.companion == fields["companion"]
+    joined, ok = await main_bus.join_companion(event)
+    assert ok
+    assert joined.payload == _vision_event().payload
+    # Key order is restored too, at every depth.
+    assert json.dumps(joined.payload) == json.dumps(_vision_event().payload)
+
+
+@pytest.mark.asyncio
+async def test_companion_written_before_main_entry(main_bus):
+    from tests._companion import attach_test_volatile
+
+    volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
+    order: list[str] = []
+    real_add = volatile.add
+    real_xadd = main_bus.client.xadd
+
+    async def add(stream, values):
+        order.append("companion")
+        return await real_add(stream, values)
+
+    async def xadd(stream, fields, **kw):
+        order.append(f"main:{'companion' in fields}")
+        # The companion entry the main entry names exists already.
+        stream_c, _s, eid = fields["companion"].rpartition(":")
+        assert await volatile.get(stream_c, eid) is not None
+        return await real_xadd(stream, fields, **kw)
+
+    volatile.add = add
+    # The bus wraps the raw client; patch the raw client's xadd.
+    main_bus._client._raw.xadd = xadd
+    await main_bus.publish(_vision_event())
+    assert order == ["companion", "main:True"]
+
+
+@pytest.mark.asyncio
+async def test_failed_companion_write_loses_value_not_privacy(main_bus, caplog):
+    from tests._companion import attach_test_volatile
+
+    volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
+
+    async def refuse(stream, values):
+        raise ConnectionError("volatile down")
+
+    volatile.add = refuse
+    with caplog.at_level("ERROR", logger="kaine.bus.client"):
+        await main_bus.publish(_vision_event())
+        await main_bus.publish(_vision_event(change_score=0.4))
+    raw = await _raw_entries(main_bus, "vision.out")
+    assert len(raw) == 2
+    for fields in raw:
+        assert "companion" not in fields
+        _assert_no_latent_text(fields["payload"])
+    errors = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1  # once per stream and reason
+    assert "vision.out.companion" in errors[0] and "ConnectionError" in errors[0]
+    assert _latent_numbers_in(errors[0]) == []
+
+
+@pytest.mark.asyncio
+async def test_missing_companion_is_absent(main_bus):
+    from tests._companion import attach_test_volatile
+
+    volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
+    await main_bus.publish(_vision_event())
+    await volatile.flush()  # the volatile instance restarted
+    ((_eid, event),) = await main_bus.read("vision.out")
+    joined, ok = await main_bus.join_companion(event)
+    assert ok is False
+    assert joined is event
+    assert "latent" not in joined.payload
+    # A malformed or foreign reference is absent too, never an error.
+    assert await main_bus.companion_values("vision.out:1-0") is None
+    assert await main_bus.companion_values("nonsense") is None
+
+
+@pytest.mark.asyncio
+async def test_broadcast_carries_no_latent_field_and_no_member_copy(main_bus):
+    from tests._companion import attach_test_volatile
+
+    volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
+    snapshot = {
+        "tick_index": 1,
+        "selected": [
+            {"entry_id": "1-0", "source": "vision", "type": "vision.report", "salience": 0.9,
+             "payload": _vision_event().payload, "companion": "vision.out.companion:5-0"},
+            {"entry_id": "2-0", "source": "affect", "type": "affect.state", "salience": 0.3,
+             "payload": {"valence": 0.1}},
+        ],
+        "metadata": {"coherence": {"a": 0.4}, "workspace_feedback": {"latent_derived": {"code": list(CODE)}}},
+    }
+    await main_bus.publish_workspace(snapshot)
+    (fields,) = await _raw_entries(main_bus, "workspace.broadcast")
+    _assert_no_latent_text(fields["snapshot"])
+    stored = json.loads(fields["snapshot"])
+    assert stored["selected"][0]["payload"] == {
+        "change_score": 0.31, "fovea": {"x": 0.5, "y": 0.5, "size": 0.2}, "nested": {},
+    }
+    assert stored["selected"][0]["companion"] == "vision.out.companion:5-0"
+    assert stored["selected"][1]["payload"] == {"valence": 0.1}
+    assert stored["metadata"] == {"coherence": {"a": 0.4}, "workspace_feedback": {}}
+    # No member copy, and the metadata's tag undeclared on the broadcast: nothing
+    # was written to the volatile instance.
+    assert await volatile.client.keys("*") == []
+    assert "companion" not in fields
+
+
+@pytest.mark.asyncio
+async def test_broadcast_without_latents_is_unchanged(main_bus):
+    snapshot = {"tick_index": 2, "selected": [{"source": "a", "type": "a.b", "payload": {"x": [1, 2]}}],
+                "metadata": {"k": 1}}
+    await main_bus.publish_workspace(snapshot)
+    (fields,) = await _raw_entries(main_bus, "workspace.broadcast")
+    assert fields["snapshot"] == json.dumps(snapshot, separators=(",", ":"))
+
+
+@pytest.mark.asyncio
+async def test_language_mode_record_goes_through_the_split(main_bus):
+    from kaine.bus.schema import validate_event
+
+    await main_bus.publish_on(
+        "language.external",
+        validate_event(source="language", type="external_speech", payload={"mode": "external",
+                       "latent_derived": {"c": list(CODE)}}, salience=0.2,
+                       timestamp=datetime.now(timezone.utc)),
+    )
+    (fields,) = await _raw_entries(main_bus, "language.external")
+    assert json.loads(fields["payload"]) == {"mode": "external"}
+
+
+class _ConfigClient:
+    """A stand-in volatile client reporting chosen CONFIG values."""
+
+    def __init__(self, *, ping=True, appendonly="no", save="", requirepass="pw"):
+        self._ping = ping
+        self._values = {"appendonly": appendonly, "save": save, "requirepass": requirepass}
+
+    async def ping(self):
+        if not self._ping:
+            raise ConnectionError("down")
+        return True
+
+    async def config_get(self, key):
+        return {key: self._values[key]}
+
+    async def aclose(self):
+        pass
+
+
+def _registry(*streams):
+    from kaine.bus.companion import CompanionDeclaration, CompanionRegistry
+
+    return CompanionRegistry(declarations=[CompanionDeclaration("vision", s, "latent") for s in streams])
+
+
+@pytest.mark.asyncio
+async def test_no_producer_no_check():
+    from kaine.bus.volatile import PrivacySettings, companion_refusals
+
+    assert await companion_refusals(_registry(), None, PrivacySettings()) == []
+
+
+@pytest.mark.asyncio
+async def test_latent_producer_refused_without_volatile_bus():
+    from kaine.bus.volatile import PrivacySettings, companion_refusals
+
+    (reason,) = await companion_refusals(_registry("vision.out"), None, PrivacySettings())
+    assert "volatile bus" in reason and "KAINE_REDIS_VOLATILE_URL" in reason and "vision" in reason
+    from kaine.bus.volatile import VolatileBus
+
+    (reason,) = await companion_refusals(
+        _registry("vision.out"), VolatileBus(client=_ConfigClient(ping=False)), PrivacySettings()
+    )
+    assert "does not answer" in reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        ({"appendonly": "yes"}, "appendonly is 'yes'"),
+        ({"save": "3600 1"}, "save is '3600 1'"),
+        ({"requirepass": ""}, "requires no password"),
+    ],
+)
+async def test_latent_producer_refused_when_volatile_bus_persists(kwargs, expected):
+    from kaine.bus.volatile import PrivacySettings, VolatileBus, companion_refusals
+
+    reasons = await companion_refusals(
+        _registry("vision.out"), VolatileBus(client=_ConfigClient(**kwargs)), PrivacySettings()
+    )
+    assert len(reasons) == 1 and expected in reasons[0]
+    assert await companion_refusals(
+        _registry("vision.out"), VolatileBus(client=_ConfigClient()), PrivacySettings()
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_companion_cap_refused_above_bound():
+    from kaine.bus.volatile import PrivacySettings, VolatileBus, companion_refusals
+
+    volatile = VolatileBus(client=_ConfigClient(), per_stream_maxlen={"vision.out.companion": 100000})
+    (reason,) = await companion_refusals(_registry("vision.out"), volatile, PrivacySettings())
+    assert "vision.out.companion" in reason and "100000" in reason and "12000" in reason
+    # A lower cap is fine; a higher bound admits it.
+    assert await companion_refusals(
+        _registry("vision.out"), volatile, PrivacySettings(companion_stream_maxlen=100000)
+    ) == []
+    assert await companion_refusals(
+        _registry("vision.out"),
+        VolatileBus(client=_ConfigClient(), per_stream_maxlen={"vision.out.companion": 500}),
+        PrivacySettings(),
+    ) == []
+
+
+def test_privacy_settings_refuse_unknown_and_malformed_keys():
+    from kaine.bus.volatile import PrivacyConfigError, PrivacySettings
+
+    assert PrivacySettings.from_config({}).companion_stream_maxlen == 12000
+    assert PrivacySettings.from_config({"privacy": {"companion_stream_maxlen": 500}}).companion_stream_maxlen == 500
+    for bad in ({"latent_stream_maxlen": 1}, {"companion_stream_maxlen": 0},
+                {"companion_stream_maxlen": True}, {"companion_stream_maxlen": "12000"}):
+        with pytest.raises(PrivacyConfigError):
+            PrivacySettings.from_config({"privacy": bad})
+    with pytest.raises(PrivacyConfigError):
+        PrivacySettings.from_config({"privacy": 3})
+
+
+def test_shipped_config_privacy_table():
+    import tomllib
+    from pathlib import Path
+
+    from kaine.bus.volatile import PrivacySettings
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = tomllib.loads((root / "config" / "kaine.toml").read_text())
+    assert PrivacySettings.from_config(cfg).companion_stream_maxlen == 12000
+
+
+class _DeclaringModule:
+    name = "declarer"
+
+    @classmethod
+    def companion_declarations(cls, section):
+        from kaine.bus.companion import CompanionDeclaration
+
+        return [CompanionDeclaration("declarer", "vision.out", "latent")] if section.get("on") else []
+
+
+@pytest.mark.asyncio
+async def test_boot_declares_and_refuses_without_volatile(main_bus):
+    from kaine.boot.companions import declare_and_check
+
+    assert await declare_and_check(main_bus, [_DeclaringModule()], {"declarer": {}}) == []
+    assert main_bus.companions.declarations == ()
+    (reason,) = await declare_and_check(main_bus, [_DeclaringModule()], {"declarer": {"on": True}})
+    assert "volatile bus" in reason
+    assert main_bus.companions.declared("vision.out", "latent")
+    main_bus.attach_volatile(__import__("kaine.bus.volatile", fromlist=["x"]).VolatileBus(client=_ConfigClient()))
+    assert await declare_and_check(main_bus, [_DeclaringModule()], {"declarer": {"on": True}}) == []
+
+
+def test_shipped_modules_declare_no_latent_companion():
+    from kaine.boot.companions import config_declarations
+
+    every = {name: True for name in (
+        "vision", "audition", "interoception", "sequence", "affect", "planning",
+        "episodic_memory", "self_model", "social_cognition", "world_model", "sleep",
+        "vocal", "embodiment", "effectors", "perceptual_locus",
+    )}
+    assert [d for d in config_declarations({"modules": every}) if d.field_set == "latent"] == []
+
+
+@pytest.mark.asyncio
+async def test_preboot_volatile_rows():
+    from kaine import preboot
+    from kaine.bus.companion import CompanionDeclaration
+
+    async def none(cfg):
+        return [], []
+
+    (row,) = await preboot.check_volatile_bus({}, refusals=none)
+    assert row.status == preboot.SKIP
+
+    async def refused(cfg):
+        return ["the volatile bus persists: appendonly is 'yes', not 'no'"], [
+            CompanionDeclaration("vision", "vision.out", "latent")
+        ]
+
+    (row,) = await preboot.check_volatile_bus({}, refusals=refused)
+    assert row.status == preboot.FAIL and "appendonly" in row.detail
+
+
+def test_decommission_flushes_the_volatile_bus():
+    from kaine.lifecycle.decommission import flush_volatile_bus
+
+    class Client:
+        def __init__(self, *, up=True, flush_ok=True):
+            self.up, self.flush_ok, self.flushed = up, flush_ok, False
+
+        def ping(self):
+            if not self.up:
+                raise ConnectionError("down")
+
+        def flushdb(self):
+            if not self.flush_ok:
+                raise RuntimeError("no")
+            self.flushed = True
+
+    assert flush_volatile_bus(None, dry_run=False) == ("not configured", None)
+    c = Client()
+    assert flush_volatile_bus(c, dry_run=True) == ("would flush", None) and not c.flushed
+    assert flush_volatile_bus(c, dry_run=False) == ("flushed", None) and c.flushed
+    state, error = flush_volatile_bus(Client(up=False), dry_run=False)
+    assert state == "unreachable" and "ConnectionError" in error
+    state, error = flush_volatile_bus(Client(flush_ok=False), dry_run=False)
+    assert state == "failed" and "RuntimeError" in error
+
+
+def test_decommission_delete_marks_volatile_failure_incomplete(tmp_path):
+    from kaine.lifecycle.decommission import delete_entity_state
+
+    class Down:
+        def ping(self):
+            raise ConnectionError("down")
+
+    result = delete_entity_state(
+        state_root=tmp_path / "state", qdrant_cfg=None, dry_run=True, qdrant_absent=True,
+        volatile_client=Down(),
+    )
+    assert result.volatile_bus == "unreachable"
+    assert any("volatile bus" in e for e in result.errors)
+
+
+@pytest.mark.asyncio
+async def test_vision_novelty_and_salience_identical_without_latents(main_bus):
+    """Task 3.7: the scores of vision reports are the same whether or not the
+    main-bus payload carries the perceptual latents."""
+    from kaine.modules.vision import Vision
+    from kaine.workspace.novelty import NoveltyTracker
+    from kaine.workspace.salience import RuleBasedSalience
+    from kaine.workspace.strategies import StaticAffectModulator, StaticGoalScorer
+    from tests._companion import attach_test_volatile, joined_entries
+
+    class Enc(_VisionEncoder):
+        def __init__(self):
+            self.i = 0
+
+        async def encode(self, image):  # noqa: ARG002
+            self.i += 1
+            return [0.4 + 0.01 * (self.i % 3), 0.1, -0.3 + 0.02 * (self.i % 5), 0.2]
+
+    attach_test_volatile(main_bus, ("vision.out", "latent"))
+    vision = Vision(main_bus, encoder=Enc(), forward_prediction=True)
+    for _ in range(40):
+        await vision.process_frame(None)
+    with_latents = [ev for _eid, ev in await joined_entries(main_bus, "vision.out")]
+    without = [ev for _eid, ev in await main_bus.read("vision.out", count=1000)]
+    assert len(with_latents) == len(without) == 40
+    assert all("latent" in ev.payload for ev in with_latents)
+    assert not any(k in ev.payload for ev in without for k in ("latent", "peripheral", "foveal"))
+
+    async def scores(events):
+        sal = RuleBasedSalience(NoveltyTracker(), StaticGoalScorer(), StaticAffectModulator())
+        return [await sal.score(ev, {}) for ev in events]
+
+    assert await scores(with_latents) == await scores(without)
+
+
+@pytest.mark.asyncio
+async def test_declared_companion_without_volatile_drops_the_values(main_bus, caplog):
+    main_bus.declare_companions(
+        [__import__("kaine.bus.companion", fromlist=["x"]).CompanionDeclaration("t", "vision.out", "latent")]
+    )
+    with caplog.at_level("ERROR", logger="kaine.bus.client"):
+        await main_bus.publish(_vision_event())
+    (fields,) = await _raw_entries(main_bus, "vision.out")
+    assert "companion" not in fields
+    _assert_no_latent_text(fields["payload"])
+    assert any("no volatile bus" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_language_mode_stream_record_holds_no_latent_field(main_bus):
+    from types import SimpleNamespace
+
+    from kaine.modules.language.module import Language
+
+    fake_self = SimpleNamespace(_bus=main_bus, name="language", _baseline_salience=0.2)
+    await Language._write_mode_record(
+        fake_self, "language.internal", "internal_speech",
+        {"mode": "internal", "latent_derived": {"code": list(CODE)}},
+    )
+    (fields,) = await _raw_entries(main_bus, "language.internal")
+    assert json.loads(fields["payload"]) == {"mode": "internal"}
+    assert fields["source"] == "language" and fields["type"] == "internal_speech"
