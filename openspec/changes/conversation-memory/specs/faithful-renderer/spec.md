@@ -22,7 +22,8 @@ A conversation trace whose gist or account is withheld SHALL render as "I rememb
 The speaker phrase SHALL be:
 - "the <label>" for the configured speaker label;
 - "someone in what I was watching" for a `media:` channel of the audition module;
-- "someone in the world" for in-world chat.
+- "someone in the world" for `world:chat`;
+- "someone" for `unknown`.
 
 #### Scenario: A film voice is not the operator
 - **WHEN** a recalled utterance trace has speaker `media:playlist`
