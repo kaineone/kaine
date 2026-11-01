@@ -821,8 +821,11 @@ def test_strategy_error_carries_the_type_only(mgr: ForkManager):
 def test_mapping_naming_an_old_and_a_current_name_refused(mgr: ForkManager):
     a = _snapshot(mgr, [_vision(1)])
     b = _snapshot(mgr, [_vision(2)])
+    from kaine import legacy_names
+
+    old = next(k for k, e in legacy_names.MODULES.items() if e["new_key"] == "vision")
     with pytest.raises(ValueError, match="twice"):
-        mgr.merge(a, b, module_weights_from={"topos": "a", "vision": "b"})
+        mgr.merge(a, b, module_weights_from={old: "a", "vision": "b"})
 
 
 def test_serialize_error_marker_not_carried_into_the_merge(mgr: ForkManager):
