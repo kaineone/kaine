@@ -35,6 +35,17 @@ The episodic memory module SHALL keep a member's whole payload in the trace text
 - **WHEN** a broadcast's coalition holds a `vision.report` with `change_score` 0.25
 - **THEN** the stored trace text holds that payload after `strip_vectors`
 
+### Requirement: The playlist media file name is not stored
+The episodic memory module SHALL drop, at any depth, `item` from `vision.report` and `audition.perception` members and `faithful_rendering` from `internal_speech` and `external_speech` members, and keep the rest of their payloads. The rule SHALL live in the store's own declaration and change neither `INTERNAL_EVENT_TYPES` nor the language module's rendering.
+
+#### Scenario: A film's file name is not stored
+- **WHEN** a coalition holds a `vision.report` with `item` "episode-01.mkv" and `item_order` 1
+- **THEN** the stored trace holds `item_order` 1 and no "episode-01"
+
+#### Scenario: Own speech keeps its words without its rendering
+- **WHEN** a coalition holds `external_speech` with `text` and a `faithful_rendering` that renders an `item`
+- **THEN** the stored trace holds the `text` and no `faithful_rendering`
+
 ### Requirement: Audited own-content pairs keep only their allowlisted fields
 `kaine/faithful/episodic_own_content.py` SHALL declare, for the episodic store only, a field allowlist for each pair in the design's own-content audit; `EPISODIC_OWN_CONTENT` SHALL be `INTERNAL_EVENT_TYPES` plus those pairs. For a member of an audited pair that is not heard, the trace text SHALL hold only the fields its allowlist names whose values pass the field's rule, after `strip_vectors`; every other field SHALL be dropped.
 
