@@ -567,8 +567,9 @@ def test_stimulus_source_is_cpu_only_and_torch_free() -> None:
 def test_no_entity_state_feeds_the_stimulus_source() -> None:
     # The stimulus source is external: its only inputs are the seed, the parameters, the
     # shared stimulus source clock, the hearing stage (for the colour schedule and the
-    # hearing band) and lived time (for the maternal voice's repertoire unlocking only).
-    # Nothing from the entity's affect, workspace or modules may reach it.
+    # hearing band), lived time (for the maternal voice's repertoire unlocking only) and the
+    # added sounds, a function of the seed and slot. Nothing from the entity's affect,
+    # workspace or modules may reach it.
     import ast
     import importlib.util
     import inspect
@@ -579,8 +580,23 @@ def test_no_entity_state_feeds_the_stimulus_source() -> None:
     ]
     assert list(inspect.signature(StimulusSourceProceduralAudioStream.__init__).parameters) == [
         "self", "schedule", "params", "clock", "callback", "voice", "awake", "hearing",
-        "hearing_stage",
+        "hearing_stage", "added",
     ]
+    added_spec = importlib.util.find_spec("kaine.modules.audition.added_sounds")
+    assert added_spec is not None and added_spec.origin is not None
+    added_tree = ast.parse(Path(added_spec.origin).read_text())
+    added_imports = {
+        node.module
+        for node in ast.walk(added_tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("kaine")
+    }
+    assert added_imports <= {
+        "kaine.config",
+        "kaine.modules.audition.live",
+        "kaine.modules.audition.maternal_voice",
+        "kaine.modules.perception_prng",
+        "kaine.modules.stimulus_source_signal",
+    }
     spec = importlib.util.find_spec("kaine.modules.stimulus_source_signal")
     assert spec is not None and spec.origin is not None
     tree = ast.parse(Path(spec.origin).read_text())
