@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar, Optional
 
 from kaine.bus.client import AsyncBus
+from kaine.bus.companion import CompanionDeclaration
 from kaine.bus.schema import Event, validate_event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.oscillator import NEUTRAL_PHASE, OscillatorProtocol
@@ -41,6 +42,15 @@ class BaseModule(ABC):
     # latent rule is present, state encryption is in effect and
     # [preservation].require_encryption is true (kaine.security.latent_producer).
     produces_latent_derived: ClassVar[bool] = False
+
+    @classmethod
+    def companion_declarations(cls, section: dict[str, Any]) -> list[CompanionDeclaration]:
+        """The companion streams this module's events need, given its config
+        section (``kaine.bus.companion``): the streams whose diverted values a
+        consumer reads, each with its field set. A declaration makes the boot
+        require the never-persisted bus. Default: none, so every diverted value
+        of this module is dropped from the main bus and never kept."""
+        return []
 
     def __init__(self, bus: AsyncBus) -> None:
         self._enforce_name()
@@ -271,7 +281,12 @@ class BaseModule(ABC):
                     causal_parent=item.get("causal_parent") or None,
                 )
             except Exception:
-                log.warning("dropped malformed broadcast item: %s", item, exc_info=True)
+                # Names the member only: its payload may hold words or latents.
+                log.warning(
+                    "dropped malformed broadcast item (source %r, type %r)",
+                    item.get("source") if isinstance(item, dict) else None,
+                    item.get("type") if isinstance(item, dict) else None,
+                )
                 continue
             selected.append((str(item.get("entry_id", "")), event))
         published_at = payload.get("published_at")

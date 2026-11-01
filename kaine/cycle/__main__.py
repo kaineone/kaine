@@ -194,6 +194,11 @@ STAGE_REFUSED_EXIT = 13
 # was changed by a refusal.
 RENAME_REFUSED_EXIT = 14
 
+# Exit code when an enabled module declares companion streams (values that never
+# enter a persisted stream) and the never-persisted bus is missing, persists, or
+# a declared companion stream is capped above [privacy].companion_stream_maxlen.
+COMPANION_REFUSED_EXIT = 15
+
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
@@ -1912,6 +1917,19 @@ async def _phase_bus(ctx: BootContext) -> int | None:
     bus_config = load_bus_config()
     ctx.bus = AsyncBus(bus_config, client_name=CYCLE_CLIENT_NAME)
     await ctx.bus.audit()
+    # The never-persisted instance for companion streams, when configured; the
+    # boot refuses below when an enabled module needs it and it is missing.
+    from kaine.boot.companions import volatile_from_config
+    from kaine.bus.volatile import PrivacyConfigError
+
+    try:
+        volatile = volatile_from_config(ctx.kaine_config, client_name=CYCLE_CLIENT_NAME)
+    except PrivacyConfigError as exc:
+        sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
+        await ctx.bus.close()
+        return COMPANION_REFUSED_EXIT
+    if volatile is not None:
+        ctx.bus.attach_volatile(volatile)
 
     # Preservation config is needed by the cycle safety-net and by the welfare
     # gray-zone producer, which runs whenever the welfare response is enabled,
@@ -2075,6 +2093,21 @@ async def _phase_registry(ctx: BootContext) -> int | None:
     )
     if not len(ctx.registry):
         log.warning("no modules enabled in [modules]; cycle will run but never collect events")
+
+    # Companion streams: give the bus every enabled module's declarations and
+    # refuse before any module starts when the never-persisted bus cannot hold them.
+    from kaine.boot.companions import declare_and_check
+
+    companion_reasons = await declare_and_check(
+        ctx.bus, list(ctx.registry.all_modules()), ctx.kaine_config
+    )
+    if companion_reasons:
+        message = "refusing to start: " + "; ".join(companion_reasons)
+        log.error("%s", message)
+        sys.stderr.write(f"kaine.cycle: {message}\n")
+        await _stop_welfare_producer(ctx.welfare_producer)
+        await ctx.bus.close()
+        return COMPANION_REFUSED_EXIT
 
     # Developmental phase: keep effectors dormant until maturation. The gate_runner will
     # call activate() at maturation before unlocking the locus.

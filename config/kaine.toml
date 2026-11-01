@@ -28,16 +28,31 @@ max_connections = 1024
 # Per-stream overrides. The key is the full stream name
 # (`<module>.out` or `workspace.broadcast`). The caps give observers and the
 # research archive a long lookback: 12000 entries is about 20 minutes at 10 Hz,
-# so a restart of several minutes loses no records. A vision.out entry is about
-# 40 KB, so vision.out is the largest stream in memory. The memory these caps
-# imply is checked before boot by the "Bus budget" row of
-# `python -m kaine.preboot` against Redis maxmemory (KAINE_REDIS_MAXMEMORY).
+# so a restart of several minutes loses no records. The perceptual latents of a
+# vision report never enter the persisted bus (they travel, when a module needs
+# them, on the never-persisted instance; see [privacy]), so a vision.out entry
+# is small. The memory these caps imply is checked before boot by the "Bus
+# budget" row of `python -m kaine.preboot` against Redis maxmemory
+# (KAINE_REDIS_MAXMEMORY). A companion stream (`<stream>.companion`) may be
+# capped here too, but never above [privacy].companion_stream_maxlen.
 [bus.per_stream_maxlen]
 "workspace.broadcast" = 100000
 "vision.out" = 12000
 "audition.out" = 12000
 # The perception feed's transition outcomes: a few events per world entry.
 "perception_feed.out" = 1000
+
+[privacy]
+# Values that may never reach disk through the bus (perceptual latents and
+# latent-derived values) travel on companion streams `<stream>.companion` of a
+# second Redis instance, kaine-redis-volatile, which never persists (no
+# append-only file, no snapshots). This is the cap of every companion stream and
+# the bound on any per-stream cap set for one in [bus.per_stream_maxlen]: 12000
+# entries is about 20 minutes at the 10 Hz maximum access rate. The cycle
+# refuses to start a module that declares companion streams unless the instance
+# answers, does not persist, and every declared companion stream is capped
+# within this bound. Caps are approximate (trimmed per stream macro-node).
+companion_stream_maxlen = 12000
 
 [cycle]
 # Default cycle pacing. Benchmarked on this host (RTX 4070 SUPER): ~17 Hz tick

@@ -760,7 +760,8 @@ async def check_bus_budget(
         f"budget {_fmt_gib(budget)} (maxlen x per-entry size over {len(shares)} "
         f"streams: {n_live} sampled live, {len(shares) - n_live - len(estimated)} from "
         f"the measured table, {len(estimated)} estimated at 2 KB; "
-        f"x{BUS_BUDGET_HEADROOM_FACTOR} for AOF rewrite; largest: {largest})"
+        f"x{BUS_BUDGET_HEADROOM_FACTOR} for AOF rewrite; caps are approximate, "
+        f"trimmed per stream macro-node; largest: {largest})"
     )
 
     if probe_error is not None:
@@ -1218,9 +1219,107 @@ async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
     ]
 
 
+async def check_volatile_bus(
+    config: dict[str, Any],
+    *,
+    refusals: Optional[Callable[[dict[str, Any]], Awaitable[tuple[list[str], list[Any]]]]] = None,
+    maxmemory_probe: Optional[Callable[[dict[str, Any]], Awaitable[int]]] = None,
+) -> list[CheckResult]:
+    """The never-persisted bus: the boot's companion check, then its budget.
+
+    "Volatile bus" FAILs with the boot's own reasons when an enabled module
+    declares companion streams and the instance is missing, persists or caps a
+    companion stream above ``[privacy].companion_stream_maxlen``; SKIP when no
+    module declares one. "Volatile bus budget" compares the declared companion
+    streams' caps times their per-entry sizes (no AOF, so no rewrite headroom)
+    with the instance's ``maxmemory``.
+    """
+    from kaine.boot.companions import preboot_refusals, volatile_from_config
+    from kaine.bus.companion import companion_stream
+    from kaine.bus.config import typical_companion_bytes
+
+    name = "Volatile bus"
+    runner = refusals or preboot_refusals
+    try:
+        reasons, declarations = await asyncio.wait_for(runner(config), BUS_PROBE_TIMEOUT_S)
+    except Exception as exc:
+        return [
+            CheckResult(
+                GROUP_RESOURCES, name, FAIL,
+                f"could not check the volatile bus ({type(exc).__name__}: {exc})",
+            )
+        ]
+    if not declarations:
+        return [
+            CheckResult(
+                GROUP_RESOURCES, name, SKIP,
+                "no enabled module declares a companion stream",
+            )
+        ]
+    streams = sorted({companion_stream(d.stream) for d in declarations})
+    if reasons:
+        return [
+            CheckResult(
+                GROUP_RESOURCES, name, FAIL,
+                "the boot would refuse: " + "; ".join(reasons),
+            )
+        ]
+    results = [
+        CheckResult(
+            GROUP_RESOURCES, name, PASS,
+            f"reachable, not persisted, {len(streams)} companion streams within the cap",
+        )
+    ]
+    volatile = volatile_from_config(config)
+    caps = {s: (volatile.cap_for(s) if volatile is not None else 0) for s in streams}
+    budget = sum(caps[s] * typical_companion_bytes(s) for s in streams)
+    largest = ", ".join(
+        f"{s} {_fmt_gib(caps[s] * typical_companion_bytes(s))}"
+        for s in sorted(streams, key=lambda s: caps[s] * typical_companion_bytes(s), reverse=True)[:3]
+    )
+    try:
+        if maxmemory_probe is not None:
+            maxmemory = int(await maxmemory_probe(config))
+        else:
+            reply = await volatile.client.config_get("maxmemory")
+            maxmemory = int(str((reply or {}).get("maxmemory")).strip())
+    except Exception as exc:
+        results.append(
+            CheckResult(
+                GROUP_RESOURCES, "Volatile bus budget", WARN,
+                f"could not read the volatile bus maxmemory ({type(exc).__name__}); "
+                f"budget {_fmt_gib(budget)} ({largest}); make sure "
+                "KAINE_REDIS_VOLATILE_MAXMEMORY is at least the budget",
+            )
+        )
+        return results
+    finally:
+        if volatile is not None:
+            await volatile.close()
+    basis = (
+        f"budget {_fmt_gib(budget)} over {len(streams)} companion streams "
+        f"(caps are approximate, trimmed per stream macro-node; largest: {largest}) "
+        f"vs maxmemory {_fmt_gib(maxmemory)}"
+    )
+    if maxmemory <= 0:
+        status, detail = WARN, f"maxmemory is 0 (no limit); {basis}; set KAINE_REDIS_VOLATILE_MAXMEMORY"
+    elif budget > maxmemory:
+        status, detail = FAIL, (
+            f"{basis}: the companion streams would fill the volatile bus and halt the "
+            "entity; raise KAINE_REDIS_VOLATILE_MAXMEMORY (compose/.env)"
+        )
+    elif budget > BUS_BUDGET_WARN_FRACTION * maxmemory:
+        status, detail = WARN, f"{basis}: above {BUS_BUDGET_WARN_FRACTION:.0%} of the cap"
+    else:
+        status, detail = PASS, basis
+    results.append(CheckResult(GROUP_RESOURCES, "Volatile bus budget", status, detail))
+    return results
+
+
 async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
-    """The RESOURCES group: the bus budget row, then the disk-free rows."""
+    """The RESOURCES group: the bus budget rows, then the disk-free rows."""
     results = await check_bus_budget(config)
+    results.extend(await check_volatile_bus(config))
     results.extend(await check_old_streams(config))
     results.extend(check_storage(config))
     results.extend(check_disk(config))

@@ -128,6 +128,45 @@ services:
       KAINE_REDIS_PASSWORD: ${KAINE_REDIS_PASSWORD:?KAINE_REDIS_PASSWORD must be set (see compose/.env.example)}
     logging: *default-logging
 
+  # ---- the never-persisted bus: companion streams only ----------------------
+  # Holds the values that never enter a persisted stream (perceptual latents and
+  # latent-derived values; see kaine/bus/companion.py). No append-only file, no
+  # snapshots and no volume: it exists only in memory and is lost when it stops.
+  # No host port: it is reached only on the compose network, by service name.
+  # The cycle refuses to start a module that declares companion streams unless
+  # this instance answers, requires its password, reports appendonly no and an
+  # empty save, and caps every companion stream within
+  # [privacy].companion_stream_maxlen.
+  kaine-redis-volatile:
+    image: redis:7.2-alpine
+    container_name: kaine-redis-volatile
+    command:
+      - redis-server
+      - --requirepass
+      - ${KAINE_REDIS_VOLATILE_PASSWORD:?KAINE_REDIS_VOLATILE_PASSWORD must be set (see compose/.env.example)}
+      - --appendonly
+      - "no"
+      - --save
+      - ""
+      # Its own memory ceiling (default 2gb), checked by the preboot "Volatile bus
+      # budget" row; noeviction: a full instance fails loud, never drops silently.
+      - --maxmemory
+      - ${KAINE_REDIS_VOLATILE_MAXMEMORY:-2gb}
+      - --maxmemory-policy
+      - noeviction
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'redis-cli -a "$$KAINE_REDIS_VOLATILE_PASSWORD" ping | grep PONG'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    environment:
+      KAINE_REDIS_VOLATILE_PASSWORD: ${KAINE_REDIS_VOLATILE_PASSWORD:?KAINE_REDIS_VOLATILE_PASSWORD must be set (see compose/.env.example)}
+    logging: *default-logging
+
   kaine-qdrant:
     image: qdrant/qdrant:v1.19.1
     container_name: kaine-qdrant
@@ -333,6 +372,8 @@ services:
       # load_bus_config honours KAINE_REDIS_URL over the toml host/port, so this
       # redirects the bus for the containerized cycle without editing that config.
       KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
+      # The never-persisted companion-stream instance, by service name only.
+      KAINE_REDIS_VOLATILE_URL: redis://:${KAINE_REDIS_VOLATILE_PASSWORD}@kaine-redis-volatile:6379/0
       KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
       # Encryption-at-rest key (design §7); empty unless the operator sets it.
@@ -397,6 +438,8 @@ services:
     depends_on:
       kaine-redis:
         condition: service_healthy
+      kaine-redis-volatile:
+        condition: service_healthy
       kaine-qdrant:
         condition: service_healthy
     # DELIBERATELY no restart policy on kaine-cycle: an entity process never
@@ -443,6 +486,8 @@ services:
       # load_bus_config honours KAINE_REDIS_URL over the toml host/port, so this
       # redirects the bus for the containerized cycle without editing that config.
       KAINE_REDIS_URL: redis://:${KAINE_REDIS_PASSWORD}@kaine-redis:6379/0
+      # The never-persisted companion-stream instance, by service name only.
+      KAINE_REDIS_VOLATILE_URL: redis://:${KAINE_REDIS_VOLATILE_PASSWORD}@kaine-redis-volatile:6379/0
       KAINE_QDRANT_API_KEY: ${KAINE_QDRANT_API_KEY:?KAINE_QDRANT_API_KEY must be set (see compose/.env.example)}
       KAINE_MODEL_SERVER_API_KEY: ${KAINE_MODEL_SERVER_API_KEY:-}
       # Encryption-at-rest key (design §7); empty unless the operator sets it.
@@ -481,6 +526,8 @@ services:
       - kaine-studies:/app/studies
     depends_on:
       kaine-redis:
+        condition: service_healthy
+      kaine-redis-volatile:
         condition: service_healthy
       kaine-qdrant:
         condition: service_healthy
