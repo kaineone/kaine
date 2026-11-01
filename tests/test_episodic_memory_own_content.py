@@ -533,8 +533,8 @@ def test_allowlisted_numeric_lists_are_short_or_reviewed():
 
 def test_strip_vectors_runs_on_the_allowlist_branch(monkeypatch):
     """A rule that would admit a vector still cannot put one in a trace."""
-    import kaine.modules.episodic_memory.module as episodic_module
     from kaine.faithful.episodic_own_content import ListOf, Number
+    from kaine.modules.episodic_memory import module as episodic_module
 
     pair = ("planning", "planning.vectorish")
     monkeypatch.setitem(
@@ -883,7 +883,7 @@ def test_every_field_a_module_fills_from_a_media_title_is_media_metadata():
 
 def test_serializer_membership_is_episodic_own_content(monkeypatch):
     """The store decides "keep a payload" from EPISODIC_OWN_CONTENT alone."""
-    import kaine.modules.episodic_memory.module as episodic_module
+    from kaine.modules.episodic_memory import module as episodic_module
 
     declared = ("vision", "vision.report")
     audited = ("planning", "planning.belief")
