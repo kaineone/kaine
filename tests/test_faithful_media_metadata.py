@@ -268,3 +268,23 @@ def test_heard_redaction_hands_no_template_the_media_file_name(felt):
     assert "hello there" not in line
     chat = _ev("embodiment", "embodiment.chat", {"message": "hi", "item": FILM})
     assert MARK not in (fn(chat) or "")
+
+
+def test_heard_redaction_strips_before_a_template_that_would_print_everything():
+    """The strip in ``redact_heard_speech`` itself, with a template and a
+    fallback that print the whole payload."""
+    from kaine.faithful.templates import redact_heard_speech
+
+    def _print_all(payload):
+        return str(payload)
+
+    templated = _ev("vision", "vision.report", {**VISION, "heard_text": "hello there"})
+    line = redact_heard_speech(
+        templated,
+        templates={("vision", "vision.report"): _print_all},
+        fallback=lambda s, t, p: str(p),
+    )
+    assert line is not None and MARK not in line and "item_order" in line
+    untemplated = _ev("mystery", "mystery.report", {"item": FILM, "heard_text": "hello there"})
+    line = redact_heard_speech(untemplated, templates={}, fallback=lambda s, t, p: str(p))
+    assert line is not None and MARK not in line
