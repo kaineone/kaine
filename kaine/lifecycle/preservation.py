@@ -51,6 +51,7 @@ from kaine.lifecycle.identity import (
     check_sidecar_agrees,
     identity_of_snapshot,
 )
+from kaine.lifecycle.latent_strip import strip_module_states
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.storage import resolve
 
@@ -272,6 +273,10 @@ async def preserve_live(
         elif module_states[module.name].get("adapters"):
             adapters = list(module_states[module.name]["adapters"])
 
+    # No captured state keeps a latent field (the latent rule). The strip never
+    # refuses the preservation; the metadata names any module it had to strip.
+    module_states, latent_meta = strip_module_states(module_states, capture="preservation")
+
     snap = ForkSnapshot(
         parent_id=None,
         label=label or f"preservation:{reason}",
@@ -292,6 +297,7 @@ async def preserve_live(
                 if identity_unreadable is not None
                 else {}
             ),
+            **latent_meta,
         },
     )
     # Snapshot json+encrypt+write is synchronous disk/crypto work; run it off the

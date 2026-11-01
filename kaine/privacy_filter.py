@@ -301,22 +301,35 @@ def without_latent_derived(value: Any) -> Any:
     (tuples stay tuples). The perceptual latents are left in place; this is the
     narrower strip for a payload that still travels on the bus.
     """
-    return _without_key(value, LATENT_DERIVED_KEY)
+    return _without_keys(value, _LATENT_DERIVED_ONLY)
 
 
-def _without_key(value: Any, key: str) -> Any:
+def without_latent_fields(value: Any) -> Any:
+    """``value`` with every key in ``LATENT_FIELDS`` removed at any depth, copy
+    on write like ``without_latent_derived``: when no mapping holds such a key
+    the very same object is returned, and nothing else (numpy arrays included)
+    is converted. This is the strip for module states, whose learned
+    parameters must come back exactly as they went in."""
+    return _without_keys(value, LATENT_FIELDS)
+
+
+_LATENT_DERIVED_ONLY: frozenset[str] = frozenset({LATENT_DERIVED_KEY})
+
+
+def _without_keys(value: Any, keys: frozenset[str]) -> Any:
     if isinstance(value, Mapping):
-        changed = key in value
+        changed = False
         out: dict[Any, Any] = {}
         for k, v in value.items():
-            if k == key:
+            if k in keys:
+                changed = True
                 continue
-            nv = _without_key(v, key)
+            nv = _without_keys(v, keys)
             changed = changed or nv is not v
             out[k] = nv
         return out if changed else value
     if isinstance(value, (list, tuple)):
-        items = [_without_key(item, key) for item in value]
+        items = [_without_keys(item, keys) for item in value]
         if all(a is b for a, b in zip(items, value)):
             return value
         return items if isinstance(value, list) else tuple(items)

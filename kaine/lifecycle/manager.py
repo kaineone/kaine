@@ -27,6 +27,7 @@ from kaine.lifecycle.identity import (
     read_identity_sidecar,
     write_identity_sidecar,
 )
+from kaine.lifecycle.latent_strip import strip_module_states
 from kaine.lifecycle.snapshot import (
     ARTIFACTS_DIRNAME,
     ForkSnapshot,
@@ -112,6 +113,20 @@ def _self_model_state_name(modules: dict[str, Any]) -> str | None:
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
     return name if isinstance(name, str) and name else None
+
+
+# The longest exception message a snapshot's ``_serialize_error`` record keeps.
+SERIALIZE_ERROR_MESSAGE_LIMIT = 200
+
+
+def _serialize_error_text(exc: BaseException) -> str:
+    """The exception type and at most ``SERIALIZE_ERROR_MESSAGE_LIMIT``
+    characters of its message."""
+    try:
+        message = str(exc)
+    except Exception:
+        message = "<message unavailable>"
+    return f"{type(exc).__name__}: {message[:SERIALIZE_ERROR_MESSAGE_LIMIT]}"
 
 
 class ForkManager:
@@ -203,9 +218,14 @@ class ForkManager:
             try:
                 modules[module.name] = copy.deepcopy(module.serialize())
             except Exception as exc:
-                log.warning("module %s serialize failed: %s", module.name, exc)
-                modules[module.name] = {"_serialize_error": str(exc)}
+                # An exception message can format any value, a latent included,
+                # so the record and the log keep its type and a short message.
+                error = _serialize_error_text(exc)
+                log.warning("module %s serialize failed: %s", module.name, error)
+                modules[module.name] = {"_serialize_error": error}
+        modules, latent_meta = strip_module_states(modules, capture="fork snapshot")
         snap_meta = dict(metadata or {})
+        snap_meta.update(latent_meta)
         if identity is not None:
             snap_meta["identity"] = identity.to_dict()
         if identity_unreadable is not None:

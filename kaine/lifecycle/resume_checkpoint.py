@@ -21,6 +21,8 @@ Some fields of a self-persisting module are not held in its own file, so the che
 them instead; for example, it carries the self_model drift_count.
 A module whose serialize() raises or returns a non-dict is omitted from that checkpoint and
 starts fresh on a plain restart; the omission is recorded in metadata.
+Every captured state passes the latent strip (``kaine.lifecycle.latent_strip``): a latent field
+is removed and the module named in metadata under ``latent_stripped``.
 After a revive, any checkpoint written before the revive is ignored so old pre-revive state is
 not restored; this guard uses a small revive record file.
 """
@@ -40,6 +42,7 @@ from typing import Any, Callable
 
 from kaine.lifecycle import stage as _stage
 from kaine.lifecycle.identity import EntityIdentity, identity_of_snapshot
+from kaine.lifecycle.latent_strip import strip_module_states
 from kaine.lifecycle.snapshot import ForkSnapshot
 from kaine.security.crypto import get_state_encryptor
 from kaine.storage import resolve
@@ -162,6 +165,10 @@ def capture_checkpoint(
 
         modules[name] = state
 
+    # No checkpointed state keeps a latent field (the latent rule), so a
+    # crash-recovery restart never reloads one.
+    modules, latent_meta = strip_module_states(modules, capture="resume checkpoint")
+
     metadata = {
         "kind": CHECKPOINT_KIND,
         "version": CHECKPOINT_VERSION,
@@ -170,6 +177,7 @@ def capture_checkpoint(
         "awake_seconds": awake_seconds,
         "excluded_modules": sorted(SELF_PERSISTING_MODULES),
         "omitted_modules": sorted(omitted),
+        **latent_meta,
     }
 
     return ForkSnapshot(label="resume-checkpoint", modules=modules, adapters=[], metadata=metadata)
