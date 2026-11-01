@@ -144,7 +144,12 @@ def test_language_and_episodic_memory_use_the_one_rule():
 
 def test_internal_event_types_have_one_home():
     assert language_context.INTERNAL_EVENT_TYPES is external_input.INTERNAL_EVENT_TYPES
-    assert episodic_module.INTERNAL_EVENT_TYPES is external_input.INTERNAL_EVENT_TYPES
+    # The episodic store decides from EPISODIC_OWN_CONTENT, which holds the same
+    # declared pairs plus its own audited ones (kaine.faithful.episodic_own_content).
+    from kaine.faithful import episodic_own_content
+
+    assert episodic_module.EPISODIC_OWN_CONTENT is episodic_own_content.EPISODIC_OWN_CONTENT
+    assert external_input.INTERNAL_EVENT_TYPES <= episodic_module.EPISODIC_OWN_CONTENT
     # The language module's list, unchanged by the move (its layout digest hashes it).
     assert external_input.INTERNAL_EVENT_TYPES == frozenset(
         {

@@ -25,7 +25,7 @@ The episodic memory module SHALL classify each coalition member with the shared 
 - **THEN** the stored trace holds that member as heard with no payload
 
 ### Requirement: Only declared own-content types keep their payload in a trace
-The episodic memory module SHALL keep a coalition member's payload in the trace text only when its `(source, type)` is in `INTERNAL_EVENT_TYPES` (`kaine/faithful/external_input.py`, the list the language module's notes use) and the member is not heard. A member of any other type, known or unknown, SHALL be stored as `source:type=<unclassified omitted>`. `embodiment.visual.raw` SHALL keep `<raw-perceptual omitted>`, and a replay from the episodic memory module SHALL keep `<replay of {memory_id}>`.
+The episodic memory module SHALL keep a member's whole payload in the trace text only when its `(source, type)` is in `INTERNAL_EVENT_TYPES` (`kaine/faithful/external_input.py`) and the member is not heard, and part of it only for an audited pair (next requirement). Any other type SHALL be stored as `source:type=<unclassified omitted>`; `embodiment.visual.raw` keeps `<raw-perceptual omitted>` and this module's replay `<replay of {memory_id}>`.
 
 #### Scenario: An instant message under an adapter's own type is not stored
 - **WHEN** a broadcast's coalition holds `embodiment.im` with payload `{"message": "hello there"}`
@@ -35,12 +35,72 @@ The episodic memory module SHALL keep a coalition member's payload in the trace 
 - **WHEN** a broadcast's coalition holds a `vision.report` with `change_score` 0.25
 - **THEN** the stored trace text holds that payload after `strip_vectors`
 
+### Requirement: The playlist media file name is not stored
+The episodic memory module SHALL drop, at any depth, every field in `MEDIA_METADATA_FIELDS` (`kaine/faithful/media_metadata.py`: `item`, the playlist media file name) from every declared member, and `faithful_rendering` from `internal_speech` and `external_speech` members, and keep the rest of their payloads. Neither rule SHALL change `INTERNAL_EVENT_TYPES`.
+
+#### Scenario: A film's file name is not stored
+- **WHEN** a coalition holds a `vision.report` with `item` "episode-01.mkv" and `item_order` 1
+- **THEN** the stored trace holds `item_order` 1 and no "episode-01"
+
+#### Scenario: Own speech keeps its words without its rendering
+- **WHEN** a coalition holds `external_speech` with `text` and a `faithful_rendering` that renders an `item`
+- **THEN** the stored trace holds the `text` and no `faithful_rendering`
+
+### Requirement: Audited own-content pairs keep only their allowlisted fields
+`kaine/faithful/episodic_own_content.py` SHALL declare, for the episodic store only, a field allowlist for each pair in the design's own-content audit; `EPISODIC_OWN_CONTENT` SHALL be `INTERNAL_EVENT_TYPES` plus those pairs. For a member of an audited pair that is not heard, the trace text SHALL hold only the fields its allowlist names whose values pass the field's rule, after `strip_vectors`; every other field SHALL be dropped.
+
+#### Scenario: A belief keeps its label and numbers
+- **WHEN** a broadcast's coalition holds `planning.belief` with `statement` `salience_high`, `kind`, `frequency` and `confidence`
+- **THEN** the stored trace text holds those four fields
+
+#### Scenario: An exception message is not stored
+- **WHEN** a coalition member is `planning.error` whose `error_reason` quotes "meet me at 12 Elm Street"
+- **THEN** the stored trace holds `elapsed_ms`, `num_factors` and `num_actions` and no "Elm Street"
+
+#### Scenario: A field the producer adds later is dropped
+- **WHEN** a member of an audited pair carries a field `message` that its allowlist does not name
+- **THEN** the stored trace holds the member's allowlisted fields and no `message`
+
+#### Scenario: A value outside its field's rule is dropped
+- **WHEN** a `perceptual_locus.denied` member's `requested` is a sentence rather than a locus
+- **THEN** the stored trace holds `reason` and no `requested`
+
+#### Scenario: The heard rule runs first
+- **WHEN** a member of an audited pair carries a non-empty `heard_text` field
+- **THEN** the stored trace holds `source:type=<heard omitted>`
+
+### Requirement: The allowlist rules admit no free text and leave the organ's layout alone
+No field rule SHALL admit a string outside a fixed set of values, a trace-id format or a token of at most 64 characters from `[A-Za-z0-9_.:-]`. No allowlist SHALL name a heard-text field or a field the audit classed as heard-derived. The language module SHALL NOT read the declaration, and it SHALL change neither `INTERNAL_EVENT_TYPES` nor the prompt layout digest.
+
+#### Scenario: A sentence in a token field is dropped
+- **WHEN** a `social_cognition.agent_model` member's `agent_label` is "Alice Smith"
+- **THEN** the stored trace holds no `agent_label`
+
+#### Scenario: The organ's layout is unchanged
+- **WHEN** the declaration is imported
+- **THEN** `layout_digest()` is `76f99c859fe8b7bb` and `INTERNAL_EVENT_TYPES` holds the same 18 pairs
+
 ### Requirement: Existing stores can be checked for heard text without reading it out
-A read-only maintainer tool SHALL report, for a sqlite-vec store, a Qdrant store, fork snapshots and preservation bundles, how many traces it read, how many hold a member that may carry heard text (an external-input member with a payload, a heard-text field, an undeclared type's text, or an unreadable payload holding a string) and the ids of those traces. It SHALL print no trace text and SHALL change none of the files or stores it reads.
+A read-only maintainer tool SHALL report, for sqlite-vec and Qdrant stores, fork snapshots and preservation bundles, how many traces it read, how many hold a member that may carry heard text (an external-input member with a payload, a heard-text field, text in an undeclared type or outside an audited pair's allowlist, or an unreadable payload holding a string) and those traces' ids. It SHALL print no trace text and change nothing it reads.
+
+#### Scenario: An audited pair's current trace is clean
+- **WHEN** a trace holds a `planning.belief` member whose every field passes its rule
+- **THEN** the tool does not flag it, and it flags a legacy `planning.error` member that kept `error_reason` text
 
 #### Scenario: A legacy chat trace is reported by id only
 - **WHEN** a store holds a trace written before the heard rule with an `embodiment.chat` member holding "hello there"
 - **THEN** the report counts it, names its id, and contains no "hello there", and the store's files are unchanged
+
+### Requirement: Intent logs can be checked for the media file name without reading it out
+The read-only maintainer tool SHALL, given an intent log, count the records in which any string holds a rendered `item=` or an `item` value, and report them by record id (or line number) and by record field, with no record text. It SHALL count lines it cannot decrypt or parse and report such a log as an error, never as clean. It SHALL change nothing it reads.
+
+#### Scenario: A numeric-mode record from before the fix
+- **WHEN** an intent log holds a record whose `prompt` renders `item=episode-01.mkv`
+- **THEN** the report counts it under `intent_log:prompt`, names its record id, and holds no "episode-01"
+
+#### Scenario: A log read without its key
+- **WHEN** an encrypted intent log is scanned without the state key or with the wrong key
+- **THEN** the report counts its unreadable lines, sets an error, and the tool exits 2
 
 ### Requirement: New traces store their members
 Each trace stored after this change SHALL carry `members`: for each coalition member its `source`, `type`, `accessed`, `intensity` and `fields`, the payload keys the felt renderer declares for that type, after `strip_vectors`. Traces stored before this change SHALL NOT be rewritten.

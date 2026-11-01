@@ -1505,6 +1505,9 @@ backend = "qdrant"            # or "inmemory" for tests / minimal deployments
 collection = "social_cognition_agents"
 # Operator-set speaker label. Default "operator" for single-partner v1.
 # Speaker diarization (paper §10) will expand this to per-speaker labels.
+# The label is stored as written in the entity's episodic traces (as the agent
+# id and label) and travels with preservation bundles: use a role such as
+# "operator", never a person's name.
 speaker_label = "operator"
 # Channels whose voices are attributed to the operator. Audio from any other
 # channel is modelled as media:<channel>; the action selection module only answers these channels.

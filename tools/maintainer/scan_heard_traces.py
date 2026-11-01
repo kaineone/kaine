@@ -19,6 +19,16 @@ Sources:
 * ``--fork-root DIR``: every fork snapshot under a fork root (``state/forks``).
 * ``--bundle DIR``: a preservation bundle directory (``bundle.tar.enc``,
   ``bundle.tar`` or the loose layout).
+* ``--intent-log PATH``: a language-module intent log (a ``.jsonl`` file, or a
+  directory whose ``*.jsonl`` files are read), decrypted in memory. Only the
+  ``media_item`` check applies: a record is flagged when a string anywhere in
+  it holds a rendered ``item=`` or an ``'item': '...'`` repr, and it is
+  reported by its ``record_id`` (or its line number) and the record field.
+  An unreadable line (no state key, the wrong key, a damaged line) is
+  counted, and any unreadable line makes the source an error (exit 2): a log
+  the tool cannot read is not reported clean. A file name the organ repeated
+  in its own words cannot be told apart from its other words and is not
+  detected.
 * ``--qdrant-host HOST``: a running Qdrant store, read by scrolling payloads
   without vectors; the API key is read from the environment variable named by
   ``--qdrant-api-key-env`` (default ``QDRANT_API_KEY``).
@@ -34,9 +44,16 @@ A member is flagged as:
   under the shared heard rule (``kaine.faithful.external_input``);
 * ``undeclared_text``: a member of a type outside ``INTERNAL_EVENT_TYPES``
   whose payload holds any non-empty string, which could be heard words under
-  another field name;
+  another field name, unless the type has a field allowlist
+  (``kaine.faithful.episodic_own_content``) and every field of the payload is
+  allowlisted and passes its rule;
 * ``unparsed``: a member whose payload could not be read back and holds a
-  quoted string, counted on the safe side.
+  quoted string, counted on the safe side;
+* ``media_item``: a declared member (in practice ``vision.report`` or
+  ``audition.perception``) that kept ``item``, the playlist media file name
+  (``kaine.faithful.media_metadata``), or an own-speech member whose
+  ``faithful_rendering`` holds a rendered ``item=`` (the store now drops both;
+  ``kaine.faithful.episodic_own_content``).
 
 A flagged member is reported by its ``source:type`` only when the code names
 that pair (the declared own-content types, the felt renderer's templates, the
@@ -73,6 +90,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from kaine.faithful.episodic_own_content import (  # noqa: E402
+    EPISODIC_FIELD_ALLOWLISTS,
+    allowlisted_payload,
+    declared_fields_dropped,
+)
 from kaine.faithful.external_input import (  # noqa: E402
     EXTERNAL_INPUT_TYPES,
     INTERNAL_EVENT_TYPES,
@@ -93,7 +115,7 @@ _CONTENT_FREE_PREFIXES = (
 # after the " | " separator.
 _MEMBER_HEADER = re.compile(r"(?:^|(?<= \| ))([A-Za-z0-9_]+):([A-Za-z0-9_.]+)=")
 
-CATEGORIES = ("external_input", "heard_field", "undeclared_text", "unparsed")
+CATEGORIES = ("external_input", "heard_field", "undeclared_text", "unparsed", "media_item")
 
 
 @dataclass
@@ -106,12 +128,14 @@ class SourceReport:
     by_category: dict[str, int] = field(default_factory=lambda: {c: 0 for c in CATEGORIES})
     by_member_type: dict[str, int] = field(default_factory=dict)
     flagged_ids: list[str] = field(default_factory=list)
+    unreadable: int = 0
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "traces": self.traces,
+            "unreadable": self.unreadable,
             "flagged": self.flagged,
             "by_category": dict(self.by_category),
             "by_member_type": dict(sorted(self.by_member_type.items())),
@@ -147,6 +171,40 @@ _HEARD_FIELD_REPR = re.compile(
 )
 
 
+# A media file name a legacy trace kept: ``item`` with a non-empty string in a
+# payload repr, or ``item=`` in a fallback rendering inside faithful_rendering.
+_MEDIA_ITEM_REPR = re.compile(r"['\"]item['\"]\s*:\s*(?:'\s*[^'\s]|\"\s*[^\"\s])")
+_RENDERED_ITEM = re.compile(r"(?<![\w])item=(?!none\b)\S")
+
+
+def _has_media_item(source: str, type_: str, payload: Any) -> bool:
+    """True when a declared member kept a field the store now drops and that
+    field could name a media file: ``item`` itself, or an ``item=`` rendered
+    into an own-speech ``faithful_rendering``."""
+    denied = declared_fields_dropped(source, type_)
+    if "item" in denied and any(
+        isinstance(v, str) and v.strip() for v in _values_under(payload, "item")
+    ):
+        return True
+    if "faithful_rendering" in denied:
+        return any(
+            isinstance(v, str) and _RENDERED_ITEM.search(v)
+            for v in _values_under(payload, "faithful_rendering")
+        )
+    return False
+
+
+def _values_under(value: Any, key: str) -> Iterator[Any]:
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if k == key:
+                yield v
+            yield from _values_under(v, key)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            yield from _values_under(v, key)
+
+
 def classify_member(source: str, type_: str, value: str) -> str | None:
     """Return the flag category of one member, or None when it holds no heard text."""
     stripped = value.strip()
@@ -164,13 +222,23 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
         event = SimpleNamespace(source=source, type=type_, payload=payload)
         if heard_texts(event):
             return "heard_field"
-        if not declared and any(iter_text_leaves(payload)):
+        if declared:
+            return "media_item" if _has_media_item(source, type_, payload) else None
+        if allowlisted_payload(source, type_, payload) == payload:
+            # Every field is allowlisted for this type and passes its rule.
+            return None
+        if any(iter_text_leaves(payload)):
             return "undeclared_text"
         return None
     # The payload could not be read back: decide on the safe side.
     if declared:
         if source != "language" and _HEARD_FIELD_REPR.search(stripped):
             return "unparsed"
+        denied = declared_fields_dropped(source, type_)
+        if "item" in denied and _MEDIA_ITEM_REPR.search(stripped):
+            return "media_item"
+        if "faithful_rendering" in denied and _RENDERED_ITEM.search(stripped):
+            return "media_item"
         return None
     if "'" in stripped or '"' in stripped:
         return "unparsed"
@@ -183,11 +251,11 @@ UNDECLARED_TYPE = "<undeclared type>"
 
 def _known_pairs() -> frozenset[tuple[str, str]]:
     """Every (source, type) pair the code itself names: the declared own-content
-    types, the felt renderer's templates, the external-input types and the two
-    store markers' types."""
+    types and field-allowlisted pairs, the felt renderer's templates, the
+    external-input types and the two store markers' types."""
     from kaine.faithful.felt import FELT_TEMPLATES
 
-    pairs = set(INTERNAL_EVENT_TYPES) | set(FELT_TEMPLATES)
+    pairs = set(INTERNAL_EVENT_TYPES) | set(EPISODIC_FIELD_ALLOWLISTS) | set(FELT_TEMPLATES)
     pairs |= {(t.split(".", 1)[0], t) for t in EXTERNAL_INPUT_TYPES}
     pairs |= {("embodiment", "embodiment.visual.raw"), ("episodic_memory", "episodic_memory.replay")}
     return frozenset(pairs)
@@ -247,7 +315,91 @@ def scan_traces(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
     return report
 
 
+# Intent-log record fields reported by name; any other field is reported under
+# one fixed label, so a key can never echo content.
+INTENT_LOG_FIELDS = frozenset(
+    {
+        "prompt",
+        "faithful_rendering",
+        "numeric_rendering",
+        "generated_text",
+        "extra",
+        "snapshot_summary",
+        "about_values",
+    }
+)
+_RECORD_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _holds_rendered_item(value: Any) -> bool:
+    return any(
+        _RENDERED_ITEM.search(text) or _MEDIA_ITEM_REPR.search(text)
+        for text in iter_text_leaves(value)
+    ) or any(
+        isinstance(v, str) and v.strip() for v in _values_under(value, "item")
+    )
+
+
+def scan_intent_log(source: str, records: Iterable[tuple[str, Any]]) -> SourceReport:
+    """Scan ``(record position, record)`` pairs of an intent log for the media
+    file name. Reports counts, field names and record ids only."""
+    report = SourceReport(source=source)
+    for position, record in records:
+        if record is UNREADABLE:
+            report.unreadable += 1
+            continue
+        report.traces += 1
+        if not isinstance(record, dict):
+            continue
+        fields = sorted(
+            (key if key in INTENT_LOG_FIELDS else "<other field>")
+            for key, value in record.items()
+            if _holds_rendered_item(value)
+        )
+        if not fields:
+            continue
+        record_id = record.get("record_id")
+        shown = record_id if isinstance(record_id, str) and _RECORD_ID.fullmatch(record_id) else position
+        report.flagged += 1
+        report.flagged_ids.append(str(shown))
+        for name in fields:
+            report.by_category["media_item"] += 1
+            label = f"intent_log:{name}"
+            report.by_member_type[label] = report.by_member_type.get(label, 0) + 1
+    if report.unreadable:
+        # Fail closed: an encrypted log read without (or with the wrong) state
+        # key is not clean. Counts only; a line's content is never shown.
+        report.error = (
+            f"{report.unreadable} unreadable line(s) in {source} "
+            "(no state key, the wrong key, or a damaged line)"
+        )
+    return report
+
+
 # --- readers (read-only) ------------------------------------------------------
+
+# Marks an intent-log line that could not be decrypted or parsed.
+UNREADABLE = object()
+
+
+def intent_log_records(path: Path) -> Iterator[tuple[str, Any]]:
+    """Yield ``(position, record)`` for every line of an intent log file, or of
+    every ``*.jsonl`` file in a directory, decrypted in memory; a line that
+    cannot be decrypted or parsed yields ``UNREADABLE``."""
+    from kaine.persistence.encrypted_jsonl import iter_records
+
+    if path.is_dir():
+        files = sorted(p for p in path.glob("*.jsonl") if p.is_file())
+    elif path.is_file():
+        files = [path]
+    else:
+        raise FileNotFoundError(f"no such intent log: {path}")
+    for file in files:
+        for n, line in enumerate(iter_records(file), start=1):
+            if line.unreadable:
+                yield f"{file.name}:line {n}", UNREADABLE
+                continue
+            yield f"{file.name}:line {n}", line.record
 
 
 def sqlite_traces(path: Path) -> Iterator[tuple[str, str]]:
@@ -357,9 +509,9 @@ def default_collection_prefixes() -> tuple[str, ...]:
     return (CURRENT_COLLECTION_PREFIX, *old)
 
 
-def _scan(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
+def _scan(source: str, traces: Iterable[Any], scanner=None) -> SourceReport:
     try:
-        return scan_traces(source, traces)
+        return (scanner or scan_traces)(source, traces)
     except Exception as exc:  # the exception type and the source only: a message could quote its input
         report = SourceReport(source=source)
         report.error = f"{type(exc).__name__} reading {source}"
@@ -372,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot", type=Path, action="append", default=[])
     parser.add_argument("--fork-root", type=Path, action="append", default=[])
     parser.add_argument("--bundle", type=Path, action="append", default=[])
+    parser.add_argument("--intent-log", type=Path, action="append", default=[])
     parser.add_argument("--qdrant-host")
     parser.add_argument("--qdrant-port", type=int, default=6533)
     parser.add_argument("--qdrant-api-key-env", default="QDRANT_API_KEY")
@@ -383,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="print one JSON object")
     args = parser.parse_args(argv)
-    if args.snapshot or args.fork_root or args.bundle:
+    if args.snapshot or args.fork_root or args.bundle or args.intent_log:
         install_state_key()
 
     reports: list[SourceReport] = []
@@ -396,6 +549,10 @@ def main(argv: list[str] | None = None) -> int:
         reports.append(_scan(f"snapshot:{path}", snapshot_file_traces(path)))
     for bundle in args.bundle:
         reports.append(_scan(f"bundle:{bundle}", bundle_traces(bundle)))
+    for log_path in args.intent_log:
+        reports.append(
+            _scan(f"intent_log:{log_path}", intent_log_records(log_path), scan_intent_log)
+        )
     if args.qdrant_host:
         prefixes = tuple(args.collection_prefix or default_collection_prefixes())
         api_key = os.environ.get(args.qdrant_api_key_env) or None
@@ -414,7 +571,8 @@ def main(argv: list[str] | None = None) -> int:
         for r in reports:
             if r.error:
                 print(f"{r.source}: ERROR {r.error}")
-                continue
+                if not r.traces:
+                    continue
             print(f"{r.source}: {r.traces} traces, {r.flagged} flagged")
             for category in CATEGORIES:
                 if r.by_category[category]:

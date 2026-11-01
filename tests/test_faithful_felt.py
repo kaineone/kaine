@@ -356,8 +356,10 @@ def test_numeric_renderer_unchanged():
     assert renderer.render_event(affect) == (
         "Affect state: arousal 0.35, dominance 0, valence 0.1. Drives: boredom 0.85, curiosity 0.3. Emotion: neutral."
     )
+    # audition.perception has a numeric template (it used to fall back to every
+    # field, the playlist media file name included).
     assert renderer.render_event(audition) == (
-        "audition emitted audition.perception carrying change_score=0.12, energy_dbfs=-30.5, normalised_error=3.4."
+        "Audition via unknown encoder reports change 0.12, prediction error none."
     )
     assert renderer.render_event(embodiment) == (
         "embodiment emitted embodiment.chat carrying text=hello 42."
