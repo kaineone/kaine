@@ -1,14 +1,21 @@
 ## ADDED Requirements
 
 ### Requirement: Sources are declared as content-free descriptors
-With `[perceptual_sources].enabled = true`, boot SHALL build a registry from the `[perceptual_sources.sources.<id>]` tables. Each source SHALL declare an `id`, a `kind`, its modalities with shape and rate, a `locus_class` of `physical` or `virtual`, a `privacy_class`, a `provenance`, `entity_selectable`, and an optional paired `body`. A modality a source does not list SHALL be treated as declared absent.
+With `[perceptual_sources].enabled = true`, boot SHALL build a registry from the `[perceptual_sources.sources.<id>]` tables. Each source SHALL declare an `id`, a `kind`, its modalities with shape and rate, a `provenance`, `entity_selectable`, and an optional paired `body`. A modality a source does not list SHALL be treated as declared absent.
 
 #### Scenario: A missing modality is declared absent
 - **WHEN** a `mujoco` source lists only a `video` modality
 - **THEN** its audio modality is declared absent, and the descriptor in the run manifest says so
 
+### Requirement: The locus and privacy classes come from the kind
+A source's `locus_class` and `privacy_class` SHALL be derived from its `kind` by one table in code: `device` and `scalar` are `physical` and `operator_room`; `screen` is `physical` and `operator_desktop`; `programme`, `mujoco`, `stream`, `network_media` and `world` are `virtual`. A configured `locus_class` or `privacy_class` SHALL refuse boot.
+
+#### Scenario: A device declared virtual
+- **WHEN** a `device` source is configured with `locus_class = "virtual"`
+- **THEN** boot refuses, naming the source and the rule that classes come from the kind
+
 ### Requirement: Invalid source configurations refuse boot
-Boot SHALL refuse with a named configuration error on an unknown kind, a missing required field, a duplicate id, an absent initial source, `[perception_feed].mode` set to `live` or `screen` while the registry is on, or a source of privacy class `operator_desktop` marked `entity_selectable`.
+Boot SHALL refuse with a named configuration error on an unknown kind, a missing required field, a duplicate id, an absent initial source, a fallback other than the programme, `[perception_feed].mode` set to `live` or `screen` while the registry is on, or a `screen` source marked `entity_selectable`.
 
 #### Scenario: A screen source cannot be made selectable
 - **WHEN** a `screen` source is configured with `entity_selectable = true`
@@ -40,11 +47,15 @@ While a source other than the programme is selected, the playlist clock SHALL be
 - **THEN** the programme continues where it stopped, and its end-of-programme preservation is requested when perceived programme time reaches its length
 
 ### Requirement: A device source opens its devices by identity
-A `device` source SHALL identify its camera by a `/dev/v4l/by-id` name or a sysfs-name substring, and its microphone by a sounddevice name substring. An index SHALL be accepted only with `allow_index = true`.
+A `device` source SHALL identify its camera by a `/dev/v4l/by-id` name or a sysfs-name substring, and its microphone by a sounddevice name substring. An index SHALL be accepted only with `allow_index = true`. At each open it SHALL resolve the identity to `/dev/videoN`, re-read the node's `bus_info` and `card`, refuse if they differ from the bound identity, and open the resolved node.
 
 #### Scenario: Re-plugged camera
 - **WHEN** the configured camera is unplugged and plugged into another port
-- **THEN** the source finds it again by its by-id name, whatever its new node number
+- **THEN** the source finds it again by its by-id name, resolves its new node, and opens that node
+
+#### Scenario: A different device on the old node
+- **WHEN** between resolution and open another device takes the resolved node
+- **THEN** the open is refused, and no other device is opened
 
 ### Requirement: A device source accepts only real capture nodes
 Discovery SHALL accept only a node whose `VIDIOC_QUERYCAP` device capabilities include video capture. It SHALL refuse a node whose driver is `v4l2 loopback` unless `allow_loopback = true`, in which case the descriptor's provenance SHALL be `recorded`.
@@ -58,32 +69,46 @@ Discovery SHALL accept only a node whose `VIDIOC_QUERYCAP` device capabilities i
 - **THEN** the device source is not available, and the reason says it is a loopback
 
 ### Requirement: A device source fails closed
-Availability SHALL be polled at least every 2 s and SHALL be one of `available`, `absent`, `busy`, `no_access` or `not_capture`. A source that is not `available` SHALL NOT be opened, no other device SHALL be substituted for it, and each refusal message SHALL state what the operator can do.
+Availability SHALL be polled at least every 2 s and SHALL be one of `available`, `absent`, `busy`, `no_access` or `not_capture`. `busy` SHALL be detected by a pre-open check that requests capture buffers and reads `EBUSY`. The poller SHALL NOT run that check on the node the entity holds. A source that is not `available` SHALL NOT be opened, no other device SHALL be substituted, and each refusal SHALL state what the operator can do.
 
 #### Scenario: The camera is held by another program
-- **WHEN** opening the capture node fails with EBUSY
-- **THEN** the source is `busy`, nothing is opened, and the message says another program holds the camera
+- **WHEN** another program is streaming from the camera
+- **THEN** the pre-open check reads `EBUSY`, the source is `busy`, nothing is opened, and the message says another program holds the camera
 
 ### Requirement: A device source discards the camera's warm-up
-On each open, a device source SHALL discard frames until the mean luminance changes by less than 2% between consecutive frames for 5 frames, or until 60 frames have been discarded, and SHALL record the number of discarded frames. No discarded frame SHALL reach the vision module.
+On each open a device source SHALL discard at least 10 frames, then discard frames until the mean luminance exceeds an absolute floor and changes by less than 2% between consecutive frames for 5 frames, or until 60 frames have been discarded, and SHALL record the number discarded. No discarded frame SHALL reach the vision module.
 
 #### Scenario: Auto-exposure settling
 - **WHEN** the camera's brightness rises over its first 20 frames
 - **THEN** the vision module receives its first frame only after the brightness has settled, and the record states how many frames were discarded
 
-### Requirement: Losing the selected source returns the entity to its fallback
-When the selected source stays `absent` or `busy` for longer than `[perceptual_sources].loss_grace_s` (default 10 s), the registry SHALL select `[perceptual_sources].fallback` (default the programme) through the operator path, recorded with `by = "source_lost"`, and SHALL publish the change. A returning source SHALL NOT be reselected automatically.
+### Requirement: Losing the selected source returns the entity to the programme
+When the selected source stays `absent` or `busy` for longer than `[perceptual_sources].loss_grace_s` (default 10 s), the registry SHALL select the programme through the operator path, recorded with `by = "source_lost"`, and SHALL publish the change. If the programme has ended, the end-of-programme path SHALL apply. A returning source SHALL NOT be reselected automatically.
 
 #### Scenario: The webcam is unplugged
 - **WHEN** the selected webcam is unplugged and does not return within the grace period
 - **THEN** the programme is selected with `by = "source_lost"`, and the welfare observer receives the event
 
 ### Requirement: The MuJoCo source renders headless on the planned card
-A `mujoco` source SHALL render its body's named camera with `MUJOCO_GL=egl` on the EGL device that matches the configured card by PCI bus id. It SHALL refuse at boot when EGL is unavailable or the mapping does not match, and SHALL NOT fall back to a display-bound backend. Boot SHALL measure the render's memory and time per frame on that card and SHALL refuse past the configured limit.
+A `mujoco` source SHALL render with `MUJOCO_GL=egl` on the EGL device whose PCI address, found through the CUDA or DRM device attribute, equals the vision encoder's device. It SHALL refuse at boot when EGL is unavailable or no device matches, SHALL NOT fall back to a display-bound backend, and SHALL refuse past the configured limit on the render's measured memory and time per frame.
 
 #### Scenario: No EGL
 - **WHEN** EGL cannot be initialised
 - **THEN** boot refuses, naming the `mujoco` source and the missing backend
+
+### Requirement: One thread owns the simulated world
+The simulated world's physics stepping, scene update and rendering SHALL run on one owner thread, which holds the GL context, and every other reader or writer SHALL reach the world through requests to that thread.
+
+#### Scenario: Reads from the capture loop
+- **WHEN** the capture loop requests frames from several worker threads
+- **THEN** every render runs on the owner thread, and no `EGL_BAD_ACCESS` occurs
+
+### Requirement: A world whose body cannot move is not offered to the entity
+A `mujoco` source with a paired body SHALL be `available` only when `embodiment_built()` is true. Before that it MAY be configured as a passive view, which SHALL never be entity-selectable.
+
+#### Scenario: Before the driving loop exists
+- **WHEN** the simulated body exists and the driving loop does not
+- **THEN** the source is not available to the entity
 
 ### Requirement: The simulated world steps on entity time and waits while away
 The simulated world SHALL step on entity time, and SHALL hold while its source is not selected and while sleep or a freeze holds the clock. The `mujoco` source SHALL declare no audio modality.
@@ -121,18 +146,18 @@ The sensor processor SHALL publish `sensor.report` with the source id, the predi
 - **THEN** the processor publishes no value for that tick and does not adapt its forward model on it
 
 ### Requirement: No source persists sense data, and records hash device identities
-No source SHALL write a frame, audio sample or sensor reading to disk or to the bus. The run manifest SHALL carry each descriptor only when the registry is on. Records and events SHALL carry device identities only as a 16-hex SHA-256 prefix. The availability and selection events SHALL carry only `source_id`, `state`, `reason_label`, `by` and `epoch`, and the research-event allowlist SHALL list exactly those fields. The static zero-persistence test SHALL cover every file of this capability.
+No source SHALL write a frame, audio sample or sensor reading to disk or to the bus. The run manifest SHALL carry each descriptor only when the registry is on. Records and events SHALL carry device identities only as a 16-hex prefix of an HMAC-SHA-256 keyed by a per-install key. Availability and selection events SHALL carry only `source_id`, `state`, `reason_label`, `by` and `epoch`, and the research allowlist SHALL list exactly those.
 
 #### Scenario: A camera's serial number
 - **WHEN** the device source binds a camera whose by-id name contains its serial number
-- **THEN** no record, event or log line contains the by-id name, and the manifest carries its hash
+- **THEN** no record, event or log line contains the by-id name, and the manifest carries its keyed hash
 
-### Requirement: An operator-room source is selectable only by the operator's recorded opt-in
-A source of privacy class `operator_room` SHALL default to `entity_selectable = false`. When the operator configuration sets it true, the run manifest SHALL record the opt-in as a label with its date. The entity's choice of it SHALL still pass every switching gate.
+### Requirement: Room sources need a second, per-modality approval
+A source of privacy class `operator_room` SHALL open a modality only when the environment approval `KAINE_OPERATOR_ROOM_APPROVED` lists it (`camera`, `microphone`), and SHALL be entity-selectable only when the source sets `entity_selectable = true` and the approval lists `entity_select`. Each approval SHALL be recorded in the run manifest as a label with its date.
 
-#### Scenario: The reference host's webcam
-- **WHEN** the operator configuration sets `entity_selectable = true` for the webcam source
-- **THEN** the manifest records the operator's opt-in, and an entity switch to the webcam is evaluated by the arbiter's gates
+#### Scenario: Camera approved, microphone not
+- **WHEN** the approval lists `camera` and `entity_select` but not `microphone`
+- **THEN** the room camera may open, the room microphone stays closed, and the source is entity-selectable
 
 ### Requirement: Networked sources and bodies declare their egress
 A source or body adapter that opens a network connection SHALL declare each endpoint: a label, a scheme, a host or `tailnet:<tag>`, a port or range, a direction, and its outbound data classes from the closed set `none`, `protocol_control`, `gamepad_state`, `avatar_action` and `own_speech_text`. A networked adapter without a declaration SHALL refuse boot.
@@ -141,12 +166,12 @@ A source or body adapter that opens a network connection SHALL declare each endp
 - **WHEN** a world adapter that opens a connection is configured with no `egress` list
 - **THEN** boot refuses, naming the adapter
 
-### Requirement: Connections are checked against the declaration at runtime
-Each networked adapter SHALL connect only through an egress gate built from its declaration, and only to the address the gate resolved and checked. An undeclared host, port or direction SHALL be refused, logged with the endpoint label and raised as an operator advisory. Every such client SHALL pass `trust_env=False`.
+### Requirement: Each networked adapter runs behind a network boundary
+Each networked adapter SHALL run in its own process behind a boundary that allows only its declared endpoints: either a network-less sandbox that receives sockets KAINE opened after checking them, or a dedicated user with an outbound allowlist. Boot SHALL run escape probes from inside each boundary and SHALL refuse unless an undeclared address fails and a declared endpoint succeeds. Every client SHALL pass `trust_env=False`.
 
 #### Scenario: A redirect to another host
-- **WHEN** a media stream's server redirects the client to an undeclared host
-- **THEN** the connection is refused, and the operator sees the advisory
+- **WHEN** a media server, tested through the real FFmpeg path, redirects to an undeclared host
+- **THEN** the connection does not leave the boundary, and the operator sees the advisory
 
 ### Requirement: Only declared data classes cross an egress
 An adapter's send path SHALL accept only the typed messages of its declared outbound classes. No outbound class SHALL exist for sense data, latents, memories, internal state or operator data.
@@ -161,3 +186,31 @@ Network-capable code for sources and bodies SHALL live only in adapter packages 
 #### Scenario: An organ URL on the internet
 - **WHEN** the language organ's URL resolves to a globally routable address
 - **THEN** boot refuses, naming the module and the URL's label
+
+### Requirement: A failed state read resolves to the programme, never to the room
+With the registry on, a missing, corrupt or unknown `source`, an unreadable desired-state file, a missing key, or a failed pre-sleep read SHALL resolve to the programme source, and SHALL never resolve to a physical source.
+
+#### Scenario: A corrupt desired-state file
+- **WHEN** `state/perceptual_locus/desired.json` cannot be parsed while the webcam is entity-selectable
+- **THEN** the programme is selected, and no camera or microphone opens
+
+### Requirement: Capture loops follow an explicit epoch state machine
+Each capture loop SHALL hold the epoch of its open source, cleared on release. The desired reader SHALL return false while an open source's epoch differs from the current one, false for a modality the selected source declares absent, and the selected source's desire otherwise. On an epoch change every physical surface SHALL close before any virtual surface opens.
+
+#### Scenario: From the webcam to the simulation
+- **WHEN** the selected source changes from the webcam to the simulated world
+- **THEN** the room camera and microphone report closed before the simulated camera opens, and the audio loop does not retry an open while the simulation is selected
+
+### Requirement: A switch flushes the clip ring and the audio windows
+On each epoch change vision's clip ring and audition's windows SHALL be cleared, and no report SHALL be emitted until they refill.
+
+#### Scenario: No mixed clip
+- **WHEN** the selected source changes
+- **THEN** no clip contains frames of both sources
+
+### Requirement: The operator route offers screen capture only by explicit opt-in
+With the registry on, the operator source route SHALL offer a `screen` source only when `[perception_feed.screen].operator_opt_in = true`.
+
+#### Scenario: No opt-in
+- **WHEN** a `screen` source is registered without the opt-in
+- **THEN** the operator route does not offer it

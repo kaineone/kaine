@@ -70,7 +70,7 @@ So each source needs a declared identity, modalities, rate, privacy class and pr
 8. **Declared egress.**
    - The CTO clarified on 2026-11-01 that the no-cloud rule covers KAINE's modules using cloud services. It does not restrict where perceived streams come from, or where the entity's outputs go.
    - So a source or body adapter that reaches a network declares each endpoint and the closed classes of data it may send there.
-   - Its connections are checked against that declaration at runtime, and anything undeclared is refused.
+   - Each networked adapter runs in its own process behind a network boundary that allows only its declared endpoints: a network-less sandbox given checked sockets, or a dedicated user with an outbound allowlist. Escape probes at boot prove it.
    - Module internals stay no-cloud. The proxy guard of `local-service-clients` (#400) stays, and a boot check refuses a public address for any module-internal service URL.
 9. **Zero persistence, extended to every new source.**
    - No frame, sample or reading is written anywhere.
@@ -99,7 +99,9 @@ None. Selection among sources by the entity, and the locus contract, are `percep
   - `kaine/evaluation/observers/research_event_observer.py` (availability events in the allowlist).
   - `kaine/dashboard/perception.py` (the source list and availability, read-only).
   - `config/kaine.toml` (`[perceptual_sources]`, off).
-  - A new `kaine/egress.py` (the declaration and the runtime gate), and an extension of the guard test `tests/test_local_clients_ignore_proxies.py`.
+  - A new `kaine/egress.py` (the declaration, the sandbox arguments, the generated nftables allowlist, the escape probes), and an extension of the guard test `tests/test_local_clients_ignore_proxies.py`.
+  - `Dockerfile` (`libegl1` with the glvnd NVIDIA ICD) and `compose/kaine.yml` (graphics driver capability, both GPUs mapped, the resolved device nodes).
+  - `kaine/perception_state.py` and `kaine/modules/sleep/module.py`: fail to the programme, never to the room, with the registry on.
 - **Dependencies.** None new for the programme and device sources. MuJoCo is already installed. Adding it to `pyproject.toml` as an optional extra (`sim`, `mujoco==3.16.0`, Apache-2.0) needs the CTO's OK, as every new dependency does.
 - **Docs.**
   - New `docs/09-modules/perceptual-sources.md`.

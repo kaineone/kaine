@@ -17,24 +17,43 @@
 - [ ] 2.2 The programme source and the `away` holder on the playlist clock. Tests: extend the playlist clock tests (holder combination, end of programme unchanged).
 - [ ] 2.3 Off equals absent: a seeded, entity-free harness digest against a golden captured on origin/main. Test: `tests/test_perceptual_sources_disabled_identity.py`.
 - [ ] 2.4 Availability and selection events, and the research-event allowlist. Tests: allowlist exactness, plus no device identity in any event.
+- [ ] 2.5 Classes derived from the kind; a configured class refused. Tests: a device declared virtual refused; a screen source made selectable refused.
+- [ ] 2.6 Fail to the programme. Tests: a corrupt file, a missing key, an unknown id and a failed sleep read each resolve to the programme, and no device opens.
+- [ ] 2.7 The epoch state machine, physical surfaces closing first, and the clip-ring and audio-window flush. Tests: release clears the epoch; an absent modality does not loop on open; no clip mixes two sources.
+- [ ] 2.8 Fallback validation: the programme only, with an ended programme going through the end-of-programme path.
 
 ## 3. Device source (one PR)
 
-- [ ] 3.1 Discovery by by-id name, sysfs name and sounddevice name; the `VIDIOC_QUERYCAP` capture check through `fcntl`; loopback refusal; the availability states and their operator messages. Tests: a fake sysfs tree and ioctl. A real-loopback test (the OBS camera) runs in the slow lane.
-- [ ] 3.2 Warm-up settling, with the discarded-frame count. Tests: a synthetic brightening stream.
+- [ ] 3.1 Discovery by by-id name, sysfs name and sounddevice name.
+  - The `VIDIOC_QUERYCAP` capture check through `fcntl`.
+  - Resolution to `/dev/videoN` with the `bus_info`/`card` re-check before open.
+  - The `REQBUFS` busy check, skipped on the held node.
+  - Loopback refusal, and the availability states with their operator messages.
+  - Tests: a fake sysfs tree and ioctl. A real-loopback test (the OBS camera) runs in the slow lane.
+- [ ] 3.2 Warm-up settling (a 10-frame minimum, a luminance floor, the 60-frame cap) with the discarded-frame count. Tests: a synthetic brightening stream, and a near-black start that must not settle early.
 - [ ] 3.3 Loss and fallback through the operator path. Tests: unplug simulation, grace period, no automatic reselection.
 - [ ] 3.4 Container passthrough. The preflight resolves the by-id node and the ALSA card into the cycle service (`devices`, `group_add`), names the hot-plug limit, and refuses a missing device with a clear message. Tests: the preflight's generated override for a fake device.
-- [ ] 3.5 The zero-persistence static test extended to the new files, and identity hashing in the manifest. Test: `tests/test_zero_persistence_invariant.py`.
+- [ ] 3.5 The zero-persistence static test extended to the new files, and keyed (HMAC) identity hashing with the per-install key. Test: `tests/test_zero_persistence_invariant.py`.
+- [ ] 3.5a The room approval `KAINE_OPERATOR_ROOM_APPROVED` per part (`camera`, `microphone`, `entity_select`), recorded in the manifest. Tests: the microphone refused while the camera is allowed; no `entity_select`, so not entity-selectable.
 - [ ] 3.6 An entity-free check on the real webcam and the USB microphone on a branch: open, settle, hot-plug, busy. No frames kept.
 
 ## 4. MuJoCo source (with `virtual-world-body` stage 1)
 
-- [ ] 4.1 `SimWorld`, the EGL renderer on the configured card with the PCI-bus mapping, the resource-limit check, stepping on entity time, and the hold. Tests: headless render shape, hold equality, refusal without EGL.
+- [ ] 4.1 `SimWorld` with one owner thread for physics, scene update and rendering.
+  - The EGL device chosen by PCI address through the CUDA or DRM attribute.
+  - The resource-limit check through NVML graphics processes or the used-memory delta.
+  - Stepping on entity time with a wall-rate cap, and the hold.
+  - Tests: headless render shape; renders requested from pool threads all run on the owner thread; hold equality; refusal without EGL or without a matching device.
+- [ ] 4.1a The container: `libegl1` with the glvnd NVIDIA ICD in the `Dockerfile`, the graphics driver capability and both GPUs in `compose/kaine.yml`. Test: the preflight's check inside the image.
+- [ ] 4.1b A `mujoco` source with a body available only when `embodiment_built()` is true; passive views never entity-selectable; the advisory for a long stretch in a source with an absent modality.
 - [ ] 4.2 The declared-absent audio, and the welfare observer's `modality_absent`. Tests: no silent-sensor advisory while the simulation is selected.
 
 ## 5. Declared egress (one PR, before any networked source or body)
 
-- [ ] 5.1 `kaine/egress.py`: the declaration, the closed outbound classes, the `EgressGate` with resolve-then-check, refusals logged and raised as advisories. Tests: an undeclared host, a port outside the range, a redirect to another host, a direction mismatch.
+- [ ] 5.1 `kaine/egress.py`: the declaration and the closed outbound classes.
+  - The two boundaries: a bubblewrap `--unshare-net` sandbox with passed sockets, and a per-adapter user with a generated nftables allowlist that the operator installs.
+  - Escape probes at boot.
+  - Tests: an undeclared host, a port outside the range, a direction mismatch, and a redirect through the real FFmpeg path against a local redirecting server.
 - [ ] 5.2 Typed send paths, with a static check that a send signature accepts only declared message types.
 - [ ] 5.3 The guard test's placement rule: sockets, websockets, or URL opens by PyAV or OpenCV outside declared adapter packages are refused. Exercise each rule with a throwaway probe file, as #400 did.
 - [ ] 5.4 The boot check that module-internal service URLs are not globally routable. Tests: loopback, compose, tailnet and private addresses pass; a public address refuses.

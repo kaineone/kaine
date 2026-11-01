@@ -37,28 +37,57 @@ Non-goals:
 | `id` | operator-chosen, `[a-z][a-z0-9_]*` | stable identity across runs; the contextual cue for per-source models |
 | `kind` | `programme`, `device`, `mujoco`, `stream` (built in `virtual-world-body`), `network_media` (later), `world` (later), `scalar` (future), `screen` | what builds the surfaces |
 | `modalities` | `video` {width, height, rate_hz}, `audio` {sample_rate, channels, block_ms}, `scalar` {channels: name, unit, lo, hi, rate_hz} | what the source delivers; a modality not listed is declared absent |
-| `locus_class` | `physical`, `virtual` | which side of the physical XOR virtual invariant it is on |
-| `privacy_class` | `operator_room`, `operator_desktop`, `confined_world`, `shared_world` (other people are present, as in an online world), `public_media`, `curated_media`, `synthetic` | what it can see of the operator's life, or of other people's |
+| `locus_class` | `physical`, `virtual`. **Derived from `kind` in code; configuration cannot set it** (review PS-1) | which side of the physical XOR virtual invariant it is on |
+| `privacy_class` | `operator_room`, `operator_desktop`, `confined_world`, `shared_world` (other people are present, as in an online world), `public_media`, `curated_media`, `synthetic`. **Derived from `kind` in code** | what it can see of the operator's life, or of other people's |
 | `provenance` | `live`, `recorded`, `synthetic`, `simulated` | whether it is perception of now or a recording |
 | `entity_selectable` | bool | whether the entity may choose it |
 | `body` | optional adapter name | the body that acts in this source's world |
 | `egress` | optional list of declared endpoints (D9) | where the source or its body may connect, and what it may send there |
 
-Only `id`, `kind`, the declared shapes and rates, the classes and a hash of any device identity enter the run manifest and the records.
+Only `id`, `kind`, the declared shapes and rates, the classes and a keyed hash of any device identity enter the run manifest and the records.
+
+The classes come from the kind (review PS-1, PM decision). A table in code is the only place that maps kind to class, and a configured `locus_class` or `privacy_class` key refuses boot.
+
+| `kind` | `locus_class` | `privacy_class` |
+|---|---|---|
+| `programme` | `virtual` | `curated_media`, or `synthetic` for the seeded and stimulus-source feeds |
+| `device` | `physical` | `operator_room` |
+| `screen` | `physical` | `operator_desktop` |
+| `scalar` | `physical` | `operator_room` |
+| `mujoco` | `virtual` | `confined_world` |
+| `stream` | `virtual` | `confined_world` when the launcher has verified a confined host session (`virtual-world-body` D7); otherwise refused |
+| `network_media` | `virtual` | `public_media` |
+| `world` | `virtual` | `shared_world` |
+
+So a device source can never run under the virtual locus, and a screen source can never be anything but `operator_desktop`.
 
 ### D2. The registry wraps today's paths
 
 - `[perceptual_sources].enabled = false` ships. Off, boot runs the code of today, unchanged, and no registry object exists.
 - On:
   - Boot builds the registry from `[perceptual_sources.sources.<id>]` tables.
-  - It validates each table: an unknown kind, a missing required field, a duplicate id, or a `screen` source marked `entity_selectable` is a named boot refusal.
+  - It validates each table. Each of these is a named boot refusal:
+    - an unknown kind;
+    - a missing required field;
+    - a duplicate id;
+    - a configured `locus_class` or `privacy_class`, since both are derived from the kind;
+    - a `screen` source (kind `screen`, class `operator_desktop`) marked `entity_selectable`;
+    - a `fallback` other than the programme.
   - The registry gives the vision module and the audition module one *switching* factory each. It keeps the existing signatures: `source_factory(device, *, width, height)` (`kaine/modules/vision/live.py:301-310`) and `stream_factory(*, device, sample_rate, channels, frames_per_block, callback)` (`kaine/boot/perception_feed.py:724-...`).
   - On each open, the switching factory delegates to the selected source's own factory.
 - Switching uses the loop that exists:
   - The capture loops close when their desired reader turns false and reopen when it turns true (`live.py:256-276`).
   - The registry keeps a `source_epoch`, bumped on every change of selected source.
-  - The desired reader returns false while the open source's epoch differs from the current one, so the loop closes the old source and opens the new one within one poll interval (250 ms).
   - No new thread and no second capture loop.
+- **The epoch state machine** (review PS-8). Each capture loop has an `open_epoch`, which is `None` while nothing is open.
+  - Opening sets `open_epoch` to the current epoch. `release()` clears it to `None`.
+  - The desired reader returns false while `open_epoch` is set and differs from the current epoch: the loop closes. When nothing is open, the reader returns the selected source's desire for that modality, so the loop reopens.
+  - The reader returns false for a modality the selected source declares absent, so the loop does not retry an open every poll.
+  - Tests cover both.
+- **The physical side closes first** (review PLS-13). On an epoch change, every physical surface (camera, microphone) must report closed before any virtual surface opens. A barrier on the epoch enforces it, so the room's microphone is never open beside the simulated camera.
+- **Flush on every switch** (review PS-9).
+  - Vision's 16-frame clip ring (`clip_len = 16`, `clip_stride = 3`; `config/kaine.toml:524-533`) and audition's windows are cleared on each epoch change, and no report is emitted until the ring refills, as on first start.
+  - Otherwise the first clips after a switch would mix two worlds: for about 1.6 s, the room and the simulation encoded in one latent, scored against and trained into the new context, with a room frame encoded under the virtual locus.
 - `[perception_feed].mode = "live"` or `"screen"` together with an enabled registry is a boot refusal: the registry owns device and screen sources. `off`, `seeded`, `playlist` and `stimulus_source` are wrapped by the programme source.
 
 ### D3. The programme source
@@ -87,6 +116,10 @@ Decisions:
 
 1. **Identity, not index.**
    - `video` is a `/dev/v4l/by-id` name, a sysfs-name substring, or, as a last resort, an index.
+   - OpenCV cannot open the by-id symlink. The review's probe failed with CAP_V4L2 and with the default backend, while `/dev/video1` opened (PS-4). So at each open the source:
+     - resolves the identity to `/dev/videoN` (`os.path.realpath` for by-id);
+     - re-reads `VIDIOC_QUERYCAP`'s `bus_info` and `card` just before opening, and refuses if they differ from the bound identity, so that a re-plug between resolution and open cannot substitute another device;
+     - passes the resolved node to `cv2.VideoCapture(node, cv2.CAP_V4L2)`.
    - `audio` is a sounddevice name substring, which `LiveMicConfig.device` already accepts (`kaine/modules/audition/live.py:57`).
    - Indexes shift on re-plug and are refused unless `allow_index = true`.
 2. **Capture-capable nodes only.**
@@ -104,10 +137,16 @@ Decisions:
    - An absent initial source is a named boot refusal that names the source id and the state.
    - A source that is not `available` cannot be selected. Its refusal reason is the state.
    - A different device is never substituted.
-   - `busy` (EBUSY on open or stream-on: only one process can hold a V4L2 capture node) and `no_access` (EACCES) each give a message that says what to do: close the other program, or check the seat ACL or group.
+   - `busy` and `no_access` (EACCES) each give a message that says what to do: close the other program, or check the seat ACL or group.
+   - **Detecting `busy`.** OpenCV cannot tell `busy` from absent: a second concurrent open returned `isOpened() == False` with no errno (review probe, PS-5). So before opening, the source runs its own pre-open check:
+     - `os.open(node, O_RDWR)`, which succeeds on a held UVC node;
+     - then `VIDIOC_REQBUFS` with one MMAP buffer, which fails with `EBUSY` while another process streams;
+     - then frees the buffers with a count of 0, and closes.
+   - The 2 s availability poller never runs that check on the node the entity currently holds. It reports that node as `available (held)`.
 6. **Warm-up.**
    - The capture loop discards three warm-up frames today (`LiveCameraConfig.warmup_frames`). That is too few for this camera.
-   - A device source settles instead. It discards frames until the mean luminance changes by less than 2% between consecutive frames for 5 frames, capped at 60 frames.
+   - A device source settles instead. It discards at least 10 frames. It then discards further frames until the mean luminance is above an absolute floor (16 of 255) and changes by less than 2% between consecutive frames for 5 frames. The cap is 60 frames (review PS-14: a near-black start could otherwise "settle").
+   - A room that stays dark past the cap is perceived as dark. That is the world.
    - The darkness of a camera starting up is the device's artefact, not the world's. Leaving it in would add a burst of prediction error the world did not cause.
    - The readout records the settle frame count per open.
    - Other sources settle in 0 frames.
@@ -122,17 +161,24 @@ Decisions:
    - PipeWire would also need the user session's PipeWire socket inside the cycle's container.
    - Recommendation: direct V4L2 through the existing OpenCV path. A PipeWire camera source is a later kind (`device_pipewire`), worth building only if the operator wants the camera in use by both the entity and another program at once.
 9. **Containers.**
-   - The compose cycle has no device passthrough today (`compose/kaine.yml:320-413`).
+   - The compose cycle has no device passthrough today (`compose/kaine.yml:320-413`), and it gets one GPU with `capabilities: [gpu]` (`compose/kaine.yml:66-73, 321`).
    - With a device source configured, the preflight resolves the by-id link to its node and passes only that node, and only the configured ALSA card, into the cycle service: `devices:`, plus `group_add` for the host's `video` and `audio` group ids where the host uses groups.
    - Under rootless containers the seat ACL of the operator's uid applies to the mapped process. Under rootful containers, root opens the node.
    - Hot-plug inside a container is limited: a device first plugged in after the container started is not visible. The design does not widen access with a device-cgroup rule for every camera. A re-plugged device in a container needs a cycle restart, and the preflight says so. Native runs tolerate hot-plug fully.
 10. **Privacy.**
     - The descriptor's privacy class is `operator_room`.
-    - `entity_selectable` defaults to false for that class, and the operator opts in per source.
-    - On the reference host the CTO opted in on 2026-11-01: the entity may see the room, and may choose the webcam itself. So that host's operator configuration sets `entity_selectable = true` for its webcam source.
-    - The run manifest records the opt-in as a label (`consent = "operator"` with its date).
+    - **Two layers of approval for the room, per modality** (review PS-3). The pattern is `KAINE_EMBODIMENT_OPERATOR_APPROVED` (`kaine/modules/embodiment/module.py:71-72`).
+      - Configuration declares the source.
+      - The environment approves it: `KAINE_OPERATOR_ROOM_APPROVED` lists the approved parts, from `camera`, `microphone` and `entity_select`.
+      - A part not listed stays closed. The microphone can be refused while the camera is allowed. Without `entity_select`, the source is operator-selectable only, whatever `entity_selectable` says.
+    - `entity_selectable` defaults to false for that class.
+    - On the reference host the CTO opted in on 2026-11-01: the entity may see the room, and may choose the webcam itself. So that host's operator configuration sets `entity_selectable = true` for its webcam source, and its environment approves `camera,microphone,entity_select`.
+    - The run manifest records each approval as a content-free label with its date.
     - The entity's choice still passes every gate of `perceptual-locus-switching`.
-    - The by-id name carries the camera's serial number, so records keep a 16-hex SHA-256 prefix of it. The by-id name itself is never recorded.
+    - **Identity hashing** (review PS-13). The by-id name carries the camera's serial number, and a serial has low entropy, so an unsalted hash could be brute-forced.
+      - Records keep a 16-hex prefix of an HMAC-SHA-256 of the identity, keyed by a per-install random key (`state/perceptual_sources/identity.key`, 32 bytes, created at first use, never exported).
+      - The by-id name itself is never recorded.
+      - The docs advise neutral source ids (`room`, `sim`), because ids reach the research log.
     - The zero-persistence invariant (`tests/test_zero_persistence_invariant.py`) extends to every new file.
     - The preview stays dev-gated (`KAINE_PERCEPTION_PREVIEW`).
 
@@ -141,27 +187,49 @@ Decisions:
 1. The world object is shared.
    - One `SimWorld` per source owns `MjModel` and `MjData`, built from the body model that `virtual-world-body` declares.
    - The perceptual source renders the body's named camera. The embodiment adapter reads proprioception and applies commands to the same object, in process.
+   - **One owner thread** (review PS-6, VWB-9).
+     - The EGL context is bound to the thread that made it. A Renderer created in one pool worker and rendered from others failed with `EGL_BAD_ACCESS` in 3 of 8 calls (review probe), and the capture loop runs `open`, `read` and `release` through `asyncio.to_thread` (`kaine/modules/vision/live.py:294-351`).
+     - So `SimWorld` runs one dedicated thread that owns the GL context and `MjData`, and that thread alone steps physics, updates the scene and renders.
+     - The capture loop's `read()` and the adapter's commands and proprioception reads are requests to it, through a queue.
 2. Rendering is headless.
    - `MUJOCO_GL=egl` is set before import, and `mujoco.Renderer(model, height, width)` with `update_scene(data, camera=<name>)` renders to an (H, W, 3) uint8 array, converted to BGR for the capture loop as the screen source does.
    - osmesa does not work on this host. Without EGL the source is unavailable and the boot refuses. It never falls back to glfw, which needs a display.
 3. The GPU plan. GPU 0 (RTX 4070 SUPER, 12 GB) hosts the language organ. GPU 1 (RTX 3070, 8 GB) hosts the vision encoder.
-   - The renderer goes on GPU 1, through `MUJOCO_EGL_DEVICE_ID`.
+   - The renderer goes on the card that hosts the vision encoder (GPU 1 natively), through `MUJOCO_EGL_DEVICE_ID`.
    - The rendered array is consumed by the encoder on the same card. Physics runs on the CPU.
-   - A 640×480 scene at 10 Hz is small next to the encoder, but this is measured, not assumed. The preboot device map gains a `sim_render` entry, and the boot's resource check measures the render's VRAM and time per frame on the configured card and refuses past a configured limit.
-   - EGL device indexes need not equal CUDA indexes. The preflight maps them by the EGL device's PCI bus id and refuses on a mismatch.
+   - **Mapping EGL to the card.**
+     - `MUJOCO_EGL_DEVICE_ID` is an index into `eglQueryDevicesEXT()`, which lists 6 devices on this host, the AMD iGPU among them.
+     - The driver exposes `EGL_DRM_DEVICE_FILE_EXT` and `EGL_CUDA_DEVICE_NV`, but not a PCI-bus attribute (review probe, PS-7).
+     - So the preflight maps each EGL device through `EGL_CUDA_DEVICE_NV` to its CUDA index, and that index's `pci_bus_id`. Where that attribute is absent, it uses `EGL_DRM_DEVICE_FILE_EXT` and the PCI address in `/sys/class/drm/cardN/device`.
+     - It selects the EGL device whose PCI address equals the vision encoder's resolved device, and refuses if none does. No index is hard-coded.
+   - **Measured, not assumed.**
+     - The review's probe measured a minimal 640×480 scene at +164 MiB and a median of 0.48 ms per frame.
+     - The preboot device map gains a `sim_render` entry, and the boot's resource check measures the render on the chosen card and refuses past a configured limit.
+     - The EGL context is a graphics process, which NVML's compute-process query does not list. So memory is measured through NVML's graphics-process query, or as the card's used-memory delta across the render's start.
+   - **In the container** (review PS-7).
+     - The runtime image (`nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04`, `Dockerfile:33`) has no libEGL. The image gains `libegl1` with the glvnd NVIDIA vendor ICD.
+     - The cycle service sets `NVIDIA_DRIVER_CAPABILITIES` to include `graphics` (with `compute,utility`).
+     - It maps both GPUs, so the device map resolves the same cards as natively. Inside the container, the CUDA and EGL indexes are renumbered, which is why the mapping above goes by PCI address.
+     - These are in Impact: `Dockerfile` and `compose/kaine.yml`.
 4. Stepping.
    - The world steps on entity time (`EntityClock`), so time dilation reaches it.
    - It holds while the source is not selected, and while sleep or a freeze holds the clock. The world waits, as the programme does.
+   - Under dilation, physics steps per wall second scale with `time_scale`. The owner thread caps steps per wall second and records any span it had to slow (review VWB-9).
+6. **A world with a body is available only when the body can move** (review PS-10).
+   - A `mujoco` source whose paired body has no driving loop would be a static, silent room seen from a head that cannot turn.
+   - So such a source is `available` only when `embodiment_built()` is true.
+   - Before that, it may be configured only as `passive_view = true`. A passive view is never entity-selectable, and is for operator tests.
 5. No audio. MuJoCo has no audio facility: no audio sensor type in `mjtSensor` and no audio API in the package (checked in 3.16.0). The source declares no audio modality.
    - The welfare observer reads the selected source's declared modalities. It records a declared-absent modality as `modality_absent` rather than raising a silent-sensor advisory.
    - A sound model for the simulated world (contact impulses rendered as sound) is a new sense. It needs its own design and a second review, and is not part of this change.
+   - An operator advisory is raised after `modality_absent_advisory_s` (default 30 minutes of awake time) continuously in a source that declares a modality absent. An absent sense is honest, but a long stretch without one is the operator's to judge (review PS-10).
 
 ### D6. Network sources
 
 - **`stream`.** A game streamed from a Sunshine host, received by a Moonlight-protocol client helper. Design is in `virtual-world-body` D7.
   - The host is this desktop under that change's GPU arbitration rule, or another of the CTO's machines. The CTO decided on 2026-11-01 not to wait for the Steam Deck.
   - Video and audio come in process as raw frames and PCM, over a socketpair from the helper.
-  - Privacy class `confined_world`, provenance `live`.
+  - Privacy class `confined_world`, provenance `live`. The class is granted only when the launcher has verified that the host session is confined: a dedicated headless session with its own input devices, not the operator's desktop. Otherwise the source is refused (review VWB-2).
   - Its egress is the tailnet peer that hosts the game (D9).
   - It is refused at boot until the conditions of `virtual-world-body` hold.
 - **`network_media`** (later, small). An operator-declared URL stream (HLS, RTSP, an HTTP live stream), opened by PyAV and decoded in memory.
@@ -175,6 +243,8 @@ Decisions:
 - **`screen`.** The existing desktop capture, registered with privacy class `operator_desktop`.
   - It can never be `entity_selectable`. On X11 a region capture includes any window that overlaps the region (`kaine/modules/vision/screen.py:81-146`), so it can show the operator's other windows.
   - A game is captured through `stream` or a confined display, never through this.
+  - **The leak is not fixed by this change** (review PS-15). The existing operator path still captures regions, and overlapping windows still appear in them (`kaine/modules/vision/screen.py:140-145`).
+  - With the registry on, the operator source route offers a `screen` source only when `[perception_feed.screen].operator_opt_in = true`, so a registered screen source is not one click away by accident.
 
 ### D7. The scalar-sensor seam (designed now, built later)
 
@@ -218,14 +288,24 @@ Decisions:
   - its outbound data classes, from a closed set: `none`, `protocol_control` (handshakes, acknowledgements, keep-alives), `gamepad_state`, `avatar_action` and `own_speech_text`.
 
   There is no class for sense data, latents, memories, internal state or operator data, so none of these can be declared.
-- **The runtime gate.**
-  - `kaine/egress.py` builds one `EgressGate` per adapter from its declaration.
-  - The adapter's connector calls the gate before every connection, and connects only to the address the gate resolved and checked.
-  - An undeclared host, port or direction is refused, logged with the endpoint label, and raised as an operator advisory.
-  - A helper process (the Moonlight client, a .NET world client) receives its endpoints from the launcher, which checks them against the same declaration.
+- **Enforcement is a network boundary, not an in-process check** (review addendum, PM decision).
+  - A check made before `av.open(url)` cannot police FFmpeg: libavformat resolves and connects itself, and follows HTTP redirects and HLS segment hosts.
+  - The same holds inside moonlight-common-c and any .NET world client.
+  - So every networked adapter (the FFmpeg-backed media source, the Moonlight helper, the world clients) runs in its own process, behind a boundary that allows only its declared endpoints. Two mechanisms, chosen per adapter:
+    - **Passed sockets in a network-less sandbox.**
+      - The process runs under bubblewrap with `--unshare-net`, so it has no network at all.
+      - KAINE's launcher opens each declared connection itself, after resolving and checking it, and passes the connected socket's file descriptor in.
+      - This is rootless. It fits adapters whose connections KAINE can open: the media source, where KAINE's own fetcher, with redirects off and only declared hosts, feeds the bytes to the decoder through a pipe.
+    - **A per-adapter system user with an outbound allowlist.**
+      - The process runs as a dedicated user (`kaine-egress-<adapter>`). An nftables output rule matching that user's uid drops every destination but the declared ones.
+      - This fits clients that open their own sockets: the Moonlight helper's RTSP, ENet and RTP sockets, and a world client's region connections.
+      - The rule set is installed once by the operator, with root, from a generated file.
+  - **Boot self-test.** Escape probes run from inside each adapter's boundary, on the pattern of `effector-confinement`: a connection to an undeclared address must fail, and one to a declared endpoint must succeed. A failure is a named boot refusal.
+  - **The redirect scenario** is tested against the real FFmpeg path and a local HTTP server that redirects, not against a mock.
+  - `kaine/egress.py` holds the declaration, generates the sandbox arguments and the nftables file, and runs the probes. The in-process `EgressGate` stays only as KAINE's own first check, for the connections KAINE opens.
 - **Typed outbound messages.** An adapter's send path accepts only the typed messages of its declared classes (`GamepadState`, `AvatarAction`, `OwnSpeech`, `ProtocolControl`), so a raw buffer cannot be handed to it. A static test checks the send signatures.
 - **Placement.**
-  - Network-capable code for sources and bodies lives only in the adapter packages that declare egress (`kaine/perceptual_sources/network/`, `kaine/modules/embodiment/adapters/<name>/`), or in separate helper programs under `tools/`.
+  - Network-capable code for sources and bodies lives only in the adapter packages that declare egress (`kaine/perceptual_sources/network/`, `kaine/modules/embodiment/adapters/<name>/`). That code is the launcher side; the networked work runs in the bounded process. A GPL helper lives in its own repository (`virtual-world-body` D7).
   - The guard test gains a rule: elsewhere in `kaine/modules/`, a socket, `asyncio.open_connection`, `websockets`, `av.open` on a URL, or `cv2.VideoCapture` on a URL is refused. The existing clients of KAINE's own services are the exception.
   - Every client, adapters included, keeps `trust_env=False`. A proxy is an undeclared host.
 - **Module internals stay no-cloud.**
@@ -235,6 +315,21 @@ Decisions:
   - The run manifest lists each declared endpoint by label, scheme, port and outbound classes.
   - A tailnet peer or private host name is hashed, because host names can be personal. A public world host is recorded as declared.
 - **Inbound is perception.** What arrives from a network source is perceived like any input: never persisted. In-world text is data, never a command (the salvaged `inbound-world-safety` rule, `virtual-world-body` D8).
+
+### D10. Failure defaults, the fallback, and the harness
+
+- **Fail to the programme or to `off`, never to the room** (review PS-2, PM decision).
+  - Today `_coerce_locus` turns an unknown value into `physical` (`kaine/perception_state.py:59-60`), `DesiredState.locus` defaults to `physical` (`perception_state.py:100`), and sleep restore falls back to `physical` (`kaine/modules/sleep/module.py:839-841, 866`). That was safe while `physical` needed `[vision].capture_enabled` as well. With a registry and a selectable webcam it would open the room camera on a corrupt file.
+  - With the registry on, every failed read resolves to the programme source, with the `off` holders it had: a missing, corrupt or unknown `source`, an unreadable `desired.json`, a missing key, or a failed pre-sleep read. It never resolves to a physical source.
+  - Off, today's behaviour is unchanged.
+  - Tests: a corrupt `desired.json`, a missing key, an unknown source id, and a failed sleep read each resolve to the programme. No device opens in any of them.
+- **The fallback** (review PS-11).
+  - The fallback must be the programme. Any other value refuses boot: a device can be absent, and a world can be unavailable.
+  - When the programme has already ended, falling back to it goes through the end-of-programme path, which preserves and stops the entity, rather than leaving the entity awake without senses.
+- **The off-equals-absent harness** (review PS-12).
+  - `DesiredState.to_dict` is `asdict` (`perception_state.py:107-108`), so a `source` field defaulting to `None` would write `"source": null`. The field is omitted explicitly when the registry is off.
+  - The golden is captured on the merge base at build time, not on today's origin/main, because `stimulus-control-act` changes the playlist clock and feeds and may merge first.
+  - The harness drives the capture loops with a manual clock.
 
 ## Risks and trade-offs
 
