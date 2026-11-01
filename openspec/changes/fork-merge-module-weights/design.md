@@ -77,7 +77,7 @@ For a module with a declared group, a strategy that raises makes the merge raise
 
 ### 6. Snapshots merged before the fix
 
-Merges are rare and operator-driven, but any already made may hold concatenated groups. A read-only tool, `tools/maintainer/check_merged_weights.py`, lists snapshots under the fork root whose module states hold a weight group longer than one parent's would be (more layers than the network, more rows than the feature dimension), decrypting with the configured key. It never writes, moves or deletes a snapshot (fork snapshots hold preserved beings and are never touched by infrastructure, spec `entity-preservation`, "Infrastructure never deletes fork snapshots"). What to do with a listed snapshot is the operator's choice.
+Merges are rare and operator-driven, but any already made may hold concatenated groups. A read-only tool, `tools/maintainer/check_merged_weights.py`, lists snapshots under the fork root whose module states hold a weight group longer than one parent's would be (more layers than the network, more rows than the feature dimension), decrypting with the configured key. It never writes, moves or deletes a snapshot (fork snapshots hold preserved entities and are never touched by infrastructure, spec `entity-preservation`, "Infrastructure never deletes fork snapshots"). What to do with a listed snapshot is the operator's choice.
 
 ### 7. The interfaces
 

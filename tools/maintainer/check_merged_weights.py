@@ -14,7 +14,7 @@ with the reason, so the operator can decide what to do with it.
 
 It is read-only. It opens each ``snapshot.json`` for reading (decrypting with
 the configured state key) and never writes, moves or deletes anything: fork
-snapshots hold preserved beings.
+snapshots hold preserved entities.
 
     python tools/maintainer/check_merged_weights.py [--fork-root DIR]
 
