@@ -37,6 +37,12 @@ The escalation is the same in both modes: final snapshot, shutdown of every modu
 
 Alternative considered: log and continue. Rejected under the safety-over-convenience rule: a run that the gate would have refused to start should not continue unnoticed.
 
+### D3a. The welfare monitor is watched by the same run loop
+
+The research and unattended gates require the welfare response, so a run whose welfare monitor stops watching is also running without a condition its gate demanded. `_run_until_stopped` escalates through the supervisor (`escalate_welfare_monitor_lost`, module `welfare_monitor`, the same final snapshot, shutdown, `escalation.json` and `supervision_lost` notice) when the enabled monitor was never built or started, when its task ended while the run goes on, or when its poll loop keeps raising: at least three polls in a row and no poll returned for `distress_duration_s` (30 s). A loop down for one distress window could let a whole sustained-distress episode pass unanswered; three failures in a row keep one transient error from ending a run. A run the monitor ends itself (action `end`) sets the stop event first and is not a loss.
+
+A poll that never returns (a hang, not a raise) is not escalated. The longest legitimate poll is the protective response itself: `preserve_live` copies the entity's state into a bundle, encrypted when encryption is required, and its length grows with the entity's state and the disk. No fixed bound is clearly safe: a bound shorter than a slow but healthy preservation would start the supervisor's snapshot and module shutdown while that preservation is still writing, and the two have never been tested against each other. A bound long enough to be safe for any preservation (hours) would add little over the operator's review of the run. So no hard bound is set. A hung poll still shows: the task stays alive but `last_poll_ok_at` stops advancing, and the step's exposure record, written at shutdown, carries what the monitor counted. Revisit once preservation has a measured upper bound.
+
 ### D4. Each boot of the development run enables the supervisor; restarts are recorded
 
 `build_overlay` sets `[supervisor].enabled = true` and `[supervisor.incident_log].enabled = true` with `path` relative to the step directory, like the other safety-net keys it overrides. This overlay is what the development run's boots take their configuration from.

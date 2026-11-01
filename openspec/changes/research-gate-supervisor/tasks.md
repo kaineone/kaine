@@ -14,6 +14,8 @@
 
 - [x] 3.3 The welfare monitor is watched too: `_run_until_stopped` escalates through `Supervisor.escalate_welfare_monitor_lost` (module `welfare_monitor`) when the welfare response is enabled and its monitor was never built or started, its task ended, or its poll loop keeps raising (`poll_loop_failing`: three raising polls in a row and none returned for `distress_duration_s`); the caretaker gets `supervision_lost`; `status` names a lost welfare monitor. Tests in `tests/test_welfare_monitor_liveness.py` (each case, the real monitor's run loop, a monitor that ended the run itself, operator-present mode) and `tests/test_ignition_study_runner.py`.
 
+- [x] 3.4 A hung welfare poll (one that never returns) is not escalated; design D3a gives the reason (no bound is clearly safe against a long preservation inside the poll).
+
 ## 4. Development run
 
 - [x] 4.1 `build_overlay` enables the supervisor and its incident log with a step-relative path. Extend the merged-config test from `study-overlay-individuation` to assert every config-level gate requirement for every step kind.
