@@ -12,6 +12,8 @@
 # - --keep-password is an alias for the default behaviour and is kept for
 #   backward compatibility.
 # - Upserts KAINE_REDIS_PASSWORD in compose/.env via kaine.secrets_file.
+# - Generates KAINE_REDIS_VOLATILE_PASSWORD in compose/.env once, for the
+#   never-persisted companion-stream instance, and keeps it on later runs.
 # - Mirrors the password into config/secrets.toml under [redis].password.
 # - Brings the chosen runtime up so the container/native server picks up the value.
 # - Confirms the bus answers PING with PONG.
@@ -78,6 +80,13 @@ resolve_credential KAINE_REDIS_PASSWORD redis password "$ROTATE" "$KEEP" PW
 
 # 2. Write compose/.env.
 write_env_credential "$ENV_FILE" KAINE_REDIS_PASSWORD "$PW" "$PY"
+
+# 2b. The never-persisted bus (kaine-redis-volatile, compose network only) has
+# its own password, generated once and kept; it holds nothing across a restart,
+# so --rotate leaves it alone (recreate that container to change it).
+VPW=""
+resolve_credential KAINE_REDIS_VOLATILE_PASSWORD redis_volatile password 0 0 VPW
+write_env_credential "$ENV_FILE" KAINE_REDIS_VOLATILE_PASSWORD "$VPW" "$PY"
 
 # 3. Mirror into config/secrets.toml.
 mirror_toml_credential "$SECRETS_FILE" "$SECRETS_EXAMPLE" redis password "$PW" "$PY"

@@ -697,6 +697,7 @@ def test_provision_plans_all_models_without_network(monkeypatch):
 def test_docker_compose_config_validates():
     env = {
         "KAINE_REDIS_PASSWORD": "x",
+        "KAINE_REDIS_VOLATILE_PASSWORD": "v",
         "KAINE_QDRANT_API_KEY": "y",
         "PATH": __import__("os").environ.get("PATH", ""),
     }
@@ -994,6 +995,7 @@ def test_compose_renders_old_names_from_env(tmp_path: Path):
         env.pop(entry["new"], None)
     env["KAINE_REDIS_PASSWORD"] = "x"
     env["KAINE_QDRANT_API_KEY"] = "y"
+    env["KAINE_REDIS_VOLATILE_PASSWORD"] = "v"
 
     result = subprocess.run(
         [
