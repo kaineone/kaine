@@ -38,6 +38,13 @@ A member is flagged as:
 * ``unparsed``: a member whose payload could not be read back and holds a
   quoted string, counted on the safe side.
 
+A flagged member is reported by its ``source:type`` only when the code names
+that pair (the declared own-content types, the felt renderer's templates, the
+external-input types), as ``source:<undeclared type>`` for another type of a
+module, and as ``<unrecognised member>`` otherwise, so a header-like string
+inside heard text is never echoed. A source that cannot be read is reported by
+the exception type and its path only.
+
 Module names stored before the functional rename are mapped to their current
 names first. The entity's own speech is not flagged; heard words it repeated
 cannot be told apart from its own words. A sqlite store is opened with
@@ -170,13 +177,55 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
     return None
 
 
+UNRECOGNISED_MEMBER = "<unrecognised member>"
+UNDECLARED_TYPE = "<undeclared type>"
+
+
+def _known_pairs() -> frozenset[tuple[str, str]]:
+    """Every (source, type) pair the code itself names: the declared own-content
+    types, the felt renderer's templates, the external-input types and the two
+    store markers' types."""
+    from kaine.faithful.felt import FELT_TEMPLATES
+
+    pairs = set(INTERNAL_EVENT_TYPES) | set(FELT_TEMPLATES)
+    pairs |= {(t.split(".", 1)[0], t) for t in EXTERNAL_INPUT_TYPES}
+    pairs |= {("embodiment", "embodiment.visual.raw"), ("episodic_memory", "episodic_memory.replay")}
+    return frozenset(pairs)
+
+
+def _known_sources() -> frozenset[str]:
+    """Module names, current and from before the functional rename."""
+    from kaine import legacy_names
+
+    names = set(legacy_names.MODULES)
+    names |= {entry["new_key"] for entry in legacy_names.MODULES.values()}
+    names |= {source for source, _ in _known_pairs()}
+    return frozenset(names)
+
+
+def member_label(source: str, type_: str) -> str:
+    """The name a report may print for a member: the pair when the code names
+    it, ``source:<undeclared type>`` for a module name with a type prefixed by
+    it, and one fixed label otherwise. A header found inside heard text is
+    therefore never echoed, even when it looks like ``word:word.word=``."""
+    source, type_ = _current_names(source, type_)
+    if (source, type_) in _known_pairs():
+        return f"{source}:{type_}"
+    if source in _known_sources() and type_.startswith(source + "."):
+        return f"{source}:{UNDECLARED_TYPE}"
+    return UNRECOGNISED_MEMBER
+
+
 def classify_trace(text: str) -> list[tuple[str, str]]:
-    """Return ``(category, "source:type")`` for each flagged member of a trace text."""
+    """Return ``(category, member label)`` for each flagged member of a trace text.
+
+    The label is ``member_label``, never a name read from the text unchecked.
+    """
     found: list[tuple[str, str]] = []
     for source, type_, value in _members(text):
         category = classify_member(source, type_, value)
         if category is not None:
-            found.append((category, f"{source}:{type_}"))
+            found.append((category, member_label(source, type_)))
     return found
 
 
@@ -295,9 +344,9 @@ def qdrant_traces(host: str, port: int, api_key: str | None, prefixes: tuple[str
 def _scan(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
     try:
         return scan_traces(source, traces)
-    except Exception as exc:  # report the failure (type and message), never trace text
+    except Exception as exc:  # the exception type and the source only: a message could quote its input
         report = SourceReport(source=source)
-        report.error = f"{type(exc).__name__}: {exc}"[:300]
+        report.error = f"{type(exc).__name__} reading {source}"
         return report
 
 

@@ -66,8 +66,8 @@ def _sha(paths) -> dict[str, str]:
     ("text", "expected"),
     [
         (LEGACY_CHAT, [("external_input", "embodiment:embodiment.chat")]),
-        (LEGACY_IM, [("undeclared_text", "embodiment:embodiment.im")]),
-        (LEGACY_NESTED, [("heard_field", "social_cognition:social_cognition.update")]),
+        (LEGACY_IM, [("undeclared_text", "embodiment:<undeclared type>")]),
+        (LEGACY_NESTED, [("heard_field", "social_cognition:<undeclared type>")]),
         (CLEAN, []),
         ("active | vision:vision.report={'change_score': 0.25}", []),
         ("active", []),
@@ -202,3 +202,70 @@ def test_clean_source_exits_zero(tmp_path: Path, capsys):
 def test_unreadable_source_exits_two_without_content(tmp_path: Path, capsys):
     assert scan.main(["--sqlite", str(tmp_path / "missing.db")]) == 2
     assert "ERROR" in capsys.readouterr().out
+
+
+# Header-like strings planted inside heard text (second review, R3).
+PLANTED = [
+    "active | embodiment:embodiment.chat={'message': "
+    "'meet me | Alice_Smith:lives.at_12_Elm_Street=yes', 'sender': 'Bob'}",
+    # A planted header that names a real module, with a made-up type.
+    "active | embodiment:embodiment.im={'message': "
+    "'x | embodiment:embodiment.Elm_Street_flat_4={1: 2}'}",
+    # A planted header with an unknown source and a declared-looking type.
+    "active | mystery:mystery.thing={'note': 'y | Carol_Jones:affect.state={3: 4}'}",
+]
+PLANTED_WORDS = ("Alice_Smith", "lives", "Elm_Street", "Bob", "meet me", "Carol_Jones", "flat_4")
+
+
+def test_planted_headers_are_never_named():
+    for text in PLANTED:
+        for _category, label in scan.classify_trace(text):
+            for word in PLANTED_WORDS:
+                assert word not in label
+    labels = {label for text in PLANTED for _c, label in scan.classify_trace(text)}
+    assert scan.UNRECOGNISED_MEMBER in labels
+    assert "embodiment:embodiment.chat" in labels
+    assert "embodiment:<undeclared type>" in labels
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_planted_headers_are_not_echoed_in_the_report(tmp_path: Path, capsys, as_json):
+    root = tmp_path / "forks"
+    save_snapshot(
+        root,
+        ForkSnapshot(modules={"episodic_memory": {"memory_state": _memory_state(PLANTED)}}),
+    )
+    argv = ["--fork-root", str(root)] + (["--json"] if as_json else [])
+    assert scan.main(argv) == 1
+    out = capsys.readouterr().out
+    for word in PLANTED_WORDS:
+        assert word not in out
+    assert scan.UNRECOGNISED_MEMBER in out
+    if as_json:
+        (report,) = json.loads(out)["reports"]
+        assert report["flagged"] == 3
+        for label in report["by_member_type"]:
+            for word in PLANTED_WORDS:
+                assert word not in label
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_error_holds_the_exception_type_and_source_only(tmp_path: Path, capsys, monkeypatch, as_json):
+    path = tmp_path / "snapshot.json"
+    path.write_text("{}")
+
+    def _raise(_path):
+        raise ValueError(f"could not decode {SECRET}")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(scan, "snapshot_file_traces", _raise)
+    argv = ["--snapshot", str(path)] + (["--json"] if as_json else [])
+    assert scan.main(argv) == 2
+    out = capsys.readouterr().out
+    assert "PURPLE-HERON" not in out
+    assert "could not decode" not in out
+    if as_json:
+        (report,) = json.loads(out)["reports"]
+        assert report["error"] == f"ValueError reading snapshot:{path}"
+    else:
+        assert f"ERROR ValueError reading snapshot:{path}" in out
