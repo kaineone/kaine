@@ -37,8 +37,8 @@ With both opt-in layers set, the boot SHALL refuse, naming the reason, when work
 - **WHEN** `enabled = true`, the operator variable is set and every precondition holds
 - **THEN** the content code is built
 
-### Requirement: The content code reads mean-pooled vision latents (pending operator ruling)
-Pending the operator's ruling on this change's open question 1 (recommended option b), the content code SHALL refuse to build unless `[vision].pooling = "mean"`, so the code never reads the vision encoder's text-aligned attention-pooled vector.
+### Requirement: The content code reads mean-pooled vision latents
+Under the ruling on this change's open question 1 (option b, 2026-11-01), the content code SHALL refuse to build unless `[vision].pooling = "mean"`, so the code never reads the vision encoder's text-aligned attention-pooled vector.
 
 #### Scenario: Attention pooling
 - **WHEN** the content code is opted in with `[vision].pooling = "attention"`
@@ -78,7 +78,7 @@ On each accessed broadcast the workspace SHALL form `z_k = tanh(Σ α_s (W_s x̃
 - **THEN** the code is the zero vector
 
 ### Requirement: The code rides the accessed broadcast under the latent tag
-The workspace SHALL attach the code to each accessed broadcast under `workspace_feedback.latent_derived.code`, on the broadcast's volatile companion entry while `latent-content-privacy`'s bus ruling is pending its recommended option, and SHALL attach none to an inhibited broadcast. Processors SHALL adopt a code only from an accessed broadcast and SHALL keep its tick index with the prediction it forms.
+The workspace SHALL attach the code to each accessed broadcast under `workspace_feedback.latent_derived.code`, on the broadcast's volatile companion entry (`latent-content-privacy` bus ruling, option B), and SHALL attach none to an inhibited broadcast. Processors SHALL adopt a code only from an accessed broadcast and SHALL keep its tick index with the prediction it forms.
 
 #### Scenario: The code is tagged
 - **WHEN** an accessed broadcast is published with the content code on

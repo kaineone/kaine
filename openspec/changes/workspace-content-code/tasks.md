@@ -1,29 +1,29 @@
 ## 0. Before the build
 
-- [ ] 0.1 `latent-content-privacy` merged with its two open questions ruled; confirm `LATENT_RULE_VERSION == 1` on main; drop or rewrite this change's "pending" marks on the bus to match the bus ruling
-- [ ] 0.2 Open question 1 of this design (vision pooling) ruled by the operator; drop or rewrite the pending marks of decision 13 and the pooling boot check
+- [ ] 0.1 `latent-content-privacy` merged (its two open questions were ruled on 2026-11-01, B and b, and this change's bus text follows B); confirm `LATENT_RULE_VERSION == 1` on main
+- [x] 0.2 Open question 1 of this design (vision pooling): ruled option (b), mean pooling, on 2026-11-01 (architecture decisions of 2026-11-01, item 4; reasoning in the design's "Ruling on the open question"); decision 13, the pooling boot check and the spec no longer carry "pending" marks
 - [ ] 0.3 `welfare-signal-unblended` merged (the welfare readers use the own-model error)
 - [ ] 0.4 `fork-merge-module-weights` merged (weight-bearing module state merges by an explicit choice)
 - [ ] 0.5 The two feed defects fixed, with tests: video frame selection by real timestamps on variable-frame-rate files (`kaine/modules/vision/feed.py:1122`), and playlist audio taken by its sample count, not its padded plane (`kaine/modules/audition/feed.py:1000`)
 - [ ] 0.6 Rerun the decodability check at 0.5 to 3 s lags on the synchrony-specific excess (lag-k minus block-shuffle), with mean-pooled vision latents if the pooling ruling is (b); set `slot_decay_s` from it and record it, with the stimulus-suitability note and the per-film ranking, in the design and Table A1 notes; `code_dim` stays 64
-- [ ] 0.7 The development run's configuration (build order item 5) sets `[vision].pooling` per the ruling and, under bus option A only, `workspace.broadcast` and `interoception.out` caps of at most 12000
+- [ ] 0.7 The development run's configuration (build order item 5) sets `[vision].pooling = "mean"` per the ruling (bus option B needs no main-bus cap change)
 - [ ] 0.8 `workspace-feedback` task 3.2 marked as moved to this change (done in this revision); `workspace-feedback` archived (its task 3.3 done or moved) before this change's `workspace-feedback` delta is archived
 
 ## 1. Heads (PR 1, behind `enabled = false`)
 
 - [ ] 1.1 `kaine/modules/feedback.py`: `TopDownHead` regressor `(b, s, z, 1)` when a code width is given; widening a base-only head with zero code columns and removing the code block at switch-off; null-code, cross-code and shifted-code evaluations of the blend; the ascending error `g_j` with `m_j` as the running mean of the head's per-dimension MSE, the pre-`adapt` code block, the code and `code_tick` stored at formation, computed on every scoring tick, clipped
 - [ ] 1.2 Heads persist in every arm (carries `workspace-feedback` task 3.2): serialize and restore the base block and error windows in the vision, audition and interoception modules; discard only on a context-width or input-dimension mismatch, with a warning
-- [ ] 1.3 `FeedbackChannel` adopts the code and `code_tick` from accessed broadcasts only (from the companion entry under bus option B)
+- [ ] 1.3 `FeedbackChannel` adopts the code and `code_tick` from accessed broadcasts only (from the companion entry, bus option B)
 - [ ] 1.4 Golden trace recorded on the commit before PR 1, for the shipped configuration and every feedback arm
 - [ ] 1.5 Tests: `test_content_off_matches_pre_change_golden_trace` (every feedback arm, table absent and `enabled = false`), `test_head_widened_on_switch_on_continuity`, `test_off_on_off_on_resumes_code_blocks`, `test_off_module_state_has_no_code_columns`, `test_head_persists_across_restore`, `test_head_context_mismatch_discarded`, `test_ascending_error_matches_finite_difference`, `test_ascending_error_uses_pre_adapt_weights_and_formation_code`, `test_ascending_error_clipped`, `test_no_head_learning_or_ascending_error_when_suspended`
 
 ## 2. The code (PR 2)
 
 - [ ] 2.1 `kaine/workspace/content_code.py`: settings and validation (`shift_s >= 60`), slots, per-source standardisers with warm-up, seeded encoder init, code formation without cross-slot normalisation, the pending-code ring, per-code per-processor averaging of ascending errors, the encoder step with the finite guard and row max-norm; cite at the code site the neuroscience of the design's Context (hub and spokes, predictive coding, precision-weighted access, learned integration, `τ_z` and sustained activity, sleep-onset clearing), checking every citation against Crossref (Massimini et al. 2005 is new in this revision)
-- [ ] 2.2 `kaine/workspace/core.py` and `kaine/workspace/feedback.py`: write slots from accessed members (joining companion entries under bus option B), attach the code to accessed broadcasts under the tag, read ascending errors from every tick's candidate events
+- [ ] 2.2 `kaine/workspace/core.py` and `kaine/workspace/feedback.py`: write slots from accessed members (joining companion entries, bus option B), attach the code to accessed broadcasts under the tag, read ascending errors from every tick's candidate events
 - [ ] 2.3 Audition publishes the acoustic embedding inside `latent_derived` (as `latent_derived.acoustic`) only when the content code is on with audition as a source
 - [ ] 2.4 `kaine/workspace/novelty.py`: the fingerprint excludes `latent_derived` at any depth
-- [ ] 2.5 Boot: the opt-in layers, the feedback-arm check, `LATENT_RULE_VERSION`, the encryption conditions, the `welfare-signal-unblended` marker, `[vision].pooling == "mean"` (pending), the bus declaration and its check; research-gate field `content_code`, absent when the table is absent
+- [ ] 2.5 Boot: the opt-in layers, the feedback-arm check, `LATENT_RULE_VERSION`, the encryption conditions, the `welfare-signal-unblended` marker, `[vision].pooling == "mean"`, the bus declaration and its check; research-gate field `content_code`, absent when the table is absent
 - [ ] 2.6 Bus budget: measured entry sizes for every stream or companion stream that carries the code, latents or ascending errors, entered in `TYPICAL_EVENT_BYTES` and checked by the preboot row
 - [ ] 2.7 Tests: `test_slots_written_only_by_accessed_members`, `test_slot_cleared_by_age_advisory_and_sleep`, `test_code_intensity_and_age_weights`, `test_slot_expiry_continuity` (clearing a slot whose weight is below 0.01 changes `z` by less than 0.01 in every component), `test_slot_arrival_leaves_other_terms_unchanged`, `test_standardiser_warmup_then_slow`, `test_code_zero_without_slots`, `test_inhibited_broadcast_no_code`, `test_stale_ascending_error_dropped_and_counted`, `test_nonfinite_encoder_step_skipped`, `test_encoder_rows_max_norm`, `test_ascending_errors_averaged_per_code_and_processor`, `test_async_credit_matches_sync_on_synthetic_task`, `test_no_new_candidate_event_types`, `test_novelty_and_salience_identical_with_zero_code_columns`, `test_opt_in_layers`, `test_refuses_without_latent_rule`, `test_refuses_without_encryption`, `test_refuses_without_unblended_welfare_signal`, `test_refuses_attention_pooling`, `test_refuses_unbounded_latent_stream`
 
