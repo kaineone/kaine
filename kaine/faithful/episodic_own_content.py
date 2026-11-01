@@ -19,8 +19,10 @@ started to copy one. The heard rule still runs first, so a member with a heard
 field is stored as ``<heard omitted>`` whatever its type.
 
 It also names fields of declared types that the store drops although the
-language module renders their payload (``EPISODIC_DECLARED_FIELD_DENYLISTS``):
-the playlist media file name and the speech events' ``faithful_rendering``.
+language module renders their payload: the playlist media file name
+(``MEDIA_METADATA_FIELDS``, shared with the renderers) on every declared type,
+and the speech events' ``faithful_rendering``
+(``EPISODIC_DECLARED_FIELD_DENYLISTS``).
 
 Nothing in the language module reads this module, so the organ's prompt layout
 (``layout_digest``) does not depend on it.
@@ -33,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from kaine.faithful.external_input import INTERNAL_EVENT_TYPES
+from kaine.faithful.media_metadata import MEDIA_METADATA_FIELDS, without_media_metadata
 
 
 class FieldRule:
@@ -410,18 +413,15 @@ EPISODIC_FIELD_ALLOWLISTS: Mapping[tuple[str, str], Mapping[str, FieldRule]] = {
 
 # Fields of ``INTERNAL_EVENT_TYPES`` pairs that the episodic store drops at any
 # depth, although the language module renders the rest of the payload. The
-# list is the store's alone, so the prompt layout does not change.
+# list is the store's alone, so the prompt layout does not change. Every
+# declared type also drops ``MEDIA_METADATA_FIELDS``
+# (``kaine.faithful.media_metadata``, shared with the renderers): ``item``, the
+# playlist media file name that ``vision.report`` and ``audition.perception``
+# carry. The entity perceives the film, not its file name; ``item_order`` stays.
 #
-# * ``item``: the basename of the playlist media file (an operator-chosen file
-#   name, often a film title). The entity perceives the film, not its file
-#   name (the eyes-and-ears rule); ``item_order`` stays.
-# * ``faithful_rendering`` on the entity's own speech: a rendering of the same
-#   coalition the trace already holds as members. With the numeric awareness
-#   rendering, the fallback template writes every field of an untemplated type
-#   into it, ``audition.perception``'s ``item`` included.
+# ``faithful_rendering`` on the entity's own speech is a rendering of the same
+# coalition the trace already holds as members.
 EPISODIC_DECLARED_FIELD_DENYLISTS: Mapping[tuple[str, str], frozenset[str]] = {
-    ("vision", "vision.report"): frozenset({"item"}),
-    ("audition", "audition.perception"): frozenset({"item"}),
     ("language", "internal_speech"): frozenset({"faithful_rendering"}),
     ("language", "external_speech"): frozenset({"faithful_rendering"}),
 }
@@ -464,19 +464,17 @@ def allowlisted_payload(source: str, type_: str, payload: Any) -> dict[str, Any]
     return kept
 
 
-def _without_keys(value: Any, keys: frozenset[str]) -> Any:
-    """A copy of ``value`` with every mapping key in ``keys`` removed at any depth."""
-    if isinstance(value, dict):
-        return {k: _without_keys(v, keys) for k, v in value.items() if k not in keys}
-    if isinstance(value, (list, tuple)):
-        return [_without_keys(v, keys) for v in value]
-    return value
+def declared_fields_dropped(source: str, type_: str) -> frozenset[str]:
+    """The fields the store drops from a declared pair's payload, at any depth."""
+    return MEDIA_METADATA_FIELDS | EPISODIC_DECLARED_FIELD_DENYLISTS.get(
+        (source, type_), frozenset()
+    )
 
 
 def declared_payload(source: str, type_: str, payload: Any) -> Any:
     """The payload of an ``INTERNAL_EVENT_TYPES`` member as the store keeps it:
-    without the fields ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names for its pair."""
-    denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_))
-    if not denied:
-        return payload
-    return _without_keys(payload, denied)
+    without ``MEDIA_METADATA_FIELDS`` and the fields
+    ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names for its pair."""
+    return without_media_metadata(
+        payload, EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
+    )

@@ -7,6 +7,7 @@ from typing import Callable, Optional
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.media_metadata import without_media_metadata
 from kaine.faithful.templates import (
     DEFAULT_EMPTY_SNAPSHOT_TEXT,
     TEMPLATES,
@@ -36,11 +37,13 @@ class FaithfulRenderer:
         self._line_prefix = line_prefix
 
     def render_event(self, event: Event) -> str:
+        # No template or fallback sees media metadata (the playlist file name).
+        payload = without_media_metadata(dict(event.payload))
         key = (event.source, event.type)
         template = self._templates.get(key)
         if template is None:
-            return self._fallback(event.source, event.type, dict(event.payload))
-        return template(dict(event.payload))
+            return self._fallback(event.source, event.type, payload)
+        return template(payload)
 
     def render_snapshot(
         self,

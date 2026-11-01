@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 
 # HEARD_TEXT_FIELDS lives with the heard rule; it stays importable from here.
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, HEARD_TEXT_FIELDS
+from kaine.faithful.media_metadata import without_media_metadata
 
 TemplateFn = Callable[[dict[str, Any]], str]
 
@@ -118,6 +119,8 @@ def redact_heard_speech(event, *, templates=None, fallback=None) -> Optional[str
     fall = fallback_template if fallback is None else fallback
 
     payload = event.payload if isinstance(event.payload, dict) else {}
+    # No template or fallback sees media metadata (the playlist file name).
+    payload = without_media_metadata(payload)
 
     if event.type in EXTERNAL_INPUT_TYPES:
         redacted_payload = _replace_text_leaves(payload)
@@ -198,6 +201,16 @@ def _t_vision_report(payload: dict[str, Any]) -> str:
     return (
         f"Vision via {model} reports change {_fmt(change)}, "
         f"habituation {_fmt(hab)}."
+    )
+
+
+def _t_audition_perception(payload: dict[str, Any]) -> str:
+    change = payload.get("change_score")
+    error = payload.get("prediction_error")
+    model = payload.get("encoder_model_id", "unknown encoder")
+    return (
+        f"Audition via {model} reports change {_fmt(change)}, "
+        f"prediction error {_fmt(error)}."
     )
 
 
@@ -486,6 +499,7 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.report"): _t_interoception_report,
     ("sequence", "sequence.report"): _t_sequence_report,
     ("vision", "vision.report"): _t_vision_report,
+    ("audition", "audition.perception"): _t_audition_perception,
     ("planning", "planning.belief"): _t_planning_belief,
     ("planning", "planning.policy"): _t_planning_policy,
     ("episodic_memory", "episodic_memory.recall"): _t_episodic_memory_recall,
@@ -517,7 +531,12 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
 
 
 def fallback_template(source: str, type_: str, payload: dict[str, Any]) -> str:
-    """Structured summary for unrecognized (source, type) pairs."""
+    """Structured summary for unrecognized (source, type) pairs.
+
+    Fails closed on media metadata: a field in ``MEDIA_METADATA_FIELDS`` (the
+    playlist file name) is never written, at any depth.
+    """
+    payload = without_media_metadata(payload)
     if not payload:
         return f"{source} emitted {type_} with no payload."
     pieces = ", ".join(f"{k}={_fmt(v)}" for k, v in sorted(payload.items()))

@@ -568,12 +568,19 @@ def test_ignition_audit_payload_from_the_real_report_keeps_only_counts():
 FILM = "Some-Film-Title-1987.mkv"
 
 
-def test_denylisted_pairs_are_declared_and_list_no_heard_rule_bypass():
-    from kaine.faithful.episodic_own_content import EPISODIC_DECLARED_FIELD_DENYLISTS
+def test_denylists_cover_declared_pairs_and_share_the_media_list():
+    from kaine.faithful.episodic_own_content import (
+        EPISODIC_DECLARED_FIELD_DENYLISTS,
+        declared_fields_dropped,
+    )
+    from kaine.faithful.media_metadata import MEDIA_METADATA_FIELDS
 
     assert set(EPISODIC_DECLARED_FIELD_DENYLISTS) <= INTERNAL_EVENT_TYPES
-    assert EPISODIC_DECLARED_FIELD_DENYLISTS[("vision", "vision.report")] == {"item"}
-    assert EPISODIC_DECLARED_FIELD_DENYLISTS[("audition", "audition.perception")] == {"item"}
+    assert MEDIA_METADATA_FIELDS == {"item"}
+    for pair in INTERNAL_EVENT_TYPES:
+        assert MEDIA_METADATA_FIELDS <= declared_fields_dropped(*pair)
+    for rules in EPISODIC_FIELD_ALLOWLISTS.values():
+        assert not set(rules) & MEDIA_METADATA_FIELDS
 
 
 @pytest.mark.parametrize(
@@ -614,26 +621,42 @@ def test_own_speech_keeps_its_text_and_drops_its_rendering(type_):
     assert "the light keeps changing" in text
 
 
-def test_other_declared_types_keep_an_item_field():
-    """The denylist is per pair: only the producers that stamp the media name."""
-    text = _trace("sequence", "sequence.report", {"item": "slot-3", "x": 1})
-    assert "'item': 'slot-3'" in text
+@pytest.mark.parametrize("pair", sorted(INTERNAL_EVENT_TYPES), ids=lambda p: f"{p[0]}:{p[1]}")
+def test_every_declared_type_drops_a_media_file_name(pair):
+    """The media list applies to every declared type, so a producer that starts
+    to stamp the file name on another report cannot put it in a trace."""
+    source, type_ = pair
+    text = _trace(source, type_, {"item": FILM, "x": 1})
+    assert "Some-Film" not in text
+    assert "'x': 1" in text
 
 
-def test_every_media_title_the_perception_producers_stamp_is_denylisted():
-    """Any payload key the vision or audition module fills from a playlist
-    position's ``title`` is on the store's denylist for that type."""
-    import re
+def test_every_field_a_module_fills_from_a_media_title_is_media_metadata():
+    """Any payload key a module fills from a ``.title`` attribute (a subscript
+    assignment or a dict literal) is in the shared media list."""
+    import ast
+    import pathlib
 
-    from kaine.faithful.episodic_own_content import EPISODIC_DECLARED_FIELD_DENYLISTS
-    from kaine.modules.audition import module as audition_module
-    from kaine.modules.vision import module as vision_module
+    import kaine.modules
+    from kaine.faithful.media_metadata import MEDIA_METADATA_FIELDS
 
-    stamp = re.compile(r"\[\"(\w+)\"\]\s*=\s*\w+\.title\b")
-    for mod, pair in (
-        (vision_module, ("vision", "vision.report")),
-        (audition_module, ("audition", "audition.perception")),
-    ):
-        keys = set(stamp.findall(inspect.getsource(mod)))
-        assert keys, pair
-        assert keys <= EPISODIC_DECLARED_FIELD_DENYLISTS[pair], pair
+    def _is_title(node: ast.AST) -> bool:
+        return isinstance(node, ast.Attribute) and node.attr == "title"
+
+    found: set[str] = set()
+    root = pathlib.Path(kaine.modules.__file__).parent
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and _is_title(node.value):
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript) and isinstance(
+                        target.slice, ast.Constant
+                    ):
+                        found.add(target.slice.value)
+            elif isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values):
+                    if isinstance(key, ast.Constant) and _is_title(value):
+                        found.add(key.value)
+    assert found == {"item"}
+    assert found <= MEDIA_METADATA_FIELDS

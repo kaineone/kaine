@@ -628,8 +628,9 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     classified by the shared heard rule the language module uses
     (``kaine.faithful.external_input.is_heard_event``), is kept as its source
     and type with ``<heard omitted>``, never its words. A declared type drops
-    the fields ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names (the playlist media
-    file name, the speech events' ``faithful_rendering``). A pair audited field by
+    the playlist media file name (``MEDIA_METADATA_FIELDS``) and the fields
+    ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names (the speech events'
+    ``faithful_rendering``). A pair audited field by
     field (``kaine.faithful.episodic_own_content``) keeps only its allowlisted
     fields whose values pass their rules; any other field is dropped. Any other
     type, known or not, is kept as its source and type with

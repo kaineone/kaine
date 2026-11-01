@@ -39,8 +39,9 @@ A member is flagged as:
   allowlisted and passes its rule;
 * ``unparsed``: a member whose payload could not be read back and holds a
   quoted string, counted on the safe side;
-* ``media_item``: a ``vision.report`` or ``audition.perception`` member that
-  kept ``item``, the playlist media file name, or an own-speech member whose
+* ``media_item``: a declared member (in practice ``vision.report`` or
+  ``audition.perception``) that kept ``item``, the playlist media file name
+  (``kaine.faithful.media_metadata``), or an own-speech member whose
   ``faithful_rendering`` holds a rendered ``item=`` (the store now drops both;
   ``kaine.faithful.episodic_own_content``).
 
@@ -80,9 +81,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from kaine.faithful.episodic_own_content import (  # noqa: E402
-    EPISODIC_DECLARED_FIELD_DENYLISTS,
     EPISODIC_FIELD_ALLOWLISTS,
     allowlisted_payload,
+    declared_fields_dropped,
 )
 from kaine.faithful.external_input import (  # noqa: E402
     EXTERNAL_INPUT_TYPES,
@@ -168,12 +169,11 @@ def _has_media_item(source: str, type_: str, payload: Any) -> bool:
     """True when a declared member kept a field the store now drops and that
     field could name a media file: ``item`` itself, or an ``item=`` rendered
     into an own-speech ``faithful_rendering``."""
-    denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
-    if "item" in denied:
-        return any(
-            isinstance(v, str) and v.strip()
-            for v in _values_under(payload, "item")
-        )
+    denied = declared_fields_dropped(source, type_)
+    if "item" in denied and any(
+        isinstance(v, str) and v.strip() for v in _values_under(payload, "item")
+    ):
+        return True
     if "faithful_rendering" in denied:
         return any(
             isinstance(v, str) and _RENDERED_ITEM.search(v)
@@ -222,7 +222,7 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
     if declared:
         if source != "language" and _HEARD_FIELD_REPR.search(stripped):
             return "unparsed"
-        denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
+        denied = declared_fields_dropped(source, type_)
         if "item" in denied and _MEDIA_ITEM_REPR.search(stripped):
             return "media_item"
         if "faithful_rendering" in denied and _RENDERED_ITEM.search(stripped):

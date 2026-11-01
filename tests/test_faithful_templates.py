@@ -34,6 +34,11 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "habituation_score": 0.7,
         "encoder_model_id": "facebook/dinov2-small",
     },
+    ("audition", "audition.perception"): {
+        "change_score": 0.2,
+        "prediction_error": 0.05,
+        "encoder_model_id": "dasheng-base",
+    },
     ("planning", "planning.belief"): {
         "statement": "salience_high",
         "frequency": 0.9,
