@@ -174,7 +174,7 @@ async def test_merge_api_refuses_differing_module_weights_naming_the_module(tmp_
             response = await client.post(
                 "/diagnostics/merges",
                 json={"snapshot_a_id": a, "snapshot_b_id": b},
-                headers={"Authorization": "Bearer test-token", "Origin": "http://test"},
+                headers={"Authorization": "Bearer test-token"},
             )
             assert response.status_code == 409, response.text
             assert "vision" in response.json()["detail"]
@@ -183,7 +183,7 @@ async def test_merge_api_refuses_differing_module_weights_naming_the_module(tmp_
             response = await client.post(
                 "/diagnostics/merges",
                 json={"snapshot_a_id": a, "snapshot_b_id": b, "module_weights_from": "b"},
-                headers={"Authorization": "Bearer test-token", "Origin": "http://test"},
+                headers={"Authorization": "Bearer test-token"},
             )
             assert response.status_code == 200, response.text
             merged = mgr.load(response.json()["id"])

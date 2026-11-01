@@ -481,7 +481,8 @@ def _stock_registry(monkeypatch) -> Any:
         cfg["modules"][name] = True
     # Switch on every learned component a stock module can carry.
     cfg.setdefault("interoception", {})["self_rhythm_enabled"] = True
-    for name in ("vision", "sequence", "audition"):
+    # Audition's forward models are always on; vision's and sequence's are opt-in.
+    for name in ("vision", "sequence"):
         cfg.setdefault(name, {})["forward_prediction"] = True
     return build_registry(MagicMock(spec=AsyncBus), cfg)
 
