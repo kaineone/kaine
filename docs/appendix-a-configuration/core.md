@@ -105,7 +105,7 @@ The memory these caps imply must fit in Redis `maxmemory`, set per host with `KA
 
 ### Privacy
 
-Section `[privacy]`. Values that may never reach disk through the bus (the perceptual latents and every `latent_derived` mapping; see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)) are removed from every payload the main bus persists. When an enabled module declares that a consumer needs them, they travel on the companion stream `<stream>.companion` of the never-persisted instance `kaine-redis-volatile`, and the main entry names its companion entry. No shipped module declares one.
+Section `[privacy]`. Values that may never reach disk through the bus (the perceptual latents and every `latent_derived` mapping, see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values); heard and spoken words, see [Heard and spoken words on the bus](../13-security-and-privacy.md#heard-and-spoken-words-on-the-bus)) are removed from every payload the main bus persists. When an enabled module declares that a consumer needs them, they travel on the companion stream `<stream>.companion` of the never-persisted instance `kaine-redis-volatile`, and the main entry names its companion entry. The language module always declares its three speech streams, the audition module declares `audition.out` with `transcription_enabled`, and the embodiment and episodic memory modules declare their streams; no shipped module declares a latent companion, so latent values are dropped.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

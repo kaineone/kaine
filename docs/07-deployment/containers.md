@@ -11,7 +11,7 @@ With no profile selected, the configuration loader applies the `first_configurat
 | Service | Role | Host endpoint | GPU |
 |---|---|---|---|
 | `kaine-redis` | event bus (Redis Streams) | `127.0.0.1:6479` (`KAINE_REDIS_HOST_PORT`) | none |
-| `kaine-redis-volatile` | the never-persisted bus: companion streams only (no append-only file, no snapshots, no volume) | none: compose network only | none |
+| `kaine-redis-volatile` | the never-persisted bus: companion streams only (no append-only file, no snapshots, a tmpfs at `/data`, persisting commands refused) | none: compose network only | none |
 | `kaine-qdrant` | vector store | `127.0.0.1:6533` (`KAINE_QDRANT_HOST_PORT`) | none |
 | `kaine-model-server` | OpenAI-compatible language organ (llama.cpp `llama-server`) | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 (`KAINE_ORGAN_GPU`) |
 | `kaine-speaches` | speech-to-text (faster-distil-Whisper) | `127.0.0.1:8000` (`KAINE_SPEACHES_HOST_PORT`) | none, CPU only |

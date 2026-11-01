@@ -72,6 +72,8 @@ KAINE_QDRANT_ARCHIVE=/path/to/qdrant-<arch>.tar.gz bash scripts/qdrant-bootstrap
 
 The archive is still checked against the same pinned sha256.
 
+The native services do not include the never-persisted bus (`kaine-redis-volatile`), which holds heard and spoken words and latent values on companion streams. A cycle that enables the language module, audition with transcription, embodiment or episodic memory refuses to start (exit code 15) unless one is reachable through `KAINE_REDIS_VOLATILE_URL` and answers the boot check: no append-only file, an empty `save`, a password, and the persisting commands refused for its user. On a native or portable host, run a second `redis-server` for it with those settings (see the `kaine-redis-volatile` service in `compose/kaine.yml` for the exact arguments), with no data directory on persistent storage, and set `KAINE_REDIS_VOLATILE_URL` for the cycle.
+
 On Termux, `bash scripts/redis-bootstrap.sh --native` uses the `redis` package (`pkg install redis` if it is missing). Qdrant has no Android build; set `[episodic_memory].backend = "sqlite_vec"` in `config/kaine.operator.toml` and skip Qdrant.
 
 ## Service helper
