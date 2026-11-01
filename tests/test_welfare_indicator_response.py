@@ -440,6 +440,24 @@ async def test_an_unsent_request_escalates(bus, tmp_path, monkeypatch):
     await _assert_escalated(h, "request_not_sent")
 
 
+async def test_q04_a_rest_request_publish_that_hangs_is_not_sent_and_escalates(bus, tmp_path, monkeypatch):
+    """The publish of the rest request never answers: it is bounded, counted as
+    request_not_sent, and the protective response follows in the same poll."""
+    h = Harness(bus, tmp_path)
+    h.mon._bus_timeout_s = 0.05
+    real_publish = bus.publish
+
+    async def hanging(event):
+        if event.type == WELFARE_REST_REQUEST_TYPE:
+            await asyncio.sleep(3600)
+        return await real_publish(event)
+
+    monkeypatch.setattr(bus, "publish", hanging)
+    await h.poll()
+    await asyncio.wait_for(h.awake(610, boredom=True), timeout=30.0)
+    await _assert_escalated(h, "request_not_sent")
+
+
 @pytest.mark.parametrize("reason", ["failed", "too_soon"])
 async def test_a_refusal_other_than_busy_escalates(bus, tmp_path, reason):
     h = Harness(bus, tmp_path)

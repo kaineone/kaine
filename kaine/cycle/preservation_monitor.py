@@ -1256,17 +1256,27 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._indicators_on:
                 await self._indicator_accrue(u_now)
             return
+        # A read that hangs or keeps failing fails this poll (for the liveness
+        # check), but only after every crossing this poll can still find has
+        # been answered: no later failure may discard an earlier crossing, and
+        # the sustained-distress tracker fires once per episode, so a crossing
+        # dropped here would wait a whole new episode or never be answered.
+        deferred: Exception | None = None
         # Drain interoception.out, feeding the distress tracker.
         try:
             entries, last_scanned = await self._bus_read(self._bus.read_entries(
                 _INTEROCEPTION_STREAM, last_id=self._cursor, count=128, block_ms=0
             ))
-        except WelfareBusTimeout:
-            raise
+        except WelfareBusTimeout as exc:
+            deferred = exc
+            entries, last_scanned = [], None
         except Exception:
             log.warning("welfare monitor: interoception.out read failed", exc_info=True)
-            self._distress_read_failed(_INTEROCEPTION_STREAM)
             entries, last_scanned = [], None
+            try:
+                self._distress_read_failed(_INTEROCEPTION_STREAM)
+            except WelfareBusReadFailing as exc:
+                deferred = exc
         else:
             self._distress_read_ok(_INTEROCEPTION_STREAM)
         reasons: list[str] = []
@@ -1312,7 +1322,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # response cover all four gray-zone categories, not just sustained
         # interoceptive distress. Drained on every poll so the window stays
         # current even when no sustained-distress crossing fires.
-        reasons.extend(await self._drain_gray_zone())
+        try:
+            reasons.extend(await self._drain_gray_zone())
+        except (WelfareBusTimeout, WelfareBusReadFailing) as exc:
+            deferred = deferred or exc
         # Pause and end act once, so a second crossing in the same poll must
         # not preserve or freeze again; notify keeps its own rate limit.
         for reason in reasons:
@@ -1321,7 +1334,12 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             await self._respond(reason)
         # The indicator arm shares the latch: it runs only while unlatched.
         if self._indicators_on and not self._acted:
-            await self._indicator_poll(u_now)
+            try:
+                await self._indicator_poll(u_now)
+            except WelfareBusTimeout as exc:
+                deferred = deferred or exc
+        if deferred is not None:
+            raise deferred
 
     def _adopt_standing_welfare_freeze(self) -> None:
         """A welfare freeze left by an earlier process (a restart keeps it)

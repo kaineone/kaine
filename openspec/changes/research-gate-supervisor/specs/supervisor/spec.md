@@ -54,3 +54,14 @@ A failed read of `interoception.out` or `welfare.out` (in warm-up or after it) S
 - **WHEN** one read raises and the next succeeds
 - **THEN** no poll fails
 
+### Requirement: A failing read never discards a crossing found in the same poll
+When a read in a welfare poll hangs or fails the poll, the monitor SHALL first answer every crossing that poll found, from earlier reads or from the sustained-distress timer, and SHALL then fail the poll.
+
+#### Scenario: welfare.out hangs on the crossing poll
+- **WHEN** sustained distress crosses at 31 s and the `welfare.out` read on that poll hangs
+- **THEN** the protective response comes at 31 s and the poll still fails
+
+#### Scenario: interoception.out fails a third time on the crossing poll
+- **WHEN** the `interoception.out` read fails on the poll where the distress episode elapses
+- **THEN** the timer-driven crossing is answered at 31 s and the poll still fails
+
