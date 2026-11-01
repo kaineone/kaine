@@ -405,19 +405,27 @@ def record_maturation_stimulus_source(
     )
 
 
-def stimulus_source_params_digest(params: object, *, hearing: object | None = None) -> str:
+def stimulus_source_params_digest(
+    params: object,
+    *,
+    hearing: object | None = None,
+    retired_min_dwell_seconds: float | None = None,
+) -> str:
     """Return a stable sha256 hex digest of a stimulus source parameters object.
 
     ``params`` must be a dataclass instance (e.g. ``StimulusSourceParams``); its fields are
     serialised under their stored names (see :mod:`kaine.lifecycle.stored_field_names`) as a
     compact sorted JSON object before hashing. ``hearing`` is the hearing band parameters
-    (a dataclass with ``saturation_window_seconds``, ``min_dwell_seconds`` and
-    ``max_dwell_seconds``). When given, the digest also covers the hearing schedule that
-    drives the field's colour; when ``None`` the digest equals the one computed before the
-    hearing schedule was added.
+    (a dataclass with ``saturation_window_seconds`` and ``max_dwell_seconds``). When given,
+    the digest also covers the hearing schedule that drives the field's colour; when ``None``
+    the digest equals the one computed before the hearing schedule was added.
+    ``retired_min_dwell_seconds`` gives the digest of the form recorded while stages had a
+    minimum dwell.
     """
     payload = json.dumps(
-        stimulus_source_params_record(params, hearing=hearing),
+        stimulus_source_params_record(
+            params, hearing=hearing, retired_min_dwell_seconds=retired_min_dwell_seconds
+        ),
         sort_keys=True,
         separators=(",", ":"),
     )

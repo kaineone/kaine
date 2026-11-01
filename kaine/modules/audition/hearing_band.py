@@ -5,9 +5,9 @@
 
 The developmental stimulus's audio passes a hearing band that widens in steps,
 following the order fetal hearing matures. A stage ends when audition's own
-learning progress has saturated (or at a dwell cap); the
-rule lives in ``hearing_stage_state.HearingStageState``, and this module only
-holds the stage edges and the filter design. Band edges are
+learning progress, read over its full span, has saturated (or at a dwell cap);
+the rule lives in ``hearing_stage_state.HearingStageState``, and this module only
+holds the stage edges, the stage parameters and the filter design. Band edges are
 placed geometrically midway between the outermost tested tone the fetus can
 hear and the next tested tone outside that range. Once the lowest tested
 tone (100 Hz) is heard there is no unheard tone below it, so the low edge
@@ -48,6 +48,7 @@ __all__ = (
     "HEARING_TOP_TONE_HZ",
     "HearingBandParams",
     "HEARING_FINAL_STAGE",
+    "check_hearing_dwell_bounds",
     "stage_edges",
     "band_taps",
     "band_frequency_response_db",
@@ -79,7 +80,10 @@ HEARING_BAND_STAGES: tuple[tuple[float | None, float | None], ...] = (
 
 _MAX_SECONDS = 2592000.0
 
-_RETIRED_KEYS = frozenset({"maturation_seconds"})
+# min_dwell_seconds is retired: a stage can end by saturation only on full-span
+# readings of audition's learning progress, so the learning-progress span is the
+# minimum, a property of the measure rather than a free dwell parameter.
+_RETIRED_KEYS = frozenset({"maturation_seconds", "min_dwell_seconds"})
 
 _TABLE = "[perception_feed.stimulus_source.hearing]"
 
@@ -112,17 +116,20 @@ class HearingBandParams:
 
     Attributes:
         enabled: Whether the hearing band filter is active.
-        saturation_window_seconds: Awake seconds audition's learning progress
-            must stay below the floor for a stage to end by saturation.
-        min_dwell_seconds: Awake seconds a stage must have run before
-            saturation can end it.
+        saturation_window_seconds: Awake seconds audition's full-span
+            learning progress must stay below the floor for a stage to end by
+            saturation.
         max_dwell_seconds: Awake seconds after which a stage ends regardless
             of learning progress.
+
+    There is no minimum dwell. A reading of audition's learning progress over
+    less than its full span counts as missing (``Affect.audition_learning_progress``),
+    so no stage ends by saturation before ``learning_progress_span_s +
+    saturation_window_seconds`` (``earliest_release_seconds``).
     """
 
     enabled: bool = True
     saturation_window_seconds: float = 600.0
-    min_dwell_seconds: float = 5400.0
     max_dwell_seconds: float = 25200.0
 
     @classmethod
@@ -131,9 +138,9 @@ class HearingBandParams:
 
         Args:
             section: A mapping with optional keys ``enabled``,
-                ``saturation_window_seconds``, ``min_dwell_seconds`` and
-                ``max_dwell_seconds``. The retired key ``maturation_seconds``
-                is accepted and ignored with a warning. ``None`` is treated
+                ``saturation_window_seconds`` and ``max_dwell_seconds``. The
+                retired keys ``maturation_seconds`` and ``min_dwell_seconds``
+                are accepted and ignored with a warning. ``None`` is treated
                 as an empty table.
 
         Returns:
@@ -142,8 +149,9 @@ class HearingBandParams:
         Raises:
             ValueError: If ``section`` is not a dict, contains unknown keys,
                 holds invalid values, or violates
-                ``0 < saturation_window_seconds <= min_dwell_seconds <=
-                max_dwell_seconds``.
+                ``0 < saturation_window_seconds <= max_dwell_seconds``. The
+                bound against ``[affect].learning_progress_span_s`` is checked
+                at boot by ``check_hearing_dwell_bounds``.
         """
         table = _TABLE
         if section is None:
@@ -156,7 +164,6 @@ class HearingBandParams:
             {
                 "enabled",
                 "saturation_window_seconds",
-                "min_dwell_seconds",
                 "max_dwell_seconds",
             }
             | _RETIRED_KEYS,
@@ -176,19 +183,58 @@ class HearingBandParams:
             )
 
         window = _seconds_field(section, "saturation_window_seconds", 600.0)
-        min_dwell = _seconds_field(section, "min_dwell_seconds", 5400.0)
         max_dwell = _seconds_field(section, "max_dwell_seconds", 25200.0)
-        if not (window <= min_dwell <= max_dwell):
+        if not (window <= max_dwell):
             raise ValueError(
-                f"{table} requires saturation_window_seconds <= min_dwell_seconds "
-                f"<= max_dwell_seconds, got {window}, {min_dwell}, {max_dwell}"
+                f"{table} requires saturation_window_seconds <= max_dwell_seconds, "
+                f"got {window}, {max_dwell}"
             )
 
         return cls(
             enabled=enabled,
             saturation_window_seconds=window,
-            min_dwell_seconds=min_dwell,
             max_dwell_seconds=max_dwell,
+        )
+
+    def earliest_release_seconds(self, learning_progress_span_s: float) -> float:
+        """Awake seconds after a step before saturation can first end the stage.
+
+        The first full-span reading comes ``learning_progress_span_s`` after the
+        restart, and it must then stay below the floor for the saturation window.
+        """
+        return float(learning_progress_span_s) + self.saturation_window_seconds
+
+
+def check_hearing_dwell_bounds(
+    params: HearingBandParams, learning_progress_span_s: object
+) -> None:
+    """Refuse a maximum dwell too short for saturation ever to end a stage.
+
+    ``learning_progress_span_s`` is ``[affect].learning_progress_span_s``. A stage
+    ends by saturation no earlier than the span plus the saturation window, so
+    ``max_dwell_seconds`` must be at least that; otherwise every stage would end
+    at the cap whatever audition has learnt.
+
+    Raises:
+        ValueError: naming the keys, when the bound is violated or the span is
+            not a finite number above 0.
+    """
+    span = learning_progress_span_s
+    if (
+        isinstance(span, bool)
+        or not isinstance(span, (int, float))
+        or not math.isfinite(span)
+        or span <= 0.0
+    ):
+        raise ValueError(
+            f"[affect].learning_progress_span_s must be a finite number > 0, got {span!r}"
+        )
+    earliest = params.earliest_release_seconds(float(span))
+    if earliest > params.max_dwell_seconds:
+        raise ValueError(
+            f"{_TABLE} requires [affect].learning_progress_span_s + "
+            "saturation_window_seconds <= max_dwell_seconds, got "
+            f"{float(span)} + {params.saturation_window_seconds} > {params.max_dwell_seconds}"
         )
 
 

@@ -59,7 +59,7 @@ def test_edges_widen_with_stage():
 def test_from_section_defaults_and_validation():
     defaults = HearingBandParams()
     assert defaults.saturation_window_seconds == 600.0
-    assert defaults.min_dwell_seconds == 5400.0
+    assert not hasattr(defaults, "min_dwell_seconds")
     assert defaults.max_dwell_seconds == 25200.0
 
     for section in (None, {}):
@@ -70,24 +70,20 @@ def test_from_section_defaults_and_validation():
         {
             "enabled": False,
             "saturation_window_seconds": 60,
-            "min_dwell_seconds": 120,
             "max_dwell_seconds": 600,
         }
     )
-    assert configured == HearingBandParams(False, 60.0, 120.0, 600.0)
+    assert configured == HearingBandParams(False, 60.0, 600.0)
 
     invalid_sections = [
         {"enabled": 1},
         {"saturation_window_seconds": True},
-        {"min_dwell_seconds": "x"},
         {"max_dwell_seconds": float("nan")},
         {"max_dwell_seconds": float("inf")},
         {"saturation_window_seconds": 0},
         {"saturation_window_seconds": -1.0},
         {"max_dwell_seconds": 2592001.0},
-        {"saturation_window_seconds": 6000.0},
-        {"min_dwell_seconds": 30000.0},
-        {"min_dwell_seconds": 100.0},
+        {"saturation_window_seconds": 700.0, "max_dwell_seconds": 600.0},
         {"unknown": 1},
     ]
     for section in invalid_sections:
@@ -109,6 +105,38 @@ def test_retired_maturation_seconds_is_ignored_with_warning(caplog):
         "[perception_feed.stimulus_source.hearing].maturation_seconds is retired and ignored"
         in caplog.text
     )
+
+
+@pytest.mark.parametrize("value", [600, 5400.0, "x", True])
+def test_retired_min_dwell_seconds_is_ignored_with_warning(caplog, value):
+    """Spec: a retired minimum dwell is accepted with a warning and has no effect."""
+    with caplog.at_level("WARNING"):
+        parsed = HearingBandParams.from_section({"min_dwell_seconds": value})
+    assert parsed == HearingBandParams()
+    assert (
+        "[perception_feed.stimulus_source.hearing].min_dwell_seconds is retired and ignored"
+        in caplog.text
+    )
+
+
+def test_dwell_bounds_against_the_learning_progress_span():
+    from kaine.modules.audition.hearing_band import check_hearing_dwell_bounds
+
+    check_hearing_dwell_bounds(HearingBandParams(), 5400.0)
+    # Exactly the span plus the window is allowed.
+    check_hearing_dwell_bounds(
+        HearingBandParams(saturation_window_seconds=600.0, max_dwell_seconds=6000.0), 5400.0
+    )
+    with pytest.raises(ValueError) as excinfo:
+        check_hearing_dwell_bounds(
+            HearingBandParams(saturation_window_seconds=600.0, max_dwell_seconds=5999.0), 5400.0
+        )
+    message = str(excinfo.value)
+    for key in ("learning_progress_span_s", "saturation_window_seconds", "max_dwell_seconds"):
+        assert key in message
+    for bad in (0.0, -1.0, float("nan"), float("inf"), True, "5400"):
+        with pytest.raises(ValueError, match="learning_progress_span_s"):
+            check_hearing_dwell_bounds(HearingBandParams(), bad)
 
 
 def test_taps_unity_and_stopband():

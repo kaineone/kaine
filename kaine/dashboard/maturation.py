@@ -150,7 +150,7 @@ def read_hearing_stage(
         "high_hz": _finite(block.get("high_hz")),
         "awake_seconds": _finite(block.get("awake_seconds")),
         "dwell_seconds": _read_hearing_dwell(stage, hearing_stage_path),
-        "min_dwell_seconds": _finite(block.get("min_dwell_seconds")),
+        "earliest_release_seconds": _finite(block.get("earliest_release_seconds")),
         "max_dwell_seconds": _finite(block.get("max_dwell_seconds")),
     }
 

@@ -28,7 +28,6 @@ def test_stimulus_source_perception_feed():
                 "maternal_voice_enabled": True,
                 "hearing_enabled": True,
                 "hearing_saturation_window_seconds": 600.0,
-                "hearing_min_dwell_seconds": 5400.0,
                 "hearing_max_dwell_seconds": 25200.0,
             },
         },
@@ -38,7 +37,7 @@ def test_stimulus_source_perception_feed():
     assert "follows the hearing stage" in html
     assert "maternal voice" in html
     assert "on" in html
-    assert "window 600.0 s, dwell 5400.0 to 25200.0 s" in html
+    assert "steps on full-span saturation (window 600.0 s, dwell at most 25200.0 s)" in html
     assert 'id="feed-hearing-stage"' in html
 
 

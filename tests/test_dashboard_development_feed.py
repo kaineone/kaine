@@ -48,7 +48,7 @@ def test_read_hearing_stage_valid_round_trip(tmp_path: Path) -> None:
         "high_hz": 500.0,
         "awake_seconds": 120.0,
         "dwell_seconds": None,
-        "min_dwell_seconds": None,
+        "earliest_release_seconds": None,
         "max_dwell_seconds": None,
     }
 
@@ -61,7 +61,7 @@ def _hearing_runtime(path: Path, **extra) -> None:
             "low_hz": None,
             "high_hz": 1732.05,
             "awake_seconds": 50000.0,
-            "min_dwell_seconds": 5400.0,
+            "earliest_release_seconds": 6000.0,
             "max_dwell_seconds": 25200.0,
             **extra,
         }
@@ -75,7 +75,7 @@ def test_read_hearing_stage_dwell_from_owner_file(tmp_path: Path) -> None:
     owner.write_text(json.dumps({"version": 1, "stage": 3, "dwell_seconds": 4320.0}), encoding="utf-8")
     result = read_hearing_stage(runtime_path=runtime, hearing_stage_path=owner)
     assert result["dwell_seconds"] == 4320.0
-    assert result["min_dwell_seconds"] == 5400.0
+    assert result["earliest_release_seconds"] == 6000.0
     assert result["max_dwell_seconds"] == 25200.0
 
 
@@ -310,7 +310,7 @@ def test_perception_feed_block_stimulus_source_defaults() -> None:
     assert summary["maternal_voice_enabled"] is True
     assert summary["hearing_enabled"] is True
     assert summary["hearing_saturation_window_seconds"] == 600.0
-    assert summary["hearing_min_dwell_seconds"] == 5400.0
+    assert "hearing_min_dwell_seconds" not in summary
     assert summary["hearing_max_dwell_seconds"] == 25200.0
     for value in summary.values():
         assert isinstance(value, (bool, int, float)) or value is None
@@ -339,7 +339,6 @@ def test_perception_feed_block_invalid_hearing_table() -> None:
     )
     summary = block["stimulus_source"]
     assert summary["hearing_enabled"] is None
-    assert summary["hearing_min_dwell_seconds"] is None
     assert summary["hearing_max_dwell_seconds"] is None
     assert summary["hearing_saturation_window_seconds"] is None
     assert summary["heartbeat_bpm"] == 70.0

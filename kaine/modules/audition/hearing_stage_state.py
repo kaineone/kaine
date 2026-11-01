@@ -4,11 +4,19 @@
 """The single persisted owner of the hearing stage.
 
 Stage k (0..4) ends when audition's own learning progress, restarted at the
-step, stays below ``lp_floor`` for ``saturation_window_seconds`` awake seconds,
-once the stage has run ``min_dwell_seconds``; or when it has run
+step and read only over its full span, stays below ``lp_floor`` for
+``saturation_window_seconds`` awake seconds, or when the stage has run
 ``max_dwell_seconds`` (paper A.7, Table A1). ``observe`` is the only place the
 rule lives. The audio stream, the visual source, the affect module and the
 maturation gate read the stage from here and never compute one.
+
+There is no minimum dwell here. The reading comes from
+``Affect.audition_learning_progress``, which is None until the restarted window
+holds its full span of completed bins; a reading over a shorter span is a ramp
+that sits below the floor for about an hour after any step, so counting it
+released every stage 12 minutes in (band-step record 2026-10-31,
+docs/records/validation/band-steps/). The span is therefore the minimum, and
+``earliest_release_seconds`` reports it with the window.
 
 Dwell advances only by positive deltas of the awake-time provider, so rests add
 none, and it persists across restarts. The saturation window is held in memory
@@ -56,14 +64,21 @@ class HearingStageState:
         *,
         path: Path | None = None,
         lp_floor: float = 0.20,
+        learning_progress_span_s: float = 5400.0,
         entity_id: str | None = None,
         lineage: tuple[str, ...] = (),
     ) -> None:
         if not _finite_number(lp_floor) or not (0.0 <= lp_floor < 1.0):
             raise ValueError(f"lp_floor must be a finite number in [0, 1), got {lp_floor!r}")
+        if not _finite_number(learning_progress_span_s) or learning_progress_span_s <= 0.0:
+            raise ValueError(
+                "learning_progress_span_s must be a finite number > 0, "
+                f"got {learning_progress_span_s!r}"
+            )
         self._params = params
         self._path = Path(path) if path is not None else None
         self._lp_floor = float(lp_floor)
+        self._lp_span_s = float(learning_progress_span_s)
         self._entity_id = entity_id
         self._lineage = tuple(lineage)
         self._lock = threading.Lock()
@@ -80,6 +95,7 @@ class HearingStageState:
         *,
         path: Path | None,
         lp_floor: float = 0.20,
+        learning_progress_span_s: float = 5400.0,
         entity_id: str | None = None,
         lineage: tuple[str, ...] = (),
     ) -> "HearingStageState":
@@ -93,6 +109,7 @@ class HearingStageState:
             params,
             path=path,
             lp_floor=lp_floor,
+            learning_progress_span_s=learning_progress_span_s,
             entity_id=entity_id,
             lineage=lineage,
         )
@@ -164,6 +181,11 @@ class HearingStageState:
         return self._params
 
     @property
+    def earliest_release_seconds(self) -> float:
+        """Awake seconds after a step before saturation can first end a stage."""
+        return self._params.earliest_release_seconds(self._lp_span_s)
+
+    @property
     def stage(self) -> int:
         with self._lock:
             return self._stage
@@ -211,9 +233,9 @@ class HearingStageState:
                 self._saturated = 0.0
 
             p = self._params
-            if self._dwell >= p.max_dwell_seconds or (
-                self._dwell >= p.min_dwell_seconds
-                and self._saturated >= p.saturation_window_seconds
+            if (
+                self._dwell >= p.max_dwell_seconds
+                or self._saturated >= p.saturation_window_seconds
             ):
                 self._stage += 1
                 advanced = self._stage

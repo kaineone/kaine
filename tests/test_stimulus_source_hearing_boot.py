@@ -57,9 +57,9 @@ def test_hearing_band_disabled():
 
 def test_hearing_band_config_is_validated():
     invalid = [
-        {"seed": 7, "stimulus_source": {"hearing": {"min_dwell_seconds": 9000.0, "max_dwell_seconds": 4000.0}}},
-        {"seed": 7, "stimulus_source": {"hearing": {"saturation_window_seconds": 9000.0}}},
-        {"seed": 7, "stimulus_source": {"hearing": {"min_dwell_seconds": 0.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"saturation_window_seconds": 9000.0, "max_dwell_seconds": 4000.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"saturation_window_seconds": 0.0}}},
+        {"seed": 7, "stimulus_source": {"hearing": {"max_dwell_seconds": 0.0}}},
         {"seed": 7, "stimulus_source": {"hearing": {"bogus": 1}}},
         {"seed": 7, "stimulus_source": {"hearing": 3}},
     ]
@@ -75,7 +75,7 @@ def test_hearing_band_config_is_validated():
 
 
 def test_hearing_band_out_of_digest():
-    with_hearing = _stimulus_source_params({"stimulus_source": {"hearing": {"min_dwell_seconds": 3600.0}}})
+    with_hearing = _stimulus_source_params({"stimulus_source": {"hearing": {"max_dwell_seconds": 3600.0}}})
     without_hearing = _stimulus_source_params({"stimulus_source": {}})
     assert with_hearing == without_hearing
     assert stimulus_source_params_digest(with_hearing) == stimulus_source_params_digest(without_hearing)
@@ -88,14 +88,12 @@ def test_hearing_band_dwell_bounds_reach_stream():
             "stimulus_source": {
                 "hearing": {
                     "saturation_window_seconds": 300.0,
-                    "min_dwell_seconds": 3600.0,
                     "max_dwell_seconds": 7200.0,
                 }
             },
         }
     )
     assert stream._hearing.saturation_window_seconds == 300.0
-    assert stream._hearing.min_dwell_seconds == 3600.0
     assert stream._hearing.max_dwell_seconds == 7200.0
 
 

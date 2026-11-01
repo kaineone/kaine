@@ -354,7 +354,7 @@ async def run(args) -> None:
         learning_progress_bin_s=float(acfg["learning_progress_bin_s"]),
     )
     lp0 = float(acfg["learning_progress_floor"])
-    rule = HearingStageState(hearing, path=None, lp_floor=lp0)
+    rule = HearingStageState(hearing, path=None, lp_floor=lp0, learning_progress_span_s=float(acfg["learning_progress_span_s"]))
 
     def stage_event(stage: int):
         return validate_event(source="development", type="development.hearing_stage", payload={"stage": int(stage)},
@@ -442,7 +442,8 @@ async def run(args) -> None:
         out,
         seed=args.seed, arm=args.arm, schedule=args.schedule, lp0=lp0,
         bin_s=float(acfg["learning_progress_bin_s"]), span_s=float(acfg["learning_progress_span_s"]),
-        w_sat=hearing.saturation_window_seconds, d_min=hearing.min_dwell_seconds, d_max=hearing.max_dwell_seconds,
+        w_sat=hearing.saturation_window_seconds, d_min=0.0, d_max=hearing.max_dwell_seconds,  # no minimum dwell since full-span saturation
+        earliest_release_s=rule.earliest_release_seconds,
         err_t=np.asarray(errs_t), err_e=np.asarray(errs_e, dtype=np.float64), alert_t=np.asarray(alerts),
         lp_t=np.asarray(lp_t), lp_v=np.asarray(lp_v), lp_stage=np.asarray(lp_stage, dtype=np.int8),
         steps=np.asarray(steps), rule_steps=np.asarray(rule_steps, dtype=np.float64).reshape(-1, 2),

@@ -19,6 +19,13 @@ from kaine.storage import resolve as resolve_storage
 
 log = logging.getLogger(__name__)
 
+# Affect's default learning-progress span (the Affect constructor's default), used
+# when [affect] does not set learning_progress_span_s.
+_AFFECT_LP_SPAN_DEFAULT_S = 5400.0
+# The retired [perception_feed.stimulus_source.hearing].min_dwell_seconds default, for
+# matching maturation digests recorded while it existed.
+_RETIRED_MIN_DWELL_DEFAULT_S = 5400.0
+
 
 def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
@@ -227,12 +234,16 @@ def _install_shared_stimulus_source_clock(
 
     # The single owner of the hearing stage. It drives the band, the colour
     # saturation and the maturation gate even when the band is disabled.
+    from kaine.modules.audition.hearing_band import check_hearing_dwell_bounds
     from kaine.modules.audition.hearing_stage_state import HearingStageState
 
     hearing_params = _hearing_band_params(perception_feed)
-    lp_floor = float(
-        ((kaine_config or {}).get("affect") or {}).get("learning_progress_floor", 0.20)
-    )
+    affect_section = (kaine_config or {}).get("affect") or {}
+    lp_floor = float(affect_section.get("learning_progress_floor", 0.20))
+    # Saturation counts only full-span readings, so the span plus the window is
+    # the earliest release; a cap below it would end every stage at the cap.
+    lp_span = affect_section.get("learning_progress_span_s", _AFFECT_LP_SPAN_DEFAULT_S)
+    check_hearing_dwell_bounds(hearing_params, lp_span)
     stage_file = Path(stage_path) if stage_path is not None else Path(_lifecycle_stage.STAGE_PATH)
     # The cycle puts the entity id and lineage into the feed config before the
     # registry is built. Without them the owner adopts no file that names an entity.
@@ -245,6 +256,7 @@ def _install_shared_stimulus_source_clock(
         hearing_params,
         path=resolve_storage(stage_file).parent / "hearing_stage.json",
         lp_floor=lp_floor,
+        learning_progress_span_s=float(lp_span),
         entity_id=entity_id,
         lineage=lineage,
     )
@@ -334,19 +346,31 @@ def _plan_stimulus_source_world_transition(
         )
     try:
         stimulus_params = _stimulus_source_params(feed)
+        hearing_params = _hearing_band_params(feed)
         digest = _lifecycle_stage.stimulus_source_params_digest(
-            stimulus_params, hearing=_hearing_band_params(feed)
+            stimulus_params, hearing=hearing_params
         )
         # An entity matured before the hearing schedule joined the digest recorded the
         # form without it, so that form is accepted as well.
         legacy_digest = _lifecycle_stage.stimulus_source_params_digest(stimulus_params)
+        # One matured while stages had a minimum dwell recorded it in the schedule: the
+        # retired key's configured value, or its old default. The last field's colour
+        # (stage/5) does not depend on it.
+        retired_min = ((feed.get("stimulus_source") or {}).get("hearing") or {}).get(
+            "min_dwell_seconds", _RETIRED_MIN_DWELL_DEFAULT_S
+        )
+        if isinstance(retired_min, bool) or not isinstance(retired_min, (int, float)):
+            retired_min = _RETIRED_MIN_DWELL_DEFAULT_S
+        min_dwell_digest = _lifecycle_stage.stimulus_source_params_digest(
+            stimulus_params, hearing=hearing_params, retired_min_dwell_seconds=float(retired_min)
+        )
     except Exception as exc:
         return (
             False,
             f"the stimulus source parameters could not be read to check the maturation record: {exc}",
             logging.WARNING,
         )
-    if stage_state.stimulus_source_params_digest not in (digest, legacy_digest):
+    if stage_state.stimulus_source_params_digest not in (digest, legacy_digest, min_dwell_digest):
         return (
             False,
             "the configured stimulus source parameters differ from those recorded at maturation "
@@ -827,8 +851,9 @@ def _build_perception_feed_audio_factory(
             )
         if hearing.enabled:
             log.info(
-                "stimulus source: hearing band on (stages advance on saturation, %.0f to %.0f s of awake time each)",
-                hearing.min_dwell_seconds,
+                "stimulus source: hearing band on (stages advance on full-span saturation, "
+                "%.0f to %.0f s of awake time each)",
+                hearing_state.earliest_release_seconds,
                 hearing.max_dwell_seconds,
             )
         else:

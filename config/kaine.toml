@@ -1167,12 +1167,16 @@ pause_max_seconds = 1.5         # maximum pause between utterances
 # 707 Hz, the heartbeat thud heard). Stage 3: 1000 Hz joins (low-pass at
 # 1732 Hz). Stage 4: 3000 Hz joins and the band is open. A stage ends when
 # audition's learning progress has saturated or at the maximum dwell: stage k
-# ends when that progress, restarted at the step, stays below the affect module's
-# learning_progress_floor (0.20) for saturation_window_seconds of awake time
-# after at least min_dwell_seconds in the stage, or at max_dwell_seconds
-# (paper A.7, Table A1: W_sat, d_min, d_max; provisional, to be calibrated;
-# staging by ability follows Law et al. 2014). The defaults make a step arrive
-# 1.5 to 7 awake hours after the last, so the schedule runs 6 to 28 awake hours.
+# ends when that progress, restarted at the step and read only over the full
+# [affect].learning_progress_span_s of completed bins, stays below the affect
+# module's learning_progress_floor (0.20) for saturation_window_seconds of awake
+# time, or at max_dwell_seconds (paper A.7, Table A1: W_sat, d_max; provisional,
+# to be calibrated; staging by ability follows Law et al. 2014). A reading over a
+# shorter span counts as missing, so no stage ends before the span plus the
+# window (1.67 h); boot refuses learning_progress_span_s + saturation_window_seconds
+# above max_dwell_seconds. min_dwell_seconds is retired (accepted with a warning,
+# ignored): the full span is the minimum. The defaults make a step arrive 1.67 to
+# 7 awake hours after the last, so the schedule runs about 7 to 28 awake hours.
 # Dwell persists across restarts in state/lifecycle/hearing_stage.json and
 # counts awake time only; the saturation window restarts after a restart. A
 # missing learning-progress reading counts as unsaturated. With the band on, the
@@ -1181,8 +1185,7 @@ pause_max_seconds = 1.5         # maximum pause between utterances
 # the colour (k/5) and the maturation gate's C3 still run.
 [perception_feed.stimulus_source.hearing]
 enabled = true
-saturation_window_seconds = 600.0   # awake seconds the learning progress must stay below the floor (Table A1 W_sat)
-min_dwell_seconds = 5400.0          # awake seconds a stage lasts at least, 1.5 h (Table A1 d_min)
+saturation_window_seconds = 600.0   # awake seconds the full-span learning progress must stay below the floor (Table A1 W_sat)
 max_dwell_seconds = 25200.0         # awake seconds after which a stage ends regardless, 7 h (Table A1 d_max)
 
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol

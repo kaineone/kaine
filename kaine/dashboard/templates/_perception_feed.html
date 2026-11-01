@@ -56,7 +56,7 @@
         <dt>maternal voice</dt>
         <dd>{% if ss.get("maternal_voice_enabled") is true %}on{% elif ss.get("maternal_voice_enabled") is false %}off{% else %}n/a{% endif %}</dd>
         <dt>hearing band</dt>
-        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}n/a{% else %}steps on saturation (window {{ ss.hearing_saturation_window_seconds }} s, dwell {{ ss.hearing_min_dwell_seconds }} to {{ ss.hearing_max_dwell_seconds }} s) · now <span id="feed-hearing-stage">n/a</span>{% endif %}</dd>
+        <dd>{% if ss.get("hearing_enabled") is false %}off{% elif ss.get("hearing_enabled") is none %}n/a{% else %}steps on full-span saturation (window {{ ss.hearing_saturation_window_seconds }} s, dwell at most {{ ss.hearing_max_dwell_seconds }} s) · now <span id="feed-hearing-stage">n/a</span>{% endif %}</dd>
       </dl>
     {% endif %}
   {% else %}

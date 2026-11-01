@@ -19,23 +19,41 @@ STIMULUS_SOURCE_PARAMS: dict[str, str] = {
 }
 
 
-def stimulus_source_params_record(params: object, *, hearing: object | None = None) -> dict[str, Any]:
+def stimulus_source_params_record(
+    params: object,
+    *,
+    hearing: object | None = None,
+    retired_min_dwell_seconds: float | None = None,
+) -> dict[str, Any]:
     """``asdict(params)`` with each renamed field under the name stored data uses.
 
     With ``hearing`` (the hearing band parameters), the record gains a
-    ``hearing_schedule`` entry holding the saturation window, the minimum and
-    maximum dwell, and the colour rule ``stage/5``. Without it the record is
-    unchanged, so digests written before the hearing schedule existed still match.
+    ``hearing_schedule`` entry holding the saturation window, the maximum dwell,
+    the release rule ``full_span`` and the colour rule ``stage/5``. Without it the
+    record is unchanged, so digests written before the hearing schedule existed
+    still match.
+
+    ``retired_min_dwell_seconds`` gives instead the form written while stages had
+    a minimum dwell (the saturation window, the minimum and maximum dwell and the
+    colour rule), so a maturation recorded then can still be matched.
     """
     record = {
         STIMULUS_SOURCE_PARAMS.get(name, name): value
         for name, value in asdict(params).items()
     }
     if hearing is not None:
-        record["hearing_schedule"] = {
-            "saturation_window_seconds": getattr(hearing, "saturation_window_seconds"),
-            "min_dwell_seconds": getattr(hearing, "min_dwell_seconds"),
-            "max_dwell_seconds": getattr(hearing, "max_dwell_seconds"),
-            "colour": "stage/5",
-        }
+        if retired_min_dwell_seconds is not None:
+            record["hearing_schedule"] = {
+                "saturation_window_seconds": getattr(hearing, "saturation_window_seconds"),
+                "min_dwell_seconds": float(retired_min_dwell_seconds),
+                "max_dwell_seconds": getattr(hearing, "max_dwell_seconds"),
+                "colour": "stage/5",
+            }
+        else:
+            record["hearing_schedule"] = {
+                "saturation_window_seconds": getattr(hearing, "saturation_window_seconds"),
+                "max_dwell_seconds": getattr(hearing, "max_dwell_seconds"),
+                "release": "full_span",
+                "colour": "stage/5",
+            }
     return record

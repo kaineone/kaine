@@ -55,7 +55,7 @@
 
   function formatDwell(hearing) {
     var dwell = hearing.dwell_seconds;
-    var min = hearing.min_dwell_seconds;
+    var min = hearing.earliest_release_seconds;
     var max = hearing.max_dwell_seconds;
     if (
       typeof dwell !== "number" || typeof min !== "number" || typeof max !== "number" ||

@@ -40,7 +40,6 @@ def test_hearing_stage_watch_current_lifecycle_and_copy() -> None:
     state = HearingStageState(
         HearingBandParams(
             saturation_window_seconds=100.0,
-            min_dwell_seconds=200.0,
             max_dwell_seconds=1000.0,
         )
     )

@@ -632,7 +632,7 @@ var scenarios = [
               readiness: { ready: false, passed: [], unmet: [] },
               readout: {}
             },
-            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: 4320, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: 4320, earliest_release_seconds: 6000, max_dwell_seconds: 25200 }
           };
         }
       });
@@ -641,7 +641,7 @@ var scenarios = [
       await tick();
       var hearingValue = sandbox.document.getElementById(HEARING_VALUE_ID);
       var feedHearing = sandbox.document.getElementById(FEED_HEARING_ID);
-      var expected = "stage 3 of 4, below 1732.1 Hz, 1.2 h of 1.5 to 7 h";
+      var expected = "stage 3 of 4, below 1732.1 Hz, 1.2 h of 1.7 to 7 h";
       if (hearingValue.textContent !== expected) {
         throw new Error("unexpected hearing value: " + JSON.stringify(hearingValue.textContent));
       }
@@ -668,7 +668,7 @@ var scenarios = [
               readiness: { ready: false, passed: [], unmet: [] },
               readout: {}
             },
-            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: null, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+            hearing: { stage: 3, previous_stage: 2, low_hz: null, high_hz: 1732.0508, awake_seconds: 9, dwell_seconds: null, earliest_release_seconds: 6000, max_dwell_seconds: 25200 }
           };
         }
       });
@@ -740,7 +740,7 @@ var scenarios = [
               readiness: { ready: false, passed: [], unmet: [] },
               readout: {}
             },
-            hearing: { stage: 4, previous_stage: 3, low_hz: null, high_hz: null, awake_seconds: 9, dwell_seconds: 0, min_dwell_seconds: 5400, max_dwell_seconds: 25200 }
+            hearing: { stage: 4, previous_stage: 3, low_hz: null, high_hz: null, awake_seconds: 9, dwell_seconds: 0, earliest_release_seconds: 6000, max_dwell_seconds: 25200 }
           };
         }
       });

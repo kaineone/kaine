@@ -31,7 +31,6 @@ class _FakeBus:
 PARAMS = HearingBandParams(
     enabled=True,
     saturation_window_seconds=100.0,
-    min_dwell_seconds=200.0,
     max_dwell_seconds=1000.0,
 )
 LOW = 0.05
@@ -361,10 +360,11 @@ def test_runtime_reading_adds_the_dwell_bounds_and_leaves_the_event_alone() -> N
     reading = watch.runtime_reading
     assert reading == {
         **payload,
-        "min_dwell_seconds": PARAMS.min_dwell_seconds,
+        "earliest_release_seconds": 5400.0 + PARAMS.saturation_window_seconds,
         "max_dwell_seconds": PARAMS.max_dwell_seconds,
     }
-    assert "min_dwell_seconds" not in payload
-    assert "min_dwell_seconds" not in watch.current
+    assert "earliest_release_seconds" not in payload
+    assert "earliest_release_seconds" not in watch.current
+    assert "min_dwell_seconds" not in reading
     reading["stage"] = 99
     assert watch.runtime_reading["stage"] == 0

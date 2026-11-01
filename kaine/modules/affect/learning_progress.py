@@ -98,6 +98,18 @@ class WindowedProgress:
         """Maximum number of completed bins retained."""
         return self._max_bins
 
+    def completed_bins(self, t: float) -> int:
+        """Return the number of completed bins held at time t, at most ``max_bins``.
+
+        Bins close as time passes, including empty ones across a gap. The count
+        starts at 0 when the estimator starts (its first positive error) and is
+        restored with the bins by ``from_dict``, so it counts the bins since the
+        owner last made a fresh estimator. It reaches ``max_bins`` once the
+        window spans its full length.
+        """
+        self.advance(t)
+        return len(self._deque)
+
     def add(self, t: float, error: float) -> None:
         """Record a raw prediction error at entity time t."""
         if self._origin is None:

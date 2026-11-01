@@ -1052,6 +1052,36 @@ def test_the_conditions_hold_for_a_digest_recorded_before_the_hearing_schedule()
     assert active
 
 
+def test_the_conditions_hold_for_a_digest_recorded_with_the_retired_min_dwell():
+    from kaine.boot.perception_feed import _hearing_band_params
+
+    feed = _feed()
+    recorded = lifecycle_stage.stimulus_source_params_digest(
+        _stimulus_source_params(feed),
+        hearing=_hearing_band_params(feed),
+        retired_min_dwell_seconds=5400.0,
+    )
+    active, _reason, _level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=recorded)
+    )
+    assert active
+    # One recorded with another minimum dwell matches while the retired key still names it.
+    other = lifecycle_stage.stimulus_source_params_digest(
+        _stimulus_source_params(feed),
+        hearing=_hearing_band_params(feed),
+        retired_min_dwell_seconds=3600.0,
+    )
+    active, _reason, _level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=other)
+    )
+    assert not active
+    feed["stimulus_source"] = {"hearing": {"min_dwell_seconds": 3600.0}}
+    active, _reason, _level = _plan_stimulus_source_world_transition(
+        feed, _born_stage(feed, stimulus_source_params_digest=other)
+    )
+    assert active
+
+
 def test_a_changed_hearing_schedule_fails_the_recorded_new_form_digest():
     from kaine.boot.perception_feed import _hearing_band_params
 
@@ -1059,7 +1089,7 @@ def test_a_changed_hearing_schedule_fails_the_recorded_new_form_digest():
     recorded = lifecycle_stage.stimulus_source_params_digest(
         _stimulus_source_params(feed), hearing=_hearing_band_params(feed)
     )
-    feed["stimulus_source"] = {"hearing": {"min_dwell_seconds": 3600.0}}
+    feed["stimulus_source"] = {"hearing": {"max_dwell_seconds": 3600.0}}
     active, reason, level = _plan_stimulus_source_world_transition(
         feed, _born_stage(feed, stimulus_source_params_digest=recorded)
     )

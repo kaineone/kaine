@@ -310,9 +310,36 @@ def test_install_creates_the_stage_owner_even_with_the_band_disabled(tmp_path):
 
 
 def test_install_refuses_a_bad_hearing_table_at_boot(tmp_path):
-    feed: dict[str, object] = {"stimulus_source": {"hearing": {"min_dwell_seconds": 9000.0, "max_dwell_seconds": 100.0}}}
+    feed: dict[str, object] = {"stimulus_source": {"hearing": {"saturation_window_seconds": 900.0, "max_dwell_seconds": 100.0}}}
     with pytest.raises(ValueError):
         _install_shared_stimulus_source_clock(feed, None, None, stage_path=tmp_path / "stage.json")
+
+
+def test_install_refuses_a_cap_below_the_span_plus_the_window(tmp_path):
+    """Spec: inverted dwell bounds are refused, naming the keys."""
+    feed: dict[str, object] = {"stimulus_source": {"hearing": {"max_dwell_seconds": 5999.0}}}
+    with pytest.raises(ValueError) as excinfo:
+        _install_shared_stimulus_source_clock(
+            feed, {"affect": {"learning_progress_span_s": 5400.0}}, None, stage_path=tmp_path / "stage.json"
+        )
+    for key in ("learning_progress_span_s", "saturation_window_seconds", "max_dwell_seconds"):
+        assert key in str(excinfo.value)
+    # A shorter span makes the same cap valid; the owner carries the span.
+    feed = {"stimulus_source": {"hearing": {"max_dwell_seconds": 5999.0}}}
+    _install_shared_stimulus_source_clock(
+        feed, {"affect": {"learning_progress_span_s": 3600.0}}, None, stage_path=tmp_path / "stage.json"
+    )
+    assert feed["_hearing_stage_state"].earliest_release_seconds == 3600.0 + 600.0
+
+
+def test_install_accepts_a_retired_min_dwell_with_a_warning(tmp_path, caplog):
+    """Spec: min_dwell_seconds = 600 boots with a warning and changes nothing."""
+    feed: dict[str, object] = {"stimulus_source": {"hearing": {"min_dwell_seconds": 600}}}
+    with caplog.at_level("WARNING"):
+        _install_shared_stimulus_source_clock(feed, None, None, stage_path=tmp_path / "stage.json")
+    assert "min_dwell_seconds is retired" in caplog.text
+    state = feed["_hearing_stage_state"]
+    assert state.earliest_release_seconds == 6000.0
 
 
 def test_shared_hearing_stage_state_falls_back_to_a_fresh_unpersisted_one():

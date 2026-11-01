@@ -418,20 +418,31 @@ class Affect(BaseModule):
             self._hearing_stage = stage
 
     def audition_learning_progress(self, stage: int) -> float | None:
-        """Return audition's windowed learning progress for hearing ``stage``, else None.
+        """Return audition's full-span learning progress for hearing ``stage``, else None.
 
-        None until this module has seen the matching ``development.hearing_stage``
-        event and holds an audition window with a value. That gates out the
-        stale pre-restart reading in the interval between the hearing stage
-        watch advancing the stage and this module restarting its audition bins
-        on the event.
+        This is the reading the hearing-stage owner decides saturation on, and
+        only that reader. None until this module has seen the matching
+        ``development.hearing_stage`` event, which gates out the stale
+        pre-restart reading in the interval between the hearing stage watch
+        advancing the stage and this module restarting its audition bins on the
+        event. None also until the restarted window holds
+        ``learning_progress_span_s / learning_progress_bin_s`` completed bins:
+        a reading over a shorter span is a ramp set by the span's length, which
+        sits below the floor for about an hour after any restart whatever the
+        stage has left to teach (band-step record 2026-10-31,
+        docs/records/validation/band-steps/), so it counts as missing. The
+        learning progress the drives use (``_learning_progress_terms``) and the
+        ``affect.state`` field are not gated.
         """
         if self._hearing_stage != stage:
             return None
         window = self._lp_windows.get("audition")
         if window is None:
             return None
-        return window.value(self._clock())
+        now = self._clock()
+        if window.completed_bins(now) < self._lp_max_bins:
+            return None
+        return window.value(now)
 
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).

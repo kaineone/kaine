@@ -396,7 +396,6 @@ def perception_feed_block(
             from kaine.boot.perception_feed import _hearing_band_params
             hearing = _hearing_band_params(feed)
             summary["hearing_enabled"] = bool(hearing.enabled)
-            summary["hearing_min_dwell_seconds"] = float(hearing.min_dwell_seconds)
             summary["hearing_max_dwell_seconds"] = float(hearing.max_dwell_seconds)
             summary["hearing_saturation_window_seconds"] = float(
                 hearing.saturation_window_seconds
@@ -404,7 +403,6 @@ def perception_feed_block(
         except Exception:
             log.debug("hearing_band params read failed", exc_info=True)
             summary["hearing_enabled"] = None
-            summary["hearing_min_dwell_seconds"] = None
             summary["hearing_max_dwell_seconds"] = None
             summary["hearing_saturation_window_seconds"] = None
 

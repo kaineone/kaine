@@ -95,12 +95,14 @@ class HearingStageWatch:
         """The newest reading with the run's dwell bounds, for the runtime file.
 
         The bounds are fixed for the run; the dashboard shows the stage's dwell against
-        them. The published event and ``current`` do not carry them.
+        them. The lower bound is the earliest a stage can end by saturation (the
+        learning-progress span plus the saturation window). The published event and
+        ``current`` do not carry them.
         """
         reading = self.current
         if reading is None:
             return None
-        reading["min_dwell_seconds"] = self._state.params.min_dwell_seconds
+        reading["earliest_release_seconds"] = self._state.earliest_release_seconds
         reading["max_dwell_seconds"] = self._state.params.max_dwell_seconds
         return reading
 

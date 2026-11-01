@@ -57,6 +57,13 @@ def test_hearing_schedule_joins_the_record_and_digest() -> None:
     record = stimulus_source_params_record(params, hearing=hearing)
     assert record["hearing_schedule"] == {
         "saturation_window_seconds": 600.0,
+        "max_dwell_seconds": 25200.0,
+        "release": "full_span",
+        "colour": "stage/5",
+    }
+    retired = stimulus_source_params_record(params, hearing=hearing, retired_min_dwell_seconds=5400.0)
+    assert retired["hearing_schedule"] == {
+        "saturation_window_seconds": 600.0,
         "min_dwell_seconds": 5400.0,
         "max_dwell_seconds": 25200.0,
         "colour": "stage/5",
@@ -70,7 +77,6 @@ def test_hearing_schedule_joins_the_record_and_digest() -> None:
     "change",
     [
         {"saturation_window_seconds": 300.0},
-        {"min_dwell_seconds": 3600.0},
         {"max_dwell_seconds": 7200.0},
     ],
 )
