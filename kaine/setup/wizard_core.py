@@ -222,7 +222,7 @@ def implied_extras(modules: dict[str, bool], shipped: dict[str, Any]) -> list[st
     Perception-feed-based (closes the gap that the shipped ``capture_enabled =
     off`` hides for research runs): the top-level ``[perception_feed].mode``
     implies the decode/capture deps independently of the per-module capture
-    flags. ``mode == "playlist"`` decodes media -> both ``vision`` (cv2 video) and
+    flags. ``mode == "playlist"`` decodes media -> both ``vision`` (av video decode) and
     ``audio`` (av audio-track decode). ``mode == "live"`` opens real devices ->
     both ``vision`` (camera) and ``audio`` (mic). ``mode == "seeded"`` is pure
     numpy synthesis and implies NOTHING (no cv2/av). The returned list is

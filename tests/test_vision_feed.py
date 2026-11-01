@@ -25,49 +25,17 @@ from kaine.modules.vision.feed import (
     SeededSchedule,
     load_playlist_manifest,
 )
+from tests._playlist_fakes import (
+    ConstantAudioContainer,
+    FakeVideoDecoders,
+    fake_av_module,
+)
 
 # ---------------------------------------------------------------------------
-# Fake cv2 decoder for real-time playlist pacing tests (no OpenCV, no media).
-# Each fake frame is tagged (path, media_frame_index) so a test can assert
-# exactly which media frame the source returned at a given elapsed time.
+# Fake playlist video decoder (tests/_playlist_fakes.py): frame i of a clip at
+# i / fps, tagged (path, media_frame_index) so a test can assert exactly which
+# media frame the source returned at a given elapsed time.
 # ---------------------------------------------------------------------------
-
-
-class _FakeCap:
-    def __init__(self, path: str, frame_count: int) -> None:
-        self._path = path
-        self._n = frame_count
-        self._i = 0
-
-    def isOpened(self) -> bool:
-        return True
-
-    def get(self, prop) -> float:  # noqa: ANN001 — only FRAME_COUNT is queried
-        return float(self._n)
-
-    def read(self):
-        if self._i >= self._n:
-            return False, None
-        frame = (self._path, self._i)
-        self._i += 1
-        return True, frame
-
-    def release(self) -> None:
-        return None
-
-
-class _FakeCv2:
-    CAP_PROP_FRAME_COUNT = 7  # arbitrary sentinel; the source only reads .get()
-
-    def __init__(self, frame_counts: dict[str, int]) -> None:
-        # frame_counts keyed by basename (paths are resolved absolute at open).
-        self._frame_counts = frame_counts
-
-    def VideoCapture(self, path: str):  # noqa: N802 — mirrors cv2 API
-        import os
-
-        base = os.path.basename(path)
-        return _FakeCap(base, self._frame_counts[base])
 
 
 class _FakeClock:
@@ -303,8 +271,8 @@ def test_missing_media_fails_closed(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _one_item_source(tmp_path, *, fps, frame_count):
-    """A verified single-item PlaylistSource wired to a fake cv2 + fake clock."""
+def _one_item_source(tmp_path, *, fps, frame_count, decoders=None, open_now=True):
+    """A verified single-item PlaylistSource wired to a fake decoder + fake clock."""
     (tmp_path / "clip.mp4").write_bytes(b"clip-media-0")
     sha = hashlib.sha256(b"clip-media-0").hexdigest()
     manifest = _write_manifest(tmp_path, [{"path": "clip.mp4", "sha256": sha, "fps": fps}])
@@ -314,10 +282,11 @@ def _one_item_source(tmp_path, *, fps, frame_count):
     src = PlaylistSource(
         parsed,
         playlist_clock=clock,
-        cv2_module=_FakeCv2({"clip.mp4": frame_count}),
+        decoder_factory=decoders or FakeVideoDecoders({"clip.mp4": frame_count}),
     )
-    opened = src.open()
-    assert opened
+    if open_now:
+        opened = src.open()
+        assert opened
     return src, fake_clock
 
 
@@ -388,7 +357,7 @@ def test_playlist_video_advances_item_at_real_time_end(tmp_path):
     src = PlaylistSource(
         parsed,
         playlist_clock=clock,
-        cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each at 30 fps
+        decoder_factory=FakeVideoDecoders({"a.mp4": 60, "b.mp4": 60}),  # 2 s each at 30 fps
     )
     opened = src.open()
     assert opened
@@ -464,7 +433,7 @@ def test_shared_clock_keeps_video_and_audio_on_the_same_item(tmp_path):
     video = PlaylistSource(
         parsed,
         playlist_clock=clock,
-        cv2_module=_FakeCv2({"a.mp4": 60, "b.mp4": 60}),  # 2 s each
+        decoder_factory=FakeVideoDecoders({"a.mp4": 60, "b.mp4": 60}),  # 2 s each
     )
     audio = PlaylistAudioStream(parsed, callback=lambda _b: None, playlist_clock=clock)
     video_opened = video.open()  # registers item 0's duration; audio shares the clock
@@ -596,7 +565,7 @@ def test_video_read_represents_held_frame_while_paused(tmp_path):
     clock = PlaylistClock(1, clock=_FakeClock())
     clk = clock._clock
     video = PlaylistSource(
-        parsed, playlist_clock=clock, cv2_module=_FakeCv2({"a.mp4": 60})
+        parsed, playlist_clock=clock, decoder_factory=FakeVideoDecoders({"a.mp4": 60})
     )  # 60 frames @ 30 fps = 2 s
     opened = video.open()
     assert opened
@@ -630,55 +599,9 @@ def test_audio_producer_parks_while_clock_paused(tmp_path, monkeypatch):
     parsed = load_playlist_manifest(manifest)
     clock = PlaylistClock(1, clock=_FakeClock())
 
-    class _Plane:
-        def __init__(self, d):
-            self._d = d
-
-        def __bytes__(self):
-            return bytes(self._d)
-
-    class _Frame:
-        def __init__(self, d):
-            self.planes = [_Plane(d)]
-
-    class _AudioResampler:
-        def __init__(self, **kwargs):
-            pass
-
-        def resample(self, frame):
-            yield frame
-
-    class _Stream:
-        pass
-
-    class _Streams:
-        audio = [_Stream()]
-
-    class _Container:
-        duration = 8_000_000  # AV_TIME_BASE microseconds
-        streams = _Streams()
-
-        def decode(self, stream):
-            for _ in range(8):
-                yield _Frame(b"\x01" * 32_000)
-
-        def close(self):
-            pass
-
-    class _ResamplerNS:
-        AudioResampler = _AudioResampler
-
-    class _AudioNS:
-        resampler = _ResamplerNS
-
-    class _FakeAv:
-        audio = _AudioNS
-
-        @staticmethod
-        def open(path):
-            return _Container()
-
-    monkeypatch.setitem(sys.modules, "av", _FakeAv)
+    monkeypatch.setitem(
+        sys.modules, "av", fake_av_module(lambda path: ConstantAudioContainer())
+    )
 
     emitted: list[bytes] = []
     stream = PlaylistAudioStream(
@@ -702,3 +625,136 @@ def test_audio_producer_parks_while_clock_paused(tmp_path, monkeypatch):
         stream.stop()
     assert stream._thread is None
     clock.resume()
+
+
+# ---------------------------------------------------------------------------
+# Presentation by decoded timestamp (playlist-feed-av-sync)
+# ---------------------------------------------------------------------------
+
+
+def test_playlist_video_presents_by_timestamp_not_nominal_fps(tmp_path):
+    """A variable-frame-rate item whose manifest says 25 fps: the frame shown is
+    the latest one whose own timestamp is at or before the clock, not frame
+    number elapsed x 25 (which would run 1 s ahead by 5 s here)."""
+    times = [i * 0.05 for i in range(100)] + [5.0 + i / 30.0 for i in range(150)]
+    src, clk = _one_item_source(
+        tmp_path, fps=25, frame_count=len(times), open_now=False,
+        decoders=FakeVideoDecoders(len(times), times=times, duration=10.0),
+    )
+    assert src.open()
+    for t, expected in ((0.0, 0), (1.27, 25), (4.99, 99), (5.0, 100), (6.0, 130), (9.99, 249)):
+        clk.t = t
+        ok, frame = src.read()
+        assert ok and frame == ("clip.mp4", expected), t
+    assert src.clock.duration(0) == 10.0
+
+
+def test_playlist_video_registers_its_last_frame_without_a_container_duration(tmp_path):
+    """No container duration: the item ends with its last frame, so the clock
+    can cross into the next item."""
+    src, clk = _one_item_source(
+        tmp_path, fps=30, frame_count=60, open_now=False,
+        decoders=FakeVideoDecoders(60, duration=None),
+    )
+    assert src.open()
+    assert src.clock.duration(0) is None
+    clk.t = 0.0
+    assert src.read()[1] == ("clip.mp4", 0)
+    clk.t = 3.0  # past the last frame (59/30 s)
+    ok, frame = src.read()
+    assert ok and frame == ("clip.mp4", 59)
+    assert src.clock.duration(0) == pytest.approx(60 / 30)
+
+
+def test_playlist_video_opened_late_seeks_instead_of_decoding_from_zero(tmp_path):
+    decoders = FakeVideoDecoders(600, keyframe_every=30)
+    src, clk = _one_item_source(
+        tmp_path, fps=30, frame_count=600, open_now=False, decoders=decoders
+    )
+    clk.t = 0.0
+    src.clock.start()
+    assert src.open()
+    clk.t = 15.0
+    ok, frame = src.read()
+    assert ok and frame == ("clip.mp4", 450)
+    decoder = decoders.opened[-1]
+    assert decoder.seeks == [15.0]
+    assert decoder.decoded <= 32  # from the keyframe at 15 s, not 450 frames
+
+
+def test_playlist_video_decodes_forward_when_a_seek_fails(tmp_path, caplog):
+    import logging
+
+    class _NoSeek(FakeVideoDecoders):
+        def __call__(self, path, item):  # noqa: ANN001, ANN204
+            decoder = super().__call__(path, item)
+
+            def _refuse(seconds):  # noqa: ANN001, ANN202
+                raise OSError("not seekable")
+
+            decoder.seek = _refuse
+            return decoder
+
+    src, clk = _one_item_source(
+        tmp_path, fps=30, frame_count=600, open_now=False, decoders=_NoSeek(600)
+    )
+    clk.t = 0.0
+    src.clock.start()
+    assert src.open()
+    caplog.set_level(logging.WARNING)
+    clk.t = 10.0
+    assert src.read()[1] == ("clip.mp4", 300)
+    clk.t = 15.0
+    assert src.read()[1] == ("clip.mp4", 450)
+    assert caplog.text.count("seek to") == 1  # one warning, then forward decode
+
+
+class _FakeVideoFrame:
+    def __init__(self, pts):  # noqa: ANN001
+        self.pts = pts
+
+
+def _fake_av_video(pts_list, *, duration=2_000_000, start_time=0):  # noqa: ANN001, ANN202
+    from types import SimpleNamespace
+
+    stream = SimpleNamespace(time_base=0.001, average_rate=25, thread_type=None)
+
+    class _Container:
+        def __init__(self) -> None:
+            self.duration = duration
+            self.start_time = start_time
+            self.streams = SimpleNamespace(video=[stream])
+            self.closed = False
+
+        def decode(self, s):  # noqa: ANN001, ANN201
+            for p in pts_list:
+                yield _FakeVideoFrame(p)
+
+        def close(self) -> None:
+            self.closed = True
+
+    return SimpleNamespace(open=lambda path: _Container())
+
+
+def test_pyav_decoder_keeps_the_timeline_monotonic():
+    """Missing timestamps take the previous time plus the frame interval;
+    duplicate and backward ones are held at the previous time."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    decoder = PyAvVideoDecoder(
+        _fake_av_video([0, 40, None, 120, 120, 100, 200], start_time=0), "x.webm"
+    )
+    times = []
+    while (nxt := decoder.next()) is not None:
+        times.append(round(nxt[0], 6))
+    assert times == [0.0, 0.04, 0.08, 0.12, 0.12, 0.12, 0.2]
+    assert decoder.duration == 2.0
+    assert decoder.frame_interval == pytest.approx(0.04)
+
+
+def test_pyav_decoder_measures_from_the_container_start():
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    decoder = PyAvVideoDecoder(_fake_av_video([1500, 1540], start_time=1_500_000), "x.webm")
+    assert decoder.next()[0] == pytest.approx(0.0)
+    assert decoder.next()[0] == pytest.approx(0.04)

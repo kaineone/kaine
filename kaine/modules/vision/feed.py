@@ -16,9 +16,10 @@ TWO REPRODUCIBILITY TIERS:
   frame is a pure function of ``(seed, frame_index)``, so a run replicates
   frame-for-frame. See openspec/changes/reproducible-perception-feed.
 - The **playlist source** is a LIVE / STATISTICAL tier: it presents each
-  manifest item's video at real wall-clock time (1x) — the way a media player
-  shows a file — so that picture and sound stay on the same item at the same
-  media position (see ``PlaylistClock``). It is reproducible by **media identity
+  manifest item's video at real wall-clock time (1x) by each frame's decoded
+  presentation timestamp — the way a media player shows a file — so that
+  picture and sound stay on the same item at the same media position (see
+  ``PlaylistClock``). It is reproducible by **media identity
   (per-item sha256)**, NOT by frame-for-frame reproduction: two runs present the
   same media, but the exact frame selected at a given cognitive tick depends on
   wall-clock timing. This deliberately trades bit-identical frame reproduction
@@ -670,6 +671,8 @@ def load_playlist_manifest(manifest_path: str | Path) -> PlaylistManifest:
     """Parse an operator playlist manifest (TOML).
 
     Schema (per item): ``path`` (str), ``sha256`` (64-hex str), ``fps`` (number).
+    ``fps`` is the item's nominal frame rate, recorded as provenance; the
+    playlist sources time presentation from the decoded timestamps, not from it.
     Items are ordered by their position in the file; an explicit ``order`` key
     is honoured if present, else the file order is used.
     """
@@ -745,8 +748,9 @@ class PlaylistClock:
     acceptable for the live tier.
 
     Per-item durations are registered by whichever feed opens an item first
-    (FIRST WRITER WINS): the video source registers ``frame_count / fps`` when it
-    opens an item, so the shared boundaries follow the true video-frame duration.
+    (FIRST WRITER WINS). Both feeds register the container duration, so the
+    first writer does not change the boundary; the video source registers its
+    last frame's end only for a container that reports no duration.
     A monotonic clock function is injectable so the pacing is unit-testable
     without real time.
 
@@ -947,21 +951,178 @@ class PlaylistClock:
             return self._n, 0.0
 
 
+#: PyAV reports ``container.duration`` and ``container.start_time`` in
+#: AV_TIME_BASE units (microseconds).
+AV_TIME_BASE = 1_000_000.0
+
+#: A playlist video source this far behind the clock seeks instead of decoding
+#: forward (a source opened partway into an item, or a long stall).
+_SEEK_BEHIND_S = 2.0
+
+#: Frame interval used for a frame without a timestamp when neither the stream
+#: nor the manifest gives a usable rate.
+_FALLBACK_FRAME_INTERVAL_S = 1.0 / 25.0
+
+
+def container_duration_s(container: Any) -> float | None:
+    """The container's duration in seconds, or ``None`` when it reports none.
+
+    Both playlist surfaces register this as the item's length on the shared
+    clock, so they agree on every item boundary."""
+    duration = getattr(container, "duration", None)
+    if not isinstance(duration, (int, float)) or duration <= 0:
+        return None
+    return float(duration) / AV_TIME_BASE
+
+
+def container_origin_s(container: Any) -> float:
+    """The container's start time in seconds (0 when it reports none).
+
+    Media time on both surfaces is a stream timestamp minus this origin, so a
+    file whose streams start a few milliseconds in keeps picture and sound on
+    one timeline."""
+    start = getattr(container, "start_time", None)
+    if not isinstance(start, (int, float)):
+        return 0.0
+    return float(start) / AV_TIME_BASE
+
+
+class PyAvVideoDecoder:
+    """One playlist item's video stream, decoded with PyAV, with each frame's
+    presentation time in seconds on the item's timeline.
+
+    The time of a frame is ``pts x time_base`` minus the container start, never
+    a frame index divided by a rate, so variable-frame-rate files keep their
+    real timing. A frame without a timestamp is placed one frame interval after
+    the previous frame; a timestamp at or before the previous frame's time is
+    held at that time, so the timeline never runs backwards. Frames are decoded
+    in memory only and converted to BGR only when presented (``image``).
+    """
+
+    def __init__(self, av_module: Any, path: str | Path, *, nominal_fps: float | None = None) -> None:
+        self._container = av_module.open(str(path))
+        try:
+            streams = self._container.streams.video
+            if not streams:
+                raise ValueError(f"no video stream in {path}")
+            self._stream = streams[0]
+            try:
+                # Frame-threaded decode keeps dropping frames cheap at 1x.
+                self._stream.thread_type = "AUTO"
+            except Exception:
+                log.debug("playlist video decoder: thread_type not settable", exc_info=True)
+            self._time_base = float(self._stream.time_base)
+            self._origin = container_origin_s(self._container)
+            self.duration: float | None = container_duration_s(self._container)
+            self.frame_interval = self._frame_interval(nominal_fps)
+        except Exception:
+            self._container.close()
+            raise
+        self._frames = self._container.decode(self._stream)
+        self._last_t: float | None = None
+
+    def _frame_interval(self, nominal_fps: float | None) -> float:
+        for rate in (
+            getattr(self._stream, "average_rate", None),
+            getattr(self._stream, "guessed_rate", None),
+            nominal_fps,
+        ):
+            try:
+                value = float(rate) if rate is not None else 0.0
+            except (TypeError, ValueError, ZeroDivisionError):
+                value = 0.0
+            if value > 0:
+                return 1.0 / value
+        return _FALLBACK_FRAME_INTERVAL_S
+
+    def next(self) -> tuple[float, Any] | None:
+        """The next decoded frame as ``(media_seconds, frame)``, or ``None`` at
+        the end of the stream (or on a decode error, which is logged)."""
+        try:
+            frame = next(self._frames)
+        except StopIteration:
+            return None
+        except Exception:
+            log.warning("playlist video decode failed; holding the last frame", exc_info=True)
+            return None
+        pts = frame.pts
+        if pts is None:
+            t = 0.0 if self._last_t is None else self._last_t + self.frame_interval
+        else:
+            t = float(pts) * self._time_base - self._origin
+            if self._last_t is not None and t < self._last_t:
+                t = self._last_t
+        self._last_t = t
+        return t, frame
+
+    def seek(self, seconds: float) -> None:
+        """Position on the keyframe at or before ``seconds`` (media time)."""
+        target = int((max(0.0, seconds) + self._origin) / self._time_base)
+        self._container.seek(target, stream=self._stream, backward=True, any_frame=False)
+        self._frames = self._container.decode(self._stream)
+        self._last_t = None
+
+    @staticmethod
+    def image(frame: Any) -> Any:
+        """The frame as a BGR uint8 ndarray, the layout the camera path gives."""
+        return frame.to_ndarray(format="bgr24")
+
+    def close(self) -> None:
+        self._container.close()
+
+
+def _pyav_video_decoder_factory() -> Callable[[Path, PlaylistItem], Any]:
+    """The default playlist video decoder factory (PyAV), or an honest
+    unavailable error with an install hint when PyAV is missing."""
+    try:
+        import av  # type: ignore[import-untyped]
+    except ImportError as exc:
+        from kaine.modules.vision.live import PerceptionUnavailableError
+
+        raise PerceptionUnavailableError(
+            "PyAV (av) not installed — playlist video decode requires it; "
+            "install with: pip install -e .[vision]"
+        ) from exc
+
+    def _factory(path: Path, item: PlaylistItem) -> PyAvVideoDecoder:
+        return PyAvVideoDecoder(av, path, nominal_fps=item.fps)
+
+    return _factory
+
+
+@dataclass
+class _Shown:
+    """The frame a playlist video source is presenting: its media time, the
+    decoded frame (dropped once converted) and its BGR image (made on first
+    presentation, then re-presented as the same object while held)."""
+
+    t: float
+    frame: Any
+    image: Any = None
+
+
 class PlaylistSource:
     """A ``_VideoSource`` over an operator-supplied, checksummed manifest,
     presented at REAL wall-clock time (1x) — the live / statistical tier.
 
     ``open()`` verifies EVERY item's sha256 before the run; any mismatch raises
-    ``PlaylistVerificationError`` (fail-closed). ``read()`` then returns the frame
-    at the current elapsed wall-clock position (``elapsed x item.fps``), dropping
-    stale frames when the cognitive tick runs slower than the file's frame rate
-    and holding the current frame when it runs faster — so a 30 fps clip plays at
-    30 fps of wall time regardless of the tick rate. Item boundaries come from the
-    shared ``PlaylistClock`` so video and audio advance together.
+    ``PlaylistVerificationError`` (fail-closed). ``read()`` then returns the
+    latest frame whose presentation time (``pts x time_base``) is at or before
+    the shared clock's offset into the item, dropping stale frames when the
+    cognitive tick runs slower than the file's frame rate and holding the
+    current frame when it runs faster. Frame times come from the decoded
+    timestamps, never from a frame index and the manifest's nominal ``fps``, so
+    a variable-frame-rate file stays on the sound's time. A source that opens,
+    or falls more than ``_SEEK_BEHIND_S`` behind, partway into an item seeks to
+    the keyframe at or before the clock's offset. Item boundaries come from the
+    shared ``PlaylistClock`` so video and audio advance together; both register
+    the container duration as the item's length.
 
     Reproducible by media identity (per-item sha256), NOT frame-for-frame: the
     frame selected at a given tick depends on wall-clock timing. Frames are
     decoded to in-memory ndarrays; nothing beyond the manifest is persisted.
+    ``decoder_factory(path, item)`` is injectable for tests; the default decodes
+    with PyAV (``PyAvVideoDecoder``).
     """
 
     def __init__(
@@ -970,7 +1131,7 @@ class PlaylistSource:
         *,
         media_root: str | Path | None = None,
         playlist_clock: PlaylistClock | None = None,
-        cv2_module: Any | None = None,
+        decoder_factory: Callable[[Path, PlaylistItem], Any] | None = None,
     ) -> None:
         self._manifest = manifest
         # Relative item paths resolve against the manifest's own directory by
@@ -979,15 +1140,16 @@ class PlaylistSource:
         # Shared start-clock (injected at boot so audio and video align); a
         # private clock keeps a standalone source working on its own.
         self._clock = playlist_clock or PlaylistClock(len(manifest.items))
-        # Injectable cv2 for tests (fake decoder). None -> import the real cv2.
-        self._cv2: Any = cv2_module
-        self._cap: Any = None
+        # None -> the PyAV decoder, resolved at open() (honest failure there).
+        self._decoder_factory = decoder_factory
+        self._decoder: Any = None
         self._item_idx = 0
         self._verified = False
-        # Real-time pacing state (per item), reset on every item open.
-        self._frame_cursor = 0        # index of the NEXT media frame cap.read() yields
-        self._last_media_frame = -1   # media frame index last RETURNED for this item
-        self._last_frame: Any = None  # cached frame for the hold path
+        # Per-item presentation state, reset on every item open.
+        self._shown: _Shown | None = None             # the frame being presented
+        self._pending: tuple[float, Any] | None = None  # next decoded frame, not yet due
+        self._ended = False                            # the item's stream is exhausted
+        self._seek_failed = False                      # seek raised once; decode forward
 
     @property
     def manifest(self) -> PlaylistManifest:
@@ -1026,82 +1188,83 @@ class PlaylistSource:
         # Verify BEFORE opening any decoder — a changed file must stop the run
         # before a single frame is read.
         self.verify()
-        if self._cv2 is None:
-            try:
-                import cv2  # type: ignore[import-untyped]
-            except ImportError as exc:
-                from kaine.modules.vision.live import PerceptionUnavailableError
-
-                raise PerceptionUnavailableError(
-                    "opencv-python-headless not installed — install with: pip install -e .[vision]"
-                ) from exc
-            self._cv2 = cv2
+        if self._decoder_factory is None:
+            self._decoder_factory = _pyav_video_decoder_factory()
         self._item_idx = 0
         return self._open_current_item()
+
+    def _reset_item_state(self) -> None:
+        self._shown = None
+        self._pending = None
+        self._ended = False
+        self._seek_failed = False
+
+    def _close_decoder(self) -> None:
+        if self._decoder is not None:
+            try:
+                self._decoder.close()
+            except Exception:
+                log.debug("playlist video decoder close raised", exc_info=True)
+            self._decoder = None
 
     def _open_current_item(self) -> bool:
         if self._item_idx >= len(self._manifest.items):
             return False
         item = self._manifest.items[self._item_idx]
         media = self._resolve(item)
-        cap = self._cv2.VideoCapture(str(media))
-        if not cap.isOpened():
-            log.warning("playlist item could not be opened: %s", media)
-            return False
-        self._cap = cap
-        self._frame_cursor = 0
-        self._last_media_frame = -1
-        self._last_frame = None
-        # Register this item's real duration on the shared clock so the boundary
-        # is crossed at 1x (video is the authority for video-frame duration).
         try:
-            frame_count = float(cap.get(self._cv2.CAP_PROP_FRAME_COUNT))
+            decoder = self._decoder_factory(media, item)
         except Exception:
-            frame_count = 0.0
-        if frame_count > 0 and item.fps > 0:
-            self._clock.set_duration(self._item_idx, frame_count / float(item.fps))
+            log.warning("playlist item could not be opened: %s", media, exc_info=True)
+            return False
+        self._decoder = decoder
+        self._reset_item_state()
+        # Register this item's length on the shared clock (first writer wins):
+        # the container duration, the same value the audio surface registers.
+        duration = getattr(decoder, "duration", None)
+        if duration is not None and duration > 0:
+            self._clock.set_duration(self._item_idx, float(duration))
         return True
 
     def first_frame(self) -> Any | None:
-        """Decode the programme's opening frame (item 0, media frame 0).
+        """Decode the programme's opening frame (item 0, first frame).
 
-        Uses a private capture on the same decode path as ``read()`` and never
+        Uses a private decoder on the same decode path as ``read()`` and never
         starts, reads or registers anything on the shared clock, so the
         programme's position is untouched. Requires a verified source
         (``open()`` first); returns ``None`` when the frame cannot be decoded.
         The frame lives only in memory.
         """
-        if not self._verified or self._cv2 is None or not self._manifest.items:
+        if not self._verified or self._decoder_factory is None or not self._manifest.items:
             return None
-        cap = self._cv2.VideoCapture(str(self._resolve(self._manifest.items[0])))
+        item = self._manifest.items[0]
         try:
-            if not cap.isOpened():
-                return None
-            ok, frame = cap.read()
-            return frame if ok else None
+            decoder = self._decoder_factory(self._resolve(item), item)
+        except Exception:
+            log.debug("playlist first frame: item could not be opened", exc_info=True)
+            return None
+        try:
+            first = decoder.next()
+            return decoder.image(first[1]) if first is not None else None
+        except Exception:
+            log.debug("playlist first frame could not be decoded", exc_info=True)
+            return None
         finally:
             try:
-                cap.release()
+                decoder.close()
             except Exception:
-                log.debug("playlist VideoCapture.release raised", exc_info=True)
+                log.debug("playlist video decoder close raised", exc_info=True)
 
     def _advance_item(self) -> bool:
-        if self._cap is not None:
-            try:
-                self._cap.release()
-            except Exception:
-                log.debug("playlist VideoCapture.release raised", exc_info=True)
-            self._cap = None
+        self._close_decoder()
         self._item_idx += 1
-        self._frame_cursor = 0
-        self._last_media_frame = -1
-        self._last_frame = None
+        self._reset_item_state()
         if self._item_idx >= len(self._manifest.items):
             return False
         return self._open_current_item()
 
     def read(self) -> tuple[bool, Any]:
-        if self._cap is None or not self._verified or self._cv2 is None:
+        if self._decoder is None or not self._verified:
             return False, None
         # First read fixes the shared playback origin (idempotent across feeds).
         self._clock.start()
@@ -1118,36 +1281,67 @@ class PlaylistSource:
             target_idx, offset = self._clock.locate()
             if target_idx >= n:
                 return False, None
-        item = self._manifest.items[self._item_idx]
-        target_media_frame = int(offset * float(item.fps))
-        # HOLD: the tick outran the frame rate — re-present the current frame.
-        if self._last_frame is not None and target_media_frame <= self._last_media_frame:
-            return True, self._last_frame
-        # DROP/read forward to the target frame (skip stale frames to track 1x).
-        frame = self._last_frame
-        while self._frame_cursor <= target_media_frame:
-            ok, f = self._cap.read()
-            if not ok:
-                # File ended earlier than its declared frame count — let the
-                # shared clock advance us to the next item on a later read.
-                break
-            frame = f
-            self._last_media_frame = self._frame_cursor
-            self._frame_cursor += 1
-        if frame is None:
+        shown = self._present(offset)
+        if shown is None:
             return False, None
-        self._last_frame = frame
-        return True, frame
+        if shown.image is None:
+            shown.image = self._decoder.image(shown.frame)
+            shown.frame = None
+        return True, shown.image
+
+    def _present(self, offset: float) -> _Shown | None:
+        """Advance to the latest frame at or before ``offset`` (item seconds)
+        and return it. Before the first frame's time the first frame is shown;
+        after the last frame the last frame is held until the clock moves on."""
+        decoder = self._decoder
+        if not self._ended and not self._seek_failed:
+            if self._pending is not None:
+                next_t = self._pending[0]
+            elif self._shown is not None:
+                next_t = self._shown.t
+            else:
+                next_t = 0.0
+            if offset - next_t > _SEEK_BEHIND_S:
+                self._seek(offset)
+        while not self._ended:
+            if self._pending is None:
+                self._pending = decoder.next()
+                if self._pending is None:
+                    self._end_of_stream()
+                    break
+            t, frame = self._pending
+            if t <= offset or self._shown is None:
+                self._shown = _Shown(t=t, frame=frame)
+                self._pending = None
+                continue
+            break
+        return self._shown
+
+    def _seek(self, offset: float) -> None:
+        try:
+            self._decoder.seek(offset)
+        except Exception:
+            # Decoding forward is slower but reaches the same frame.
+            log.warning(
+                "playlist video seek to %.3fs failed; decoding forward", offset, exc_info=True
+            )
+            self._seek_failed = True
+            return
+        # The frame on screen stays until a frame from the new position is due.
+        self._pending = None
+
+    def _end_of_stream(self) -> None:
+        self._ended = True
+        # A container without a duration: the item ends with its last frame,
+        # so the clock can cross the boundary (it cannot cross an unmeasured one).
+        if self._clock.duration(self._item_idx) is None and self._shown is not None:
+            interval = float(getattr(self._decoder, "frame_interval", _FALLBACK_FRAME_INTERVAL_S))
+            self._clock.set_duration(self._item_idx, self._shown.t + interval)
 
     def release(self) -> None:
-        if self._cap is not None:
-            try:
-                self._cap.release()
-            except Exception:
-                log.debug("playlist VideoCapture.release raised", exc_info=True)
-            self._cap = None
+        self._close_decoder()
         self._verified = False
-        self._last_frame = None
+        self._reset_item_state()
 
 
 __all__ = [
@@ -1161,4 +1355,8 @@ __all__ = [
     "PlaylistClock",
     "load_playlist_manifest",
     "PlaylistSource",
+    "PyAvVideoDecoder",
+    "AV_TIME_BASE",
+    "container_duration_s",
+    "container_origin_s",
 ]

@@ -50,9 +50,12 @@ from kaine.modules.audition.live import PerceptionUnavailableError
 from kaine.modules.perception_prng import keyed_u64 as _keyed_u64
 from kaine.modules.perception_prng import unit_float as _unit_float
 from kaine.modules.vision.feed import (
+    AV_TIME_BASE,
     PlaylistClock,
     PlaylistManifest,
     PlaylistPosition,
+    container_duration_s,
+    container_origin_s,
 )
 
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
@@ -66,8 +69,6 @@ if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
 log = logging.getLogger(__name__)
 
 _INT16_MAX = 32767
-# PyAV reports ``container.duration`` in AV_TIME_BASE units (microseconds).
-_AV_TIME_BASE = 1_000_000.0
 
 
 def soft_limit(x: "np.ndarray", *, knee: float, ceiling: float) -> "np.ndarray":
@@ -748,9 +749,14 @@ class PlaylistAudioStream:
     semantics); any mismatch raises ``PlaylistVerificationError`` (fail-closed).
     It then decodes each media file's AUDIO track in manifest order via PyAV
     (``av``), resamples to ``sample_rate`` / ``channels``, and emits int16 LE PCM
-    blocks into the callback. cv2 cannot decode audio, so ``av`` is required; if
-    it is absent the source raises ``PerceptionUnavailableError`` with an install
-    hint — honest failure, NEVER a silent no-op or synthetic substitute.
+    blocks into the callback. Each resampled frame contributes exactly its
+    ``frame.samples`` (never its padded plane buffer), placed on the item's
+    timeline by the decoded timestamps (``_ItemTimeline``): a timestamp gap is
+    heard as silence, audio before the position is trimmed, and each item is
+    padded or trimmed to its length on the shared clock, so every item's sound
+    starts when the clock reaches it. ``av`` is required; if it is absent the
+    source raises ``PerceptionUnavailableError`` with an install hint — honest
+    failure, NEVER a silent no-op or synthetic substitute.
 
     Persists nothing beyond the manifest it is handed (zero-persistence).
     """
@@ -883,10 +889,25 @@ class PlaylistAudioStream:
 
     # --- producer ----------------------------------------------------------
 
+    def _clock_duration(self, idx: int) -> float | None:
+        """The item's length on the shared clock, or ``None`` when unknown."""
+        getter = getattr(self._clock, "duration", None)
+        if not callable(getter):
+            return None
+        try:
+            value = getter(idx)
+        except Exception:
+            log.debug("playlist clock duration lookup failed", exc_info=True)
+            return None
+        if isinstance(value, (int, float)) and value > 0:
+            return float(value)
+        return None
+
     def _produce(self) -> None:
         import av  # type: ignore[import-untyped]
 
-        block_bytes = self._frames_per_block * self._channels * 2
+        frame_bytes = self._channels * 2
+        block_bytes = self._frames_per_block * frame_bytes
         block_seconds = max(1, self._frames_per_block) / float(max(1, self._sample_rate))
         carry = bytearray()
         next_deadline = time.monotonic()
@@ -912,6 +933,37 @@ class PlaylistAudioStream:
                 self._stopped.wait(timeout=sleep_for)
             else:
                 next_deadline = time.monotonic()
+
+        def _push(pcm: bytes) -> bool:
+            """Queue PCM and emit every full block. False once stopped."""
+            carry.extend(pcm)
+            while len(carry) >= block_bytes:
+                if self._stopped.is_set():
+                    return False
+                _emit(bytes(carry[:block_bytes]))
+                del carry[:block_bytes]
+            return not self._stopped.is_set()
+
+        def _push_silence(samples: int) -> bool:
+            """Queue ``samples`` frames of silence, a block at a time."""
+            remaining = max(0, int(samples)) * frame_bytes
+            zeros = bytes(block_bytes)
+            while remaining > 0:
+                chunk = min(remaining, block_bytes)
+                if not _push(zeros[:chunk]):
+                    return False
+                remaining -= chunk
+            return not self._stopped.is_set()
+
+        def _push_frame(rframe: Any, timeline: _ItemTimeline) -> bool:
+            """Queue exactly the resampled frame's samples (never its padded
+            plane), trimmed to the item's timeline."""
+            pcm = _frame_pcm(rframe, self._channels)
+            skip, keep = timeline.take(len(pcm) // self._channels)
+            if keep <= 0:
+                return not self._stopped.is_set()
+            lo = skip * self._channels
+            return _push(pcm[lo : lo + keep * self._channels].tobytes())
 
         # Align to the shared playback origin (idempotent across both feeds) so
         # audio and video start item 0 at the same wall-clock moment.
@@ -940,21 +992,33 @@ class PlaylistAudioStream:
                     continue
                 if self._stopped.is_set():
                     return
-                self._begin_item(idx, start_offset if idx == start_idx else 0.0)
+                item_start = start_offset if idx == start_idx else 0.0
+                self._begin_item(idx, item_start)
                 media = self._resolve(item.path)
                 container = av.open(str(media))
                 try:
-                    # Register this item's duration on the shared clock (first
-                    # writer wins — the video source's frame-count duration is
-                    # authoritative when it opened the item first). PyAV reports
-                    # container.duration in AV_TIME_BASE units (microseconds).
-                    if container.duration:
-                        self._clock.set_duration(
-                            idx, float(container.duration) / _AV_TIME_BASE
-                        )
+                    # Register this item's length on the shared clock (first
+                    # writer wins). Both surfaces register the container
+                    # duration, so they agree on the boundary.
+                    container_s = container_duration_s(container)
+                    if container_s is not None:
+                        self._clock.set_duration(idx, container_s)
+                    end_s = self._clock_duration(idx) or container_s
+                    timeline = _ItemTimeline(
+                        self._sample_rate, start_s=item_start, end_s=end_s
+                    )
                     if not container.streams.audio:
-                        log.warning("playlist item has no audio track: %s", media)
+                        # Heard as silence for the item's length, so the next
+                        # item's sound starts when the clock reaches it.
+                        log.warning(
+                            "playlist item has no audio track: %s; %.3f s of silence",
+                            media,
+                            timeline.remaining() / float(self._sample_rate),
+                        )
+                        if not _push_silence(timeline.remaining()):
+                            return
                         continue
+                    origin = container_origin_s(container)
                     resampler = av.audio.resampler.AudioResampler(
                         format="s16",
                         layout="mono" if self._channels == 1 else "stereo",
@@ -963,46 +1027,47 @@ class PlaylistAudioStream:
                     stream = container.streams.audio[0]
                     # H1 — seek within the located item up to the clock's
                     # offset. Prefer a fast container seek; if PyAV refuses,
-                    # fall back to decode-and-drop (bounded by the offset;
-                    # dropped frames never reach _emit, so no pacing sleeps
-                    # occur while dropping).
-                    drop_until_s = start_offset if idx == start_idx else 0.0
-                    if drop_until_s > 0:
+                    # decode from the start: the timeline trims every frame
+                    # before the offset, and frames wholly before it are not
+                    # even resampled (no _emit, so no pacing sleeps).
+                    if item_start > 0:
                         try:
                             container.seek(
-                                int(drop_until_s * 1_000_000), any_frame=False
+                                int((item_start + origin) * AV_TIME_BASE),
+                                any_frame=False,
                             )
-                            drop_until_s = 0.0
                         except Exception:
                             log.warning(
                                 "playlist container seek failed; "
                                 "decode-and-dropping to offset %.3fs",
-                                drop_until_s,
+                                item_start,
                                 exc_info=True,
                             )
                     for frame in container.decode(stream):
                         if self._stopped.is_set():
                             return
-                        if drop_until_s > 0:
-                            frame_t = float(frame.pts or 0) * float(
-                                frame.time_base or 0
-                            )
-                            if frame_t < drop_until_s:
-                                continue
-                            drop_until_s = 0.0
+                        t_in = _media_time(frame, origin)
+                        if timeline.wholly_before(t_in, frame):
+                            continue
                         # Per-frame pause park (between frames, which covers
                         # the first block of each item): no PyAV frame iteration
                         # while asleep, so decoders truly idle. Stop wins.
                         self._clock.wait_if_paused(stop_check=self._stopped.is_set)
                         if self._stopped.is_set():
                             return
+                        if not _push_silence(timeline.place(t_in)):
+                            return
                         for rframe in resampler.resample(frame):
-                            carry += bytes(rframe.planes[0])
-                            while len(carry) >= block_bytes:
-                                if self._stopped.is_set():
-                                    return
-                                _emit(bytes(carry[:block_bytes]))
-                                del carry[:block_bytes]
+                            if rframe is not None and not _push_frame(rframe, timeline):
+                                return
+                    # Drain the resampler's buffered tail for this item.
+                    for rframe in _flush_resampler(resampler):
+                        if not _push_frame(rframe, timeline):
+                            return
+                    # Pad (or, via the cap in take(), trim) to the item's length.
+                    log.info("playlist audio item %d: %s", idx, timeline.summary())
+                    if not _push_silence(timeline.remaining()):
+                        return
                 finally:
                     container.close()
             # Flush a final short block (zero-padded) so no audio is dropped.
@@ -1013,6 +1078,150 @@ class PlaylistAudioStream:
                 _emit(bytes(carry[:block_bytes]))
         except Exception:
             log.exception("playlist audio producer crashed")
+
+
+#: Audio more than this far off the item's timeline is re-placed: a later
+#: timestamp is preceded by silence, an earlier one is trimmed. Larger than one
+#: Vorbis/Opus frame's millisecond rounding, smaller than a perceptible
+#: audio-leading lip-sync error (~45 ms, ITU-R BT.1359).
+_TIMELINE_TOLERANCE_S = 0.040
+
+
+class _ItemTimeline:
+    """Where the playlist audio is on one item's timeline, in samples.
+
+    ``pos`` counts the samples placed for the item (from the resync offset).
+    ``place`` compares a decoded frame's media time with ``pos`` and returns
+    the silence to insert before it (a timestamp gap) or arranges for the
+    frame's head to be trimmed (audio before the position: after a seek, or
+    overlapping timestamps). ``take`` applies that trim and the item's end, so
+    an item never delivers more than its length on the shared clock;
+    ``remaining`` is the silence that pads a short item to that length.
+    """
+
+    def __init__(
+        self,
+        sample_rate: int,
+        *,
+        start_s: float,
+        end_s: float | None,
+        tolerance_s: float = _TIMELINE_TOLERANCE_S,
+    ) -> None:
+        self._rate = int(sample_rate)
+        self.pos = int(round(max(0.0, start_s) * self._rate))
+        self.end = int(round(end_s * self._rate)) if end_s else None
+        self._tolerance = int(round(tolerance_s * self._rate))
+        self._trim = 0
+        # Content-free accounting, logged when the item ends.
+        self.filled = 0    # silence inserted for timestamp gaps
+        self.trimmed = 0   # samples dropped before the position
+        self.capped = 0    # samples dropped past the item's end
+
+    def wholly_before(self, t_in: float | None, frame: Any) -> bool:
+        """True when a decoded frame ends before the position (so it need not
+        be resampled at all)."""
+        if t_in is None:
+            return False
+        samples = getattr(frame, "samples", None)
+        rate = getattr(frame, "sample_rate", None)
+        if not isinstance(samples, int) or not isinstance(rate, int) or rate <= 0:
+            return False
+        end = int(round((t_in + samples / rate) * self._rate))
+        return end < self.pos - self._tolerance
+
+    def place(self, t_in: float | None) -> int:
+        """Silence samples to insert before a frame starting at ``t_in``."""
+        self._trim = 0
+        if t_in is None:
+            return 0
+        gap = int(round(t_in * self._rate)) - self.pos
+        if gap > self._tolerance:
+            if self.end is not None:
+                gap = max(0, min(gap, self.end - self.pos))
+            self.pos += gap
+            self.filled += gap
+            return gap
+        if gap < -self._tolerance:
+            self._trim = -gap
+        return 0
+
+    def take(self, n: int) -> tuple[int, int]:
+        """``(skip, keep)`` for ``n`` resampled samples: the head to trim and
+        the count to deliver (never past the item's end)."""
+        skip = min(self._trim, n)
+        self._trim -= skip
+        self.trimmed += skip
+        keep = n - skip
+        if self.end is not None:
+            capped = max(0, min(keep, self.end - self.pos))
+            self.capped += keep - capped
+            keep = capped
+        self.pos += keep
+        return skip, keep
+
+    def summary(self) -> str:
+        """One content-free line on how the item's audio was placed."""
+        rate = float(self._rate)
+        return (
+            f"{self.filled / rate:.3f} s of timestamp gaps filled with silence, "
+            f"{self.trimmed / rate:.3f} s before the position trimmed, "
+            f"{self.capped / rate:.3f} s past the item's end dropped, "
+            f"{self.remaining() / rate:.3f} s padded to the item's length"
+        )
+
+    def remaining(self) -> int:
+        """Samples of silence that pad the item to its end (0 when unknown)."""
+        if self.end is None:
+            return 0
+        return max(0, self.end - self.pos)
+
+
+def _media_time(frame: Any, origin: float) -> float | None:
+    """A decoded frame's time on the item's timeline, or ``None`` without a
+    timestamp."""
+    pts = getattr(frame, "pts", None)
+    time_base = getattr(frame, "time_base", None)
+    if pts is None or not time_base:
+        return None
+    return float(pts) * float(time_base) - origin
+
+
+def _frame_pcm(frame: Any, channels: int) -> "np.ndarray":
+    """Exactly ``frame.samples`` int16 samples per channel, interleaved.
+
+    A PyAV plane is a padded buffer (a 193-sample mono s16 frame is a 512-byte
+    plane), so the plane bytes are never used: ``to_ndarray()`` gives
+    ``(1, samples x channels)`` for a packed layout and ``(channels, samples)``
+    for a planar one, which is transposed to interleave.
+    """
+    import numpy as np
+
+    samples = int(frame.samples)
+    arr = np.asarray(frame.to_ndarray())
+    if arr.dtype != np.int16:
+        raise ValueError(f"playlist audio resampler gave {arr.dtype}, expected int16")
+    fmt = getattr(frame, "format", None)
+    planar = bool(getattr(fmt, "is_planar", False))
+    if planar and arr.ndim == 2 and arr.shape[0] == channels:
+        flat = arr[:, :samples].T.reshape(-1)
+    else:
+        flat = arr.reshape(-1)[: samples * channels]
+    if flat.size != samples * channels:
+        raise ValueError(
+            f"playlist audio frame holds {flat.size} values, expected "
+            f"{samples} samples x {channels} channels"
+        )
+    return np.ascontiguousarray(flat, dtype="<i2")
+
+
+def _flush_resampler(resampler: Any) -> list[Any]:
+    """The resampler's buffered tail at the end of an item."""
+    try:
+        out = resampler.resample(None)
+    except Exception:
+        log.debug("playlist audio resampler flush raised", exc_info=True)
+        return []
+    return [f for f in (out or ()) if f is not None]
 
 
 __all__ = [

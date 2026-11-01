@@ -188,6 +188,28 @@ def test_vision_cv2_needed_in_playlist_mode(monkeypatch):
     assert any(m.import_name == "cv2" and m.extra == "vision" for m in missing)
 
 
+def test_vision_av_needed_in_playlist_mode_only(monkeypatch):
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        _make_find_spec({"torch", "transformers", "PIL", "cv2"}),
+    )
+    playlist = {
+        "modules": {"vision": True},
+        "perception_feed": {"mode": "playlist"},
+    }
+    live = {
+        "modules": {"vision": True},
+        "vision": {"capture_enabled": True},
+        "perception_feed": {"mode": "live"},
+    }
+    assert any(
+        m.module == "vision" and m.import_name == "av" and m.extra == "vision"
+        for m in check(playlist)
+    )
+    assert not any(m.import_name == "av" for m in check(live))
+
+
 def test_vision_cv2_not_needed_without_capture_or_playlist(monkeypatch):
     monkeypatch.setattr(
         importlib.util,

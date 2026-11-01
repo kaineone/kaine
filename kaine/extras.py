@@ -57,6 +57,11 @@ def _vision_cv2_needed(config: dict) -> bool:
     return _perception_mode(config) == "playlist"
 
 
+def _vision_av_needed(config: dict) -> bool:
+    """PyAV decodes playlist video by presentation timestamp."""
+    return _perception_mode(config) == "playlist"
+
+
 def _audition_sounddevice_needed(config: dict) -> bool:
     """sounddevice is only used when audition itself opens a real mic device."""
     if not (config.get("audition") or {}).get("capture_enabled"):
@@ -170,6 +175,7 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
         Requirement("transformers", "vision"),
         Requirement("PIL", "vision"),
         Requirement("cv2", "vision", predicate=_vision_cv2_needed),
+        Requirement("av", "vision", predicate=_vision_av_needed),
     ),
     "audition": (
         Requirement("sounddevice", "audio", predicate=_audition_sounddevice_needed),

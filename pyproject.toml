@@ -48,12 +48,14 @@ nexus = ["kaine[dashboard]"]
 nvidia = [
     "pynvml>=13.0.1,<14",
 ]
-# the vision module: the vision encoder (transformers, Pillow) and the live camera / playlist
-# video reader (OpenCV). Lazy-imported.
+# the vision module: the vision encoder (transformers, Pillow), the live camera reader
+# (OpenCV) and the playlist video decoder (PyAV, which gives each frame's presentation
+# timestamp). Lazy-imported.
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
     "transformers>=5.19.0,<6",
     "Pillow>=12.3.0,<13",
+    "av>=18.1.0,<19",  # PyAV — playlist-video decode by presentation timestamp (PlaylistSource)
 ]
 full = [
     "kaine[core,memory,memory-edge,dashboard,nvidia,vision,audio,reasoning,worldmodel,oscillator,internvideo]",
@@ -119,8 +121,8 @@ internvideo-flash = [
     "flash-attn>=2.8.3.post1",
 ]
 # Aggregate convenience extra: everything the reproducible perception feed needs
-# (the unified [perception_feed] — cv2 decodes playlist video, sounddevice/av
-# decode playlist audio, mic/camera for live mode). Self-referential extras are
+# (the unified [perception_feed] — av decodes playlist video and audio, sounddevice
+# and cv2 serve the mic and camera for live mode). Self-referential extras are
 # valid; this one name provisions both sense surfaces for a research install.
 perception = ["kaine[audio]", "kaine[vision]"]
 # Active-inference reasoning engine for the planning module (pymdp 1.0, JAX).

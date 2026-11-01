@@ -23,7 +23,7 @@ PyAV exposes each decoded frame's `pts` and `time_base`, the container duration 
 - *Alternative:* keep OpenCV and read `CAP_PROP_POS_MSEC` after each frame. Rejected for the seek and portability reasons above.
 
 **Decision 2: a small decoder seam.**
-`PlaylistSource` takes an optional `decoder_factory(path)` returning an object with `duration`, `next()` (the next `(seconds, frame)` or `None` at the end), `seek(seconds)`, `image(frame)` and `close()`. The default wraps PyAV; tests inject a fake with scripted timestamps. This replaces the `cv2_module` seam.
+`PlaylistSource` takes an optional `decoder_factory(path, item)` returning an object with `duration`, `next()` (the next `(seconds, frame)` or `None` at the end), `seek(seconds)`, `image(frame)` and `close()`. The default wraps PyAV; tests inject a fake with scripted timestamps. This replaces the `cv2_module` seam.
 
 **Decision 3: presentation rule.**
 Media time is `pts × time_base − container start`. The source keeps the current frame and one decoded frame of lookahead. A read moves forward while the lookahead's time is at or before the clock offset, then presents the current frame; a read that finds no newer frame re-presents the same frame object (hold). Before the first frame's time, the first frame is shown. After the last frame, the last frame is held until the clock moves to the next item. A missing `pts` becomes the previous time plus the stream's frame interval (from its average rate, else the nominal manifest rate, else 1/25 s); a `pts` at or before the previous time is held at the previous time, so of several frames with one timestamp the last is the one shown.
