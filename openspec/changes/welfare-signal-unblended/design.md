@@ -28,11 +28,11 @@ The specification of `workspace-feedback` makes the blend's error the reported e
 
 `welfare_prediction_error(payload) -> float | None`, in `kaine/lifecycle/welfare_signal.py`, which already holds `SustainedThresholdTracker`, the sustained-distress primitive shared by the welfare observer and the welfare response (so the response keeps its rule of importing nothing from `kaine.evaluation`):
 
-1. If `payload["prediction_error"]` is null or absent, return `None`. A null error is no sample, as now.
-2. If the payload carries a `workspace_feedback` mapping (the blend is in use), return its `own_error`.
+1. If `payload["prediction_error"]` is null, return `None`: no sample, as now. If the key is absent, or the value is not a number, the report is unreadable: no sample, marked with its defect. (On main an absent key read as 0.0 in the observer and the welfare response, which ended an open episode, and a non-number raised in the welfare response's poll. An unreadable report now never ends an episode, and decision 2a keeps it loud.)
+2. If the payload carries a `workspace_feedback` mapping (the blend is in use), return its `own_error`, whatever number it is. A non-finite own error is returned as is: when the own model overflows, the blend weights go to the head alone and the published error turns finite and low, so falling back to it would let the head mask the distress.
 3. Otherwise return `prediction_error`. Nothing blends it, so it is the own-model error.
 
-If step 2 finds no finite `own_error` in a report whose `prediction_error` is defined, that is a producer defect. The function then returns the published `prediction_error` and logs an error once per processor. Returning `None` instead would pause the distress tracker for as long as the defect lasted, hiding distress; the blended value is today's behaviour and keeps the net watching. The producer test of decision 3 keeps the path from firing.
+If step 2 finds no numeric `own_error` in a report whose `prediction_error` is defined, that is a producer defect. The function then returns the published `prediction_error`, marked as a fallback, and logs an error once per processor; every reader counts the fallbacks (decision 2a). Returning `None` instead would pause the distress tracker for as long as the defect lasted, hiding distress; the blended value is today's behaviour and keeps the net watching. The producer test of decision 3 keeps the path from firing.
 
 Alternatives considered:
 
@@ -47,6 +47,20 @@ The sustained-distress tracker and gray-zone count in the welfare observer, the 
 A source-scan test lists those files and fails when one reads `prediction_error` from a report payload for a welfare decision other than through the function. A new welfare reader is added to its list by the same review that adds the reader.
 
 The vision module's stimulus-source error in the development run (`development.py`, `_read_vision_errors`) is not a welfare signal: it measures how well the entity predicts its stimulus, which is the blend when feedback is on. It is left as is and named here so the choice is explicit.
+
+### 2a. Defects are counted and never silent
+
+`read_welfare_prediction_error` returns the reading with its defect, if any: an unreadable report (no key, or not a number) or an own-error fallback. Each reader keeps a `WelfareSignalAccount` of the reports it read, its unreadable reports and their current run, and its fallbacks.
+
+- The welfare response fails its poll, after acting on every readable sample in it, whenever the poll read an unreadable report (`WelfareSignalUnreadable`). The run loop logs every such poll, and on the welfare-gates branch `poll_loop_failing` counts it, so a producer that stops sending a readable error escalates like any other blind net. It writes a `welfare_signal_defects` incident-log record whenever a new defect was read.
+- The welfare observer writes a content-free `welfare_signal` record of the counts to its log when a new defect was read, at most once per distress duration and at stop.
+- The development run skips an unreadable report as a sample and puts `interoception_unreadable_reports` and `interoception_own_error_fallbacks` in its readout once either is non-zero.
+
+A fallback does not fail the poll: the reading is defined, and failing would pause or preserve a healthy entity over a code bug, against the rule that a sensor fault is not distress. It is counted where the operator sees it.
+
+### 2b. What still follows the blend, on purpose
+
+The distress reading is the instrument that watches the substrate, so the component under watch must not compute it. Fatigue, regulation and affect are different: they are the entity's own state, computed from the prediction it actually makes, and filtering them would report a counterfactual entity. So the unmaintained-fatigue gray zone (through the blend's residuals in the unexpected error, and under an absolute threshold breach the blended error itself in the fatigue input, `interoception/module.py` `action_error`), the sustained-extreme-VAD gray zone (affect reads the blended vision and audition errors), and with them the repeat arm of the welfare response, follow the blend and are reported unfiltered. The hard-threshold alert reads the raw thresholds and is unaffected.
 
 ### 3. The producer guarantees the field
 
@@ -70,7 +84,7 @@ The test that matters: the interoception module is driven twice with the same fe
 ## Welfare and admissibility
 
 - Welfare code: the PR gets the independent second review.
-- With the shipped configuration the welfare readings are unchanged, bit for bit.
+- With the shipped configuration the welfare readings are unchanged, bit for bit, for every report the producer publishes. Only producer defects read differently: a report without the key, or with a non-numeric error, is now an unreadable report (no sample, counted, and a failed welfare-response poll) where main read 0.0 or raised.
 - No run is in flight.
 
 ## Implementation estimate
