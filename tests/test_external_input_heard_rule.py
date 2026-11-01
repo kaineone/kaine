@@ -135,7 +135,7 @@ def test_shared_rule_matches_the_language_modules_former_rule(event: Event):
 
 
 def test_language_and_episodic_memory_use_the_one_rule():
-    assert language_context.heard_texts is external_input.heard_texts
+    assert language_context.heard_words is external_input.heard_words
     assert language_context.is_heard_event is external_input.is_heard_event
     assert episodic_module.is_heard_event is external_input.is_heard_event
     assert not hasattr(language_context, "_heard_texts")

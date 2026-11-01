@@ -34,7 +34,7 @@ from kaine.faithful import FaithfulRenderer
 from kaine.faithful.external_input import (
     EXTERNAL_INPUT_TYPES,
     INTERNAL_EVENT_TYPES,
-    heard_texts,
+    heard_words,
     is_heard_event,
 )
 from kaine.faithful.felt import felt_fallback, felt_renderer, redact_heard_speech_felt
@@ -322,7 +322,11 @@ class ContextAssembler:
         return self._awareness_rendering
 
     def _heard_event_lines(self, ev: Event) -> list[str]:
-        """The attributed, quoted lines this event contributes to the heard turn."""
+        """The attributed, quoted lines this event contributes to the heard turn.
+
+        Only the words heard (``heard_words``) are quoted, never the event's
+        metadata such as a transcription's source label, model id or backend.
+        """
         attribution = (
             HEARD_ATTRIBUTION_WROTE
             if ev.type == "embodiment.chat"
@@ -330,7 +334,7 @@ class ContextAssembler:
         )
         lines: list[str] = []
         running_chars = 0
-        for text in heard_texts(ev):
+        for text in heard_words(ev):
             line = attribution + _quote_heard(text) + "."
             if not lines:
                 lines.append(line)

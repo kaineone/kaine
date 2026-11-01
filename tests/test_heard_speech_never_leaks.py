@@ -15,6 +15,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, redact_heard_speech
 from kaine.modules.episodic_memory.module import _serialize_snapshot
 from kaine.modules.language import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Language
+from kaine.modules.language.context import HEARD_POINTER_LINE
 from kaine.workspace.action_selection import SPEAK
 from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
@@ -242,16 +243,21 @@ def test_every_report_policy_branch_tags_its_intent_as_an_event():
 
 
 @pytest.mark.asyncio
-async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Path):
+@pytest.mark.parametrize("words_key", ["text", "message"])
+async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Path, words_key: str):
     """Other avatars' chat and their identifiers are redacted like heard
-    speech and never reach the bus or the log."""
+    speech and never reach the bus or the log.
+
+    Under ``text`` (a heard-text field) the words are quoted to the organ and
+    logged as the placeholder; under ``message`` they are not words the heard
+    turn quotes, and are still redacted everywhere."""
     sentinel = "PURPLE-HERON-4471 said this"
     sender = "Avatar Two"
     language = _make_language(bus, tmp_path, responses=["First reply.", "Second reply."])
     await language.initialize()
     try:
         chat = _snapshot(
-            [("t1", _event("embodiment", "embodiment.chat", {"message": sentinel, "sender": sender}, 0.9))]
+            [("t1", _event("embodiment", "embodiment.chat", {words_key: sentinel, "sender": sender}, 0.9))]
         )
         await _say(language, about="chat event", snapshot=chat, about_kind="event")
         await _say(language, about=sentinel, snapshot=_snapshot(), about_kind="heard")
@@ -271,7 +277,10 @@ async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Pa
         log_text = language.intent_log.path.read_text()
         assert sentinel not in log_text
         assert sender not in log_text
-        assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
+        if words_key == "text":
+            assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
+        else:
+            assert records[0]["faithful_rendering"] == "- " + HEARD_POINTER_LINE
 
         snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
         serialized = _serialize_snapshot(snapshot)
