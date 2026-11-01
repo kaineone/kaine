@@ -7,6 +7,8 @@
 
 - [x] 2.1 The runner copies a valid record into the step record and holds before the next step on a missing, unreadable, mismatched or incomplete record, or any indicator crossing. Tests with stand-in step directories for every spec scenario, including a crash after a revive whose bundle held an old record.
 - [x] 2.2 `ack-welfare --step <line>/<k> --decision continue|stop` records the answer and releases the hold or ends the line; `status` shows the hold. Tests: continue starts the next step on `run`; stop ends the line and keeps its preservations; neither touches the step's `state/`.
+- [x] 2.4 A protective response holds: the runner holds with `protective_response` whenever the monitor's `responses` is not empty or is not a dict. Tests: the `action = "end"` boot with an `indicators_unavailable` response and no rest or freeze holds; a malformed response count holds; a clean monitor does not.
+- [x] 2.5 A failed step's hold: `--retry-failed` refuses (exit 4) while the failed record's unanswered hold names `indicator_crossing` or `protective_response`; `ack-welfare` answers a failed step; `stop` on a failed step ends its line and the step is never retried; `status` and the halt message show the hold; a record missing after a crash is shown and does not block the retry. Tests in `tests/test_ignition_study_welfare_hold.py`.
 - [x] 2.3 `analysis.py` prints the per-step exposure table. Test on synthetic step records.
 
 ## 3. Docs and checks

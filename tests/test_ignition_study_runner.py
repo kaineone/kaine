@@ -183,6 +183,9 @@ STANDIN_SCRIPT = textwrap.dedent(
         # boot's record at shutdown (welfare-exposure-report).
         exposure_path = cwd / "state" / "welfare" / "exposure.json"
         exposure_mode = os.environ.get("IGNITION_STANDIN_EXPOSURE", "valid")
+        if active_scenario and os.environ.get("IGNITION_STANDIN_SCENARIO_EXPOSURE"):
+            # The exposure of the boot that fails, and of that boot only.
+            exposure_mode = os.environ["IGNITION_STANDIN_SCENARIO_EXPOSURE"]
         if not os.environ.get("IGNITION_STANDIN_KEEP_EXPOSURE"):
             exposure_path.unlink(missing_ok=True)
         boot_started_at = utc_iso()
@@ -199,16 +202,23 @@ STANDIN_SCRIPT = textwrap.dedent(
             indicators = {n: {"max_value": 0.2, "crossings": 0, "rests_requested": 0,
                               "freezes_placed": 0} for n in names}
             rests = 0
+            responses = {}
             if exposure_mode == "crossing":
                 indicators["boredom_deprived"].update(max_value=0.7, crossings=1, rests_requested=1)
                 rests = 1
+            elif exposure_mode == "protective":
+                # action = "end": an unavailable-indicators response preserves and
+                # ends the boot, placing no freeze and requesting no rest.
+                responses = {"indicators_unavailable": 1}
+            elif exposure_mode == "responses_malformed":
+                responses = ["indicators_unavailable"]
             record = {
                 "schema": 1,
                 "run_id": "someone-else" if exposure_mode == "other_run" else run_id,
                 "boot_started_at": boot_started_at,
                 "written_at": utc_iso(),
                 "monitor": {"awake_seconds": 600.0, "rests_requested": rests,
-                            "freezes_placed": 0, "responses": {}, "indicators": indicators},
+                            "freezes_placed": 0, "responses": responses, "indicators": indicators},
                 "shares": {"awake_seconds": 600.0, "negative_valence_share": 0.1,
                            "curiosity_interest_share": 0.2,
                            "deficits": {d: {"deprivation_share": 0.2, "uncontrolled_share": None,
@@ -443,6 +453,7 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_KEEP_ESCALATION",
         "IGNITION_STANDIN_EXPOSURE",
         "IGNITION_STANDIN_KEEP_EXPOSURE",
+        "IGNITION_STANDIN_SCENARIO_EXPOSURE",
     ):
         monkeypatch.delenv(name, raising=False)
     return names

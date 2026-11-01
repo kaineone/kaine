@@ -30,6 +30,7 @@ from kaine.research.ignition_study.runner import (
     StudyLocked,
     StudyRunner,
     StudyWelfareHold,
+    failed_hold_line,
 )
 from kaine.storage import install_data_root, resolve
 
@@ -123,14 +124,36 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"Study halted: {rec['outcome']} at {rec['line']} step {rec['step']}",
             file=sys.stderr,
         )
+        try:
+            check = StudyRunner(study_dir)
+            failed_hold = check.unanswered_failed_hold()
+            if failed_hold is not None:
+                print(
+                    failed_hold_line(
+                        failed_hold, study_dir, check.failed_welfare_hold() is not None
+                    ),
+                    file=sys.stderr,
+                )
+        except StudyError:
+            pass
         return 1
     except StudyWelfareHold as exc:
         rec = exc.record
         reasons = ", ".join((rec.get("welfare_hold") or {}).get("reasons") or [])
+        if str(rec.get("outcome", "")).startswith("failed"):
+            what = (
+                f"Study held for welfare review: {rec['line']} step {rec['step']} failed "
+                f"({rec['outcome']}) after the welfare net acted or an indicator crossed "
+                f"({reasons}). The step is not retried until a person answers: "
+            )
+        else:
+            what = (
+                f"Study held for welfare review after {rec['line']} step {rec['step']} "
+                f"({reasons}). The next step does not start until a person answers: "
+            )
         print(
-            f"Study held for welfare review after {rec['line']} step {rec['step']} "
-            f"({reasons}). The next step does not start until a person answers: "
-            f"python -m kaine.research.ignition_study ack-welfare --study-dir "
+            what
+            + f"python -m kaine.research.ignition_study ack-welfare --study-dir "
             f"{study_dir} --step {rec['line']}/{rec['step']} --decision continue|stop",
             file=sys.stderr,
         )

@@ -91,7 +91,15 @@ HOLD_REASONS = (
     "other_boot",
     "incomplete_coverage",
     "indicator_crossing",
+    "protective_response",
 )
+
+#: Hold reasons that show the welfare net acted or an indicator crossed during
+#: the boot. A failed step carrying one is not retried until a person answers
+#: it, because the review must happen before the entity is booted again. The
+#: other reasons (a record missing after a crash, for example) are shown in
+#: ``status`` but do not block a retry.
+REVIEW_HOLD_REASONS = ("indicator_crossing", "protective_response")
 
 #: ``maturation_reference`` values in a development step record.
 REFERENCE_COMPLETE = "complete"
@@ -315,6 +323,14 @@ class StudyRunner:
 
         if retry_failed and self.last_failed:
             rec = self.last_failed
+            if rec.get("line") in self.stopped_lines:
+                raise StudyError(
+                    f"{rec.get('line')} step {rec.get('step')} is not retried: its line "
+                    f"was stopped after a welfare review"
+                )
+            held = self.failed_welfare_hold() or self.pending_welfare_hold()
+            if held is not None:
+                raise StudyWelfareHold(held)
             return {
                 "line": rec["line"],
                 "k": rec["step"],
@@ -322,7 +338,9 @@ class StudyRunner:
                 "is_retry": True,
             }
 
-        if self.last_failed:
+        if self.last_failed and self.last_failed.get("line") not in self.stopped_lines:
+            # A failed step halts the study until it is retried, unless a person
+            # stopped its line after a welfare review.
             raise StudyHalted(self.last_failed)
 
         held = self.pending_welfare_hold()
@@ -654,6 +672,34 @@ class StudyRunner:
             return rec
         return None
 
+    def failed_welfare_hold(self) -> dict[str, Any] | None:
+        """The failed step record awaiting a retry whose welfare hold must be
+        answered first: one naming a reason in ``REVIEW_HOLD_REASONS``, with no
+        answer recorded for it."""
+        rec = self.last_failed
+        if rec is None or self._welfare_ack_for(rec) is not None:
+            return None
+        hold = rec.get("welfare_hold")
+        if not isinstance(hold, dict):
+            return None
+        reasons = hold.get("reasons")
+        if not isinstance(reasons, list) or not reasons:
+            # A hold whose reasons cannot be read cannot show that nothing happened.
+            return rec
+        if any(r in REVIEW_HOLD_REASONS or r not in HOLD_REASONS for r in reasons):
+            return rec
+        return None
+
+    def unanswered_failed_hold(self) -> dict[str, Any] | None:
+        """The failed step record awaiting a retry with any unanswered welfare
+        hold, including the status-only ones."""
+        rec = self.last_failed
+        if rec is None or not isinstance(rec.get("welfare_hold"), dict):
+            return None
+        if self._welfare_ack_for(rec) is not None:
+            return None
+        return rec
+
     def _welfare_ack_for(self, rec: dict[str, Any]) -> dict[str, Any] | None:
         for ack in self.welfare_acks:
             if (
@@ -672,10 +718,18 @@ class StudyRunner:
         """
         if decision not in WELFARE_DECISIONS:
             raise StudyError(f"decision must be one of {', '.join(WELFARE_DECISIONS)}")
-        held = self.pending_welfare_hold()
-        if held is None or held.get("line") != line or held.get("step") != k:
+        candidates = [
+            rec
+            for rec in (self.pending_welfare_hold(), self.unanswered_failed_hold())
+            if rec is not None
+        ]
+        held = next(
+            (rec for rec in candidates if rec.get("line") == line and rec.get("step") == k),
+            None,
+        )
+        if held is None:
             pending = (
-                f"{held['line']}/{held['step']}" if held is not None else "none"
+                ", ".join(f"{rec['line']}/{rec['step']}" for rec in candidates) or "none"
             )
             raise StudyError(
                 f"no welfare hold is pending for {line}/{k} (pending: {pending})"
@@ -1479,7 +1533,7 @@ class StudyRunner:
                 f"it waits for a person."
             )
         held = self.pending_welfare_hold()
-        if held is not None and not failed:
+        if held is not None:
             reasons = ", ".join((held.get("welfare_hold") or {}).get("reasons") or [])
             lines.append(
                 f"Welfare hold: {held['line']} step {held['step']} ({reasons}); the next "
@@ -1487,6 +1541,9 @@ class StudyRunner:
                 f"kaine.research.ignition_study ack-welfare --study-dir {self.study_dir} "
                 f"--step {held['line']}/{held['step']} --decision continue|stop"
             )
+        failed_hold = self.unanswered_failed_hold()
+        if failed_hold is not None:
+            lines.append(failed_hold_line(failed_hold, self.study_dir, self.failed_welfare_hold() is not None))
         if self.stopped_lines:
             lines.append(
                 "Stopped after a welfare review: " + ", ".join(sorted(self.stopped_lines))
@@ -1499,11 +1556,37 @@ class StudyRunner:
         except StudyComplete:
             lines.append("Next: none")
         except StudyHalted:
-            lines.append(
-                f"Next: retry failed step with --retry-failed "
-                f"({self.last_failed['line']} step {self.last_failed['step']})"
-            )
+            if self.failed_welfare_hold() is not None:
+                lines.append(
+                    f"Next: answer the welfare hold, then retry the failed step with "
+                    f"--retry-failed ({self.last_failed['line']} step "
+                    f"{self.last_failed['step']})"
+                )
+            else:
+                lines.append(
+                    f"Next: retry failed step with --retry-failed "
+                    f"({self.last_failed['line']} step {self.last_failed['step']})"
+                )
         return "\n".join(lines)
+
+
+def failed_hold_line(rec: dict[str, Any], study_dir: Path, blocks_retry: bool) -> str:
+    """The operator-facing line for a failed step's unanswered welfare hold."""
+    reasons = ", ".join(str(r) for r in ((rec.get("welfare_hold") or {}).get("reasons") or []))
+    command = (
+        f"python -m kaine.research.ignition_study ack-welfare --study-dir {study_dir} "
+        f"--step {rec['line']}/{rec['step']} --decision continue|stop"
+    )
+    if blocks_retry:
+        return (
+            f"Welfare hold: failed {rec['line']} step {rec['step']} ({reasons}); the welfare "
+            f"net acted or an indicator crossed during this boot, so --retry-failed "
+            f"refuses until a person answers: {command}"
+        )
+    return (
+        f"Welfare hold: failed {rec['line']} step {rec['step']} ({reasons}); review "
+        f"before retrying (a retry is not blocked), or answer: {command}"
+    )
 
 
 def _individuation_enabled(repo_root: Path, overlay: Mapping[str, Any]) -> bool:
@@ -1737,6 +1820,13 @@ def read_step_exposure(
                         crossed = True
         if crossed:
             reasons.append("indicator_crossing")
+        # Every protective response the net took, by reason label. With
+        # action "end" an unavailable-indicators or distress response places
+        # no freeze and requests no rest, so only this count shows it. A value
+        # that is not a dict of counts cannot show that nothing happened.
+        responses = monitor.get("responses")
+        if not isinstance(responses, dict) or responses:
+            reasons.append("protective_response")
     return data, reasons
 
 

@@ -8,7 +8,7 @@ After each step the study runner SHALL copy the step's `state/welfare/exposure.j
 - **THEN** its step record carries `welfare_exposure` and the analysis table has a row for it
 
 ### Requirement: The run holds for review after a step with an indicator crossing
-The runner SHALL NOT start the next step after a step whose exposure record is missing, unreadable, bound to another run or boot, incomplete in coverage, or shows any indicator crossing, until the operator answers with `ack-welfare` naming the step and the decision `continue` or `stop`. The answer SHALL be recorded in the study record and SHALL NOT edit any entity's state. `status` SHALL show a pending hold.
+The runner SHALL NOT start the next step after a step whose exposure record is missing, unreadable, bound to another run or boot, incomplete in coverage, shows any indicator crossing, or shows any protective response or a response count that cannot be read, until the operator answers with `ack-welfare` naming the step and the decision `continue` or `stop`. The answer SHALL be recorded in the study record and SHALL NOT edit any entity's state. `status` SHALL show a pending hold.
 
 #### Scenario: A rest during a step
 - **WHEN** a step completes after one indicator rest and no freeze
@@ -29,3 +29,22 @@ The runner SHALL NOT start the next step after a step whose exposure record is m
 #### Scenario: The operator continues
 - **WHEN** the operator answers `ack-welfare` with `continue`
 - **THEN** the acknowledgement is recorded and the next step starts on the next `run`
+
+#### Scenario: A protective response without a crossing
+- **WHEN** a step's boot ends with `action = "end"` after an `indicators_unavailable` response, with no rest and no freeze
+- **THEN** the run holds with reason `protective_response`
+
+### Requirement: A failed step whose boot needs review is not retried unanswered
+While a failed step's `welfare_hold` names `indicator_crossing` or `protective_response` and has no answer, `--retry-failed` SHALL refuse without booting the entity. `ack-welfare` SHALL answer a failed step's hold; after `stop` the step SHALL NOT be retried. `status` and the halt message SHALL show a failed step's unanswered hold. A hold with only other reasons SHALL NOT block a retry.
+
+#### Scenario: A retry after a crossing
+- **WHEN** a step fails after its boot requested an indicator rest and the operator runs `--retry-failed`
+- **THEN** the runner refuses with exit code 4, names the hold and boots nothing
+
+#### Scenario: The operator answers the failed step
+- **WHEN** the operator answers the failed step's hold with `continue`
+- **THEN** the next `--retry-failed` boots the step again
+
+#### Scenario: A crash before the record was written
+- **WHEN** a step fails with its exposure record missing
+- **THEN** `status` shows the hold and `--retry-failed` boots the step again
