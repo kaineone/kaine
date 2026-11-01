@@ -205,7 +205,8 @@ def _bound_record(line_dir: Path, **monitor_overrides) -> tuple[str, str]:
     names = ["boredom_deprived", "social_drive_deprived", "restlessness_deprived",
              "negative_valence", "boredom_uncontrolled", "restlessness_uncontrolled"]
     monitor = {
-        "awake_seconds": 599.0, "rests_requested": 0, "freezes_placed": 0, "responses": {},
+        "awake_seconds": 599.0, "awake_wall_seconds": 599.0, "rests_requested": 0,
+        "freezes_placed": 0, "responses": {},
         "indicators": {n: {"max_value": 0.1, "crossings": 0, "rests_requested": 0,
                            "freezes_placed": 0} for n in names},
     }
@@ -347,3 +348,35 @@ def test_a_record_missing_after_a_crash_is_shown_but_does_not_block_a_retry(
     assert "a retry is not blocked" in status
     monkeypatch.delenv("IGNITION_STANDIN_SCENARIO")
     assert _run(_runner(study_dir, script), retry=True) == "complete"
+
+
+# --- coverage under time dilation (F3) ----------------------------------------------
+
+
+def test_a_dilated_clean_boot_compares_wall_seconds_with_wall_seconds(tmp_path):
+    """Time scale 2 for two wall hours: the monitor counted 14399 awake entity
+    seconds and 7199.5 wall seconds; the tally covered 7200 wall seconds."""
+    run_id, since = _bound_record(tmp_path, awake_seconds=14399.0, awake_wall_seconds=7199.5)
+    path = tmp_path / "state" / "welfare" / "exposure.json"
+    data = json.loads(path.read_text())
+    data["covered_awake_seconds"] = 7200.0
+    path.write_text(json.dumps(data))
+    _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
+    assert reasons == []
+
+
+@pytest.mark.parametrize("wall", [None, "x", float("nan")])
+def test_a_monitor_without_its_wall_count_holds_for_coverage(tmp_path, wall):
+    run_id, since = _bound_record(tmp_path, awake_wall_seconds=wall)
+    _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
+    assert reasons == ["incomplete_coverage"]
+
+
+def test_a_tally_short_in_wall_seconds_still_holds_under_dilation(tmp_path):
+    run_id, since = _bound_record(tmp_path, awake_seconds=14399.0, awake_wall_seconds=7199.5)
+    path = tmp_path / "state" / "welfare" / "exposure.json"
+    data = json.loads(path.read_text())
+    data["covered_awake_seconds"] = 6000.0
+    path.write_text(json.dumps(data))
+    _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
+    assert reasons == ["incomplete_coverage"]

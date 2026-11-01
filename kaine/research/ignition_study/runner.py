@@ -1788,14 +1788,22 @@ def read_step_exposure(
     covered = data.get("covered_awake_seconds")
     restarts = data.get("producer_restarts")
     interval = data.get("affect_summary_interval_s")
-    if not isinstance(monitor, dict) or not _is_number(monitor.get("awake_seconds")):
+    # The tally counts wall seconds; the monitor's spans count awake entity
+    # seconds, which run ahead of wall time when the entity is dilated. The
+    # comparison uses the monitor's count converted to wall seconds, so like
+    # is compared with like at every time scale.
+    if (
+        not isinstance(monitor, dict)
+        or not _is_number(monitor.get("awake_seconds"))
+        or not _is_number(monitor.get("awake_wall_seconds"))
+    ):
         reasons.append("incomplete_coverage")
     elif (
         not _is_count(restarts)
         or restarts > 0
         or not _is_number(covered)
         or not _is_number(interval)
-        or float(covered) < float(monitor["awake_seconds"]) - float(interval)
+        or float(covered) < float(monitor["awake_wall_seconds"]) - float(interval)
     ):
         reasons.append("incomplete_coverage")
     if isinstance(monitor, dict):

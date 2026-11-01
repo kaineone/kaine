@@ -360,3 +360,121 @@ async def test_only_a_research_shutdown_writes_the_record(tmp_path, monkeypatch)
         ctx.cycle_task = asyncio.create_task(_never())
         await cycle_main._shutdown(ctx)
     assert written == ["run-research"]
+
+
+# --- coverage under time dilation ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scale", [1.0, 2.0])
+async def test_a_clean_dilated_boot_round_trips_without_a_coverage_hold(bus, tmp_path, scale):
+    """The real monitor (spans on the awake entity clock), the real tally (wall
+    seconds), the real writer and the runner's real reader: a clean boot at
+    time scale 2 is not held for incomplete coverage."""
+    from kaine.research.ignition_study.runner import EXPOSURE_FILE, read_step_exposure
+
+    u = {"v": 0.0}
+    w = {"v": T0}
+    registry = ModuleRegistry()
+    registry.register(_Sleep(bus))
+    monitor = WelfareProtectiveMonitor(
+        registry=registry,
+        fork_manager=None,
+        config=WelfareResponseConfig(enabled=True, warmup_s=0.0, warmup_ceiling_s=0.0),
+        bus=bus,
+        incident_log=IncidentLog(enabled=False, path="unused"),
+        clock=lambda: u["v"],
+        unfrozen_clock=UnfrozenClock(
+            control_state.read_frozen_state, unknown_counts_as="unfrozen", monotonic=lambda: u["v"]
+        ),
+        indicator_params=IndicatorParams(),
+        awake_clock=lambda: u["v"] * scale,
+        entity_scale=lambda: scale,
+        wall_time=lambda: w["v"],
+    )
+
+    class _Sink:
+        async def write(self, row):
+            pass
+
+    observer = WelfareObserver(
+        bus,
+        _Sink(),
+        unfrozen_clock=UnfrozenClock(
+            control_state.read_frozen_state, unknown_counts_as="unfrozen", monotonic=lambda: u["v"]
+        ),
+    )
+    stop = asyncio.Event()
+    await monitor._poll_once(stop)
+    # One affect.state per entity second for 900 wall seconds.
+    period = 1.0 / scale
+    for step in range(int(900 * scale)):
+        ts = datetime.fromtimestamp(w["v"], timezone.utc)
+        event = validate_event(
+            source="affect", type="affect.state", payload=_affect_payload(False), salience=0.1, timestamp=ts
+        )
+        await bus.publish(event)
+        await observer._handle_affect("x", event)
+        u["v"] += period
+        w["v"] += period
+        if step % 20 == 19:
+            await monitor._poll_once(stop)
+    await monitor._poll_once(stop)
+    summary = monitor.exposure_summary()
+    assert summary["awake_seconds"] == pytest.approx(900.0 * scale, abs=3.0)
+    assert summary["awake_wall_seconds"] == pytest.approx(900.0, abs=3.0)
+
+    started_at = "2026-10-31T12:00:00+00:00"
+    cycle_main._write_exposure_record(
+        run_ctx=SimpleNamespace(run_id="run-dilated", started_at=started_at),
+        welfare_monitor=monitor,
+        welfare_producer=(observer, None),
+        welfare_supervision={"restarts": 0},
+        eval_cfg=_eval_cfg(tmp_path),
+    )
+    path = _exposure_path()
+    line_dir = path.parents[2]
+    assert line_dir / EXPOSURE_FILE == path
+    exposure, reasons = read_step_exposure(line_dir, run_id="run-dilated", since_iso=started_at)
+    assert exposure is not None
+    assert reasons == []
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_time_scale_leaves_the_wall_count_unknown(bus, tmp_path):
+    def broken_scale() -> float:
+        raise RuntimeError("scale unreadable")
+
+    u = {"v": 0.0}
+    w = {"v": T0}
+    registry = ModuleRegistry()
+    registry.register(_Sleep(bus))
+    monitor = WelfareProtectiveMonitor(
+        registry=registry,
+        fork_manager=None,
+        config=WelfareResponseConfig(enabled=True, warmup_s=0.0, warmup_ceiling_s=0.0),
+        bus=bus,
+        incident_log=IncidentLog(enabled=False, path="unused"),
+        clock=lambda: u["v"],
+        unfrozen_clock=UnfrozenClock(
+            control_state.read_frozen_state, unknown_counts_as="unfrozen", monotonic=lambda: u["v"]
+        ),
+        indicator_params=IndicatorParams(),
+        awake_clock=lambda: u["v"] * 2.0,
+        entity_scale=broken_scale,
+        wall_time=lambda: w["v"],
+    )
+    stop = asyncio.Event()
+    await monitor._poll_once(stop)
+    for step in range(40):
+        ts = datetime.fromtimestamp(w["v"], timezone.utc)
+        await bus.publish(validate_event(
+            source="affect", type="affect.state", payload=_affect_payload(False), salience=0.1, timestamp=ts
+        ))
+        u["v"] += 0.5
+        w["v"] += 0.5
+        if step % 20 == 19:
+            await monitor._poll_once(stop)
+    summary = monitor.exposure_summary()
+    assert summary["awake_seconds"] > 0
+    assert summary["awake_wall_seconds"] is None

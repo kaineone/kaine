@@ -3,6 +3,8 @@
 - [x] 1.1 The cycle deletes `state/welfare/exposure.json` at boot, before the gates. Test: a boot over a state tree that holds one leaves none behind, including when the boot is then refused by a gate.
 - [x] 1.2 The cycle writes the record at shutdown in research mode: `run_id`, `boot_started_at`, indicator figures from the welfare monitor's evaluator, shares with `producer_restarts` and `covered_awake_seconds` from the producer's tally; plain JSON, atomic, mode 0600. Tests: stand-in monitor and tally give the expected record; a restarted producer is reflected in the coverage fields while the indicator figures cover the whole run; a failed write logs at error level and does not change the exit code; a content check that every value is a number, boolean, the run id, a timestamp or a table label.
 
+- [x] 1.3 The monitor's awake time is also counted in wall seconds (`awake_wall_seconds`, the spans' awake entity seconds divided by the time scale per poll; null when the scale cannot be read), and the runner compares the tally's coverage against it. Tests: the real monitor, tally, writer and reader at time scale 1 and 2 give no coverage hold; an unreadable scale leaves the count null; a record without the count, or a short tally under dilation, holds.
+
 ## 2. Study runner
 
 - [x] 2.1 The runner copies a valid record into the step record and holds before the next step on a missing, unreadable, mismatched or incomplete record, or any indicator crossing. Tests with stand-in step directories for every spec scenario, including a crash after a revive whose bundle held an old record.

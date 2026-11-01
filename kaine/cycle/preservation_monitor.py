@@ -1039,6 +1039,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._exposure_rests = 0
         self._exposure_freezes = 0
         self._exposure_responses: dict[str, int] = {}
+        # The spans' awake seconds converted to wall seconds, the unit the
+        # producer's tally counts in, so the exposure coverage check compares
+        # like with like under time dilation. None once a conversion failed.
+        self._ind_pos_seen = 0.0
+        self._ind_awake_wall: float | None = 0.0
 
     def _in_warmup(self, u_now: float, wall_now: float) -> bool:
         """True while still inside the cold-start warm-up window.
@@ -1840,7 +1845,38 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     signals.append(("answer", payload))
         self._ind_eval.advance(a_now)
         self._ind_prev = (w_now, a_now)
+        self._note_awake_wall()
         return signals
+
+    def _note_awake_wall(self) -> None:
+        """Add this poll's new span time, in wall seconds, to the exposure count.
+
+        With an awake entity clock the spans count entity seconds; dividing by
+        the time scale gives the wall seconds the producer's tally counts. A
+        scale that cannot be read, or reads zero or less while awake time
+        accrued, leaves the count unknown (None), so the study runner holds
+        the step for incomplete coverage instead of comparing other units.
+        """
+        pos = float(self._ind_eval.awake_seconds)
+        delta = pos - self._ind_pos_seen
+        self._ind_pos_seen = pos
+        if delta <= 0.0 or self._ind_awake_wall is None:
+            return
+        if self._awake_clock is None:
+            # The spans run on unfrozen time, already in wall seconds.
+            self._ind_awake_wall += delta
+            return
+        scale: float | None = None
+        if self._entity_scale is not None:
+            try:
+                scale = float(self._entity_scale())
+            except Exception:
+                scale = None
+        if scale is None or not math.isfinite(scale) or scale <= 0.0:
+            log.error("welfare monitor: the time scale is unreadable; exposure coverage is unknown")
+            self._ind_awake_wall = None
+            return
+        self._ind_awake_wall += delta / scale
 
     async def _indicator_accrue(self, u_now: float) -> None:
         """Warm-up: the spans accrue; no stage acts and nothing is evaluated."""
@@ -2100,6 +2136,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             return None
         return {
             "awake_seconds": float(self._ind_eval.awake_seconds),
+            "awake_wall_seconds": (
+                None if self._ind_awake_wall is None else float(self._ind_awake_wall)
+            ),
             "rests_requested": int(self._exposure_rests),
             "freezes_placed": int(self._exposure_freezes),
             "responses": dict(self._exposure_responses),

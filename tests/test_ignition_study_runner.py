@@ -217,7 +217,7 @@ STANDIN_SCRIPT = textwrap.dedent(
                 "run_id": "someone-else" if exposure_mode == "other_run" else run_id,
                 "boot_started_at": boot_started_at,
                 "written_at": utc_iso(),
-                "monitor": {"awake_seconds": 600.0, "rests_requested": rests,
+                "monitor": {"awake_seconds": 600.0, "awake_wall_seconds": 600.0, "rests_requested": rests,
                             "freezes_placed": 0, "responses": responses, "indicators": indicators},
                 "shares": {"awake_seconds": 600.0, "negative_valence_share": 0.1,
                            "curiosity_interest_share": 0.2,

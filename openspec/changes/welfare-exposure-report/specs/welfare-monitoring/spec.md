@@ -15,6 +15,17 @@ At shutdown a research-mode cycle SHALL write `state/welfare/exposure.json` as p
 - **WHEN** the welfare producer was restarted once during the run
 - **THEN** the record's indicator figures cover the whole run, and `producer_restarts` is 1 with `covered_awake_seconds` below the run's awake seconds
 
+### Requirement: The exposure coverage is compared in one unit
+The exposure record SHALL carry the welfare monitor's awake time in entity seconds (`awake_seconds`) and in wall seconds (`awake_wall_seconds`, null when the time scale could not be read). The study runner SHALL compare the tally's `covered_awake_seconds`, which counts wall seconds, against `awake_wall_seconds`, and SHALL hold for incomplete coverage when that field is missing or not a number.
+
+#### Scenario: A dilated clean boot
+- **WHEN** a clean boot runs at time scale 2 for 900 wall seconds
+- **THEN** `awake_seconds` is about 1800, `awake_wall_seconds` and `covered_awake_seconds` are about 900, and the runner does not hold
+
+#### Scenario: An unreadable time scale
+- **WHEN** the time scale cannot be read while awake time accrues
+- **THEN** `awake_wall_seconds` is null and the runner holds for incomplete coverage
+
 ### Requirement: A stale exposure record is removed at boot
 Every cycle boot SHALL delete any existing `state/welfare/exposure.json` before the boot gates run.
 
