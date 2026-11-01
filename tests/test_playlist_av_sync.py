@@ -551,6 +551,179 @@ def test_a_pause_is_not_owed(cfr_clip: Path, monkeypatch):  # noqa: ANN001
         assert abs((t - paused) - (pos - _BLOCK_S)) < 1e-6, i
 
 
+
+# ---------------------------------------------------------------------------
+# Damaged media, failing items, and what the logs may say
+# ---------------------------------------------------------------------------
+
+_TITLE = "Secret_Film_Title"
+
+
+def _noise_clip(path: Path, seconds: float = 20.0) -> None:
+    """VP8 noise at 25 fps in WebM: large packets, so scattered byte damage
+    lands in frame data rather than in the container structure."""
+    rng = np.random.default_rng(0)
+    out = av.open(str(path), mode="w", format="webm")
+    vs = out.add_stream("libvpx", rate=25)
+    vs.width, vs.height, vs.pix_fmt = W, H, "yuv420p"
+    vs.time_base = fractions.Fraction(1, 1000)
+    vs.codec_context.time_base = fractions.Fraction(1, 1000)
+    vs.codec_context.gop_size = 50
+    for i in range(int(seconds * 25)):
+        frame = av.VideoFrame.from_ndarray(
+            rng.integers(0, 255, (H, W, 3), dtype=np.uint8), format="rgb24"
+        )
+        frame.pts = i * 40
+        frame.time_base = vs.time_base
+        for packet in vs.encode(frame):
+            out.mux(packet)
+    for packet in vs.encode():
+        out.mux(packet)
+    out.close()
+
+
+def _plain_decode_stops_at(path: Path) -> float | None:
+    """Where ``container.decode`` (one generator for the whole stream) stops
+    on an error, or None when it decodes to the end."""
+    container = av.open(str(path))
+    last = 0.0
+    try:
+        for frame in container.decode(container.streams.video[0]):
+            last = float(frame.pts) / 1000.0
+    except av.error.FFmpegError:
+        return last
+    finally:
+        container.close()
+    return None
+
+
+def _damaged_clip(tmp_path: Path, name: str) -> Path:
+    """A 20 s clip with a few flipped bytes, chosen so that a whole-stream
+    decode stops early on an error (the defect being guarded)."""
+    import random
+
+    clean = tmp_path / "clean-noise.webm"
+    if not clean.exists():
+        _noise_clip(clean)
+    data = clean.read_bytes()
+    for seed in range(60):
+        damaged = bytearray(data)
+        rng = random.Random(seed)
+        for _ in range(60):
+            k = rng.randrange(4096, len(damaged))
+            damaged[k] ^= 0xFF
+        path = tmp_path / name
+        path.write_bytes(bytes(damaged))
+        stop = _plain_decode_stops_at(path)
+        if stop is not None and stop < 15.0:
+            return path
+    raise AssertionError("no damage pattern made the whole-stream decode stop early")
+
+
+def test_a_bad_packet_does_not_freeze_the_picture_for_the_rest_of_the_item(tmp_path: Path):
+    """A packet that fails to decode is skipped: frames after it are still
+    presented, where a whole-stream decode would end at the error."""
+    path = _damaged_clip(tmp_path, "damaged.webm")
+    decoder = PyAvVideoDecoder(av, path, nominal_fps=25.0)
+    times = []
+    try:
+        while (nxt := decoder.next()) is not None:
+            times.append(nxt[0])
+    finally:
+        decoder.close()
+    assert decoder.skipped_packets >= 1
+    assert times[-1] == pytest.approx(19.96, abs=0.05)
+    assert len(times) >= 480
+    # Through the source: at 17 s the picture is from 17 s, not held at the error.
+    mclock = _ManualClock()
+    src = _video(_manifest(tmp_path, [("damaged.webm", 25.0)]), PlaylistClock(1, clock=mclock))
+    try:
+        _read_at(src, mclock, 0.0)
+        _read_at(src, mclock, 17.0)
+        assert 16.9 <= src._shown.t <= 17.0
+    finally:
+        src.release()
+
+
+def test_a_video_item_that_cannot_be_opened_does_not_end_the_picture(tmp_path: Path):
+    """The source shows nothing while the clock is on an item it cannot open
+    and carries on with the next item when the clock gets there."""
+    _write_clip(tmp_path / "a.mkv", _cfr_times())
+    (tmp_path / "junk.mkv").write_bytes(b"this is not media" * 100)
+    _write_clip(tmp_path / "b.mkv", _cfr_times())
+    manifest_path = _manifest(tmp_path, [("a.mkv", 25.0), ("junk.mkv", 25.0), ("b.mkv", 25.0)])
+    mclock = _ManualClock()
+    clock = PlaylistClock(3, clock=mclock)
+    src = _video(manifest_path, clock)
+    try:
+        _read_at(src, mclock, 0.0)
+        clock.set_duration(1, 5.0)  # known from elsewhere (the audio surface)
+        mclock.t = CLIP_S + 1.0
+        assert src.read() == (False, None)
+        img = _read_at(src, mclock, CLIP_S + 5.0 + 4.17)
+        assert src.current_item.item_idx == 2
+        assert _right_white(img) and _left_level(img) == pytest.approx(_decile_level(4.17), abs=4)
+    finally:
+        src.release()
+
+
+def test_feed_logs_name_items_by_index_never_by_path_or_title(tmp_path: Path, monkeypatch, caplog):  # noqa: ANN001
+    """No title, file name or path appears in any feed log record (message or
+    attached exception) for: an item without audio, a file that is not media,
+    a file without a video stream, and a packet that fails to decode."""
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.vision.feed")
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.audition.feed")
+    _write_clip(tmp_path / f"{_TITLE}_silent.mkv", _cfr_times(), audio=False)
+    (tmp_path / f"{_TITLE}_junk.mkv").write_bytes(b"this is not media" * 100)
+    _damaged_clip(tmp_path, f"{_TITLE}_damaged.webm")
+    audio_only = tmp_path / f"{_TITLE}_audio_only.mkv"
+    out = av.open(str(audio_only), mode="w", format="matroska")
+    astream = out.add_stream("pcm_s16le", rate=SR)
+    astream.layout = "mono"
+    frame = av.AudioFrame.from_ndarray(np.zeros((1, SR), np.int16), format="s16", layout="mono")
+    frame.rate = SR
+    for packet in astream.encode(frame):
+        out.mux(packet)
+    for packet in astream.encode(None):
+        out.mux(packet)
+    out.close()
+
+    # Video: a file that is not media, a file without a video stream, a bad packet.
+    for name in (f"{_TITLE}_junk.mkv", audio_only.name):
+        src = PlaylistSource(
+            load_playlist_manifest(_manifest(tmp_path, [(name, 25.0)])),
+            playlist_clock=PlaylistClock(1, clock=_ManualClock()),
+        )
+        assert src.open() is False
+        src.release()
+    mclock = _ManualClock()
+    src = _video(_manifest(tmp_path, [(f"{_TITLE}_damaged.webm", 25.0)]), PlaylistClock(1, clock=mclock))
+    for t in np.arange(0.0, 19.5, 0.5):  # through the damage, no seek past it
+        _read_at(src, mclock, float(t))
+    src.release()
+    # Audio: an item without audio, a file that is not media.
+    mclock = _ManualClock()
+    clock = PlaylistClock(2, clock=mclock)
+    clock.set_duration(1, 1.0)  # the unreadable item's length, from the video surface
+    _deliver_all(
+        _manifest(tmp_path, [(f"{_TITLE}_silent.mkv", 25.0), (f"{_TITLE}_junk.mkv", 25.0)]),
+        monkeypatch, clock=clock, mclock=mclock,
+    )
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("has no audio track" in m for m in messages)
+    assert any("could not be opened" in m for m in messages)
+    assert any("skipped a packet" in m for m in messages)
+    assert any("failed (" in m for m in messages)
+    for record in caplog.records:
+        text = record.getMessage()
+        if record.exc_info:
+            text += logging.Formatter().formatException(record.exc_info)
+        assert _TITLE not in text and str(tmp_path) not in text, text
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(
     not os.environ.get("KAINE_PROGRAMME_MEDIA"),

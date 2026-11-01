@@ -54,6 +54,18 @@ at or before the previous frame's time SHALL be held at that time.
 - **THEN** presentation time never runs backwards: the later of the duplicates is
   shown, and the untimed frame is placed one frame interval after the previous one
 
+#### Scenario: A timestamp reset
+
+- **WHEN** a frame's timestamp is more than 1 s before the previous frame's
+- **THEN** the timeline continues one frame interval after the previous frame,
+  so the frames after the reset are presented at their own pace, not all at once
+
+#### Scenario: A packet that fails to decode
+
+- **WHEN** one video packet partway into an item fails to decode
+- **THEN** it is skipped, and the frames after it are presented at their times
+  for the rest of the item
+
 ### Requirement: A playlist video source opened partway into an item seeks
 
 A playlist video source that opens, or falls more than 2 s behind the clock,
@@ -113,6 +125,12 @@ silence for its length.
 - **THEN** the gap is heard as silence and the audio after it stays on the item's
   timeline
 
+#### Scenario: An item that fails to decode
+
+- **WHEN** an audio item cannot be opened, or raises while it is decoded
+- **THEN** the rest of its length is silence, the failure is logged by item index
+  and exception type only, and the next item plays when the clock reaches it
+
 #### Scenario: An item without an audio track
 
 - **WHEN** an item has no audio track
@@ -145,3 +163,16 @@ Time during which the clock is paused SHALL NOT count as owed.
 
 - **WHEN** the shared clock is paused for 5 s while the producer is waiting
 - **THEN** no block is caught up or skipped when it resumes
+
+### Requirement: Feed logs never name the media
+
+Playlist feed log lines SHALL identify an item by its index or manifest order and
+an exception by its type, and SHALL NOT contain the media path, the file name or
+the title, nor exception text that can embed them.
+
+#### Scenario: An item that cannot be opened
+
+- **WHEN** a playlist item cannot be opened by either surface
+- **THEN** the log line names the item's index and the exception's type, and no
+  log record carries the path or the title
+

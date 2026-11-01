@@ -28,6 +28,15 @@ PyAV exposes each decoded frame's `pts` and `time_base`, the container duration 
 **Decision 3: presentation rule.**
 Media time is `pts × time_base − container start`. The source keeps the current frame and one decoded frame of lookahead. A read moves forward while the lookahead's time is at or before the clock offset, then presents the current frame; a read that finds no newer frame re-presents the same frame object (hold). Before the first frame's time, the first frame is shown. After the last frame, the last frame is held until the clock moves to the next item. A missing `pts` becomes the previous time plus the stream's frame interval (from its average rate, else the nominal manifest rate, else 1/25 s); a `pts` at or before the previous time is held at the previous time, so of several frames with one timestamp the last is the one shown.
 
+**Decision 3a: damaged media and odd timestamps.**
+The decoder demuxes and decodes one packet at a time. A packet that fails to decode is skipped and counted (the first logged at warning, later ones at debug); the picture holds until the next good frame. A single decode generator for the whole stream is finished by its first error, which would freeze the picture for the rest of the item and, for a container without a duration, end the item at the error. After a seek, an untimed first frame takes the seek target as its time, not 0. A timestamp more than 1 s before the previous frame's is a discontinuity (a timestamp reset): the timeline is re-based to continue one frame interval after the previous frame. Holding every later frame at one time would make all of them due at once, so one read would decode the rest of the item.
+
+**Decision 3b: one failing item does not end a surface.**
+A video item that cannot be opened shows nothing while the clock is on it, and the source opens the next item when the clock gets there. An audio item that fails to open or decode is logged and heard as silence for the rest of its length on the clock (with no known length, nothing more is delivered and the next item's first block waits for the clock); the producer goes on. The playlist audio delivers mono or stereo only: another channel count is refused when the factory is built at boot and when the stream is constructed.
+
+**Decision 3c: logs name items, never media.**
+Feed log lines name an item by its index (or manifest order) and an exception by its type. They never carry the media path, the file name or the exception's text, which can embed the path (the mount and the film's title).
+
 **Decision 4: seek when far behind.**
 When the clock offset is more than 2 s past the next frame to decode (a source opened partway into an item, or a long stall), the source seeks to the keyframe at or before the offset and decodes forward. If the seek raises, it decodes forward from where it is. The threshold keeps normal reads, which advance a fraction of a second, on the cheap sequential path.
 

@@ -715,11 +715,26 @@ class _FakeVideoFrame:
     def __init__(self, pts):  # noqa: ANN001
         self.pts = pts
 
+    def to_ndarray(self, format=None):  # noqa: A002, ANN001, ANN201
+        return ("frame", self.pts)
 
-def _fake_av_video(pts_list, *, duration=2_000_000, start_time=0):  # noqa: ANN001, ANN202
+
+def _fake_av_video(pts_list, *, duration=2_000_000, start_time=0, bad=(), after_seek=None):  # noqa: ANN001, ANN202
+    """A stand-in ``av`` whose video container demuxes one packet per entry
+    of ``pts_list``; a packet whose index is in ``bad`` raises on decode, and
+    after a seek the container demuxes ``after_seek`` instead."""
     from types import SimpleNamespace
 
     stream = SimpleNamespace(time_base=0.001, average_rate=25, thread_type=None)
+
+    class _Packet:
+        def __init__(self, i, pts):  # noqa: ANN001
+            self._i, self._pts = i, pts
+
+        def decode(self):  # noqa: ANN201
+            if self._i in bad:
+                raise OSError("Invalid data found when processing input")
+            return [_FakeVideoFrame(self._pts)]
 
     class _Container:
         def __init__(self) -> None:
@@ -727,10 +742,17 @@ def _fake_av_video(pts_list, *, duration=2_000_000, start_time=0):  # noqa: ANN0
             self.start_time = start_time
             self.streams = SimpleNamespace(video=[stream])
             self.closed = False
+            self.seeks: list = []
+            self._pts = list(pts_list)
 
-        def decode(self, s):  # noqa: ANN001, ANN201
-            for p in pts_list:
-                yield _FakeVideoFrame(p)
+        def demux(self, s):  # noqa: ANN001, ANN201
+            for i, p in enumerate(self._pts):
+                yield _Packet(i, p)
+
+        def seek(self, target, **kwargs):  # noqa: ANN001, ANN003
+            self.seeks.append(target)
+            if after_seek is not None:
+                self._pts = list(after_seek)
 
         def close(self) -> None:
             self.closed = True
@@ -760,3 +782,76 @@ def test_pyav_decoder_measures_from_the_container_start():
     decoder = PyAvVideoDecoder(_fake_av_video([1500, 1540], start_time=1_500_000), "x.webm")
     assert decoder.next()[0] == pytest.approx(0.0)
     assert decoder.next()[0] == pytest.approx(0.04)
+
+
+def test_pyav_decoder_skips_a_packet_that_fails_to_decode(caplog):
+    """One bad packet is skipped and decoding goes on (the picture holds until
+    the next good frame), instead of ending the item at the error."""
+    import logging
+
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.vision.feed")
+    decoder = PyAvVideoDecoder(
+        _fake_av_video([0, 40, 80, 120, 160, 200], bad={2, 4}), "x.webm", label="item order 3"
+    )
+    times = []
+    while (nxt := decoder.next()) is not None:
+        times.append(round(nxt[0], 6))
+    assert times == [0.0, 0.04, 0.12, 0.2]
+    assert decoder.skipped_packets == 2
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "item order 3" in warnings[0].getMessage()
+    assert "Invalid data" not in warnings[0].getMessage()  # type only, no text
+
+
+def test_pyav_decoder_times_an_untimed_frame_after_a_seek_from_the_target():
+    """After a seek, a first frame without a timestamp is placed at the seek
+    target, not at 0 (which would make the source decode far past it)."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    decoder = PyAvVideoDecoder(
+        _fake_av_video([0, 40], after_seek=[None, None, 6080]), "x.webm"
+    )
+    decoder.seek(6.0)
+    times = [round(decoder.next()[0], 6) for _ in range(3)]
+    assert times == [6.0, 6.04, 6.08]
+
+
+def test_pyav_decoder_rebases_a_backward_timestamp_reset():
+    """A jump back of more than a second (a timestamp reset) continues the
+    timeline one frame after the previous frame instead of holding every later
+    frame at one time; small backward jitter is still held."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    decoder = PyAvVideoDecoder(
+        _fake_av_video([4920, 4960, 5000, 0, 40, 30, 80]), "x.webm"
+    )
+    times = []
+    while (nxt := decoder.next()) is not None:
+        times.append(round(nxt[0], 6))
+    assert times == [4.92, 4.96, 5.0, 5.04, 5.08, 5.08, 5.12]
+    assert decoder.discontinuities == 1
+
+
+def test_a_timestamp_reset_does_not_decode_the_rest_of_the_item_in_one_read(tmp_path):
+    """Before the re-base, every frame after a reset was due at once."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    pts = [i * 40 for i in range(50)] + [i * 40 for i in range(500)]  # reset at 2 s
+    src, clk = _one_item_source(
+        tmp_path, fps=25, frame_count=1, open_now=False,
+        decoders=lambda path, item: PyAvVideoDecoder(
+            _fake_av_video(pts, duration=30_000_000), path
+        ),
+    )
+    clk.t = 0.0
+    src.clock.start()
+    assert src.open()
+    clk.t = 0.0
+    src.read()
+    clk.t = 2.5
+    src.read()
+    assert src._shown.t == pytest.approx(2.48)
+    assert src._pending is not None and src._pending[0] == pytest.approx(2.52)
+

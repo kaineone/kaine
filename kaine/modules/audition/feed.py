@@ -778,6 +778,12 @@ class PlaylistAudioStream:
         media_root: str | Path | None = None,
         playlist_clock: PlaylistClock | None = None,
     ) -> None:
+        if int(channels) not in (1, 2):
+            # The resampler gives mono or stereo; any other count would be
+            # resampled to stereo and then rejected frame by frame.
+            raise ValueError(
+                f"the playlist audio feed delivers 1 or 2 channels; got channels = {channels}"
+            )
         self._manifest = manifest
         self._callback = callback
         self._sample_rate = int(sample_rate)
@@ -802,6 +808,7 @@ class PlaylistAudioStream:
             timeout=seconds
         )
         self._skips = 0  # skips forward to the clock (content-free count)
+        self._item_failures = 0  # items that failed to open or decode
 
     @property
     def manifest(self) -> PlaylistManifest:
@@ -972,6 +979,19 @@ class PlaylistAudioStream:
             lo = skip * self._channels
             return _push(pcm[lo : lo + keep * self._channels].tobytes())
 
+        def _silence_rest_of_item(idx: int) -> bool:
+            """Silence from the delivered (and queued) position to the item's
+            length on the clock. With no known length, deliver nothing more:
+            the next item's first block waits until the clock reaches it."""
+            end_s = self._clock_duration(idx)
+            if end_s is None:
+                return not self._stopped.is_set()
+            with self._delivered_lock:
+                delivered = self._delivered
+            pos = delivered[1] if delivered is not None and delivered[0] == idx else 0.0
+            pos += len(carry) / float(frame_bytes) / rate
+            return _push_silence(int(round(max(0.0, end_s - pos) * rate)))
+
         def _play_item(idx: int, item: Any, item_start: float) -> bool:
             """Decode one item from ``item_start`` onto its timeline. False
             once stopped; raises _SkipForward when the clock got away."""
@@ -989,9 +1009,10 @@ class PlaylistAudioStream:
                 if not container.streams.audio:
                     # Heard as silence for the item's length, so the next
                     # item's sound starts when the clock reaches it.
+                    # Index only: the path carries the mount and the title.
                     log.warning(
-                        "playlist item has no audio track: %s; %.3f s of silence",
-                        media,
+                        "playlist audio item %d has no audio track; %.3f s of silence",
+                        idx,
                         timeline.remaining() / rate,
                     )
                     return _push_silence(timeline.remaining())
@@ -1013,12 +1034,13 @@ class PlaylistAudioStream:
                             int((item_start + origin) * AV_TIME_BASE),
                             any_frame=False,
                         )
-                    except Exception:
+                    except Exception as exc:
                         log.warning(
-                            "playlist container seek failed; "
+                            "playlist audio item %d: seek failed (%s); "
                             "decode-and-dropping to offset %.3fs",
+                            idx,
+                            type(exc).__name__,
                             item_start,
-                            exc_info=True,
                         )
                 for frame in container.decode(stream):
                     if self._stopped.is_set():
@@ -1077,7 +1099,18 @@ class PlaylistAudioStream:
                 carried_s = len(carry) / float(frame_bytes) / rate
                 self._begin_item(idx, item_start, carried_s=carried_s)
                 try:
-                    if not _play_item(idx, items[idx], item_start):
+                    try:
+                        played = _play_item(idx, items[idx], item_start)
+                    except _SkipForward:
+                        raise
+                    except Exception as exc:
+                        # One item failing (unreadable after verify, a decode
+                        # error the decoder does not conceal) must not silence
+                        # the rest of the programme: hear silence for the rest
+                        # of this item and go on with the next on the clock.
+                        self._note_item_failure(idx, exc)
+                        played = _silence_rest_of_item(idx)
+                    if not played:
                         return
                 except _SkipForward as skip:
                     # Too far behind to catch up: drop what is queued and
@@ -1143,6 +1176,17 @@ class PlaylistAudioStream:
                 return math.inf
             total += d
         return total - from_off + to_off
+
+    def _note_item_failure(self, idx: int, exc: BaseException) -> None:
+        """Log an item that failed to open or decode: index and exception
+        type only (its text can carry the path, so the title)."""
+        self._item_failures += 1
+        log.warning(
+            "playlist audio item %d failed (%s); heard as silence for the rest "
+            "of its length, the programme goes on",
+            idx,
+            type(exc).__name__,
+        )
 
     def _note_skip(self, skip: _SkipForward) -> None:
         """Log a skip forward, content-free: the first at warning, later ones

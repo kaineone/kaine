@@ -313,9 +313,13 @@ def _run_fake_av_stream(tmp_path, monkeypatch, containers, *, clock=None):  # no
         items.append({"path": name, "sha256": hashlib.sha256(data).hexdigest(), "fps": 25})
     parsed = load_playlist_manifest(_write_manifest(tmp_path, items))
     by_name = {f"item{i}.webm": c for i, c in enumerate(containers)}
-    monkeypatch.setitem(
-        sys.modules, "av", fake_av_module(lambda path: by_name[path.rsplit("/", 1)[-1]])
-    )
+    def _open(path):  # noqa: ANN001, ANN202
+        found = by_name[path.rsplit("/", 1)[-1]]
+        if isinstance(found, BaseException):
+            raise found  # the item cannot be opened
+        return found
+
+    monkeypatch.setitem(sys.modules, "av", fake_av_module(_open))
     from kaine.modules.vision.feed import PlaylistClock
 
     # A manual shared clock that the producer's pacing waits advance.
@@ -366,6 +370,8 @@ class _TimedContainer:
         from tests._playlist_fakes import FakeAudioFrame
 
         for pts, n, value in self._frames:
+            if value is None:
+                raise OSError("Invalid data found when processing input")
             yield FakeAudioFrame(
                 int(value).to_bytes(2, "little", signed=True) * n,
                 pts=pts, time_base=0.001, sample_rate=1000,
@@ -408,3 +414,70 @@ def test_playlist_audio_resumes_at_the_offset_when_the_seek_fails(tmp_path, monk
     assert pcm.size == 400
     assert (pcm[:150] == 3).all() and (pcm[150:] == 4).all()
     assert stream.delivered_position == (0, pytest.approx(1.0))
+
+
+def test_an_item_that_fails_to_decode_is_silence_and_the_programme_goes_on(
+    tmp_path, monkeypatch, caplog
+):
+    """Item 0 raises mid-decode and item 1 cannot be opened at all: each is
+    heard as silence for the rest of its length, item 2 plays at its place on
+    the clock, and the producer is still alive at the end."""
+    import logging
+
+    from kaine.modules.vision.feed import PlaylistClock
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.audition.feed")
+    clock = PlaylistClock(3, clock=_ManualTime())
+    clock.set_duration(1, 1.0)  # registered by the video surface
+    pcm, stream = _run_fake_av_stream(
+        tmp_path, monkeypatch,
+        [
+            _TimedContainer([(0, 300, 5), (300, 300, None)], duration_s=1.0),
+            FileNotFoundError(2, "No such file or directory", str(tmp_path / "item1.webm")),
+            _TimedContainer([(0, 500, 9)], duration_s=0.5),
+        ],
+        clock=clock,
+    )
+    assert pcm.size == 2500
+    assert (pcm[:300] == 5).all() and not pcm[300:2000].any() and (pcm[2000:] == 9).all()
+    assert stream._item_failures == 2
+    failures = [r.getMessage() for r in caplog.records if "failed (" in r.getMessage()]
+    assert failures == [
+        "playlist audio item 0 failed (OSError); heard as silence for the rest "
+        "of its length, the programme goes on",
+        "playlist audio item 1 failed (FileNotFoundError); heard as silence for the rest "
+        "of its length, the programme goes on",
+    ]
+    assert all(str(tmp_path) not in r.getMessage() and r.exc_info is None for r in caplog.records)
+
+
+def test_playlist_audio_refuses_a_channel_count_it_cannot_deliver(tmp_path):
+    (tmp_path / "a.webm").write_bytes(b"a")
+    parsed = load_playlist_manifest(
+        _write_manifest(
+            tmp_path, [{"path": "a.webm", "sha256": hashlib.sha256(b"a").hexdigest(), "fps": 25}]
+        )
+    )
+    for channels in (1, 2):
+        PlaylistAudioStream(parsed, callback=_noop, channels=channels)
+    for channels in (0, 3, 6):
+        with pytest.raises(ValueError, match="1 or 2 channels"):
+            PlaylistAudioStream(parsed, callback=_noop, channels=channels)
+
+
+def test_the_playlist_audio_factory_refuses_bad_channels_at_boot(tmp_path):
+    from kaine.boot.perception_feed import _build_perception_feed_audio_factory
+
+    (tmp_path / "a.webm").write_bytes(b"a")
+    manifest = _write_manifest(
+        tmp_path, [{"path": "a.webm", "sha256": hashlib.sha256(b"a").hexdigest(), "fps": 25}]
+    )
+    feed = {"mode": "playlist", "playlist_manifest": str(manifest)}
+    _build_perception_feed_audio_factory(
+        "playlist", feed, sample_rate=16000, channels=1, frames_per_block=480
+    )
+    with pytest.raises(ValueError, match="1 or 2 audio channels"):
+        _build_perception_feed_audio_factory(
+            "playlist", feed, sample_rate=16000, channels=4, frames_per_block=480
+        )
+

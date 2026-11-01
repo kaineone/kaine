@@ -32,3 +32,13 @@
 
 - [x] 6.1 Run the vision, audition, feed, perception and ignition tests, `ruff` and `lint-imports`.
 - [x] 6.2 Record the before and after durations and alignment for the four programme films. After: decoded audio equals the container duration within one 30 ms block on all four films (no timestamp gaps filled, nothing trimmed, 4 to 16 ms of end padding), and the presented frame is the one on screen at the clock's offset (37 ms behind it at a 40 ms frame interval, 77 ms at the 80 ms intervals of the two variable-frame-rate films) at 1, 10, 30 and 60 minutes and at the end.
+
+## 7. Review fixes
+
+- [x] 7.1 Decode playlist video packet by packet; skip and count a packet that fails to decode (one content-free warning, then debug) instead of ending the item (M1). Tested on a damaged 20 s VP8 WebM on which a whole-stream decode stops early.
+- [x] 7.2 An audio item that fails to open or decode is silence for the rest of its length and the producer goes on; a video item that cannot be opened no longer ends the picture; channels other than 1 or 2 are refused at boot and at construction (L1).
+- [x] 7.3 Feed logs name the item index or order and the exception type, never the path, file name, title or exception text; a test checks every feed log record on these paths (L2).
+- [x] 7.4 After a seek, an untimed frame takes the seek target as its time (L3).
+- [x] 7.5 A video timestamp more than 1 s back is a discontinuity: re-base the timeline instead of clamping every later frame (L4).
+- [x] 7.6 Mutation-check each fix.
+

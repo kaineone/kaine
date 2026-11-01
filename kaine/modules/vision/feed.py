@@ -963,6 +963,10 @@ _SEEK_BEHIND_S = 2.0
 #: nor the manifest gives a usable rate.
 _FALLBACK_FRAME_INTERVAL_S = 1.0 / 25.0
 
+#: A video timestamp this far before the previous frame's is a discontinuity
+#: (a timestamp reset), not jitter: the timeline is re-based, not held.
+_PTS_DISCONTINUITY_S = 1.0
+
 
 def container_duration_s(container: Any) -> float | None:
     """The container's duration in seconds, or ``None`` when it reports none.
@@ -994,23 +998,42 @@ class PyAvVideoDecoder:
     The time of a frame is ``pts x time_base`` minus the container start, never
     a frame index divided by a rate, so variable-frame-rate files keep their
     real timing. A frame without a timestamp is placed one frame interval after
-    the previous frame; a timestamp at or before the previous frame's time is
-    held at that time, so the timeline never runs backwards. Frames are decoded
-    in memory only and converted to BGR only when presented (``image``).
+    the previous frame (after a seek, at the seek target). A timestamp slightly
+    before the previous frame's time is held at that time, so the timeline never
+    runs backwards; a jump back of more than ``_PTS_DISCONTINUITY_S`` (a
+    timestamp reset, as in a concatenated file) is a discontinuity: the
+    timeline is re-based to continue one frame interval after the previous
+    frame, instead of holding every later frame at one time (which would make
+    one read decode the rest of the item).
+
+    Packets are decoded one at a time, and a packet that fails to decode is
+    skipped (counted in ``skipped_packets``; the first logged at warning, later
+    ones at debug, content-free): the picture holds until the next good frame
+    instead of freezing for the rest of the item. Frames are decoded in memory
+    only and converted to BGR only when presented (``image``). ``label`` names
+    the item in log lines (an index or order, never a path or title).
     """
 
-    def __init__(self, av_module: Any, path: str | Path, *, nominal_fps: float | None = None) -> None:
+    def __init__(
+        self,
+        av_module: Any,
+        path: str | Path,
+        *,
+        nominal_fps: float | None = None,
+        label: str = "item",
+    ) -> None:
+        self._label = label
         self._container = av_module.open(str(path))
         try:
             streams = self._container.streams.video
             if not streams:
-                raise ValueError(f"no video stream in {path}")
+                raise ValueError("no video stream")
             self._stream = streams[0]
             try:
                 # Frame-threaded decode keeps dropping frames cheap at 1x.
                 self._stream.thread_type = "AUTO"
             except Exception:
-                log.debug("playlist video decoder: thread_type not settable", exc_info=True)
+                log.debug("playlist video decoder: thread_type not settable")
             self._time_base = float(self._stream.time_base)
             self._origin = container_origin_s(self._container)
             self.duration: float | None = container_duration_s(self._container)
@@ -1018,8 +1041,17 @@ class PyAvVideoDecoder:
         except Exception:
             self._container.close()
             raise
-        self._frames = self._container.decode(self._stream)
+        self.skipped_packets = 0
+        self.discontinuities = 0
+        self._start_decoding(base_t=0.0)
+
+    def _start_decoding(self, *, base_t: float) -> None:
+        self._packets = self._container.demux(self._stream)
+        self._ready: list[Any] = []
         self._last_t: float | None = None
+        # Time for an untimed first frame (0, or the seek target).
+        self._base_t = max(0.0, float(base_t))
+        self._shift = 0.0  # re-base after a backward timestamp discontinuity
 
     def _frame_interval(self, nominal_fps: float | None) -> float:
         for rate in (
@@ -1035,23 +1067,62 @@ class PyAvVideoDecoder:
                 return 1.0 / value
         return _FALLBACK_FRAME_INTERVAL_S
 
+    def _next_frame(self) -> Any | None:
+        """The next decoded frame, skipping packets that fail to decode, or
+        ``None`` at the end of the stream (or if the demuxer itself fails,
+        which is logged)."""
+        while not self._ready:
+            try:
+                packet = next(self._packets)
+            except StopIteration:
+                return None
+            except Exception as exc:
+                log.warning(
+                    "playlist video %s: the demuxer failed (%s); holding the last frame",
+                    self._label,
+                    type(exc).__name__,
+                )
+                return None
+            try:
+                self._ready.extend(packet.decode())
+            except Exception as exc:
+                self.skipped_packets += 1
+                log.log(
+                    logging.WARNING if self.skipped_packets == 1 else logging.DEBUG,
+                    "playlist video %s: skipped a packet that failed to decode (%s); "
+                    "%d skipped so far, later skips are logged at debug",
+                    self._label,
+                    type(exc).__name__,
+                    self.skipped_packets,
+                )
+        return self._ready.pop(0)
+
     def next(self) -> tuple[float, Any] | None:
         """The next decoded frame as ``(media_seconds, frame)``, or ``None`` at
-        the end of the stream (or on a decode error, which is logged)."""
-        try:
-            frame = next(self._frames)
-        except StopIteration:
-            return None
-        except Exception:
-            log.warning("playlist video decode failed; holding the last frame", exc_info=True)
+        the end of the stream."""
+        frame = self._next_frame()
+        if frame is None:
             return None
         pts = frame.pts
         if pts is None:
-            t = 0.0 if self._last_t is None else self._last_t + self.frame_interval
+            t = self._base_t if self._last_t is None else self._last_t + self.frame_interval
         else:
-            t = float(pts) * self._time_base - self._origin
+            t = float(pts) * self._time_base - self._origin + self._shift
             if self._last_t is not None and t < self._last_t:
-                t = self._last_t
+                if self._last_t - t > _PTS_DISCONTINUITY_S:
+                    resumed = self._last_t + self.frame_interval
+                    self._shift += resumed - t
+                    t = resumed
+                    self.discontinuities += 1
+                    log.log(
+                        logging.WARNING if self.discontinuities == 1 else logging.DEBUG,
+                        "playlist video %s: timestamps jumped back; the timeline "
+                        "continues from the previous frame (%d so far)",
+                        self._label,
+                        self.discontinuities,
+                    )
+                else:
+                    t = self._last_t
         self._last_t = t
         return t, frame
 
@@ -1059,8 +1130,7 @@ class PyAvVideoDecoder:
         """Position on the keyframe at or before ``seconds`` (media time)."""
         target = int((max(0.0, seconds) + self._origin) / self._time_base)
         self._container.seek(target, stream=self._stream, backward=True, any_frame=False)
-        self._frames = self._container.decode(self._stream)
-        self._last_t = None
+        self._start_decoding(base_t=seconds)
 
     @staticmethod
     def image(frame: Any) -> Any:
@@ -1085,7 +1155,7 @@ def _pyav_video_decoder_factory() -> Callable[[Path, PlaylistItem], Any]:
         ) from exc
 
     def _factory(path: Path, item: PlaylistItem) -> PyAvVideoDecoder:
-        return PyAvVideoDecoder(av, path, nominal_fps=item.fps)
+        return PyAvVideoDecoder(av, path, nominal_fps=item.fps, label=f"item order {item.order}")
 
     return _factory
 
@@ -1204,7 +1274,7 @@ class PlaylistSource:
             try:
                 self._decoder.close()
             except Exception:
-                log.debug("playlist video decoder close raised", exc_info=True)
+                log.debug("playlist video decoder close raised")
             self._decoder = None
 
     def _open_current_item(self) -> bool:
@@ -1214,8 +1284,14 @@ class PlaylistSource:
         media = self._resolve(item)
         try:
             decoder = self._decoder_factory(media, item)
-        except Exception:
-            log.warning("playlist item could not be opened: %s", media, exc_info=True)
+        except Exception as exc:
+            # Index and exception type only: the path and its exception text
+            # carry the mount and the title.
+            log.warning(
+                "playlist video item %d could not be opened (%s)",
+                self._item_idx,
+                type(exc).__name__,
+            )
             return False
         self._decoder = decoder
         self._reset_item_state()
@@ -1240,20 +1316,20 @@ class PlaylistSource:
         item = self._manifest.items[0]
         try:
             decoder = self._decoder_factory(self._resolve(item), item)
-        except Exception:
-            log.debug("playlist first frame: item could not be opened", exc_info=True)
+        except Exception as exc:
+            log.debug("playlist first frame: item 0 could not be opened (%s)", type(exc).__name__)
             return None
         try:
             first = decoder.next()
             return decoder.image(first[1]) if first is not None else None
-        except Exception:
-            log.debug("playlist first frame could not be decoded", exc_info=True)
+        except Exception as exc:
+            log.debug("playlist first frame could not be decoded (%s)", type(exc).__name__)
             return None
         finally:
             try:
                 decoder.close()
             except Exception:
-                log.debug("playlist video decoder close raised", exc_info=True)
+                log.debug("playlist video decoder close raised")
 
     def _advance_item(self) -> bool:
         self._close_decoder()
@@ -1264,7 +1340,7 @@ class PlaylistSource:
         return self._open_current_item()
 
     def read(self) -> tuple[bool, Any]:
-        if self._decoder is None or not self._verified:
+        if not self._verified or self._decoder_factory is None:
             return False, None
         # First read fixes the shared playback origin (idempotent across feeds).
         self._clock.start()
@@ -1274,13 +1350,16 @@ class PlaylistSource:
             return False, None
         # Walk whole items forward to the item the shared clock is on. We only
         # ever move forward (the clock is monotonic); each open registers the new
-        # item's duration, so the clock can then reveal the next boundary.
+        # item's duration, so the clock can then reveal the next boundary. An
+        # item that cannot be opened shows nothing while the clock is on it;
+        # the source carries on with the next item when the clock gets there.
         while self._item_idx < target_idx:
-            if not self._advance_item():
-                return False, None
+            self._advance_item()
             target_idx, offset = self._clock.locate()
             if target_idx >= n:
                 return False, None
+        if self._decoder is None:
+            return False, None
         shown = self._present(offset)
         if shown is None:
             return False, None
@@ -1320,10 +1399,13 @@ class PlaylistSource:
     def _seek(self, offset: float) -> None:
         try:
             self._decoder.seek(offset)
-        except Exception:
+        except Exception as exc:
             # Decoding forward is slower but reaches the same frame.
             log.warning(
-                "playlist video seek to %.3fs failed; decoding forward", offset, exc_info=True
+                "playlist video item %d: seek to %.3fs failed (%s); decoding forward",
+                self._item_idx,
+                offset,
+                type(exc).__name__,
             )
             self._seek_failed = True
             return
