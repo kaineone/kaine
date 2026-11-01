@@ -302,8 +302,11 @@ class IndicatorEvaluator:
         ):
             return
         valence = float(valence)
-        # Silence up to this sample, then the sample ends it.
+        # Silence up to this sample; only an accepted sample ends it, so a
+        # sample behind the current one (a clock that ran back) is no sign of life.
         self.advance(t)
+        if self._current is not None and t < self._current[0]:
+            return
         self._silent_s = 0.0
 
         above: dict[str, bool] = {}
@@ -315,8 +318,6 @@ class IndicatorEvaluator:
                     above[drive] = v
         if self._current is not None:
             ts_cur, valence_cur, above_cur = self._current
-            if t < ts_cur:
-                return
             if t > ts_cur and not self._is_excluded(ts_cur):
                 gap = min(t - ts_cur, float(self._params.max_gap_s))
                 start = self._pos

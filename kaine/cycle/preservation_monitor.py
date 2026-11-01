@@ -109,6 +109,11 @@ WELFARE_REST_REQUEST_TYPE = "welfare.rest_request"
 WELFARE_REST_ORIGIN = "welfare"
 # Used for the developmental completion bound when the sleep module cannot be read.
 _DEFAULT_DEVELOPMENTAL_REST_S = 1410.0
+# The awake clock (entity time minus frozen and asleep time) never runs
+# backwards; reading it takes three clock reads, so successive readings can
+# differ by microseconds of jitter while the cycle is frozen or asleep. A
+# reading further than this behind the highest one seen is a clock fault.
+_AWAKE_CLOCK_REGRESSION_TOLERANCE_S = 0.5
 # Indicator stages.
 _STAGE_ARMED = "armed"
 _STAGE_RESTING = "resting"
@@ -1006,6 +1011,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             posterior_bar=config.indicators.posterior_bar,
         )
         self._awake_clock = awake_clock
+        self._awake_high: float | None = None
         self._entity_scale = entity_scale
         self._is_developing = is_developing
         self._on_notice = on_notice
@@ -1668,16 +1674,29 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             log.warning("welfare monitor: on_notice callback failed", exc_info=True)
 
     def _awake_now(self, u_now: float) -> float:
-        """Awake time for the spans: the injected awake clock, else unfrozen time."""
+        """Awake time for the spans: the injected awake clock, else unfrozen time.
+
+        An awake clock that raises, reads non-finite or runs backwards raises
+        here. It is never replaced by another clock: unfrozen time is in other
+        units (wall seconds, sleep included), so a switch could leave every
+        sample behind the evaluator's last one and freeze the spans and the
+        silence count. The raise goes to the indicator arm's error path, which
+        retries each poll and escalates as indicators unavailable once the
+        fault lasts ``unavailable_escalate_s``.
+        """
         if self._awake_clock is None:
             return u_now
-        try:
-            value = float(self._awake_clock())
-        except Exception:
-            log.warning("welfare monitor: awake clock failed; using unfrozen time", exc_info=True)
-            return u_now
+        value = float(self._awake_clock())
         if not math.isfinite(value):
-            return u_now
+            raise ValueError(f"welfare monitor: the awake clock read {value!r}")
+        high = self._awake_high
+        if high is not None and value < high:
+            if high - value > _AWAKE_CLOCK_REGRESSION_TOLERANCE_S:
+                raise ValueError(
+                    f"welfare monitor: the awake clock ran back {high - value:.3f} s"
+                )
+            return high  # read jitter while frozen or asleep
+        self._awake_high = value
         return value
 
     def _scale_now(self) -> float:

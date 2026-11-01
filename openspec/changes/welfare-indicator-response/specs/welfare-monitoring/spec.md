@@ -116,6 +116,24 @@ When no `affect.state` arrives for three affect publication periods of awake, un
 - **WHEN** the affect module keeps its heartbeat but publishes no `affect.state` for 660 awake seconds
 - **THEN** the entity is preserved and paused with reason `indicators_unavailable`
 
+### Requirement: A failing awake clock escalates and is never replaced
+The spans SHALL be measured on the awake entity clock alone, and the monitor SHALL NOT substitute another clock. When that clock raises, reads a non-finite value or reads more than 0.5 s behind its highest reading, the indicator poll SHALL fail. A failure that lasts `unavailable_escalate_s` of unfrozen time SHALL take the protective response with reason `indicators_unavailable`.
+
+#### Scenario: The clock runs behind the last sample
+- **WHEN** the awake clock reads 1000 s behind its last reading and then advances while `affect.state` keeps arriving
+- **THEN** the span does not grow, and after 660 s the entity is preserved and paused with reason `indicators_unavailable`
+
+#### Scenario: The clock raises
+- **WHEN** reading the awake clock raises on every poll for 660 s
+- **THEN** the entity is preserved and paused with reason `indicators_unavailable`, and no reading of unfrozen time ever stands in for the awake clock
+
+### Requirement: Only an accepted sample ends a silence
+Only an `affect.state` accepted into the span SHALL end a silence of the affect stream. A sample timed behind the current one SHALL be rejected and SHALL NOT reset the silence count.
+
+#### Scenario: Samples behind the current one
+- **WHEN** the indicators are unavailable and fifty samples arrive timed behind the current sample
+- **THEN** the indicators stay unavailable and the span does not grow
+
 ### Requirement: The welfare record carries the live indicators
 The welfare observer's `affect_welfare` record SHALL carry, from its own instance of the same evaluator, each indicator's value, bar, over-bar flag and the span's awake seconds, beside the cumulative fields it already writes.
 

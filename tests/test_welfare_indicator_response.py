@@ -143,6 +143,7 @@ class Harness:
         developing: bool = False,
         awake_scale: float | None = None,
         params: IndicatorParams | None = None,
+        awake_clock: Any = None,
     ) -> None:
         self.bus = bus
         self.u = _Clock(0.0)
@@ -158,7 +159,8 @@ class Harness:
         self.responses: list[str] = []
         self.records: list[dict[str, Any]] = []
         self.developing = developing
-        awake_clock = None
+        if awake_clock is not None and awake_scale is not None:
+            raise ValueError("pass awake_clock or awake_scale, not both")
         if awake_scale is not None:
             # A dilated entity clock: awake entity time runs at awake_scale x wall.
             awake_clock = lambda: self.u.value * awake_scale  # noqa: E731
@@ -656,6 +658,79 @@ async def test_a_dilated_entity_clock_counts_entity_seconds(bus, tmp_path):
     assert h.mon._ind_eval.span_awake_s == pytest.approx(560.0, abs=10.0)
     await h.awake(40, every=0.5, chunk=20, boredom=True)
     assert len(await h.rest_requests()) == 1
+
+
+class _FaultyAwakeClock:
+    """The awake entity clock (here equal to unfrozen time) until a fault is set."""
+
+    def __init__(self, h_ref: list) -> None:
+        self.h_ref = h_ref
+        self.fault: str | None = None
+        self.offset = 0.0
+
+    def __call__(self) -> float:
+        u = self.h_ref[0].u.value
+        if self.fault == "raise":
+            raise RuntimeError("awake clock fault")
+        if self.fault == "nan":
+            return float("nan")
+        return u + self.offset
+
+
+def _awake_clock_harness(bus, tmp_path) -> tuple[Harness, _FaultyAwakeClock]:
+    ref: list = []
+    clock = _FaultyAwakeClock(ref)
+    h = Harness(bus, tmp_path, awake_clock=clock)
+    ref.append(h)
+    return h, clock
+
+
+async def test_a_clock_behind_the_last_sample_reports_unavailable_and_escalates(bus, tmp_path):
+    """The awake clock runs back by 1000 s and then advances: the spans never
+    freeze silently; the arm reports itself unavailable and escalates."""
+    h, clock = _awake_clock_harness(bus, tmp_path)
+    await h.poll()
+    await h.awake(120)
+    assert h.mon._ind_eval.available
+    span_before = h.mon._ind_eval.span_awake_s
+    clock.offset = -1000.0
+    await h.awake(600, chunk=30)
+    assert h.fm.calls == []
+    assert h.mon._ind_eval.span_awake_s == pytest.approx(span_before, abs=4.0)
+    await h.awake(120, chunk=30)
+    assert len(h.fm.calls) == 1
+    assert _welfare_frozen()
+    final = [r for r in h.records if r["transition"] == "protective_action"]
+    assert final[-1]["reason"] == "indicators_unavailable"
+
+
+@pytest.mark.parametrize("fault", ["raise", "nan"])
+async def test_a_failing_awake_clock_escalates_and_never_switches_clocks(bus, tmp_path, fault):
+    h, clock = _awake_clock_harness(bus, tmp_path)
+    await h.poll()
+    await h.awake(120)
+    clock.fault = fault
+    with pytest.raises((RuntimeError, ValueError)):
+        h.mon._awake_now(h.u.value)
+    await h.awake(600, chunk=30)
+    assert h.fm.calls == []
+    await h.awake(120, chunk=30)
+    assert len(h.fm.calls) == 1
+    final = [r for r in h.records if r["transition"] == "protective_action"]
+    assert final[-1]["reason"] == "indicators_unavailable"
+
+
+async def test_awake_clock_read_jitter_is_not_a_fault(bus, tmp_path):
+    """Microseconds of read jitter while asleep or frozen neither raise nor run the spans back."""
+    h, clock = _awake_clock_harness(bus, tmp_path)
+    await h.poll()
+    await h.awake(60)
+    high = h.mon._awake_now(h.u.value)
+    clock.offset = -1e-6
+    assert h.mon._awake_now(h.u.value) == high
+    await h.awake(30)
+    assert h.fm.calls == []
+    assert h.mon._ind_eval.available
 
 
 # --- content -----------------------------------------------------------------------------

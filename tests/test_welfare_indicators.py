@@ -222,6 +222,25 @@ def test_silence_marks_the_indicators_unavailable_and_sleep_does_not_count():
     assert not ev.available
 
 
+def test_a_sample_behind_the_current_one_does_not_end_the_silence():
+    """A clock that ran back: its samples are rejected and no sign of life."""
+    params = IndicatorParams(publish_interval_s=1.0)
+    ev = IndicatorEvaluator(params)
+    t = _feed(ev, 1000.0, 10)  # the last sample is at t - 1
+    ev.advance(t + 5.0)
+    assert not ev.available
+    silent = ev.silent_awake_s
+    span = ev.span_awake_s
+    for k in range(50):
+        ev.observe_state(500.0 + k, _state())
+    assert ev.silent_awake_s == silent
+    assert not ev.available
+    assert ev.span_awake_s == span
+    # A sample on the current clock is accepted and ends the silence.
+    ev.observe_state(t + 6.0, _state())
+    assert ev.available
+
+
 def test_peek_does_not_consume_a_crossing():
     ev = IndicatorEvaluator(IndicatorParams())
     _feed(ev, 0.0, 601, boredom=True)
