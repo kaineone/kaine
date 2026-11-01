@@ -101,6 +101,9 @@ CONDITION_NAMES: dict[int, str] = {
 SAFETY_NET_CONDITIONS: dict[str, int] = {
     "preservation_enabled": 1,
     "welfare_response_wired": 2,
+    # The indicator response is part of the welfare response: condition 2
+    # holds only when both are wired.
+    "indicator_response_wired": 2,
     "logging_active": 3,
     "dry_self_check_passed": 4,
     "encryption_satisfied": 5,
@@ -145,6 +148,7 @@ _FALLBACK_REASONS: dict[str, str] = {
     "dry_self_check_passed": "the dry preserve→revive round-trip did not pass on this install",
     "encryption_satisfied": "[preservation].require_encryption is true but [security.state_encryption] is off",
     "supervisor_armed": "the supervisor is not armed and self-tested",
+    "indicator_response_wired": "the welfare response to the welfare indicators is not wired",
     "individuation_enabled": "[individuation].enabled is false, its configuration is invalid, or the language module is disabled",
 }
 

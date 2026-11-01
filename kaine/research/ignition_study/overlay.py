@@ -108,7 +108,10 @@ def build_overlay(
         "evaluation": {"enabled": False, "workspace_trajectory": False},
         "preservation": {
             "divergence_monitor": {"enabled": True},
-            "welfare_response": {"enabled": True},
+            # The research gate requires the response to the A.4 welfare
+            # indicators too (it needs the affect and sleep modules, which the
+            # base set holds, and the pause or end action).
+            "welfare_response": {"enabled": True, "indicators": {"enabled": True}},
         },
         # The research gate refuses a boot without the individuation producer,
         # so every step enables it whatever the operator config says.

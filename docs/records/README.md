@@ -2,6 +2,7 @@
 
 Dated records kept as written. They describe the system at the time they were made, so they can disagree with the current book; the chapters describe the software as it is now.
 
+- [Welfare indicator replay (2026-10-31)](validation/welfare-indicator-replay/2026-10-31-replay.md): the archived test boots run offline through the welfare net's response to the A.4 indicators, by both replay methods, and which boots could not be read.
 - [Pretend-process audit (2026-06-09)](audits/2026-06-09-pretend-process-audit.md): a read-only sweep for code that faked or stubbed work while claiming success, and what was fixed.
 - [Stimulus control: habituation of skip-driven novelty (2026-10-31)](shakedowns/2026-10-31-stimulus-control-habituation.md): the offline check that habituation damps the novelty a skip buys, to a floor rather than zero.
 - [K1-Jev W2a 0.8B smoke run (2026-10-06)](shakedowns/2026-10-06-k1jev-w2a-0.8b-smoke-run.md): the schema v1 pipeline test of the K1-Jev trainer on Qwen3.5-0.8B, its result and the gaps left for the schema v2 run.

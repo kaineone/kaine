@@ -19,6 +19,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from kaine.lifecycle.welfare_indicators import INDICATOR_NAMES
 from kaine.lifecycle.welfare_signal import ADVISORY_RESET, BLIND_SENSOR_PROCESSORS
 
 log = logging.getLogger(__name__)
@@ -49,7 +50,29 @@ AFFECT_WELFARE_KEYS: tuple[str, ...] = tuple(
     + [f"{drive}_sleep_reset_ends" for drive in AFFECT_DEFICIT_DRIVES]
     + [f"{drive}_open_crossings" for drive in AFFECT_DEFICIT_DRIVES]
     + [f"{drive}_interest_share" for drive in AFFECT_INTEREST_DRIVES]
+    + ["indicator_span_awake_seconds"]
+    + [f"indicator_{name}_{part}" for name in INDICATOR_NAMES for part in ("value", "bar", "over")]
 )
+
+#: Indicator keys whose value is a share, a posterior or a bar: in [0, 1].
+_UNIT_INTERVAL_KEYS: frozenset[str] = frozenset(
+    f"indicator_{name}_{part}" for name in INDICATOR_NAMES for part in ("value", "bar")
+)
+#: Indicator over-bar flags: 0 or 1.
+_FLAG_KEYS: frozenset[str] = frozenset(f"indicator_{name}_over" for name in INDICATOR_NAMES)
+
+
+def _bounded(key: str, value: Any) -> Any:
+    """A record value within its range, or None (the readout never shows an out-of-range figure)."""
+    if not (_is_number(value) and math.isfinite(value)):
+        return None
+    if key in _UNIT_INTERVAL_KEYS and not 0.0 <= value <= 1.0:
+        return None
+    if key in _FLAG_KEYS and value not in (0, 1):
+        return None
+    if key == "indicator_span_awake_seconds" and value < 0.0:
+        return None
+    return value
 
 
 def _get_encryptor() -> Any:
@@ -288,11 +311,7 @@ def affect_welfare_from_jsonl(logs_root: Path) -> dict[str, Any] | None:
                 result["current_run"] = not reset_seen
 
                 for key in AFFECT_WELFARE_KEYS:
-                    value = entry.get(key)
-                    if _is_number(value) and math.isfinite(value):
-                        result[key] = value
-                    else:
-                        result[key] = None
+                    result[key] = _bounded(key, entry.get(key))
 
                 return result
 

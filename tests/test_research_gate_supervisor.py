@@ -31,7 +31,7 @@ def _net_config(tmp_path: Path, supervisor: dict[str, Any] | None) -> dict[str, 
         },
         "evaluation": {"enabled": True},
         "individuation": {"enabled": True},
-        "modules": {"language": True},
+        "modules": {"language": True, "affect": True, "sleep": True},
     }
     if supervisor is not None:
         config["supervisor"] = supervisor

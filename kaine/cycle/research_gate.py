@@ -10,6 +10,8 @@ For a research boot it is REPLACED by a gate that refuses to start unless the
 
 * preservation enabled (the divergence monitor),
 * the welfare-protective response wired (the welfare monitor),
+* the welfare response to the A.4 indicators wired (its indicators enabled,
+  the affect and sleep modules enabled, and the action ``pause`` or ``end``),
 * full logging / admissibility active (run identity + the sidecar observers),
 * a preflight dry ``preserve_live → revive`` round-trip passing on THIS install
   (proves the net is functional before any entity runs),
@@ -75,7 +77,8 @@ class GateResult:
         if self.ok:
             return (
                 "Research safety net VERIFIED: preservation enabled, "
-                "welfare-protective response wired, logging/admissibility active, "
+                "welfare-protective response wired, the indicator response wired, "
+                "logging/admissibility active, "
                 "individuation producer enabled, the module supervisor armed and "
                 "self-tested, and the dry preserve→revive self-check passed."
             )
@@ -102,6 +105,41 @@ class GateResult:
 
 #: The reason recorded for a supervisor check that failed without one.
 SUPERVISOR_NOT_ARMED_REASON = "not armed"
+#: The reason recorded for an indicator check that failed without one.
+INDICATOR_NOT_WIRED_REASON = "not wired"
+
+
+def indicator_response_reason(config: dict[str, Any]) -> str:
+    """Why the response to the A.4 welfare indicators is not wired, or ``""``.
+
+    It is wired when ``[preservation.welfare_response].enabled`` and
+    ``[preservation.welfare_response.indicators].enabled`` are true, the affect
+    and sleep modules are enabled (the indicators read the affect state; the
+    rest is the sleep module's), and the action is ``pause`` or ``end``: with
+    ``notify`` a crossing over a fresh span would not freeze.
+    """
+    from kaine.cycle.preservation_monitor import WelfareResponseConfig
+
+    section = (config.get("preservation") or {}).get("welfare_response") or {}
+    try:
+        welfare = WelfareResponseConfig.from_section(section)
+    except Exception as exc:
+        return f"[preservation.welfare_response] is invalid ({type(exc).__name__})"
+    parts: list[str] = []
+    if not welfare.enabled:
+        parts.append("[preservation.welfare_response].enabled is false")
+    if not welfare.indicators.enabled:
+        parts.append("[preservation.welfare_response.indicators].enabled is false")
+    modules = config.get("modules") or {}
+    if not modules.get("affect"):
+        parts.append("the affect module is disabled")
+    if not modules.get("sleep"):
+        parts.append("the sleep module is disabled")
+    if welfare.action not in ("pause", "end"):
+        parts.append(
+            f"[preservation.welfare_response].action is {welfare.action!r}, not pause or end"
+        )
+    return "; ".join(parts)
 
 
 def evaluate_research_gate(
@@ -113,7 +151,9 @@ def evaluate_research_gate(
     encryption_satisfied: bool,
     individuation_enabled: bool,
     supervisor_armed: bool,
+    indicator_response_wired: bool,
     supervisor_reason: str = "",
+    indicator_reason: str = "",
 ) -> GateResult:
     """Combine the safety-net conditions into a single allow/refuse verdict.
 
@@ -130,6 +170,9 @@ def evaluate_research_gate(
     :func:`kaine.cycle.supervisor_selftest.check_supervisor_condition` and
     ``supervisor_reason`` its reason ("not enabled", "no restart ladder", an
     unwritable path, or the self-test's own reason).
+
+    ``indicator_response_wired`` is :func:`indicator_response_reason` being
+    empty, and ``indicator_reason`` names the part that failed.
     """
     checks = {
         "preservation_enabled": bool(preservation_enabled),
@@ -139,6 +182,7 @@ def evaluate_research_gate(
         "encryption_satisfied": bool(encryption_satisfied),
         "individuation_enabled": bool(individuation_enabled),
         "supervisor_armed": bool(supervisor_armed),
+        "indicator_response_wired": bool(indicator_response_wired),
     }
     failures: list[str] = []
     reasons: dict[str, str] = {}
@@ -158,6 +202,13 @@ def evaluate_research_gate(
             "welfare_response_wired",
             "the welfare-protective response is not wired "
             "([preservation.welfare_response].enabled = false)",
+        )
+    if not checks["indicator_response_wired"]:
+        reason = str(indicator_reason or "").strip() or INDICATOR_NOT_WIRED_REASON
+        _fail(
+            "indicator_response_wired",
+            f"the welfare response to the welfare indicators is not wired: {reason}",
+            reason,
         )
     if not checks["logging_active"]:
         _fail(
@@ -368,6 +419,7 @@ def config_requirements(config: dict[str, Any]) -> dict[str, bool]:
         "encryption_satisfied": encryption_satisfied,
         "individuation_enabled": individuation_enabled,
         "supervisor_armed": _supervisor_config_armed(config),
+        "indicator_response_wired": indicator_response_reason(config) == "",
     }
 
 
@@ -418,6 +470,7 @@ def evaluate_safety_net(config: dict[str, Any]) -> GateResult:
     return evaluate_research_gate(
         self_check_passed=self_check_ok,
         supervisor_reason=supervisor.reason,
+        indicator_reason=indicator_response_reason(config),
         **requirements,
     )
 
@@ -451,6 +504,8 @@ class _NullBus:
 __all__ = [
     "RESEARCH_GATE_EXIT_CODE",
     "SUPERVISOR_NOT_ARMED_REASON",
+    "INDICATOR_NOT_WIRED_REASON",
+    "indicator_response_reason",
     "research_mode_requested",
     "GateResult",
     "evaluate_research_gate",

@@ -65,6 +65,7 @@ def test_study_step_config_meets_every_config_requirement(tmp_path, line, kind, 
         "encryption_satisfied": True,
         "individuation_enabled": True,
         "supervisor_armed": True,
+        "indicator_response_wired": True,
     }
     assert config["supervisor"]["enabled"] is True
     assert config["supervisor"]["incident_log"]["enabled"] is True

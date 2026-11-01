@@ -56,14 +56,19 @@ class _FakeNotifier:
         self.config = config
         self.started = False
         self.events: list[str] = []
+        self.indicators: list[tuple[str, ...]] = []
         _FakeNotifier.instances.append(self)
 
     async def start(self):
         self.started = True
         return "start-id"
 
-    async def send_event(self, event):
+    async def send_event(self, event, *, indicators=()):
+        # The real notifier builds the notice, which refuses any name outside
+        # the fixed indicator table.
+        caretaker.build_notice(event, self.config, indicators=indicators)
         self.events.append(event)
+        self.indicators.append(tuple(indicators))
         return []
 
 
@@ -316,3 +321,67 @@ def test_caretaker_ack_runs_as_a_module(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     ack = json.loads((state_dir / "caretaker_ack.json").read_text())
     assert ack["start_id"] == start_id
+
+
+@pytest.mark.asyncio
+async def test_an_indicator_crossing_in_a_research_run_sends_its_own_notice(bus, tmp_path):
+    """A first crossing tells the caretaker welfare_indicator_rest, naming the indicator only."""
+    from kaine.modules.base import BaseModule
+
+    class Sleep(BaseModule):
+        name = "sleep"
+        developmental_rest_s = 1410.0
+
+        async def initialize(self):
+            pass
+
+        def serialize(self):
+            return {}
+
+        def welfare_rest_ready(self):
+            return True
+
+    ctx = _ctx(bus, tmp_path, mode="research", caretaker_section=CARETAKER_SECTION)
+    ctx.registry.register(Sleep(bus))
+    await cycle_main._phase_safety_net(ctx)
+    monitor = ctx.welfare_monitor
+    # The boot's monitor runs on real clocks; drive it on simulated ones.
+    clock = {"u": 0.0, "w": 1_800_000_000.0}
+    from kaine.cycle.unfrozen_clock import UnfrozenClock
+
+    monitor._clock = lambda: clock["u"]
+    monitor._unfrozen = UnfrozenClock(
+        control_state.read_frozen_state, unknown_counts_as="unfrozen", monotonic=lambda: clock["u"]
+    )
+    monitor._wall_time = lambda: clock["w"]
+    stop = asyncio.Event()
+    await monitor._poll_once(stop)
+    for step in range(320):
+        await bus.publish(
+            validate_event(
+                source="affect",
+                type="affect.state",
+                payload={
+                    "state": {"valence": 0.0},
+                    "drive_above": {"boredom": True, "social_drive": False, "restlessness": False},
+                },
+                salience=0.1,
+                timestamp=datetime.fromtimestamp(clock["w"], timezone.utc),
+            )
+        )
+        clock["u"] += 2.0
+        clock["w"] += 2.0
+        if step % 15 == 14:
+            await monitor._poll_once(stop)
+            if ctx._caretaker_tasks:
+                break
+    await asyncio.gather(*ctx._caretaker_tasks)
+    assert ctx.caretaker.events == ["welfare_indicator_rest"]
+    assert ctx.caretaker.indicators == [("boredom_deprived",)]
+    assert ctx.fork_manager.calls == 0
+    notice = caretaker.build_notice(
+        "welfare_indicator_rest", ctx.caretaker.config, indicators=("boredom_deprived",)
+    )
+    title, message = caretaker.render_text(notice)
+    assert "flagged for review" in title
+    assert "Welfare indicators: boredom_deprived" in message

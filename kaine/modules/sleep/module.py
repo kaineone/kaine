@@ -23,6 +23,7 @@ from kaine.bus.streams import (
     LANGUAGE_EXTERNAL_STREAM,
     LANGUAGE_INTERNAL_STREAM,
     PLANNING_STREAM,
+    PRESERVATION_STREAM,
     SLEEP_STREAM,
     VOCAL_STREAM,
     WORKSPACE_STREAM,
@@ -66,6 +67,13 @@ log = logging.getLogger(__name__)
 
 # Bound on each wait in Sleep.shutdown(): the in-flight sleep, then the held tasks.
 _SHUTDOWN_WAIT_S = 5.0
+
+
+#: The welfare net's requested rest: its request on the welfare monitor's
+#: stream, the trigger of the sleep that answers it, and the origin of the answer.
+WELFARE_REST_REQUEST_TYPE = "welfare.rest_request"
+WELFARE_REST_TRIGGER = "welfare_rest"
+WELFARE_REST_ORIGIN = "welfare"
 
 
 def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
@@ -280,6 +288,12 @@ class Sleep(BaseModule):
         # from inside the pipeline right after ``sleep.sleep.started``.
         self._pending_rest: Optional[dict[str, Any]] = None
         self._requested_rest_accepted: bool = False
+        # The welfare net's rest requests (on the welfare monitor's stream).
+        self._welfare_cursor: str = "0"
+        self._welfare_rest_task: Optional[asyncio.Task[Any]] = None
+        # True while the running welfare rest is the state cycle's rest brought
+        # forward (the developmental phase): it is held like a state-cycle rest.
+        self._welfare_rest_held: bool = False
         # Sleep-time ignition audit (change sleep-ignition-audit): per-stream
         # cursors, seeded at initialize() to the CURRENT stream tails (the same
         # persisted-cursor pattern as _interoception_cursor) so the first sleep audits
@@ -315,6 +329,18 @@ class Sleep(BaseModule):
     @property
     def is_sleeping(self) -> bool:
         return self._sleep_lock.locked()
+
+    @property
+    def developmental_rest_s(self) -> float:
+        """Entity seconds a developmental (state-cycle) rest is held."""
+        return self._developmental_rest_s
+
+    def welfare_rest_ready(self) -> bool:
+        """True while this module is running and reads welfare rest requests."""
+        if self._stopped.is_set():
+            return False
+        task = self._welfare_rest_task
+        return task is not None and not task.done()
 
     def try_defer(self) -> bool:
         return self._scheduler.try_defer()
@@ -360,6 +386,13 @@ class Sleep(BaseModule):
         self._tasks.append(
             asyncio.create_task(self._action_selection_consumer_loop(), name="sleep-action-selection-consumer")
         )
+        # The welfare net's rest requests are read whatever the fatigue toggle
+        # says: they come from the system around the entity, not its intents.
+        self._welfare_cursor = await tail_id(self._bus, PRESERVATION_STREAM)
+        self._welfare_rest_task = asyncio.create_task(
+            self._welfare_rest_consumer_loop(), name="sleep-welfare-rest-consumer"
+        )
+        self._tasks.append(self._welfare_rest_task)
         if self._fatigue_triggered:
             # Seed cursor so we only process new interoception module events from now on.
             self._interoception_cursor = await tail_id(self._bus, INTEROCEPTION_STREAM)
@@ -790,6 +823,92 @@ class Sleep(BaseModule):
             self._pending_rest = None
             self._requested_rest_accepted = False
 
+    async def _welfare_rest_consumer_loop(self) -> None:
+        """Background loop: watch the welfare monitor's stream for rest requests."""
+        try:
+            while not self._stopped.is_set():
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        PRESERVATION_STREAM,
+                        last_id=self._welfare_cursor,
+                        count=32,
+                        block_ms=0,
+                    )
+                    if last_scanned:
+                        self._welfare_cursor = last_scanned
+                    if entries:
+                        for _, event in entries:
+                            if event.type != WELFARE_REST_REQUEST_TYPE:
+                                continue
+                            payload = getattr(event, "payload", None) or {}
+                            await self._handle_welfare_rest_request(payload)
+                    else:
+                        await asyncio.sleep(0.05)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("sleep welfare rest consumer iteration failed")
+                    await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            raise
+
+    async def _handle_welfare_rest_request(self, payload: dict[str, Any]) -> None:
+        """Answer the welfare net's rest request.
+
+        A running sleep answers ``busy`` (that sleep stands as the rest). In the
+        developmental phase the request brings the state cycle's rest forward:
+        a ``welfare_rest`` sleep held for ``developmental_rest_s``, after which
+        the awake stretch restarts. After maturation, or with staging off, it
+        starts a maintenance sleep, regardless of the fatigue-maintenance
+        toggle and of the requested-rest minimum interval, which guard the
+        entity's own intents and not the net. Acceptance is announced right
+        after ``sleep.sleep.started``.
+        """
+        request_id = payload.get("request_id")
+        if not isinstance(request_id, str):
+            request_id = None
+        if self._sleep_lock.locked() or self._sleep_pending:
+            await self._publish_rest_request(False, "busy", WELFARE_REST_ORIGIN, request_id)
+            log.info("sleep: welfare rest request answered busy, a sleep is running")
+            return
+        self._sleep_pending = True
+        self._welfare_rest_held = self._developing() is True
+        self._sleep_task = asyncio.create_task(
+            self._welfare_enter_sleep(request_id),
+            name="sleep-welfare-rest",
+        )
+
+    async def _welfare_enter_sleep(self, request_id: Optional[str]) -> None:
+        """Run the welfare rest; a failure before it began is ``failed``, after it ``aborted``."""
+        try:
+            self._pending_rest = {"proposal_id": request_id, "origin": WELFARE_REST_ORIGIN}
+            self._requested_rest_accepted = False
+            log.warning(
+                "sleep: the welfare net requested a rest (%s)",
+                "the state cycle's rest brought forward" if self._welfare_rest_held else "maintenance",
+            )
+            await self.enter_sleep(trigger=WELFARE_REST_TRIGGER)
+        except SleepBusyError:
+            await self._publish_rest_request(False, "busy", WELFARE_REST_ORIGIN, request_id)
+        except BaseException as exc:
+            if isinstance(exc, Exception):
+                log.exception("sleep: welfare rest failed")
+            reason = "aborted" if self._requested_rest_accepted else "failed"
+            await self._publish_rest_request(False, reason, WELFARE_REST_ORIGIN, request_id)
+            if not isinstance(exc, Exception):
+                raise
+        finally:
+            self._sleep_pending = False
+            self._pending_rest = None
+            self._requested_rest_accepted = False
+            self._welfare_rest_held = False
+
+    def _holds_cycle_rest(self, trigger: Optional[str]) -> bool:
+        """True for a state-cycle rest, or a welfare rest that brings one forward."""
+        return trigger == "state_cycle" or (
+            trigger == WELFARE_REST_TRIGGER and self._welfare_rest_held
+        )
+
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
@@ -976,7 +1095,7 @@ class Sleep(BaseModule):
             "sleep_index": self._sleep_count,
             "trigger": trigger,
         }
-        if trigger == "state_cycle":
+        if self._holds_cycle_rest(trigger):
             # A rest cut by a restart resumes for its remaining time: its clock starts
             # that far back, so the hold measures the remainder.
             resumed_spent = min(self._cycle_resume_spent_s, self._developmental_rest_s)
@@ -996,7 +1115,7 @@ class Sleep(BaseModule):
             started_payload,
             salience=self._baseline_salience,
         )
-        if trigger == "requested" and self._pending_rest is not None:
+        if trigger in ("requested", WELFARE_REST_TRIGGER) and self._pending_rest is not None:
             pending = self._pending_rest
             self._pending_rest = None
             self._requested_rest_accepted = True
@@ -1180,7 +1299,7 @@ class Sleep(BaseModule):
                         exc_info=True,
                     )
 
-            if trigger == "state_cycle":
+            if self._holds_cycle_rest(trigger):
                 await self._hold_developmental_rest(rest_started)
 
             if self._housekeeper is not None:
@@ -1314,7 +1433,7 @@ class Sleep(BaseModule):
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
-        if trigger == "state_cycle":
+        if self._holds_cycle_rest(trigger):
             summary["rest_seconds"] = self._cycle_rest_seconds
         elif self._cycle_phase == "awake":
             # Any completed sleep restarts the active stretch, so two rests never run back to back.
@@ -1841,7 +1960,7 @@ class Sleep(BaseModule):
                 "reason": type(exc).__name__,
                 "trigger": trigger,
             }
-            if trigger == "state_cycle":
+            if self._holds_cycle_rest(trigger):
                 payload["rest_seconds"] = self._cycle_rest_seconds
                 began = self._cycle_rest_began
                 if (

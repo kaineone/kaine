@@ -41,6 +41,7 @@ import abc
 import asyncio
 import json
 import logging
+import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -51,6 +52,7 @@ from typing import Any, Callable
 from kaine import legacy_aliases
 from kaine.boot.errors import ConfigurationError
 from kaine.bus.schema import validate_event
+from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.config import require_known_keys
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog, scrub_paths
@@ -61,6 +63,16 @@ from kaine.lifecycle.divergence import (
     assess_divergence,
 )
 from kaine.lifecycle.manager import ForkManager
+from kaine.lifecycle.welfare_indicators import (
+    DEPRIVATION_INDICATORS,
+    REST_FAILED_REASON,
+    REST_FAILURES,
+    UNAVAILABLE_REASON,
+    Evaluation,
+    IndicatorEvaluator,
+    IndicatorParams,
+    indicator_reason,
+)
 from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
 from kaine.modules.registry import ModuleRegistry
 from kaine.state_io import write_json_atomic
@@ -82,6 +94,37 @@ _COUNTED_EPISODES_MAX = 256
 # still-failing retry is logged at error level at most once per this many
 # seconds of wall time (the rest go to debug), so a full disk cannot flood the log.
 _FREEZE_RETRY_LOG_INTERVAL_S = 60.0
+# The indicator response reads the affect and sleep streams itself.
+_AFFECT_STREAM = AFFECT_STREAM
+_SLEEP_STREAM = SLEEP_STREAM
+# Entries read per stream per poll, in batches of _INDICATOR_READ_COUNT.
+_INDICATOR_READ_COUNT = 256
+_INDICATOR_MAX_BATCHES = 16
+# The sleep trigger of the welfare net's requested rest.
+WELFARE_REST_TRIGGER = "welfare_rest"
+# The event the monitor publishes on its own stream to request that rest.
+WELFARE_REST_REQUEST_TYPE = "welfare.rest_request"
+# The origin the sleep module answers a welfare rest request with.
+WELFARE_REST_ORIGIN = "welfare"
+# Used for the developmental completion bound when the sleep module cannot be read.
+_DEFAULT_DEVELOPMENTAL_REST_S = 1410.0
+# Indicator stages.
+_STAGE_ARMED = "armed"
+_STAGE_RESTING = "resting"
+_STAGE_FRESH = "fresh"
+
+
+@dataclass
+class _RestRequest:
+    """The indicator response's outstanding rest request."""
+
+    request_id: str
+    indicators: tuple[str, ...]
+    requested_u: float
+    started: bool = False
+    standing: bool = False
+    started_rest_u: float | None = None
+    bound_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +237,107 @@ class DivergenceMonitorConfig:
         )
 
 
+def _indicator_number(
+    section: dict[str, Any], key: str, default: float, *, low: float, high: float | None = None
+) -> float:
+    """Read one number of ``[preservation.welfare_response.indicators]`` and range-check it.
+
+    The value must be finite, above ``low`` and, when given, at most ``high``.
+    """
+    raw = section.get(key, default)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ValueError(
+            f"[preservation.welfare_response.indicators].{key} must be a number, got {raw!r}"
+        )
+    value = float(raw)
+    if not math.isfinite(value) or value <= low or (high is not None and value > high):
+        bound = f"({low}, {high}]" if high is not None else f"> {low}"
+        raise ValueError(
+            f"[preservation.welfare_response.indicators].{key} must be finite and {bound}, got {raw!r}"
+        )
+    return value
+
+
+@dataclass(frozen=True)
+class WelfareIndicatorConfig:
+    """``[preservation.welfare_response.indicators]`` — the response to the A.4 indicators.
+
+    Ships ``enabled = true``, so enabling the welfare response enables it. The
+    bars are paper Table A1's provisional ``theta_wf`` and ``q_wf``; they are
+    safety bars, not tuning knobs. The three bounds keep the rest stage and a
+    silent affect stream from holding the response open: a rest that does not
+    start within ``rest_start_timeout_s`` of unfrozen time, or does not
+    complete within ``rest_complete_timeout_s`` (``developmental`` and
+    ``matured``), escalates to preservation and the freeze, as do indicators
+    that stay unavailable for ``unavailable_escalate_s`` of awake time.
+    ``rest_complete_developmental_s = None`` means the sleep module's
+    ``developmental_rest_s`` plus 300 s.
+    """
+
+    enabled: bool = True
+    share_bar: float = 0.5
+    posterior_bar: float = 0.95
+    rest_start_timeout_s: float = 30.0
+    rest_complete_developmental_s: float | None = None
+    rest_complete_matured_s: float = 3600.0
+    unavailable_escalate_s: float = 660.0
+
+    #: Added to ``developmental_rest_s`` for the default developmental bound.
+    DEVELOPMENTAL_MARGIN_S = 300.0
+
+    @classmethod
+    def from_section(cls, section: dict[str, Any]) -> "WelfareIndicatorConfig":
+        if not isinstance(section, dict):
+            raise ValueError("[preservation.welfare_response.indicators] must be a table")
+        allowed = {
+            "enabled",
+            "share_bar",
+            "posterior_bar",
+            "rest_start_timeout_s",
+            "rest_complete_timeout_s",
+            "unavailable_escalate_s",
+        }
+        _check_section_keys(section, allowed, "[preservation.welfare_response.indicators]")
+        enabled = section.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError(
+                "[preservation.welfare_response.indicators].enabled must be true or false"
+            )
+        complete = section.get("rest_complete_timeout_s", {})
+        if not isinstance(complete, dict):
+            raise ValueError(
+                "[preservation.welfare_response.indicators].rest_complete_timeout_s must be "
+                "a table with developmental and matured"
+            )
+        _check_section_keys(
+            complete,
+            {"developmental", "matured"},
+            "[preservation.welfare_response.indicators].rest_complete_timeout_s",
+        )
+        developmental: float | None = None
+        if "developmental" in complete:
+            developmental = _indicator_number(
+                complete, "developmental", 0.0, low=0.0
+            )
+        return cls(
+            enabled=enabled,
+            share_bar=_indicator_number(section, "share_bar", 0.5, low=0.0, high=1.0),
+            posterior_bar=_indicator_number(section, "posterior_bar", 0.95, low=0.0, high=1.0),
+            rest_start_timeout_s=_indicator_number(section, "rest_start_timeout_s", 30.0, low=0.0),
+            rest_complete_developmental_s=developmental,
+            rest_complete_matured_s=_indicator_number(complete, "matured", 3600.0, low=0.0),
+            unavailable_escalate_s=_indicator_number(section, "unavailable_escalate_s", 660.0, low=0.0),
+        )
+
+    def rest_complete_bound(self, *, developing: bool, developmental_rest_s: float) -> float:
+        """The completion bound for a rest, in unfrozen seconds."""
+        if not developing:
+            return self.rest_complete_matured_s
+        if self.rest_complete_developmental_s is not None:
+            return self.rest_complete_developmental_s
+        return float(developmental_rest_s) + self.DEVELOPMENTAL_MARGIN_S
+
+
 @dataclass
 class WelfareResponseConfig:
     """``[preservation.welfare_response]`` — the autonomous protective action.
@@ -202,7 +346,9 @@ class WelfareResponseConfig:
     distress episodes within ``repeat_window_s``) the monitor takes ``action``:
     ``"pause"`` (default — preserve then freeze the cycle, resumable),
     ``"end"`` (preserve then signal the run to stop), or ``"notify"`` (preserve,
-    record a flagged event, and continue).
+    record a flagged event, and continue). ``indicators`` configures the
+    response to the A.4 welfare indicators (a rest first, then preservation
+    and the freeze on a crossing over a fresh span).
     """
 
     enabled: bool = False
@@ -237,6 +383,7 @@ class WelfareResponseConfig:
     # table. The canonical source is ``[evaluation.welfare]``; see
     # :meth:`adopt_sustained_distress`.
     legacy_distress_keys: frozenset[str] = frozenset()
+    indicators: WelfareIndicatorConfig = field(default_factory=WelfareIndicatorConfig)
 
     _ACTIONS = ("pause", "end", "notify")
 
@@ -255,6 +402,7 @@ class WelfareResponseConfig:
             "min_interval_s",
             "out_root",
             "entity_name",
+            "indicators",
         }
         _check_section_keys(section, allowed, "[preservation.welfare_response]")
         action = str(section.get("action", "pause")).strip().lower()
@@ -281,6 +429,7 @@ class WelfareResponseConfig:
                 for key in ("distress_threshold", "distress_duration_s")
                 if key in section
             ),
+            indicators=WelfareIndicatorConfig.from_section(section.get("indicators") or {}),
         )
 
     def adopt_sustained_distress(self, threshold: float, duration_s: float) -> None:
@@ -767,6 +916,23 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # (sustained distress, warm-up) use this; the repeat window stays on
         # wall time.
         unfrozen_clock: UnfrozenClock | None = None,
+        # The A.4 indicator parameters (T_lp, Delta_stall, theta_E, P_Aff from
+        # the affect section, the bars from [preservation.welfare_response.indicators]).
+        # None takes the evaluator's defaults with the configured bars.
+        indicator_params: IndicatorParams | None = None,
+        # Awake entity seconds (frozen and asleep time excluded) for the
+        # indicator spans. None counts the unfrozen clock, with sleep skipped
+        # from the sleep module's events.
+        awake_clock: Callable[[], float] | None = None,
+        # The entity clock's time scale, for the rest bounds in entity time.
+        entity_scale: Callable[[], float] | None = None,
+        # True while the entity is in the developmental phase.
+        is_developing: Callable[[], bool] | None = None,
+        # Called with an indicator caretaker notice kind and the indicator
+        # names (from the fixed table). Never allowed to break the response.
+        on_notice: Callable[[str, tuple[str, ...]], None] | None = None,
+        # Real time of day, the clock event timestamps are stamped with.
+        wall_time: Callable[[], float] = time.time,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -831,6 +997,31 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # per min_interval_s, so sustained distress does not fire one bundle
         # per distress cycle.
         self._last_notify_at = float("-inf")
+        # --- The response to the A.4 welfare indicators. ---
+        self._indicators_cfg = config.indicators
+        self._indicators_on = bool(config.indicators.enabled)
+        self._indicator_params = indicator_params or IndicatorParams(
+            share_bar=config.indicators.share_bar,
+            posterior_bar=config.indicators.posterior_bar,
+        )
+        self._awake_clock = awake_clock
+        self._entity_scale = entity_scale
+        self._is_developing = is_developing
+        self._on_notice = on_notice
+        self._wall_time = wall_time
+        self._ind_eval = IndicatorEvaluator(self._indicator_params)
+        self._ind_stage = _STAGE_ARMED
+        self._ind_request: _RestRequest | None = None
+        self._ind_affect_cursor: str | None = None
+        self._ind_sleep_cursor: str | None = None
+        # (wall time, awake time) at the previous indicator read.
+        self._ind_prev: tuple[float, float] | None = None
+        self._ind_unavailable_notified = False
+        self._ind_error_since_u: float | None = None
+        # Unfrozen entity seconds, for the rest bounds (unfrozen wall time
+        # times the entity time scale).
+        self._ind_rest_u = 0.0
+        self._ind_rest_u_last: float | None = None
 
     def _in_warmup(self, u_now: float, wall_now: float) -> bool:
         """True while still inside the cold-start warm-up window.
@@ -953,6 +1144,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         )
         if self._in_warmup(u_now, now) or interoception_gate:
             await self._drain_during_warmup(u_now)
+            # The indicator spans accrue during warm-up; no indicator response fires.
+            if self._indicators_on:
+                await self._indicator_accrue(u_now)
             return
         # Drain interoception.out, feeding the distress tracker.
         try:
@@ -1012,6 +1206,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._acted:
                 break
             await self._respond(reason)
+        # The indicator arm shares the latch: it runs only while unlatched.
+        if self._indicators_on and not self._acted:
+            await self._indicator_poll(u_now)
 
     def _adopt_standing_welfare_freeze(self) -> None:
         """A welfare freeze left by an earlier process (a restart keeps it)
@@ -1055,11 +1252,20 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         try:
             interoception_tail = await self._bus.last_entry_id(_INTEROCEPTION_STREAM)
             welfare_tail = await self._bus.last_entry_id(_WELFARE_STREAM)
+            if self._indicators_on:
+                affect_tail = await self._bus.last_entry_id(_AFFECT_STREAM)
+                sleep_tail = await self._bus.last_entry_id(_SLEEP_STREAM)
         except Exception:
             log.warning("welfare monitor: re-arm deferred, stream tail unreadable", exc_info=True)
             return
         self._cursor = interoception_tail
         self._welfare_cursor = welfare_tail
+        if self._indicators_on:
+            # Every span restarts and every crossing state resets: the next
+            # crossing requests a rest before any freeze.
+            self._ind_affect_cursor = affect_tail
+            self._ind_sleep_cursor = sleep_tail
+            self._indicator_reset(restart_span=True)
         self._distress = SustainedThresholdTracker(
             threshold=self._config.distress_threshold,
             duration_s=self._config.distress_duration_s,
@@ -1266,7 +1472,14 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         except Exception:
             log.warning("welfare monitor: on_response callback failed", exc_info=True)
 
-    async def _respond(self, crossing_reason: str) -> None:
+    async def _respond(
+        self,
+        crossing_reason: str,
+        *,
+        indicators: tuple[str, ...] = (),
+        stimulus_spent: bool = False,
+        indicator_detail: dict[str, Any] | None = None,
+    ) -> None:
         # M3 — "notify" continues the run, so sustained distress re-fires the
         # tracker every distress window; without a rate limit that is one full
         # encrypted preservation bundle per window (retention never-delete)
@@ -1388,6 +1601,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 "distress_threshold": self._config.distress_threshold,
                 "distress_duration_s": self._config.distress_duration_s,
                 "poll_index": self.poll_index,
+                **(indicator_detail or {}),
             },
             event_type="welfare.protective_action",
         )
@@ -1398,7 +1612,461 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             action_taken if freeze_error is None
             else f"{action_taken} (freeze FAILED, retrying)",
         )
-        self._notify_response(transition)
+        if indicator_detail is not None and self._on_notice is not None:
+            # The indicator response's own notice: a freeze that could not be
+            # written still says the entity is NOT paused.
+            if transition == "protective_action_freeze_failed":
+                kind = "welfare_freeze_failed"
+            elif stimulus_spent:
+                kind = "welfare_stimulus_spent"
+            else:
+                kind = "welfare_response"
+            self._notify(kind, indicators)
+        else:
+            self._notify_response(transition)
+
+
+    # ------------------------------------------------------------------
+    # The response to the A.4 welfare indicators
+    # ------------------------------------------------------------------
+    #
+    # Three stages share the distress arm's latch: ``armed`` (a first
+    # crossing requests a rest), ``resting`` (wait for that rest; every way it
+    # could hang escalates) and ``fresh`` (every span restarted at the rest's
+    # end; a crossing brings preservation and the freeze). Nothing here
+    # imports kaine.evaluation, and the rest request goes out on this
+    # monitor's own stream, which the cycle never reads as a candidate.
+
+    def _notify(self, kind: str, indicators: tuple[str, ...]) -> None:
+        """Tell ``on_notice`` an indicator notice; a failing callback is only logged."""
+        if self._on_notice is None:
+            return
+        try:
+            self._on_notice(kind, tuple(indicators))
+        except Exception:
+            log.warning("welfare monitor: on_notice callback failed", exc_info=True)
+
+    def _awake_now(self, u_now: float) -> float:
+        """Awake time for the spans: the injected awake clock, else unfrozen time."""
+        if self._awake_clock is None:
+            return u_now
+        try:
+            value = float(self._awake_clock())
+        except Exception:
+            log.warning("welfare monitor: awake clock failed; using unfrozen time", exc_info=True)
+            return u_now
+        if not math.isfinite(value):
+            return u_now
+        return value
+
+    def _scale_now(self) -> float:
+        if self._entity_scale is None:
+            return 1.0
+        try:
+            value = float(self._entity_scale())
+        except Exception:
+            return 1.0
+        if not math.isfinite(value) or value < 0.0:
+            return 1.0
+        return value
+
+    def _developing(self) -> bool:
+        """The developmental phase; a failing probe counts as developing (the shorter bound)."""
+        if self._is_developing is None:
+            return False
+        try:
+            return bool(self._is_developing())
+        except Exception:
+            return True
+
+    def _sleep_module(self) -> Any | None:
+        try:
+            if "sleep" not in self._registry:
+                return None
+            return self._registry.get("sleep")
+        except Exception:
+            return None
+
+    def _sleep_module_ready(self) -> bool:
+        """True when a running sleep module listens for welfare rest requests."""
+        module = self._sleep_module()
+        if module is None:
+            return False
+        probe = getattr(module, "welfare_rest_ready", None)
+        if not callable(probe):
+            return False
+        try:
+            return bool(probe())
+        except Exception:
+            return False
+
+    def _developmental_rest_s(self) -> float:
+        module = self._sleep_module()
+        value = getattr(module, "developmental_rest_s", None) if module is not None else None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0:
+            return float(value)
+        return _DEFAULT_DEVELOPMENTAL_REST_S
+
+    def _indicator_reset(self, *, restart_span: bool) -> None:
+        """Back to ``armed``: no request outstanding, crossing states reset."""
+        if restart_span:
+            self._ind_eval.restart()
+        self._ind_stage = _STAGE_ARMED
+        self._ind_request = None
+        self._ind_unavailable_notified = False
+        self._ind_error_since_u = None
+        self._ind_prev = None
+
+    def _indicator_tick_rest_clock(self, u_now: float) -> None:
+        if self._ind_rest_u_last is not None:
+            self._ind_rest_u += max(0.0, u_now - self._ind_rest_u_last) * self._scale_now()
+        self._ind_rest_u_last = u_now
+
+    async def _indicator_seed_cursors(self) -> bool:
+        """Start reading the affect and sleep streams at their tails (this run only)."""
+        if self._ind_affect_cursor is not None and self._ind_sleep_cursor is not None:
+            return True
+        try:
+            affect_tail = await self._bus.last_entry_id(_AFFECT_STREAM)
+            sleep_tail = await self._bus.last_entry_id(_SLEEP_STREAM)
+        except Exception:
+            log.warning("welfare monitor: indicator stream tails unreadable; retrying", exc_info=True)
+            return False
+        self._ind_affect_cursor = affect_tail
+        self._ind_sleep_cursor = sleep_tail
+        return True
+
+    async def _indicator_read(self, stream: str, cursor: str) -> tuple[list[tuple[str, Any]], str]:
+        entries_out: list[tuple[str, Any]] = []
+        for _ in range(_INDICATOR_MAX_BATCHES):
+            entries, last_scanned = await self._bus.read_entries(
+                stream, last_id=cursor, count=_INDICATOR_READ_COUNT, block_ms=0
+            )
+            for entry_id, event in entries:
+                entries_out.append((entry_id, event))
+                cursor = entry_id
+            if last_scanned is not None:
+                cursor = last_scanned
+            if len(entries) < _INDICATOR_READ_COUNT:
+                break
+        return entries_out, cursor
+
+    async def _indicator_ingest(self, u_now: float) -> list[tuple[str, dict[str, Any]]]:
+        """Feed new affect and sleep events to the evaluator, in time order.
+
+        Returns the sleep signals the rest stage acts on. Each event's time on
+        the awake clock is interpolated between the previous read and this one
+        from its wall timestamp, so samples published within one poll keep
+        their spacing. Time always advances, even when a read fails, so a
+        silent or unreadable affect stream is seen as silence.
+        """
+        w_now = float(self._wall_time())
+        a_now = self._awake_now(u_now)
+        signals: list[tuple[str, dict[str, Any]]] = []
+        if await self._indicator_seed_cursors():
+            gathered: list[tuple[float, int, str, Any]] = []
+            for order, (stream, attr) in enumerate(
+                ((_SLEEP_STREAM, "_ind_sleep_cursor"), (_AFFECT_STREAM, "_ind_affect_cursor"))
+            ):
+                try:
+                    entries, cursor = await self._indicator_read(stream, getattr(self, attr))
+                except Exception:
+                    log.warning("welfare monitor: %s read failed", stream, exc_info=True)
+                    continue
+                setattr(self, attr, cursor)
+                for _entry_id, event in entries:
+                    ts = self._event_ts(event)
+                    gathered.append((w_now if ts is None else ts, order, stream, event))
+            gathered.sort(key=lambda item: (item[0], item[1]))
+            prev = self._ind_prev
+            for ts, _order, stream, event in gathered:
+                if prev is None or w_now <= prev[0]:
+                    t = a_now
+                else:
+                    frac = min(1.0, max(0.0, (ts - prev[0]) / (w_now - prev[0])))
+                    t = prev[1] + frac * (a_now - prev[1])
+                payload = event.payload if isinstance(getattr(event, "payload", None), dict) else {}
+                if stream == _AFFECT_STREAM:
+                    if event.type == "affect.state":
+                        self._ind_eval.observe_state(t, payload)
+                    continue
+                if event.type == "sleep.sleep.started":
+                    self._ind_eval.exclude_start("sleep", t)
+                    signals.append(("started", payload))
+                elif event.type == "sleep.sleep.completed":
+                    self._ind_eval.exclude_end("sleep", t)
+                    signals.append(("completed", payload))
+                elif event.type == "sleep.rest_request":
+                    signals.append(("answer", payload))
+        self._ind_eval.advance(a_now)
+        self._ind_prev = (w_now, a_now)
+        return signals
+
+    async def _indicator_accrue(self, u_now: float) -> None:
+        """Warm-up: the spans accrue; no stage acts and nothing is evaluated."""
+        try:
+            self._indicator_tick_rest_clock(u_now)
+            await self._indicator_ingest(u_now)
+        except Exception:
+            log.error("welfare monitor: indicator accrual failed during warm-up", exc_info=True)
+
+    def _indicator_detail(
+        self, ev: Evaluation | None, indicators: tuple[str, ...]
+    ) -> dict[str, Any]:
+        """The content-free indicator fields of a record (names from the fixed table)."""
+        detail: dict[str, Any] = {
+            "indicator_stage": self._ind_stage,
+            "indicators": list(indicators),
+        }
+        if ev is not None:
+            detail["indicator_values"] = {r.name: r.value for r in ev.readings}
+            detail["indicator_bars"] = {r.name: r.bar for r in ev.readings}
+            detail["span_awake_s"] = ev.span_awake_s
+        return detail
+
+    async def _indicator_record(
+        self, transition: str, ev: Evaluation | None, indicators: tuple[str, ...], **extra: Any
+    ) -> None:
+        await self._record(
+            {
+                "monitor": "welfare",
+                "transition": transition,
+                "run_id": self._run_id(),
+                "poll_index": self.poll_index,
+                **self._indicator_detail(ev, indicators),
+                **extra,
+            },
+            event_type="welfare.protective_action",
+        )
+
+    async def _indicator_escalate(
+        self, reason: str, ev: Evaluation | None, indicators: tuple[str, ...]
+    ) -> None:
+        """Stage 3: preservation first, the configured action, the shared latch."""
+        stimulus_spent = (
+            reason.startswith("indicator_")
+            and reason != REST_FAILED_REASON
+            and self._developing()
+            and any(name in DEPRIVATION_INDICATORS for name in indicators)
+        )
+        await self._respond(
+            reason,
+            indicators=indicators,
+            stimulus_spent=stimulus_spent,
+            indicator_detail=self._indicator_detail(ev, indicators),
+        )
+        if not self._acted:
+            # "notify" continues the run: start over from a fresh span.
+            self._indicator_reset(restart_span=True)
+
+    async def _indicator_rest_failed(
+        self, failure: str, ev: Evaluation | None, indicators: tuple[str, ...]
+    ) -> None:
+        """A rest that cannot start or does not complete: record it, then stage 3."""
+        if failure not in REST_FAILURES:
+            failure = "refused"
+        await self._indicator_record(
+            "indicator_rest_failed", ev, indicators, failure=failure
+        )
+        await self._indicator_escalate(REST_FAILED_REASON, ev, indicators)
+
+    async def _indicator_request_rest(self, ev: Evaluation, u_now: float) -> None:
+        """Stage 1: request a rest (no preservation, no freeze)."""
+        crossed = ev.crossed
+        if not self._sleep_module_ready():
+            log.error("welfare monitor: indicator crossed and the sleep module is not running")
+            await self._indicator_rest_failed("sleep_module_not_running", ev, crossed)
+            return
+        request_id = uuid.uuid4().hex[:16]
+        try:
+            await self._bus.publish(
+                validate_event(
+                    source=self.source,
+                    type=WELFARE_REST_REQUEST_TYPE,
+                    payload={"request_id": request_id, "indicators": list(crossed)},
+                    salience=0.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+        except Exception:
+            log.error("welfare monitor: the welfare rest request could not be sent", exc_info=True)
+            await self._indicator_rest_failed("request_not_sent", ev, crossed)
+            return
+        self._ind_request = _RestRequest(
+            request_id=request_id, indicators=tuple(crossed), requested_u=u_now
+        )
+        self._ind_stage = _STAGE_RESTING
+        await self._indicator_record(
+            "indicator_rest_requested", ev, crossed, request_id=request_id
+        )
+        self._notify("welfare_indicator_rest", crossed)
+        log.warning(
+            "welfare monitor: welfare indicator crossed (%s); a rest is requested",
+            ", ".join(crossed),
+        )
+
+    def _indicator_rest_began(self, request: _RestRequest, *, standing: bool) -> None:
+        request.started = not standing
+        request.standing = standing
+        request.started_rest_u = self._ind_rest_u
+        request.bound_s = self._indicators_cfg.rest_complete_bound(
+            developing=self._developing(),
+            developmental_rest_s=self._developmental_rest_s(),
+        )
+
+    async def _indicator_rest_signals(
+        self, signals: list[tuple[str, dict[str, Any]]], ev: Evaluation | None
+    ) -> bool:
+        """Apply the sleep module's answers to the outstanding rest; True when it ended.
+
+        A refusal other than ``busy``, an ``aborted`` answer or an aborted
+        rest escalates at once. ``busy`` makes the running sleep stand as the
+        rest. Its completion restarts every span and moves to ``fresh``.
+        """
+        request = self._ind_request
+        if request is None:
+            return False
+        for kind, payload in signals:
+            if kind == "answer":
+                if payload.get("origin") != WELFARE_REST_ORIGIN:
+                    continue
+                if payload.get("proposal_id") != request.request_id:
+                    continue
+                if payload.get("accepted") is True:
+                    continue
+                reason = payload.get("reason")
+                if reason == "busy" and not request.started and not request.standing:
+                    self._indicator_rest_began(request, standing=True)
+                    await self._indicator_record(
+                        "indicator_rest_started", ev, request.indicators,
+                        request_id=request.request_id, standing=True,
+                    )
+                    continue
+                if reason == "busy":
+                    continue
+                log.error("welfare monitor: the welfare rest was refused or aborted")
+                await self._indicator_rest_failed("refused", ev, request.indicators)
+                return True
+            if kind == "started":
+                if payload.get("trigger") != WELFARE_REST_TRIGGER:
+                    continue
+                if request.started or request.standing:
+                    continue
+                self._indicator_rest_began(request, standing=False)
+                await self._indicator_record(
+                    "indicator_rest_started", ev, request.indicators,
+                    request_id=request.request_id, standing=False,
+                )
+                continue
+            if kind == "completed":
+                if not (request.started or request.standing):
+                    continue
+                if request.started and payload.get("trigger") != WELFARE_REST_TRIGGER:
+                    continue
+                if payload.get("aborted"):
+                    log.error("welfare monitor: the welfare rest was aborted")
+                    await self._indicator_rest_failed("aborted", ev, request.indicators)
+                    return True
+                # The rest's affective reset has run: every span restarts at
+                # its end, and every crossing state resets.
+                self._ind_eval.restart()
+                self._ind_stage = _STAGE_FRESH
+                self._ind_request = None
+                await self._indicator_record(
+                    "indicator_rest_completed", None, request.indicators,
+                    request_id=request.request_id,
+                )
+                return True
+        return False
+
+    async def _indicator_check_rest_bounds(self, ev: Evaluation, u_now: float) -> bool:
+        """Escalate a rest that did not start or did not complete in time."""
+        request = self._ind_request
+        if request is None:
+            return False
+        if not self._sleep_module_ready():
+            log.error("welfare monitor: the sleep module stopped during a welfare rest")
+            await self._indicator_rest_failed("sleep_module_not_running", ev, request.indicators)
+            return True
+        if not (request.started or request.standing):
+            if u_now - request.requested_u >= self._indicators_cfg.rest_start_timeout_s:
+                log.error("welfare monitor: the welfare rest did not start in time")
+                await self._indicator_rest_failed("start_timeout", ev, request.indicators)
+                return True
+            return False
+        bound = request.bound_s if request.bound_s is not None else self._indicators_cfg.rest_complete_matured_s
+        began = request.started_rest_u if request.started_rest_u is not None else self._ind_rest_u
+        if self._ind_rest_u - began >= bound:
+            log.error("welfare monitor: the welfare rest did not complete in time")
+            await self._indicator_rest_failed("complete_timeout", ev, request.indicators)
+            return True
+        return False
+
+    async def _indicator_availability(self, ev: Evaluation) -> bool:
+        """Report a silent affect stream once; escalate when it stays silent."""
+        if ev.available:
+            self._ind_unavailable_notified = False
+            return False
+        if not self._ind_unavailable_notified:
+            self._ind_unavailable_notified = True
+            await self._indicator_record(
+                "indicators_unavailable", ev, (),
+                silent_awake_s=self._ind_eval.silent_awake_s,
+            )
+            self._notify("welfare_indicators_unavailable", ())
+            log.warning("welfare monitor: no affect.state; the welfare indicators are unavailable")
+        if self._ind_eval.silent_awake_s >= self._indicators_cfg.unavailable_escalate_s:
+            log.error("welfare monitor: the welfare indicators stayed unavailable; escalating")
+            await self._indicator_escalate(UNAVAILABLE_REASON, ev, ())
+            return True
+        return False
+
+    async def _indicator_poll(self, u_now: float) -> None:
+        """One poll of the indicator arm. An error is retried next poll; a
+        persistent one escalates as indicators unavailable."""
+        try:
+            await self._indicator_poll_inner(u_now)
+        except Exception:
+            log.error("welfare monitor: indicator poll failed; retrying next poll", exc_info=True)
+            if self._ind_error_since_u is None:
+                self._ind_error_since_u = u_now
+            elif (
+                u_now - self._ind_error_since_u >= self._indicators_cfg.unavailable_escalate_s
+                and not self._acted
+            ):
+                self._ind_error_since_u = None
+                await self._indicator_escalate(UNAVAILABLE_REASON, None, ())
+            return
+        self._ind_error_since_u = None
+
+    async def _indicator_poll_inner(self, u_now: float) -> None:
+        self._indicator_tick_rest_clock(u_now)
+        signals = await self._indicator_ingest(u_now)
+        if self._ind_stage == _STAGE_RESTING:
+            ended = await self._indicator_rest_signals(signals, None)
+            if self._acted:
+                return
+            if not ended:
+                ev = self._ind_eval.evaluate()
+                await self._indicator_check_rest_bounds(ev, u_now)
+                return
+        ev = self._ind_eval.evaluate()
+        if await self._indicator_availability(ev):
+            return
+        if self._ind_stage == _STAGE_ARMED:
+            if ev.crossed:
+                await self._indicator_request_rest(ev, u_now)
+            return
+        if self._ind_stage == _STAGE_FRESH:
+            if ev.crossed:
+                await self._indicator_escalate(
+                    indicator_reason(ev.crossed[0]), ev, ev.crossed
+                )
+                return
+            if ev.span_awake_s >= float(self._indicator_params.span_s):
+                # A full fresh span with no crossing: the next one requests a rest.
+                self._ind_stage = _STAGE_ARMED
+                await self._indicator_record("indicator_rearmed", ev, ())
 
 
 __all__ = [

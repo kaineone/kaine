@@ -31,6 +31,7 @@ def _all_pass_net() -> object:
         self_check_passed=True,
         encryption_satisfied=True,
         supervisor_armed=True,
+        indicator_response_wired=True,
     )
 
 
@@ -131,6 +132,7 @@ def test_unattended_gate_with_logging_failure():
         self_check_passed=True,
         encryption_satisfied=True,
         supervisor_armed=True,
+        indicator_response_wired=True,
     )
     result = evaluate_unattended_gate(net)
     assert not result.ok
@@ -239,7 +241,7 @@ def test_unattended_gate_runs_the_supervisor_selftest_once(monkeypatch, tmp_path
             },
             "evaluation": {"enabled": True},
             "individuation": {"enabled": True},
-            "modules": {"language": True},
+            "modules": {"language": True, "affect": True, "sleep": True},
         }
     )
     result = cycle_main._evaluate_unattended_gate(config)
@@ -298,6 +300,7 @@ def test_evaluate_unattended_gate_uses_input_condition(monkeypatch):
                 "encryption_satisfied": True,
                 "individuation_enabled": True,
                 "supervisor_armed": True,
+                "indicator_response_wired": True,
             }
         },
     )()
@@ -355,6 +358,7 @@ def test_unattended_gate_individuation_failure_is_condition_9():
         self_check_passed=True,
         encryption_satisfied=True,
         supervisor_armed=True,
+        indicator_response_wired=True,
     )
     built = {
         7: Condition(7, CONDITION_NAMES[7], True),
@@ -412,6 +416,7 @@ def test_individuation_failure_withholds_the_caretaker_start_notice(monkeypatch)
                 "encryption_satisfied": True,
                 "individuation_enabled": False,
                 "supervisor_armed": True,
+                "indicator_response_wired": True,
             }
         },
     )()

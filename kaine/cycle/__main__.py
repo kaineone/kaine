@@ -634,13 +634,43 @@ def _wire_development(ctx: BootContext) -> None:
     )
 
 
+def _welfare_indicator_params(kaine_config: dict[str, Any], preservation_cfg: Any) -> Any:
+    """The A.4 indicator parameters: the affect section's values and the configured bars.
+
+    ``T_lp``, ``Delta_stall``, ``P_Aff`` and ``theta_E`` come from the affect
+    module's own configuration (one source each); the bars from
+    ``[preservation.welfare_response.indicators]``. Raises ``ValueError`` on
+    an invalid value.
+    """
+    from kaine.boot.factories.affect import affect_indicator_parameters
+    from kaine.lifecycle.welfare_indicators import IndicatorParams
+
+    affect = affect_indicator_parameters(kaine_config.get("affect") or {})
+    indicators = preservation_cfg.welfare_response.indicators
+    return IndicatorParams(
+        span_s=affect["learning_progress_span_s"],
+        min_span_s=affect["goal_stall_s"],
+        valence_bar=affect["regulation_set_point"],
+        publish_interval_s=affect["publish_interval_s"],
+        share_bar=indicators.share_bar,
+        posterior_bar=indicators.posterior_bar,
+    )
+
+
 async def _start_welfare_producer(
-    bus, eval_cfg, preservation_cfg, development_probe=None, supplementary_records=None
+    bus,
+    eval_cfg,
+    preservation_cfg,
+    development_probe=None,
+    kaine_config=None,
+    supplementary_records=None,
 ) -> tuple[Any, Any] | None:
     """Start the welfare-net gray-zone producer when the welfare response is on.
 
     The gray-zone producer belongs to the welfare net, so it runs whenever the
-    welfare response is enabled, independent of ``[evaluation]``.
+    welfare response is enabled, independent of ``[evaluation]``. It also
+    writes the A.4 indicators into its ``affect_welfare`` record, from its own
+    instance of the evaluator the welfare monitor uses.
     """
     if not preservation_cfg.welfare_response.enabled:
         return None
@@ -649,8 +679,13 @@ async def _start_welfare_producer(
     observer = None
     sink = None
     try:
+        indicator_params = _welfare_indicator_params(kaine_config or {}, preservation_cfg)
         observer, sink = build_welfare_producer(
-            bus, eval_cfg, development_probe, supplementary_records=supplementary_records
+            bus,
+            eval_cfg,
+            development_probe,
+            indicator_params=indicator_params,
+            supplementary_records=supplementary_records,
         )
         await sink.start()
         await observer.start()
@@ -1993,6 +2028,7 @@ async def _phase_bus(ctx: BootContext) -> int | None:
                 if ctx.stimulus_control is not None
                 else None
             ),
+            kaine_config=ctx.kaine_config,
         )
     except RuntimeError:
         log.error(
@@ -2895,11 +2931,37 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         ctx._caretaker_tasks.add(task)
         task.add_done_callback(ctx._caretaker_tasks.discard)
 
+    def _on_welfare_notice(event: str, indicators: tuple[str, ...]) -> None:
+        # The indicator response's notices name the crossed indicators from
+        # the fixed table and nothing else from the entity.
+        if ctx.caretaker is None:
+            return
+        try:
+            task = asyncio.get_running_loop().create_task(
+                ctx.caretaker.send_event(event, indicators=indicators)
+            )
+        except RuntimeError:
+            return
+        ctx._caretaker_tasks.add(task)
+        task.add_done_callback(ctx._caretaker_tasks.discard)
+
     # One unfrozen clock shared by every welfare timer in this process.
     from kaine.cycle.unfrozen_clock import UnfrozenClock
     ctx.unfrozen_clock = UnfrozenClock.for_welfare()
 
     if ctx.preservation_cfg.welfare_response.enabled:
+        cycle = getattr(ctx, "cycle", None)
+        awake_clock = None
+        entity_scale = None
+        if cycle is not None:
+            # The indicator spans are awake entity time: subjective time minus
+            # the time the cycle spent frozen or asleep.
+            def awake_clock() -> float:
+                return cycle.entity_clock.now() - cycle.unawake_subjective_seconds()
+
+            def entity_scale() -> float:
+                return cycle.entity_clock.scale
+
         ctx.welfare_monitor = WelfareProtectiveMonitor(
             registry=ctx.registry,
             fork_manager=ctx.fork_manager,
@@ -2914,6 +2976,11 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             require_encryption=ctx.preservation_cfg.require_encryption,
             on_response=_on_welfare_response,
             unfrozen_clock=ctx.unfrozen_clock,
+            indicator_params=_welfare_indicator_params(ctx.kaine_config, ctx.preservation_cfg),
+            awake_clock=awake_clock,
+            entity_scale=entity_scale,
+            is_developing=_development_probe(ctx),
+            on_notice=_on_welfare_notice,
         )
 
 
