@@ -368,8 +368,8 @@ async def test_a_cancelled_welfare_rest_answers_and_the_cancellation_propagates(
     task = asyncio.create_task(sleep._welfare_enter_sleep("req-cut"))
     await asyncio.wait_for(entered.wait(), timeout=5.0)
     task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    (outcome,) = await asyncio.gather(task, return_exceptions=True)
+    assert isinstance(outcome, asyncio.CancelledError)
     assert task.cancelled()
     answers = _answers(await _sleep_events(bus), "req-cut")
     assert answers == [{"accepted": False, "reason": reason, "origin": "welfare", "proposal_id": "req-cut"}]
