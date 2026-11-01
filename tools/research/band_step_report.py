@@ -32,12 +32,15 @@ def _mean(x):
     return float(np.mean(x)) if len(x) else float("nan")
 
 
-def replay(WindowedProgress, t, e, steps, bin_s, max_bins):
+def replay(WindowedProgress, t, e, steps, bin_s, max_bins, full_span_only=False):
     """Replay the affect module's per-source estimator in the harness's event order.
 
     After each report the harness reads every whole second up to the report's
     time, then applies a step due at that second, which drops the window; the
-    next report starts a fresh one (the affect module's restart).
+    next report starts a fresh one (the affect module's restart). With
+    ``full_span_only`` a reading counts only once the window holds ``max_bins``
+    completed bins, as ``Affect.audition_learning_progress`` gates it since the
+    full-span release rule.
     """
     w = None
     out_t, out_v = [], []
@@ -50,6 +53,8 @@ def replay(WindowedProgress, t, e, steps, bin_s, max_bins):
             w = None
         while tick <= ti:
             v = None if w is None else w.value(tick)
+            if v is not None and full_span_only and w.completed_bins(tick) < max_bins:
+                v = None
             out_t.append(tick)
             out_v.append(np.nan if v is None else v)
             if si < len(steps) and tick >= steps[si]:
@@ -99,7 +104,9 @@ def analyse(path: str, WindowedProgress) -> dict:
     if run["arm"] == "shipped":
         run["outside_voice_slots"] = run.pop("outside_proxy_slots")
     # Fault check: the 60 s replay equals the affect module's own reading.
-    rt, rv = replay(WindowedProgress, t, e, steps, bin_s, int(span_s / bin_s))
+    # Runs made since the full-span rule carry earliest_release_s; their readings are gated.
+    gated = "earliest_release_s" in d
+    rt, rv = replay(WindowedProgress, t, e, steps, bin_s, int(span_s / bin_s), full_span_only=gated)
     n = min(len(rv), len(lv))
     both = np.isfinite(rv[:n]) & np.isfinite(lv[:n])
     run["replay_matches_affect"] = bool(

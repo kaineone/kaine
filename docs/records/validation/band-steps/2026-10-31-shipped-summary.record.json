@@ -1,0 +1,8 @@
+{
+  "kind": "band_step",
+  "date": "2026-10-31",
+  "summary": "2026-10-31-shipped-summary.json",
+  "method": "offline harness: tools/research/band_step_check.py --arm shipped and band_step_report.py; real generator, maternal voice, shipped added sounds (melody and rendered outside voice), hearing band, Audition acoustic path and Affect bins with the full-span gate; seeds 1-3, settled schedule (fixed:18000); no workspace context, arousal at baseline, no rests",
+  "stimulus_version": "28a8b11bf29112bd48d2174463e3ad53a71eacb080634a34aa4ce12aff34a3f5",
+  "results": "Full-span saturation released stages 0-2 at 3.3 to 4.9 h (stage 0 3.4-4.0 h, stage 1 3.4-4.9 h, stage 2 3.3-3.5 h) and stage 3 at 1.67 to 1.77 h. Steps 1 and 2 raise the error 2.9 to 4.8 times in the first minute; steps 3 and 4 add little (new-band share 0.000 to 0.033, embedding shift below its spread). Perceptual alerts per hour: 17 to 47 in stages 0-2, 165 to 186 in stages 3-4. Runs under the release rule were not made (the machine ran out of memory during the first attempt); the live-gap record is still owed."
+}
