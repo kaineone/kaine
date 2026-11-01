@@ -1212,9 +1212,27 @@ async def test_language_mode_record_goes_through_the_split(main_bus):
 class _ConfigClient:
     """A stand-in volatile client reporting chosen CONFIG values."""
 
-    def __init__(self, *, ping=True, appendonly="no", save="", requirepass="pw"):
+    def __init__(self, *, ping=True, appendonly="no", save="", requirepass="pw",
+                 acl_password=False, allowed=(), dryrun=True):
         self._ping = ping
         self._values = {"appendonly": appendonly, "save": save, "requirepass": requirepass}
+        self._acl_password = acl_password
+        self._allowed = set(allowed)
+        self._dryrun = dryrun
+
+    async def execute_command(self, *args):
+        if args[:2] == ("ACL", "GETUSER"):
+            if self._acl_password:
+                return ["flags", ["on"], "passwords", ["hash"]]
+            return ["flags", ["on", "nopass"], "passwords", []]
+        if args[:2] == ("ACL", "DRYRUN"):
+            if not self._dryrun:
+                raise RuntimeError("unknown subcommand")
+            command = args[3]
+            if command in self._allowed:
+                return "OK"
+            return f"User default has no permissions to run the '{command.lower()}' command"
+        raise NotImplementedError(args)
 
     async def ping(self):
         if not self._ping:
