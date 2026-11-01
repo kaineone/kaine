@@ -947,6 +947,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
     and rate limits stay on wall time.
     """
 
+    #: The bound on each of this monitor's own bus calls; the constructor's
+    #: ``bus_timeout_s`` overrides it per instance.
+    _bus_timeout_s: float = _WELFARE_BUS_TIMEOUT_S
+
+
     source = "preservation"
 
     def __init__(
