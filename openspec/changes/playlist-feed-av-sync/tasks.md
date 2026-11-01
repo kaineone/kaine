@@ -41,4 +41,6 @@
 - [x] 7.4 After a seek, an untimed frame takes the seek target as its time (L3).
 - [x] 7.5 A video timestamp more than 1 s back is a discontinuity: re-base the timeline instead of clamping every later frame (L4).
 - [x] 7.6 Mutation-check each fix.
+- [x] 7.7 Re-base on a backward timestamp jump only when the next frame confirms the reset; a lone far-behind stamp is placed as untimed and the old timeline continues (R1).
+- [x] 7.8 Surfaces report an item they could not open to the shared clock; the clock logs once at error, by item index, when such an unmeasured item has held the programme for 5 s; documented (R2).
 

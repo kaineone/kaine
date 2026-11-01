@@ -1181,6 +1181,9 @@ class PlaylistAudioStream:
         """Log an item that failed to open or decode: index and exception
         type only (its text can carry the path, so the title)."""
         self._item_failures += 1
+        report = getattr(self._clock, "report_unplayable", None)
+        if callable(report):
+            report(idx)
         log.warning(
             "playlist audio item %d failed (%s); heard as silence for the rest "
             "of its length, the programme goes on",

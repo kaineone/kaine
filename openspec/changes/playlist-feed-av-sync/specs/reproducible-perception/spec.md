@@ -56,9 +56,17 @@ at or before the previous frame's time SHALL be held at that time.
 
 #### Scenario: A timestamp reset
 
-- **WHEN** a frame's timestamp is more than 1 s before the previous frame's
+- **WHEN** two frames in a row are stamped more than 1 s before the previous
+  frame, the second after the first
 - **THEN** the timeline continues one frame interval after the previous frame,
   so the frames after the reset are presented at their own pace, not all at once
+
+#### Scenario: One corrupt timestamp
+
+- **WHEN** a single frame is stamped more than 1 s before the previous frame and
+  the next frame is back on the old timeline
+- **THEN** that frame is placed one frame interval after the previous one, nothing
+  is re-based, and the picture keeps tracking the clock
 
 #### Scenario: A packet that fails to decode
 
@@ -90,6 +98,12 @@ frame when it reaches the end of the stream.
 
 - **WHEN** either surface opens an item first
 - **THEN** the shared clock's length for that item is the container duration
+
+#### Scenario: An item no surface can open
+
+- **WHEN** neither surface can open an item and nothing has measured its length
+- **THEN** the programme is held on that item, and after 5 s the clock logs that
+  once at error level, naming the item's index only
 
 ### Requirement: Playlist audio carries exactly the decoded samples
 

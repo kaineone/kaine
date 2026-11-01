@@ -855,3 +855,120 @@ def test_a_timestamp_reset_does_not_decode_the_rest_of_the_item_in_one_read(tmp_
     assert src._shown.t == pytest.approx(2.48)
     assert src._pending is not None and src._pending[0] == pytest.approx(2.52)
 
+
+def test_pyav_decoder_treats_a_lone_backward_stamp_as_untimed():
+    """One frame stamped far behind (a corrupt timestamp) is placed one frame
+    after the previous one, and the timeline goes on: nothing is re-based."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    decoder = PyAvVideoDecoder(
+        _fake_av_video([11280, 11320, 608, 11400, 11440], duration=30_000_000), "x.webm"
+    )
+    times = []
+    while (nxt := decoder.next()) is not None:
+        times.append(round(nxt[0], 6))
+    assert times == [11.28, 11.32, 11.36, 11.4, 11.44]
+    assert decoder.discontinuities == 0
+
+
+def test_a_lone_backward_stamp_does_not_hold_the_picture(tmp_path):
+    """The picture keeps tracking the clock after a single corrupt stamp (it
+    used to re-base on it and fall seconds behind, holding the outlier)."""
+    from kaine.modules.vision.feed import PyAvVideoDecoder
+
+    pts = [i * 40 for i in range(750)]
+    pts[284] = 608  # one corrupt stamp at 11.36 s
+    src, clk = _one_item_source(
+        tmp_path, fps=25, frame_count=1, open_now=False,
+        decoders=lambda path, item: PyAvVideoDecoder(
+            _fake_av_video(pts, duration=30_000_000), path
+        ),
+    )
+    clk.t = 0.0
+    src.clock.start()
+    assert src.open()
+    for t in [x / 10.0 for x in range(0, 200, 5)]:  # 0 to 19.5 s, every 0.5 s
+        clk.t = t
+        assert src.read()[0]
+        assert t - 0.04 < src._shown.t <= t + 1e-9, (t, src._shown.t)
+
+
+def test_clock_logs_once_when_an_item_nothing_could_open_holds_the_programme(caplog):
+    """An item a surface could not open and none measured holds the clock on
+    it: after the grace the clock logs that once, at error, by index only."""
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.vision.feed")
+    fake = _FakeClock()
+    clock = PlaylistClock(3, clock=fake)
+    clock.start(at=0.0)
+    clock.set_duration(0, 10.0)
+    fake.t = 10.5
+    clock.report_unplayable(1)
+    assert clock.locate() == (1, pytest.approx(0.5))
+    fake.t = 14.0  # within the grace: the other surface may still measure it
+    clock.locate()
+    assert not [r for r in caplog.records if r.levelno == logging.ERROR]
+    fake.t = 16.0
+    assert clock.locate()[0] == 1
+    fake.t = 99.0
+    clock.locate()
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors == [
+        "playlist item 1 could not be opened and no surface knows its length: "
+        "the programme is held on it"
+    ]
+
+
+def test_clock_does_not_log_an_item_another_surface_measured(caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.vision.feed")
+    fake = _FakeClock()
+    clock = PlaylistClock(2, clock=fake)
+    clock.start(at=0.0)
+    clock.report_unplayable(0)  # the video could not open it...
+    clock.set_duration(0, 30.0)  # ...but the audio measured it
+    fake.t = 20.0
+    clock.locate()
+    assert not [r for r in caplog.records if r.levelno == logging.ERROR]
+
+
+def test_a_video_item_it_cannot_open_is_reported_to_the_clock(tmp_path, caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="kaine.modules.vision.feed")
+
+    class _NoB(FakeVideoDecoders):
+        def __call__(self, path, item):  # noqa: ANN001, ANN204
+            if str(path).endswith("b.mp4"):
+                raise OSError(2, "No such file or directory", str(path))
+            return super().__call__(path, item)
+
+    (tmp_path / "a.mp4").write_bytes(b"aaa")
+    (tmp_path / "b.mp4").write_bytes(b"bbb")
+    manifest = _write_manifest(
+        tmp_path,
+        [
+            {"path": "a.mp4", "sha256": hashlib.sha256(b"aaa").hexdigest(), "fps": 30, "order": 0},
+            {"path": "b.mp4", "sha256": hashlib.sha256(b"bbb").hexdigest(), "fps": 30, "order": 1},
+        ],
+    )
+    parsed = load_playlist_manifest(manifest)
+    clock = PlaylistClock(2, clock=_FakeClock())
+    clk = clock._clock
+    src = PlaylistSource(parsed, playlist_clock=clock, decoder_factory=_NoB({"a.mp4": 60}))
+    assert src.open()
+    clk.t = 0.0
+    src.read()
+    clk.t = 2.5
+    assert src.read() == (False, None)  # on item 1, which cannot be opened
+    clk.t = 30.0
+    assert src.read() == (False, None)
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors == [
+        "playlist item 1 could not be opened and no surface knows its length: "
+        "the programme is held on it"
+    ]
+    assert all(str(tmp_path) not in r.getMessage() for r in caplog.records)
+

@@ -782,6 +782,10 @@ class PlaylistClock:
         self._origin: float | None = None
         self._durations: list[float | None] = [None] * self._n
         self._lock = threading.Lock()
+        # Items a surface could not open, with the elapsed time of the first
+        # report, and those already logged as holding the programme.
+        self._unplayable: dict[int, float] = {}
+        self._held_logged: set[int] = set()
         # Pause state (playlist-sleep-pause / film-aligned-ignition-log).
         # ``_holders`` is the pause authority: the clock is paused while the
         # set is non-empty. ``_pause_started`` is the clock value the current
@@ -909,6 +913,15 @@ class PlaylistClock:
             if 0 <= idx < self._n and self._durations[idx] is None and seconds > 0:
                 self._durations[idx] = float(seconds)
 
+    def report_unplayable(self, idx: int) -> None:
+        """A surface could not open item ``idx``. If no surface measures its
+        length, the clock cannot cross its end, so the programme is held on
+        it; ``locate`` logs that once at error level (item index only) when it
+        has lasted ``_HOLD_GRACE_S``."""
+        with self._lock:
+            if 0 <= idx < self._n and self._durations[idx] is None:
+                self._unplayable.setdefault(idx, self._elapsed_locked())
+
     def duration(self, idx: int) -> float | None:
         with self._lock:
             return self._durations[idx] if 0 <= idx < self._n else None
@@ -936,19 +949,37 @@ class PlaylistClock:
         until the feed opening it registers its duration. Returns ``item_idx ==
         item_count`` once the elapsed time passes every known item (playlist
         exhausted)."""
+        held: int | None = None
         with self._lock:
             if elapsed is None:
                 elapsed = self._elapsed_locked()
             acc = 0.0
+            result: tuple[int, float] = (self._n, 0.0)
             for idx in range(self._n):
                 d = self._durations[idx]
                 if d is None:
                     # Unmeasured boundary ahead — hold at this item.
-                    return idx, max(0.0, elapsed - acc)
+                    result = (idx, max(0.0, elapsed - acc))
+                    reported = self._unplayable.get(idx)
+                    if (
+                        reported is not None
+                        and idx not in self._held_logged
+                        and elapsed - reported > _HOLD_GRACE_S
+                    ):
+                        self._held_logged.add(idx)
+                        held = idx
+                    break
                 if elapsed < acc + d:
-                    return idx, elapsed - acc
+                    result = (idx, elapsed - acc)
+                    break
                 acc += d
-            return self._n, 0.0
+        if held is not None:
+            log.error(
+                "playlist item %d could not be opened and no surface knows its "
+                "length: the programme is held on it",
+                held,
+            )
+        return result
 
 
 #: PyAV reports ``container.duration`` and ``container.start_time`` in
@@ -962,6 +993,10 @@ _SEEK_BEHIND_S = 2.0
 #: Frame interval used for a frame without a timestamp when neither the stream
 #: nor the manifest gives a usable rate.
 _FALLBACK_FRAME_INTERVAL_S = 1.0 / 25.0
+
+#: An item that a surface could not open and none has measured holds the
+#: programme; past this long, the clock says so once.
+_HOLD_GRACE_S = 5.0
 
 #: A video timestamp this far before the previous frame's is a discontinuity
 #: (a timestamp reset), not jitter: the timeline is re-based, not held.
@@ -1000,11 +1035,14 @@ class PyAvVideoDecoder:
     real timing. A frame without a timestamp is placed one frame interval after
     the previous frame (after a seek, at the seek target). A timestamp slightly
     before the previous frame's time is held at that time, so the timeline never
-    runs backwards; a jump back of more than ``_PTS_DISCONTINUITY_S`` (a
-    timestamp reset, as in a concatenated file) is a discontinuity: the
-    timeline is re-based to continue one frame interval after the previous
-    frame, instead of holding every later frame at one time (which would make
-    one read decode the rest of the item).
+    runs backwards. A jump back of more than ``_PTS_DISCONTINUITY_S`` is
+    either one corrupt stamp or a timestamp reset (as in a concatenated file).
+    A lone frame that far behind is placed as untimed and the timeline goes
+    on; when the next frame is also that far behind and in order from it, the
+    timestamps were reset, and the timeline is re-based to continue one frame
+    interval after the previous frame. Holding every later frame at one time
+    would make one read decode the rest of the item; re-basing on a single
+    outlier would put every later frame seconds late.
 
     Packets are decoded one at a time, and a packet that fails to decode is
     skipped (counted in ``skipped_packets``; the first logged at warning, later
@@ -1052,6 +1090,9 @@ class PyAvVideoDecoder:
         # Time for an untimed first frame (0, or the seek target).
         self._base_t = max(0.0, float(base_t))
         self._shift = 0.0  # re-base after a backward timestamp discontinuity
+        # Raw time of a lone frame far behind the timeline, until the next frame
+        # says whether it was a reset (it follows on) or an outlier (it doesn't).
+        self._suspect: float | None = None
 
     def _frame_interval(self, nominal_fps: float | None) -> float:
         for rate in (
@@ -1107,22 +1148,34 @@ class PyAvVideoDecoder:
         if pts is None:
             t = self._base_t if self._last_t is None else self._last_t + self.frame_interval
         else:
-            t = float(pts) * self._time_base - self._origin + self._shift
-            if self._last_t is not None and t < self._last_t:
-                if self._last_t - t > _PTS_DISCONTINUITY_S:
-                    resumed = self._last_t + self.frame_interval
-                    self._shift += resumed - t
-                    t = resumed
-                    self.discontinuities += 1
-                    log.log(
-                        logging.WARNING if self.discontinuities == 1 else logging.DEBUG,
-                        "playlist video %s: timestamps jumped back; the timeline "
-                        "continues from the previous frame (%d so far)",
-                        self._label,
-                        self.discontinuities,
-                    )
-                else:
-                    t = self._last_t
+            raw = float(pts) * self._time_base - self._origin + self._shift
+            if self._last_t is None or raw >= self._last_t:
+                self._suspect = None
+                t = raw
+            elif self._last_t - raw <= _PTS_DISCONTINUITY_S:
+                self._suspect = None
+                t = self._last_t  # backward jitter: held
+            elif self._suspect is not None and raw >= self._suspect:
+                # A second frame far behind, in order from the first: the
+                # timestamps were reset. Re-base so the timeline continues.
+                resumed = self._last_t + self.frame_interval
+                self._shift += resumed - raw
+                t = resumed
+                self._suspect = None
+                self.discontinuities += 1
+                log.log(
+                    logging.WARNING if self.discontinuities == 1 else logging.DEBUG,
+                    "playlist video %s: timestamps jumped back; the timeline "
+                    "continues from the previous frame (%d so far)",
+                    self._label,
+                    self.discontinuities,
+                )
+            else:
+                # A lone frame far behind may be one corrupt stamp: place it
+                # as untimed and keep the old timeline until a following frame
+                # confirms a reset.
+                self._suspect = raw
+                t = self._last_t + self.frame_interval
         self._last_t = t
         return t, frame
 
@@ -1292,6 +1345,9 @@ class PlaylistSource:
                 self._item_idx,
                 type(exc).__name__,
             )
+            report = getattr(self._clock, "report_unplayable", None)
+            if callable(report):
+                report(self._item_idx)
             return False
         self._decoder = decoder
         self._reset_item_state()
