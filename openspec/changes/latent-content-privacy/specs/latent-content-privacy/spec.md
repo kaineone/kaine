@@ -71,8 +71,8 @@ When the cycle builds the workspace broadcast payload, it SHALL remove the `late
 - **WHEN** no member payload carries `latent_derived`
 - **THEN** the broadcast payload equals, field for field, the payload the current code builds
 
-### Requirement: Latent values never enter a persisted bus stream (pending operator ruling)
-Pending the operator's ruling on the design's open question 1 (recommended option B): no payload published on a stream of the main Redis bus SHALL hold a key in `LATENT_FIELDS`, at any depth. Every producer, and the cycle when it builds the broadcast payload, SHALL remove those keys before publishing.
+### Requirement: Latent values never enter a persisted bus stream
+No payload published on a stream of the main Redis bus SHALL hold a key in `LATENT_FIELDS`, at any depth. Every producer, and the cycle when it builds the broadcast payload, SHALL remove those keys before publishing.
 
 #### Scenario: A vision report on the main bus
 - **WHEN** the vision module publishes a report
@@ -82,19 +82,37 @@ Pending the operator's ruling on the design's open question 1 (recommended optio
 - **WHEN** the cycle publishes a broadcast whose metadata carries `latent_derived` and whose member carries `latent`
 - **THEN** the `workspace.broadcast` entry holds neither key
 
-### Requirement: Latent values a consumer needs travel on a volatile companion stream (pending operator ruling)
-Pending the same ruling: a latent value that a declared consumer needs SHALL be published on a companion stream of a second Redis instance that runs with no append-only file and no snapshots, keyed by the main-bus stream and entry id of its event. A consumer SHALL treat a missing companion entry as an absent value. Decommission SHALL flush the volatile instance.
+### Requirement: Latent values a consumer needs travel on a volatile companion stream
+A latent value that a declared consumer needs SHALL be published on the companion stream `<stream>.companion` of a second Redis instance that runs with no append-only file and no snapshots. A consumer SHALL treat a missing companion entry as an absent value. Decommission SHALL flush the volatile instance.
 
 #### Scenario: A consumer joins the companion entry
-- **WHEN** a declared consumer reads an accessed vision report and its companion entry exists
-- **THEN** it reads the latent from the companion entry with the same entry id
+- **WHEN** a declared consumer reads an accessed vision report whose envelope names a companion entry that exists
+- **THEN** it reads the latent from that companion entry
 
 #### Scenario: A missing companion entry
 - **WHEN** the volatile instance restarted and the companion entry is gone
 - **THEN** the consumer treats the latent as absent and raises no error
 
-### Requirement: The boot refuses a latent producer without a bounded volatile bus (pending operator ruling)
-Pending the same ruling: when any producer of latent values is enabled, the boot and the preboot SHALL refuse unless the volatile instance is reachable, reports `appendonly` off and an empty `save`, and every companion stream the producer declares has a cap of at most `[privacy].latent_stream_maxlen` (default 12000). The refusal SHALL name the failed condition.
+### Requirement: The companion entry is written first and named by the main entry
+The producer SHALL write the companion entry before the main-bus entry, and the main-bus entry's envelope, outside the payload, SHALL record the companion's stream and entry id in the field `companion`. A consumer SHALL read the companion entry by that id. When the companion write fails, the producer SHALL log it and publish the main-bus entry without the `companion` field and without the diverted values.
+
+#### Scenario: The companion exists before the main entry
+- **WHEN** a consumer reads a main-bus entry whose envelope names a companion entry
+- **THEN** that companion entry was written before the main-bus entry
+
+#### Scenario: A failed companion write
+- **WHEN** the volatile instance refuses a companion write
+- **THEN** the main-bus entry is published without the latent values and without a `companion` field, and an error is logged
+
+### Requirement: The companion mechanism takes a declared field set
+The companion publisher and reader in `kaine/bus` SHALL take the set of fields a producer diverts to the volatile instance, so that another rule keeping a class of value off the persisted bus uses the same instance, companion streams, boot check and budget row. Each producer SHALL declare its companion streams and its field set.
+
+#### Scenario: A second field set
+- **WHEN** a producer declares a field set other than `LATENT_FIELDS`
+- **THEN** its fields travel on companion streams of the same volatile instance, under the same cap and boot check
+
+### Requirement: The boot refuses a companion producer without a bounded volatile bus
+When any declared companion producer is enabled, whatever its field set, the boot and the preboot SHALL refuse unless the volatile instance is reachable, reports `appendonly` off and an empty `save`, and every companion stream the producer declares has a cap of at most `[privacy].companion_stream_maxlen` (default 12000). The refusal SHALL name the failed condition.
 
 #### Scenario: The volatile instance persists
 - **WHEN** a latent producer is enabled and the volatile instance reports `appendonly yes`
@@ -182,13 +200,14 @@ A test SHALL run the cycle entity-free on fake encoders, with a producer of `lat
 - **WHEN** the planted controls write one latent through a sink with the strip disabled, one through the renderer with its strip disabled, and one into a binary artifact
 - **THEN** the scan reports each of those files
 
-### Requirement: The canary states how it covers the bus (pending operator ruling)
-Pending the operator's ruling on the design's open question 1: under the recommended option B the canary SHALL wrap the bus client and assert that no publish to a main-bus stream carries a `LATENT_FIELDS` key and that companion streams go to the volatile client. Under option A the canary SHALL state that the Redis append-only file is outside its scan.
+### Requirement: The canary covers the bus
+The canary SHALL wrap the bus client and assert that no publish to a main-bus stream carries a `LATENT_FIELDS` key and that companion streams go to the volatile client.
 
 #### Scenario: A main-bus publish with a latent field
-- **WHEN** a planted producer publishes `latent_derived` on a main-bus stream under option B
+- **WHEN** a planted producer publishes `latent_derived` on a main-bus stream
 - **THEN** the canary fails and names the stream
 
+### Requirement: Every published numeric list is reviewed
 A test SHALL walk every payload published in the entity-free harness and fail when a list, tuple or numpy array of two or more numbers sits under a key that is neither in `LATENT_FIELDS` nor in the reviewed set `NON_LATENT_NUMERIC_KEYS`.
 
 #### Scenario: A new vector key

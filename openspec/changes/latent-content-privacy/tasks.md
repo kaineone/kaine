@@ -1,7 +1,7 @@
-## 0. Operator rulings (before PR 3 and PR 4)
+## 0. Rulings (before PR 3 and PR 4)
 
-- [ ] 0.1 Open question 1 (design): the bus and Redis's append-only file; option B recommended. Record the ruling in the design and drop the "pending" marks, or rewrite decision 7, PR 3 and the canary's bus check for option A or C
-- [ ] 0.2 Open question 2 (design): a content code in episodes; option (b) recommended. Record the ruling in decisions 3 and 6 and the episodic delta, or rewrite them for option (a)
+- [x] 0.1 Open question 1 (design): the bus and Redis's append-only file. Ruled option B on 2026-11-01 (architecture decisions of 2026-11-01, item 2; reasoning in the design's "Rulings on the open questions"); recorded in the design, the proposal and the spec, and the "pending" marks dropped. The ruling also covers heard and spoken text, specified in `heard-text-volatile-bus`, which reuses decision 7's mechanism
+- [x] 0.2 Open question 2 (design): a content code in episodes. Ruled option (b) on 2026-11-01 (architecture decisions of 2026-11-01, item 3; reasoning in the design's "Rulings on the open questions"); recorded in decisions 3 and 6 and the episodic delta, and the "pending" marks dropped
 
 ## 1. The rule and the record writers (PR 1)
 
@@ -21,12 +21,12 @@
 - [x] 2.4 `ForkManager.snapshot` `_serialize_error` record: the exception type and a message cut to 200 characters; test
 - [x] 2.5 Encryption boot check for latent producers (effective state encryption with a resolvable key, and `require_encryption = true`), shared with `workspace-content-code`; tests `test_latent_producer_refused_without_encryption`, `test_latent_producer_refused_without_require_encryption`
 
-## 3. The bus (PR 3; pending open question 1, option B)
+## 3. The bus (PR 3; open question 1, ruled B)
 
 - [ ] 3.1 `compose/kaine.yml`: the `kaine-redis-volatile` service with `--appendonly no --save ""`, its own `maxmemory` (`KAINE_REDIS_VOLATILE_MAXMEMORY`), password and health check, on the compose network only
-- [ ] 3.2 `kaine/bus`: a companion-stream publisher and reader keyed by the main-bus stream and entry id; every main-bus publish removes `LATENT_FIELDS` keys from the payload; a consumer that finds no companion entry treats the value as absent
+- [ ] 3.2 `kaine/bus`: a companion-stream publisher and reader that take a declared field set (here `LATENT_FIELDS`): the companion entry is written first on `<stream>.companion` of the volatile instance and the main-bus entry's envelope records its id in `companion`; a failed companion write is logged and the main entry is published without the field and without the values; every main-bus publish removes the declared fields from the payload; a consumer that finds no companion entry treats the values as absent; tests `test_companion_written_before_main_entry`, `test_failed_companion_write_loses_value_not_privacy`
 - [ ] 3.3 Vision publishes `latent`, `peripheral` and `foveal` only on its companion stream, and only when a declared consumer is enabled; the broadcast record removes every latent field from members and metadata; move the tests that read `latent` off a published vision report
-- [ ] 3.4 `[privacy].latent_stream_maxlen = 12000` in `config/kaine.toml` with a comment; the producer declaration (a component names its companion streams); the boot check (volatile instance reachable, `appendonly no`, empty `save`, caps within the bound) in `kaine/bus/config.py` and the preboot; config-shape validation of the new table refuses unknown keys
+- [ ] 3.4 `[privacy].companion_stream_maxlen = 12000` in `config/kaine.toml` with a comment; the producer declaration (a component names its companion streams and its field set); the boot check (volatile instance reachable, `appendonly no`, empty `save`, caps within the bound) in `kaine/bus/config.py` and the preboot; config-shape validation of the new table refuses unknown keys
 - [ ] 3.5 `TYPICAL_EVENT_BYTES` and the preboot "Bus budget" row: the main bus without latents and the volatile instance, each against its own `maxmemory`; the soft (approximate) trimming stated in the row's text
 - [ ] 3.6 Decommission flushes the volatile instance with the entity's streams
 - [ ] 3.7 Entity-free check that vision novelty and salience scores are identical with and without the perceptual latents in the main-bus payload
@@ -34,24 +34,24 @@
 
 ## 4. Episodic store (PR 4, after or with episodic-recall-content PR 1)
 
-- [ ] 4.1 Confirm `episodic-recall-content` PR 1 (the shared heard rule in `kaine/faithful/external_input.py`, applied at store time) has merged, or land it first as its own PR
+- [x] 4.1 Confirm `episodic-recall-content` PR 1 (the shared heard rule in `kaine/faithful/external_input.py`, applied at store time) has merged: merged in #636 (6f936088)
 - [ ] 4.2 `kaine/modules/episodic_memory/module.py`: the heard, raw-perceptual and latent rules in that order; the order stated at the code site
-- [ ] 4.3 Pending open question 2, option (b): the identity-bound field's rule at the code site (no writer until build item 9(d)); the store refuses to write the field without encryption at rest; recall ignores a stored code whose code id differs from the running code
+- [ ] 4.3 Open question 2, ruled (b): the identity-bound field's rule at the code site (no writer until build item 9(d)); the store refuses to write the field without encryption at rest; recall ignores a stored code whose code id differs from the running code
 - [ ] 4.4 Tests in `tests/test_latent_content_privacy.py`: `test_episodic_store_rule_order`, `test_episodic_heard_member_with_latent_removed_whole`, `test_episodic_short_latent_vector_not_stored`, `test_identity_bound_field_refused_without_encryption`, `test_identity_bound_field_never_in_trace_text`
 
 ## 5. The canary and the publisher review (PR 5)
 
 - [ ] 5.1 `tests/test_latent_persistence_canary.py`: the entity-free harness of the spec (the language module on a fake organ, a file-backed sqlite-vec episodic store, the resume checkpoint, the trajectory, every sink), built on the existing fakeredis helpers in `tests/` named in the brief; its producer test double; the decrypting file scan at full, float32 and `_fmt` precision with the three-in-sequence structural check; the packed-float scan of binary files; the planted controls; `test_canary_clean_run`, `test_canary_detects_planted_sink_leak`, `test_canary_detects_planted_rendering_leak`, `test_canary_detects_planted_binary_leak`
-- [ ] 5.2 Pending open question 1: under option B, the bus-client wrapper assertion that no main-bus `XADD` carries a latent field; under option A, the AOF named as excluded in the test's docstring and the spec
+- [ ] 5.2 The bus-client wrapper assertion that no main-bus `XADD` carries a latent field and that companion streams go to the volatile client (open question 1, ruled B)
 - [ ] 5.3 `tests/test_publisher_numeric_keys.py` with the reviewed `NON_LATENT_NUMERIC_KEYS` set, each entry commented with its module and why it is not latent, lists, tuples and arrays all walked; `test_every_numeric_list_is_reviewed`
 - [ ] 5.4 A log-capture assertion inside the canary: no recorded latent float in the captured log file
 - [ ] 5.5 Both tests run in the default CI lane (they take minutes on the CPU)
 
 ## 6. Docs and records
 
-- [ ] 6.1 Security and privacy chapter: the latent rule, the tag, the persisting-surfaces table, the strip points, the bus rule and the volatile instance (per the ruling), the encryption check
+- [ ] 6.1 Security and privacy chapter: the latent rule, the tag, the persisting-surfaces table, the strip points, the bus rule and the volatile instance, the encryption check
 - [ ] 6.2 Preservation chapter: a bundle holds learned weights and content-free buffer summaries, never latents; older bundles hold the old summaries until re-preserved
-- [ ] 6.3 Configuration appendix: `[privacy].latent_stream_maxlen`
+- [ ] 6.3 Configuration appendix: `[privacy].companion_stream_maxlen`
 - [ ] 6.4 Paper REVISION-NOTES entry (paper repo): the principle beside "no pixels reach the workspace" (§3.5) and in the privacy paragraph of §6
 
 ## 7. Review
