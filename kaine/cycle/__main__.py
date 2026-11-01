@@ -3338,6 +3338,38 @@ _BOOT_PHASES = (
 )
 
 
+def _welfare_monitor_lost_reason(ctx: BootContext) -> str | None:
+    """Why the welfare monitor is no longer watching, or ``None`` while it is.
+
+    Checked by the run loop in research and unattended mode, whose boot gates
+    require the welfare response. The monitor is lost when it was never built
+    or started, when its task ended (a stop that ends the run sets the stop
+    event first and is not a loss), or when its poll loop keeps raising: at
+    least three polls in a row and no poll returned for one
+    ``distress_duration_s`` (30 s by default) of wall time. A poll loop down for
+    that long could let a whole sustained-distress episode pass unanswered.
+    """
+    welfare_cfg = getattr(ctx.preservation_cfg, "welfare_response", None)
+    monitor = ctx.welfare_monitor
+    if monitor is None:
+        if welfare_cfg is not None and getattr(welfare_cfg, "enabled", False):
+            return "welfare monitor never built"
+        return None
+    if ctx.welfare_task is None:
+        return "welfare monitor task never started"
+    if ctx.welfare_task.done():
+        return "welfare monitor task ended"
+    bound = float(getattr(welfare_cfg, "distress_duration_s", 30.0))
+    try:
+        failing = monitor.poll_loop_failing(bound)
+    except Exception:
+        log.error("welfare monitor liveness unreadable", exc_info=True)
+        return "welfare monitor liveness unreadable"
+    if failing:
+        return "welfare monitor polls keep failing"
+    return None
+
+
 async def _run_until_stopped(ctx: BootContext) -> None:
     """Supervise the running cycle until a stop is requested or the cycle ends."""
     # The producer's restarts are kept on the context for the exposure record.
@@ -3365,6 +3397,12 @@ async def _run_until_stopped(ctx: BootContext) -> None:
                 await ctx.supervisor.escalate_supervision_lost(
                     "supervision task ended"
                 )
+                ctx.stop_event.set()
+                break
+            lost = _welfare_monitor_lost_reason(ctx)
+            if lost is not None and not ctx.stop_event.is_set() and not ctx.supervisor.escalated:
+                log.critical("The welfare monitor stopped watching (%s); escalating", lost)
+                await ctx.supervisor.escalate_welfare_monitor_lost(lost)
                 ctx.stop_event.set()
                 break
         await _write_runtime_state(
@@ -3433,8 +3471,12 @@ async def _shutdown(ctx: BootContext) -> None:
                 from kaine.cycle.escalation_state import read_escalation
 
                 rec = read_escalation()
+                from kaine.cycle.supervisor import WELFARE_MONITOR_ESCALATION_MODULE
+
                 await ctx.caretaker.send_event(
-                    "supervision_lost" if rec.module == "supervisor" else "supervisor_escalation"
+                    "supervision_lost"
+                    if rec.module in ("supervisor", WELFARE_MONITOR_ESCALATION_MODULE)
+                    else "supervisor_escalation"
                 )
         except Exception:
             log.warning("caretaker escalation notice failed", exc_info=True)

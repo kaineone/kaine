@@ -1503,6 +1503,13 @@ class StudyRunner:
                         "cannot be read. Check the step's state/cycle/escalation.json and "
                         "the supervisor's incident log before retrying the step."
                     )
+                elif escalation.get("module") == "welfare_monitor":
+                    lines.append(
+                        f"Welfare monitor lost: the welfare monitor stopped watching, so "
+                        f"the entity was preserved first (snapshot "
+                        f"{escalation.get('snapshot_id')}) and shut down. Check the cycle "
+                        f"log for the welfare monitor's errors, then retry the step."
+                    )
                 else:
                     lines.append(
                         f"Supervisor escalation: module {escalation.get('module')} after "

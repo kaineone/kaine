@@ -68,6 +68,9 @@ from kaine.security.crypto import get_state_encryptor
 
 log = logging.getLogger(__name__)
 
+#: The ``module`` an escalation names when the welfare monitor stopped watching.
+WELFARE_MONITOR_ESCALATION_MODULE = "welfare_monitor"
+
 _SUPERVISOR_OUT_SALIENCE = 0.5
 
 
@@ -576,6 +579,37 @@ class Supervisor:
             self.escalated = True
         except Exception:
             log.critical("supervisor failed to escalate supervision loss", exc_info=True)
+
+    async def escalate_welfare_monitor_lost(self, reason: str) -> None:
+        """Escalate because the welfare monitor stopped watching (research and unattended runs).
+
+        The same path as a loss of supervision: a final snapshot, every module
+        shut down and ``escalation.json`` written, with module
+        ``welfare_monitor``. A research or unattended entity does not keep
+        running without the welfare net its boot gate required. Never raises:
+        a failure here is logged at CRITICAL.
+        """
+        snapshot_id: Optional[str] = None
+        try:
+            snapshot_id = await self._snapshot(
+                "supervisor-welfare-monitor-lost", WELFARE_MONITOR_ESCALATION_MODULE, None
+            )
+            await self._shutdown_all()
+            await self._escalate(
+                WELFARE_MONITOR_ESCALATION_MODULE,
+                0,
+                snapshot_id,
+                None,
+                message=(
+                    f"The welfare monitor stopped watching ({reason}). Entity state saved "
+                    f"(snapshot {snapshot_id}). A research or unattended entity does not run "
+                    f"without its welfare net. Restart the cycle once the welfare monitor is "
+                    f"healthy."
+                ),
+            )
+            self.escalated = True
+        except Exception:
+            log.critical("supervisor failed to escalate the welfare monitor's loss", exc_info=True)
 
     # --- recovery (one incident per poll) ---------------------------------
 

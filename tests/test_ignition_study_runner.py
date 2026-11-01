@@ -244,7 +244,9 @@ STANDIN_SCRIPT = textwrap.dedent(
             # The supervisor ran out of restarts: final snapshot, shutdown,
             # escalation.json, exit 70 (no maturation preservation).
             write_json(state_dir / "escalation.json", {
-                "escalated": True, "module": "language", "attempts": 5,
+                "escalated": True,
+                "module": os.environ.get("IGNITION_STANDIN_ESCALATION_MODULE", "language"),
+                "attempts": 5,
                 "snapshot_id": "snap-final", "escalated_at": utc_iso(),
                 "message": "Module 'language' failed to recover after 5 attempts.",
             })
@@ -454,6 +456,7 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_EXPOSURE",
         "IGNITION_STANDIN_KEEP_EXPOSURE",
         "IGNITION_STANDIN_SCENARIO_EXPOSURE",
+        "IGNITION_STANDIN_ESCALATION_MODULE",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -2013,6 +2016,21 @@ def test_a_supervisor_escalation_is_its_own_outcome(tmp_path: Path, known_module
     status = runner.status()
     assert "Halted: failed:supervisor at development step 0" in status
     assert "Supervisor escalation: module language after 5 restart attempt(s)" in status
+
+
+def test_a_lost_welfare_monitor_is_named_in_status(tmp_path: Path, known_modules, monkeypatch):
+    study_dir = _create_study(tmp_path, viewings=1)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    monkeypatch.setenv("IGNITION_STANDIN_SUPERVISOR", "escalate")
+    monkeypatch.setenv("IGNITION_STANDIN_ESCALATION_MODULE", "welfare_monitor")
+    runner = _runner(study_dir, script)
+    record = _run(runner)
+    assert record["outcome"] == "failed:supervisor"
+    assert record["supervisor_escalation"]["module"] == "welfare_monitor"
+    status = runner.status()
+    assert "Welfare monitor lost: the welfare monitor stopped watching" in status
+    assert "snap-final" in status
 
 
 def test_a_retry_after_an_escalation_is_not_failed_supervisor_once_cleared(

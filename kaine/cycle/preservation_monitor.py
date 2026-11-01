@@ -575,6 +575,11 @@ class _BaseSafetyMonitor(abc.ABC):
         self._poll_interval_s = float(poll_interval_s)
         self._clock = clock
         self.poll_index = 0
+        # Liveness of the poll loop, read by the cycle's run loop: consecutive
+        # polls that raised, and the clock time of the last poll that returned.
+        self.poll_failures = 0
+        self.loop_started_at: float | None = None
+        self.last_poll_ok_at: float | None = None
 
     def _run_id(self) -> str | None:
         ctx = get_run_context()
@@ -611,22 +616,40 @@ class _BaseSafetyMonitor(abc.ABC):
         """Run one monitor poll. Subclasses implement the detection/action."""
         ...
 
+    #: Consecutive raising polls before the loop can count as failing.
+    POLL_FAILURES_TO_ESCALATE = 3
+
+    def poll_loop_failing(self, bound_s: float) -> bool:
+        """True when the poll loop keeps raising: at least
+        ``POLL_FAILURES_TO_ESCALATE`` polls in a row raised and no poll has
+        returned for ``bound_s`` of this monitor's clock."""
+        if self.poll_failures < self.POLL_FAILURES_TO_ESCALATE:
+            return False
+        since = self.last_poll_ok_at if self.last_poll_ok_at is not None else self.loop_started_at
+        if since is None:
+            return False
+        return self._clock() - since >= float(bound_s)
+
     async def run(self, stop_event: asyncio.Event) -> None:
         try:
             await self._incident_log.start()
         except Exception:
             log.warning("%s incident log failed to start", self.source, exc_info=True)
+        self.loop_started_at = self._clock()
         try:
             while not stop_event.is_set():
                 try:
                     await self._poll_once(stop_event)
                 except Exception:
                     # A safety monitor must not die silently; log loudly and keep
-                    # going (unlike the supervisor it does not halt the run on its own error
-                    # — losing the monitor must not also stop preservation, but a
-                    # crash here means the net is degraded and the operator log
-                    # carries it).
+                    # going. A poll loop that keeps raising is seen by
+                    # poll_loop_failing(), and the cycle's run loop escalates
+                    # it in research and unattended mode.
+                    self.poll_failures += 1
                     log.error("%s poll crashed; continuing", self.source, exc_info=True)
+                else:
+                    self.poll_failures = 0
+                    self.last_poll_ok_at = self._clock()
                 try:
                     await asyncio.wait_for(
                         stop_event.wait(), timeout=self._poll_interval_s

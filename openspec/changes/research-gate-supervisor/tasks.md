@@ -12,6 +12,8 @@
 - [x] 3.1 Both sites in `kaine/cycle/__main__.py` apply in research mode: `_run_until_stopped` (task never started or ended early) and the supervisor's `escalate_on_crash` argument. Tests: a research-mode cycle whose supervisor task raises escalates, preserves, shuts down and sends a caretaker notice; a research-mode supervisor whose `_poll_once` raises writes a final snapshot and `escalation.json` before the halt; an operator-present cycle does neither.
 - [x] 3.2 Mutation check: restoring `escalate_on_crash=(ctx.supervision_mode == "unattended")` makes the poll-loop test fail.
 
+- [x] 3.3 The welfare monitor is watched too: `_run_until_stopped` escalates through `Supervisor.escalate_welfare_monitor_lost` (module `welfare_monitor`) when the welfare response is enabled and its monitor was never built or started, its task ended, or its poll loop keeps raising (`poll_loop_failing`: three raising polls in a row and none returned for `distress_duration_s`); the caretaker gets `supervision_lost`; `status` names a lost welfare monitor. Tests in `tests/test_welfare_monitor_liveness.py` (each case, the real monitor's run loop, a monitor that ended the run itself, operator-present mode) and `tests/test_ignition_study_runner.py`.
+
 ## 4. Development run
 
 - [x] 4.1 `build_overlay` enables the supervisor and its incident log with a step-relative path. Extend the merged-config test from `study-overlay-individuation` to assert every config-level gate requirement for every step kind.
