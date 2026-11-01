@@ -327,7 +327,10 @@ class Affect(BaseModule):
         # reports made during a rest (``awake`` false, the forward model suspended)
         # are left out, so its full span is awake learning time (paper A.7).
         self._hearing_window: WindowedProgress | None = None
-        self._hearing_awake_s = 0.0
+        # Entity seconds left out of audition's awake time: gaps that begin or end
+        # with a report made during a rest. Awake time is the entity time less these,
+        # so without rests the bins fall exactly where the entity-clock bins do.
+        self._hearing_asleep_s = 0.0
         self._hearing_last_at: float | None = None
         self._hearing_last_awake = False
         self._perception_streams = [self._vision_stream, self._audition_emotion_stream]
@@ -474,22 +477,23 @@ class Affect(BaseModule):
         return window.value(now)
 
     def _hearing_awake_now(self) -> float:
-        """Audition's awake seconds so far: time between consecutive awake reports."""
-        if self._hearing_last_at is not None and self._hearing_last_awake:
-            return self._hearing_awake_s + max(0.0, self._clock() - self._hearing_last_at)
-        return self._hearing_awake_s
+        """Audition's awake time now: the entity time less the time left out for rests."""
+        if self._hearing_last_at is not None and not self._hearing_last_awake:
+            return self._hearing_last_at - self._hearing_asleep_s  # standing still since a rest report
+        return self._clock() - self._hearing_asleep_s
 
     def _record_hearing_report(self, now: float, error: float, awake: bool) -> None:
         """Bin an audition report for the hearing-stage reading when it was made awake."""
-        if self._hearing_last_at is not None and self._hearing_last_awake and awake:
-            self._hearing_awake_s += max(0.0, now - self._hearing_last_at)
+        last = self._hearing_last_at
+        if last is not None and not (self._hearing_last_awake and awake):
+            self._hearing_asleep_s += max(0.0, now - last)
         self._hearing_last_at = now
         self._hearing_last_awake = awake
         if not awake:
             return
         if self._hearing_window is None:
             self._hearing_window = WindowedProgress(self._lp_bin_s, self._lp_max_bins)
-        self._hearing_window.add(self._hearing_awake_s, error)
+        self._hearing_window.add(now - self._hearing_asleep_s, error)
 
     def _progress(self) -> tuple[float, float]:
         """Return (learning_progress, signed_progress).
@@ -1968,16 +1972,16 @@ class Affect(BaseModule):
                 if window is not None:
                     self._lp_windows[source] = window
 
-        # Audition's awake clock restarts at 0 with the process; the bins keep their
-        # completed history and the current bin's elapsed time.
-        self._hearing_awake_s = 0.0
+        # Audition's awake clock restarts with the process at the entity time; the bins
+        # keep their completed history and the current bin's elapsed time.
+        self._hearing_asleep_s = 0.0
         self._hearing_last_at = None
         self._hearing_last_awake = False
         self._hearing_window = WindowedProgress.from_dict(
             state.get("hearing_stage_bins"),
             bin_s=self._lp_bin_s,
             max_bins=self._lp_max_bins,
-            t=0.0,
+            t=self._clock(),
         )
 
         raw_wellness_means = state.get("wellness_means")
