@@ -36,7 +36,7 @@ The episodic memory module SHALL keep a member's whole payload in the trace text
 - **THEN** the stored trace text holds that payload after `strip_vectors`
 
 ### Requirement: The playlist media file name is not stored
-The episodic memory module SHALL drop, at any depth, `item` from `vision.report` and `audition.perception` members and `faithful_rendering` from `internal_speech` and `external_speech` members, and keep the rest of their payloads. The rule SHALL live in the store's own declaration and change neither `INTERNAL_EVENT_TYPES` nor the language module's rendering.
+The episodic memory module SHALL drop, at any depth, every field in `MEDIA_METADATA_FIELDS` (`kaine/faithful/media_metadata.py`: `item`, the playlist media file name) from every declared member, and `faithful_rendering` from `internal_speech` and `external_speech` members, and keep the rest of their payloads. Neither rule SHALL change `INTERNAL_EVENT_TYPES`.
 
 #### Scenario: A film's file name is not stored
 - **WHEN** a coalition holds a `vision.report` with `item` "episode-01.mkv" and `item_order` 1

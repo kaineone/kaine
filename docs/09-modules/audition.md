@@ -105,7 +105,7 @@ All events are published to the `audition.out` stream.
 
 `source_label` is `"microphone"` for direct `process_audio()` calls and `"live_mic"` for utterances from the physical microphone; for a deterministic feed it is the feed mode's name. Emotion `category` is one of `neutral`, `happy`, `sad`, `angry`, `surprised`, `fearful`, `disgusted`, and `scores` carries the full seven-class distribution.
 
-`audition.perception` is content-free: it carries numeric descriptors and the encoder's identity string, never audio or the embedding.
+`audition.perception` is content-free: it carries numeric descriptors and the encoder's identity string, never audio or the embedding. `item`, the playlist media file name, is on the bus for the operator only: no rendering of the organ's notes, no intent-log field and no episodic trace holds it (`kaine/faithful/media_metadata.py`).
 
 ## Sleep
 

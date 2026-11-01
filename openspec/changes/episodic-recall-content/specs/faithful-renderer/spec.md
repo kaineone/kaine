@@ -35,3 +35,18 @@ A felt replay line for a trace with `members` SHALL read "As I rest, I go over a
 #### Scenario: Replay of a trace with an own thought
 - **WHEN** a replayed trace's accessed member is a language thought with text "the light keeps changing"
 - **THEN** the replay line contains "As I rest, I go over a memory:" and "the light keeps changing"
+
+### Requirement: No rendering writes the playlist media file name
+`FaithfulRenderer.render_event`, `redact_heard_speech` and `fallback_template` SHALL remove every field in `MEDIA_METADATA_FIELDS` (`kaine/faithful/media_metadata.py`) at any depth before any template or fallback reads the payload, for the numeric and the felt templates. `audition.perception` SHALL have a numeric template. No organ prompt, intent-log record or voice-alignment pair SHALL hold a media file name, in either awareness rendering.
+
+#### Scenario: The numeric rendering of a heard sound
+- **WHEN** an `audition.perception` with change 0.31, prediction error 0.052, encoder `dasheng-base` and `item` "episode-01.mkv" is rendered numerically
+- **THEN** the line is "Audition via dasheng-base reports change 0.31, prediction error 0.052." and holds no "episode-01"
+
+#### Scenario: A type without a template
+- **WHEN** the fallback renders a payload holding `item` "episode-01.mkv" and `x` 1
+- **THEN** the line holds `x=1` and no "episode-01"
+
+#### Scenario: The intent log and the training pairs
+- **WHEN** the language module answers an intent over a coalition whose vision and audition reports carry `item`, in the felt and in the numeric rendering
+- **THEN** the organ's prompt, the intent-log record and every voice-alignment pair built from it hold no file name
