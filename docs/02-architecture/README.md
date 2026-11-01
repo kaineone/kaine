@@ -297,6 +297,7 @@ Core runtime must run with the sidecar absent, so nothing under `kaine/` imports
 | Affect | Average dimensional baseline; max drives; union goals; concatenate emotional history |
 | Social cognition | Sum interaction counts; average emotion histograms, behavioural summaries and reliability weighted by interaction count; earliest `first_seen`, latest `last_seen` |
 | World model | World-model weights travel in the snapshot; the merge refuses to choose between two world models unless `world_model_from` is given |
+| Learned module weights | Vision, audition, interoception, sequence and planning declare a weight group (`MODULE_WEIGHT_GROUPS`); each group is taken whole from one parent, and two differing groups need `module_weights_from` |
 | All others | `UnionMergeStrategy` (last-write-wins union for scalars, recursive for dicts, deduplicated lists) |
 
 LoRA adapter merging is set by `adapter_merger`: `"auto"` (the default) uses PEFT TIES/DARE merging (`kaine/lifecycle/adapter_merge.py`, with a capability-loss veto) when the `[training]` extra is installed and falls back to `"fake"` (which unions the parent adapter paths) otherwise. `"ties_dare"` and `"fake"` force one or the other.

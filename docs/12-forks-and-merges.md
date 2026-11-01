@@ -52,13 +52,48 @@ Module shedding lets KAINE degrade gracefully under resource constraints: forkin
 
 `ForkManager.restore(snapshot_id, registry)` loads a snapshot, calls `module.deserialize(state)` on each module present in the snapshot, and then installs each module's artifacts from `<snapshot root>/<id>/artifacts/<module>/` into the live instance. Modules not present in the snapshot are unchanged. The world model module writes restored weights to its own `checkpoint_path` and logs a warning that a fresh world-model start is beginning when the snapshot carries no world-model weights. Symlinked artifact directories are never followed.
 
-### merge(snapshot_a_id, snapshot_b_id, world_model_from=None)
+A processor refuses a forward-model state whose structure differs from its running model before copying any of it. Vision and audition check the number of layers against the network's linear layers and every layer's weight and bias shapes; interoception's readout and sequence's prediction head check their weight and bias shapes; the self-rhythm checks its per-unit arrays against its population size. A refused state is discarded with a warning naming the module and the mismatch, that model re-learns from scratch, and the rest of the module's restored state is kept.
 
-`ForkManager.merge(snapshot_a_id, snapshot_b_id, world_model_from=None)` loads both snapshots, applies a per-module merge strategy, merges any adapters, and saves a new `ForkSnapshot` with `parent_id = "<a_id>+<b_id>"`. It records each module's artifact source in `metadata["artifact_sources"]`. For non-world-model modules, when both parents have artifacts, the merged snapshot always takes parent A's copy.
+### merge(snapshot_a_id, snapshot_b_id, world_model_from=None, module_weights_from=None)
 
-If both parents carry a world model, `merge()` requires `world_model_from="a"` or `world_model_from="b"` to name which parent's world model continues; two independently trained world models cannot be averaged. If the parameter is missing, `merge()` raises `WorldModelChoiceRequiredError` (a `ValueError`). The dashboard `POST …/merges` endpoint validates `world_model_from` as `Literal["a", "b"] | None`, so an invalid value returns HTTP 422 before `merge()` runs. The dashboard returns HTTP 409 only for `WorldModelChoiceRequiredError` and `UnmergedAdaptersError`. If only one parent has a world model, that parent's copy is used automatically.
+`ForkManager.merge(snapshot_a_id, snapshot_b_id, world_model_from=None, module_weights_from=None)` loads both snapshots, applies a per-module merge strategy, merges any adapters, and saves a new `ForkSnapshot` with `parent_id = "<a_id>+<b_id>"`. It records each module's artifact source in `metadata["artifact_sources"]`. For non-world-model modules, when both parents have artifacts, the merged snapshot always takes parent A's copy.
 
-If a module's merge strategy raises, the merge falls back to keeping state A for that module.
+If both parents carry a world model, `merge()` requires `world_model_from="a"` or `world_model_from="b"` to name which parent's world model continues; two independently trained world models cannot be averaged. If the parameter is missing, `merge()` raises `WorldModelChoiceRequiredError` (a `ValueError`). The dashboard `POST …/merges` endpoint validates `world_model_from` as `Literal["a", "b"] | None`, so an invalid value returns HTTP 422 before `merge()` runs. The dashboard returns HTTP 409 for `WorldModelChoiceRequiredError`, `ModuleWeightsChoiceRequiredError`, `ModuleMergeStrategyError` and `UnmergedAdaptersError`. If only one parent has a world model, that parent's copy is used automatically.
+
+#### Learned module weights
+
+The processors' forward models and the planning module's learned transition prior are learned weights, and they follow the same rule as the world model: they are never combined, and a merge takes them from one parent by an explicit choice. `MODULE_WEIGHT_GROUPS` in `kaine/lifecycle/strategies.py` declares, per module, the keys of its serialized state that hold learned parameters together with the seeds, layouts and encoder ids they were trained against:
+
+| Module | Weight group |
+|--------|--------------|
+| `vision` | `forward_model`, `encoder_model_id` |
+| `audition` | `forward_model`, `forward_model_features`, `acoustic_forward_models` |
+| `interoception` | `forward_model`, `reservoir_seed`, `feature_layout`, `expected_error`, `self_rhythm` |
+| `sequence` | `pred_head`, `reservoir_seed`, `featurizer_layout` |
+| `planning` | `learned` |
+
+For each such module, merge takes the group whole from one parent:
+
+- a group that is equal in both parents (for example, two forks of one snapshot that have not trained since) is copied without a choice;
+- a group held by one parent only is copied from that parent;
+- otherwise `module_weights_from` names the parent: `"a"` or `"b"` for every module that needs a choice, or a mapping such as `{"vision": "a", "interoception": "b"}` that names each of them. Without a sufficient choice merge raises `ModuleWeightsChoiceRequiredError` (a `ValueError`) naming the modules, and writes no snapshot. A mapping that names a module without a weight group, or a parent other than `"a"` or `"b"`, raises `ValueError`.
+
+The group's keys are removed from both parents' states before the module's strategy runs, so the strategy only merges the rest, and the chosen group is set on the result afterwards. `metadata["module_weights_from"]` records, per module with a group, the parent it came from and why: `{"vision": {"from": "b", "reason": "chosen"}, "interoception": {"from": "a", "reason": "equal"}}` (reasons `chosen`, `equal`, `one-sided`).
+
+If the merge strategy of a module with a weight group raises, merge raises `ModuleMergeStrategyError` naming the module and writes no snapshot; it never takes either parent's state in its place. For any other module, a strategy that raises makes the merge keep state A for that module.
+
+`tests/test_fork_merge_module_weights.py` pins the inventory and fails when a stock module serializes a weight-like list (a list of numeric lists, or a list of 16 or more numbers) outside its weight group and outside the reviewed non-weight keys.
+
+#### Snapshots merged by the union of weights
+
+A merge made without weight groups concatenated the parents' weight lists: a vision or audition forward model with more layers than its network, an interoception readout or sequence head with more rows than its feature dimension. A fork of such a snapshot inherits the same state. `tools/maintainer/check_merged_weights.py` lists every snapshot under the fork root whose module states hold such a group, with the reason:
+
+```bash
+python tools/maintainer/check_merged_weights.py               # [lifecycle].snapshots_path
+python tools/maintainer/check_merged_weights.py --fork-root state/forks
+```
+
+It decrypts with the configured state key and only reads; it never writes, moves or deletes a snapshot. It exits 0 when nothing is listed, 1 when a snapshot is listed and 2 when the key or a snapshot could not be read. Restoring a listed snapshot discards the concatenated forward models (the restore guards above), so the processors re-learn them; what to do with a listed snapshot is the operator's choice.
 
 If both parents carry trained LoRA adapters and no real adapter merger is available, or if a real merge ran but its merged adapter failed the checks or the PEFT backend failed, `merge()` raises `UnmergedAdaptersError` and writes no snapshot, rather than saving one that claims to be merged while its adapter weights were never combined. Callers who deliberately want to keep the parents' adapters uncombined must pass `allow_unmerged_adapters=True` explicitly; the snapshot metadata then records why.
 
@@ -274,7 +309,8 @@ For the full config schema, see [Lifecycle, evaluation and research](appendix-a-
 |------|------|
 | [`kaine/lifecycle/manager.py`](../kaine/lifecycle/manager.py) | `ForkManager`: snapshot, restore, fork, merge |
 | [`kaine/lifecycle/snapshot.py`](../kaine/lifecycle/snapshot.py) | `ForkSnapshot` dataclass and JSON persistence |
-| [`kaine/lifecycle/strategies.py`](../kaine/lifecycle/strategies.py) | Merge strategies and `default_strategies()` |
+| [`kaine/lifecycle/strategies.py`](../kaine/lifecycle/strategies.py) | Merge strategies, `default_strategies()` and `MODULE_WEIGHT_GROUPS` |
+| [`tools/maintainer/check_merged_weights.py`](../tools/maintainer/check_merged_weights.py) | Read-only listing of snapshots holding concatenated weight groups |
 | [`kaine/lifecycle/adapter_merge.py`](../kaine/lifecycle/adapter_merge.py) | `TiesDareAdapterMerger` and `TiesDareMergeConfig` |
 | [`kaine/lifecycle/timing_profile.py`](../kaine/lifecycle/timing_profile.py) | Parse and validate `metadata["timing"]` |
 | [`kaine/cycle/fork_timing.py`](../kaine/cycle/fork_timing.py) | Apply a parsed timing profile to the clock/cycle |

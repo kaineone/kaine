@@ -19,6 +19,8 @@ from kaine.dashboard.bridge import BusBridge, event_to_sse_payload
 from kaine.dashboard.health import HealthProber
 from kaine.lifecycle.manager import (
     ForkManager,
+    ModuleMergeStrategyError,
+    ModuleWeightsChoiceRequiredError,
     UnmergedAdaptersError,
     WorldModelChoiceRequiredError,
 )
@@ -75,6 +77,10 @@ class MergeRequestBody(BaseModel):
     label: str = ""
     allow_unmerged_adapters: bool = False
     world_model_from: Literal["a", "b"] | None = None
+    # Which parent's learned module weights continue when the parents' differ
+    # (ForkManager.merge module_weights_from); the form sends 'a' or 'b' or
+    # leaves it out.
+    module_weights_from: Literal["a", "b"] | None = None
 
 
 class RateControlBody(BaseModel):
@@ -402,6 +408,7 @@ def build_diagnostics_router(
                 label=body.label,
                 allow_unmerged_adapters=body.allow_unmerged_adapters,
                 world_model_from=body.world_model_from,
+                module_weights_from=body.module_weights_from,
             )
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc))
@@ -411,6 +418,11 @@ def build_diagnostics_router(
             # (install [lifecycle.adapter_merge] or pass allow_unmerged_adapters).
             raise HTTPException(409, str(exc))
         except WorldModelChoiceRequiredError as exc:
+            raise HTTPException(409, str(exc))
+        except ModuleWeightsChoiceRequiredError as exc:
+            # The detail names the modules whose weights differ.
+            raise HTTPException(409, str(exc))
+        except ModuleMergeStrategyError as exc:
             raise HTTPException(409, str(exc))
         return {"id": snap.id, "parent_id": snap.parent_id, "label": snap.label}
 

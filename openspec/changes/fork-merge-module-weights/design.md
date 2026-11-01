@@ -36,8 +36,11 @@ When a strategy raises, merge logs it and takes parent a's state (`manager.py:40
 |---|---|
 | `vision` | `forward_model`, `encoder_model_id` |
 | `audition` | `forward_model`, `forward_model_features`, `acoustic_forward_models` |
-| `interoception` | `forward_model`, `reservoir_seed`, `feature_layout`, `expected_error` |
+| `interoception` | `forward_model`, `reservoir_seed`, `feature_layout`, `expected_error`, `self_rhythm` |
 | `sequence` | `pred_head`, `reservoir_seed`, `featurizer_layout` |
+| `planning` | `learned` |
+
+Task 1.1 extended the starting inventory by two keys. Interoception's `self_rhythm` holds the self-rhythm oscillator's plastic time constant (`ln_tau`) with the per-unit arrays (`mem`, `weights`) and RNG state it evolved with; the union merge concatenated those arrays to twice the population. Planning's `learned` holds the learned transition prior (`pB`) and the belief carried with it; its specialised strategy picked a parent by posterior certainty, an automatic choice of learned parameters, which the identity rule does not allow. The remaining specialised strategies (episodic memory, self-model, affect, social cognition) merge records, counts and statistics, not learned parameters.
 
 Task 1.1 confirms it by reading every stock module's `serialize` and `deserialize`, including modules with a specialised strategy (affect, planning, self-model, social cognition, episodic memory), and the content code's head blocks when `workspace-content-code` lands. `buffer_summary` is not in a group: it is content-free (change `latent-content-privacy`) and nothing reads it.
 

@@ -114,3 +114,80 @@ async def test_diagnostics_page_renders_world_model_choice():
             assert 'value=""' in html
             assert 'value="a"' in html
             assert 'value="b"' in html
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_page_renders_module_weights_choice():
+    client, app = await _make_client()
+    async with app.router.lifespan_context(app):
+        async with client:
+            response = await client.get(
+                "/diagnostics/",
+                headers={"Authorization": "Bearer test-token"},
+            )
+            assert response.status_code == 200
+            html = response.text
+            assert '<label for="merge-module-weights">module weights from</label>' in html
+            start = html.index('<select id="merge-module-weights">')
+            select = html[start : html.index("</select>", start)]
+            for value in ('value=""', 'value="a"', 'value="b"'):
+                assert value in select
+
+
+def _vision_snapshots(mgr: ForkManager) -> tuple[str, str]:
+    from unittest.mock import MagicMock
+
+    from kaine.bus.client import AsyncBus
+    from kaine.modules.context import CONTEXT_DIM
+    from kaine.modules.vision.forward import LatentForwardModel
+    from kaine.modules.vision.module import Vision
+
+    class _Encoder:
+        model_id = "test/encoder"
+        latent_dim = 4
+        clip_len = 1
+
+    class _Registry:
+        def __init__(self, module):
+            self._module = module
+
+        def all_modules(self):
+            return iter([self._module])
+
+    ids = []
+    for seed in (1, 2):
+        vision = Vision(MagicMock(spec=AsyncBus), encoder=_Encoder(), forward_prediction=True)
+        vision._forward_model = LatentForwardModel(
+            latent_dim=4, units=3, seed=seed, context_dim=CONTEXT_DIM
+        )
+        ids.append(mgr.snapshot(_Registry(vision)).id)
+    return ids[0], ids[1]
+
+
+@pytest.mark.asyncio
+async def test_merge_api_refuses_differing_module_weights_naming_the_module(tmp_path):
+    mgr = ForkManager(tmp_path / "forks")
+    a, b = _vision_snapshots(mgr)
+    client, app = await _make_client(fork_manager=mgr)
+    async with app.router.lifespan_context(app):
+        async with client:
+            response = await client.post(
+                "/diagnostics/merges",
+                json={"snapshot_a_id": a, "snapshot_b_id": b},
+                headers={"Authorization": "Bearer test-token", "Origin": "http://test"},
+            )
+            assert response.status_code == 409, response.text
+            assert "vision" in response.json()["detail"]
+            assert len(mgr.list_snapshots()) == 2
+
+            response = await client.post(
+                "/diagnostics/merges",
+                json={"snapshot_a_id": a, "snapshot_b_id": b, "module_weights_from": "b"},
+                headers={"Authorization": "Bearer test-token", "Origin": "http://test"},
+            )
+            assert response.status_code == 200, response.text
+            merged = mgr.load(response.json()["id"])
+            assert merged.metadata["module_weights_from"]["vision"] == {
+                "from": "b",
+                "reason": "chosen",
+            }

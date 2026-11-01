@@ -273,11 +273,12 @@ POST /diagnostics/merges
   "snapshot_a_id": "...",
   "snapshot_b_id": "...",
   "world_model_from": "a"|"b",
+  "module_weights_from": "a"|"b",
   "allow_unmerged_adapters": true|false
 }
 ```
 
-If both parents carry a world model and no `world_model_from` is given, the API returns `409`. It also returns `409`, with the reason, when the adapter merge is refused: no real merger is available for two parents that carry adapters, or the merged adapter failed its capability or abliteration checks. Merges run in a worker thread, so a long check does not stall the dashboard. The dashboard's merge form has a "world model from" choice (none, A or B) that sets `world_model_from`, and when a merge is refused it shows the status and the server's reason. `allow_unmerged_adapters` is available only through the API, so keeping uncombined adapter weights is always a deliberate call. A fork request can also carry a timing profile (for example a `time_scale` for the fork).
+If both parents carry a world model and no `world_model_from` is given, the API returns `409`. It returns `409` too when the parents' learned module weights differ and no `module_weights_from` is given; the detail names the modules (see [Forks and merges](12-forks-and-merges.md#learned-module-weights)). It also returns `409`, with the reason, when the adapter merge is refused: no real merger is available for two parents that carry adapters, or the merged adapter failed its capability or abliteration checks. Merges run in a worker thread, so a long check does not stall the dashboard. The dashboard's merge form has a "world model from" choice (none, A or B) that sets `world_model_from` and a "module weights from" choice (none, A or B) that sets `module_weights_from`, and when a merge is refused it shows the status and the server's reason. `allow_unmerged_adapters` is available only through the API, so keeping uncombined adapter weights is always a deliberate call. A fork request can also carry a timing profile (for example a `time_scale` for the fork).
 
 See [Forks and merges](12-forks-and-merges.md) for the lifecycle semantics.
 
