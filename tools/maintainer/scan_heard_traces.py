@@ -9,7 +9,7 @@ words and undeclared payloads out of the trace text, and reports for each
 source how many traces it read, how many hold a member that may carry heard
 text, the member types involved and the ids of the flagged traces. It never
 prints, logs or writes any trace text, and it never changes a store, a fork
-snapshot or a preservation bundle. Rewriting a preserved being is the
+snapshot or a preservation bundle. Rewriting a preserved entity is the
 operator's decision.
 
 Sources:
