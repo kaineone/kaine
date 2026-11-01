@@ -13,8 +13,8 @@ from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.faithful.episodic_own_content import allowlisted_payload, declared_payload
-from kaine.faithful.external_input import INTERNAL_EVENT_TYPES, is_heard_event
+from kaine.faithful.episodic_own_content import EPISODIC_OWN_CONTENT, own_content_payload
+from kaine.faithful.external_input import is_heard_event
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -662,13 +662,11 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
         if is_heard_event(event):
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
             continue
-        if (event.source, event.type) in INTERNAL_EVENT_TYPES:
-            kept = declared_payload(event.source, event.type, event.payload)
-            pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
-            continue
-        kept = allowlisted_payload(event.source, event.type, event.payload)
-        if kept is None:
+        if (event.source, event.type) not in EPISODIC_OWN_CONTENT:
             pieces.append(f"{event.source}:{event.type}={UNCLASSIFIED_OMITTED_MARKER}")
             continue
+        # A declared pair keeps its payload less the dropped fields; an audited
+        # pair keeps only its allowlisted fields (kaine.faithful.episodic_own_content).
+        kept = own_content_payload(event.source, event.type, event.payload)
         pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
     return " | ".join(pieces) if pieces else ""

@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
+__all__ = ["MEDIA_METADATA_FIELDS", "without_media_metadata"]
+
 MEDIA_METADATA_FIELDS: frozenset[str] = frozenset({"item"})
 
 

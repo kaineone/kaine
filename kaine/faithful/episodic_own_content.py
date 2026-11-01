@@ -37,6 +37,48 @@ from typing import Any, Mapping
 from kaine.faithful.external_input import INTERNAL_EVENT_TYPES
 from kaine.faithful.media_metadata import MEDIA_METADATA_FIELDS, without_media_metadata
 
+__all__ = [
+    "AUDITION_CHANNEL",
+    "AUDITION_CHANNELS",
+    "AnyOf",
+    "EFFECTOR_NAMES",
+    "EMBODIMENT_CHANNELS",
+    "EMOTIONS",
+    "EPISODIC_DECLARED_FIELD_DENYLISTS",
+    "EPISODIC_FIELD_ALLOWLISTS",
+    "EPISODIC_OWN_CONTENT",
+    "FieldRule",
+    "Flag",
+    "INTENT_ORIGINS",
+    "INTEROCEPTION_ACTIONS",
+    "ListOf",
+    "LOCI",
+    "LOCUS_DENIAL_REASONS",
+    "MEMORY_COLLECTIONS",
+    "MEMORY_ID",
+    "MODULE_SOURCE",
+    "MODULE_SOURCES",
+    "MapOf",
+    "Matches",
+    "Number",
+    "OneOf",
+    "PLANNING_ACTIONS",
+    "PLANNING_POSITIONAL_LABEL",
+    "PLANNING_STATE_LABELS",
+    "PROPOSAL_KINDS",
+    "SOCIAL_AGENT",
+    "TOKEN",
+    "VOCAL_BACKENDS",
+    "VOCAL_PROSODY",
+    "WORLD_MODEL_BACKENDS",
+    "WORLD_MODEL_ENCODER_VERSIONS",
+    "WORLD_MODEL_ENGINES",
+    "allowlisted_payload",
+    "declared_fields_dropped",
+    "declared_payload",
+    "own_content_payload",
+]
+
 
 class FieldRule:
     """Decides whether one field value may be stored."""
@@ -496,3 +538,20 @@ def declared_payload(source: str, type_: str, payload: Any) -> Any:
     return without_media_metadata(
         payload, EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
     )
+
+
+def own_content_payload(source: str, type_: str, payload: Any) -> Any:
+    """The payload the episodic store keeps for a member that is not heard,
+    raw-perceptual or a replay, or ``None`` when ``(source, type_)`` is not in
+    ``EPISODIC_OWN_CONTENT``.
+
+    A declared pair (``INTERNAL_EVENT_TYPES``) keeps its payload without the
+    dropped fields (``declared_payload``); an audited pair keeps only its
+    allowlisted fields (``allowlisted_payload``). The caller strips vectors.
+    """
+    pair = (source, type_)
+    if pair not in EPISODIC_OWN_CONTENT:
+        return None
+    if pair in INTERNAL_EVENT_TYPES:
+        return declared_payload(source, type_, payload)
+    return allowlisted_payload(source, type_, payload)

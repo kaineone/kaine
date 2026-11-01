@@ -533,6 +533,7 @@ def test_allowlisted_numeric_lists_are_short_or_reviewed():
 
 def test_strip_vectors_runs_on_the_allowlist_branch(monkeypatch):
     """A rule that would admit a vector still cannot put one in a trace."""
+    import kaine.modules.episodic_memory.module as episodic_module
     from kaine.faithful.episodic_own_content import ListOf, Number
 
     pair = ("planning", "planning.vectorish")
@@ -541,6 +542,9 @@ def test_strip_vectors_runs_on_the_allowlist_branch(monkeypatch):
         pair,
         {"latent": ListOf(Number(), 4096), "scores": ListOf(Number(), 4096), "x": Number()},
     )
+    widened = EPISODIC_OWN_CONTENT | {pair}
+    monkeypatch.setattr(own, "EPISODIC_OWN_CONTENT", widened)
+    monkeypatch.setattr(episodic_module, "EPISODIC_OWN_CONTENT", widened)
     vector = [0.123456 + i for i in range(32)]
     text = _trace(*pair, {"latent": vector, "scores": vector, "x": 1})
     assert text == "active | planning:planning.vectorish={'x': 1}"
@@ -872,3 +876,54 @@ def test_every_field_a_module_fills_from_a_media_title_is_media_metadata():
                 found.add(node.arg)
     assert found == {"item"}
     assert found <= MEDIA_METADATA_FIELDS
+
+
+# --- one source of truth, and the module's public names ---------------------------
+
+
+def test_serializer_membership_is_episodic_own_content(monkeypatch):
+    """The store decides "keep a payload" from EPISODIC_OWN_CONTENT alone."""
+    import kaine.modules.episodic_memory.module as episodic_module
+
+    declared = ("vision", "vision.report")
+    audited = ("planning", "planning.belief")
+    assert _trace(*declared, {"change_score": 0.3}).endswith("{'change_score': 0.3}")
+    monkeypatch.setattr(
+        episodic_module, "EPISODIC_OWN_CONTENT", EPISODIC_OWN_CONTENT - {declared, audited}
+    )
+    assert _trace(*declared, {"change_score": 0.3}) == (
+        f"active | vision:vision.report={UNCLASSIFIED_OMITTED_MARKER}"
+    )
+    assert _trace(*audited, SAFE_SAMPLES[audited]) == (
+        f"active | planning:planning.belief={UNCLASSIFIED_OMITTED_MARKER}"
+    )
+
+
+def test_own_content_payload_routes_declared_and_audited_pairs():
+    from kaine.faithful.episodic_own_content import own_content_payload
+
+    assert own_content_payload("planning", "planning.unknown", {"x": 1}) is None
+    assert own_content_payload("vision", "vision.report", {"x": 1, "item": "F.mkv"}) == {"x": 1}
+    assert own_content_payload("planning", "planning.error", {"elapsed_ms": 1.0, "error_reason": "y"}) == {
+        "elapsed_ms": 1.0
+    }
+
+
+@pytest.mark.parametrize("module_name", ["episodic_own_content", "media_metadata"])
+def test_all_lists_exactly_the_public_names(module_name):
+    import ast
+    import importlib
+
+    mod = importlib.import_module(f"kaine.faithful.{module_name}")
+    public = set()
+    for node in ast.parse(inspect.getsource(mod)).body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            public.add(node.name)
+        elif isinstance(node, ast.Assign):
+            public.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            public.add(node.target.id)
+    public = {name for name in public if not name.startswith("_")}
+    assert set(mod.__all__) == public
+    assert all(hasattr(mod, name) for name in mod.__all__)
+    assert len(mod.__all__) == len(set(mod.__all__))
