@@ -257,6 +257,14 @@ class CompanionRegistry:
         ages = [float(d.max_age_s) for d in self._declarations if d.stream == stream and d.max_age_s is not None]
         return min(ages) if ages else None
 
+    def age_bounds(self) -> dict[str, float]:
+        """Every main stream whose companion stream has an age bound, with it."""
+        out: dict[str, float] = {}
+        for d in self._declarations:
+            if d.max_age_s is not None:
+                out[d.stream] = min(float(d.max_age_s), out.get(d.stream, float(d.max_age_s)))
+        return out
+
     def has_age_bounds(self) -> bool:
         return any(d.max_age_s is not None for d in self._declarations)
 

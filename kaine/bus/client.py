@@ -202,6 +202,11 @@ class _CancellationSafeClient:
         return f"_CancellationSafeClient({self._raw!r})"
 
 
+#: How often the companion sweeper trims age-bounded companion streams, in
+#: seconds: an entry is gone within its bound plus one period even when
+#: nothing else is written to its stream.
+COMPANION_SWEEP_PERIOD_S = 1.0
+
 CYCLE_CLIENT_NAME = "kaine-cycle"  # the cognitive cycle names its bus connections so tools such as decommission can tell whether a cycle is connected
 
 
@@ -232,6 +237,7 @@ class AsyncBus:
         self._companions = companions if companions is not None else CompanionRegistry()
         self._volatile = volatile
         self._companion_errors_logged: set[str] = set()
+        self._companion_sweeper: Optional[asyncio.Task] = None
 
     @property
     def companions(self) -> CompanionRegistry:
@@ -282,6 +288,46 @@ class AsyncBus:
             )
             return dict(main), None
         return dict(main), companion_ref(cstream, entry_id)
+
+    def start_companion_sweeper(
+        self, period_s: float = COMPANION_SWEEP_PERIOD_S
+    ) -> Optional[asyncio.Task]:
+        """Start the periodic exact age trim of every age-bounded companion
+        stream, independent of writes. Returns None, and starts nothing, when no
+        declaration sets an age bound (off means absent) or no volatile
+        instance is attached."""
+        if self._volatile is None or not self._companions.has_age_bounds():
+            return None
+        if self._companion_sweeper is not None and not self._companion_sweeper.done():
+            return self._companion_sweeper
+        self._companion_sweeper = asyncio.create_task(
+            self._companion_sweep_loop(float(period_s)), name="companion-age-sweeper"
+        )
+        return self._companion_sweeper
+
+    async def sweep_companions_once(self) -> None:
+        """Trim, exactly, every entry older than its bound from every
+        age-bounded companion stream, by the volatile instance's clock."""
+        bounds = self._companions.age_bounds()
+        if not bounds or self._volatile is None:
+            return
+        now_ms = await self._volatile.now_ms()
+        for stream, age_s in bounds.items():
+            await self._volatile.trim_older_than(
+                companion_stream(stream), now_ms - int(age_s * 1000)
+            )
+
+    async def _companion_sweep_loop(self, period_s: float) -> None:
+        while True:
+            try:
+                await self.sweep_companions_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._log_companion_error(
+                    "age sweep", f"the age sweep failed ({type(exc).__name__}); retrying"
+                )
+            await asyncio.sleep(period_s)
 
     def _log_companion_error(self, cstream: str, message: str) -> None:
         # Names the stream and the reason only, never a value; once per stream
@@ -776,6 +822,13 @@ class AsyncBus:
         return await self._resolve_dollar("$")
 
     async def close(self) -> None:
+        sweeper = self._companion_sweeper
+        if sweeper is not None and not sweeper.done():
+            sweeper.cancel()
+            try:
+                await sweeper
+            except (asyncio.CancelledError, Exception):
+                pass
         await self._client.aclose()
         if self._volatile is not None:
             try:

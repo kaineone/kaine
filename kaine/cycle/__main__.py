@@ -2108,6 +2108,9 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         await _stop_welfare_producer(ctx.welfare_producer)
         await ctx.bus.close()
         return COMPANION_REFUSED_EXIT
+    # Declared age bounds are enforced by a periodic exact trim as well as on
+    # every write; nothing starts when no producer declares one.
+    ctx.bus.start_companion_sweeper()
 
     # Developmental phase: keep effectors dormant until maturation. The gate_runner will
     # call activate() at maturation before unlocking the locus.

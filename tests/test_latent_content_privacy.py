@@ -1601,3 +1601,47 @@ def test_the_smallest_declared_age_bound_wins():
     assert registry.max_age_s("vision.out") == 30
     assert registry.has_age_bounds()
     assert not CompanionRegistry(declarations=[_decl("vision.out")]).has_age_bounds()
+
+
+@pytest.mark.asyncio
+async def test_sweeper_removes_aged_entries_without_any_write(main_bus):
+    volatile = _attach(main_bus, _decl("vision.out", max_age_s=0.5), _decl("interoception.out"))
+    await main_bus.publish(_vision_event())
+    await main_bus.publish(_ev("interoception", "interoception.report", {"latent": [0.5]}))
+    assert await volatile.client.xlen("vision.out.companion") == 1
+    sweeper = main_bus.start_companion_sweeper(period_s=0.2)
+    assert sweeper is not None
+    assert main_bus.start_companion_sweeper(period_s=0.2) is sweeper  # one sweeper
+    # Gone within the bound plus one sweep period (with a margin), with nothing
+    # written or read in between; the unbounded stream is untouched.
+    await asyncio.sleep(0.5 + 0.2 + 0.5)
+    assert await volatile.client.xlen("vision.out.companion") == 0
+    assert await volatile.client.xlen("interoception.out.companion") == 1
+    await main_bus.close()
+    assert sweeper.done()
+
+
+@pytest.mark.asyncio
+async def test_no_sweeper_without_an_age_bound(main_bus):
+    assert main_bus.start_companion_sweeper() is None  # no volatile instance
+    _attach(main_bus, _decl("vision.out"))
+    assert main_bus.start_companion_sweeper() is None  # no declared bound
+
+
+@pytest.mark.asyncio
+async def test_sweep_trims_exactly(main_bus):
+    volatile = _attach(main_bus, _decl("vision.out", max_age_s=0.3))
+    for _ in range(5):
+        await main_bus.publish(_vision_event())
+    calls = []
+    real = volatile.client.xtrim
+
+    async def xtrim(*a, **k):
+        calls.append(k)
+        return await real(*a, **k)
+
+    volatile.client.xtrim = xtrim
+    await asyncio.sleep(0.4)
+    await main_bus.sweep_companions_once()
+    assert calls and all(k.get("approximate") is False and "minid" in k for k in calls)
+    assert await volatile.client.xlen("vision.out.companion") == 0
