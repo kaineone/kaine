@@ -70,7 +70,8 @@ def summarise(path: str, hearing, lp0: float, span_s: float) -> dict:  # noqa: A
     stages = []
     for k in range(len(bounds) - 1):
         a, b = bounds[k], bounds[k + 1]
-        m = (lt >= a) & (lt < b)
+        # The reading at the step's own second is taken before the restart, so it belongs to the stage before.
+        m = (lt > a) & (lt <= b) if k > 0 else (lt >= a) & (lt <= b)
         vals, aw, ts = lv[m], la[m], lt[m]
         awake_in = awake_mask(ts)
         fin = np.isfinite(vals)
@@ -114,6 +115,9 @@ def summarise(path: str, hearing, lp0: float, span_s: float) -> dict:  # noqa: A
                 rel_f = (aw_i - abounds[k], t_i - a)
                 break
         st["rule_awake_floor_release_awake_s"] = _f(rel_f[0]) if rel_f else None
+        if rel_f:
+            after = (aw - abounds[k] > rel_f[0]) & fin & awake_in
+            st["lp_share_above_lp0_after_floor_release"] = _f(np.mean(vals[after] >= lp0)) if after.any() else None
         am = (alerts >= a) & (alerts < b)
         n_alert_awake = int(np.sum(awake_mask(alerts[am]))) if am.any() else 0
         st["alerts_per_awake_hour"] = _f(n_alert_awake * 3600.0 / max(1.0, abounds[k + 1] - abounds[k]))
@@ -148,6 +152,46 @@ def summarise(path: str, hearing, lp0: float, span_s: float) -> dict:  # noqa: A
     }
 
 
+def _range(values):  # noqa: ANN001
+    vals = [v for v in values if v is not None]
+    return [round(min(vals), 3), round(max(vals), 3)] if vals else None
+
+
+def aggregate(runs: list[dict], *, floor: float) -> dict:
+    """Ranges over seeds, per arm: settled runs per stage, rule runs' dwells, deprivation shares."""
+    out: dict = {"awake_floor_s": floor}
+    for arm in sorted({r["arm"] for r in runs}):
+        fixed = [r for r in runs if r["arm"] == arm and r["schedule"].startswith("fixed")]
+        rule = [r for r in runs if r["arm"] == arm and r["schedule"] == "rule"]
+        settled = {}
+        for k in range(5):
+            sts = [r["stages"][k] for r in fixed if len(r["stages"]) > k]
+            settled[str(k)] = {
+                key: _range(st.get(key) for st in sts)
+                for key in (
+                    "first_full_reading_awake_s", "first_window_rest_share", "lp_max", "lp_share_above_lp0_awake",
+                    "rule_release_awake_s", "rule_release_window_rest_share", "lp_share_above_lp0_after_rule_release",
+                    "rule_awake_floor_release_awake_s", "lp_share_above_lp0_after_floor_release",
+                    "error_rise_first_minute", "alerts_per_awake_hour", "arousal_awake_mean", "arousal_awake_p90",
+                    "boredom_deprivation_share",
+                )
+            }
+        dwells = {str(k): _range(r["stages"][k]["awake_dwell_s"] for r in rule if len(r["stages"]) > k) for k in range(4)}
+        below = sum(1 for r in rule for st in r["stages"][:4] if st["awake_dwell_s"] is not None and st["awake_dwell_s"] < floor)
+        out[arm] = {
+            "settled_by_stage": settled,
+            "rule_stage_awake_dwell_s": dwells,
+            "rule_schedule_complete_awake_s": _range(r["steps_awake_s"][-1] if r["steps_awake_s"] else None for r in rule),
+            "rule_releases_below_awake_floor": f"{below} of {4 * len(rule)}",
+            "boredom_deprivation_share_settled": _range(r["boredom_deprivation_share"] for r in fixed),
+            "boredom_deprivation_share_rule": _range(r["boredom_deprivation_share"] for r in rule),
+            "boredom_uncontrolled_per_awake_hour_settled": _range(r["boredom_uncontrolled_per_awake_hour"] for r in fixed),
+            "broadcasts_per_s": _range(r["broadcasts_per_s"] for r in runs if r["arm"] == arm),
+            "broadcast_inhibited_share": _range(r["broadcast_inhibited_share"] for r in runs if r["arm"] == arm),
+        }
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("rundir")
@@ -162,7 +206,9 @@ def main() -> None:
     lp0 = float(cfg["affect"]["learning_progress_floor"])
     span = float(cfg["affect"]["learning_progress_span_s"])
     runs = [summarise(p, hearing, lp0, span) for p in sorted(glob.glob(str(Path(args.rundir) / "*-live.npz")))]
-    Path(args.out).write_text(json.dumps(runs, indent=1) + "\n")
+    record = {"summary": aggregate(runs, floor=span + hearing.saturation_window_seconds), "runs": runs}
+    Path(args.out).write_text(json.dumps(record, indent=1) + "\n")
+    print(json.dumps(record["summary"], indent=1))
     for r in runs:
         print(f"== {r['file']} awake {r['awake_hours']} h, rests {r['rests']}, broadcasts/s {r['broadcasts_per_s']} "
               f"(inhibited {r['broadcast_inhibited_share']}), boredom deprivation {r['boredom_deprivation_share']}")

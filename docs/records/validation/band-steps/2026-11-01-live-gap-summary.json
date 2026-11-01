@@ -1,0 +1,2170 @@
+{
+ "summary": {
+  "awake_floor_s": 6000.0,
+  "none": {
+   "settled_by_stage": {
+    "0": {
+     "first_full_reading_awake_s": [
+      3991.68,
+      3991.68
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.243,
+      0.264
+     ],
+     "lp_share_above_lp0_awake": [
+      0.087,
+      0.146
+     ],
+     "rule_release_awake_s": [
+      4831.68,
+      5131.68
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.062,
+      0.117
+     ],
+     "rule_awake_floor_release_awake_s": [
+      7021.92,
+      7921.92
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.018,
+      0.053
+     ],
+     "error_rise_first_minute": null,
+     "alerts_per_awake_hour": [
+      31.799,
+      37.799
+     ],
+     "arousal_awake_mean": [
+      0.442,
+      0.445
+     ],
+     "arousal_awake_p90": [
+      0.432,
+      0.444
+     ],
+     "boredom_deprivation_share": [
+      0.787,
+      0.923
+     ]
+    },
+    "1": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.273,
+      0.325
+     ],
+     "lp_share_above_lp0_awake": [
+      0.113,
+      0.16
+     ],
+     "rule_release_awake_s": [
+      5191.2,
+      5611.2
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.051,
+      0.128
+     ],
+     "rule_awake_floor_release_awake_s": [
+      7141.44,
+      7681.44
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.052
+     ],
+     "error_rise_first_minute": [
+      3.536,
+      4.037
+     ],
+     "alerts_per_awake_hour": [
+      15.8,
+      30.399
+     ],
+     "arousal_awake_mean": [
+      0.437,
+      0.442
+     ],
+     "arousal_awake_p90": [
+      0.429,
+      0.446
+     ],
+     "boredom_deprivation_share": [
+      0.769,
+      0.815
+     ]
+    },
+    "2": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.247,
+      0.282
+     ],
+     "lp_share_above_lp0_awake": [
+      0.04,
+      0.123
+     ],
+     "rule_release_awake_s": [
+      4950.24,
+      5490.24
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.013,
+      0.066
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      7380.48
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.016
+     ],
+     "error_rise_first_minute": [
+      4.048,
+      4.139
+     ],
+     "alerts_per_awake_hour": [
+      29.801,
+      42.601
+     ],
+     "arousal_awake_mean": [
+      0.444,
+      0.451
+     ],
+     "arousal_awake_p90": [
+      0.446,
+      0.477
+     ],
+     "boredom_deprivation_share": [
+      0.795,
+      0.829
+     ]
+    },
+    "3": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.204,
+      0.257
+     ],
+     "lp_share_above_lp0_awake": [
+      0.0,
+      0.031
+     ],
+     "rule_release_awake_s": [
+      4590.24,
+      4590.24
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.0,
+      0.033
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      6720.48
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.028
+     ],
+     "error_rise_first_minute": [
+      1.046,
+      2.438
+     ],
+     "alerts_per_awake_hour": [
+      116.803,
+      136.804
+     ],
+     "arousal_awake_mean": [
+      0.473,
+      0.482
+     ],
+     "arousal_awake_p90": [
+      0.603,
+      0.633
+     ],
+     "boredom_deprivation_share": [
+      0.786,
+      0.823
+     ]
+    },
+    "4": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.189,
+      0.224
+     ],
+     "lp_share_above_lp0_awake": [
+      0.0,
+      0.017
+     ],
+     "rule_release_awake_s": [
+      4591.2,
+      4591.2
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.0,
+      0.018
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      6525.6
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.021
+     ],
+     "error_rise_first_minute": [
+      0.773,
+      0.921
+     ],
+     "alerts_per_awake_hour": [
+      107.597,
+      153.996
+     ],
+     "arousal_awake_mean": [
+      0.469,
+      0.487
+     ],
+     "arousal_awake_p90": [
+      0.57,
+      0.654
+     ],
+     "boredom_deprivation_share": [
+      0.723,
+      0.853
+     ]
+    }
+   },
+   "rule_stage_awake_dwell_s": {
+    "0": [
+     4831.68,
+     5131.68
+    ],
+    "1": [
+     5581.44,
+     5881.44
+    ],
+    "2": [
+     5641.44,
+     5881.44
+    ],
+    "3": [
+     4591.2,
+     5041.44
+    ]
+   },
+   "rule_schedule_complete_awake_s": [
+    20945.76,
+    21636.0
+   ],
+   "rule_releases_below_awake_floor": "12 of 12",
+   "boredom_deprivation_share_settled": [
+    0.783,
+    0.825
+   ],
+   "boredom_deprivation_share_rule": [
+    0.793,
+    0.887
+   ],
+   "boredom_uncontrolled_per_awake_hour_settled": [
+    10.48,
+    12.52
+   ],
+   "broadcasts_per_s": [
+    4.697,
+    4.917
+   ],
+   "broadcast_inhibited_share": [
+    0.772,
+    0.841
+   ]
+  },
+  "shipped": {
+   "settled_by_stage": {
+    "0": {
+     "first_full_reading_awake_s": [
+      3991.68,
+      3991.68
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.239,
+      0.269
+     ],
+     "lp_share_above_lp0_awake": [
+      0.087,
+      0.178
+     ],
+     "rule_release_awake_s": [
+      4711.68,
+      5011.68
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.062,
+      0.163
+     ],
+     "rule_awake_floor_release_awake_s": [
+      7201.92,
+      7501.92
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.001,
+      0.08
+     ],
+     "error_rise_first_minute": null,
+     "alerts_per_awake_hour": [
+      49.999,
+      63.398
+     ],
+     "arousal_awake_mean": [
+      0.453,
+      0.459
+     ],
+     "arousal_awake_p90": [
+      0.472,
+      0.511
+     ],
+     "boredom_deprivation_share": [
+      0.798,
+      0.904
+     ]
+    },
+    "1": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.256,
+      0.321
+     ],
+     "lp_share_above_lp0_awake": [
+      0.113,
+      0.15
+     ],
+     "rule_release_awake_s": [
+      4951.2,
+      7021.44
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.003,
+      0.107
+     ],
+     "rule_awake_floor_release_awake_s": [
+      7021.44,
+      7261.44
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.003,
+      0.07
+     ],
+     "error_rise_first_minute": [
+      3.389,
+      3.927
+     ],
+     "alerts_per_awake_hour": [
+      33.199,
+      49.199
+     ],
+     "arousal_awake_mean": [
+      0.446,
+      0.453
+     ],
+     "arousal_awake_p90": [
+      0.45,
+      0.486
+     ],
+     "boredom_deprivation_share": [
+      0.742,
+      0.798
+     ]
+    },
+    "2": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.256,
+      0.269
+     ],
+     "lp_share_above_lp0_awake": [
+      0.027,
+      0.153
+     ],
+     "rule_release_awake_s": [
+      4950.24,
+      5370.24
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.001,
+      0.108
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      7380.48
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.001,
+      0.007
+     ],
+     "error_rise_first_minute": [
+      3.754,
+      4.152
+     ],
+     "alerts_per_awake_hour": [
+      48.001,
+      75.602
+     ],
+     "arousal_awake_mean": [
+      0.456,
+      0.473
+     ],
+     "arousal_awake_p90": [
+      0.508,
+      0.605
+     ],
+     "boredom_deprivation_share": [
+      0.75,
+      0.777
+     ]
+    },
+    "3": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.188,
+      0.246
+     ],
+     "lp_share_above_lp0_awake": [
+      0.0,
+      0.013
+     ],
+     "rule_release_awake_s": [
+      4590.24,
+      4590.24
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.0,
+      0.013
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      6541.44
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.015
+     ],
+     "error_rise_first_minute": [
+      0.898,
+      2.393
+     ],
+     "alerts_per_awake_hour": [
+      152.804,
+      184.405
+     ],
+     "arousal_awake_mean": [
+      0.496,
+      0.507
+     ],
+     "arousal_awake_p90": [
+      0.731,
+      0.767
+     ],
+     "boredom_deprivation_share": [
+      0.713,
+      0.766
+     ]
+    },
+    "4": {
+     "first_full_reading_awake_s": [
+      3991.2,
+      3991.2
+     ],
+     "first_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_max": [
+      0.219,
+      0.245
+     ],
+     "lp_share_above_lp0_awake": [
+      0.0,
+      0.021
+     ],
+     "rule_release_awake_s": [
+      4591.2,
+      4591.2
+     ],
+     "rule_release_window_rest_share": [
+      0.261,
+      0.261
+     ],
+     "lp_share_above_lp0_after_rule_release": [
+      0.0,
+      0.022
+     ],
+     "rule_awake_floor_release_awake_s": [
+      6000.48,
+      6525.6
+     ],
+     "lp_share_above_lp0_after_floor_release": [
+      0.0,
+      0.026
+     ],
+     "error_rise_first_minute": [
+      0.915,
+      1.026
+     ],
+     "alerts_per_awake_hour": [
+      153.596,
+      191.195
+     ],
+     "arousal_awake_mean": [
+      0.493,
+      0.509
+     ],
+     "arousal_awake_p90": [
+      0.703,
+      0.762
+     ],
+     "boredom_deprivation_share": [
+      0.682,
+      0.739
+     ]
+    }
+   },
+   "rule_stage_awake_dwell_s": {
+    "0": [
+     4711.68,
+     5011.68
+    ],
+    "1": [
+     5881.44,
+     6061.44
+    ],
+    "2": [
+     4741.44,
+     5881.44
+    ],
+    "3": [
+     4591.2,
+     5105.28
+    ]
+   },
+   "rule_schedule_complete_awake_s": [
+    20405.76,
+    21579.84
+   ],
+   "rule_releases_below_awake_floor": "11 of 12",
+   "boredom_deprivation_share_settled": [
+    0.766,
+    0.772
+   ],
+   "boredom_deprivation_share_rule": [
+    0.799,
+    0.857
+   ],
+   "boredom_uncontrolled_per_awake_hour_settled": [
+    15.92,
+    16.96
+   ],
+   "broadcasts_per_s": [
+    4.773,
+    5.074
+   ],
+   "broadcast_inhibited_share": [
+    0.752,
+    0.827
+   ]
+  }
+ },
+ "runs": [
+  {
+   "file": "1-none-fixed_18000-live.npz",
+   "seed": 1,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "stimulus_version": null,
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 4.9172,
+   "broadcast_inhibited_share": 0.7747,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.7831,
+   "boredom_uncontrolled_per_awake_hour": 12.5202,
+   "negative_valence_share": 0.025,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2547,
+     "lp_share_above_lp0_awake": 0.1461,
+     "rule_release_awake_s": 5131.68,
+     "rule_release_stimulus_s": 6541.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1171,
+     "rule_awake_floor_release_awake_s": 7921.92,
+     "lp_share_above_lp0_after_floor_release": 0.0179,
+     "alerts_per_awake_hour": 37.799,
+     "arousal_awake_mean": 0.4449,
+     "arousal_awake_p90": 0.4444,
+     "boredom_deprivation_share": 0.7875
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.291,
+     "lp_share_above_lp0_awake": 0.1131,
+     "rule_release_awake_s": 5371.2,
+     "rule_release_stimulus_s": 6781.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0637,
+     "rule_awake_floor_release_awake_s": 7441.44,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 26.3993,
+     "arousal_awake_mean": 0.4398,
+     "arousal_awake_p90": 0.4343,
+     "error_rise_first_minute": 3.8181,
+     "boredom_deprivation_share": 0.8146
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2821,
+     "lp_share_above_lp0_awake": 0.1229,
+     "rule_release_awake_s": 5490.24,
+     "rule_release_stimulus_s": 6900.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0657,
+     "rule_awake_floor_release_awake_s": 7380.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 29.8008,
+     "arousal_awake_mean": 0.4436,
+     "arousal_awake_p90": 0.4457,
+     "error_rise_first_minute": 4.0636,
+     "boredom_deprivation_share": 0.8046
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2038,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 136.8036,
+     "arousal_awake_mean": 0.4818,
+     "arousal_awake_p90": 0.633,
+     "error_rise_first_minute": 1.0459,
+     "boredom_deprivation_share": 0.7865
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2239,
+     "lp_share_above_lp0_awake": 0.0171,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0179,
+     "rule_awake_floor_release_awake_s": 6525.6,
+     "lp_share_above_lp0_after_floor_release": 0.0209,
+     "alerts_per_awake_hour": 153.9959,
+     "arousal_awake_mean": 0.4868,
+     "arousal_awake_p90": 0.6541,
+     "error_rise_first_minute": 0.9211,
+     "boredom_deprivation_share": 0.7225
+    }
+   ]
+  },
+  {
+   "file": "1-none-rule-live.npz",
+   "seed": 1,
+   "arm": "none",
+   "schedule": "rule",
+   "stimulus_version": null,
+   "sim_hours": 10.7512,
+   "awake_hours": 7.4927,
+   "rests": 9,
+   "broadcasts_per_s": 4.7617,
+   "broadcast_inhibited_share": 0.8298,
+   "steps_awake_s": [
+    5131.68,
+    10713.12,
+    16594.56,
+    21636.0
+   ],
+   "boredom_deprivation_share": 0.7933,
+   "boredom_uncontrolled_per_awake_hour": 5.7391,
+   "negative_valence_share": 0.0121,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 5131.68,
+     "stimulus_dwell_s": 6541.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2547,
+     "lp_share_above_lp0_awake": 0.4733,
+     "rule_release_awake_s": 5131.68,
+     "rule_release_stimulus_s": 6541.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 1.403,
+     "arousal_awake_mean": 0.4256,
+     "arousal_awake_p90": 0.4261,
+     "boredom_deprivation_share": 0.662
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 5581.44,
+     "stimulus_dwell_s": 8401.0,
+     "first_full_reading_awake_s": 3859.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2855,
+     "lp_max": 0.2803,
+     "lp_share_above_lp0_awake": 0.651,
+     "rule_release_awake_s": 5581.44,
+     "rule_release_stimulus_s": 8401.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.0,
+     "arousal_awake_mean": 0.4241,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.4539,
+     "boredom_deprivation_share": 0.8291
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 5881.44,
+     "stimulus_dwell_s": 8701.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2692,
+     "lp_share_above_lp0_awake": 0.6822,
+     "rule_release_awake_s": 5881.44,
+     "rule_release_stimulus_s": 8701.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 1.2242,
+     "arousal_awake_mean": 0.4262,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.9191,
+     "boredom_deprivation_share": 0.8465
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 5041.44,
+     "stimulus_dwell_s": 7861.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2123,
+     "lp_share_above_lp0_awake": 0.0524,
+     "rule_release_awake_s": 5041.44,
+     "rule_release_stimulus_s": 7861.0,
+     "rule_release_window_rest_share": 0.3236,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 72.1223,
+     "arousal_awake_mean": 0.4684,
+     "arousal_awake_p90": 0.5734,
+     "error_rise_first_minute": 0.9863,
+     "boredom_deprivation_share": 0.8375
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 5337.6,
+     "stimulus_dwell_s": 7200.32,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1015,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 114.6583,
+     "arousal_awake_mean": 0.4836,
+     "arousal_awake_p90": 0.6655,
+     "error_rise_first_minute": 0.9725,
+     "boredom_deprivation_share": 0.7819
+    }
+   ]
+  },
+  {
+   "file": "1-shipped-fixed_18000-live.npz",
+   "seed": 1,
+   "arm": "shipped",
+   "schedule": "fixed:18000",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 5.0741,
+   "broadcast_inhibited_share": 0.7516,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.7665,
+   "boredom_uncontrolled_per_awake_hour": 16.9603,
+   "negative_valence_share": 0.0275,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.239,
+     "lp_share_above_lp0_awake": 0.1777,
+     "rule_release_awake_s": 4951.68,
+     "rule_release_stimulus_s": 6361.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1632,
+     "rule_awake_floor_release_awake_s": 7501.92,
+     "lp_share_above_lp0_after_floor_release": 0.08,
+     "alerts_per_awake_hour": 63.3983,
+     "arousal_awake_mean": 0.4586,
+     "arousal_awake_p90": 0.5106,
+     "boredom_deprivation_share": 0.8566
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2563,
+     "lp_share_above_lp0_awake": 0.1128,
+     "rule_release_awake_s": 4951.2,
+     "rule_release_stimulus_s": 6361.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0935,
+     "rule_awake_floor_release_awake_s": 7021.44,
+     "lp_share_above_lp0_after_floor_release": 0.0702,
+     "alerts_per_awake_hour": 49.1987,
+     "arousal_awake_mean": 0.4521,
+     "arousal_awake_p90": 0.4861,
+     "error_rise_first_minute": 3.3889,
+     "boredom_deprivation_share": 0.7983
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2569,
+     "lp_share_above_lp0_awake": 0.1531,
+     "rule_release_awake_s": 5370.24,
+     "rule_release_stimulus_s": 6780.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1081,
+     "rule_awake_floor_release_awake_s": 7380.48,
+     "lp_share_above_lp0_after_floor_release": 0.0071,
+     "alerts_per_awake_hour": 48.0013,
+     "arousal_awake_mean": 0.4564,
+     "arousal_awake_p90": 0.5083,
+     "error_rise_first_minute": 3.9942,
+     "boredom_deprivation_share": 0.7774
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1878,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 176.2047,
+     "arousal_awake_mean": 0.5051,
+     "arousal_awake_p90": 0.7388,
+     "error_rise_first_minute": 1.1968,
+     "boredom_deprivation_share": 0.7178
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2344,
+     "lp_share_above_lp0_awake": 0.0214,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0224,
+     "rule_awake_floor_release_awake_s": 6525.6,
+     "lp_share_above_lp0_after_floor_release": 0.0261,
+     "alerts_per_awake_hour": 191.1949,
+     "arousal_awake_mean": 0.5086,
+     "arousal_awake_p90": 0.7624,
+     "error_rise_first_minute": 0.9148,
+     "boredom_deprivation_share": 0.6824
+    }
+   ]
+  },
+  {
+   "file": "1-shipped-rule-live.npz",
+   "seed": 1,
+   "arm": "shipped",
+   "schedule": "rule",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 10.5928,
+   "awake_hours": 7.46,
+   "rests": 8,
+   "broadcasts_per_s": 4.8626,
+   "broadcast_inhibited_share": 0.8064,
+   "steps_awake_s": [
+    4951.68,
+    10833.12,
+    16474.56,
+    21065.76
+   ],
+   "boredom_deprivation_share": 0.7988,
+   "boredom_uncontrolled_per_awake_hour": 8.0433,
+   "negative_valence_share": 0.0114,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 4951.68,
+     "stimulus_dwell_s": 6361.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2366,
+     "lp_share_above_lp0_awake": 0.3746,
+     "rule_release_awake_s": 4951.68,
+     "rule_release_stimulus_s": 6361.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 26.1729,
+     "arousal_awake_mean": 0.4387,
+     "arousal_awake_p90": 0.428,
+     "boredom_deprivation_share": 0.8601
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 5881.44,
+     "stimulus_dwell_s": 8701.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2844,
+     "lp_share_above_lp0_awake": 0.6504,
+     "rule_release_awake_s": 5881.44,
+     "rule_release_stimulus_s": 8701.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 20.1991,
+     "arousal_awake_mean": 0.4365,
+     "arousal_awake_p90": 0.4268,
+     "error_rise_first_minute": 1.4386,
+     "boredom_deprivation_share": 0.7749
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 5641.44,
+     "stimulus_dwell_s": 8461.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2727,
+     "lp_share_above_lp0_awake": 0.636,
+     "rule_release_awake_s": 5641.44,
+     "rule_release_stimulus_s": 8461.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 3.1907,
+     "arousal_awake_mean": 0.4294,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.9173,
+     "boredom_deprivation_share": 0.8519
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 4591.2,
+     "stimulus_dwell_s": 7411.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1643,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 7411.0,
+     "rule_release_window_rest_share": 0.4292,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 47.0465,
+     "arousal_awake_mean": 0.4581,
+     "arousal_awake_p90": 0.5235,
+     "error_rise_first_minute": 1.796,
+     "boredom_deprivation_share": 0.8724
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 5790.24,
+     "stimulus_dwell_s": 7200.08,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.0528,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 141.134,
+     "arousal_awake_mean": 0.5029,
+     "arousal_awake_p90": 0.7543,
+     "error_rise_first_minute": 1.6545,
+     "boredom_deprivation_share": 0.6604
+    }
+   ]
+  },
+  {
+   "file": "2-none-fixed_18000-live.npz",
+   "seed": 2,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "stimulus_version": null,
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 4.8953,
+   "broadcast_inhibited_share": 0.7723,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.8246,
+   "boredom_uncontrolled_per_awake_hour": 11.0802,
+   "negative_valence_share": 0.0311,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2428,
+     "lp_share_above_lp0_awake": 0.089,
+     "rule_release_awake_s": 4831.68,
+     "rule_release_stimulus_s": 6241.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0765,
+     "rule_awake_floor_release_awake_s": 7021.92,
+     "lp_share_above_lp0_after_floor_release": 0.0528,
+     "alerts_per_awake_hour": 31.7992,
+     "arousal_awake_mean": 0.4422,
+     "arousal_awake_p90": 0.4322,
+     "boredom_deprivation_share": 0.9226
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.3253,
+     "lp_share_above_lp0_awake": 0.1176,
+     "rule_release_awake_s": 5611.2,
+     "rule_release_stimulus_s": 7021.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0507,
+     "rule_awake_floor_release_awake_s": 7141.44,
+     "lp_share_above_lp0_after_floor_release": 0.0059,
+     "alerts_per_awake_hour": 30.3992,
+     "arousal_awake_mean": 0.4422,
+     "arousal_awake_p90": 0.4462,
+     "error_rise_first_minute": 4.0375,
+     "boredom_deprivation_share": 0.7686
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2542,
+     "lp_share_above_lp0_awake": 0.0396,
+     "rule_release_awake_s": 4950.24,
+     "rule_release_stimulus_s": 6360.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0149,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0163,
+     "alerts_per_awake_hour": 30.8008,
+     "arousal_awake_mean": 0.4468,
+     "arousal_awake_p90": 0.4629,
+     "error_rise_first_minute": 4.0483,
+     "boredom_deprivation_share": 0.7953
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2573,
+     "lp_share_above_lp0_awake": 0.0313,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0327,
+     "rule_awake_floor_release_awake_s": 6720.48,
+     "lp_share_above_lp0_after_floor_release": 0.0282,
+     "alerts_per_awake_hour": 116.8031,
+     "arousal_awake_mean": 0.4733,
+     "arousal_awake_p90": 0.6028,
+     "error_rise_first_minute": 2.4385,
+     "boredom_deprivation_share": 0.8154
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.189,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 128.3966,
+     "arousal_awake_mean": 0.4766,
+     "arousal_awake_p90": 0.6199,
+     "error_rise_first_minute": 0.8536,
+     "boredom_deprivation_share": 0.821
+    }
+   ]
+  },
+  {
+   "file": "2-none-rule-live.npz",
+   "seed": 2,
+   "arm": "none",
+   "schedule": "rule",
+   "stimulus_version": null,
+   "sim_hours": 10.1679,
+   "awake_hours": 7.0351,
+   "rests": 8,
+   "broadcasts_per_s": 4.6972,
+   "broadcast_inhibited_share": 0.8408,
+   "steps_awake_s": [
+    4831.68,
+    10713.12,
+    16354.56,
+    20945.76
+   ],
+   "boredom_deprivation_share": 0.8871,
+   "boredom_uncontrolled_per_awake_hour": 4.4069,
+   "negative_valence_share": 0.0065,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 4831.68,
+     "stimulus_dwell_s": 6241.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2151,
+     "lp_share_above_lp0_awake": 0.2854,
+     "rule_release_awake_s": 4831.68,
+     "rule_release_stimulus_s": 6241.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 5.2156,
+     "arousal_awake_mean": 0.4275,
+     "arousal_awake_p90": 0.4261,
+     "boredom_deprivation_share": 0.964
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 5881.44,
+     "stimulus_dwell_s": 8701.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2687,
+     "lp_share_above_lp0_awake": 0.6822,
+     "rule_release_awake_s": 5881.44,
+     "rule_release_stimulus_s": 8701.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.6121,
+     "arousal_awake_mean": 0.4261,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.4882,
+     "boredom_deprivation_share": 0.85
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 5641.44,
+     "stimulus_dwell_s": 8461.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2829,
+     "lp_share_above_lp0_awake": 0.527,
+     "rule_release_awake_s": 5641.44,
+     "rule_release_stimulus_s": 8461.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.0,
+     "arousal_awake_mean": 0.4241,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.7752,
+     "boredom_deprivation_share": 0.8884
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 4591.2,
+     "stimulus_dwell_s": 6001.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.0861,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 42.3419,
+     "arousal_awake_mean": 0.4582,
+     "arousal_awake_p90": 0.5189,
+     "error_rise_first_minute": 0.7505,
+     "boredom_deprivation_share": 0.8729
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 4380.48,
+     "stimulus_dwell_s": 7200.32,
+     "first_full_reading_awake_s": 3030.72,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.439,
+     "lp_max": 0.1532,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 3631.2,
+     "rule_release_stimulus_s": 6451.0,
+     "rule_release_window_rest_share": 0.334,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 59.9934,
+     "arousal_awake_mean": 0.4636,
+     "arousal_awake_p90": 0.5362,
+     "error_rise_first_minute": 1.2331,
+     "boredom_deprivation_share": 0.8655
+    }
+   ]
+  },
+  {
+   "file": "2-shipped-fixed_18000-live.npz",
+   "seed": 2,
+   "arm": "shipped",
+   "schedule": "fixed:18000",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 5.0617,
+   "broadcast_inhibited_share": 0.7524,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.7696,
+   "boredom_uncontrolled_per_awake_hour": 16.7203,
+   "negative_valence_share": 0.0312,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2445,
+     "lp_share_above_lp0_awake": 0.1061,
+     "rule_release_awake_s": 4711.68,
+     "rule_release_stimulus_s": 6121.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1028,
+     "rule_awake_floor_release_awake_s": 7201.92,
+     "lp_share_above_lp0_after_floor_release": 0.0703,
+     "alerts_per_awake_hour": 49.9987,
+     "arousal_awake_mean": 0.4526,
+     "arousal_awake_p90": 0.472,
+     "boredom_deprivation_share": 0.9036
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.3205,
+     "lp_share_above_lp0_awake": 0.1503,
+     "rule_release_awake_s": 7021.44,
+     "rule_release_stimulus_s": 9841.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0033,
+     "rule_awake_floor_release_awake_s": 7021.44,
+     "lp_share_above_lp0_after_floor_release": 0.0033,
+     "alerts_per_awake_hour": 43.1988,
+     "arousal_awake_mean": 0.4526,
+     "arousal_awake_p90": 0.4861,
+     "error_rise_first_minute": 3.9274,
+     "boredom_deprivation_share": 0.7424
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2556,
+     "lp_share_above_lp0_awake": 0.0268,
+     "rule_release_awake_s": 4950.24,
+     "rule_release_stimulus_s": 6360.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0011,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0013,
+     "alerts_per_awake_hour": 49.2013,
+     "arousal_awake_mean": 0.4592,
+     "arousal_awake_p90": 0.5284,
+     "error_rise_first_minute": 3.7536,
+     "boredom_deprivation_share": 0.7502
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2216,
+     "lp_share_above_lp0_awake": 0.0129,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0134,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.015,
+     "alerts_per_awake_hour": 184.4049,
+     "arousal_awake_mean": 0.5067,
+     "arousal_awake_p90": 0.7668,
+     "error_rise_first_minute": 2.3935,
+     "boredom_deprivation_share": 0.7133
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2188,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 170.5955,
+     "arousal_awake_mean": 0.5013,
+     "arousal_awake_p90": 0.7388,
+     "error_rise_first_minute": 0.9205,
+     "boredom_deprivation_share": 0.7388
+    }
+   ]
+  },
+  {
+   "file": "2-shipped-rule-live.npz",
+   "seed": 2,
+   "arm": "shipped",
+   "schedule": "rule",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 10.7356,
+   "awake_hours": 7.4927,
+   "rests": 9,
+   "broadcasts_per_s": 4.7908,
+   "broadcast_inhibited_share": 0.8166,
+   "steps_awake_s": [
+    4711.68,
+    10593.12,
+    16474.56,
+    21579.84
+   ],
+   "boredom_deprivation_share": 0.8568,
+   "boredom_uncontrolled_per_awake_hour": 6.4065,
+   "negative_valence_share": 0.0125,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 4711.68,
+     "stimulus_dwell_s": 6121.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2093,
+     "lp_share_above_lp0_awake": 0.1664,
+     "rule_release_awake_s": 4711.68,
+     "rule_release_stimulus_s": 6121.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 38.2029,
+     "arousal_awake_mean": 0.4456,
+     "arousal_awake_p90": 0.4368,
+     "boredom_deprivation_share": 0.9215
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 5881.44,
+     "stimulus_dwell_s": 8701.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2609,
+     "lp_share_above_lp0_awake": 0.6822,
+     "rule_release_awake_s": 5881.44,
+     "rule_release_stimulus_s": 8701.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.6121,
+     "arousal_awake_mean": 0.4261,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.394,
+     "boredom_deprivation_share": 0.9147
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 5881.44,
+     "stimulus_dwell_s": 8701.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2795,
+     "lp_share_above_lp0_awake": 0.6187,
+     "rule_release_awake_s": 5881.44,
+     "rule_release_stimulus_s": 8701.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 4.2847,
+     "arousal_awake_mean": 0.4308,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.9398,
+     "boredom_deprivation_share": 0.8785
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 5105.28,
+     "stimulus_dwell_s": 7925.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2015,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 5105.28,
+     "rule_release_stimulus_s": 7925.0,
+     "rule_release_window_rest_share": 0.334,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 69.8101,
+     "arousal_awake_mean": 0.4717,
+     "arousal_awake_p90": 0.5938,
+     "error_rise_first_minute": 0.9313,
+     "boredom_deprivation_share": 0.8399
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 5393.76,
+     "stimulus_dwell_s": 7200.16,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.116,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 100.7831,
+     "arousal_awake_mean": 0.4803,
+     "arousal_awake_p90": 0.628,
+     "error_rise_first_minute": 1.4531,
+     "boredom_deprivation_share": 0.7292
+    }
+   ]
+  },
+  {
+   "file": "3-none-fixed_18000-live.npz",
+   "seed": 3,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "stimulus_version": null,
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 4.8837,
+   "broadcast_inhibited_share": 0.777,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.8251,
+   "boredom_uncontrolled_per_awake_hour": 10.4802,
+   "negative_valence_share": 0.0219,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2636,
+     "lp_share_above_lp0_awake": 0.0871,
+     "rule_release_awake_s": 5011.68,
+     "rule_release_stimulus_s": 6421.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0616,
+     "rule_awake_floor_release_awake_s": 7201.92,
+     "lp_share_above_lp0_after_floor_release": 0.0179,
+     "alerts_per_awake_hour": 34.1991,
+     "arousal_awake_mean": 0.442,
+     "arousal_awake_p90": 0.4361,
+     "boredom_deprivation_share": 0.8263
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2726,
+     "lp_share_above_lp0_awake": 0.1601,
+     "rule_release_awake_s": 5191.2,
+     "rule_release_stimulus_s": 6601.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1282,
+     "rule_awake_floor_release_awake_s": 7681.44,
+     "lp_share_above_lp0_after_floor_release": 0.0521,
+     "alerts_per_awake_hour": 15.7996,
+     "arousal_awake_mean": 0.4369,
+     "arousal_awake_p90": 0.429,
+     "error_rise_first_minute": 3.5357,
+     "boredom_deprivation_share": 0.7936
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2469,
+     "lp_share_above_lp0_awake": 0.063,
+     "rule_release_awake_s": 5310.24,
+     "rule_release_stimulus_s": 6720.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0128,
+     "rule_awake_floor_release_awake_s": 6720.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 42.6011,
+     "arousal_awake_mean": 0.4513,
+     "arousal_awake_p90": 0.4767,
+     "error_rise_first_minute": 4.1393,
+     "boredom_deprivation_share": 0.8293
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.247,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6541.44,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 119.2032,
+     "arousal_awake_mean": 0.4777,
+     "arousal_awake_p90": 0.6294,
+     "error_rise_first_minute": 1.0724,
+     "boredom_deprivation_share": 0.8229
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1894,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6000.48,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 107.5971,
+     "arousal_awake_mean": 0.4686,
+     "arousal_awake_p90": 0.5698,
+     "error_rise_first_minute": 0.7735,
+     "boredom_deprivation_share": 0.8534
+    }
+   ]
+  },
+  {
+   "file": "3-none-rule-live.npz",
+   "seed": 3,
+   "arm": "none",
+   "schedule": "rule",
+   "stimulus_version": null,
+   "sim_hours": 10.1679,
+   "awake_hours": 7.0351,
+   "rests": 8,
+   "broadcasts_per_s": 4.7124,
+   "broadcast_inhibited_share": 0.8404,
+   "steps_awake_s": [
+    5011.68,
+    10653.12,
+    16354.56,
+    20945.76
+   ],
+   "boredom_deprivation_share": 0.8337,
+   "boredom_uncontrolled_per_awake_hour": 4.6912,
+   "negative_valence_share": 0.0084,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 5011.68,
+     "stimulus_dwell_s": 6421.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2636,
+     "lp_share_above_lp0_awake": 0.4114,
+     "rule_release_awake_s": 5011.68,
+     "rule_release_stimulus_s": 6421.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 3.5916,
+     "arousal_awake_mean": 0.4284,
+     "arousal_awake_p90": 0.4261,
+     "boredom_deprivation_share": 0.6146
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 5641.44,
+     "stimulus_dwell_s": 8461.0,
+     "first_full_reading_awake_s": 3979.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2633,
+     "lp_max": 0.2814,
+     "lp_share_above_lp0_awake": 0.6384,
+     "rule_release_awake_s": 5641.44,
+     "rule_release_stimulus_s": 8461.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.6381,
+     "arousal_awake_mean": 0.4261,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.8314,
+     "boredom_deprivation_share": 0.8429
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 5701.44,
+     "stimulus_dwell_s": 8521.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2125,
+     "lp_share_above_lp0_awake": 0.3787,
+     "rule_release_awake_s": 5701.44,
+     "rule_release_stimulus_s": 8521.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 0.0,
+     "arousal_awake_mean": 0.4242,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.3657,
+     "boredom_deprivation_share": 0.9871
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 4591.2,
+     "stimulus_dwell_s": 6001.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1903,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 34.5008,
+     "arousal_awake_mean": 0.4551,
+     "arousal_awake_p90": 0.5007,
+     "error_rise_first_minute": 1.1989,
+     "boredom_deprivation_share": 0.8679
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 4380.48,
+     "stimulus_dwell_s": 7200.32,
+     "first_full_reading_awake_s": 3030.72,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.439,
+     "lp_max": 0.1393,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 3631.2,
+     "rule_release_stimulus_s": 6451.0,
+     "rule_release_window_rest_share": 0.334,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 90.4011,
+     "arousal_awake_mean": 0.468,
+     "arousal_awake_p90": 0.5734,
+     "error_rise_first_minute": 0.8212,
+     "boredom_deprivation_share": 0.8366
+    }
+   ]
+  },
+  {
+   "file": "3-shipped-fixed_18000-live.npz",
+   "seed": 3,
+   "arm": "shipped",
+   "schedule": "fixed:18000",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 36.7481,
+   "awake_hours": 25.0001,
+   "rests": 30,
+   "broadcasts_per_s": 5.0488,
+   "broadcast_inhibited_share": 0.7582,
+   "steps_awake_s": [
+    18000.48,
+    36000.96,
+    54000.48,
+    72000.0
+   ],
+   "boredom_deprivation_share": 0.7719,
+   "boredom_uncontrolled_per_awake_hour": 15.9203,
+   "negative_valence_share": 0.0279,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2686,
+     "lp_share_above_lp0_awake": 0.0871,
+     "rule_release_awake_s": 5011.68,
+     "rule_release_stimulus_s": 6421.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0616,
+     "rule_awake_floor_release_awake_s": 7441.92,
+     "lp_share_above_lp0_after_floor_release": 0.0012,
+     "alerts_per_awake_hour": 61.5984,
+     "arousal_awake_mean": 0.4532,
+     "arousal_awake_p90": 0.4779,
+     "boredom_deprivation_share": 0.7985
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2717,
+     "lp_share_above_lp0_awake": 0.1409,
+     "rule_release_awake_s": 5191.2,
+     "rule_release_stimulus_s": 6601.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.1073,
+     "rule_awake_floor_release_awake_s": 7261.44,
+     "lp_share_above_lp0_after_floor_release": 0.0643,
+     "alerts_per_awake_hour": 33.1991,
+     "arousal_awake_mean": 0.4461,
+     "arousal_awake_p90": 0.4499,
+     "error_rise_first_minute": 3.5313,
+     "boredom_deprivation_share": 0.7909
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2693,
+     "lp_share_above_lp0_awake": 0.0582,
+     "rule_release_awake_s": 5010.24,
+     "rule_release_stimulus_s": 6420.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0304,
+     "rule_awake_floor_release_awake_s": 6900.48,
+     "lp_share_above_lp0_after_floor_release": 0.0048,
+     "alerts_per_awake_hour": 75.602,
+     "arousal_awake_mean": 0.4733,
+     "arousal_awake_p90": 0.6049,
+     "error_rise_first_minute": 4.152,
+     "boredom_deprivation_share": 0.7734
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 17999.52,
+     "stimulus_dwell_s": 26458.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2456,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4590.24,
+     "rule_release_stimulus_s": 6000.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6541.44,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 152.8041,
+     "arousal_awake_mean": 0.4961,
+     "arousal_awake_p90": 0.7313,
+     "error_rise_first_minute": 0.8978,
+     "boredom_deprivation_share": 0.7658
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 18000.48,
+     "stimulus_dwell_s": 26459.28,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2449,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": 6525.6,
+     "lp_share_above_lp0_after_floor_release": 0.0,
+     "alerts_per_awake_hour": 153.5959,
+     "arousal_awake_mean": 0.4934,
+     "arousal_awake_p90": 0.703,
+     "error_rise_first_minute": 1.0264,
+     "boredom_deprivation_share": 0.7309
+    }
+   ]
+  },
+  {
+   "file": "3-shipped-rule-live.npz",
+   "seed": 3,
+   "arm": "shipped",
+   "schedule": "rule",
+   "stimulus_version": "cb8f29d54d1d2327a21350d76856fe930a8c8c33fe33876c40711d372b82bd7e",
+   "sim_hours": 10.0179,
+   "awake_hours": 6.8851,
+   "rests": 8,
+   "broadcasts_per_s": 4.7727,
+   "broadcast_inhibited_share": 0.8271,
+   "steps_awake_s": [
+    5011.68,
+    11073.12,
+    15814.56,
+    20405.76
+   ],
+   "boredom_deprivation_share": 0.8216,
+   "boredom_uncontrolled_per_awake_hour": 5.665,
+   "negative_valence_share": 0.008,
+   "stages": [
+    {
+     "stage": 0,
+     "awake_dwell_s": 5011.68,
+     "stimulus_dwell_s": 6421.0,
+     "first_full_reading_awake_s": 3991.68,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.2686,
+     "lp_share_above_lp0_awake": 0.4114,
+     "rule_release_awake_s": 5011.68,
+     "rule_release_stimulus_s": 6421.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 17.958,
+     "arousal_awake_mean": 0.4346,
+     "arousal_awake_p90": 0.4264,
+     "boredom_deprivation_share": 0.6209
+    },
+    {
+     "stage": 1,
+     "awake_dwell_s": 6061.44,
+     "stimulus_dwell_s": 8881.0,
+     "first_full_reading_awake_s": 3979.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2633,
+     "lp_max": 0.2812,
+     "lp_share_above_lp0_awake": 0.7113,
+     "rule_release_awake_s": 6061.44,
+     "rule_release_stimulus_s": 8881.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": 6061.44,
+     "lp_share_above_lp0_after_floor_release": null,
+     "alerts_per_awake_hour": 7.127,
+     "arousal_awake_mean": 0.4355,
+     "arousal_awake_p90": 0.4271,
+     "error_rise_first_minute": 1.8221,
+     "boredom_deprivation_share": 0.8329
+    },
+    {
+     "stage": 2,
+     "awake_dwell_s": 4741.44,
+     "stimulus_dwell_s": 7561.0,
+     "first_full_reading_awake_s": 3912.0,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2758,
+     "lp_max": 0.2053,
+     "lp_share_above_lp0_awake": 0.2027,
+     "rule_release_awake_s": 4741.44,
+     "rule_release_stimulus_s": 7561.0,
+     "rule_release_window_rest_share": 0.2916,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 2.2778,
+     "arousal_awake_mean": 0.4289,
+     "arousal_awake_p90": 0.4261,
+     "error_rise_first_minute": 1.3737,
+     "boredom_deprivation_share": 0.9784
+    },
+    {
+     "stage": 3,
+     "awake_dwell_s": 4591.2,
+     "stimulus_dwell_s": 6001.0,
+     "first_full_reading_awake_s": 3991.2,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.2612,
+     "lp_max": 0.1599,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4591.2,
+     "rule_release_stimulus_s": 6001.0,
+     "rule_release_window_rest_share": 0.2612,
+     "lp_share_above_lp0_after_rule_release": null,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 21.955,
+     "arousal_awake_mean": 0.4482,
+     "arousal_awake_p90": 0.4639,
+     "error_rise_first_minute": 0.9708,
+     "boredom_deprivation_share": 0.9234
+    },
+    {
+     "stage": 4,
+     "awake_dwell_s": 4380.48,
+     "stimulus_dwell_s": 7200.32,
+     "first_full_reading_awake_s": 3570.72,
+     "first_full_reading_stimulus_s": 5401.0,
+     "first_window_rest_share": 0.339,
+     "lp_max": 0.1352,
+     "lp_share_above_lp0_awake": 0.0,
+     "rule_release_awake_s": 4171.2,
+     "rule_release_stimulus_s": 6991.0,
+     "rule_release_window_rest_share": 0.334,
+     "lp_share_above_lp0_after_rule_release": 0.0,
+     "rule_awake_floor_release_awake_s": null,
+     "alerts_per_awake_hour": 115.0559,
+     "arousal_awake_mean": 0.4855,
+     "arousal_awake_p90": 0.6655,
+     "error_rise_first_minute": 0.862,
+     "boredom_deprivation_share": 0.7586
+    }
+   ]
+  }
+ ]
+}
