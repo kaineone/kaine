@@ -8,7 +8,14 @@ The operator SHALL be able to select any registered, available source through `P
 - **THEN** the programme is selected, and `perceptual_locus.changed` records `changed_by = "operator"`
 
 ### Requirement: The entity switches through a confined, signed act
-With self-switching on and the registry on, a `perceptual_source` effector SHALL run only when the operator whitelist names it. Its confined executor's only side effect SHALL be publishing a signed request to `perceptual_locus.requests`. The arbiter SHALL verify the request against the signed act it realises before applying any gate. A refused switch SHALL change nothing and SHALL be reported as a failed `effectors.action` at alert salience.
+With self-switching on and the registry on, a `perceptual_source` effector SHALL run only when the operator whitelist names it. Its confined executor SHALL have no network, file or device access, and its only side effect SHALL be returning a signed request over its pipe, which the effectors module publishes verbatim to `perceptual_locus.requests`. The arbiter SHALL verify the request against the signed act it realises before applying any gate.
+
+#### Scenario: The executor's reach
+- **WHEN** the confined executor runs a switch act
+- **THEN** it has no network and no bus credential, and the request reaches the stream only through the effectors module
+
+### Requirement: A refused switch is perceived as a failed act
+A refused switch SHALL change nothing and SHALL be reported as a failed `effectors.action` at alert salience.
 
 #### Scenario: A refused act is perceived
 - **WHEN** the entity's switch act is refused because the dwell has not elapsed
@@ -17,6 +24,13 @@ With self-switching on and the registry on, a `perceptual_source` effector SHALL
 #### Scenario: A forged request
 - **WHEN** a request appears on the request stream without a matching signed act
 - **THEN** the arbiter refuses it and audits the refusal
+
+### Requirement: Each switch request is accepted once, promptly
+The arbiter SHALL accept each `(run_id, act_seq)` at most once, and only within `request_window_s` after the act was signed. A replayed or late request SHALL be refused with `reason_label = "replay"` and audited.
+
+#### Scenario: A replayed request
+- **WHEN** a request that was already applied is published again after the dwell has passed
+- **THEN** the arbiter refuses it with `replay`, and desired state is unchanged
 
 ### Requirement: The arbiter reads inhibition itself and the legacy intent is refused
 The arbiter SHALL read the inhibition flag from the workspace broadcast stream, and SHALL treat the entity as inhibited until the first snapshot. With the registry on, a legacy `intent.perceptual_locus.switch` SHALL be refused with `reason_label = "legacy_intent"`.

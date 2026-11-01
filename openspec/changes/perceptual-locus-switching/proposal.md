@@ -47,7 +47,7 @@ The second half of this list was revised after the adversarial review (`kaine-re
    - A new source route, behind the operator token.
    - The `/locus` route keeps working: `off` sets an operator off-holder, and `physical` or `virtual` select the class's configured default source.
 3. **The entity's act, conforming to `effector-confinement`.**
-   - A `perceptual_source` effector, run only when the operator's whitelist names it. Its confined executor's only side effect is publishing a signed request to one stream.
+   - A `perceptual_source` effector, run only when the operator's whitelist names it. Its confined executor has no network or bus credential, and its only side effect is returning a signed request over its pipe. The effectors module publishes the request verbatim, and the arbiter accepts each request once, within a short window.
    - The arbiter in the cycle verifies the request against the signed act and applies it.
    - The arbiter reads inhibition from the broadcast itself and starts inhibited.
    - With the registry on, the legacy unsigned intent is refused.
@@ -137,7 +137,7 @@ None.
 - **Depends on:**
   - `perceptual-sources`, for the registry and the single desired-state model (its task 2.9, moved there from this change);
   - `stimulus-control-act`, merged, for the composed stage-M source and the credit window it extends;
-  - `effector-confinement` (branch `spec/grounding-social-safety-2026-10-31`), merged, with its amendment for a profile class that publishes one declared request to one named stream (design D2). The same amendment serves `stimulus-control-act`.
+  - `effector-confinement` (branch `spec/grounding-social-safety-2026-10-31`), merged, with its amendment for a profile class that returns one declared request over the executor pipe, plus anti-replay (design D2). The same amendment serves `stimulus-control-act`.
   - `fork-merge-module-weights` (#638, merged in `1fd9268f`), whose weight groups gain `forward_model_bank`.
 - **Stage L** depends on `act-intent-derivation` and `learned-action-selection`.
 - **Joining an entity.** Turning it on for a running entity is a development-run component join: a two-layer opt-in, its second-review record, and the operator whitelisting the effector. Never inside a running study.

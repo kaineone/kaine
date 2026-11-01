@@ -21,6 +21,13 @@ With `[perceptual_locus].allow_self_switch = false`, the build SHALL construct n
 - **WHEN** switching is off
 - **THEN** the harness digest equals the registry-only golden, and no `perceptual_switching` record is written
 
+### Requirement: Adaptation is recorded only after a plateau
+A first-entry adaptation time SHALL be recorded only when the raw-error median had plateaued before departure; otherwise the visit SHALL be recorded as not adapted. The savings ratio SHALL use only pairs in which both visits adapted, and SHALL count the pairs it left out.
+
+#### Scenario: A short first visit
+- **WHEN** the entity leaves a new source before its raw-error median plateaus
+- **THEN** the visit is recorded as not adapted, and no savings ratio uses it
+
 ### Requirement: Switching cannot become a self-reward loop
 Within the response window after the entity's own realised switch, only learning progress SHALL count as its own response for boredom, and alert excess inside each processor's adaptation period SHALL be excluded. Before switching is enabled, an offline habituation check on the affect module's trackers SHALL show that the relief a switch buys falls with repetition, and its record SHALL be dated in the shakedown records.
 

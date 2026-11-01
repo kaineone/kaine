@@ -63,10 +63,14 @@ Review PLS-4, PLS-5 and PLS-6; the PM's decision is to conform.
   - It declares one parameter, `source`, whose allowed values are the registered ids, and it runs only when the operator's whitelist names it.
 - **Conformance with `effector-confinement`.**
   - That change runs every effector's side effect in a separate, confined executor process: "The cycle process never performs an effector's side effect itself."
-  - So this effector's side effect is one thing: the executor publishes a request `{source, act_seq, signature}` to one stream, `perceptual_locus.requests`. Its confinement profile declares bus publish to that stream only: no files, no network, no devices.
+  - So this effector's side effect is one thing: the executor hands a request `{source, run_id, act_seq, signature}` back to the effectors module over its own pipe.
+  - Its confinement profile has no network, no files and no devices. It holds no bus credential: Redis is a TCP service, and "bus publish, no network" would be a contradiction (re-review R-PLS-1).
+  - The effectors module publishes the returned request verbatim to `perceptual_locus.requests`, adding nothing.
   - The arbiter, in the cycle, reads only that stream. It verifies the request's provenance against the signed act it realises (the act's run id, sequence and signature, `kaine/workspace/action_selection.py:412-421`), applies the gates, and writes through `update_desired`.
   - The executor itself cannot change desired state.
-- **What this asks of `effector-confinement`.** A profile class, "publishes one declared request to one named stream". That needs an amendment to that change, reviewed there, and the same amendment serves `stimulus-control-act`, whose controller is in process too. Until it is accepted, this effector is not built. No exemption is taken.
+- **Anti-replay.** The arbiter accepts each `(run_id, act_seq)` once, and only within `request_window_s` (5 s of entity time) after the act was signed. It keeps the seen pairs for the window. A replayed or late request is refused, `reason_label = "replay"`, and audited.
+- **The alternative, if the pipe handback is rejected.** A dedicated Redis ACL user allowed only `XADD` on `perceptual_locus.requests`, with no read and no other key, reached through a Unix socket bound into the sandbox.
+- **What this asks of `effector-confinement`.** A profile class, "returns one declared request over the executor pipe". That needs an amendment to that change, reviewed there, and the same amendment serves `stimulus-control-act`, whose controller is in process too. Until it is accepted, this effector is not built. No exemption is taken.
 - **Inhibition.**
   - The arbiter reads `snapshot.inhibited` from the workspace broadcast stream itself. It does not rely on the `PerceptualLocus` module, which ships off.
   - It treats the entity as inhibited until the first snapshot arrives.
@@ -213,8 +217,10 @@ The workspace-feedback wrap and the positive-control shadows are rebuilt around 
 - **The `perceptual_switching` welfare record.** One per viewing, as in the proposal (item 10). Adaptation is measured on the raw prediction error, not the self-normalised one (review PLS-7).
   - The self-normalised error falls toward 1 as its window fills with the burst's own errors, whether or not anything was learned.
   - **First entry.** The adaptation time is the time until the 30-report rolling median of raw error comes within 10% of its value at departure, computed when the entity leaves.
+    - It is recorded only if that median had plateaued before departure: its slope over the last 60 reports is below a threshold (1% of the median per 10 reports).
+    - Otherwise the visit is recorded "not adapted" (re-review R-PLS-2). A short first visit would otherwise report a trivially short adaptation.
   - **Revisit.** It is the time until that median comes within 1.2 times the target context's pre-departure asymptote: the median raw error of its last 30 reports before the entity last left it.
-  - The savings ratio is the revisit's adaptation time over the first entry's.
+  - The savings ratio is the revisit's adaptation time over the first entry's. It is computed only when both visits adapted under the same plateau rule. A pair with a "not adapted" visit is left out of the ratio and counted.
 - **What the readout answers.** Whether prediction 4 holds for this mind: return should be faster than first entry. If it does not, the context bank is not doing its job, and stage 2 is due.
 
 ### D12. Off equals absent

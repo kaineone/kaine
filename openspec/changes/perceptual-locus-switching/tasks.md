@@ -11,13 +11,16 @@
   - `fork-merge-module-weights` (#638);
   - `act-intent-derivation` and `learned-action-selection`.
 - [x] 1.4 Revised after the adversarial review (`kaine-research/paper-audit-2026-10-31/SENSORS-LOCUS-SPEC-REVIEW.md`, PLS-1 to PLS-15), with the PM's decisions on PLS-1, PLS-2, PLS-3, PLS-6, PLS-7 and PLS-8.
-- [ ] 1.5 Propose the `effector-confinement` amendment (a profile class that publishes one declared request to one named stream) in that change, jointly with `stimulus-control-act`, for its own review.
+- [ ] 1.5 Propose the `effector-confinement` amendment, jointly with `stimulus-control-act`, for its own review. The amendment:
+  - a profile class that returns one declared request over the executor pipe, with no network or bus credential;
+  - the alternative, a Redis ACL user limited to `XADD` on one stream;
+  - anti-replay: single-use `(run_id, act_seq)` within a short window.
 
 ## 2. Locus and act (one PR, after `perceptual-sources` 2.x)
 
 - [ ] 2.1 Moved to `perceptual-sources` task 2.9: the single desired-state model (re-review R-PS-1). Here, the arbiter and the operator source route write through its `update_desired`.
 - [ ] 2.2 The arbiter with its ordered gates (selectable before available) and reason labels, inhibition read from the broadcast (inhibited until the first snapshot), the return-to-programme exemption, and the legacy intent refused. Tests: `tests/test_perceptual_switch_arbiter.py`, one case per gate, order checks and mutation checks.
-- [ ] 2.3 The `perceptual_source` effector through the confined executor, after 1.5: a signed request on `perceptual_locus.requests`, verified by the arbiter, with its own hash-chained audit. Tests: through `ActionSelection`, the signer, the bus and the effectors module; a forged request refused.
+- [ ] 2.3 The `perceptual_source` effector through the confined executor, after 1.5: a signed request on `perceptual_locus.requests`, verified by the arbiter, with its own hash-chained audit. Tests: through `ActionSelection`, the signer, the bus and the effectors module; a forged request refused; a replayed or late request refused with `replay`; the executor has no network.
 - [ ] 2.4 The operator source route, the `/locus` defaults, and the operator off-holder. Tests: extend the dashboard perception tests (token required, 409 without a default, developmental lock wins, `screen` only with the opt-in).
 - [ ] 2.5 The event fields and the research allowlist fix. Tests: allowlist exactness for both events, and a denial reaching the research log.
 - [ ] 2.6 The welfare hold: into-sources only; return always allowed; recurring distress returns home with `welfare_hold`; escalation through the unattended welfare path. Tests: each rule, and that the hold never refuses a return.
@@ -38,7 +41,7 @@
 
 ## 4. Records and checks
 
-- [ ] 4.1 The `perceptual_switching` record, with adaptation measured on raw error and the savings ratio. Tests: synthetic report streams with a known transient; a window refill alone must not count as adaptation.
+- [ ] 4.1 The `perceptual_switching` record, with adaptation measured on raw error, the plateau rule ("not adapted" otherwise), and the savings ratio over adapted pairs only. Tests: synthetic report streams with a known transient; a window refill alone must not count as adaptation; a short first visit is "not adapted".
 - [ ] 4.2 Off equals absent, both harnesses (registry off; registry on with switching off), with goldens captured on the merge base and a manual clock.
 - [ ] 4.3 Docs:
   - `docs/09-modules/perceptual-locus.md` (status, the gates, the stale `[perception]` wording);
