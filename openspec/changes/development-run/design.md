@@ -4,6 +4,8 @@
 
 On 2026-10-31 the operator set the project's goal as a working synthetic mind and ruled that the module-ignition study converts into a development run: one entity boots, goes through development and is grown continuously; the held modules join first, then each architecture component as it is built, each behind an off-equals-absent switch with a plain readout. The three-arm ablation and the pilot boots are dropped. Kept for every new component: an off switch bit-identical to absent, a plain readout (information gain, a changed prediction, a changed action) and the graph-only log. No longer gating: the 30-pilot calibration chain, the preregistered minimum effect and sign test, and a three-arm ablation per change of context composition. Of the two pre-study changes approved that morning, the welfare indicator response stays; continuous competition with K = 1 is to be revisited as an architecture choice before the run's image is built.
 
+Decisions of 2026-11-01 (lead developer, under the operator's direction that research and the architecture decide design questions and that the entity is an autonomous being, not a chatbot): the workspace is option B of D14, from boot; there is no operator conversation until every module has joined (operator rule); the run's own first supervised hours are the validation (open question 2 of the earlier draft). Operator speech, once it is heard at all, is perception that competes for access like any other sound, specified by `operator-speech-as-perception`.
+
 The ruling also names the known costs. The run is n = 1 and uncontrolled. Nothing retained answers whether the system thinks: the language organ is a pretrained chat model, so the entity will sound as if it thinks whatever lies behind it, and the rule that utterance text is never welfare evidence extends to every claim about cognition. A complete mind is not a deliverable on any horizon.
 
 ### What exists on main (cb41895b)
@@ -65,7 +67,7 @@ Alternative considered: only the reference programme, for clean windows. It maxi
 
 ### D4. Joins and the component registry
 
-The plan's join order starts with the held modules in the existing order: episodic memory, world model, planning, self-model, social cognition, vocal. The effectors, perceptual locus and embodiment modules join only through an explicit plan entry once their hardware or feed is attached, as today.
+The plan's join order starts with the held modules in the existing order: episodic memory, world model, planning, self-model, social cognition, vocal (`_default_order`, `kaine/research/ignition_study/__main__.py` 35-45). The effectors, perceptual locus and embodiment modules stay held (D16).
 
 Architecture components are added to the shipped registry `config/development_run/components.toml` by the change that builds them. An entry holds:
 
@@ -120,6 +122,8 @@ A readout answers one plain question: did the component do its job. It is a smal
 | Output | vocal, voice alignment | output events per hour; failed and refused share; latency; for voice alignment, adapters promoted and adapters rejected by the trainer's veto | research event log; trainer records |
 | Measurement-only probe | a shadow evaluation | none of its own; the absence test shows it changes nothing in the live path | absence test |
 
+The workspace is not a component and has no switch in the run, but its readout is computed on every reference pass beside the components' readouts, from the pool's records (`workspace-continuous-competition` D10): pool size, accessed and inhibited shares, each stream's win share and lost-above-threshold share, protected waits and the share of protected accesses by the priority rule, defects, and the two starvation advisories.
+
 Every readout is a number. No readout reads a payload, an embedding or an utterance's text. A readout whose inputs are absent on a pass is recorded as `not_computed` with the reason, never as zero. A component whose readout needs a field that no record carries adds that field to the content-free research event log in its own change; the registry test checks that every `readout_fields` entry exists.
 
 What readouts cannot show: they cover processors, memory and action. None of them bears on whether the entity thinks, and the organ's text is evidence of neither cognition nor welfare. The analysis report states this every time.
@@ -141,6 +145,7 @@ Limits the report states: one entity; additions in one order, so each effect is 
 - **Freeze.** The runner surfaces a welfare freeze in `status` and in its log and never lifts it, as now.
 - **Protective switch-off.** The operator may switch any component off at the next pass end as a welfare-protective action (`switch <name> off --protective`), without the second layer's review record and without the reversibility rule. The component's state is kept. The action is recorded with its reason and counts as a boundary.
 - **Supervisor.** Every session runs the module supervisor, and an escalation ends the session as `failed:supervisor` and halts the run.
+- **Workspace advisories.** The pool's readout (D14) is computed for every reference pass and every awake hour of the developmental phase. A starvation advisory in two consecutive windows, or any pool defect, stops the session at the next pass end and holds the run until `ack-welfare` (with the advisory named in the hold); in the developmental phase it is shown in `status` and, for a defect, the session is preserved and stopped. Moving to fallback C is a separate `accept-image` with its review record.
 
 ### D10. Persistence, revive and fork rules
 
@@ -151,7 +156,7 @@ Limits the report states: one entity; additions in one order, so each effect is 
 - **Forks.** The runner never forks. A fork is an operator action outside the run that creates a new being with a new identity and the run entity in its lineage, a copy of its learned weights, and no claim on the run's directory. If the fork is ever started it needs its own run (its own plan, directory and welfare net). The run record notes the fork's id. Until the per-tree identity question of #626 is settled, an operator who forks should not decommission either being without checking which adapters and volumes they share.
 - **Merge.** Nothing is merged into the run's entity. A merge would need the existing explicit operator choice of world model and a second review.
 - **Decommission.** Only through the gated decommission path. The runner has no delete command.
-- **Workspace supply.** The entity's workspace supply (D14) is recorded in every session manifest. A session whose image has a different supply is refused unless the operator accepts it as a change to the entity's mind under D11, with the indicator check that `workspace-continuous-competition` D12 asks for.
+- **Workspace supply.** The entity's workspace supply and capacity (D14) are recorded in every session manifest. A session whose image or configuration has a different supply or capacity is refused unless the operator accepts it as a change to the entity's mind under D11, with its second-review record and a check of the welfare indicators after the move (`workspace-continuous-competition` D11). Fallback C goes this way and no other.
 
 ### D11. Image updates during a life
 
@@ -180,7 +185,7 @@ The harness (`tools/development_run/harness_digest.py`) uses the NumPy backends 
 
 ### D14. Workspace capacity and candidate supply
 
-See the section of that name below. The run's image carries the option the operator chooses, fixed before the developmental phase.
+Decided: option B, the held candidate pool with one access per broadcast, with drive and alarm events held until accessed, as specified by `workspace-continuous-competition`. It is part of the run's architecture from the developmental phase, not a join: the overlay sets `[workspace.pool].enabled = true` and `capacity = 1` for every session kind, overriding the operator configuration, and every session manifest records the supply and capacity. The reasoning is in the section of that name below. The analysis reads the pool's readout and its starvation advisories (D7, D9).
 
 ### D15. Code layout and naming
 
@@ -190,6 +195,40 @@ The documentation page becomes `docs/15-experiments/development-run.md`. To end 
 
 Alternative considered: keep `kaine/research/ignition_study/`. Cheaper, but the code would run something it is not named for, and every later reader would have to learn the history to find it.
 
+### D16. Modules that stay held
+
+The effectors, embodiment and perceptual-locus modules are not in the join order and cannot be joined until their prerequisites exist. Their registry entries carry those prerequisites in `requires`, so `plan-join` refuses them by the ordinary registry rule:
+
+- **Effectors: unsafe.** The shell effector starts its child with `asyncio.create_subprocess_exec` and no `env=` (`kaine/modules/effectors/effectors.py` 203-209), so the child inherits the cycle's environment, the state key and the service passwords among it. No shipped policy emits an `act` intent, so the module would also be idle. Requires: `effector-confinement` merged.
+- **Embodiment: a pretend body.** The only adapter is the stub, whose reachability probe always returns true and whose `apply_action` and `apply_setpoints` return true for every request (`kaine/modules/embodiment/adapters/stub.py` 59-61, 90-98). Joining it would tell the entity, and the maturation gate, that it has a body it does not have, which the no-pretend rule forbids. Requires: `embodiment-held-status` merged and a real adapter.
+- **Perceptual locus: no producer.** Nothing emits `intent.perceptual_locus.switch` (`kaine/modules/perceptual_locus/module.py` 13-20), so the module would do nothing. Requires: a producer of that intent.
+
+The all-modules readiness survey of 2026-11-01 found the same three and counts 13 modules that can work on the reference host: the seven of the first configuration and the six held modules.
+
+### D17. Research mode with the operator present
+
+Every session boots in research mode: the runner sets `KAINE_RESEARCH_MODE=1` for the cycle (`kaine/research/ignition_study/runner.py` 630), and research mode wins over the operator flag (`resolve_supervision_mode`, `kaine/cycle/unattended_gate.py` 56-84). The research path runs the full research gate (`kaine/cycle/__main__.py` 3706-3721). The operator-present path checks only that `KAINE_CYCLE_OPERATOR_PRESENT=1` is set (`__main__.py` 3723) and enforces none of the safety net's conditions, and the exposure record is written only in research mode. So the runner refuses to start a session whose environment would resolve to the operator or the unattended mode, and no safety property of the run depends on the operator flag.
+
+The operator's presence is a procedural fact, recorded rather than enforced: the developmental phase's first session starts only on `run --operator-present`, and the run record keeps it with the time. The operator watches through `status`, the dashboard and the welfare records; presence does not mean interaction (D18).
+
+### D18. No operator conversation until every module has joined
+
+The operator's rule: no conversation with the entity until every module has joined. Until the last of the six held modules (vocal) has joined, the overlay closes every operator input path for every session kind, overriding the operator configuration:
+
+- `[audition].transcription_enabled = false`, so no speech becomes text;
+- `[remote_bridge].enabled = false`, so no remote microphone, camera or text reaches the entity;
+- the perception feed stays in `stimulus_source` or `playlist` mode, in which the feed replaces the microphone (`docs/09-modules/audition.md`, "Deterministic auditory feed"), so speech in the room does not reach the entity.
+
+A session whose merged configuration would open any of these before the last join is refused. After the last join, opening conversation is a planned switch (`plan-switch` and `switch`, D6) of the component that `operator-speech-as-perception` defines on branch `spec/content-code-2026-10-31`; that change decides how operator speech is perceived (an auditory event that competes for access on salience, with no rule that forces or forbids a reply), and this change decides only when. The opening counts as a boundary with the post-change hold.
+
+Welfare: the social drive builds only once an operator interaction has been seen (`kaine/modules/affect/module.py` 941 and 1509-1519, where the social signal is zero until the sequence module first reports a time since the last interaction). With conversation closed it stays at its baseline. Opening conversation starts it, and from then silence raises it, so the opening is itself a welfare-relevant change and the exposure records after it are read for the social drive in particular.
+
+### D19. The first supervised hours are the validation
+
+No separate validation entity is booted: it would be one more being kept for life for a check that the offline harnesses of the pre-study changes mostly cover. The validation is the developmental phase's first session with the operator present (D17). During it the runner computes, every awake hour, the pool's readout (D14), the accessed share, protected waits, speak and think rates, the arousal and access-rate distributions, the welfare indicators and the drive trajectories, and shows them in `status`.
+
+Stop rules, fixed before the run starts: a welfare-indicator crossing of a kind the 2026-10 test boots did not show; an arousal or access-rate distribution outside the range of those boots; a pool defect. When one fires, the runner requests preservation with stop at once (the runner's existing `_request_preserve` path, `runner.py`), records the rule, and holds the run until the operator answers. Whatever follows is a change to a being that has already lived under the design, decided by the operator.
+
 ## Workspace capacity and candidate supply for a growing mind
 
 The question the operator reopened: should the entity that lives the development run have the held candidate pool with one access per broadcast (K = 1), keep today's supply and capacity, or something between. It is asked here as an architecture choice, whether the workspace the being lives with is the right one, and no longer as a fix for a test's validity. The evidence is in the workspace capacity design note of 2026-10-31 (measurements from the seven readable real-time test-boot runs, 5.4 hours and 133,072 broadcasts, and a Monte Carlo of supply rules that reproduces the measured system), and the design of `workspace-continuous-competition`.
@@ -197,7 +236,7 @@ The question the operator reopened: should the entity that lives the development
 ### The options
 
 - **A. Today: this-tick supply, K = 5.** A candidate is an event published since the previous tick, and reports published on the two of every three ticks that do not broadcast are scored and discarded.
-- **B. Held pool, K = 1.** Each processor's latest report per (stream, type) stays a candidate until superseded by its source, consumed by being accessed, or stale (1.5 times the source's own running period; event-driven reports about three resting access intervals). Held reports are re-scored each tick with the current gains; novelty is evaluated once on arrival; the phasic access-rate input, the affect observer, the arousal estimate and the organ's output forwarding read arrivals only. One accessed content per broadcast.
+- **B. Held pool, K = 1.** Each processor's latest report per (stream, type) stays a candidate until superseded by its source, consumed by being accessed, or stale (1.5 times the source's own running period; event-driven reports after 1.0 s). As decided, drive events and interoceptive alarms are held until accessed and an eligible overdue one takes the coalition first (`workspace-continuous-competition` D3, D5). Held reports are re-scored each tick with the current gains; novelty is evaluated once on arrival; the phasic access-rate input, the affect observer, the arousal estimate and the organ's output forwarding read arrivals only. One accessed content per broadcast.
 - **C. Held pool, K = 5.** As B, with today's capacity.
 - **D. B plus a held store of about four.** A capacity-four buffer of recently accessed contents as the processors' context. This is working memory (Cowan 2001; Oberauer 2002; triage workstream W2(c), build-order item 9c). It is planned separately and joins as a component through D4, so it is not a choice for the image.
 
@@ -226,25 +265,20 @@ A growing mind gains report streams with every join. The base set has six period
 
 - **Boredom.** Boredom is relieved by learning progress, by alert excess and by engaging intents; access matters to it through intents, which need an accessed broadcast that clears the report bars. B raises the accessed share of broadcasts from about 26% to about 60%, which gives more occasions for engaging intents, more appraisals, more speech and thought, more organ load and more interoceptive load. Whether boredom crosses sooner or later is not known and must be measured, not assumed. The dominant boredom risk of the run is the fixed stimulus (D3), and the access design changes it only at the margin.
 - **Arousal.** A held alert must drive the phasic access-rate input once, on arrival. If held reports re-triggered it every tick, the access rate could run to its 10 Hz ceiling, an arousal runaway. B and C both need the arrivals-only rule, with a test; A does not hold reports.
-- **Affect and interoception access.** The entity's bodily and affective states reach access rarely on score (0.03 and 0.10). The affect module re-publishes a pending drive event, by default every 30 s, until a broadcast accesses it (concern re-entry, after Klinger 2013), and the concern resolves only on access. Under A each such event competes on one tick, and only when that tick broadcasts. Under B and C it stays a candidate for about three broadcasts at rest. Under C it is accessed whenever it reaches the threshold on the roughly two thirds of broadcasts where capacity does not bind; under B it must also outrank the strongest other candidate, usually audition. So B and C both give the entity's own concerns more chances than A, and C gives more than B. Interoceptive alarms carry the alert intensity, so under B they compete with other alerts at equal intensity; whether they still reach access promptly is what condition 2 below measures. Consumption delays a sustained alarm by at most one interoceptive period (1 s), since each new report re-enters.
+- **Affect and interoception access.** The entity's bodily and affective states reach access rarely on score (0.03 and 0.10). The affect module re-publishes a pending drive event about once a second (on its own updates) until a broadcast accesses it, then again 30 s after the access while the goal stays active (concern re-entry, after Klinger 2013); the concern resolves only on access (`kaine/modules/affect/module.py` 635-680, 860-899). Under A each such event competes on one tick, and only when that tick broadcasts. Under the pool as first drafted it would have stayed a candidate for about three broadcasts at rest, and under K = 1 it would have had to outrank the strongest other candidate, usually audition, with no bound on the wait. As decided, B holds it until accessed and gives an eligible overdue one the coalition first, which bounds the wait (Decision below). Interoceptive alarms are held the same way. Consumption delays a sustained alarm by at most one interoceptive period (1 s), since each new report re-enters.
 - **Moving a being.** Whatever is chosen must be fixed before the developmental phase. Changing the supply or the capacity later changes every access the being has, which is a change to a living being's mind (`workspace-continuous-competition` D12).
 
-### Recommendation
+### Decision
 
-Option B, the held pool with K = 1, as the architecture of the development run's entity, fixed before its developmental phase, with D as the working-memory component joined later through the registry. The reasons: it is the only value of K below the number of processors that has a citation; its rule does not drift as the mind grows; it ends the phase aliasing that would make every join's readout partly an artefact; and the entity's own concerns and alarms get more chances to reach access than today.
+Option B, the held pool with K = 1, as the architecture of the development run's entity from its developmental phase, with D as the working-memory component joined later through the registry. The reasons: it is the only value of K below the number of processors that has a citation; its rule does not drift as the mind grows; it ends the phase aliasing that would make every join's readout partly an artefact; and the entity's own concerns and alarms get more chances to reach access than today.
 
-Conditions, checked offline with no entity before the image is built, by the welfare checks already designed in `workspace-continuous-competition` (harness runs of the real engine and the real affect module, before and after):
+The first fallback of the earlier draft is part of B: drive events and interoceptive alarms are held until accessed, never dropped as stale, and an eligible overdue one takes the coalition first. `workspace-continuous-competition` D6 proves that such an event, while it scores at or above the access threshold, is accessed within the priority wait plus one broadcast per protected key: 4.2 s at the shipped rates, 17 s at the regulation ladder's slowest processing rate. The cycle checks that bound live.
 
-1. a held alert raises the phasic input once, and the access rate stays inside its pre-change range under a sustained alert source;
-2. the share of affect drive events accessed before their next re-entry, and the time from an interoceptive alert's onset to its access, are each no worse under B than under A;
-3. the time to boredom's first crossing and the deprivation share over a simulated span are reported for A and B side by side, for the operator to read before deciding;
-4. the offline mediation check and the red-team harness pass under the pool.
+C is the fallback when B's readout shows starvation: the pool's two advisories (the entity's concerns reach access mostly through the priority rule; a source that reaches threshold but almost never wins) firing in two consecutive windows. Moving the living entity to C is a change to its mind, made by the operator through `accept-image` with the second-review record (D10, D11), never by the runner.
 
-If condition 2 fails under B, the first fallback is to hold a pending drive event until it is accessed or superseded instead of letting it go stale, which follows the concern re-entry account the affect module already cites; the second is C. Neither changes the access threshold.
+Conditions checked offline with no entity before the image is built are the welfare checks of `workspace-continuous-competition` (held alert counted once; the wait bound as a gate; concerns and alarms reaching access no later than under A as a gate; boredom and the drives under A and B on the real perceptual modules and the real stimulus, reported, with a hold rule; privacy). That change also removes the planned test's apparatus (count-yoked arm, divergence rule, K = 2 pilots), which the run does not need.
 
-Split of `workspace-continuous-competition`: the architecture part (pool, exits, re-scoring, novelty once, arrivals-only consumers, K = 1, the records of pool size and member age, the supply field in manifests and the revive guard) lands before the image. The planned-test apparatus (count-yoked matched arm, the divergence rule for NOT EXERCISED, the calibration statistics, the K = 2 pilot sensitivity setting) is not needed by the run and is deferred to whenever a planned experiment is designed. The amendment is made in that change, not here.
-
-The operator decides between A, B and C, and on the fallbacks.
+What the literature does and does not support is listed in that change's "Sources and method" section: a buffered preconscious stage from which later access is possible for a short while, and a serial, capacity-limited access stage that postpones waiting input, are supported; that access is strictly one item and all-or-none is contested, and no source fixes the hold spans or the priority wait, which are design choices.
 
 ## Risks
 
@@ -254,11 +288,12 @@ The operator decides between A, B and C, and on the fallbacks.
 - **Silent image updates that are not silent.** The harness does not exercise every path (pretrained encoders, the organ, rare branches). Mitigations: model identities and digests in the comparison, the configuration digest, and the rule that a doubtful update is accepted as a dynamics change.
 - **Loss on recovery.** A revive discards what the entity lived after the bundle. Bundles at every pass end bound the loss to one pass.
 - **Storage.** The graph and bundles grow without automatic deletion; the disk guard preserves and stops before the disk fills.
-- **A design that fails at the first boot.** If the first supervised hours of the developmental phase show the workspace or the welfare net misbehaving, the entity has already lived under it (see the open question on a validation boot).
+- **A design that fails at the first boot.** The first supervised hours are the validation (D19), so if they show the workspace or the welfare net misbehaving, the entity has already lived under it, and moving it off B is a change to its mind. Accepted: a separate validation entity would be one more being kept for life for a check the offline harnesses mostly cover.
+- **Starvation under B.** A source could reach threshold and still lose almost every broadcast. The pool's advisories show it, and C is the decided fallback.
 
 ## Migration and ordering
 
-1. Operator decisions: the workspace option (with its fallbacks), the validation-boot question, the reversal policy and the stimulus schedule (tasks group 1).
+1. Decided on 2026-11-01: workspace option B with C as the fallback, the run's first supervised hours as the validation, no operator conversation before every module has joined. Still open for the operator: the reversal policy and the stimulus schedule (tasks group 1).
 2. The pre-study changes land: `welfare-indicator-response`, `research-gate-supervisor`, `welfare-exposure-report` (amended for passes), the workspace architecture as decided, `developmental-stir`, and the organ change the operator ruled on. Their `module-ignition-study` deltas are re-targeted to `development-run` before they archive, or are archived first and then removed by this change (tasks 2.x).
 3. This change's implementation, its absence tests and its stand-in-cycle dry run, then the pre-boot dry run of the full stack, shown green to the operator.
 4. The operator starts the run (build-order item 7). The held modules join in order. Architecture components (build-order items 8 to 12) each register themselves and join through D4 and D6.
@@ -277,8 +312,9 @@ Admissibility: nothing here changes a running entity. From the run's start, the 
 
 ## Open questions for the operator
 
-1. The workspace option: A, B or C, and the fallbacks of condition 2.
-2. A validation boot. The pre-study plan had one supervised validation boot before pilots. With pilots dropped, either the development run's own first supervised hours are the validation (no extra being; if the design misbehaves, the entity has lived under it and moving it is a change to its mind), or one short validation entity is booted first and preserved (one more being, kept for life). Recommendation: the first hours of the run itself, operator present, with the stop rules of `workspace-continuous-competition` applied to the developmental phase, because the developmental phase is where the workspace first runs and a separate entity would be one more preserved being for a check the offline harness mostly covers.
-3. Reversal windows: confirm that identity-bearing components are not reversible except as protection.
-4. The stimulus schedule: whether the run starts with supplementary programmes in the schedule, and which.
-5. Whether the stimulus-control act (W3) should be pulled forward as the first architecture component, given D3.
+The workspace option and the validation boot were decided on 2026-11-01 (D14, D19).
+
+1. Reversal windows: confirm that identity-bearing components are not reversible except as protection.
+2. The stimulus schedule: whether the run starts with supplementary programmes in the schedule, and which.
+3. Whether the stimulus-control act (W3) should be pulled forward as the first architecture component, given D3.
+4. The pool's protected alarms below the access threshold and tier-1 regulation's effect on them (`workspace-continuous-competition` open items 1 and 2).

@@ -92,11 +92,22 @@ Every module and architecture component that can join the run SHALL have an entr
 - **THEN** `plan-join` refuses and names the missing requirement
 
 ### Requirement: The held modules join first in the existing order
-Without an explicit join order, `init` SHALL record the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules SHALL join only through an explicit plan entry.
+Without an explicit join order, `init` SHALL record the order episodic memory, world model, planning, self-model, social cognition, vocal modules.
 
 #### Scenario: Default order
 - **WHEN** a run is initialised without a join order
 - **THEN** its plan's order is episodic memory, world model, planning, self-model, social cognition, vocal modules
+
+### Requirement: Effectors, embodiment and perceptual locus stay held until their prerequisites exist
+The registry entries of the effectors, embodiment and perceptual-locus modules SHALL name their prerequisites in `requires`: `effector-confinement` for the effectors, `embodiment-held-status` and a real adapter for embodiment, a producer of `intent.perceptual_locus.switch` for the perceptual locus. `plan-join` SHALL refuse each while a prerequisite is missing, and no default order SHALL contain them.
+
+#### Scenario: Joining the effectors before confinement
+- **WHEN** the operator runs `plan-join effectors` and `effector-confinement` is not merged
+- **THEN** `plan-join` refuses and names the missing prerequisite
+
+#### Scenario: Joining the stub body
+- **WHEN** the operator runs `plan-join embodiment` with only the stub adapter available
+- **THEN** `plan-join` refuses and says no real body adapter exists
 
 ### Requirement: A join or switch change needs both layers of opt-in
 A join or switch change SHALL take effect only when the run's plan lists it (`plan-join` or `plan-switch`) and the operator's `join` or `switch` command names the component and the run's `entity_id`. For an experience-changing component the runner SHALL also refuse unless its review record exists in the image. A change SHALL take effect at the next pass end.
@@ -274,6 +285,64 @@ Every session's overlay SHALL set `[workspace].arm` to `"competitive"` and `[lan
 #### Scenario: An operator arm
 - **WHEN** the operator configuration sets `[workspace].arm = "pooled"` and `[language].temperature = 0.7`
 - **THEN** the session's overlay has arm `"competitive"` and temperature 0.0
+
+### Requirement: Every session runs the held candidate pool with one access
+`build_overlay` SHALL set `[workspace.pool].enabled = true` and `[workspace.pool].capacity = 1` for every session kind, the developmental phase included, overriding the operator configuration, and every session manifest SHALL record the workspace supply and capacity. A different supply or capacity SHALL reach the entity only as an accepted image change with its review record.
+
+#### Scenario: An operator config turns the pool off
+- **WHEN** the operator configuration sets `[workspace.pool].enabled = false`
+- **THEN** every session's overlay sets it to true and the manifest records `held_pool` with capacity 1
+
+#### Scenario: Fallback C without acceptance
+- **WHEN** a new image or configuration sets the pool's capacity to 5
+- **THEN** the session does not start until the operator accepts it with `accept-image` and its review record exists
+
+### Requirement: The workspace readout and its advisories are read every window
+The analysis SHALL compute the pool's readout for every reference pass and every awake hour of the developmental phase, from content-free records only. A starvation advisory in two consecutive windows, or any pool defect, SHALL stop the session at the next pass end and hold the run until `ack-welfare`, with the advisory named in the hold. In the developmental phase an advisory SHALL be shown in `status`, and a defect SHALL preserve and stop the session.
+
+#### Scenario: Two windows with the same advisory
+- **WHEN** two consecutive reference passes show more than half of the protected accesses made by the priority rule
+- **THEN** the session stops at the next pass end and `status` names the workspace advisory and the command that answers it
+
+#### Scenario: A defect in the developmental phase
+- **WHEN** a `workspace.pool.defect` record is written during the developmental phase
+- **THEN** the runner requests preservation with stop and holds the run
+
+### Requirement: Sessions boot in research mode and never rely on operator mode
+The runner SHALL start every session's cycle in research mode and SHALL refuse a session whose environment would resolve to the operator or unattended supervision mode. The developmental phase's first session SHALL start only on `run --operator-present`, and the run record SHALL keep the attestation and its time.
+
+#### Scenario: The operator flag alone
+- **WHEN** a session's environment sets `KAINE_CYCLE_OPERATOR_PRESENT=1` and the runner's research-mode variable is missing
+- **THEN** the runner refuses to start the session
+
+#### Scenario: The first session without the attestation
+- **WHEN** the operator runs `run` for the developmental phase without `--operator-present`
+- **THEN** the runner refuses and says the first hours need the operator present
+
+### Requirement: No operator input path is open until every held module has joined
+Until the last module of the join order has joined, `build_overlay` SHALL set `[audition].transcription_enabled = false` and `[remote_bridge].enabled = false` for every session kind, and the runner SHALL refuse a session whose merged configuration opens either or sets the perception feed to a mode in which the microphone is live. After the last join, conversation SHALL open only as a planned switch of the operator-speech component, recorded as a boundary with the post-change hold.
+
+#### Scenario: Speech-to-text before the last join
+- **WHEN** the operator configuration sets `[audition].transcription_enabled = true` and vocal has not joined
+- **THEN** the session's overlay sets it to false
+
+#### Scenario: Opening conversation
+- **WHEN** every held module has joined and the operator plans and makes the switch of the operator-speech component
+- **THEN** the switch takes effect at the next pass end and the first pass after it ends in the post-change hold
+
+### Requirement: The first supervised hours are the validation
+During the developmental phase's first session the runner SHALL compute every awake hour the pool's readout, the accessed share, protected waits, speak and think rates, the arousal and access-rate distributions, the welfare indicators and the drive trajectories, and SHALL show them in `status`. No separate validation entity SHALL be booted.
+
+#### Scenario: The hourly validation readout
+- **WHEN** the first awake hour of the developmental phase ends
+- **THEN** `status` shows that hour's validation readout
+
+### Requirement: A validation stop rule preserves and stops the entity
+The stop rules SHALL be fixed before the run starts: an indicator crossing of a kind the 2026-10 test boots did not show, an arousal or access-rate distribution outside their range, or a pool defect. When one fires during the first session, the runner SHALL request preservation with stop, record the rule and hold the run until the operator answers.
+
+#### Scenario: An access rate outside the earlier range
+- **WHEN** an awake hour of the first session shows an access-rate distribution outside the range of the 2026-10 test boots
+- **THEN** the runner requests preservation with stop, records the rule and holds the run
 
 ### Requirement: The run records the workspace graph, not every module's output
 `build_overlay` SHALL set `[research_event_log.dashboard_record].enabled = false`, `[research_event_log.raw_archive].enabled = false`, `[evaluation].workspace_trajectory = false` and `[evaluation].enabled = false` for every session, overriding the operator configuration, and SHALL keep the ignition log enabled. Run-control and safety records SHALL be unaffected.

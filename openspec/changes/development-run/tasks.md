@@ -1,7 +1,7 @@
 ## 1. Operator decisions (before any code)
 
-- [ ] 1.1 Workspace capacity and candidate supply: option A, B or C of the design's section, and the fallbacks of condition 2. Recommendation B.
-- [ ] 1.2 Validation boot: the run's own first supervised hours, or one short validation entity first. Recommendation: the run's own first hours.
+- [x] 1.1 Workspace capacity and candidate supply: decided 2026-11-01, option B (drive and alarm events held until accessed) with C as the fallback on a starvation readout (design D14).
+- [x] 1.2 Validation boot: decided 2026-11-01, the run's own first supervised hours (design D19).
 - [ ] 1.3 Reversal policy: identity-bearing components are not reversible except as a welfare-protective action or by a reviewed operator decision.
 - [ ] 1.4 Stimulus schedule at the start: reference programme only, or with supplementary programmes (which).
 - [ ] 1.5 Whether the stimulus-control act (W3) is pulled forward as the first architecture component.
@@ -11,7 +11,9 @@
 - [ ] 2.1 `welfare-indicator-response`, `research-gate-supervisor` and `welfare-exposure-report` merged (branch `spec/pre-study-gates-2026-10-31`).
 - [ ] 2.2 Amend `welfare-exposure-report` for per-pass records and the pass-end hold (this change's `welfare-monitoring` delta), before it is built.
 - [ ] 2.3 Re-target the `module-ignition-study` deltas of `research-gate-supervisor` and `welfare-exposure-report` to `development-run`, or, if they archive first, add their requirements to this change's REMOVED list before this change archives.
-- [ ] 2.4 Amend `workspace-continuous-competition` by decision 1.1: split the architecture part (before the image) from the planned-test apparatus (deferred); replace its `module-ignition-study` delta with the pool size and accessed share already in `development-run`'s analysis requirement.
+- [x] 2.4 `workspace-continuous-competition` rewritten for option B on branch `spec/pre-study-gates-2026-10-31`; the planned-test apparatus and its `module-ignition-study` delta removed.
+- [ ] 2.8 `workspace-continuous-competition` and `latent-content-privacy` (the never-persisted bus with the heard and utterance text extension) merged before the image is built; the pool cannot be enabled without the second.
+- [ ] 2.9 Cross-check with `operator-speech-as-perception` (branch `spec/content-code-2026-10-31`) that its component has a registry entry and a switch, that it opens no input path before the last join, and that the two changes do not both specify how heard speech is held.
 - [ ] 2.5 Archive `module-ignition-study` with task 2.5 marked superseded by `development-run`.
 - [ ] 2.6 Re-target the gates of `act-intent-derivation`, `active-vision`, `embodiment-motor-contingency`, `goal-directed-grasping`, `planning-act-proposals` and `world-model-action-outcomes` from `module-ignition-study` task 2.5 to the matching join in the development run; drop the study-step wording in `voice-development` and `vox-default-voice`; record in `pilot-calibration` that it gates nothing.
 - [ ] 2.7 The privacy rule for latent-derived content (build-order item 2) is a `requires` entry of every content-bearing component; it does not gate the run's start.
@@ -33,7 +35,7 @@
 
 ## 5. Registry, switches and absence
 
-- [ ] 5.1 `config/development_run/components.toml` with entries for the six held modules, voice alignment, and the effectors, perceptual locus and embodiment modules. Test: `tests/test_development_run_registry.py::test_registry_entries_complete`, `::test_experience_changing_needs_review_record`, `::test_readout_fields_exist`.
+- [ ] 5.1 `config/development_run/components.toml` with entries for the six held modules, voice alignment, and the effectors, perceptual locus and embodiment modules, the last three with their prerequisites in `requires` (design D16). Test: `tests/test_development_run_registry.py::test_registry_entries_complete`, `::test_experience_changing_needs_review_record`, `::test_readout_fields_exist`, `tests/test_development_run_joins.py::test_effectors_refused_without_confinement`, `::test_stub_body_refused`, `::test_locus_refused_without_producer`.
 - [ ] 5.2 Entity-free deterministic harness and digest, `tools/development_run/harness_digest.py` (NumPy backends; deterministic fakes for the organ, encoders and services). Test: `tests/test_harness_digest.py::test_digest_reproducible`, `::test_digest_changes_with_module_set`.
 - [ ] 5.3 Golden digests for the base set and for each held module off; absence tests for every registry entry. Tests: `tests/test_development_run_absence.py` (one per entry).
 - [ ] 5.4 Two-layer opt-in, entity id check, review-record check, reversibility rule and protective switch-off. Tests: `tests/test_development_run_joins.py::test_one_layer_refused`, `::test_other_entity_refused`, `::test_review_record_required`, `::test_not_reversible_refused`, `::test_protective_switch_off_accepted`, `::test_voice_alignment_keeps_approval_variable`.
@@ -43,6 +45,7 @@
 
 - [ ] 6.1 `readouts.py`: per-class readouts from the ignition log, research event log, welfare records and content-free counters; `not_computed` with reasons. Tests: `tests/test_development_run_readouts.py::test_processor_readout`, `::test_context_readout_uses_context_gain`, `::test_memory_readout`, `::test_learned_model_readout_against_persistence_baseline`, `::test_action_readout`, `::test_output_readout`, `::test_not_computed_not_zero`, `::test_readouts_content_free`.
 - [ ] 6.2 Analysis: per reference pass measures, boundaries, before and after windows, baseline trend, exposure table, limits text; the line comparisons removed. Tests: `tests/test_development_run_analysis.py::test_boundaries_from_record`, `::test_window_pending_when_short`, `::test_dilated_pass_flagged`, `::test_limits_stated`, `::test_report_content_free`.
+- [ ] 6.4 The workspace readout per reference pass and per awake hour of the developmental phase; the two starvation advisories; the hold after two consecutive windows or a defect. Tests: `tests/test_development_run_readouts.py::test_workspace_readout`, `tests/test_development_run_holds.py::test_two_window_advisory_holds`, `::test_pool_defect_holds`.
 - [ ] 6.3 Ignition records carry session and pass. Test: `tests/test_ignition_log.py::test_session_and_pass_in_record`, `::test_broadcast_unchanged_by_pass_fields`.
 
 ## 7. Welfare wiring
@@ -51,6 +54,10 @@
 - [ ] 7.2 Per-pass exposure records (with 2.2) and the pass-end hold; `ack-welfare`. Tests: `tests/test_development_run_holds.py::test_crossing_holds`, `::test_missing_record_holds`, `::test_ack_continue_records_decision`.
 - [ ] 7.3 Post-change hold and `ack-change`. Test: `::test_first_pass_after_join_holds`.
 - [ ] 7.4 Welfare freeze surfacing; `failed:welfare`; `failed:supervisor`. Tests carried over from the study runner, plus `::test_supervisor_escalation_halts_run`.
+- [ ] 7.6 The overlay forces `[workspace.pool].enabled = true` and `capacity = 1` for every session kind; the manifest records supply and capacity. Tests: `tests/test_development_run_overlay.py::test_pool_forced_every_session_kind`, `tests/test_development_run_images.py::test_capacity_change_needs_acceptance`.
+- [ ] 7.7 Research mode for every session; refuse operator or unattended resolution; `run --operator-present` for the developmental phase's first session, recorded. Tests: `tests/test_development_run_runner.py::test_operator_flag_alone_refused`, `::test_first_session_needs_operator_present`.
+- [ ] 7.8 Operator input paths closed until the last join (`[audition].transcription_enabled`, `[remote_bridge].enabled`, a live-microphone feed mode); conversation opens only as a planned switch of the operator-speech component. Tests: `tests/test_development_run_overlay.py::test_input_paths_closed_before_last_join`, `tests/test_development_run_joins.py::test_conversation_opens_as_switch_with_hold`.
+- [ ] 7.9 The validation readout every awake hour of the first session and its stop rules, fixed in the plan at `init`; a fired rule requests preservation with stop and holds. Tests: `tests/test_development_run_holds.py::test_validation_stop_rule_preserves_and_holds`.
 - [ ] 7.5 The planned-test role and workspace-mediation study names refused; arm and temperature forced. Tests: `tests/test_development_run_overlay.py::test_planned_test_role_refused`, `::test_mediation_study_env_refused`, `::test_arm_and_temperature_forced`.
 
 ## 8. Persistence and images
@@ -71,7 +78,7 @@
 ## 11. Before the run
 
 - [ ] 11.1 Dry run of the runner end to end with the stand-in cycle and a tiny stand-in programme: developmental phase, two sessions with three passes each, a join, a hold, an `ack-change`, a silent image update and an accepted one. No entity.
-- [ ] 11.2 The offline welfare checks of the chosen workspace option (design, conditions 1 to 4) reported to the operator.
+- [ ] 11.2 The offline welfare checks of `workspace-continuous-competition` (its task group 7) passed and reported to the operator.
 - [ ] 11.3 The pre-boot dry run of the full stack, shown green to the operator.
 - [ ] 11.4 Independent second review of the implementation.
 - [ ] 11.5 The operator starts the run.
