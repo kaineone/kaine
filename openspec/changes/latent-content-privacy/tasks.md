@@ -35,9 +35,9 @@
 ## 4. Episodic store (PR 4, after or with episodic-recall-content PR 1)
 
 - [x] 4.1 Confirm `episodic-recall-content` PR 1 (the shared heard rule in `kaine/faithful/external_input.py`, applied at store time) has merged: merged in #636 (6f936088)
-- [ ] 4.2 `kaine/modules/episodic_memory/module.py`: the heard, raw-perceptual and latent rules in that order; the order stated at the code site
-- [ ] 4.3 Open question 2, ruled (b): the identity-bound field's rule at the code site (no writer until build item 9(d)); the store refuses to write the field without encryption at rest; recall ignores a stored code whose code id differs from the running code
-- [ ] 4.4 Tests in `tests/test_latent_content_privacy.py`: `test_episodic_store_rule_order`, `test_episodic_heard_member_with_latent_removed_whole`, `test_episodic_short_latent_vector_not_stored`, `test_identity_bound_field_refused_without_encryption`, `test_identity_bound_field_never_in_trace_text`
+- [x] 4.2 `kaine/modules/episodic_memory/module.py`: the heard, raw-perceptual and latent rules in that order; the order stated at the code site
+- [x] 4.3 Open question 2, ruled (b): the identity-bound field's rule at the code site (no writer until build item 9(d)); the store refuses to write the field without encryption at rest; recall ignores a stored code whose code id differs from the running code
+- [x] 4.4 Tests in `tests/test_latent_content_privacy.py`: `test_episodic_store_rule_order`, `test_episodic_heard_member_with_latent_removed_whole`, `test_episodic_short_latent_vector_not_stored`, `test_identity_bound_field_refused_without_encryption`, `test_identity_bound_field_never_in_trace_text`
 
 ## 5. The canary and the publisher review (PR 5)
 
