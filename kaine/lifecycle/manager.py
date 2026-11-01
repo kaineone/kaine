@@ -610,12 +610,16 @@ class ForkManager:
         else:
             wm_parent, wm_reason = None, ""
         if wm_name in all_names:
-            if wm_parent is None or (modules_a if wm_parent == "a" else modules_b).get(wm_name) is None:
+            holder = "a" if modules_a.get(wm_name) is not None else "b"
+            if wm_parent is None:
                 # No world-model weights in either parent: the state is
                 # configuration metadata only and is taken from the parent
                 # that holds it, a when both do.
-                wm_parent = "a" if modules_a.get(wm_name) is not None else "b"
-                wm_reason = "no world-model weights"
+                wm_parent, wm_reason = holder, "no world-model weights"
+            elif (modules_a if wm_parent == "a" else modules_b).get(wm_name) is None:
+                # The weights' parent recorded no world-model module state; the
+                # state (metadata only) comes from the other parent.
+                wm_parent, wm_reason = holder, "the weights' parent holds no module state"
             weight_record[wm_name] = {"from": wm_parent, "reason": wm_reason}
 
         merged_modules: dict[str, dict[str, Any]] = {}

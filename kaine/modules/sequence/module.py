@@ -393,6 +393,9 @@ class Sequence(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        # A restore replaces whatever an earlier restore left pending: a head
+        # from another snapshot is never loaded onto this one's reservoir.
+        self._pending_pred_head_state = None
         # The layout comes first so a snapshot with an unknown layout fails
         # before any other state is restored. A snapshot written before the
         # layout was versioned is layout 1: a trained being keeps the input

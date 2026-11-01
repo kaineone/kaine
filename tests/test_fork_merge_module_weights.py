@@ -939,3 +939,72 @@ def test_forward_prediction_off_warns_when_a_forward_model_is_dropped(caplog):
     with caplog.at_level(logging.WARNING):
         sequence.deserialize(_sequence(5).serialize())
     assert "forward prediction is off" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_has_weights", [False, True])
+async def test_vision_second_restore_before_initialize_replaces_the_pending_model(second_has_weights):
+    first, second = _vision(1), _vision(2)
+    second_state = second.serialize()
+    if not second_has_weights:
+        second_state = {"encoder_model_id": second_state["encoder_model_id"]}
+    vision = Vision(_init_bus(), encoder=_Encoder(), forward_prediction=True, forward_model_units=3)
+    fresh = vision.serialize()
+    vision.deserialize(copy.deepcopy(first.serialize()))
+    vision.deserialize(copy.deepcopy(second_state))
+    await vision.initialize()
+    try:
+        got = vision._forward_model.state_dict()
+        assert got != first._forward_model.state_dict()
+        if second_has_weights:
+            assert got == second._forward_model.state_dict()
+        else:
+            assert "forward_model" not in fresh  # nothing was built or pending before
+    finally:
+        await vision.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_has_weights", [False, True])
+async def test_sequence_second_restore_before_initialize_replaces_the_pending_head(second_has_weights):
+    first, second = _sequence(5), _sequence(6)
+    second_state = second.serialize()
+    if not second_has_weights:
+        second_state = {k: v for k, v in second_state.items() if k != "pred_head"}
+    sequence = Sequence(_init_bus(), reservoir_seed=9, cfc_units=4, forward_prediction=True)
+    sequence.deserialize(copy.deepcopy(first.serialize()))
+    sequence.deserialize(copy.deepcopy(second_state))
+    await sequence.initialize()
+    try:
+        assert sequence._network.reservoir_seed == 6
+        got = sequence._pred_head.state_dict()
+        # The first snapshot's head (trained on reservoir 5) never lands on reservoir 6.
+        assert got != first._pred_head.state_dict()
+        if second_has_weights:
+            assert got == second._pred_head.state_dict()
+    finally:
+        await sequence.shutdown()
+
+
+def test_world_model_state_reason_when_the_weights_parent_has_no_state(tmp_path: Path):
+    mgr = ForkManager(tmp_path / "forks")
+    pa = tmp_path / "entity_a" / "world_model.ckpt"
+    pb = tmp_path / "entity_b" / "world_model.ckpt"
+    pa.parent.mkdir()
+    pb.parent.mkdir()
+    a_model, b_model = _world_model(pa, seed=1), _world_model(pb, seed=2)
+    a_model._save_weights(reason="test")
+    b_model._save_weights(reason="test")
+    a = mgr.snapshot(_Registry([a_model])).id
+    b = mgr.snapshot(_Registry([b_model])).id
+    # a's snapshot keeps its world-model artifacts but loses the module state.
+    from kaine.lifecycle.snapshot import load_snapshot, save_snapshot
+
+    snap_a = load_snapshot(mgr.root, a)
+    save_snapshot(mgr.root, snap_a.with_modules({}))
+    merged = mgr.merge(a, b, world_model_from="a")
+    assert merged.metadata["artifact_sources"]["world_model"] == "a"
+    assert merged.metadata["module_weights_from"]["world_model"] == {
+        "from": "b",
+        "reason": "the weights' parent holds no module state",
+    }

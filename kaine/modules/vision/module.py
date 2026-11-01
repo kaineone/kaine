@@ -1010,6 +1010,9 @@ class Vision(BaseModule):
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        # A restore replaces whatever an earlier restore left pending: weights
+        # from another snapshot are never loaded with this one's state.
+        self._pending_forward_model_state = None
         # Encoder identity is immutable per vision module instance; just note any
         # divergence in the log for forensic value.
         recorded = state.get("encoder_model_id")
