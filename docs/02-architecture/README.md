@@ -126,6 +126,8 @@ All inter-module communication flows through Redis Streams (`compose/redis.yml`)
 
 **Stream naming.** Most modules publish to `<name>.out`. The language module also publishes `language.internal` and `language.external`. Only the workspace may write the reserved stream `workspace.broadcast`. The action selection module's intents go to `action_selection.out`. The cycle writes telemetry to `cycle.out` and reads rate-control commands from `cycle.control`.
 
+**Two instances.** The main bus persists every entry to Redis's append-only file, so no value that may never reach disk is published on it. Two field sets are diverted on every publish: the latent fields (perceptual latents and every `latent_derived` mapping) and spoken text (heard words and the entity's own utterance text, leaving `text_chars` and `text_words` behind). When a producer declares that a consumer needs them, they travel on the companion stream `<stream>.companion` of a second instance, `kaine-redis-volatile`, which never persists; the companion entry is written first and the main entry's `companion` field names it, and a consumer joins the two (`AsyncBus.join_companion`). A producer may declare an age bound for its companion stream, which is trimmed exactly on every write and by a once-a-second sweep. See [Security and privacy](../13-security-and-privacy.md#latent-derived-values).
+
 **Event schema** (`kaine/bus/schema.py`):
 
 ```
@@ -135,6 +137,7 @@ payload       object      JSON payload, module-defined
 salience      float       0.0 to 1.0, the event's intensity (validated at publish time)
 timestamp     datetime    timezone-aware UTC ISO-8601
 causal_parent string|null entry ID of the event this is a response to
+companion     string|null set on decode: the companion entry holding this entry's diverted values
 ```
 
 Events that fail validation are rejected before any Redis write. `AsyncBus.audit()` enforces `requirepass` while `[bus].audit_required` is true (the default). When `[redis].host` is not a loopback address, the audit also refuses a Redis bound to all interfaces; with the shipped loopback host only the password is checked.

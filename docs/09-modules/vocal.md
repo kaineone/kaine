@@ -58,7 +58,7 @@ Download models ahead of time with `python -m kaine.setup.speech_models [--tts I
 
 When [Language](language.md) realizes a `speak` intent, its text reaches the vocal module for synthesis. The vocal module:
 
-- reads `language.external` for the text to synthesize;
+- reads `language.external` for the text to synthesize, joining each entry's companion entry on the never-persisted bus for the words (see [Heard and spoken words on the bus](../13-security-and-privacy.md#heard-and-spoken-words-on-the-bus)); when the words are gone it plays nothing and publishes a failed `vocal.synthesized` with `error: "words unavailable"`;
 - keeps the latest `affect.state` from the [affect module](affect.md);
 - maps the affect to prosodic parameters (all four under Chatterbox, `speed_factor` only under Kokoro);
 - optionally blends in a bounded residual of the partner's prosody from `audition.prosody`, which fades after the partner stops speaking;

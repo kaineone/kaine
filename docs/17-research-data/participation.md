@@ -62,6 +62,7 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 `[research_event_log.raw_archive]` ships disabled. When enabled, a `RawBusArchiveConsumer` tees verbatim events from every `<module>.out` stream to `state/research/raw_bus_archive/` for deep local analysis. This data includes conversation content and transcripts, so it is locked down:
 
+- It holds no heard or spoken words: transcriptions, chat and utterances are archived as their main-bus entries, with `text_chars` and `text_words` in place of the words, which travel only on the never-persisted bus.
 - It never holds a latent field: the sink removes the perceptual latents (`latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`) and every `latent_derived` mapping at any depth before a record is written (see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)). Everything else is archived as published.
 - It writes outside `data/evaluation/`, so the metrics bundle builder can never include it.
 - It is encrypted at rest through the same `AsyncJsonlSink` + `StateEncryptor` mechanism.

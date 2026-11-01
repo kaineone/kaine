@@ -23,7 +23,7 @@ The self-model module never reads or stores the text of the entity's speech. Its
 |---|---|---|---|
 | Workspace | `workspace.broadcast` | snapshot | The `source` of every coalition member, for drift |
 | Language | `language.internal` (configurable) | any | Event type, text length, word count |
-| Language | `language.external` (configurable) | any | Event type, text length, word count |
+| Language | `language.external` (configurable) | any | Event type, text length, word count (from the main-bus `text_chars` and `text_words`; the words never reach this module) |
 | Affect | `affect.out` | `affect.state` | `state.valence`, `state.arousal`, `state.dominance` |
 | Affect | `affect.out` | `affect.drive` | `drive` name |
 | Planning | `planning.out` | `planning.policy` | `policy` label and `expected_free_energy` |

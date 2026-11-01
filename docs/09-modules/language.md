@@ -269,6 +269,7 @@ The window closes at the first reply, at the entity's next utterance, or after t
 - `faithful_rendering` holds rendered coalition text with heard speech replaced by `[heard speech]`. It contains no audio, camera frames or heard words.
 - `user_input` is published only for felt and event intents, with heard text redacted, and the language module does not write it to disk.
 - Inner thought on `language.internal` never reaches the vocal module, and the dashboard does not display its content.
+- No speech event's words reach the persisted bus. On `language.external`, `language.internal` and `language.out` the main-bus entry carries `text_chars` and `text_words` in place of `text`, and no `user_input` or `faithful_rendering`; the words travel on the never-persisted bus, and each entry names its companion entry. The language module declares `reads_spoken_text`, so the broadcasts it decodes carry the words back: a heard member's words feed the heard turn, and a heard member whose words are gone renders as "Speech heard but indistinct." The cycle refuses to start the language module without the never-persisted bus. See [Heard and spoken words on the bus](../13-security-and-privacy.md#heard-and-spoken-words-on-the-bus).
 
 ## Key files
 

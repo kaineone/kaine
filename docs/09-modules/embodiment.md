@@ -50,7 +50,7 @@ The canonical continuous channels are `drive`, `yaw_rate`, `gaze_yaw`, `gaze_pit
 | `adapter.feed()` | `_feed_loop` and `_handle_feed` | Perception frames from the body |
 | `action_selection.out` | `_intent_loop`, then `_send_action` | `intent.avatar.<family>` verbs to `apply_action` |
 | `action_selection.out` | `_intent_loop`, then `_drive_control` | `intent.avatar.control` to `apply_setpoints`, clamped and gated, plus a `embodiment.efference` copy |
-| `language.external` | `_speech_loop` (if `mirror_speech = true`) | Text sent as a `say` action to local chat |
+| `language.external` | `_speech_loop` (if `mirror_speech = true`) | Text, joined from the entry's companion on the never-persisted bus, sent as a `say` action to local chat; an utterance whose words are gone is logged and not said |
 
 ## Outputs
 
