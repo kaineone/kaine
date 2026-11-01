@@ -12,10 +12,47 @@ Living here rather than under ``kaine/dashboard/`` keeps the evaluation package
 from depending on the dashboard layer — preserving the one-directional sidecar
 boundary while letting both layers share the exact same ``CONTENT_FIELDS``
 definition and scrub logic.
+
+The latent rule
+---------------
+A value is *latent-derived* when it is computed from a perceptual latent (an
+encoder output: the vision module's ``latent``, ``peripheral`` and ``foveal``,
+the audition module's acoustic embedding) or from another latent-derived value,
+and it keeps per-dimension information: a vector in an encoder's latent space or
+in any learned space computed from one, or a per-dimension statistic of such
+vectors over any window. A content code, a decoder's prediction (an 8-number one
+included), a residual vector, a code-space gradient and the mean of the last 16
+clip latents are latent-derived. Scalar reductions over all dimensions (a norm,
+a distance, a mean squared error, a ratio, an information gain), counts, source
+names and tick indices are not. Learned parameters are not values under this
+rule: a weight matrix trained on latents is identity and follows the identity
+rules (persist, encrypt, copy into forks, never logged).
+
+Latent-derived values travel only inside a mapping under ``LATENT_DERIVED_KEY``
+(``"latent_derived"``), at any depth. Perceptual latents keep their own names.
+``LATENT_FIELDS`` holds both, and ``strip_latent`` removes them from a record at
+any depth regardless of length. Every record writer applies it: the JSONL sink,
+the encrypted JSONL writer, the organ's renderers and the module-state captures.
+Latent-derived content may live in working state and in learned weights; it is
+never logged, never stored as an episode and never written to a record.
+
+A worked example of the closure: once interoception's blend includes a
+prediction decoded from a content code, its residual vector is latent-derived
+(the input minus a latent-derived prediction, keeping per-dimension
+information), so it is published only under the tag. Its per-channel expected
+error state is computed from latent-derived values too, but it may stay in
+module state because a learning rule updates it and the module reads it back on
+restore: it is a learned statistic. Its scalar ``unexpected_error`` is a scalar
+reduction and may be published anywhere. To apply the rule, follow a value
+back: if any input is latent-derived and the value keeps per-dimension
+information, it is latent-derived; then ask whether it is a learned parameter
+that the module reads back on restore.
 """
 from __future__ import annotations
 
 import copy
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -51,12 +88,34 @@ from kaine.bus.schema import Event
 # operational familiarity label (metrics), so it is not entity-interior content.
 # ---------------------------------------------------------------------------
 
+# The reserved key under which every latent-derived value travels (the latent
+# rule in the module docstring). It is a vector field, so the diagnostics filter
+# (dev mode included) and ``strip_vectors`` remove it at any length.
+LATENT_DERIVED_KEY: str = "latent_derived"
+
 # Perceptual/latent embeddings (vision clip embeddings 768/384-dim; sequence
-# CfC hidden state 32-dim and 24-dim feature vector); never displayed by
-# the dashboard; persisting them would break zero raw-sense-data persistence.
+# CfC hidden state 32-dim and 24-dim feature vector) and the latent-derived tag;
+# never displayed by the dashboard; persisting them would break zero
+# raw-sense-data persistence.
 VECTOR_FIELDS: frozenset[str] = frozenset(
-    {"latent", "peripheral", "foveal", "temporal_context", "feature_vector"}
+    {
+        "latent",
+        "peripheral",
+        "foveal",
+        "temporal_context",
+        "feature_vector",
+        LATENT_DERIVED_KEY,
+    }
 )
+
+# The keys every record writer removes (``strip_latent``). The same set as
+# ``VECTOR_FIELDS``, exported under its own name so callers say what they mean.
+LATENT_FIELDS: frozenset[str] = VECTOR_FIELDS
+
+# The version of the latent rule. A component that produces latent-derived
+# values refuses to start when this is missing or lower than the version it was
+# reviewed against.
+LATENT_RULE_VERSION: int = 1
 
 # Backstop for embeddings published under a name not in VECTOR_FIELDS. 16 sits
 # above the longest small numeric list on the diagnostics streams (5-element
@@ -195,6 +254,94 @@ def _scrub(
         ]
 
     return copy.deepcopy(value)
+
+
+def _numpy_array_type() -> type | None:
+    # numpy is never imported here: when no caller has imported it, no value
+    # can be an ndarray, and the filter stays free of the dependency.
+    np = sys.modules.get("numpy")
+    return getattr(np, "ndarray", None) if np is not None else None
+
+
+def strip_latent(value: Any) -> Any:
+    """A copy of ``value`` with every key in ``LATENT_FIELDS`` removed at any depth.
+
+    It walks mappings, lists and tuples (tuples stay tuples), removes nothing
+    else (no length backstop, no content keys) and converts every numpy array it
+    meets to Python numbers with ``tolist()`` before walking it, so an array
+    under a latent key is removed with its key and an array under any other key
+    is written as exact numbers rather than by numpy's elided ``str()``. Every
+    record writer applies it before encoding.
+    """
+    return _strip_latent(value, _numpy_array_type())
+
+
+def _strip_latent(value: Any, ndarray: type | None) -> Any:
+    if ndarray is not None and isinstance(value, ndarray):
+        value = value.tolist()
+    if isinstance(value, Mapping):
+        return {
+            k: _strip_latent(v, ndarray)
+            for k, v in value.items()
+            if k not in LATENT_FIELDS
+        }
+    if isinstance(value, list):
+        return [_strip_latent(item, ndarray) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_strip_latent(item, ndarray) for item in value)
+    return value
+
+
+def without_latent_derived(value: Any) -> Any:
+    """``value`` with every ``LATENT_DERIVED_KEY`` mapping removed at any depth.
+
+    Copy on write: when no mapping at any depth holds the key, the very same
+    object is returned, so a payload with no latent-derived value passes
+    unchanged. Only the containers on the path to a removed key are rebuilt
+    (tuples stay tuples). The perceptual latents are left in place; this is the
+    narrower strip for a payload that still travels on the bus.
+    """
+    return _without_key(value, LATENT_DERIVED_KEY)
+
+
+def _without_key(value: Any, key: str) -> Any:
+    if isinstance(value, Mapping):
+        changed = key in value
+        out: dict[Any, Any] = {}
+        for k, v in value.items():
+            if k == key:
+                continue
+            nv = _without_key(v, key)
+            changed = changed or nv is not v
+            out[k] = nv
+        return out if changed else value
+    if isinstance(value, (list, tuple)):
+        items = [_without_key(item, key) for item in value]
+        if all(a is b for a, b in zip(items, value)):
+            return value
+        return items if isinstance(value, list) else tuple(items)
+    return value
+
+
+def holds_latent_field(value: Any) -> bool:
+    """True when a mapping at any depth of ``value`` (inside lists, tuples and
+    object arrays included) holds a key in ``LATENT_FIELDS``."""
+    return _holds_latent_field(value, _numpy_array_type())
+
+
+def _holds_latent_field(value: Any, ndarray: type | None) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            k in LATENT_FIELDS or _holds_latent_field(v, ndarray)
+            for k, v in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_holds_latent_field(item, ndarray) for item in value)
+    if ndarray is not None and isinstance(value, ndarray):
+        # Only an object array can hold a mapping; a numeric array is a leaf.
+        if value.dtype == object:
+            return _holds_latent_field(value.tolist(), ndarray)
+    return False
 
 
 def strip_vectors(payload: Any) -> Any:
