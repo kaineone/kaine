@@ -71,7 +71,7 @@ A body that declares `reset` SHALL be resettable to its start pose by an operato
 - **THEN** `embodiment_built()` is false and the module cannot join an entity
 
 ### Requirement: The default simulated body is a JetHexa model of KAINE's own
-The default MuJoCo body SHALL be a JetHexa model written for KAINE: 18 leg joints and a pan-tilt head with a camera, an IMU and joint-position sensors. No file from an unlicensed vendor repository SHALL be vendored. Its model card SHALL mark each physical parameter as provisional, measured or identified.
+The default MuJoCo body SHALL be a model of the JetHexa written for KAINE: 18 leg joints with joint-position sensors, a pan-tilt head with a camera, and an IMU. No file from an unlicensed vendor repository SHALL be vendored, and no value, offset or mesh SHALL be transcribed from one. Its model card SHALL record each physical value's source and its status (provisional, measured or identified). The robot's name SHALL be used descriptively only.
 
 #### Scenario: The model card
 - **WHEN** the provisional model is built from published dimensions
@@ -118,3 +118,17 @@ The MJCF and every mesh, texture and include SHALL load only from the vendored a
 #### Scenario: An include outside the directory
 - **WHEN** a model references a file outside the vendored directory
 - **THEN** loading is refused, naming the reference
+
+### Requirement: The simulated head has no joint state until the real head is confirmed to report one
+The JetHexa body SHALL declare its head joint-state sensors absent, and SHALL perceive the head command's consequence only through the camera, until the real head's servos are confirmed to report position, or a decision to fit feedback servos is recorded in the model card.
+
+#### Scenario: Stage J1
+- **WHEN** the entity drives head pan in stage J1
+- **THEN** the motor loop receives no head joint state, and the change appears in the camera image
+
+### Requirement: The real robot is driven only after its physical-safety change
+The real JetHexa adapter SHALL NOT be given to an entity before a separate physical-safety change has merged with its own independent second review. That change covers torque and speed limits below the simulated ones, a workspace or tether, an operator-held hardware stop, and an on-robot watchdog that drops torque when commands stop.
+
+#### Scenario: The adapter before the safety change
+- **WHEN** the real adapter is configured and the physical-safety change has not merged
+- **THEN** boot refuses, naming the missing change

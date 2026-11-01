@@ -42,8 +42,12 @@ A session SHALL start only for a title on the operator's curated list, identifie
 - **WHEN** a session is requested for an app id not on the list
 - **THEN** no session starts
 
-### Requirement: End-to-end latency is measured and bounded
-The launcher SHALL measure the delay from a gamepad state change to a changed frame at session start, SHALL record it, and SHALL refuse or end the session above `max_latency_ms`.
+### Requirement: End-to-end latency is measured before the entity perceives the stream
+The launcher SHALL measure the delay from a gamepad state change to a changed frame before the stream is routed to the entity, using the probe input declared neutral for that title, SHALL record it, and SHALL refuse or end the session above `max_latency_ms`. A title without a declared neutral probe SHALL NOT be admitted.
+
+#### Scenario: Session start
+- **WHEN** a session starts
+- **THEN** the probe runs before any frame or sound reaches the entity, and only the title's declared neutral input is sent
 
 #### Scenario: A slow stream
 - **WHEN** the measured end-to-end latency exceeds the bound
@@ -63,12 +67,23 @@ On a host that also runs the entity, a game SHALL run on a display other than th
 - **WHEN** a same-host session is requested and the display and confinement check has not passed
 - **THEN** the session is refused, and the reason names the check
 
-### Requirement: The game host is confined to the curated game
-Before each session the launcher SHALL verify all of these, and refuse on any failure: the host's application list holds only the curated titles; its keyboard and mouse input are disabled; its game client runs offline with notifications off; its internet is blocked except the tailnet; and its session is a confined session, not an operator's desktop. The source SHALL be classed `confined_world` only when every check passes.
+### Requirement: The game host is confined to the curated game, as reported by a host agent
+A host check agent on the game host SHALL report, signed, over the tailnet: the application list holds only the curated titles; keyboard and mouse input are disabled; the game client is offline with notifications off; outbound internet is blocked except the tailnet, with a failing escape probe; and the session is confined. The launcher SHALL refuse a session when any check fails or the agent is absent.
 
 #### Scenario: A desktop entry in the application list
-- **WHEN** the host's application list contains a Desktop entry
+- **WHEN** the agent reports a Desktop entry in the host's application list
 - **THEN** no session starts, and the reason names the entry
+
+#### Scenario: No agent
+- **WHEN** the game host runs no check agent
+- **THEN** no session starts, and the reason names the missing agent
+
+### Requirement: Unobservable host facts are attestations, never verifications
+A host fact that neither the agent nor the launcher can observe SHALL be recorded as a dated operator attestation, and SHALL NOT be reported as verified.
+
+#### Scenario: A per-title setting stored elsewhere
+- **WHEN** a title keeps an online setting the agent cannot read
+- **THEN** the session record lists it as an operator attestation with its date
 
 ### Requirement: The path is monitored for the whole session
 The launcher SHALL monitor the tailnet path throughout a session, SHALL record each change between direct and relayed, and SHALL end the session when the latency bound is exceeded.

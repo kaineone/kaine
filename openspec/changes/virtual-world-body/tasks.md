@@ -26,7 +26,7 @@
   - the bus-rate loop with the modelled read delay;
   - depth and lidar declared but not wired; temperature and voltage absent.
 
-  No vendor files. Tests: the model compiles; five-leg stance is statically stable; joint channels only (no gait channel).
+  No vendor files and no values transcribed from them. The model card records every value's source and status. The name is used descriptively, with no vendor logos or meshes. Head joint state is declared absent until the real head's feedback is confirmed. Tests: the model compiles; five-leg stance is statically stable; joint channels only (no gait channel); no head joint state.
 - [ ] 2.4 Domain randomisation from a body seed drawn once per entity, persisted with it, carried by preservation bundles, copied to forks, and recorded in the manifest; re-randomisation only as a recorded operator act. Tests: the same body across two boots of one entity; a fork has its parent's body; ranges respected.
 - [ ] 2.5 Latency measured on a cloned simulation state, never on the occupied body, plus the passive measure from the entity's own commands; the bound in entity time. Tests: a configured delay is measured within tolerance; the occupied body's joints are untouched by the probe; the bound refuses.
 - [ ] 2.6 Source gating, the world holding while away, and operator reset. Tests: no effect while another source is selected; reset recorded with the operator as initiator.
@@ -44,6 +44,7 @@
   - identify each servo (step responses at the bus rate) and the foot friction;
   - update the model card, marking each value measured or identified.
 - [ ] 3.3 Inspect the robot's ROS 2 Humble stack: topics, services, and whether per-joint commands and joint state are exposed. Record it in the docs.
+- [ ] 3.3a The required later change `jethexa-physical-safety`: torque and speed limits below the simulated ones, a workspace or tether, an operator-held hardware stop, an on-robot command watchdog that drops torque, tests on the robot with no entity attached, and its own independent second review. The real adapter is not given to an entity before it merges.
 - [ ] 3.4 The real JetHexa adapter behind the same descriptor: a ROS 2 bridge, or a thin on-robot bridge over a declared tailnet endpoint. Tests: a protocol-level fake of the bus or topics. Then one supervised hardware check, entity-free.
 - [ ] 3.5 Optional, if Hiwonder grants written permission: convert its 2027 description package with MuJoCo's URDF loader, then apply the hand-added items of design D4.
 
@@ -55,10 +56,11 @@
   - Tailnet Lock (`tailscale lock status`, parsed and tested against captured output);
   - the host's ports;
   - the host encryption setting;
-  - latency, probed before the session with no entity attached;
+  - latency, probed before the stream is routed to the entity, with the title's declared neutral input;
   - the declared egress, behind the nftables allowlist with escape probes;
-  - host confinement: curated application list, keyboard and mouse off, Steam offline with notifications off, internet blocked except the tailnet, a confined session;
+  - host confinement, through the host check agent (task 4.2a), with unobservable facts recorded as dated operator attestations;
   - continuous path monitoring.
+- [ ] 4.2a The host check agent on the game host: signed reports over the tailnet of the app list, input settings, offline state and notifications, outbound rules with an escape probe, and the session type; its own review. Tests: each failing report refuses a session; an absent agent refuses.
 - [ ] 4.3 Read Valve's subscriber agreement and each listed title's terms on automated play. Record the result in the curated-list docs before the first session.
 - [ ] 4.4 The `game_pad` body with its declared channels (no Guide, home or share channel) and per-title contexts, and the curated title list. Tests: no channel mapping in code (static check), contexts per title, and a helper message set with no keyboard, mouse or text type.
 - [ ] 4.5 Same-host GPU arbitration: admission through NVML, the priority bands, ending before sleep. Tests: fake NVML readings for each rule.

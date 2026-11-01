@@ -130,12 +130,13 @@ The CTO will build a Hiwonder JetHexa (2027 edition). It is the default simulate
 
 | Item | Fact | Status |
 |---|---|---|
-| Body | six legs, three joints each (coxa, femur, tibia): 18 leg joints, plus a pan-tilt head carrying the depth camera | product data; joint names from the public source |
-| Leg servos | HX-35H serial bus servos with position, voltage and temperature feedback | product data |
+| Body | six legs, three joints each (coxa, femur, tibia): 18 leg joints, plus a 2-DoF pan-tilt head carrying the depth camera | "18DOF" in the product data; leg joint names from the public source; the pan-tilt head only from an image caption on the product page ("2DOF Pan-Tilt Camera & 3D Depth Camera"), not from its specification table |
+| Leg servos | HX-35H serial bus servos | product data ("HX-35H bus servo"; the page says only "high precision, feedback") |
+| Leg servo feedback | position, voltage and temperature reads | the older edition's SDK command set; UNVERIFIED in a servo datasheet for the 2027 robot |
 | HX-35H figures | about 25 kg·cm rated and 35 kg·cm stall at 11.1 V (about 2.45 and 3.43 N·m), about 0.18 s per 60°, 240° range | reseller and database pages: UNVERIFIED against a Hiwonder datasheet |
-| Head servos | PWM servos in the older edition's configuration | UNVERIFIED for 2027 |
+| Head servos | PWM servos driven from GPIO in the older edition (`jethexa_sdk/src/jethexa_sdk/pwm_servo.py`: `GPIO.PWM(gpio, 50)`), which gives no position read-back | UNVERIFIED for 2027 |
 | Bus | header `0x55 0x55`, commands such as move-with-time and position read, 115200 baud, half duplex; position in 0-1000 ticks over 240° | older edition's SDK; UNVERIFIED for 2027 |
-| Compute | Jetson Orin Nano Super, Orin NX Super, Jetson Nano, or Raspberry Pi 5, by kit | product data |
+| Compute | Purchasable kits: Raspberry Pi 5 (4/8 GB), Jetson Orin Nano Super (4/8 GB), Jetson Orin NX Super (8/16 GB), or without controller. "Jetson Nano" appears only in the specification table, not among the purchasable variants | product data |
 | Software | Ubuntu 22.04.5 and ROS 2 Humble, with an inverse-kinematics gait, posture control, MoveIt2 and Gazebo | product data; the 2027 ROS 2 source is not public (UNVERIFIED) |
 | Sensors | Aurora930 Pro depth camera; COIN-D6 or RPLIDAR C1 lidar; IMU (model unnamed); WonderEcho Pro voice module | product data |
 | Size and mass | 430 × 400 × 226 mm, 2.49-2.71 kg by kit | product data |
@@ -143,14 +144,17 @@ The CTO will build a Hiwonder JetHexa (2027 edition). It is the default simulate
 
 The model has to be our own:
 
-- Hiwonder's repository has no licence. Its packages say `<license>TODO</license>`, and its README says only "open-source and available for educational and research purposes". So nothing from it is vendored, and it may be read privately for the joint layout only.
+- Hiwonder's repository has no licence. Its packages say `<license>TODO</license>`, and its README says only "open-source and available for educational and research purposes". So nothing from it is vendored or transcribed. The joint layout (six legs of coxa, femur and tibia, and a pan-tilt head) is a fact. No link offset, origin, inertia or mesh is taken from the URDF, even from a private reading (re-review).
 - Its URDF describes the older edition, and gives every link a placeholder mass of 0.00001 with unit inertia, so it carries no physics.
 - No licensed JetHexa MJCF exists (GitHub search), and Menagerie has no hexapod.
 - So KAINE writes its own MJCF.
 
 How the MJCF is built:
 
-1. Provisional geometry, from the published overall size and mass. It is marked provisional in its model card.
+1. Provisional geometry, from the published overall size (430 × 400 × 226 mm) and mass (2.49-2.71 kg by kit).
+   - **The model card** records, for every value, its source: the published figure, a measurement on the CTO's robot, a system-identification fit, or a stated assumption. It also records its status: provisional, measured or identified.
+   - No value is copied from the vendor's URDF.
+   - The name "JetHexa" is used descriptively only, to say which robot the model represents. No Hiwonder logo, mesh or visual asset is used, and the visual geometry is KAINE's own primitives.
 2. Measured geometry once the robot is built: link lengths, joint axes and offsets, and the mass of each part on a scale.
 3. Actuators:
    - position servos with the HX-35H's force limit and speed;
@@ -161,8 +165,13 @@ How the MJCF is built:
    Menagerie's practice for legged robots is followed: primitive feet, defaults in classes, `impratio` raised (Menagerie README and its Go2 notes, read).
 4. Sensors as on the real robot:
    - the head camera as an RGB render, which goes to the vision source;
-   - joint positions at the bus rate;
-   - an IMU (accelerometer and gyro) on the body.
+   - leg joint positions at the bus rate;
+   - an IMU (accelerometer and gyro) on the body;
+   - **no head joint state** (re-review R-VWB-1).
+     - The public SDK drives the head as PWM servos without read-back, and the 2027 head is unconfirmed.
+     - So the simulated head declares its `joint_state` sensors absent. The head channel gives only its command, and the command's consequence is perceived through the camera.
+     - This keeps stages J1 and J2 honest to the real robot: a policy learned with head proprioception would meet a head without it.
+     - If the 2027 head proves to have bus servos with feedback, or a decision is recorded to fit feedback servos to it, the sensors are declared present by that decision, and the model card records it.
 
    Depth and lidar are declared but not wired. They are new senses, needing their own processors, design and second review. Temperature and voltage are declared absent in simulation.
 5. System identification on the real robot:
@@ -182,7 +191,8 @@ Matching the real control path:
 - The body descriptor mirrors the real servo interface:
   - joints with a `position` command (a target plus a move time);
   - `position` state;
-  - temperature and voltage states (absent in simulation).
+  - temperature and voltage states (absent in simulation);
+  - for the head, a command only, with no state, until head feedback is confirmed (sensor item 4).
 - The control rate matches the bus:
   - A move command is about 10 bytes and a position read about 14 bytes round trip. At 115200 baud, with 10 bits per byte, a full 18-joint command is about 16 ms and a full read about 22 ms. That is the lead's arithmetic.
   - So the full-body loop is about 20 Hz, matching the older edition's 20 Hz joint-state publisher.
@@ -247,6 +257,13 @@ Order:
    `embodiment_built()` turns true when the loop is registered with a non-reference body.
 4. **J3, then J4,** each when the previous stage shows competence.
 5. **The measured model.** When the CTO has built the robot: measurement and system identification replace the provisional values, and a real adapter (D4) swaps in behind the same descriptor.
+   - **The real adapter needs its own physical-safety change first** (re-review R-VWB-4). A required later change, `jethexa-physical-safety`, designs:
+     - torque and speed limits below the simulated ones;
+     - a workspace or tether, so the robot cannot fall from a table edge;
+     - a hardware stop the operator holds;
+     - a command watchdog on the robot that drops servo torque when commands stop;
+     - its tests on the real robot with no entity attached.
+   - Babbling on 18 high-torque servos can pinch and fall. The real adapter is not given to an entity before that change has merged, with its own independent second review.
 
 Amendments to `embodiment-motor-contingency` (tasks to apply in that change, listed here):
 
@@ -308,20 +325,28 @@ The CTO's Steam library is played through a controller. The CTO decided on 2026-
   - KAINE's code stays under the CAL, and the helper is distributed separately with its source.
   - Linking moonlight-common-c into the cycle is refused.
 - **Latency.** D5's measurement runs end to end: from a gamepad state change to a changed frame. The session is refused above `max_latency_ms`.
+  - It runs before the stream is routed to the entity, so its frames and sound are never perceived (re-review R-VWB-3).
+  - Its input is a probe declared neutral for that title in the curated list: for example a d-pad press on a screen where it has no effect, with the frame region to watch. A title without a declared neutral probe is not admitted.
 - **The body.**
   - A `game_pad` body declares the gamepad's sticks, triggers and face, shoulder and d-pad buttons as channels.
   - It declares no Guide, home, Steam or share channel. Those reach the Steam client (store, browser, chat, friends) and the host's overlay, not the game (review VWB-3).
   - The motor-contingency learner learns what they do. Nothing maps a canonical channel to a control.
   - Each title is its own body context.
   - Rumble is a declared feed kind that needs its own decision before it is perceived.
-- **Confining the host to the game** (review VWB-2 and VWB-3). The launcher checks each of these before a session, and the session is refused if any fails:
-  - Sunshine's application list holds only the curated titles, with no Desktop or Big Picture entry;
-  - keyboard and mouse input are disabled in Sunshine's configuration;
-  - the host's Steam client runs offline, with notifications and the overlay's chat off;
-  - the host's internet is blocked except the tailnet, by the host's firewall, which the launcher verifies with an escape probe from the host when the host is one of the CTO's machines under KAINE's setup;
-  - the host session is confined: a dedicated session, a headless gamescope, or a Wolf-style container with its own input devices. It is not the operator's desktop.
+- **Confining the host to the game** (review VWB-2 and VWB-3; re-review R-VWB-2). Most of these facts cannot be observed from the client, and a launcher that reported them as verified would be a pretend check. So a small **host check agent** runs on the game host and reports them.
+  - It is written for KAINE and runs as the host's own user.
+  - It speaks over the tailnet to the launcher, as a declared egress endpoint, and signs its reports with a key paired at setup.
+  - It reads, on the host:
+    - Sunshine's configuration and application list: only the curated titles, no Desktop or Big Picture entry, keyboard and mouse input disabled;
+    - the game client's offline state and notification settings;
+    - the host firewall's outbound rules, plus an escape probe from the host to a public address, which must fail;
+    - the session type: a dedicated session, a headless gamescope, or a Wolf-style container with its own input devices, and not the logged-in desktop session.
+  - It has its own review.
+  - The launcher refuses a session when any reported check fails, or when the agent is absent.
+  - **What the agent cannot read** (for example a setting a title keeps elsewhere) is recorded as an operator attestation, with its date, and is never reported as verified.
+  - **From the client side**, the launcher itself checks only what it can observe: Sunshine's authenticated application list, and the ports.
 
-  The stream source is classed `confined_world` only when every check passes (`perceptual-sources` D1). A host that cannot be checked is refused. The privacy class follows the host's verified confinement, not the kind alone.
+  The stream source is classed `confined_world` only when the agent's checks pass (`perceptual-sources` D1). A host without the agent is refused. The privacy class follows the host's verified confinement, not the kind alone.
 - **Path monitoring** (review VWB-4).
   - Hosted Tailscale is accepted (CTO, 2026-11-01). So a relayed path is not refused, but it is monitored continuously, not only at start.
   - A change of path is recorded, and the latency bound ends the session when a relay makes it too slow.
