@@ -111,7 +111,7 @@ Section `[privacy]`. Values that may never reach disk through the bus (the perce
 |---|---|---|---|
 | `companion_stream_maxlen` | integer | `12000` | The cap of every companion stream and the bound on any cap set for one under `[bus.per_stream_maxlen]` (`"<stream>.companion"`). 12000 entries is about 20 minutes at the 10 Hz maximum access rate. Caps are approximate. Any other key in `[privacy]` is refused. |
 
-When any enabled module declares a companion stream, the cycle refuses to start (exit code 15) unless the never-persisted instance answers, requires a password, reports `appendonly no` and an empty `save`, and every declared companion stream is capped within this bound. The pre-boot reports the same check as the "Volatile bus" row, and the "Volatile bus budget" row compares the companion streams' caps times their per-entry sizes with the instance's `maxmemory` (`KAINE_REDIS_VOLATILE_MAXMEMORY`).
+When any enabled module declares a companion stream, the cycle refuses to start (exit code 15) unless the never-persisted instance answers, requires a password, reports `appendonly no` and an empty `save`, and every declared companion stream is capped within this bound; when a module declares an age bound for a companion stream, the instance must also apply it (`XTRIM MINID` and `TIME`). The pre-boot reports the same check as the "Volatile bus" row, and the "Volatile bus budget" row compares the companion streams' caps times their per-entry sizes with the instance's `maxmemory` (`KAINE_REDIS_VOLATILE_MAXMEMORY`).
 
 ## Pre-boot checks
 

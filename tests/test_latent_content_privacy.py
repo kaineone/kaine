@@ -1590,3 +1590,14 @@ async def test_declared_extra_fields_extend_a_field_set(main_bus):
     ev = (await main_bus.read("planning.out"))[-1][1]
     joined, ok = await main_bus.join_companion(ev)
     assert ok and joined.payload == payload
+
+
+def test_the_smallest_declared_age_bound_wins():
+    from kaine.bus.companion import CompanionRegistry
+
+    registry = CompanionRegistry(
+        declarations=[_decl("vision.out", max_age_s=120), _decl("vision.out", "latent", max_age_s=30, extra_fields=frozenset({"x"}))]
+    )
+    assert registry.max_age_s("vision.out") == 30
+    assert registry.has_age_bounds()
+    assert not CompanionRegistry(declarations=[_decl("vision.out")]).has_age_bounds()
