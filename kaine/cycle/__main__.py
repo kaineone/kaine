@@ -2110,7 +2110,9 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         return COMPANION_REFUSED_EXIT
     # Declared age bounds are enforced by a periodic exact trim as well as on
     # every write; nothing starts when no producer declares one.
-    ctx.bus.start_companion_sweeper()
+    start_sweeper = getattr(ctx.bus, "start_companion_sweeper", None)
+    if callable(start_sweeper):
+        start_sweeper()
 
     # Developmental phase: keep effectors dormant until maturation. The gate_runner will
     # call activate() at maturation before unlocking the locus.

@@ -50,9 +50,9 @@ EXPECTED_RETURNS = {
     "_phase_preconditions": {"3", "INDIVIDUATION_REFUSED_EXIT"},
     "_phase_run_identity": {"PLANNED_TEST_REFUSED_EXIT"},
     "_phase_gates": {"4", "ORGAN_GATE_REFUSED_EXIT"},
-    "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT"},
+    "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT", "COMPANION_REFUSED_EXIT"},
     "_phase_stimulus_source_hold": {"0"},
-    "_phase_registry": {"refused"},
+    "_phase_registry": {"refused", "COMPANION_REFUSED_EXIT"},
 }
 
 

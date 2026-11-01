@@ -17,6 +17,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.audition.forward import AuditoryForwardModel
 from kaine.modules.vision import Vision
 from kaine.modules.vision.forward import LatentForwardModel
+from tests._companion import attach_spoken_test_volatile, joined_entries
 
 
 @pytest.fixture
@@ -24,6 +25,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus, ("vision.out", "latent"))
     yield bus
     await bus.close()
 
@@ -133,7 +135,7 @@ async def test_vision_reports_context_gain(bus):
     for _ in range(3):
         await vision.process_frame(None)
 
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out", last_id="0")
     payload = _last_payload(entries)
     assert "context_gain" in payload
     assert "context_age_s" in payload
@@ -170,7 +172,7 @@ async def test_vision_gain_is_zero_when_the_context_carries_nothing(bus):
         await vision.on_workspace(snapshot)
         await vision.process_frame(None)
 
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out", last_id="0")
     payload = _last_payload(entries)
     assert payload["context_gain"] == 0.0
     assert payload["null_prediction_error"] == payload["prediction_error"]
@@ -229,7 +231,7 @@ async def test_vision_report_carries_the_paired_evaluations(bus):
     for _ in range(2):
         await vision.process_frame(None)
 
-    entries = await bus.read("vision.out", last_id="0")
+    entries = await joined_entries(bus, "vision.out", last_id="0")
     payload = _last_payload(entries)
     assert isinstance(payload["null_prediction_error"], float)
     assert isinstance(payload["mean_prediction_error"], float)
@@ -324,7 +326,7 @@ async def test_vision_skips_a_non_finite_latent(bus):
     for _ in range(2):
         await vision.process_frame(None)
 
-    entries = await bus.read("vision.out", last_id="0", count=50)
+    entries = await joined_entries(bus, "vision.out", last_id="0", count=50)
     events = [e for _, e in entries if e.type == "vision.report"]
     assert len(events) == 6
     assert isinstance(events[2].payload["context_gain"], float)
@@ -408,7 +410,7 @@ async def test_vision_periodic_gaps_keep_zeros_out_of_the_window(bus):
     assert window[0] == 0.0
     assert all(e > 0.0 for e in window[1:])
 
-    entries = await bus.read("vision.out", last_id="0", count=50)
+    entries = await joined_entries(bus, "vision.out", last_id="0", count=50)
     events = [e for _, e in entries if e.type == "vision.report"]
     assert len(events) == 15
     for idx in (3, 4, 6, 7, 9, 10, 12, 13):
