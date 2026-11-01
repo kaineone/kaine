@@ -294,3 +294,30 @@ async def test_the_monitor_never_reads_the_bus_unbounded():
         for line in source.splitlines():
             if call in line:
                 assert "self._bus_read(" in line, line
+
+
+async def test_n16_a_stop_set_during_the_loops_await_is_no_loss(tmp_path, monkeypatch):
+    """The monitor ends the run (action "end") while the run loop awaits the
+    producer check: the loop's top-of-loop stop check has already passed, so
+    only the guard on the liveness check keeps it from escalating."""
+    ctx, _clock = await _ctx_with_monitor(tmp_path, "research")
+    ctx.supervisor_task = asyncio.create_task(_never_ending())
+    ctx.welfare_task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert ctx.welfare_task.done() and not ctx.stop_event.is_set()
+
+    async def producer_check(*args, **kwargs):
+        ctx.stop_event.set()
+
+    async def runtime_state(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(cyc, "_supervise_welfare_producer", producer_check)
+    monkeypatch.setattr(cyc, "_write_runtime_state", runtime_state)
+    ctx.gate_runner = SimpleNamespace(stage=None, status=None)
+    ctx.staging_enabled = False
+    await asyncio.wait_for(cyc._run_until_stopped(ctx), timeout=5.0)
+    assert not ctx.supervisor.escalated
+    assert _escalation().get("escalated") is not True
+    ctx.supervisor_task.cancel()
+    ctx.cycle_task.cancel()

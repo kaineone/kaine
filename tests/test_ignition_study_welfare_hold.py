@@ -501,3 +501,68 @@ def test_an_indicator_arm_that_failed_during_the_boot_holds_for_coverage(tmp_pat
     run_id, since = _bound_record(tmp_path, indicator_poll_failures=failures)
     _, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
     assert reasons == ["incomplete_coverage"]
+
+
+# --- the reviewer's untested guards (N11, N12, N22, N24) ------------------------------
+
+
+def test_n11_a_boot_copies_the_record_it_will_delete(tmp_path, known_modules, monkeypatch):  # noqa: F811
+    """branch 1 fails with a clean record; its retry boots over the same step
+    directory, and the runner copies the failed boot's record aside first."""
+    study_dir, script = _study(tmp_path)
+    monkeypatch.setenv("IGNITION_STANDIN_SCENARIO", "missing_preservation")
+    failed = _run(_runner(study_dir, script))
+    assert (failed["line"], failed["step"]) == ("branch", 1)
+    assert "welfare_hold" not in failed
+    monkeypatch.delenv("IGNITION_STANDIN_SCENARIO")
+    line_dir = study_dir / "branch" / "1"
+    assert not (line_dir / "welfare_exposure_archive").exists()
+    assert _run(_runner(study_dir, script), retry=True) == "complete"
+    copies = list((line_dir / "welfare_exposure_archive").glob("exposure-*.json"))
+    assert len(copies) == 1
+    assert json.loads(copies[0].read_text())["run_id"] == failed["run_id"]
+
+
+def test_n12_a_boot_whose_copy_fails_is_refused(tmp_path, known_modules, monkeypatch):  # noqa: F811
+    study_dir, script = _study(tmp_path)
+    monkeypatch.setenv("IGNITION_STANDIN_SCENARIO", "missing_preservation")
+    failed = _run(_runner(study_dir, script))
+    monkeypatch.delenv("IGNITION_STANDIN_SCENARIO")
+    line_dir = study_dir / "branch" / "1"
+    # A file where the archive directory goes: the copy cannot be made.
+    (line_dir / "welfare_exposure_archive").write_text("not a directory")
+    steps_before = len(_load_steps(study_dir))
+    with pytest.raises(StudyError, match="cannot keep a copy"):
+        _runner(study_dir, script).run(retry_failed=True)
+    assert len(_load_steps(study_dir)) == steps_before
+    record = json.loads((line_dir / "state" / "welfare" / "exposure.json").read_text())
+    assert record["run_id"] == failed["run_id"]  # nothing booted, nothing deleted
+
+
+def _failed_step_with_reasons(study_dir: Path, reasons) -> StudyRunner:
+    runner = StudyRunner(study_dir, cycle_alive=lambda pid: False)
+    record = {
+        "line": "development", "step": 0, "started_at": "2026-10-31T12:00:00+00:00",
+        "ended_at": "2026-10-31T13:00:00+00:00", "run_id": "run-n22", "outcome": "failed:exit:1",
+        "revived_from": None, "welfare_hold": {"reasons": reasons},
+    }
+    runner._append_step(record)
+    return StudyRunner(study_dir, cycle_alive=lambda pid: False)
+
+
+def test_n22_an_unknown_hold_reason_blocks_a_retry(tmp_path, known_modules):  # noqa: F811
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _failed_step_with_reasons(study_dir, ["a_reason_this_runner_does_not_know"])
+    with pytest.raises(StudyWelfareHold):
+        runner._next_step(retry_failed=True)
+    # A known status-only reason does not.
+    other = _create_study(tmp_path / "other", viewings=1)
+    assert _failed_step_with_reasons(other, ["missing"])._next_step(retry_failed=True)["is_retry"]
+
+
+@pytest.mark.parametrize("reasons", [[], None])
+def test_n24_an_empty_or_unreadable_reasons_list_blocks_a_retry(tmp_path, known_modules, reasons):  # noqa: F811
+    study_dir = _create_study(tmp_path, viewings=1)
+    runner = _failed_step_with_reasons(study_dir, reasons)
+    with pytest.raises(StudyWelfareHold):
+        runner._next_step(retry_failed=True)
