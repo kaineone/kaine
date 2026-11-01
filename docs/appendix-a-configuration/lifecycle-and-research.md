@@ -321,7 +321,7 @@ Default is disabled. It runs independently of `[evaluation].enabled`.
 
 ### `[research_event_log.raw_archive]`
 
-Optional local-only raw bus archive. Never export-eligible. Tees bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/`, verbatim except for the latent fields, which every sink removes, a path outside `data/evaluation/` that the metrics bundle builder never reaches. Encrypted at rest like every other sink.
+Optional local-only raw bus archive. Never export-eligible. Tees bus events (including conversation content and transcripts) to `state/research/raw_bus_archive/`, a path outside `data/evaluation/` that the metrics bundle builder never reaches. Events are archived verbatim except for the latent fields, which every sink removes. Encrypted at rest like every other sink.
 
 This is doubly gated: it requires `enabled = true` and both attestation flags set to `true`. With `enabled = true` but either attestation false, the consumer refuses to start with a `RawArchiveAttestationError`, mirroring the full-tier attestation gate in `kaine/research/submission.py`.
 
