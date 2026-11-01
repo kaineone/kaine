@@ -19,7 +19,7 @@ Design only. This revision applies the adversarial review of 2026-11-01. Nothing
 - **A seconds-scale heard buffer.** The last two accessed heard utterances of the conversation, words field only, each for at most 30 entity seconds, in process. They reach the organ only as attributed heard words in the user turn.
 - **Comprehension in the entity's own turn, through the workspace.**
   - An accessed heard event triggers one own-turn organ request with the lead "## What I took from it" (48 tokens).
-  - The gist is published as the entity's own `comprehension` event and competes for access like a thought, so it reaches the notes and the other modules only when accessed.
+  - The gist is published as the entity's own `comprehension` event on `language.out`, its candidate stream, at the intensity with which its heard event won access. It competes for access like a thought, so it reaches the notes and the other modules only when accessed. No consumer counts it as speech.
   - It is never spoken, and it queues behind any reply.
 - **An overlap guard.** Kept text is compared with what was heard in the last two minutes, after normalisation:
   - NFKC and case-folding;
@@ -32,7 +32,7 @@ Design only. This revision applies the adversarial review of 2026-11-01. Nothing
   - Utterance traces (gist, reply, speaker channel, time, affect, tone) and episode traces (the entity's account of the whole talk) live in a per-prefix encrypted snapshot and journal.
   - Pruned traces are compacted away at each sleep.
   - Vectors are encrypted too, conversation traces never feed associative links or schemas, and nothing of them reaches plaintext Qdrant.
-- **The bus.** Gist, account and reply fields are diverted to the volatile instance under a declared field set. The comprehension stream is a declared producer. While the change is on, companion entries carrying heard words or conversation fields age out after two minutes.
+- **The bus.** Gist, account and reply fields are diverted to the volatile instance under a declared field set. While the change is on, an exact periodic `XTRIM MINID` sweep ages out, after two minutes, every companion stream that carries heard words, conversation fields or language text.
 - **Forgetting by level.** Utterance traces lose half their strength at each sleep on top of the ordinary downscaling. Episode traces decay at the ordinary rate. Nothing is rewritten on recall, and recall strengthens nothing.
 - **Recall.**
   - The current speaker's earlier conversations are recalled by the topic of the new utterance: speaker by metadata, content-only embeddings.
@@ -41,7 +41,7 @@ Design only. This revision applies the adversarial review of 2026-11-01. Nothing
 - **The lifecycle.**
   - Revive refuses rather than drops a store.
   - Forks copy the store.
-  - A merge requires an operator choice of which parent's store is kept.
+  - A merge carries the union of both parents' conversation memories, with rebased strengths (CAL Article 4.6 reintegration).
   - Decommission removes every prefix's store.
 - **Off by default, identical to the old build.** No section is written in the shipped config. With the setting off, outputs and the config digest equal golden files from the pre-change build.
 - **Checks before any entity run:**
@@ -50,7 +50,8 @@ Design only. This revision applies the adversarial review of 2026-11-01. Nothing
   - a downstream injection replay;
   - a topic-selectivity check;
   - a welfare loop check that runs the real loop (gist, thought, trace, recall, sleep) with fixed tolerances.
-- **A truthful privacy statement** for the docs and the paper notes.
+- **A truthful privacy statement** for the docs and the paper notes, including what four words can keep exactly, the retention of bundles, and CAL Article 4.3 with its carve-out for legally required disclosure or erasure.
+- **Every logged rendering** holds `[remembered conversation]` in place of conversation content, and such records never become voice-training pairs (the skips are counted).
 - **Two amended specs.** The language heard-words requirement (MODIFIED) and `episodic-recall-content`'s recall-content rule (an exception requirement).
 
 ## Capabilities

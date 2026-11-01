@@ -8,22 +8,32 @@ While conversation memory is enabled, the research log SHALL record a `conversat
 - **THEN** every field is an integer, a float or a list of integers
 
 ### Requirement: The counts event has an exact allowlist
-The `conversation_memory.counts` allowlist SHALL be exactly:
-- `heard_accessed`;
-- `comprehension_requests`, `comprehension_failed`, `comprehension_deferred`, `comprehension_interrupted`;
-- `gists_stored`, `gists_masked`, `gists_withheld`, `gists_truncated`;
-- `mean_gist_tokens`;
-- `longest_shared_run_hist`;
-- `episodes`, `episode_accounts`;
-- `conversation_recalls`, `conversation_recalls_accessed`;
-- `utterance_traces_pruned`;
-- `collection_size`.
-
-Any other field SHALL be dropped.
+The `conversation_memory.counts` allowlist SHALL be exactly the counts named in the conversation-memory design, decision 9. Any other field SHALL be dropped.
 
 #### Scenario: An unlisted field is dropped
 - **WHEN** a counts payload carries a field outside the allowlist
 - **THEN** the recorded event omits that field
+
+### Requirement: The counts cover comprehension, the guard and recall
+The allowlist SHALL hold:
+- `heard_accessed`;
+- `comprehension_requests`, `comprehension_failed`, `comprehension_deferred`, `comprehension_interrupted`, `comprehensions_accessed`;
+- `gists_stored`, `gists_masked`, `gists_withheld`, `gists_truncated`;
+- `mean_gist_tokens`;
+- `longest_shared_run_hist`;
+- `episodes`, `episode_accounts`;
+- `conversation_recalls`, `conversation_recalls_accessed`.
+
+#### Scenario: The access share is visible
+- **WHEN** the counts event is recorded after a conversation
+- **THEN** it holds both `heard_accessed` and `comprehensions_accessed`
+
+### Requirement: The counts cover forgetting and the training skip
+The allowlist SHALL also hold `utterance_traces_pruned`, `voice_records_skipped_conversation` and `collection_size`.
+
+#### Scenario: The voice-corpus loss is visible
+- **WHEN** the counts event is recorded while the setting is on
+- **THEN** it holds `voice_records_skipped_conversation`
 
 ### Requirement: The external-utterance log passes the overlap guard
 While conversation memory is enabled, the external-utterance research log SHALL record each utterance's text after the overlap guard's masking.

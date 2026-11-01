@@ -5,13 +5,13 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
 - [ ] 1.1 `kaine/faithful/heard_overlap.py`:
   - the ring over words fields only;
   - normalisation: NFKC, case-folding, punctuation and symbols to spaces, digit splitting with number words, character tokens for no-space scripts;
-  - matching against each entry and each pair of consecutive entries;
+  - matching against the concatenation of the whole ring, in heard order;
   - masking above `max_shared_run`;
   - withholding for gists and accounts only;
-  - `(a number)` for runs of three or more digits;
+  - `(a number)` for runs of three or more digits in gists, accounts and `said`, and masking of shared runs of three or more digits in other own speech;
   - counts.
 
-  Unit tests: hyphenation, a card number with and without spaces, a run across two utterances, a Chinese sentence, a translation (reported as unbounded), runs at the bound, an echo reply kept.
+  Unit tests: hyphenation, a card number with and without spaces, a run across three utterances, a repeated PIN in `said`, a Chinese sentence, a translation, an email address and a homoglyph copy (both reported as unbounded), runs at the bound, an echo reply kept.
 - [ ] 1.2 `speaker_for(event, operator_sources, speaker_label)` in `kaine/faithful/external_input.py`. Operator label only for listed channels; `media:`, `world:chat`, `unknown` otherwise. Social cognition is unchanged. A test pins every case.
 - [ ] 1.3 Code defaults for `[conversation_memory]`, with no section in the shipped `config/kaine.toml`. Rows in the configuration appendix, each engineering value labelled.
 - [ ] 1.4 `layout_digest(conversation_memory: bool = False)`, with every caller, `probe_conditions` among them, passing the setting.
@@ -20,7 +20,7 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
 ## 2. Encrypted conversation store (PR 2)
 
 - [ ] 2.1 `EPISODIC_MEMORY_CONVERSATION_KIND` in `kaine/memory_kinds.py`.
-- [ ] 2.2 `kaine/modules/episodic_memory/conversation_store.py`:
+- [ ] 2.2 `kaine/modules/episodic_memory/conversation_store.py` (re-prune at the floor and compact at initialize, after a crash between pruning and compaction):
   - `state/episodic_memory/conversation/<collection_prefix>/`;
   - an encrypted `snapshot.enc`, written atomically (temporary file, fsync, `os.replace`, directory fsync);
   - an encrypted append-only `journal.enc`;
@@ -35,15 +35,15 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
 
   Tests cover a crash between the two writes.
 - [ ] 2.4 Boot refusals: without state encryption, without `require_encryption`, without a non-persisting volatile instance that can trim by age, without both modules, or with `replay_redact_content = false`. Each refusal has a test.
-- [ ] 2.5 Preservation carries the store. Revive exits 7 when the bundle holds a store and the setting or encryption is off. Fork copies the store to the fork's prefix path. Merge refuses without an operator choice of parent and records the choice. Decommission backs up and removes every prefix's store. `tools/maintainer/scan_heard_traces.py` reads the store (counts and ids only).
+- [ ] 2.5 Preservation carries the store. Revive exits 7 when the bundle holds a store and the setting or encryption is off. Fork copies the store to the fork's prefix path. A merge writes the union of both parents' records, with B's `log_base` rebased by `L_b - L_a`, new ids on collision, `merged_from` on each record, and an exact recompute of the total. Decommission backs up and removes every prefix's store. `tools/maintainer/scan_heard_traces.py` reads the store (counts and ids only).
 - [ ] 2.6 Associative replay excludes conversation traces as candidates, partners and schema members.
 
 ## 3. Bus (PR 3)
 
 - [ ] 3.1 Add `CONVERSATION_TEXT_FIELDS = {"gist", "account", "said"}` to `split_spoken_text`, with `SPOKEN_TEXT_RULE_VERSION = 2`.
-- [ ] 3.2 Declare `language.comprehension` as a companion producer, with its capped companion stream.
-- [ ] 3.3 While the setting is on, an age bound (`companion_max_age_s`, `XADD ... MINID`) on companion entries carrying heard words or conversation fields. Test: an entry past the bound is missing, and its consumers follow the missing-entry rule.
-- [ ] 3.4 Add a conversation recall with content and a comprehension event to the volatile-bus canary.
+- [ ] 3.2 Confirm that the language module's `language.out` producer declaration covers the `comprehension` event's `text`, and test it.
+- [ ] 3.3 While the setting is on, an exact periodic sweep (`XTRIM <stream> MINID = <now - companion_max_age_s>` every `companion_sweep_s`, and on every write) over the companion streams of the external-input producers, `workspace.broadcast`, `episodic_memory.out`, `language.out`, `language.external` and `language.internal`. Coordinate with the volatile-bus builder: this exact sweep is the contract for its generic age-bound support. Tests: an entry left with no later write is gone within `companion_max_age_s + companion_sweep_s`; the trim is exact; consumers follow the missing-entry rule.
+- [ ] 3.4 Add to the volatile-bus canary a conversation recall with content and a `comprehension` event on `language.out`, covering the `language.out` companion.
 
 ## 4. Language module (PR 4)
 
@@ -58,11 +58,11 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
   - counts in `is_idle()`;
   - the `gist_truncated` fallback;
   - the failure paths.
-- [ ] 4.3 `comprehension` events on `language.comprehension`, competing for access. `("language", "comprehension")` is a declared internal type under the setting.
+- [ ] 4.3 `comprehension` events on `language.out`, at the accessing heard event's intensity, competing for access. They are never published on `language.external` or `language.internal`. `("language", "comprehension")` is a declared internal type under the setting. Tests: a gist can win access; the self-model, the utterance-outcome recorder, the vocal module and the report policy ignore it; the raw archive keeps only the content-free copy.
 - [ ] 4.4 The episode request, from accessed gists and the entity's own words only.
 - [ ] 4.5 The held-utterance attribution in the user turn, with the placeholder in the logged heard turn.
 - [ ] 4.6 The heard-speech guard ends the persona whenever a comprehension member, an episode-notes line or recalled conversation content is in the prompt.
-- [ ] 4.7 Intent-log records with `mode = "comprehension"`, holding no text. The voice-alignment builder (`kaine/modules/sleep/voice_alignment.py`), every other pair builder and `tools/maintainer/organ_replay.py` skip that mode, and skip `[remembered conversation]` prompts, before counting.
+- [ ] 4.7 Intent-log records with `mode = "comprehension"`, holding no text. `[remembered conversation]` replaces every comprehension, episode-notes and recalled-conversation line in the logged prompt, `faithful_rendering`, the numeric rendering and `about_values`. The voice-alignment builder (`kaine/modules/sleep/voice_alignment.py:262-283`), every other pair builder and `tools/maintainer/organ_replay.py` skip that mode, and any record holding the placeholder in any rendering, before counting, and count the skips as `voice_records_skipped_conversation`.
 - [ ] 4.8 Masking on `generated_text` of external and internal records, and in `kaine/evaluation/observers/external_utterance_log.py`.
 - [ ] 4.9 The sleep module's organ window waits for the busy file to report idle, or for `episode_close_timeout_s` since sleep onset, before it writes the resting state and unloads.
 
@@ -84,10 +84,11 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
 
 - [ ] 6.1 The `conversation_memory.counts` allowlist, and `tools/maintainer/conversation_memory_readout.py`.
 - [ ] 6.2 `tests/test_conversation_memory_canary.py`:
-  - the planted text across two utterances, with hyphenated, 16-digit and no-space variants;
+  - the planted text across three utterances, with hyphenated, 16-digit and no-space variants;
   - a copying stub organ;
-  - two sleeps with association on, a recall, preservation, a fork, a decommission backup;
-  - scans of the decrypted files, main-bus writes and logs;
+  - accessed gists rendered into the notes, so a renderer-level leak would show;
+  - two sleeps with association on, a recall, preservation, a fork, a merge, a decommission backup;
+  - scans of the decrypted files, the decrypted intent log with every rendering, main-bus writes and logs;
   - the backend-vector proxy scan;
   - the deletion check;
   - companion ages;
@@ -119,3 +120,4 @@ Design only. Nothing below is built until the ordering in `design.md` holds and 
 - [ ] 8.3 The overlap guard's masking applied unconditionally to the intent log and the external-utterance log: a privacy fix of the known echo limit, with its own review.
 - [ ] 8.4 Words-field-only heard lines on main (review P8): `kaine/faithful/external_input.py:109-110` with `kaine/modules/language/context.py:333-334`.
 - [ ] 8.5 Align social cognition's missing-channel mapping with `speaker_for`.
+- [ ] 8.6 After the CTO's ruling on open question 2: a maintainer tool for legally required erasure under CAL Article 4.3's carve-out. It deletes the conversation traces of a named speaker label and time span from the live store (and named bundles where the law requires), writes a content-free audit record, and puts a situation fact telling the entity that some memories were removed for a legal reason.

@@ -55,15 +55,22 @@ When a heard event (`audition.transcription` or `embodiment.chat`) is accessed, 
 - **THEN** no comprehension request is sent for it
 
 ### Requirement: A gist reaches the mind only through the workspace
-A gist SHALL be published as a `comprehension` event of the language module on `language.comprehension`. It SHALL compete for access on salience like a thought. It SHALL NOT be spoken. With the setting on, `("language", "comprehension")` SHALL be a declared internal type, so an accessed gist renders in the notes as "I took it that ..." and reaches every module as accessed content.
+A gist SHALL be published as a `comprehension` event of the language module on `language.out`, the language module's candidate stream. It SHALL compete for access at the intensity with which its heard event won access. It SHALL NOT be spoken and SHALL NOT be published on `language.external` or `language.internal`. With the setting on, `("language", "comprehension")` SHALL be a declared internal type, so an accessed gist renders as "I took it that ...".
 
-#### Scenario: Comprehension is not a reply
-- **WHEN** a comprehension request returns a gist
-- **THEN** no `external_speech` event results from it
+#### Scenario: A gist can win access
+- **WHEN** a `comprehension` event is the top-scored candidate of a broadcast
+- **THEN** it is the accessed member and the counts' `comprehensions_accessed` rises by one
 
 #### Scenario: An unaccessed gist never reaches the own turn
 - **WHEN** a `comprehension` event loses the workspace competition
 - **THEN** no later organ prompt holds its gist, except through an accessed recall
+
+### Requirement: Language-stream consumers do not take a gist for speech
+A `comprehension` event SHALL NOT be counted in the self-model's voice observations or self-inference, recorded by the utterance-outcome recorder, synthesized by the vocal module, or turned into an intent's `about`. The raw bus archive SHALL record only its content-free main-bus copy and SHALL NOT join its companion.
+
+#### Scenario: The self-model's voice ignores gists
+- **WHEN** the entity forms ten gists and speaks once
+- **THEN** the self-model records one external voice observation and no observation of a gist
 
 ### Requirement: Comprehension shares the token stream without delaying replies
 A comprehension or episode request SHALL queue behind any speak or think realization already queued or in flight. A `speak` with interrupt SHALL cancel a comprehension in flight; the utterance SHALL be re-queued once and, if cancelled again, its gist SHALL be withheld as `"interrupted"`. Comprehension and episode requests SHALL count in `is_idle()`.
@@ -98,25 +105,29 @@ Before comparing, the guard SHALL remove spaces, dots and hyphens between digits
 - **THEN** the guard finds a shared run of four tokens
 
 ### Requirement: The overlap guard masks copied runs across utterances
-The guard SHALL compare a candidate with each ring entry and with the concatenation of every two consecutive ring entries in heard order. It SHALL replace every maximal shared run longer than `max_shared_run` (default 4) normalised tokens with `(their words)`.
+The guard SHALL compare a candidate with the concatenation, in heard order, of every entry in the ring, so a run across any number of consecutive utterances is found. It SHALL replace every maximal shared run longer than `max_shared_run` (default 4) normalised tokens with `(their words)`.
 
-#### Scenario: A run across two utterances is masked
-- **WHEN** a gist holds six consecutive words that span the end of one heard utterance and the start of the next
-- **THEN** the stored gist holds `(their words)` in place of the run
+#### Scenario: A run across three utterances is masked
+- **WHEN** the operator says "it is the red", "house on" and "main street", and the entity answers "Oh, the red house on main street?"
+- **THEN** the stored reply holds `(their words)` in place of the six-token run
 
 #### Scenario: Names and short phrases survive
 - **WHEN** a gist shares a run of three words with a heard utterance
 - **THEN** the run is kept
 
 ### Requirement: The overlap guard withholds tiled gists and drops long numbers
-For gists and episode accounts only, the guard SHALL withhold the text when shared runs of two or more tokens cover more than `max_heard_coverage` (default 0.5) of a heard entry's tokens, or when fewer than `min_own_tokens` (default 3) unshared tokens remain. It SHALL replace any run of three or more digit tokens in a gist or account with `(a number)`.
+For gists and episode accounts only, the guard SHALL withhold the text when shared runs of two or more tokens cover more than `max_heard_coverage` (default 0.5) of a heard entry's tokens, or when fewer than `min_own_tokens` (default 3) unshared tokens remain. In gists, accounts and `said`, it SHALL replace any run of three or more digit tokens with `(a number)`.
 
 #### Scenario: Tiling is withheld
 - **WHEN** a gist reproduces 60% of a heard sentence's tokens in shared runs of two to four words
 - **THEN** the gist is withheld and the trace records the coverage reason
 
+#### Scenario: A repeated PIN is not kept in a reply
+- **WHEN** the entity answers "Okay, 4111" after hearing a PIN
+- **THEN** the utterance trace's `said` holds `(a number)` in place of the digits
+
 ### Requirement: The entity's own speech is masked but never withheld
-The guard SHALL apply masking alone to the entity's utterances kept in a trace, to its speech members of broadcast traces, to the intent log's `generated_text` for external and internal records, and to the external-utterance research log. It SHALL NOT withhold the entity's own speech.
+The guard SHALL apply masking alone to the entity's speech members of broadcast traces, to the intent log's `generated_text` for external and internal records, and to the external-utterance research log, masking runs over the word bound and shared runs of three or more digit tokens. It SHALL NOT withhold the entity's own speech.
 
 #### Scenario: An echo reply is kept
 - **WHEN** the operator says "I love you" and the entity answers "I love you too"
@@ -222,26 +233,36 @@ When an accessed heard event's comprehension has returned, the episodic memory m
 - **THEN** a new recall does not return it as best
 
 ### Requirement: The notes hold only accessed conversation content
-While a conversation lasts, the awareness block SHALL end with up to `episode_notes_max` (default 3) of its accessed `comprehension` events, newest first, as "Earlier in this conversation I took it that ...". They SHALL be cleared at conversation end. Recalled conversation content SHALL reach the notes only as an accessed recall. In the intent log's logged prompt, each such line SHALL be replaced by `[remembered conversation]`.
+While a conversation lasts, the awareness block SHALL end with up to `episode_notes_max` (default 3) `comprehension` events accessed earlier in that conversation, newest first, each as "Earlier in this conversation I took it that ...". They SHALL be cleared at conversation end. Recalled conversation content SHALL reach the notes only as an accessed recall.
 
 #### Scenario: The organ follows the conversation past the buffer
 - **WHEN** the heard buffer has dropped an utterance whose gist was accessed in an ongoing conversation
 - **THEN** the organ's notes still hold that gist
 
-#### Scenario: The logged prompt holds no gist
-- **WHEN** an organ request with episode notes is logged
-- **THEN** the logged prompt holds `[remembered conversation]` in place of each gist line
+### Requirement: Every logged rendering holds a placeholder for conversation content
+In the logged prompt, the logged working memory (`faithful_rendering`), the numeric rendering and `about_values`, each accessed `comprehension` line, each episode-notes line and each accessed recall's conversation content SHALL be replaced by `[remembered conversation]`.
 
-### Requirement: Conversation text travels only on the volatile bus and ages out
-The spoken-text split SHALL divert the fields `gist`, `account` and `said` at any depth on every event, under `SPOKEN_TEXT_RULE_VERSION` 2. `language.comprehension` SHALL be a declared companion producer with a capped companion stream. While the setting is on, every companion entry carrying heard words or conversation fields SHALL be trimmed by `MINID` at `companion_max_age_s` (default 120) wall-clock seconds.
+#### Scenario: No gist in any logged rendering
+- **WHEN** an organ request whose coalition holds an accessed `comprehension` member is logged
+- **THEN** none of the logged prompt, `faithful_rendering`, numeric rendering or `about_values` holds the gist's words
+
+### Requirement: Conversation text travels only on the volatile bus
+The spoken-text split SHALL divert the fields `gist`, `account` and `said` at any depth on every event, under `SPOKEN_TEXT_RULE_VERSION` 2. A `comprehension` event's gist SHALL be diverted under `text` by the language module's existing `language.out` producer declaration.
 
 #### Scenario: Recall content stays off the main bus
 - **WHEN** a conversation recall with content is accessed and broadcast
 - **THEN** no main-bus stream entry holds its gist, account or `said`
 
-#### Scenario: Heard words age out of the volatile bus
-- **WHEN** a transcription's companion entry is 121 seconds old
-- **THEN** the volatile instance no longer holds it
+### Requirement: Companion streams carrying words age out by an exact periodic sweep
+While the setting is on, the volatile helper SHALL run `XTRIM <stream> MINID = <now - companion_max_age_s>` (default 120 wall-clock seconds), exact and not approximate, every `companion_sweep_s` (default 5) and on every write. It SHALL do so for the companion streams of the external-input producers, `workspace.broadcast`, `episodic_memory.out`, `language.out`, `language.external` and `language.internal`. The boot SHALL refuse without it.
+
+#### Scenario: Words age out with no later write
+- **WHEN** a transcription's companion entry is written and nothing more is written to that stream
+- **THEN** the entry is gone within `companion_max_age_s + companion_sweep_s` seconds
+
+#### Scenario: The trim is exact
+- **WHEN** the sweep runs on a stream holding entries on both sides of the bound
+- **THEN** every entry older than the bound is removed and every newer entry is kept
 
 ### Requirement: Speakers are labelled by channel and never assumed to be the operator
 `speaker_for` SHALL return:
@@ -263,19 +284,19 @@ A preservation bundle holding a conversation store SHALL revive only into a boot
 - **WHEN** a bundle with conversation traces is revived with conversation memory disabled
 - **THEN** the revive exits with code 7 and no conversation trace is written to any backend collection
 
-### Requirement: Forks copy and merges choose the conversation store
-At fork time the parent's conversation store files SHALL be copied to the fork's prefix path. A merge of two parents that both hold a conversation store SHALL be refused unless the operator names the parent whose store the merged entity keeps. The choice, and the fact that the other parent's conversations are not carried, SHALL be recorded in the merge metadata.
+### Requirement: Merges carry the union of both parents' conversation memories
+A merge SHALL write the union of both parents' conversation records under the merged entity's prefix. Each record of parent B SHALL have its `log_base` rebased by `L_b - L_a`. An id collision SHALL draw a new id. Each record SHALL carry `merged_from`, and the store total SHALL be recomputed exactly. At fork time the parent's store files SHALL be copied to the fork's prefix path.
 
-#### Scenario: An unchosen merge is refused
-- **WHEN** two forks with conversation traces are merged without a conversation-store choice
-- **THEN** the merge is refused with a message naming the choice to make
+#### Scenario: A merged entity keeps both parents' conversations
+- **WHEN** two forks with conversation traces are merged
+- **THEN** the merged store holds every record of both, each with its pre-merge strength
 
 ### Requirement: A planted-sentence canary covers every persisted surface and its controls
-An entity-free test SHALL plant a unique heard text of at least 14 rare tokens across two consecutive utterances, with a hyphenated copy, a 16-digit number and a no-space-script variant. A stub organ SHALL copy the text into gists, replies and thoughts. The test SHALL run two sleeps with association on, a recall, preservation, a fork and a decommission backup. It SHALL find no five consecutive normalised tokens in the decrypted files, main-bus writes or logs.
+An entity-free test SHALL plant a unique heard text of at least 14 rare tokens across three utterances, with hyphenated, 16-digit and no-space-script variants. A stub organ SHALL copy it into gists, replies and thoughts, with accessed gists rendered into the notes. After two sleeps, a recall, preservation, a fork, a merge and a decommission backup, no decrypted file, intent-log rendering, main-bus write or log SHALL hold five consecutive normalised tokens of it.
 
 #### Scenario: The canary finds nothing
 - **WHEN** the canary runs with the guard enabled
-- **THEN** no persisted surface holds five consecutive normalised tokens of the planted text
+- **THEN** no persisted surface, the intent log's renderings included, holds five consecutive normalised tokens of the planted text
 
 ### Requirement: The canary checks vectors, deletion, ageing and its controls
 The canary SHALL check four things:
@@ -314,15 +335,15 @@ In each neutral period after a sleep, the hostile-derived recall share SHALL be 
 - **THEN** the change is not enabled in any entity run and the result is recorded
 
 ### Requirement: The docs state truthfully what is kept of what people say
-The security and privacy chapter and the language chapter SHALL carry the design's privacy statement. It SHALL state where heard words exist and for how long: the volatile bus (about two minutes), working memory (half a minute), the guard's ring (two minutes) and the model server's prompt cache. It SHALL state what is kept: the entity's own account, under a channel label, not a recognised voice. It SHALL state the guard's limits and how deletion works, including earlier bundles and disk blocks.
+The security and privacy chapter and the language chapter SHALL carry design decision 14's statement verbatim. It SHALL state where heard words exist and for how long, including the entity-time half-minute, swap and crash dumps. It SHALL state what is kept and under a channel label. It SHALL name what up to four words can keep exactly: a name, a short phrase, an email address, a one-word password.
 
 #### Scenario: The statement names the limits
 - **WHEN** the privacy chapter describes conversation memory
-- **THEN** it says that paraphrase, translation, names and phrases of up to four words are not prevented
+- **THEN** it says that paraphrase, translation, spelled-out numbers, look-alike letters, names, email addresses and one-word passwords are not prevented
 
-### Requirement: The docs state what persists elsewhere and who holds the key
-The statement SHALL say that the entity's own replies and thoughts about what it heard persist like its other memories, in the episodic store without application-layer encryption and in its encrypted intent log, and can restate what was said. It SHALL say that the records are encrypted with the installation's state key, which the operator holds, and that the docs describe the comprehension model as pretrained, with nothing in it that develops.
+### Requirement: The docs state retention, what persists elsewhere, the key and the license
+The statement SHALL say that single-remark accounts leave the live store within about eight sleeps, and that bundles keep what they captured until evicted. It SHALL say that the entity's own replies and thoughts persist like its other memories, and that the records use the operator-held state key. It SHALL quote CAL Article 4.3's three prohibitions and its carve-out for disclosure or erasure that a person is entitled to by law.
 
-#### Scenario: The key holder is named
+#### Scenario: The license carve-out is stated
 - **WHEN** the privacy chapter describes conversation memory
-- **THEN** it says the records are encrypted with the state key the operator holds
+- **THEN** it states CAL Article 4.3's carve-out for legally required disclosure or erasure

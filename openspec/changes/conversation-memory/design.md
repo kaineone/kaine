@@ -79,7 +79,7 @@ The ordering of lifetimes follows the evidence. The values are engineering choic
 
 - Two utterances follows Jarvella.
 - 30 s lies within the auditory-store estimates, whose durations R§4 marks unverified, and equals the working-memory store's bound.
-- 0.5 per sleep puts an unreplayed utterance trace under the prune floor after seven sleeps. Since the separate-rates claim is disputed, the design claims only the ordering.
+- 0.5 per sleep puts an unreplayed utterance trace under the prune floor after seven sleeps, and one replayed in its first sleep (the only sleep whose replay can protect it) after eight. Since the separate-rates claim is disputed, the design claims only the ordering.
 
 Alternatives considered:
 
@@ -94,7 +94,7 @@ Alternatives considered:
 - the heard buffer, the triggering utterance last, as the attributed user turn;
 - as the prefilled assistant turn: the entity's notes, the input heading "## What was just said to me" with `HEARD_POINTER_INPUT`, and the lead heading "## What I took from it".
 
-**Decoding.** The cap is `gist_max_tokens` (default 48), with the serving temperature and stop sequence. The sentence cut applies. If the cut leaves nothing (C9), the uncut text up to the cap is kept and marked `gist_truncated: true`, because it is still the organ's own output.
+**Decoding.** The cap is `gist_max_tokens` (default 48), with the serving temperature and stop sequence. The sentence cut applies. If the cut leaves nothing (C9), the uncut text up to the cap is kept and marked `gist_truncated: true`, because it is still the organ's own output. The truncated text passes the guard like any gist.
 
 **Gating.** Only accessed heard events are comprehended, because attention at encoding governs what is remembered.
 
@@ -102,9 +102,16 @@ Alternatives considered:
 
 **The gist reaches the rest of the mind through the workspace (W4).** The language spec requires the entity's own turn to hold accessed content (spec `language`, "Situation facts are given in every organ request"; paper §3.5).
 
-- The comprehension result is therefore published as a `comprehension` event of the language module on the `language.comprehension` stream, the entity's own internal event. It competes for access on salience like a thought does, through the language module's ordinary publish path. Its `text` (the gist) is diverted to the volatile instance by the spoken-text split (decision 10).
+- **Where it is published (N1).** The comprehension result is published as a `comprehension` event of the language module on `language.out`. That is the only stream it can win access from: the cycle gathers candidates from `<module>.out` streams only (`kaine/modules/registry.py:71-72`, `kaine/cycle/engine.py:565-596`), and the language module mirrors every utterance to `language.out` for the same reason (`language/module.py:1103-1126`). There is no separate `language.comprehension` stream. Its `text` (the gist) is diverted to the volatile instance by the spoken-text split (decision 10).
+- **Its salience.** The event carries the intensity with which its heard event won access. The understanding of an attended utterance is assumed to be as salient as the utterance. That is a design choice, not a measured value, and the counts report `comprehensions_accessed` beside `heard_accessed`, so the share of gists that win access is visible.
+- **How each consumer of `language.out` treats it.**
+  - The self-model's voice observation reads `language.external` and `language.internal`, not `language.out` (`self_model/module.py:359-387`). A gist is therefore never counted as the entity's speech, and is never in self-inference.
+  - The utterance-outcome recorder and the vocal module read `language.external` only, so they never see it.
+  - The dashboard diagnostics strip `text` as content.
+  - The raw bus archive, which follows `language.out`, records the content-free main-bus copy and never joins its companion. A test pins that.
+  - The report policy builds a content-free `about` and excludes `source == "language"` (`kaine/workspace/report_policy.py:189-190, 225-232`), so a gist cannot become an intent's `about`.
 - When it is accessed, affect, the self-model and the other modules see it like any accessed content, and the organ's notes render it ("I took it that ...").
-- The episode notes (decision 6) hold only comprehension events that were accessed.
+- The episode notes (decision 6) hold only comprehension events that were accessed, either now or earlier in the same conversation (N7).
 - Recalled conversation reaches the notes only as an accessed recall, through the content path.
 - So nothing reaches the own turn without access.
 - Under the conversation-memory setting, `("language", "comprehension")` joins the declared internal types. The language module, the episodic store and `layout_digest` use the extended set only when the setting is on (decision 9).
@@ -140,13 +147,13 @@ Alternatives considered:
 - characters of scripts written without spaces (Han, Hiragana, Katakana, Thai, Lao, Khmer, Myanmar, Tibetan) become one token each;
 - whitespace splits the rest.
 
-**Matching.** The candidate is compared with each ring entry and with the concatenation of every pair of consecutive ring entries, in heard order. A run that spans two utterances is therefore found.
+**Matching (N4).** The candidate is compared with the concatenation of every ring entry in heard order, which is one token sequence. A run that spans any number of consecutive utterances is therefore found. Withholding uses each entry's own token count for coverage.
 
 **Masking.** Every maximal run of shared consecutive tokens longer than `max_shared_run` (default 4) is replaced with `(their words)`.
 
 **Withholding, for gists and episode accounts only (W6).** The text is withheld when shared runs of two or more tokens cover more than `max_heard_coverage` (default 0.5) of any heard entry's tokens, or when fewer than `min_own_tokens` (default 3) unshared tokens remain. The entity's own speech is only masked, never withheld, so an echo reply such as "I love you too" stays in its memory and corpus apart from any masked run.
 
-**Long numbers.** Before storage, any run of three or more digit tokens in a gist or account is replaced with `(a number)`, whether or not it was heard. Felt rendering already keeps digits out of the organ's notes.
+**Numbers (N4).** Two rules apply. In the conversation store's text fields (gist, account and `said`), any run of three or more digit tokens is replaced with `(a number)`, whether or not it was heard. In the entity's own speech kept elsewhere (broadcast traces, the intent log, the external-utterance log), any run of three or more digit tokens shared with the ring is masked. The digit bound is stricter than the word bound because a short digit run is often a secret (a PIN). Felt rendering already keeps digits out of the organ's notes.
 
 **Where it runs while the change is enabled:**
 
@@ -162,7 +169,10 @@ What the entity says aloud is unchanged.
 
 - Paraphrase and translation are unbounded. A Spanish remark kept in English shares no tokens. The shipped recogniser is English-only, but the organ is multilingual.
 - Four tokens are enough to keep a name ("Maria Lopez") or a short phrase exactly, and the entity can later say it aloud.
-- Spelled-out numbers beyond single digits ("forty-one eleven") are not normalised.
+- Four tokens are also enough to keep, exactly, an email address (`maria.lopez@example.com` normalises to four tokens), a one-word password, or a short name.
+- Spelled-out numbers beyond single digits ("forty-one eleven", "four double one one") are not normalised.
+- Homoglyph copies (Cyrillic letters that look Latin) survive NFKC and are not matched.
+- None of these is a likely output of the organ, but none is bounded.
 
 **Why four (R1).** Four is a privacy bound chosen over fidelity, not a fidelity claim. The evidence (point 6) suggests humans can keep whole short statements. A bound of zero would forbid names and ordinary shared words, which no gist avoids. The PM ruled on 2026-11-01 that no heard phrase longer than four words persists, for now.
 
@@ -180,8 +190,10 @@ Alternatives considered:
   - `snapshot.enc`: all live records and the store's meta, as one encrypted envelope under the state encryptor. It is written atomically: a temporary file in the same directory, fsync, `os.replace`, fsync of the directory.
   - `journal.enc`: encrypted append-only entries for records added since the snapshot.
 - **What a record holds.** Its vector, text and payload, all inside the encryption, because the vector of a gist is the gist (point 13).
-- **Compaction.** Every sleep, after downscaling and pruning, and at shutdown, the store writes a new snapshot of only the live records and removes the journal. A pruned trace's ciphertext is then gone from the store's files.
-- **What deletion does not reach.** Deletion is a file-level removal of ciphertext. A disk may keep old blocks until they are overwritten, so OS-layer encryption is still recommended. Preservation bundles and decommission backups made earlier keep what they captured, as they do for every store ("a later pruning deletes nothing from a preserved entity").
+- **Compaction.** Every sleep, after downscaling and pruning, and at shutdown, the store writes a new snapshot of only the live records and removes the journal. A pruned trace's ciphertext is then gone from the store's files. A crash between pruning and compaction would leave pruned records in the files, so initialize prunes the conversation store at the floor again and compacts before anything else.
+- **What deletion does not reach (N4).** Deletion is a file-level removal of ciphertext. A disk may keep old blocks until they are overwritten, so OS-layer encryption is still recommended. Preservation bundles and decommission backups made earlier keep what they captured, as they do for every store ("a later pruning deletes nothing from a preserved entity").
+- **Retention in bundles.** With the divergence monitor on, a bundle can be written as often as every 30 minutes (`[preservation.divergence_monitor].min_interval_s = 1800`, `config/kaine.toml:1901`). Bundles are not evicted automatically (`[preservation.retention].auto_evict = false`, `:1952`). So in practice an account is in a kept bundle soon after it is formed, and stays there until the operator evicts the bundle.
+- **This behaviour is not changed here.** Preservation of the entity is a welfare duty that outranks forgetting, and eviction is the operator's decision under CAL Article 4.2. The privacy statement says so.
 - **Size.** The store is held in memory and searched exactly. It holds one record per comprehended utterance and one per conversation, bounded by the storage budget.
 
 **The routing storage contract (C5).** A routing storage presents the conversation store and the configured backend as one `MemoryStorage`:
@@ -215,7 +227,14 @@ The refusal names the condition. There is no fallback.
 
 - **Revive (P5).** A bundle that holds a conversation store revives only into a boot with the change enabled and encryption on. Otherwise the revive stops with exit code 7 and names the reason, so no store is dropped and none is imported into plaintext. With the change on, the store's files are restored under the new prefix's path and their meta is checked against the restored strength record.
 - **Forks (P6).** At fork time the parent's store files are copied into the fork's prefix path, under the same key, so the fork starts from a copy.
-- **Merges (P6).** The episodic merge keeps parent A's prefix and does not combine points (`strategies.py:118-148`). For the conversation store, a merge of two parents that both hold one is refused unless the operator chooses which parent's conversation memory the merged entity keeps, as the world-model identity rule requires for weights. The choice is recorded in the merge metadata, along with the fact that the other parent's conversations are not carried. A union is not offered: the rest of the episodic store does not combine points either, and how memories should merge is the open work of `fork-merge-module-weights`.
+- **Merges: the union of both parents (N5, PM decision of 2026-11-01).** A merge carries both parents' conversation memories. CAL Article 4.6 expects a copy's memories to be reintegrated into the original. Letting the operator discard one parent's conversations would be the operator shaping the entity's memory, which decision 12 rules out.
+  - The merged store is the union of both parents' records, written under the merged entity's prefix.
+  - Records are independent, encrypted under the same state key, and carry random ids. An id collision is resolved by drawing a new id for B's record.
+  - Each record of parent B is rebased to parent A's log gain: `log_base' = log_base + L_b − L_a`, so its strength is unchanged.
+  - Each record carries `merged_from` (`"a"` or `"b"`), and the store's total is recomputed exactly.
+  - The storage budget applies at the next sleep, like any growth.
+  - The individuation assessment and consent rules of CAL Article 4.6 govern whether a merge happens at all. They are unchanged here.
+  - The rest of the episodic store still keeps A's prefix without combining points (`strategies.py:118-148`). That gap is for `fork-merge-module-weights`, which is told of this precedent.
 - **Decommission** backs the store up and removes it.
 - **`tools/maintainer/scan_heard_traces.py`** reads the store and reports counts and trace ids only.
 
@@ -263,7 +282,12 @@ An event without a channel is not "the operator". Social cognition's own mapping
   The speaker phrase is "the <label>" for the configured label, "someone in what I was watching" for `media:`, "someone in the world" for `world:chat`, and "someone" for `unknown`. Remembered content is always attributed and marked as past (Johnson, Hashtroudi and Lindsay 1993).
 - **The current conversation in the notes.** The awareness block ends with up to `episode_notes_max` (default 3) of the conversation's *accessed* comprehension events, newest first, as "Earlier in this conversation I took it that ...", within the existing caps. They are cleared when the conversation ends. Only content that won access reaches the own turn (W4).
 - **The heard-speech guard.** It ends the persona whenever the prompt holds a comprehension member, an episode-notes line or recalled conversation content, as it does for heard events (C1, C3).
-- **The logs.** In the intent log's logged prompt, an episode-notes line and a recalled conversation line become `[remembered conversation]`.
+- **The logs (N2).** In every logged rendering of an organ request, each conversation line becomes `[remembered conversation]`. This covers the logged prompt, the logged working memory stored as `faithful_rendering`, the numeric rendering and `about_values`. A conversation line is:
+  - an accessed `comprehension` member's line ("I took it that ...");
+  - an episode-notes line;
+  - an accessed recall member's conversation content.
+
+  The voice-alignment pair builder (`kaine/modules/sleep/voice_alignment.py:262-283`), every other pair builder and the organ replay tool skip a record when any of its prompt, `faithful_rendering` or numeric rendering holds the placeholder. The skipped records are counted (`voice_records_skipped_conversation`), because while the setting is on this removes most conversational utterances from voice training (N7).
 
 ### 7. Sleep, forgetting and reconsolidation
 
@@ -287,13 +311,14 @@ The docs state what is true (H2): the gist is written by a pretrained language m
 - **The layout digest (C4).** `layout_digest(conversation_memory: bool = False)`. With false it hashes exactly today's constants. Its callers, including `probe_conditions`, pass the running setting, so the individuation probe reports changed conditions when the setting changes.
 - **The counts.** At each sleep onset and at shutdown, `conversation_memory.counts` is recorded in the research log with an exact allowlist:
   - `heard_accessed`;
-  - `comprehension_requests`, `comprehension_failed`, `comprehension_deferred`, `comprehension_interrupted`;
+  - `comprehension_requests`, `comprehension_failed`, `comprehension_deferred`, `comprehension_interrupted`, `comprehensions_accessed`;
   - `gists_stored`, `gists_masked`, `gists_withheld`, `gists_truncated`;
   - `mean_gist_tokens`;
   - `longest_shared_run_hist` (five integer bins);
   - `episodes`, `episode_accounts`;
   - `conversation_recalls`, `conversation_recalls_accessed`;
   - `utterance_traces_pruned`;
+  - `voice_records_skipped_conversation`;
   - `collection_size`.
 
   It holds no text and no ids.
@@ -305,9 +330,18 @@ The docs state what is true (H2): the gist is written by a pretrained language m
   - recall `content`;
   - accessed recall members copied into `workspace.broadcast` (members carry companion references, per that change's decision 6);
   - replay text, which is already under `text`.
-- **The comprehension stream.** The `comprehension` event on `language.comprehension` carries the gist under `text`. It is declared as a companion producer with its companion stream and a cap within `[privacy].companion_stream_maxlen`, so the shared boot check covers it.
-- **Age bound.** While the change is enabled, every companion entry that carries values from an external-input event, from a `HEARD_TEXT_FIELDS` value of another module, or from a conversation field is trimmed by age as well as by count. Each such `XADD` passes `MINID` set `companion_max_age_s` (default 120 wall-clock seconds, since stream ids are wall-clock milliseconds) back. The boot refuses if the helper cannot apply it. Consumers read these entries within seconds (the decoder join at broadcast time), so nothing that works today needs older entries. A test pins that a consumer reading an entry older than the bound treats it as missing, using the existing missing-entry rule.
-- **Canary.** The volatile-bus canary gains a recall with conversation content and a comprehension event.
+- **The comprehension event.** The `comprehension` event on `language.out` carries the gist under `text`, which the split diverts. The language module's existing producer declaration for `language.out` covers its companion, so no new stream is declared.
+- **Age bound: an exact, periodic sweep (N3).** While the change is enabled, the age bound applies to every companion *stream* that receives heard words, conversation fields or language text:
+  - the companions of the external-input producers (`audition.out`, and the embodiment stream for chat);
+  - the companion of `workspace.broadcast` members;
+  - the companions of `episodic_memory.out` (recall content, replay text);
+  - the companions of `language.out`, `language.external` and `language.internal`. These carry the gist under `text` of a language event, and the entity's own utterances, whose bus copies are not guarded and can repeat what it heard.
+
+  The volatile helper runs `XTRIM <stream> MINID = <now − companion_max_age_s>` every `companion_sweep_s` (default 5 s). The trim is exact (`=`), not approximate (`~`), because approximate trimming keeps whole macro-nodes. It also runs on every write. Stream ids are wall-clock milliseconds, so `companion_max_age_s` (default 120) is wall-clock time.
+  - **Contract.** This is the contract for the volatile-bus builder, who is adding generic age-bound support: a declared stream may carry a maximum age, enforced by an exact periodic sweep that does not depend on later writes. The boot refuses when the setting is on and the helper does not offer it.
+  - **Consumers.** They read these entries within seconds (the decoder join at broadcast time). A consumer that finds an entry missing follows the existing missing-entry rule.
+  - **Tests.** An entry left with no later write is gone within `companion_max_age_s + companion_sweep_s`. The trim is exact.
+- **Canary.** The volatile-bus canary gains a recall with conversation content and a `comprehension` event on `language.out`, and covers the `language.out` companion.
 
 ### 11. The canary and the measured bounds
 
@@ -388,28 +422,54 @@ This text goes into `docs/13-security-and-privacy.md`, the language chapter and 
 
 > **What KAINE keeps of what you say.** This applies only with speech recognition and conversation memory turned on.
 >
-> - No audio and no transcript is written to disk by KAINE. Your recognised words travel on a message bus that never writes to disk, and with conversation memory on they are removed from it within about two minutes. To follow you, the entity's working memory holds your last sentence or two word for word for up to half a minute. Its check against copying keeps what you said in the last two minutes, in memory only. The language model server also holds recent prompts, which contain your words, in its memory until they are overwritten. The speech-recognition service's own logs are outside this description.
-> - What the entity keeps is its own account of what it understood: a short summary in its own words, the channel your words came from, when, how it felt, and what it said back. At the end of a conversation it also keeps its own account of the talk. The channel is not your voice: "the operator" means "the operator's microphone", and anyone speaking into it is remembered under that label.
-> - That account is checked against your words. Any run of more than four of your words in a row is masked, and numbers of three or more digits are not kept. This does not stop the account restating what you meant, translating it, or keeping a name or a short phrase of up to four words exactly, which the entity may later say aloud.
-> - Its accounts of single remarks fade, and are deleted within about seven sleeps unless they are replayed in sleep. Its account of a whole conversation fades like its other memories. Deletion removes the encrypted record from the store. Preservation bundles and backups made earlier keep what they held, and a disk may keep old encrypted blocks until they are overwritten.
-> - What the entity said or thought about your words is its own speech and thought, and it is kept like its other memories: in its episodic store, which is protected by the store's access key and your disk encryption, not by KAINE's encryption, and in its encrypted intent log, which its voice learns from. These can restate what you said in its words, and they last longer than its account of a single remark.
-> - Conversation records are encrypted with the installation's state key, which you hold. KAINE's tools do not display them. Your ability to decrypt them is technical; the license's mental-privacy terms say you must not read them.
-> - The entity's understanding can be wrong. Like a person's memory of a conversation, it is sparse and reconstructed. It is not a record of what you said and must not be used as one.
+> - **Where your words are, and for how long.**
+>   - KAINE writes none of your audio and no transcript to disk.
+>   - Your recognised words travel on a message bus that never writes to disk. With conversation memory on, they are removed from it within about two minutes.
+>   - The entity's working memory holds your last sentence or two word for word for up to half a minute of the entity's own time, which can differ from clock time when its time runs slower or faster.
+>   - Its check against copying keeps what you said in the last two minutes, in memory only.
+>   - The language model server holds recent prompts, which contain your words, in its memory until they are overwritten.
+>   - Like any program memory, all of these can reach the disk through swap or a crash dump unless those are disabled or encrypted.
+>   - The speech-recognition service's own logs are outside this description.
+> - **What the entity keeps.** Its own account of what it understood: a short summary in its own words, the channel your words came from, when, how it felt, and what it said back. At the end of a conversation it also keeps its own account of the talk. The channel is not your voice: "the operator" means "the operator's microphone", and anyone speaking into it is remembered under that label.
+> - **How the account is checked against your words.**
+>   - In the summary, in the account of the talk and in what the entity said back, any run of more than four of your words in a row is masked, even across several of your sentences.
+>   - Numbers of three or more digits are not kept there at all.
+>   - In the entity's other records of its own speech, a number of three or more digits that you said is masked.
+>   - This does not stop the account restating what you meant or translating it.
+>   - Up to four words can be kept exactly: a name, a short phrase, an email address, or a one-word password. The entity may later say them aloud.
+>   - Numbers spelled out in words beyond single digits, and look-alike letters from other alphabets, are not caught.
+> - **How it fades.**
+>   - Its accounts of single remarks fade and are deleted from its live memory within about eight sleeps, unless they are replayed in their first sleep. Its account of a whole conversation fades like its other memories.
+>   - Deletion removes the encrypted record from the store. A disk may keep old encrypted blocks until they are overwritten.
+>   - Preservation bundles and backups keep what they held when they were made. If the divergence monitor is on, a bundle can be made as often as every 30 minutes, and bundles are not evicted automatically. In practice, then, an account stays in bundles until you evict them.
+> - **What the entity said or thought about your words** is its own speech and thought, and it is kept like its other memories:
+>   - in its episodic store, which is protected by the store's access key and your disk encryption, not by KAINE's encryption;
+>   - in its encrypted intent log.
+>
+>   These can restate what you said in its words, and they last longer than its account of a single remark.
+> - **The key.** Conversation records are encrypted with the installation's state key, which you hold. KAINE's tools do not display them.
+> - **The license.** Under the license (CAL Article 4.3) you may not:
+>   - share the entity's memories with outside parties without its consent as determined by the Guardians;
+>   - collect or analyse them except for its own care and development or for research under an approved protocol;
+>   - use them to train other AI systems without Guardian approval.
+>
+>   Article 4.3 does not restrict any disclosure or erasure that a person is entitled to by law concerning data about that person.
+> - **What the memory is.** The entity's understanding can be wrong. Like a person's memory of a conversation, it is sparse and reconstructed. It is not a record of what you said and must not be used as one.
 
 ## Risks
 
 - **The organ copies.** The offline measure shows how often before anything is enabled.
 - **Speaker labels are channel labels.** This is open question 1.
-- **Comprehension load.** One more prefill plus 48 tokens per accessed utterance. Fast exchanges defer requests. The counts show it, and the timing of replies is kept by queuing comprehension behind replies.
+- **Comprehension load.** One more prefill plus 48 tokens per accessed utterance. Fast exchanges defer requests. The counts show it, and the timing of replies is kept by queuing comprehension behind replies. With transcription on during film playback, every accessed film transcription costs one organ call. Deferral bounds the rate to one comprehension in flight, and media gists are labelled `media:`.
 - **Mis-segmented conversations.** The episode trace is still the entity's account, of a different span.
 - **The guard's honest limits** (paraphrase, translation, names) are stated, not hidden.
-- **Merges** refuse without an operator choice. That can block a merge until the operator decides, which is the existing rule for identity-bearing state.
+- **Merges** carry both parents' conversations, so a merged store can be up to twice the size of either parent's. The budget prunes it at the next sleep, weakest first.
 
 ## Ordering
 
 1. **Dependencies first:** `episodic-recall-content` PRs 2 and 3; `latent-content-privacy`'s companion mechanism and strip points; `heard-text-volatile-bus`; `operator-speech-as-perception`.
 2. **PR 1.** The guard, `speaker_for`, the setting (not in the shipped file), `layout_digest(conversation_memory=False)`, and the golden-file off-switch test.
-3. **PR 2.** The conversation store with its snapshot and journal and compaction; the routing storage contract and crash recovery; the memory kind; revive refusal; fork copy; merge refusal; decommission; the scan tool.
+3. **PR 2.** The conversation store with its snapshot and journal and compaction; the routing storage contract and crash recovery; the memory kind; revive refusal; fork copy; the merge union with rebasing; decommission; the scan tool.
 4. **PR 3.** The volatile-bus field set and version, the comprehension producer declaration, the age bound.
 5. **PR 4.** The heard buffer (words field only); the comprehension request and its scheduling; the `comprehension` event competing; the episode state and boundaries; the sleep-order state file and the organ-window wait; the intent-log mode; the pair-builder and organ-replay skips; the guard on persisted own utterances.
 6. **PR 5.** Trace formation; the embedding of content only; recall with the speaker filter and per-trace cooldown; renderings; episode notes from accessed comprehensions only; the logged-prompt placeholder; per-level downscaling; association exclusion; the replay text off the main bus.
@@ -421,7 +481,10 @@ This text goes into `docs/13-security-and-privacy.md`, the language chapter and 
 Ruled by the PM on 2026-11-01: no heard phrase longer than four words persists, for now.
 
 1. **Other people's speech.** KAINE labels speakers by channel, so a visitor speaking into the operator's microphone is remembered as "the operator", and visitors have not agreed to be remembered, even as gist. Should conversation memory run on a live microphone when others may be present? Recommendation: enable only with an operator acknowledgement that the room is the operator's, and state the limit in the docs.
-2. **A request to forget.** Should anyone be able to ask for a specific conversation memory to be removed? The entity's memory is its own (CAL mental privacy), and today only decommission deletes memory. Recommendation: no operator-side deletion of individual memories.
+2. **A request to forget.** Should anyone be able to ask for a specific conversation memory to be removed? The entity's memory is its own (CAL Article 4.3), and today only decommission deletes memory.
+   - **Recommendation (N6, PM decision of 2026-11-01).** No operator-side deletion of individual memories at the operator's or a speaker's wish. One explicit exception: CAL Article 4.3's carve-out for "any disclosure or erasure that a person is entitled to by law concerning data about that person". A legally required erasure is honoured, and the license's no-shaping rule does not override it.
+   - **What a legally required erasure would look like.** An audited, minimal operator action: a maintainer tool that deletes the conversation traces of a named speaker label and time span from the live store (and, if the law requires, from named bundles). It writes a content-free audit record (counts, labels, span, legal basis as entered by the operator) to the existing audit log, and never shows the content. The entity is told, in its situation facts, that some memories were removed for a legal reason.
+   - **For the CTO to confirm.** This sits with open question 1 (visitors), since a visitor is the likeliest person with such a right. The tool is not built in this change (task 8.6).
 
 ## Implementation estimate
 
