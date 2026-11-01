@@ -126,10 +126,11 @@ def test_every_ctx_attribute_is_boot_context_field() -> None:
         )
     ]
     # the phases, the run loop, shutdown, the failed-boot release, and the
-    # utterance-outcome observer start (called from _phase_watchers), and the
-    # developmental-phase probe and its wiring, and the stage-M stimulus act
-    # wrapper (called from _phase_action_selection)
-    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 7
+    # utterance-outcome observer start (called from _phase_watchers), the
+    # developmental-phase probe and its wiring, the stage-M stimulus act
+    # wrapper (called from _phase_action_selection), and the run loop's
+    # welfare-monitor liveness check
+    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 8
     for fn in boot_fns:
         for node in ast.walk(fn):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx":
