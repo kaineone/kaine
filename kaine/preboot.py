@@ -1224,6 +1224,7 @@ async def check_volatile_bus(
     *,
     refusals: Optional[Callable[[dict[str, Any]], Awaitable[tuple[list[str], list[Any]]]]] = None,
     maxmemory_probe: Optional[Callable[[dict[str, Any]], Awaitable[int]]] = None,
+    host_state: Optional[Callable[[], str]] = None,
 ) -> list[CheckResult]:
     """The never-persisted bus: the boot's companion check, then its budget.
 
@@ -1239,6 +1240,37 @@ async def check_volatile_bus(
     from kaine.bus.config import typical_companion_bytes
 
     name = "Volatile bus"
+    if refusals is None and host_state is None:
+        from kaine.boot.companions import config_declarations
+        from kaine.bus.volatile import resolve_volatile_url
+
+        if resolve_volatile_url() is None and config_declarations(config):
+            # A host-run preboot cannot reach the instance (no host port): say
+            # what is true instead of failing on a check it cannot run.
+            from kaine.bus import volatile_host
+
+            host_state = volatile_host.container_state
+    if host_state is not None:
+        from kaine.bus import volatile_host
+
+        state = host_state()
+        if state == volatile_host.RUNNING:
+            return [
+                CheckResult(
+                    GROUP_RESOURCES, name, SKIP,
+                    "kaine-redis-volatile is running; it has no host port, so the cycle "
+                    "checks it at boot (answers, password, appendonly no, empty save, "
+                    "persisting commands refused, caps) and refuses to start otherwise",
+                )
+            ]
+        return [
+            CheckResult(
+                GROUP_RESOURCES, name, FAIL,
+                f"enabled modules need the never-persisted bus and kaine-redis-volatile is "
+                f"{state}; start it with: docker compose -f compose/kaine.yml up -d "
+                "kaine-redis-volatile",
+            )
+        ]
     runner = refusals or preboot_refusals
     try:
         reasons, declarations = await asyncio.wait_for(runner(config), BUS_PROBE_TIMEOUT_S)

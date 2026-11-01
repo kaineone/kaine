@@ -1394,15 +1394,44 @@ def _entity_redis_streams(redis_cfg: dict[str, Any] | None) -> list[str]:
     return sorted(expanded)
 
 
-def flush_volatile_bus(client: Any, *, dry_run: bool) -> tuple[str, str | None]:
+def flush_volatile_bus(
+    client: Any, *, dry_run: bool, host: Any = None
+) -> tuple[str, str | None]:
     """Flush the never-persisted companion-stream instance.
 
     Returns ``(state, error)``. The instance holds only companion streams of
-    the entity's events, so the whole database is flushed. With no client
-    configured there is nothing to flush.
+    the entity's events, so the whole database is flushed. With a client the
+    flush goes through it. Without one (a host-run decommission, which cannot
+    reach the instance: it has no host port) the compose container is flushed
+    from inside (``docker exec``). "not configured" is reported only when this
+    host has no volatile instance at all; a stopped container holds nothing (no
+    persistence, a tmpfs ``/data``); a running one that cannot be flushed is an
+    error, never a success.
     """
     if client is None:
-        return "not configured", None
+        from kaine.bus import volatile_host
+
+        host = host or volatile_host
+        state = host.container_state()
+        if state == host.ABSENT:
+            return "not configured", None
+        if state == host.STOPPED:
+            return "stopped (holds nothing)", None
+        if state != host.RUNNING:
+            return "unknown", (
+                "volatile bus: Docker could not say whether kaine-redis-volatile exists; "
+                "its companion streams were not flushed"
+            )
+        if dry_run:
+            return "would flush (docker exec)", None
+        ok, output = host.redis_cli("FLUSHALL")
+        if not ok or output.upper() != "OK":
+            return "failed", (
+                "volatile bus: kaine-redis-volatile is running but could not be flushed "
+                "through docker exec; stop it (docker compose stop kaine-redis-volatile) "
+                "or flush it, then run decommission again"
+            )
+        return "flushed (docker exec)", None
     try:
         client.ping()
     except Exception as exc:
