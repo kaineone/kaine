@@ -63,7 +63,7 @@ A slot without maternal speech or melody SHALL hold one outside-voice utterance 
 
 #### Scenario: The fundamental arrives at the 100 Hz step
 - **WHEN** the same outside-voice slot is rendered in stage 1 and in stage 2
-- **THEN** the power below 158 Hz is at least 20 dB higher in stage 2 than in stage 1
+- **THEN** the power below 112 Hz (stage 1's stopband edge, 158 Hz divided by the square root of 2) is at least 40 dB higher in stage 2 than in stage 1
 
 ### Requirement: Added sounds are seeded and entity-independent
 Each slot's added sound SHALL be a pure function of the seed and the slot index. No added sound SHALL depend on the entity's state or output, and a slot SHALL hold at most one of maternal speech, melody and outside voice. With the added sounds disabled, every audio block SHALL be byte-identical to the stream without them.
