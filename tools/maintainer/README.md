@@ -16,6 +16,7 @@ These are the scripts the maintainers use to gate, review and merge pull request
 | `apply_edits.py RESPONSE REPO --allow PATH...` | Applies anchored `@@@EDIT` search/replace blocks from a worker response. It is atomic: if any SEARCH text does not match exactly once, nothing is written. |
 | `apply_seq.py` | Applies chained edits in order, each against the result of the previous one. |
 | `regen_roadmap_progress.py CHECKOUT` | Refreshes `docs/appendix-d-roadmap.md` from `openspec/`: each active change's progress, rows for changes no longer active, and the totals line. |
+| `scan_heard_traces.py [--sqlite DB] [--fork-root DIR] [--snapshot FILE] [--bundle DIR] [--qdrant-host HOST] [--json]` | Read-only. Reports, by count and trace id and never with text, whether episodic memory traces in a store, fork snapshots or preservation bundles hold heard text (an in-world chat or transcription payload, a heard-text field, or text under an undeclared event type). Exit 0 clean, 1 flagged, 2 unreadable. It changes nothing it reads; what to do with a preserved being's traces is the operator's decision. |
 | `gpu-lock.sh CMD...` | Runs a command holding the host-wide GPU lock, so training, calibration and validation runs never share the GPUs. `GPU_LOCK_PRIORITY=1` lets an approved job go next. |
 
 ## Restacking a stacked pull request
