@@ -135,7 +135,7 @@ def test_no_allowed_action_yields_nothing():
 
 
 def test_the_draw_is_uniform_and_reproducible_from_the_seed():
-    allowed = ["pause", "next", "previous", "quieter"]
+    allowed = ["next", "previous", "quieter", "louder"]
     picks = []
     mono = _Mono()
     source = _source(allowed, mono=mono, seed=5, interval=1.0)
@@ -148,6 +148,25 @@ def test_the_draw_is_uniform_and_reproducible_from_the_seed():
         assert abs(n - 1000) < 120  # within ~4 sd of a uniform draw
     replay = stage_m_generator(5)
     assert picks[:50] == [allowed[replay.randrange(4)] for _ in range(50)]
+
+
+def test_stage_m_never_draws_pause():
+    """A random pause would be random deprivation, not a choice from experience
+    (operator decision 2026-11-01): stage M leaves pause to stage L."""
+    from kaine.workspace.stimulus_policy import STAGE_M_EXCLUDED_ACTIONS
+
+    assert STAGE_M_EXCLUDED_ACTIONS == frozenset({"pause"})
+    mono = _Mono()
+    source = _source(["pause", "next", "louder", "resume"], mono=mono, seed=2, interval=1.0)
+    picks = []
+    for k in range(2000):
+        mono.t = float(k)
+        picks += [i.params["action"] for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT]
+    assert len(picks) == 2000 and "pause" not in picks
+    assert set(picks) == {"next", "louder", "resume"}
+    only_pause = _source(["pause"], mono=mono, seed=2, interval=1.0)
+    mono.t = 5000.0
+    assert [i for i in only_pause(_snapshot(_drive("boredom"))) if i.kind == ACT] == []
 
 
 def test_inner_policy_hooks_stay_reachable():

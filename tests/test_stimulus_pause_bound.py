@@ -96,7 +96,8 @@ def test_the_scripted_hold_cycle_cannot_pass_the_bound(tmp_path, caplog):
 
 @pytest.mark.parametrize("seed", range(5))
 def test_stage_m_under_sustained_boredom_stays_within_the_bound(tmp_path, seed):
-    """Shipped stage M, a boredom lead every 30.1 s (the concern re-entry), 3 h."""
+    """Shipped stage M, a boredom lead every 30.1 s (the concern re-entry), 3 h:
+    no pause is drawn, so nothing holds the programme still."""
     mono, runtime, clock = _rig(tmp_path, seed=seed)
     effector = runtime.effector()
     source = StimulusActSource(
@@ -124,10 +125,14 @@ def test_stage_m_under_sustained_boredom_stays_within_the_bound(tmp_path, seed):
         runtime.controller.poll_once()
         mono.t += 0.5
     record = runtime.tally.record()
-    assert record["entity_paused_share"] <= CAP + SLACK, record["entity_paused_share"]
-    assert record["paused_share_last_awake_hour_max"] <= CAP + SLACK
+    # Stage M never draws pause, so its paused share is 0 by construction; the
+    # effector's 25 % bound stays as defence in depth (the scripted cycle above).
+    assert record["commands"]["pause"] == 0
+    assert record["entity_paused_share"] == 0.0, record["entity_paused_share"]
+    assert record["paused_share_last_awake_hour_max"] == 0.0
     # Formed only when the effector is ready: no act is refused for its interval.
     assert sum(record["refused"].values()) == 0, record["refused"]
+    assert record["acts_per_awake_hour"] == pytest.approx(120.0, rel=0.01)
 
 
 def test_a_pause_waits_after_the_previous_pause_ends_whatever_came_between(tmp_path):

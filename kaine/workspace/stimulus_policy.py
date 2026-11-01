@@ -14,8 +14,9 @@ highest salience score, is the entity's own boredom or restlessness drive event
 (``affect.drive``, a crossing or a re-entry of a current concern), once the
 minimum command interval has passed since the last stimulus act, the wrapper
 adds one signed ``act`` intent naming the ``stimulus`` effector. The action is
-drawn uniformly from the actions the programme would take now, with a generator
-seeded from the run seed. No act forms in the developmental phase.
+drawn uniformly from the actions the programme would take now, ``pause``
+excluded (``STAGE_M_EXCLUDED_ACTIONS``, below), with a generator seeded from the
+run seed. No act forms in the developmental phase.
 
 Why this trigger: boredom is "the aversive experience of wanting, but being
 unable, to engage in satisfying activity" (Eastwood, Frischen, Fenske and
@@ -48,6 +49,15 @@ STIMULUS_EFFECTOR = "stimulus"
 AFFECT_SOURCE = "affect"
 AFFECT_DRIVE_TYPE = "affect.drive"
 TRIGGER_DRIVES = frozenset({"boredom", "restlessness"})
+#: Actions stage M never draws. ``pause`` holds one frame and silence, so a pause
+#: deprives the entity of novelty and progress while it lasts. Under stage M the
+#: action is drawn at random, so a drawn pause would not be the entity choosing
+#: stillness from experience but random deprivation: about 22 % of awake time
+#: under a sustained boredom concern, even within the effector's 25 % bound. The
+#: effector keeps ``pause`` with all its bounds for stage L, whose learned
+#: action selection can choose it from what pauses did (operator decision,
+#: 2026-11-01). ``resume`` stays in the set; it is allowed only while paused.
+STAGE_M_EXCLUDED_ACTIONS = frozenset({"pause"})
 
 
 def stage_m_generator(seed: int) -> random.Random:
@@ -119,7 +129,7 @@ class StimulusActSource:
             return None
         if self._ready is not None and not self._ready():
             return None
-        allowed = list(self._allowed_actions())
+        allowed = [a for a in self._allowed_actions() if a not in STAGE_M_EXCLUDED_ACTIONS]
         if not allowed:
             return None
         action = allowed[self._rng.randrange(len(allowed))]
@@ -143,6 +153,7 @@ class StimulusActSource:
 
 
 __all__ = [
+    "STAGE_M_EXCLUDED_ACTIONS",
     "STIMULUS_EFFECTOR",
     "StimulusActSource",
     "TRIGGER_DRIVES",

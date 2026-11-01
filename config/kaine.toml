@@ -1265,12 +1265,14 @@ recovery_cap_seconds = 300
 # among programme channels. Held: off builds nothing. On, it also needs the
 # operator's effector whitelist to name it ([effectors].enabled_effectors =
 # ["stimulus"]) and the effectors module enabled, and the boot refuses it unless
-# [preservation.welfare_response].enabled is true. Stage "minimal": after maturation, a broadcast led by the entity's
-# own boredom or restlessness drive event yields one act, its action drawn
-# uniformly from those the programme can take now. Skipping wraps and never ends
-# a viewing: the viewing ends when perceived programme time reaches channel 0's
-# length. Never enable it inside a running study; the workspace-mediation and
-# workspace-feedback arms refuse it. Readout and record: "stimulus_control" lines in the welfare log.
+# [preservation.welfare_response].enabled is true. Stage "minimal": after
+# maturation, a broadcast led by the entity's own boredom or restlessness drive
+# event yields one act, its action drawn uniformly from those the programme can
+# take now except pause (a random pause would be random deprivation). Skipping
+# wraps and never ends a viewing: the viewing ends when perceived programme time
+# reaches channel 0's length. Never enable it inside a running study; the
+# workspace-mediation and workspace-feedback arms refuse it. Readout and record:
+# "stimulus_control" lines in the welfare log.
 enabled = false
 stage = "minimal"
 min_interval_s = 30.0           # Delta_sc: entity seconds between accepted commands

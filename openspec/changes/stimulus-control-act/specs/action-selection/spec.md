@@ -15,6 +15,13 @@ With stage M installed, after the developmental phase, a non-inhibited broadcast
 - **WHEN** the entity is in the developmental phase
 - **THEN** no stimulus act is derived
 
+### Requirement: Stage M never draws pause
+The stage-M source SHALL leave `pause` out of the actions it draws from, so that no pause is random deprivation; the effector SHALL keep `pause` and its bounds for stage L.
+
+#### Scenario: Pause allowed
+- **WHEN** the programme would take `pause`, `next` and `louder`
+- **THEN** stage M draws only `next` or `louder`, and with `pause` the only allowed action it forms no intent
+
 ### Requirement: Stage M forms only acts the effector would take now
 The stage-M source SHALL form a stimulus intent only when the stimulus effector's own interval check passes, so that realization latency never turns an act formed at the `Delta_sc` boundary into a refusal.
 
