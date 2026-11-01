@@ -51,7 +51,10 @@ that the module reads back on restore.
 from __future__ import annotations
 
 import copy
+import dataclasses
+import math
 import sys
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Iterable
@@ -267,18 +270,39 @@ def strip_latent(value: Any) -> Any:
     """A copy of ``value`` with every key in ``LATENT_FIELDS`` removed at any depth.
 
     It walks mappings, lists and tuples (tuples stay tuples), removes nothing
-    else (no length backstop, no content keys) and converts every numpy array it
-    meets to Python numbers with ``tolist()`` before walking it, so an array
-    under a latent key is removed with its key and an array under any other key
-    is written as exact numbers rather than by numpy's elided ``str()``. Every
-    record writer applies it before encoding.
+    else (no length backstop, no content keys) and converts every numpy array
+    and every torch tensor it meets to Python numbers with ``tolist()`` before
+    walking it, so an array under a latent key is removed with its key and an
+    array under any other key is written as exact numbers rather than by an
+    elided ``str()``. It also opens the containers a record could otherwise
+    hide a latent in: a pydantic model (``model_dump()``), a dataclass instance
+    (its fields), a deque, a set and a frozenset become plain mappings and
+    lists. Every record writer applies it before encoding; the JSONL sink
+    refuses any other object instead of writing its ``str()``.
     """
     return _strip_latent(value, _numpy_array_type())
+
+
+def _open_container(value: Any) -> Any:
+    """``value`` as a plain JSON container when it is a model, a dataclass
+    instance, a deque, a set or a tensor; else ``value`` unchanged."""
+    if isinstance(value, (deque, set, frozenset)):
+        return list(value)
+    pydantic = sys.modules.get("pydantic")
+    if pydantic is not None and isinstance(value, pydantic.BaseModel):
+        return value.model_dump()
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {f.name: getattr(value, f.name) for f in dataclasses.fields(value)}
+    torch = sys.modules.get("torch")
+    if torch is not None and isinstance(value, torch.Tensor):
+        return value.detach().cpu().tolist()
+    return value
 
 
 def _strip_latent(value: Any, ndarray: type | None) -> Any:
     if ndarray is not None and isinstance(value, ndarray):
         value = value.tolist()
+    value = _open_container(value)
     if isinstance(value, Mapping):
         return {
             k: _strip_latent(v, ndarray)
@@ -290,6 +314,34 @@ def _strip_latent(value: Any, ndarray: type | None) -> Any:
     if isinstance(value, tuple):
         return tuple(_strip_latent(item, ndarray) for item in value)
     return value
+
+
+#: The one subkey of a stored trace's ``latent_derived`` mapping the episodic
+#: store may keep (identity-bound content, the episodic-memory spec), and the
+#: exact keys it holds.
+IDENTITY_BOUND_KEY = "identity_bound"
+IDENTITY_BOUND_FIELDS = ("code", "code_id", "generation")
+
+
+def identity_bound_value(value: Any) -> dict[str, Any] | None:
+    """The identity-bound field rebuilt from exactly its three keys, or None
+    when ``value`` is not one: ``code`` a non-empty list of finite numbers,
+    ``code_id`` a non-empty string, ``generation`` an integer. Nothing else
+    from ``value`` is kept, a nested latent field included."""
+    if not isinstance(value, Mapping):
+        return None
+    code, code_id, generation = (value.get(k) for k in IDENTITY_BOUND_FIELDS)
+    if not isinstance(code, (list, tuple)) or not code:
+        return None
+    if not all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in code
+    ):
+        return None
+    if not isinstance(code_id, str) or not code_id:
+        return None
+    if isinstance(generation, bool) or not isinstance(generation, int):
+        return None
+    return {"code": [float(v) for v in code], "code_id": code_id, "generation": generation}
 
 
 def without_latent_derived(value: Any) -> Any:

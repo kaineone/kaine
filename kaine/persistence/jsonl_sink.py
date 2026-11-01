@@ -31,6 +31,34 @@ from kaine.storage import resolve
 log = logging.getLogger(__name__)
 
 
+class UnwritableRecordError(TypeError):
+    """A record holds an object the sink will not write by its ``str()``."""
+
+
+#: The scalar types a record may hold beside JSON's own, written by their
+#: ``str()`` (as the sink always wrote them). Everything else is refused.
+def _json_default(obj: Any) -> str:
+    import datetime as _dt
+    import decimal
+    import enum
+    import pathlib
+    import uuid
+
+    allowed: tuple[type, ...] = (
+        _dt.datetime, _dt.date, _dt.time, _dt.timedelta,
+        pathlib.PurePath, enum.Enum, uuid.UUID, decimal.Decimal,
+    )
+    if isinstance(obj, allowed):
+        return str(obj)
+    import sys
+
+    np = sys.modules.get("numpy")
+    if np is not None and isinstance(obj, np.generic) and not isinstance(obj, (np.bytes_, np.void)):
+        return str(obj)
+    # Named by type only: the object's repr could format any value.
+    raise UnwritableRecordError(f"a record holds an unwritable {type(obj).__name__}")
+
+
 def _utc_date_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -206,11 +234,15 @@ class AsyncJsonlSink:
         runs: every key in ``LATENT_FIELDS`` is removed at any depth, with no
         length backstop (evaluation records hold legitimate long numeric
         tables), and numpy arrays are written as exact lists rather than by
-        their elided ``str()``."""
+        their elided ``str()``. Fails closed on any other object: only the
+        reviewed scalar types of ``_json_default`` are written by their
+        ``str()``; anything else (a model, a tensor, bytes, an object whose
+        ``repr`` could format a latent) raises ``UnwritableRecordError`` and
+        the record is not written."""
         from kaine.privacy_filter import strip_latent
         from kaine.security.crypto import get_state_encryptor
 
-        line = json.dumps(strip_latent(entry), default=str)
+        line = json.dumps(strip_latent(entry), default=_json_default)
         return get_state_encryptor().encrypt_text(line)
 
     async def _run(self) -> None:
@@ -253,7 +285,14 @@ class AsyncJsonlSink:
         """Encode (encrypt) and append a batch of records. Blocking; thread-run."""
         with path.open("a", encoding="utf-8") as fh:
             for entry in batch:
-                fh.write(self._encode_line(entry) + "\n")
+                try:
+                    line = self._encode_line(entry)
+                except UnwritableRecordError as exc:
+                    # One unwritable record never drops the rest of the batch.
+                    self._dropped_count += 1
+                    log.error("AsyncJsonlSink %s dropped a record: %s", self._name, exc)
+                    continue
+                fh.write(line + "\n")
 
     def _target_path(self) -> Path:
         today = _utc_date_str()
