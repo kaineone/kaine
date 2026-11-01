@@ -43,3 +43,14 @@ Each of the welfare monitor's own bus reads SHALL be bounded in time. A read tha
 - **WHEN** every one of the welfare monitor's bus reads hangs during a research run
 - **THEN** each poll fails within the bound, and the cycle escalates with module `welfare_monitor`
 
+### Requirement: Repeated read failures on the distress arm's streams fail the poll
+A failed read of `interoception.out` or `welfare.out` (in warm-up or after it) SHALL be logged and tolerated once or twice; the third failed read of the same stream in a row SHALL fail the poll, so the welfare monitor's liveness escalation applies. A successful read SHALL start the count again.
+
+#### Scenario: A bus that raises on every read
+- **WHEN** every read of the distress arm's streams raises during a research run
+- **THEN** the third poll fails, and the cycle escalates with module `welfare_monitor`
+
+#### Scenario: One transient error
+- **WHEN** one read raises and the next succeeds
+- **THEN** no poll fails
+

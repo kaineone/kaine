@@ -23,6 +23,7 @@ from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog
 from kaine.cycle.preservation_monitor import (
     PreservationConfig,
+    WelfareBusReadFailing,
     WelfareBusTimeout,
     WelfareProtectiveMonitor,
     WelfareResponseConfig,
@@ -321,3 +322,119 @@ async def test_n16_a_stop_set_during_the_loops_await_is_no_loss(tmp_path, monkey
     assert _escalation().get("escalated") is not True
     ctx.supervisor_task.cancel()
     ctx.cycle_task.cancel()
+
+
+# --- a bus that raises on every read does not leave the distress arm blind ----------
+
+
+class _RaisingBus:
+    """A bus whose reads raise ``failures`` times (forever when None), then answer empty."""
+
+    def __init__(self, failures: int | None = None) -> None:
+        self.failures = failures
+        self.reads = 0
+
+    def _maybe_raise(self) -> None:
+        self.reads += 1
+        if self.failures is None or self.reads <= self.failures:
+            raise ConnectionError("bus read failed")
+
+    async def read_entries(self, *args, **kwargs):
+        self._maybe_raise()
+        return [], None
+
+    async def last_entry_id(self, *args, **kwargs):
+        self._maybe_raise()
+        return "0-0"
+
+    async def publish(self, event=None):
+        return "0-0"
+
+
+def _distress_only(warmup_s: float) -> WelfareResponseConfig:
+    # The indicator arm off, so only the distress arm reads the bus.
+    return WelfareResponseConfig.from_section(
+        {"enabled": True, "warmup_s": warmup_s, "warmup_ceiling_s": 0.0, "indicators": {"enabled": False}}
+    )
+
+
+@pytest.mark.parametrize("warmup_s", [0.0, 120.0])
+async def test_a_bus_that_raises_on_every_read_fails_the_third_poll(warmup_s):
+    monitor = _monitor(_Clock(), _distress_only(warmup_s), bus=_RaisingBus())
+    stop = asyncio.Event()
+    await monitor._poll_once(stop)  # one failure is tolerated
+    await monitor._poll_once(stop)
+    with pytest.raises(WelfareBusReadFailing):
+        await monitor._poll_once(stop)
+    with pytest.raises(WelfareBusReadFailing):
+        await monitor._poll_once(stop)  # and every poll after it
+
+
+@pytest.mark.parametrize("warmup_s", [0.0, 120.0])
+async def test_a_single_transient_read_error_is_tolerated(warmup_s):
+    monitor = _monitor(_Clock(), _distress_only(warmup_s), bus=_RaisingBus(failures=1))
+    stop = asyncio.Event()
+    for _ in range(10):
+        await monitor._poll_once(stop)
+    assert all(v == 0 for v in monitor._distress_read_failures.values())
+
+
+async def test_two_failures_then_a_good_read_start_the_count_again():
+    monitor = _monitor(_Clock(), _distress_only(0.0), bus=_RaisingBus(failures=4))
+    stop = asyncio.Event()
+    # Poll 1 fails interoception and welfare.out (reads 1, 2); poll 2 the same
+    # (reads 3, 4): two failures each, tolerated. Poll 3 reads cleanly.
+    for _ in range(5):
+        await monitor._poll_once(stop)
+    assert all(v == 0 for v in monitor._distress_read_failures.values())
+
+
+@pytest.mark.parametrize("warmup_s", [0.0, 120.0])
+async def test_a_bus_that_raises_on_every_read_escalates_through_the_liveness_check(tmp_path, warmup_s):
+    ctx, clock = await _ctx_with_monitor(tmp_path, "research")
+    ctx.supervisor_task = asyncio.create_task(_never_ending())
+    cfg = _distress_only(warmup_s)
+    cfg = WelfareResponseConfig(**{**cfg.__dict__, "poll_interval_s": 0.01})
+    ctx.welfare_monitor = _monitor(clock, cfg, bus=_RaisingBus())
+    ctx.welfare_task = asyncio.create_task(ctx.welfare_monitor.run(ctx.stop_event))
+    for _ in range(500):
+        if ctx.welfare_monitor.poll_failures >= 3:
+            break
+        await asyncio.sleep(0.01)
+    assert ctx.welfare_monitor.poll_failures >= 3
+    clock.t += 31.0
+    await asyncio.wait_for(cyc._run_until_stopped(ctx), timeout=5.0)
+    _assert_escalated(ctx, tmp_path)
+    await asyncio.wait_for(ctx.welfare_task, timeout=5.0)
+    ctx.supervisor_task.cancel()
+    ctx.cycle_task.cancel()
+
+
+class _OneStreamRaisingBus(_RaisingBus):
+    """Only ``stream`` raises; every other read answers empty."""
+
+    def __init__(self, stream: str) -> None:
+        super().__init__()
+        self.stream = stream
+
+    async def read_entries(self, stream, *args, **kwargs):
+        if stream == self.stream:
+            raise ConnectionError("bus read failed")
+        return [], None
+
+    async def last_entry_id(self, *args, **kwargs):
+        return "0-0"
+
+
+@pytest.mark.parametrize("warmup_s", [0.0, 120.0])
+@pytest.mark.parametrize("stream_attr", ["_INTEROCEPTION_STREAM", "_WELFARE_STREAM"])
+async def test_each_distress_stream_alone_fails_the_poll_when_unreadable(stream_attr, warmup_s):
+    import kaine.cycle.preservation_monitor as pm
+
+    stream = getattr(pm, stream_attr)
+    monitor = _monitor(_Clock(), _distress_only(warmup_s), bus=_OneStreamRaisingBus(stream))
+    stop = asyncio.Event()
+    await monitor._poll_once(stop)
+    await monitor._poll_once(stop)
+    with pytest.raises(WelfareBusReadFailing, match=stream.replace(".", r"\.")):
+        await monitor._poll_once(stop)

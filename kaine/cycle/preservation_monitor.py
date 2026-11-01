@@ -123,6 +123,20 @@ _AWAKE_CLOCK_REGRESSION_TOLERANCE_S = 0.5
 _WELFARE_BUS_TIMEOUT_S = 5.0
 
 
+# Consecutive failed reads of one distress-arm stream (interoception.out or
+# welfare.out) that a poll tolerates. One transient error (a reconnect) is
+# logged and the stream is read again next poll; the third failure in a row
+# fails the poll, so a bus that raises on every read cannot leave the distress
+# arm blind while polls count as successful. Three matches the liveness
+# check's three failed polls; at the 1 s poll interval the stream has then
+# been unread for about 3 s, well inside one 30 s distress window.
+_DISTRESS_READ_FAILURES_TO_FAIL_POLL = 3
+
+
+class WelfareBusReadFailing(Exception):
+    """A distress-arm stream could not be read on several polls in a row."""
+
+
 class WelfareBusTimeout(Exception):
     """One of the welfare monitor's own bus calls did not answer in time.
 
@@ -950,6 +964,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
     #: The bound on each of this monitor's own bus calls; the constructor's
     #: ``bus_timeout_s`` overrides it per instance.
     _bus_timeout_s: float = _WELFARE_BUS_TIMEOUT_S
+    #: Consecutive failed reads per distress-arm stream (class default so a
+    #: monitor built without __init__ still counts).
+    _distress_read_failures: dict[str, int] = {}
 
 
     source = "preservation"
@@ -1152,7 +1169,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     stream,
                     exc_info=True,
                 )
+                self._distress_read_failed(stream)
                 continue
+            self._distress_read_ok(stream)
             for entry_id, event in entries:
                 setattr(self, cursor_attr, entry_id)
                 if stream == _INTEROCEPTION_STREAM and event.type == "interoception.report":
@@ -1246,7 +1265,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             raise
         except Exception:
             log.warning("welfare monitor: interoception.out read failed", exc_info=True)
+            self._distress_read_failed(_INTEROCEPTION_STREAM)
             entries, last_scanned = [], None
+        else:
+            self._distress_read_ok(_INTEROCEPTION_STREAM)
         reasons: list[str] = []
         for entry_id, event in entries:
             self._cursor = entry_id
@@ -1425,7 +1447,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             raise
         except Exception:
             log.warning("welfare monitor: welfare.out read failed", exc_info=True)
+            self._distress_read_failed(_WELFARE_STREAM)
             return []
+        self._distress_read_ok(_WELFARE_STREAM)
         reasons: list[str] = []
         for entry_id, event in entries:
             self._welfare_cursor = entry_id
@@ -1741,6 +1765,20 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
     # end; a crossing brings preservation and the freeze). Nothing here
     # imports kaine.evaluation, and the rest request goes out on this
     # monitor's own stream, which the cycle never reads as a candidate.
+
+    def _distress_read_ok(self, stream: str) -> None:
+        if self._distress_read_failures.get(stream):
+            self._distress_read_failures = {**self._distress_read_failures, stream: 0}
+
+    def _distress_read_failed(self, stream: str) -> None:
+        """Count a failed read of a distress-arm stream; fail the poll on the
+        ``_DISTRESS_READ_FAILURES_TO_FAIL_POLL``-th in a row."""
+        count = self._distress_read_failures.get(stream, 0) + 1
+        self._distress_read_failures = {**self._distress_read_failures, stream: count}
+        if count >= _DISTRESS_READ_FAILURES_TO_FAIL_POLL:
+            raise WelfareBusReadFailing(
+                f"welfare monitor: {stream} unreadable on {count} polls in a row"
+            )
 
     async def _bus_read(self, awaitable: Any) -> Any:
         """Await one of this monitor's bus reads, bounded by ``bus_timeout_s``."""
