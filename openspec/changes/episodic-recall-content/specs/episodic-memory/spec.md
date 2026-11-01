@@ -24,6 +24,24 @@ The episodic memory module SHALL classify each coalition member with the shared 
 - **WHEN** a coalition member from the social cognition module carries a heard-text field at depth two
 - **THEN** the stored trace holds that member as heard with no payload
 
+### Requirement: Only declared own-content types keep their payload in a trace
+The episodic memory module SHALL keep a coalition member's payload in the trace text only when its `(source, type)` is in `INTERNAL_EVENT_TYPES` (`kaine/faithful/external_input.py`, the list the language module's notes use) and the member is not heard. A member of any other type, known or unknown, SHALL be stored as `source:type=<unclassified omitted>`. `embodiment.visual.raw` SHALL keep `<raw-perceptual omitted>`, and a replay from the episodic memory module SHALL keep `<replay of {memory_id}>`.
+
+#### Scenario: An instant message under an adapter's own type is not stored
+- **WHEN** a broadcast's coalition holds `embodiment.im` with payload `{"message": "hello there"}`
+- **THEN** the stored trace text holds `embodiment:embodiment.im=<unclassified omitted>` and no "hello there"
+
+#### Scenario: A declared report keeps its payload
+- **WHEN** a broadcast's coalition holds a `vision.report` with `change_score` 0.25
+- **THEN** the stored trace text holds that payload after `strip_vectors`
+
+### Requirement: Existing stores can be checked for heard text without reading it out
+A read-only maintainer tool SHALL report, for a sqlite-vec store, a Qdrant store, fork snapshots and preservation bundles, how many traces it read, how many hold a member that may carry heard text (an external-input member with a payload, a heard-text field, an undeclared type's text, or an unreadable payload holding a string) and the ids of those traces. It SHALL print no trace text and SHALL change none of the files or stores it reads.
+
+#### Scenario: A legacy chat trace is reported by id only
+- **WHEN** a store holds a trace written before the heard rule with an `embodiment.chat` member holding "hello there"
+- **THEN** the report counts it, names its id, and contains no "hello there", and the store's files are unchanged
+
 ### Requirement: New traces store their members
 Each trace stored after this change SHALL carry `members`: for each coalition member its `source`, `type`, `accessed`, `intensity` and `fields`, the payload keys the felt renderer declares for that type, after `strip_vectors`. Traces stored before this change SHALL NOT be rewritten.
 
