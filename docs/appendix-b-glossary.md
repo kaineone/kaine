@@ -302,7 +302,7 @@ The offline procedural audio-visual feed (`[perception_feed].mode = "seeded"`, a
 
 ### Self-initiated report (policy)
 
-The action selection module's report rule in the first configuration (`[action_selection].policy = "self_initiated_report"`). From an accessed broadcast it derives a speak intent only when the best score in the coalition, leaving aside the organ's own utterances, clears the speak bar; when the leading candidate's source and event type differ from those of the last spoken report made within the past five minutes; and when a refractory interval has passed. A lower think bar on the same score governs inner thought. No intent comes from an inhibited broadcast, and no user utterance triggers speech. See `kaine/workspace/report_policy.py`.
+The action selection module's report rule in the first configuration (`[action_selection].policy = "self_initiated_report"`). From an accessed broadcast it derives a speak intent only when the best score in the coalition, leaving aside the organ's own utterances, clears the speak bar; when the leading candidate's source and event type differ from those of the last spoken report made within the past five minutes; and when a refractory interval has passed. A lower think bar on the same score governs inner thought. No intent comes from an inhibited broadcast. A heard transcription is a coalition member like any other: it may lead to a report as any accessed member can, and no rule answers it or forbids answering it. See `kaine/workspace/report_policy.py`.
 
 ### Interoception
 

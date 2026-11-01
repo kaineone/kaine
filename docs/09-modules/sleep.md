@@ -125,6 +125,7 @@ Not built, because the code holds nothing the paper's definition covers: contain
 | `sleep.out` | `sleep.association` | One phase-3 co-replayed pair: `a` and `b` (point ids) and `weight`, no content | `baseline_salience` |
 | `sleep.out` | `sleep.rest_request` | Answer to a rest request: `accepted`, and `reason` of `accepted`, `busy`, `too_soon` or `aborted` | `0.0` |
 | `sleep.out` | `sleep.ignition_audit` | Content-free intent audit, every sleep | `baseline_salience` |
+| `sleep_readout.out` | `sleep_readout.operator_speech` | Content-free operator-speech readout, only with speech-to-text on and operator speech heard; never read by the entity (see [Operator-speech readout](#operator-speech-readout)) | `0.0` |
 
 The sleep module reports at these fixed levels; its events are not graded by surprise. The interoception module resets fatigue and regulation in response to `sleep.sleep.completed`, and the four processors resume adaptation on it, so an aborted sleep still ends the window.
 
@@ -173,6 +174,20 @@ Every sleep, the sleep module publishes `sleep.ignition_audit` for the window si
 Each realization is linked to the intent it realized. The language module's `external_speech` and `internal_speech` payloads carry the `record_id` of the intent-log record written for that utterance, and that record holds `intent_entry_id`, the `entry_id` of the intent. The audit reads this join from the two newest intent-log files (the corpus file rotated in this sleep, or the newest one if nothing was rotated, and the live log). A payload `entry_id`, where an event carries one, is used directly. A requested `sleep.sleep.started` carries neither, so it is linked to the last `intent.rest` of the window. A speech or action realization with no link counts as `self_initiated` and adds no entry id, so one intent's coalition is never applied to another intent's utterance. If the intent log cannot be read, the audit runs unlinked and logs a warning.
 
 `intent.*` events on `planning.out` are counted separately as unrealizable, since no effector reads that stream, and `action_selection.proposal_outcome` events add realized, declined and forwarded proposal counts. The payload holds counts, entry ids, event types, intensities and `sleep_index`, and no text, transcripts or latent vectors. It is also merged into the `sleep.sleep.completed` summary.
+
+### Operator-speech readout
+
+With `[audition].transcription_enabled = true`, the audit also reads `audition.out` for the same window and computes a content-free readout of operator speech, from the main-bus labels and counts only (`source_label`, `text_chars`; no companion is joined, so no word is read):
+
+| Field | Meaning |
+|---|---|
+| `operator_speech_heard` | Non-empty `audition.transcription` events from an operator channel (`live_mic`, `microphone`, `remote`) |
+| `operator_speech_accessed` | How many of them won access (were in at least one broadcast coalition); each utterance counts once |
+| `spoke_after_operator_speech` | Accessed utterances followed by a realized `external_speech` within 30 entity seconds of their first access and before the next accessed utterance |
+| `spoke_otherwise` | Realized `external_speech` in no such window |
+| `operator_speech_access_share` | `operator_speech_accessed` / `operator_speech_heard` |
+
+Entity time comes from the broadcasts' `published_at` and `time_scale`. The 30 s window is a readout constant (`OPERATOR_SPEECH_WINDOW_S` in `kaine/modules/sleep/ignition_audit.py`). The readout is published only when operator speech was heard, as `sleep_readout.operator_speech` (with `sleep_index`) on its own stream, `sleep_readout.out`. That stream is not a module stream, so the cycle never reads it as a candidate, and no module consumes it: the readout is observation for the operator and the research record and never enters the entity's salience, affect, drives, goals, learning or training corpus. It is never part of `sleep.ignition_audit` or the `sleep.sleep.completed` summary, which are workspace candidates. With speech-to-text off, the audit never reads `audition.out` and its cursors, state and record are unchanged. The dashboard's sleep panel shows the last readout.
 
 ## Sleep index
 

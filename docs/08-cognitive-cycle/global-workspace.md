@@ -262,34 +262,42 @@ Feedback never acts on an inhibited broadcast: the workspace attaches nothing an
 
 The cycle calls `ActionSelection.select(snapshot)` after each successful publication. The action selection module checks `inhibited` first and returns no intents for an inhibited broadcast. It is the only path from the workspace to an output; the cycle publishes the returned intents on `action_selection.out` and never calls an effector itself.
 
-The policy is chosen by `[action_selection].policy` and `[action_selection].drive_initiative`:
+The policy is chosen by `[action_selection].policy`:
 
 | Setting | Policy |
 |---|---|
-| `policy = "self_initiated_report"` | `SelfInitiatedReportPolicy`, the first-configuration policy |
-| no `policy`, `drive_initiative = true` (the code default) | `DriveBiasedActionSelectionPolicy` |
-| no `policy`, `drive_initiative = false` | `DefaultActionSelectionPolicy` |
+| no `policy`, or `policy = "self_initiated_report"` (the shipped file and `first_configuration`) | `SelfInitiatedReportPolicy` |
+| `policy = "drive_biased"` | `DriveBiasedActionSelectionPolicy` |
+| any other value | the boot refuses, naming the two accepted values |
 
-When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `action_selection.proposal_outcome` events on `action_selection_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The `first_configuration` profile sets the self-initiated report policy with `drive_initiative = false`, and the planning module is off in that profile.
+`drive_initiative` is retired: a configuration that sets it refuses the boot with a message naming `policy`. Both checks run before anything opens (`_phase_preconditions` in `kaine/cycle/__main__.py`).
+
+When the planning module is enabled, the composition root wraps whichever policy was chosen in `PlanningProposalSource` (`kaine/workspace/planning_proposals.py`), and the cycle publishes `action_selection.proposal_outcome` events on `action_selection_feedback.out` after the intents, including for inhibited broadcasts so that the planning module critic receives feedback. The planning module is off in the `first_configuration` profile.
+
+### Heard speech is perception
+
+No policy answers heard speech by rule, and none forbids an answer. An operator's speech reaches the workspace only as audition events (`audition.perception`, `audition.emotion`, `audition.prosody`, and with speech-to-text on `audition.transcription`), each scored on salience like any candidate; nothing in the workspace or the action layer names the operator, a channel or a transcription. A transcription that wins access is a coalition member like any other: under the report rule it may lead to speech when it is the top member and the bars and guards allow. Every intent's `about` is the entity's own description of the cause, in felt or numeric words, never another speaker's words; the language module quotes the heard words to the organ, attributed, from the coalition. The innate structure is the speech candidate itself, cited at `Audition._publish_transcription`: newborns already listen preferentially to speech over acoustically matched non-speech (Vouloumanos and Werker 2007). Which voice is familiar is learned (social cognition's agent models), and replying is shaped by contingent social feedback (Goldstein, King and West 2003), so nothing about a reply is built in.
+
+Hearing an operator relieves the social drive whether or not the entity answers (the sequence module resets its interaction clock on a non-empty operator transcription), and nothing reads "the operator spoke and the entity did not" into the entity. The sleep audit's operator-speech readout (see the [sleep module](../09-modules/sleep.md)) is the observation of how often heard speech won access and was followed by speech; it is published on `sleep_readout.out`, which the cycle never reads.
 
 ### The self-initiated report policy
 
-`SelfInitiatedReportPolicy` derives intents from the workspace's own state and never from a user utterance. On an accessed broadcast it:
+`SelfInitiatedReportPolicy` derives intents from the scores of the accessed coalition, heard speech included as a member like any other. It never tests a member's source, type or channel except to leave the organ's own output aside. On an accessed broadcast it:
 
 1. Clears the speak guard once the language organ has published external speech, and the think guard once it has published internal speech, whether or not that output is accessed (paper A.6 step 1). The cycle hands every organ speech event it reads from the bus to `ActionSelection.observe_own_output` on the tick it reads it, before selection, because at priority 0.4 the organ's utterances never reach access in the first configuration. A coalition that contains the organ's output also clears the matching guard. Either guard is also cleared after 48 seconds of wall time, so a failed realization cannot mute the entity.
 2. Removes the language organ's own events (source `language`) from the coalition. If nothing is left, there is no intent. Otherwise the report signal is the highest score among the remaining members, and the signature is the `(source, type)` of that member.
 3. Emits a `speak` intent when the signal reaches `report_threshold` (0.6), no speak is in flight, `speak_refractory_s` (8 entity seconds) has passed since the last speak, and the signature does not match the last spoken signature. A remembered signature stops blocking once it is older than `sig_expiry_s` (300 entity seconds in `first_configuration`; it never expires when unset).
 4. Otherwise emits a `think` intent when the signal reaches `think_threshold` (0.45), no think is in flight, and `think_refractory_s` (3 entity seconds) has passed. The think path has no signature check.
 
-At most one intent is emitted per broadcast. Both bars should sit above the access threshold, and the policy requires `0 ≤ think_threshold ≤ report_threshold ≤ 1`. An optional `interrupt_threshold`, strictly above `report_threshold`, lets a coalition with a different signature preempt a `speak` that is still in flight; it is unset by default.
+At most one intent is emitted per broadcast. Both bars should sit above the access threshold, and the policy requires `0 ≤ think_threshold ≤ report_threshold ≤ 1`. The signature guard treats every source alike; because every transcription has the same signature, it also allows at most one transcription-led spoken report per `sig_expiry_s`. An optional `interrupt_threshold`, strictly above `report_threshold`, lets a coalition with a different signature preempt a `speak` that is still in flight; it is unset by default.
 
 The bars are a heuristic stand-in for the report-or-act decision of the predictive global neuronal workspace, which the action layer does not compute.
 
 ### The other policies
 
-`DefaultActionSelectionPolicy` answers a user utterance: it emits one `speak` intent when the coalition holds an `audition.transcription` event with non-empty text. It never forms a `speak` about the entity's own external speech, and it keeps a one-in-flight guard that clears when the organ publishes the entity's own `external_speech`, accessed or not, or after 48 seconds of wall time.
+`DriveBiasedActionSelectionPolicy` (`policy = "drive_biased"`, not shipped) turns an `affect.drive` crossing in an accessed coalition into an intent: `social_drive` becomes `speak`; `curiosity`, `boredom` and `restlessness` become `think`. Heard speech gets no precedence. `speak` and `think` have independent guards, each cleared by the organ's matching published output or after 48 seconds of wall time. When the planning module is enabled, `PlanningProposalSource` clears its own guard of that kind and passes the release on to the wrapped policy, and it names a heard referent like any event, by its source.
 
-`DriveBiasedActionSelectionPolicy` extends it: a `affect.drive` crossing in an accessed coalition becomes an intent. `social_drive` becomes `speak`, and a present user utterance always outranks it; `curiosity`, `boredom` and `restlessness` become `think`. `speak` and `think` have independent guards, each cleared by the organ's matching published output. When the planning module is enabled, `PlanningProposalSource` clears its own guard of that kind and passes the release on to the wrapped policy.
+`DefaultActionSelectionPolicy` is the inert library default of `ActionSelection()`: it forms no intent of its own and keeps the speak guard that a wrapper can arm. The cycle never selects it.
 
 ## Act intents and provenance
 
@@ -335,8 +343,8 @@ Selection keys live in `config/kaine.toml`; the `[action_selection]` values belo
 | `[workspace.feedback].refractory_s` | float | `10.0` | Refractory period after an episode, in entity seconds; design value |
 | `[workspace.feedback].head_learning_rate` | float | `0.001` | Top-down head stochastic-gradient step size, eta_fm; design value |
 | `[affect].baseline_arousal` | float | 0.3 | Arousal at which the contrast gain is 0 |
-| `[action_selection].policy` | string | unset; `"self_initiated_report"` in `first_configuration` | Action-selection policy |
-| `[action_selection].drive_initiative` | bool | true; false in `first_configuration` | Use the drive-biased policy when no policy is named |
+| `[action_selection].policy` | string | `"self_initiated_report"` (shipped file, `first_configuration`, and the meaning of absent) | Action-selection policy: `"self_initiated_report"` or `"drive_biased"`; any other value refuses the boot |
+| `[action_selection].drive_initiative` | retired | absent | Setting it refuses the boot |
 | `[action_selection].report_threshold` | float | 0.6 | Speak bar |
 | `[action_selection].think_threshold` | float | 0.45 | Think bar |
 | `[action_selection].interrupt_threshold` | float | unset | Optional interrupt bar, above the speak bar |
@@ -374,7 +382,7 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/modules/feedback.py` | `TopDownHead`, `TopDownBlend`, `FeedbackChannel` |
 | `kaine/boot/feedback.py` | Workspace feedback boot helpers |
 | `tests/test_workspace_feedback_*.py` | Workspace feedback tests |
-| `kaine/workspace/action_selection.py` | `ActionSelection`, `DefaultActionSelectionPolicy`, `Intent` |
+| `kaine/workspace/action_selection.py` | `ActionSelection`, `DefaultActionSelectionPolicy` (inert), `Intent`, `action_selection_policy_name` |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy` |
 | `kaine/workspace/drive_policy.py` | `DriveBiasedActionSelectionPolicy` |
 | `kaine/workspace/planning_proposals.py` | `PlanningProposalSource`, used when Planning is enabled |

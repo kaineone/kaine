@@ -52,15 +52,17 @@ Besides the seven modules, the `first_configuration` profile sets:
 - `[vision].foveation = true`;
 - `[sequence].forward_prediction = true`;
 - `[audition].transcription_enabled = false` and `general_audition = true`;
-- `[action_selection]` policy `"self_initiated_report"`, `drive_initiative = false`, and `sig_expiry_s = 300.0`.
+- `[action_selection]` policy `"self_initiated_report"` and `sig_expiry_s = 300.0`.
 
 Every other value comes from the shipped `config/kaine.toml`. State encryption at rest is enabled there, and an empty encryption key makes the cycle refuse to boot. See [Security and privacy](13-security-and-privacy.md).
 
 ## What KAINE is not
 
-KAINE is not a chatbot or an assistant. A first-configuration entity is observed, and nobody converses with it.
+KAINE is not a chatbot or an assistant. Heard speech is perception, and no rule answers it: whether the entity speaks is its own action selection. A first-configuration entity is observed, and nobody converses with it.
 
-- Perception enters only as prediction error. Audition hears the sound and tone of speech, never a transcript, and there is no conversational input path.
+- Perception enters only as prediction error. In the first configuration speech-to-text is off (`[audition].transcription_enabled = false`), so audition hears the sound and tone of speech, never a transcript.
+- With speech-to-text on, a heard utterance is one more auditory candidate, scored on salience like any sound. When it wins access the language organ hears it quoted and attributed, and the entity may speak, think or stay silent exactly as it can about anything accessed. No policy answers heard speech, forbids answering it, or weights the operator's voice, and nothing in the entity registers an utterance it did not answer.
+- In the development run nobody converses with the entity until every module has joined.
 - The language module verbalizes accessed content. It produces inner thought or speech only when an accessed broadcast clears the action selection module's think or speak bar, both set above the access threshold. With the vocal module held, nothing is spoken aloud; the utterances are text, recorded and observed. Because the organ is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure.
 - The first configuration has no memory, self-model, world model or social cognition in the loop. Those modules exist in code and join through the module-addition study.
 

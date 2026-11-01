@@ -116,3 +116,18 @@ The research log keeps only these fields:
 | `audit_error` | A non-fatal error met while building the audit. |
 
 `planning_proposals_forwarded` is reported on its own because the sleep module decides whether a forwarded rest becomes sleep; an accepted one appears as a requested sleep. The per-category `entry_id` lists, event types and intensities stay inside the sleep-snapshots payload, and no text, transcript or latent vector leaves the audit.
+
+### Operator-speech readout
+
+With speech-to-text on, the audit also publishes `sleep_readout.operator_speech` on `sleep_readout.out` whenever operator speech was heard in the window. The stream is recorded by the curated log and the raw archive and tailed by the dashboard; the cycle never reads it, so the readout never enters the entity. The research log keeps:
+
+| Field | Meaning |
+|---|---|
+| `sleep_index` | The sleep window this readout covers. |
+| `operator_speech_heard` | Non-empty operator-channel transcriptions in the window. |
+| `operator_speech_accessed` | How many of them won access, each counted once. |
+| `spoke_after_operator_speech` | Accessed utterances followed by a realized `external_speech` within 30 entity seconds, before the next accessed one. |
+| `spoke_otherwise` | Realized `external_speech` not so preceded. |
+| `operator_speech_access_share` | Accessed over heard. |
+
+The counts come from main-bus labels and counts only; no word is read. See the [sleep module](../09-modules/sleep.md#operator-speech-readout).

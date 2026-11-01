@@ -228,12 +228,12 @@ Workspace feedback is a held extension (paper §3.2 "Workspace feedback (held ex
 
 ### Action selection
 
-Executive action selection (`kaine/workspace/action_selection.py`). When the section is absent, the action selection module falls back to `DriveBiasedActionSelectionPolicy`.
+Executive action selection (`kaine/workspace/action_selection.py`). When the section or its `policy` is absent, the cycle selects `SelfInitiatedReportPolicy`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `policy` | string | `""` (unset) | `"self_initiated_report"` selects `SelfInitiatedReportPolicy`: the entity speaks or thinks only when the top score of an accessed broadcast clears a report bar, and a user utterance never triggers it. Any other value, or none, uses the drive-biased or plain default policy. |
-| `drive_initiative` | boolean | `true` | Read when `policy` is not `"self_initiated_report"`. `true` turns drive threshold crossings into intents; `false` uses the plain default policy. |
+| `policy` | string | `"self_initiated_report"` | `"self_initiated_report"` (also the meaning of absent) selects `SelfInitiatedReportPolicy`: the entity speaks or thinks when the top score of an accessed broadcast clears a report bar, a heard transcription included as a member like any other, with no rule that answers heard speech. `"drive_biased"` selects `DriveBiasedActionSelectionPolicy` (drive crossings to intents, no heard-speech precedence). Any other value refuses the boot (exit code `1`), naming the two. |
+| `drive_initiative` | retired | absent | A configuration that sets it, to any value, refuses the boot (exit code `1`) with a message naming `policy`. |
 | `report_threshold` | float | `0.6` | Report bar for speech. When the top score among the broadcast's members (the entity's own speech excluded) reaches it, the action selection module forms an `intent.speak`. The code enforces `0 <= think_threshold <= report_threshold <= 1`; keeping the bars above `[workspace].publication_threshold` is a recommendation. |
 | `think_threshold` | float | `0.45` | Report bar for inner speech: a top score at or above it, but below `report_threshold`, forms an `intent.think`. |
 | `speak_refractory_s` | float | `8.0` | Minimum entity seconds between spoken reports under the self-initiated policy. `PlanningProposalSource` also reads it when the planning module is enabled. |
@@ -241,7 +241,7 @@ Executive action selection (`kaine/workspace/action_selection.py`). When the sec
 | `interrupt_threshold` | float | unset | Opt-in interruption of an utterance in progress. Must satisfy `report_threshold < interrupt_threshold <= 1.0`. |
 | `sig_expiry_s` | float | unset | Entity seconds after which the novelty signature (the top member's source and type) stops blocking a repeat report. Unset means it never expires. |
 
-None of these keys is in the shipped file, so the defaults above apply. The `first_configuration` profile sets `policy = "self_initiated_report"`, `drive_initiative = false` and `sig_expiry_s = 300.0`.
+The shipped file sets only `policy = "self_initiated_report"`, so the other defaults above apply. The `first_configuration` profile sets `policy = "self_initiated_report"` and `sig_expiry_s = 300.0`.
 
 Regardless of policy, inhibition gates first: if `snapshot.inhibited` is true, `ActionSelection.select()` returns no intents.
 

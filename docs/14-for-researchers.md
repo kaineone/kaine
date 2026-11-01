@@ -140,7 +140,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 
 | Exit code | Refusal |
 |---|---|
-| `1` | Config or profile error, including conflicting supervision modes |
+| `1` | Config or profile error, including conflicting supervision modes, an `[action_selection].policy` other than `"self_initiated_report"` or `"drive_biased"`, and the retired `[action_selection].drive_initiative` key |
 | `2` | Operator-present gate: none of `KAINE_CYCLE_OPERATOR_PRESENT=1`, research mode or unattended mode |
 | `3` | Evaluation A/B baseline does not match the configured `[language].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |

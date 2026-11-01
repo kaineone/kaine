@@ -8,7 +8,7 @@ The default configuration is the **first configuration**, defined in `config/pro
 
 The profile activates seven modules: four predictive processors in distinct signal domains, the **interoception** module (interoception of the compute substrate), the **sequence** module (temporal prediction of the broadcast sequence), the **vision** module (foveated vision) and the **audition** module (raw hearing), plus the **affect** module (affect, whose arousal is the global gain on the competition), the **sleep** module (fatigue-triggered sleep) and the **language** module (the output-only language organ). The workspace and the action selection module always run.
 
-The first configuration observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the language module, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`.
+The first configuration observes the entity and does not converse with it. The audition module's `transcription_enabled` is `false`, so no transcript reaches the workspace, and the language module speaks only from accessed content under `[action_selection].policy = "self_initiated_report"`. With speech-to-text on, heard speech is one more auditory candidate; no policy answers it by rule.
 
 The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal, effectors, perceptual locus and embodiment modules) are built and tested in isolation and held off by configuration. The module-addition study (the `ignition_study` in the code) adds them one at a time to a preserved seed entity. Before that, a planned test asks whether competitive selection gives the processors a more useful prediction context than a score-blind coalition or a pool of every candidate; see [For researchers](../14-for-researchers.md#the-planned-test).
 
@@ -198,8 +198,10 @@ The layer ships disabled (`[oscillator].enabled = false`). When disabled the mul
 The action selection module is the only path from the workspace to an output. After each successful broadcast the cycle calls `ActionSelection.select(snapshot)`. If `snapshot.inhibited` is true, `select` returns no intents. For an accessed broadcast, the configured policy decides:
 
 - The first-configuration policy, `SelfInitiatedReportPolicy`, emits `speak` when the best score in the coalition (leaving out the language organ's own output) clears the speak bar, and `think` when it clears the lower think bar, with refractory intervals, a novelty check on the leading member's `(source, type)` and a one-in-flight guard per kind.
-- `DefaultActionSelectionPolicy` answers an `audition.transcription` event with non-empty text. It never forms a speak intent about the entity's own external speech, and its one-in-flight guard clears when the language organ publishes the entity's own `external_speech`, accessed or not, or after 48 s of wall time without it.
-- `DriveBiasedActionSelectionPolicy` adds intents from drive crossings in the coalition.
+- `DriveBiasedActionSelectionPolicy`, selected only by `policy = "drive_biased"`, turns drive crossings in the coalition into intents.
+- `DefaultActionSelectionPolicy` is the inert library default of `ActionSelection()`: it keeps the guards and forms no intent of its own. The cycle never selects it.
+
+No policy forms an intent because a member is heard speech or tests a member's source, type or audio channel, and no intent carries another speaker's words. Any other `policy` value, or the retired `drive_initiative` key, refuses the boot.
 
 Every guard is released when the organ publishes the matching speech, whether or not it is accessed: the cycle hands each organ speech event it reads to `ActionSelection.observe_own_output` (paper A.6 step 1). Every policy keeps the 48 s guard timeout, so a failed realization cannot mute the entity. Intents are published to `action_selection.out` as `intent.speak`, `intent.think`, `intent.act` or `intent.rest`. When the planning module is enabled, `PlanningProposalSource` wraps the chosen policy and may turn an accessed `planning.proposal` into an `intent.think`, `intent.speak` or `intent.rest`, subject to the same guards.
 

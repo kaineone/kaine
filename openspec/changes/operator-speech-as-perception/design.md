@@ -75,7 +75,7 @@ The report policy's signature guard, refractory and in-flight guard apply to eve
 ### 5. The shipped action layer is the report rule
 
 - `config/kaine.toml` gains `[action_selection] policy = "self_initiated_report"`, so the shipped file and the profile agree.
-- The cycle accepts `policy` values `"self_initiated_report"` (the default when absent) and `"drive_biased"` (explicit only), and refuses any other value at boot, naming the accepted ones. Today any other string silently selects an answering policy.
+- The cycle accepts `policy` values `"self_initiated_report"` (the default when absent) and `"drive_biased"` (explicit only), and refuses any other value at boot, naming the accepted ones. Today any other string silently selects an answering policy. The refusal runs first in `_phase_preconditions`, before anything opens, with exit code `1` (configuration error); the A/B baseline mismatch keeps exit code `3`.
 - `drive_initiative` is retired. The profile drops it; a config that sets it is refused at boot with a message naming `policy`.
 - `first_configuration` keeps `transcription_enabled = false`. The development run turns speech-to-text on only under decision 11.
 
@@ -109,15 +109,15 @@ The component is operator speech reaching the workspace as words, and its switch
 
 ### 10. The readout
 
-The sleep-time ignition audit (`kaine/modules/sleep/ignition_audit.py`, spec `hypnos-consolidation`) already counts input-triggered realizations. It gains, for the waking window it audits:
+The sleep-time ignition audit (`kaine/modules/sleep/ignition_audit.py`, spec `hypnos-consolidation`) already counts input-triggered realizations. It computes, for the waking window it audits:
 
 - `operator_speech_heard`: non-empty operator-channel transcriptions published (from `text_chars > 0` and `source_label` in `OPERATOR_SOURCES` on `audition.out`);
-- `operator_speech_accessed`: accessed broadcasts with at least one such member (how often operator speech won access);
-- `spoke_after_operator_speech`: accessed operator speech followed, within 30 s of entity time and before the next accessed operator speech, by a realized `external_speech` (how often the entity spoke after it);
+- `operator_speech_accessed`: how many of those utterances won access, each counted once however many broadcasts it won (counting broadcasts would let the share exceed 1, since one utterance can win several ticks);
+- `spoke_after_operator_speech`: accessed utterances followed, within 30 s of entity time after their first access and before the next accessed utterance's, by a realized `external_speech` (how often the entity spoke after it);
 - `spoke_otherwise`: realized `external_speech` not so preceded, for comparison;
 - `operator_speech_access_share` = accessed / heard, when heard > 0.
 
-The fields are present only when `operator_speech_heard > 0`. The audit reads `audition.out` only when `[audition].transcription_enabled` is true, so with it off the audit's cursors, state and record are identical to today. The 30 s window is a readout constant, documented with the audit, and is read by nothing in the entity. The dashboard's diagnostics surface shows the five numbers per sleep.
+The readout is published only when `operator_speech_heard > 0`, and not in the audit record: `sleep.ignition_audit` and the `sleep.sleep.completed` summary (which carries the audit) are published on `sleep.out`, a module stream the cycle reads as workspace candidates, so a field there could win access and be rendered to the organ, which would be the pressure signal decision 7 forbids. The readout goes to its own stream, `sleep_readout.out` (event `sleep_readout.operator_speech`, with `sleep_index`), which is not a module stream, so the cycle never reads it, and no module consumes it; the curated research log, the raw archive and the dashboard record it. Entity time comes from each broadcast's `published_at` and `time_scale`; a realization's entity time is extrapolated from the latest broadcast before it on the wall clock. The audit reads `audition.out` only when `[audition].transcription_enabled` is true, so with it off the audit's cursors, state and record are identical to today. The 30 s window is a readout constant (`OPERATOR_SPEECH_WINDOW_S`), documented with the audit, and is read by nothing in the entity. The dashboard's sleep panel shows the five numbers of the last sleep.
 
 ### 11. The development run: built and present, used after every module has joined
 
