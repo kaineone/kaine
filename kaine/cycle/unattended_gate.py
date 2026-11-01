@@ -86,7 +86,7 @@ def resolve_supervision_mode(
 
 CONDITION_NAMES: dict[int, str] = {
     1: "preservation enabled",
-    2: "welfare response wired",
+    2: "welfare and indicator responses wired",
     3: "logging active",
     4: "preserve-revive round-trip",
     5: "encryption satisfied",

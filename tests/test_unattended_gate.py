@@ -181,7 +181,7 @@ def test_unattended_gate_checks_keys_in_order():
     result = evaluate_unattended_gate(_all_pass_net())
     expected = [
         "1_preservation_enabled",
-        "2_welfare_response_wired",
+        "2_welfare_and_indicator_responses_wired",
         "3_logging_active",
         "4_preserve_revive_round_trip",
         "5_encryption_satisfied",

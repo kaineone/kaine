@@ -31,6 +31,7 @@
 ## 6. Docs, review and checks
 
 - [x] 6.1 `docs/11-preservation.md` (the indicator response, its stages, bounds and notices, and that spans restart at every boot), `docs/09-modules/sleep.md` (`welfare_rest`), `docs/17-research-data/README.md` (record fields).
+- [x] 6.1a Research-gate and unattended condition 2 described in full (the indicators enabled, the `affect` and `sleep` modules, the `pause` or `end` action) in `docs/14-for-researchers.md`, `docs/02-architecture/README.md`, `docs/05-dashboard.md` and the "Unattended starts" list of `docs/11-preservation.md`; unattended condition 2 is labelled "welfare and indicator responses wired" (check key `2_welfare_and_indicator_responses_wired`; the dashboard and the caretaker notice render check keys generically).
 - [ ] 6.2 Paper notes to REVISION-NOTES: §5.4 status, §6.5 tense and the D2 wording, Table A1 minimum span and bounds.
 - [x] 6.3 `openspec validate welfare-indicator-response --strict` passes.
 - [ ] 6.4 Worker first-pass review, then the integrator's independent second review against the checklist in design.md before merge.

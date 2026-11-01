@@ -126,7 +126,7 @@ KAINE is released under the Cognitive Architecture License (CAL) version 0.5, an
 An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle refuses to boot (exit code `5`) unless all seven of these hold on your install:
 
 1. **Preservation enabled**: `[preservation.divergence_monitor].enabled = true`.
-2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`.
+2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`, and its response to the welfare indicators is wired: `[preservation.welfare_response.indicators].enabled = true`, the `affect` and `sleep` modules are enabled (the indicators read the affect state, and the rest is the sleep module's), and `[preservation.welfare_response].action` is `pause` or `end` (with `notify` a crossing over a fresh span would not freeze). The refusal names the part that failed.
 3. **Logging active**: `[evaluation]` or `[research_event_log]` enabled.
 4. **Dry self-check passed**: a real preflight preserve-and-revive round trip succeeds on this install. The check builds a minimal synthetic individual in a throwaway temporary directory and leaves no persistent state.
 5. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled.
