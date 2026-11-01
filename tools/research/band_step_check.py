@@ -20,6 +20,32 @@ Simplifications, all stated in the record: no workspace, so the forward model's
 broadcast context is absent (None, as before the first broadcast); arousal is
 held at the affect baseline; awake time equals stimulus time (no rests).
 
+``--live`` removes those three (the live-gap check, developmental-stimulus-progress
+D5b and task 3.1), with real modules and no services:
+- Arousal: the shipped affect module (``make_affect`` on ``[affect]``, drives and
+  coupling included, regulation off as in the developmental phase) is the arousal
+  provider audition's attention window reads, as the cycle wires it; perceptual
+  alerts raise it. The affect module ticks and publishes ``affect.state`` once a
+  second, as its own timer does, and on every broadcast.
+- Rests: the sleep module's developmental state cycle from ``[sleep]``, a rest of
+  ``developmental_rest_s`` after every ``T_act = rest * (1 - s_q) / s_q`` awake
+  seconds. During a rest the stimulus plays on, audition perceives with its forward
+  model suspended (``_in_sleep``), the affect module keeps binning errors on the
+  entity clock, awake time and the hearing-stage dwell stand still, and the rest
+  ends with the affect module's affective reset, the sleep pipeline's last phase.
+- Broadcast context: the real ``Workspace`` with the shipped salience
+  (``RuleBasedSalience`` over ``make_salience_factors`` and a ``NoveltyTracker``,
+  ``top_k``, ``publication_threshold``) selects among the audition and affect
+  events gathered since the last broadcast, at the rate the real
+  ``AccessRateController`` sets on 0.1 s processing ticks from ``[cycle]``. Each
+  broadcast goes to ``Audition.on_workspace`` (its prediction context) and
+  ``Affect.on_workspace``. The broadcast holds no vision, interoception or
+  self-rhythm events (those modules do not run here), and the coherence layer and
+  broadcast feedback are off.
+The live run also feeds every ``affect.state`` to the welfare observer's own
+``AffectWelfareTally`` (rests as sleeps), for boredom's deprivation share over
+awake time (task 3.2), overall and per stage.
+
 Arms: ``shipped`` is the shipped stimulus with its added sounds as configured (the
 real ``AddedSoundsLayer`` with the shipped melody and outside-voice takes); the
 run records the shipped stimulus version (``kaine.boot.stimulus_version``).
@@ -36,7 +62,9 @@ progress, per-minute band powers and mean embeddings, and the step times. No
 audio is written.
 
 usage: band_step_check.py --seed N --arm shipped|none|melody|melody_proxy
-       --schedule fixed:SECONDS|rule --out PATH.npz [--repo REPO]
+       --schedule fixed:SECONDS|rule --out PATH.npz [--live] [--repo REPO]
+
+With --live the fixed schedule and --max-hours count awake seconds.
 """
 from __future__ import annotations
 
@@ -248,6 +276,177 @@ class AddedSoundsVoice:
         return out
 
 
+class _Live:
+    """The live conditions of ``--live``: rests, broadcasts and the welfare tally."""
+
+    PROCESSING_DT_S = 0.1
+
+    def __init__(self, cfg: dict, affect, audition, clock, affect_bus) -> None:  # noqa: ANN001
+        from kaine.boot.wiring import make_salience_factors
+        from kaine.cycle.access_rate import AccessRateConfig, AccessRateController
+        from kaine.cycle.affect_state import AffectStateProvider
+        from kaine.evaluation.observers.welfare_observer import (
+            _AFFECT_SAMPLE_GAP_CAP_S,
+            _DEFAULT_NEGATIVE_VALENCE_BAR,
+            AffectWelfareTally,
+        )
+        from kaine.workspace import NoveltyTracker, RuleBasedSalience, Workspace
+        from kaine.workspace.strategies import build_drive_sources
+
+        self._affect = affect
+        self._audition = audition
+        self._clock = clock
+        self._fbus = affect_bus
+        self._fbus_seen = 0
+        syn = dict(cfg.get("workspace") or {})
+        self.provider = AffectStateProvider()
+        modulator, goal, _ = make_salience_factors(
+            cfg, self.provider,
+            drive_sources=build_drive_sources({"audition": audition.relieves_drives, "affect": affect.relieves_drives}),
+        )
+        self.workspace = Workspace(
+            strategy=RuleBasedSalience(
+                novelty=NoveltyTracker(window=int(syn.get("novelty_window", 32))),
+                goal_scorer=goal, affect_modulator=modulator,
+            ),
+            top_k=int(syn.get("top_k", 5)),
+            publication_threshold=float(syn.get("publication_threshold", 0.35)),
+        )
+        cyc = dict(cfg.get("cycle") or {})
+        self.resting_hz = float(cyc.get("experiential_rate_hz", 3.333))
+        self.ceiling_hz = float(cyc.get("processing_rate_hz", 10.0))
+        arc = AccessRateConfig.from_section(
+            cyc.get("access_rate"), default_baseline=float((cfg.get("affect") or {}).get("baseline_arousal", 0.3))
+        )
+        self.access = AccessRateController(arc) if arc.enabled else None
+        sleep = dict(cfg.get("sleep") or {})
+        self.rest_s = float(sleep.get("developmental_rest_s", 1410.0))
+        share = float(sleep.get("developmental_quiescent_share", 0.32))
+        self.t_act = self.rest_s * (1.0 - share) / share
+        self.resting = False
+        self.rest_until = 0.0
+        self.awake_since_rest = 0.0
+        self.rests: list[tuple[float, float]] = []
+        self.pending: list = []
+        self.new_this_tick: list = []
+        self.tick_acc = 0.0
+        self.exp_acc = 0.0
+        self.tick_index = 0
+        self.n_ids = 0
+        self.broadcasts = 0
+        self.inhibited = 0
+        self.next_timer = 1.0
+        self.arousal_t: list[float] = []
+        self.arousal_v: list[float] = []
+        self.boredom_t: list[float] = []
+        self.boredom_v: list[float] = []
+
+        def tally():
+            return AffectWelfareTally(negative_valence_bar=_DEFAULT_NEGATIVE_VALENCE_BAR, max_gap_s=_AFFECT_SAMPLE_GAP_CAP_S)
+
+        self._new_tally = tally
+        self.tally = tally()
+        self.stage_tallies: dict[int, object] = {0: tally()}
+        self.stage = 0
+
+    def set_stage(self, stage: int) -> None:
+        self.stage = stage
+        t = self._new_tally()
+        if self.resting:
+            t.sleep_started(self._clock.t)
+        self.stage_tallies[stage] = t
+
+    async def advance(self, window_s: float) -> float:
+        """Start or end a rest; return the awake seconds this window adds."""
+        t = self._clock.t
+        if self.resting:
+            if t < self.rest_until:
+                return 0.0
+            self.resting = False
+            self._audition._in_sleep = False
+            await self._affect.affective_reset()
+            self.tally.sleep_completed(t)
+            self.stage_tallies[self.stage].sleep_completed(t)
+            self.rests[-1] = (self.rests[-1][0], t)
+            return window_s
+        self.awake_since_rest += window_s
+        if self.awake_since_rest >= self.t_act:
+            self.awake_since_rest = 0.0
+            self.resting = True
+            self.rest_until = t + self.rest_s
+            self._audition._in_sleep = True
+            self.tally.sleep_started(t)
+            self.stage_tallies[self.stage].sleep_started(t)
+            self.rests.append((t, t + self.rest_s))
+        return window_s
+
+    def _ids(self, stream: str, events) -> list:  # noqa: ANN001
+        out = []
+        for ev in events:
+            self.n_ids += 1
+            out.append((f"{stream}:{self.n_ids}-0", ev))
+        return out
+
+    def _collect_affect(self) -> None:
+        new = self._fbus.events[self._fbus_seen:]
+        self._fbus_seen = len(self._fbus.events)
+        pairs = self._ids("affect.out", new)
+        self.pending.extend(pairs)
+        self.new_this_tick.extend(pairs)
+        states = [(i, e) for i, e in pairs if e.type == "affect.state"]
+        if states:
+            self.provider.observe(states)
+        for _, ev in states:
+            valence = (ev.payload.get("state") or {}).get("valence")
+            if isinstance(valence, (int, float)):
+                for tally in (self.tally, self.stage_tallies[self.stage]):
+                    tally.observe_state(
+                        self._clock.t, float(valence), ev.payload.get("drive_above"), ev.payload.get("drive_ends"),
+                        ev.payload.get("drive_reset_ends"), ev.payload.get("drive_open"),
+                    )
+            drives = ev.payload.get("drives") or {}
+            boredom = (drives.get("boredom") or {}).get("value") if isinstance(drives.get("boredom"), dict) else drives.get("boredom")
+            if isinstance(boredom, (int, float)):
+                self.boredom_t.append(self._clock.t)
+                self.boredom_v.append(float(boredom))
+
+    async def after_window(self, audition_events, window_s: float) -> None:  # noqa: ANN001
+        pairs = self._ids("audition.out", audition_events)
+        self.pending.extend(pairs)
+        self.new_this_tick.extend(pairs)
+        while self._clock.t >= self.next_timer:  # the affect module's own once-a-second update
+            await self._affect._tick(own_update=True)
+            await self._affect._maybe_publish_state()
+            self.arousal_t.append(self.next_timer)
+            self.arousal_v.append(float(self._affect._state.arousal))
+            self.next_timer += 1.0
+        self._collect_affect()
+        self.tick_acc += window_s
+        while self.tick_acc >= self.PROCESSING_DT_S - 1e-9:
+            self.tick_acc -= self.PROCESSING_DT_S
+            self.tick_index += 1
+            effective = self.resting_hz
+            if self.access is not None:
+                _, effective = self.access.step(
+                    events=self.new_this_tick, arousal=float(self._affect._state.arousal),
+                    dt_s=self.PROCESSING_DT_S, resting_hz=self.resting_hz, ceiling_hz=self.ceiling_hz,
+                )
+            self.new_this_tick = []
+            self.exp_acc += effective / self.ceiling_hz
+            if self.exp_acc < 1.0:
+                continue
+            self.exp_acc = min(1.0, self.exp_acc - 1.0)
+            snapshot = await self.workspace.select(
+                list(self.pending), {"tick_index": self.tick_index, "is_experiential": True}
+            )
+            self.pending = []
+            self.broadcasts += 1
+            self.inhibited += int(snapshot.inhibited)
+            await self._audition.on_workspace(snapshot)
+            await self._affect.on_workspace(snapshot)
+            self._collect_affect()
+
+
 class _Bus:
     def __init__(self) -> None:
         self.events: list = []
@@ -335,9 +534,10 @@ async def run(args) -> None:
 
     stage_box = [0]
     clock = _Clock()
+    awake_box = [0.0]  # awake seconds; equal to the stimulus time without --live
     stream = StimulusSourceProceduralAudioStream(
         schedule, params=params, clock=None, callback=lambda _b: None,  # type: ignore[arg-type]
-        voice=layer, awake=lambda: clock.t, hearing=hearing, hearing_stage=lambda: stage_box[0], added=added,
+        voice=layer, awake=lambda: awake_box[0], hearing=hearing, hearing_stage=lambda: stage_box[0], added=added,
     )
 
     class _RecEncoder(SpectralAcousticEncoder):
@@ -365,15 +565,23 @@ async def run(args) -> None:
         context_dim=audition._acoustic_forward_model.context_dim, seed=args.seed,
     )
     baseline_arousal = float(acfg.get("baseline_arousal", 0.3))
-    audition.set_arousal_provider(lambda: baseline_arousal)
+    fbus = _Bus()
+    if args.live:
+        from kaine.boot.factories.affect import make_affect
 
-    affect = Affect(
-        _Bus(), clock=clock.now,
-        fast_time_constant_s=float(acfg["fast_time_constant_s"]), slow_time_constant_s=float(acfg["slow_time_constant_s"]),
-        learning_progress_floor=float(acfg["learning_progress_floor"]),
-        learning_progress_span_s=float(acfg["learning_progress_span_s"]),
-        learning_progress_bin_s=float(acfg["learning_progress_bin_s"]),
-    )
+        affect = make_affect(fbus, dict(acfg), entity_clock=clock)  # type: ignore[arg-type]
+        affect.set_development_probe(lambda: True)  # regulation is off in the developmental phase
+        audition.set_arousal_provider(lambda: float(affect._state.arousal))
+    else:
+        audition.set_arousal_provider(lambda: baseline_arousal)
+        affect = Affect(
+            fbus, clock=clock.now,
+            fast_time_constant_s=float(acfg["fast_time_constant_s"]), slow_time_constant_s=float(acfg["slow_time_constant_s"]),
+            learning_progress_floor=float(acfg["learning_progress_floor"]),
+            learning_progress_span_s=float(acfg["learning_progress_span_s"]),
+            learning_progress_bin_s=float(acfg["learning_progress_bin_s"]),
+        )
+    live = _Live(cfg, affect, audition, clock, fbus) if args.live else None
     lp0 = float(acfg["learning_progress_floor"])
     rule = HearingStageState(hearing, path=None, lp_floor=lp0, learning_progress_span_s=float(acfg["learning_progress_span_s"]))
 
@@ -396,7 +604,9 @@ async def run(args) -> None:
     lp_t, lp_v, lp_stage = [], [], []
     rule_steps: list[tuple[int, float]] = []
     steps: list[float] = []
-    nmin = int(math.ceil(total / 60.0)) + 2
+    # Stimulus minutes: with rests the stimulus runs on while awake time stands still.
+    stretch = 1.0 + (live.rest_s / live.t_act if live is not None else 0.0)
+    nmin = int(math.ceil(total * stretch / 60.0)) + 2 + (int(math.ceil(live.rest_s / 60.0)) if live is not None else 0)
     reg = np.zeros((nmin, len(REGION_EDGES) - 1))
     reg_n = np.zeros(nmin)
     emb = np.zeros((nmin, encoder.embedding_dim))
@@ -404,16 +614,24 @@ async def run(args) -> None:
     emb_n = np.zeros(nmin)
     k = 0
     next_lp = 1.0
+    window_s = win_blocks * block_s
+    lp_awake: list[float] = []
     wall0 = time.monotonic()
-    while clock.t < total:
+    while awake_box[0] < total:
         blocks = []
         for _ in range(win_blocks):
-            blocks.append(stream.pcm_at(k, maturation_progress=None, awake_seconds=clock.t, hearing_stage=stage_box[0]))
+            blocks.append(stream.pcm_at(k, maturation_progress=None, awake_seconds=awake_box[0], hearing_stage=stage_box[0]))
             k += 1
         clock.t = k * block_s
+        if live is not None:
+            awake_box[0] += await live.advance(window_s)
+        else:
+            awake_box[0] = clock.t
         pcm = b"".join(blocks)
         abus.events.clear()
         await audition._perceive_acoustic(encode_wav(pcm, sample_rate=sr, channels=1), sr, "stimulus_source")
+        if live is not None:
+            await live.after_window(list(abus.events), window_s)
         for ev in abus.events:
             await affect._handle_peer_event("audition.out", ev)
             pe = ev.payload.get("prediction_error")
@@ -433,24 +651,29 @@ async def run(args) -> None:
             emb_sq[mi] += float(e @ e)
             emb_n[mi] += 1
         while clock.t >= next_lp:
+            # Stimulus seconds tick the reading; the stage owner sees awake seconds (equal without --live).
+            awake_now = awake_box[0] if live is not None else next_lp
             lp = affect.audition_learning_progress(stage_box[0])
             lp_t.append(next_lp)
+            lp_awake.append(awake_now)
             lp_v.append(np.nan if lp is None else lp)
             lp_stage.append(stage_box[0])
             if planned is None:
-                new = rule.observe(next_lp, lp)
+                new = rule.observe(awake_now, lp)
                 if new is not None:
                     rule_steps.append((new, next_lp))
             next_lp += 1.0
             step_now = False
             if planned is not None:
-                step_now = len(steps) < len(planned) and next_lp - 1.0 >= planned[len(steps)]
+                step_now = len(steps) < len(planned) and awake_now >= planned[len(steps)]
             else:
                 step_now = rule.stage != stage_box[0]
             if step_now and stage_box[0] < HEARING_FINAL_STAGE:
                 stage_box[0] += 1
                 steps.append(next_lp - 1.0)
                 await affect._handle_peer_event(affect._development_stream, stage_event(stage_box[0]))
+                if live is not None:
+                    live.set_stage(stage_box[0])
         if planned is None and stage_box[0] >= HEARING_FINAL_STAGE and clock.t >= (steps[-1] if steps else 0) + float(args.tail_s):
             break
         if args.progress and (k // win_blocks) % 20000 == 0:
@@ -467,8 +690,28 @@ async def run(args) -> None:
         outside_slots = [s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "outside_proxy"]
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    live_fields: dict = {"live": bool(live is not None)}
+    if live is not None:
+        import json as _json
+
+        lt_arr, la_arr = np.asarray(lp_t), np.asarray(lp_awake)
+        live_fields.update(
+            lp_awake=la_arr,
+            steps_awake=np.asarray([float(la_arr[np.searchsorted(lt_arr, s)]) for s in steps]),
+            rests=np.asarray(live.rests, dtype=np.float64).reshape(-1, 2),
+            t_act=live.t_act, rest_s=live.rest_s,
+            broadcasts=live.broadcasts, inhibited=live.inhibited,
+            arousal_t=np.asarray(live.arousal_t), arousal_v=np.asarray(live.arousal_v),
+            boredom_t=np.asarray(live.boredom_t), boredom_v=np.asarray(live.boredom_v),
+            welfare=_json.dumps({
+                "overall": live.tally.snapshot(),
+                "by_stage": {str(k): t.snapshot() for k, t in live.stage_tallies.items()},
+            }),
+            awake_s=awake_box[0],
+        )
     np.savez_compressed(
         out,
+        **live_fields,
         seed=args.seed, arm=args.arm, schedule=args.schedule, lp0=lp0,
         bin_s=float(acfg["learning_progress_bin_s"]), span_s=float(acfg["learning_progress_span_s"]),
         w_sat=hearing.saturation_window_seconds, d_min=0.0, d_max=hearing.max_dwell_seconds,  # no minimum dwell since full-span saturation
@@ -496,6 +739,7 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--repo", default=str(Path(__file__).resolve().parents[2]))
     ap.add_argument("--progress", action="store_true")
+    ap.add_argument("--live", action="store_true", help="arousal from the affect module, state-cycle rests and broadcast context")
     args = ap.parse_args()
     asyncio.run(run(args))
 
