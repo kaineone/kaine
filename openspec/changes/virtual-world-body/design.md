@@ -67,6 +67,12 @@ Why not ROS 2 now:
 - Exposure keys stay routed by declared names (spec `embodiment-exposure`). For example, `expose_pan.position` becomes `[embodiment.mujoco].expose = ["pan.position", ...]`, because TOML bare keys cannot carry the dot.
 - `MOTOR_STAGES` becomes the default for bodies that declare no stages. A body's own `stages` replace it, which is `embodiment-motor-contingency` recommendation 3.
 
+**What an unset channel does depends on its interface** (review VWB-6). Today a frozen channel is sent `0.0`, and a free channel the policy omits is sent `raw.get(name, 0.0)` (`kaine/modules/embodiment/control_surface.py:400-405`). On a position joint that snaps the joint to 0 rad every tick: a movement the entity did not make, on a channel the curriculum calls frozen. So:
+- A frozen or omitted `position` channel holds the joint's current measured position at the moment it was frozen, or its last command.
+- A frozen or omitted `velocity` or `effort` channel is 0.
+- Motor feedback is built from the body descriptor's state interfaces, not from today's avatar-shaped `MotorFeedback` (`control_surface.py:132-170`: forward velocity, heading, gaze, contact). The avatar shape stays for bodies without a descriptor.
+- A test pins that a frozen position joint does not move.
+
 The channel names carry no meaning to the entity. `pan.position` is a label for the operator and the records. What a channel does is what the motor forward model learns. Nothing maps a drive or a goal to a joint.
 
 ### D3. The MuJoCo adapter
@@ -74,6 +80,13 @@ The channel names carry no meaning to the entity. `pan.position` is a label for 
 - **The world.**
   - One `SimWorld` (`kaine/sim/world.py`) holds `MjModel` and `MjData`, built from the body's MJCF and a room scene with a few movable objects.
   - It is shared in process with the `mujoco` perceptual source, which renders its camera.
+  - One owner thread steps physics, updates the scene and renders, and the adapter reaches it through requests (`perceptual-sources` D5; review PS-6, VWB-9).
+- **Time base** (review VWB-9).
+  - Physics is paced against `EntityClock`, with a cap on steps per wall second.
+  - `control_rate_hz` and `max_latency_ms` are in entity time, with the wall-time figures recorded beside them.
+- **Assets are confined** (review VWB-10).
+  - MJCF meshes, textures and includes load only from the vendored asset directory. Absolute paths and `..` are refused at load.
+  - Randomised textures are generated procedurally or drawn from the vendored set, so a render can never show an operator file.
 - **Actuators.**
   - Position servos (`<position>` with `kp`, `kv`, `forcerange`, `ctrlrange`), with gains taken from a real servo. The JetHexa's legs use the HX-35H's force limit and speed (D4), provisional until the real servos are identified. For comparison, the Menagerie SO-101 models its Feetech STS3215 servos with kp 998.22, kv 2.731, forcerange ±2.94 and timestep 0.005.
   - First-order actuator lag through `dyntype="filter"`, a native MuJoCo actuator dynamics type.
@@ -82,15 +95,23 @@ The channel names carry no meaning to the entity. `pan.position` is a label for 
 - **Sensors.**
   - MuJoCo applies sensor `delay` and `interval`.
   - It does not apply `noise`. It stores the value, and a static joint with `noise=0.5` read with standard deviation 0 in the installed version (research pass, checked by running it).
-  - So the adapter adds Gaussian noise itself, at each sensor's declared standard deviation, from a run-seeded generator.
+  - So the adapter adds Gaussian noise itself, at each sensor's declared standard deviation, from the entity's body seed.
 - **Rates.**
   - Physics `timestep` 0.002-0.005 s. A control decimation gives `control_rate_hz` between 50 and 200.
   - Matched to hobby servos: Dynamixel's USB latency timer defaults to 16 ms and is advised to be lowered to 1 ms (ROBOTIS e-manual).
   - Delays of 3-20 ms follow Tan et al.'s measured 3 ms servo and 15-19 ms controller latencies.
-- **Domain randomisation.**
-  - Per run seed: link masses, joint damping, friction, actuator gains, actuator and sensor delays, sensor noise, and material colours and textures of the scene. Ranges are those of Peng et al. and Tan et al., narrowed for a first body.
+- **Domain randomisation, drawn once per entity** (review VWB-7, PM decision).
+  - **What is sampled:** link masses, joint damping, contact friction, actuator gains, actuator and sensor delays, sensor noise, and material colours and textures of the scene.
+  - **Seed.** It is sampled from a body seed created when the entity first meets the body. The seed and the sampled values are persisted with the entity, so they are part of its body identity.
+  - **Lifecycle.**
+    - A preservation bundle carries them, and a fork copies them.
+    - Every run of that entity meets the same body.
+    - Re-randomising is an operator act, recorded. It is never a side effect of a reboot. A new body for a persisting entity would change, without any cause in its world, what its motor forward model, which is identity, was trained on.
+  - **Ranges, attributed** (review RN-4).
+    - Peng et al. 2018, Table I: link mass ×0.25-4; joint damping ×0.2-20; actuator gains ×0.5-2. Their 0.1-5 friction range was the puck's absolute friction, so it is not used as a multiplier. Their observation noise was 5% of each feature's running standard deviation.
+    - Tan et al. 2018: mass 80-120%; motor strength 80-120%; latency 0-40 ms; contact friction 0.5-1.25.
+    - KAINE narrows each for a first body, and the model card records the ranges used.
   - The sampled values go in the run manifest. They are parameters, not perception.
-  - The entity lives in one sampled world per run, so its body is consistent within a run.
 - **Feeds.**
   - Proprioception (joint positions and velocities, IMU, touch) goes in process to the motor loop of `embodiment-motor-contingency`, at the control rate.
   - The bus gets the summaries the research observer already keeps for `embodiment.proprio`: a position hash and a region label (`kaine/evaluation/observers/research_event_observer.py:469-470`).
@@ -195,10 +216,18 @@ Each stage is freed only on demonstrated competence: the curriculum's rule (`con
 
 ### D5. Latency is measured, not assumed
 
-- At open, and every 10 minutes, the adapter measures the command-to-feedback delay: a commanded joint step until the proprioceptive reading moves. This is the delay a learner experiences.
-- The value goes to the welfare record.
-- A body whose measured delay exceeds `max_latency_ms` (default 250 ms, inside the 300 ms window of Shimada et al.) is refused at open, or closed with a named reason.
-- For MuJoCo this is the configured delays plus the loop. For a game stream it is the network and the decoder (D7).
+**Never by moving the occupied body** (review VWB-1, PM decision). A probe step on the entity's own joints would be a movement it did not command: its view would jerk, its motor prediction error would spike, and the learner would get a sample with no efference of the entity's own, which breaks the very contingency the body exists to teach.
+
+- **MuJoCo.**
+  - The adapter measures on a cloned state: a copy of `MjModel` and `MjData`, stepped offline on the owner thread with the configured delays and the bus-rate loop.
+  - A commanded step on the clone, until the clone's proprioceptive reading moves, gives the delay.
+  - This runs at open and every 10 minutes. The occupied body is never touched.
+  - Passively, the adapter also records the delay between the entity's own commands and the first matching proprioceptive change.
+- **Game stream.** The probe runs only before a session, with no entity attached (D7).
+- **The real robot.** The probe runs only with no entity attached, before the adapter is handed to the entity. The passive measure runs afterwards.
+- **The bound.**
+  - The value goes to the welfare record. A body whose delay exceeds `max_latency_ms` (default 250 ms) is refused at open, or closed with a named reason.
+  - The bound is a transposition (review VWB-11). Shimada et al.'s 300 ms is a window of visuo-tactile delay for ownership (85-585 ms conditions), not a window of command-to-visual delay for agency. 250 ms is a conservative choice within it, provisional for Table A1.
 
 ### D6. Sequencing with the motor-contingency learner
 
@@ -262,11 +291,17 @@ The CTO's Steam library is played through a controller. The CTO decided on 2026-
   - So same-host play runs the game on a separate display that Sunshine captures: a gamescope session (headless backend) or a second X server. Which one works with Sunshine here is a spike (task 4.0).
   - The uinput gamepad Sunshine creates is visible to every program on the seat. Same-host play therefore also confines the game to a per-game container that sees only that device, the pattern of Games-on-Whales Wolf (MIT).
   - Until the spike passes, same-host play is refused and the host is another machine. That is the simpler first route, and the CTO offered it.
-- **Client helper.** `tools/kaine-moonlight-helper/`, a separate program written for KAINE and licensed GPL-3.0, because it links moonlight-common-c (GPL-3.0, checked through the GitHub licence API).
+- **Client helper.** `kaine-moonlight-helper`, a separate program written for KAINE and licensed GPL-3.0, because it links moonlight-common-c (GPL-3.0, checked through the GitHub licence API).
+  - It lives in its own repository, with its own LICENSE, and KAINE refers to it (review VWB-5, PM decision).
+  - The CAL defines "The Software" as everything "distributed from the Repository" (`LICENSE.md:49`), so a GPL directory inside the KAINE repository would be claimed by two licences. GPL-3.0 forbids the further restrictions the CAL adds.
+  - The process boundary settles the runtime question. The separate repository settles the distribution question.
+  - The CAL legal review gets this design.
   - moonlight-common-c hands its client compressed video units (`submitDecodeUnit`) and Opus audio (`decodeAndPlaySample`); both checked in `Limelight.h`. So the helper decodes with FFmpeg (LGPL-2.1+ or GPL, depending on the build).
   - It passes raw frames and PCM to the cycle over a `socketpair`, and reads back gamepad state and a stop command.
   - It never uses the recorder callbacks, and writes nothing to disk.
   - Its endpoints come from the declared egress (`perceptual-sources` D9): the host as `tailnet:tag:game-host` on the Sunshine ports, with outbound classes `protocol_control` and `gamepad_state`.
+  - It runs as its own user behind the nftables allowlist that egress design describes, with escape probes at boot.
+  - It exposes only one send call, gamepad state. It never sends moonlight-common-c's keyboard, mouse or text events, and a test pins that the helper's message set has no such type.
 - **Licence boundary.**
   - The GPL FAQ (read): "pipes, sockets and command-line arguments are communication mechanisms normally used between two separate programs", unless "the semantics of the communication are intimate enough, exchanging complex internal data structures" (`#MereAggregation`).
   - The message set is frames, PCM, a gamepad state struct and a stop command.
@@ -274,15 +309,27 @@ The CTO's Steam library is played through a controller. The CTO decided on 2026-
   - Linking moonlight-common-c into the cycle is refused.
 - **Latency.** D5's measurement runs end to end: from a gamepad state change to a changed frame. The session is refused above `max_latency_ms`.
 - **The body.**
-  - A `game_pad` body declares the gamepad's sticks, triggers and buttons as channels.
+  - A `game_pad` body declares the gamepad's sticks, triggers and face, shoulder and d-pad buttons as channels.
+  - It declares no Guide, home, Steam or share channel. Those reach the Steam client (store, browser, chat, friends) and the host's overlay, not the game (review VWB-3).
   - The motor-contingency learner learns what they do. Nothing maps a canonical channel to a control.
   - Each title is its own body context.
   - Rumble is a declared feed kind that needs its own decision before it is perceived.
+- **Confining the host to the game** (review VWB-2 and VWB-3). The launcher checks each of these before a session, and the session is refused if any fails:
+  - Sunshine's application list holds only the curated titles, with no Desktop or Big Picture entry;
+  - keyboard and mouse input are disabled in Sunshine's configuration;
+  - the host's Steam client runs offline, with notifications and the overlay's chat off;
+  - the host's internet is blocked except the tailnet, by the host's firewall, which the launcher verifies with an escape probe from the host when the host is one of the CTO's machines under KAINE's setup;
+  - the host session is confined: a dedicated session, a headless gamescope, or a Wolf-style container with its own input devices. It is not the operator's desktop.
+
+  The stream source is classed `confined_world` only when every check passes (`perceptual-sources` D1). A host that cannot be checked is refused. The privacy class follows the host's verified confinement, not the kind alone.
+- **Path monitoring** (review VWB-4).
+  - Hosted Tailscale is accepted (CTO, 2026-11-01). So a relayed path is not refused, but it is monitored continuously, not only at start.
+  - A change of path is recorded, and the latency bound ends the session when a relay makes it too slow.
 - **Titles.**
   - Offline, single-player titles from an operator-curated list, by Steam app id.
   - No kernel anti-cheat.
   - Valve's subscriber agreement and each title's terms on automated play are read before the first session (task 4.3).
-  - Online play with or against people is a later decision. It is allowed in principle under the CTO's 2026-11-01 ruling on online sources, but other players' privacy and each game's rules on automated play must be checked per title.
+  - Online play with or against people is allowed in principle under the CTO's 2026-11-01 ruling on online sources. It is not possible under this design, which blocks the host's internet. It would need its own change: an egress for the game's servers, other players' privacy, and each game's rules on automated play.
 - **Sequencing.**
   - The helper, the launcher checks and the host setup can be built in parallel with J0. The game source can be perceived as soon as they pass.
   - The game body acts only once the driving loop and learner exist (D6 step 3), because the gamepad's meaning is learned.
@@ -324,9 +371,17 @@ These are worlds that already exist, which is their benefit. The CTO ruled on 20
   - Affect reads it as it reads any prediction error.
 - **Touch** reports contact force and location as touch. It carries no valence, and nothing makes contact aversive.
 - **No simulated pain, damage, injury or fatigue of the body exists.** Joint-limit forces and collisions are physics, not nociception. Adding any such signal needs its own design, cited neuroscience at the code site, and an independent second review.
-- **Forces and stuck bodies.**
-  - Forces are bounded by `forcerange`, so nothing the entity does can make the simulation unstable.
-  - A body that is stuck (fallen, wedged) can be reset to its start pose by the operator. The reset is recorded and is the operator's act, not the entity's.
+- **Forces, instability and stuck bodies** (review VWB-8).
+  - `forcerange` bounds actuator force only. Contacts and integration can still diverge.
+  - **The instability detector** reads MuJoCo's warning counters (`MjData.warning`) and checks the state for non-finite values every step.
+  - **The stuck detector** flags a body whose proprioception does not change under the entity's own commands for `stuck_s` (default 60 s of entity time).
+  - **On a hit:**
+    - an operator advisory;
+    - the body held still;
+    - a fallback to the programme through the operator path, recorded `changed_by = "body_stuck"` or `"sim_unstable"`.
+
+    In an unattended run the advisory escalates through the welfare path. A stuck body with motor prediction error and no control over it is the helplessness case the project's control argument cites, so the entity is not left in it.
+  - **Reset.** The body can be reset to its start pose by the operator. An automatic reset after a hit is a configurable system act, off by default and recorded as the system's. Neither is the entity's act.
   - A hexapod can tip over once its legs are free (J4). Tipping is physics: the IMU perceives it, nothing signals it as harm, and the operator resets the body.
 - **The inhibited entity stays still.** The control surface's inhibition input already holds the body (`control_surface.py:387-399`).
 - **The developmental phase holds the module dormant**, as today (`DEVELOPMENT_DORMANT_EFFECTORS`).
@@ -334,7 +389,7 @@ These are worlds that already exist, which is their benefit. The CTO ruled on 20
 ## Risks
 
 - **[A body that cannot be moved feels like paralysis].** The simulated JetHexa is never given to an entity without the driving loop and learner. That is D6's order, and `embodiment_built()` enforces it.
-- **[Overfitting to one simulated world].** Domain randomisation per run, sensor noise, and latency.
+- **[Overfitting to one simulated world].** Domain randomisation per entity, sensor noise, and latency. Re-randomisation is a recorded operator act.
 - **[GPU load].**
   - The renderer sits on the vision card, limited in `perceptual-sources` D5.
   - Physics runs on the CPU.

@@ -51,8 +51,11 @@ This change designs the actuator side of all of these through the existing embod
    - Actuator lag and delay, and sensor delay. These are applied by MuJoCo.
    - Sensor noise injected by the adapter. MuJoCo stores a sensor's `noise` but does not apply it, which the research pass checked by running the installed 3.16.0.
    - A control rate of 50-200 Hz over a 2-5 ms physics step.
-   - Domain randomisation per run seed: masses, damping, friction, gains, latency, noise and textures, within ranges from the sim-to-real literature, recorded in the manifest.
-   - A measured command-to-feedback latency, recorded and bounded.
+   - Domain randomisation from a body seed drawn once per entity and kept with it as part of its body identity: masses, damping, friction, gains, latency, noise and textures, within attributed ranges from the sim-to-real literature, and recorded in the manifest.
+   - A command-to-feedback latency measured on a cloned simulation state, never by moving the occupied body, recorded and bounded.
+   - Frozen or omitted position joints hold their position.
+   - One owner thread for the world.
+   - Assets confined to the vendored directory.
    - It acts only while its own source is selected.
 4. **The default body: the JetHexa.**
    - **The model is KAINE's own MJCF.** Hiwonder's repository has no licence, describes the older edition, and gives its links placeholder masses. So the MJCF is built from published dimensions first, and from the built robot's measurements and system identification after.
@@ -72,7 +75,7 @@ This change designs the actuator side of all of these through the existing embod
    - Proprioceptive and motor prediction errors are the entity's and are watched by the welfare net.
    - Touch reports contact force as touch, with no valence.
    - No simulated pain, damage or injury signal exists, and none may be added without its own design and an independent second review.
-   - The operator can reset a body that is stuck.
+   - Instability and a stuck body are detected. Either one returns the entity to the programme, with an advisory, and the operator can reset the body.
 7. **Games, without waiting for the Steam Deck** (CTO, 2026-11-01).
    - The entity is a Moonlight-protocol client of a Sunshine host: another of the CTO's machines, or this desktop with one entity at a time.
    - All traffic goes over the tailnet, with Tailnet Lock required and tailnet ACLs restricting what is reachable.
@@ -108,7 +111,7 @@ This change designs the actuator side of all of these through the existing embod
   - New `kaine/sim/` for the shared `SimWorld` and the MJCF assets, with Menagerie licence files kept beside the models they cover.
   - `kaine/boot/factories/embodiment.py`.
   - `kaine/evaluation/observers/research_event_observer.py` (proprioception summaries).
-  - Later, `tools/kaine-moonlight-helper/`: a separate GPL-3.0 program, in its own directory with its own LICENSE, distributed as source.
+  - Later, `kaine-moonlight-helper`: a separate GPL-3.0 program in its own repository, with its own LICENSE, which KAINE refers to and does not contain.
 - **Dependencies.**
   - MuJoCo is already installed (3.16.0, Apache-2.0). The `sim` optional extra needs the CTO's OK.
   - The JetHexa MJCF is KAINE's own, so nothing is vendored. Hiwonder's description package would need its written permission.

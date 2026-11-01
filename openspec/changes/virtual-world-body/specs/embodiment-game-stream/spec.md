@@ -8,7 +8,7 @@ A game-stream body or source SHALL be refused at boot until the game host is a t
 - **THEN** boot refuses, naming the missing host
 
 ### Requirement: The Moonlight client runs as a separate program behind a minimal message set
-The Moonlight-protocol client SHALL run as a separate helper process, never linked into the cycle, and SHALL exchange with the cycle over a socketpair only decoded video frames, PCM, gamepad state and a stop command. The helper SHALL write no frame or sample to disk and SHALL NOT use the library's recording callbacks.
+The Moonlight-protocol client SHALL be a separate helper program kept in its own repository, never linked into the cycle. It SHALL exchange with the cycle over a socketpair only decoded video frames, PCM, gamepad state and a stop command, SHALL send no keyboard, mouse or text event, SHALL write no frame or sample to disk, and SHALL NOT use the library's recording callbacks.
 
 #### Scenario: The cycle's dependencies
 - **WHEN** the cycle's installed packages and imports are listed
@@ -29,7 +29,7 @@ The boot preflight SHALL refuse when any KAINE listener binds to an address othe
 - **THEN** the preflight refuses, naming the listener
 
 ### Requirement: Gamepad channels are learned, not mapped
-A game-stream body SHALL declare the virtual gamepad's axes, triggers and buttons as channels. No code SHALL map a drive, goal or canonical channel to a gamepad control, and each title SHALL be its own body context.
+A game-stream body SHALL declare the virtual gamepad's sticks, triggers and face, shoulder and d-pad buttons as channels, and SHALL declare no Guide, home, Steam or share channel. No code SHALL map a drive, goal or canonical channel to a gamepad control, and each title SHALL be its own body context.
 
 #### Scenario: A new title
 - **WHEN** the entity plays a title for the first time
@@ -62,3 +62,17 @@ On a host that also runs the entity, a game SHALL run on a display other than th
 #### Scenario: Before the spike
 - **WHEN** a same-host session is requested and the display and confinement check has not passed
 - **THEN** the session is refused, and the reason names the check
+
+### Requirement: The game host is confined to the curated game
+Before each session the launcher SHALL verify all of these, and refuse on any failure: the host's application list holds only the curated titles; its keyboard and mouse input are disabled; its game client runs offline with notifications off; its internet is blocked except the tailnet; and its session is a confined session, not an operator's desktop. The source SHALL be classed `confined_world` only when every check passes.
+
+#### Scenario: A desktop entry in the application list
+- **WHEN** the host's application list contains a Desktop entry
+- **THEN** no session starts, and the reason names the entry
+
+### Requirement: The path is monitored for the whole session
+The launcher SHALL monitor the tailnet path throughout a session, SHALL record each change between direct and relayed, and SHALL end the session when the latency bound is exceeded.
+
+#### Scenario: A fall back to a relay
+- **WHEN** the path changes from direct to relayed mid-session
+- **THEN** the change is recorded, and the session continues only while latency stays within the bound

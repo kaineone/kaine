@@ -21,19 +21,19 @@ Because MuJoCo stores a sensor's `noise` without applying it, the adapter SHALL 
 - **WHEN** a joint is held still and its sensor declares a non-zero noise
 - **THEN** the readings the motor loop receives vary with that standard deviation
 
-### Requirement: Each run samples one randomised world and records it
-At boot the adapter SHALL sample masses, damping, friction, actuator gains, delays, sensor noise and scene materials within declared ranges from the run seed, SHALL keep them fixed for the run, and SHALL record the sampled values in the run manifest.
+### Requirement: Each entity's randomised body is drawn once and kept
+The adapter SHALL sample masses, damping, friction, actuator gains, delays, sensor noise and scene materials within declared ranges from a body seed drawn once per entity. The seed and the samples SHALL be persisted with the entity, carried by preservation bundles, copied to forks and recorded in the run manifest. Re-randomising SHALL happen only as a recorded operator act.
 
-#### Scenario: Two seeds
-- **WHEN** two runs use different seeds
-- **THEN** their manifests record different sampled parameters, and each run's parameters stay fixed throughout
+#### Scenario: A reboot
+- **WHEN** the same entity boots twice
+- **THEN** it meets the same sampled body both times
 
-### Requirement: Command-to-feedback latency is measured and bounded
-The adapter SHALL measure the delay from a commanded joint step to the first moved proprioceptive reading at open and every 10 minutes, SHALL record it, and SHALL refuse to open, or close with a named reason, when it exceeds `max_latency_ms` (default 250 ms).
+### Requirement: Latency is measured without moving the occupied body
+The adapter SHALL measure command-to-feedback delay on a cloned simulation state stepped offline, never by commanding the body the entity occupies, and SHALL also record the delay between the entity's own commands and the first matching proprioceptive change. It SHALL refuse to open, or close with a named reason, when the delay exceeds `max_latency_ms` in entity time.
 
-#### Scenario: A slow body
-- **WHEN** the measured latency exceeds the bound
-- **THEN** the body is not driven, and the reason names the measured value and the bound
+#### Scenario: The periodic probe
+- **WHEN** the 10-minute latency measurement runs
+- **THEN** the occupied body's joints receive no command the entity did not issue
 
 ### Requirement: A body acts only while its own source is selected
 A body paired with a perceptual source SHALL accept actions and setpoints only while that source is selected. While it is not, the world SHALL hold, and an action SHALL return false without effect.
@@ -97,3 +97,24 @@ The JetHexa body SHALL declare its stages in this order: head pan; head pan and 
 #### Scenario: Legs stay frozen at first
 - **WHEN** the entity is in the first stage
 - **THEN** the leg joints are held at their standing pose, and only head pan is driven by the entity
+
+### Requirement: An unset position channel holds its position
+A frozen or omitted `position` channel SHALL hold the joint's current position at the moment it was frozen, or its last command, and a frozen or omitted `velocity` or `effort` channel SHALL be zero. Motor feedback for a body with a descriptor SHALL be built from its declared state interfaces.
+
+#### Scenario: A frozen leg
+- **WHEN** the leg joints are frozen during stage J1
+- **THEN** they stay at their standing pose and are never driven to zero
+
+### Requirement: An unstable or stuck body is not left with the entity
+The adapter SHALL detect simulation instability, from warning counters or non-finite state, and a stuck body, with no proprioceptive change under the entity's own commands for `stuck_s`. On either it SHALL raise an operator advisory, hold the body, and return the entity to the programme through the operator path, recorded `body_stuck` or `sim_unstable`, escalating in unattended runs.
+
+#### Scenario: A wedged leg
+- **WHEN** the entity's commands produce no proprioceptive change for `stuck_s`
+- **THEN** the programme is selected with `changed_by = "body_stuck"`, and the operator sees the advisory
+
+### Requirement: Simulation assets load only from the vendored directory
+The MJCF and every mesh, texture and include SHALL load only from the vendored asset directory. Absolute paths and parent references SHALL be refused, and randomised textures SHALL be procedural or vendored.
+
+#### Scenario: An include outside the directory
+- **WHEN** a model references a file outside the vendored directory
+- **THEN** loading is refused, naming the reference

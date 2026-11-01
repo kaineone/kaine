@@ -27,9 +27,12 @@
   - depth and lidar declared but not wired; temperature and voltage absent.
 
   No vendor files. Tests: the model compiles; five-leg stance is statically stable; joint channels only (no gait channel).
-- [ ] 2.4 Domain randomisation from the run seed, recorded in the manifest. Tests: seeded determinism, ranges respected, fixed within a run.
-- [ ] 2.5 Latency measurement and the bound. Tests: a configured delay is measured within tolerance, and the bound refuses.
+- [ ] 2.4 Domain randomisation from a body seed drawn once per entity, persisted with it, carried by preservation bundles, copied to forks, and recorded in the manifest; re-randomisation only as a recorded operator act. Tests: the same body across two boots of one entity; a fork has its parent's body; ranges respected.
+- [ ] 2.5 Latency measured on a cloned simulation state, never on the occupied body, plus the passive measure from the entity's own commands; the bound in entity time. Tests: a configured delay is measured within tolerance; the occupied body's joints are untouched by the probe; the bound refuses.
 - [ ] 2.6 Source gating, the world holding while away, and operator reset. Tests: no effect while another source is selected; reset recorded with the operator as initiator.
+- [ ] 2.6a Frozen or omitted position channels hold the current position (velocity and effort go to 0), and motor feedback is built from the body descriptor. Test: a frozen position joint does not move over 1,000 ticks.
+- [ ] 2.6b The instability detector (warning counters, non-finite state) and the stuck detector, with advisory, hold, and fallback to the programme (`body_stuck`, `sim_unstable`); escalation in unattended runs. Tests: an injected non-finite state; a wedged body under commands.
+- [ ] 2.6c Asset confinement: MJCF loads only from the vendored asset directory, refusing absolute paths and `..`; textures procedural or vendored. Tests: an include outside the directory is refused.
 - [ ] 2.7 Touch without valence, and a static check that no pain, damage or injury signal exists in the body package. Test: `tests/test_sim_body_no_nociception.py`.
 - [ ] 2.8 With `embodiment-motor-contingency` 2.1-2.3: the driving loop, the learner and the motor report against the simulated JetHexa, stages J1-J2; `embodiment_built()` true only with both. Tests are that change's, run against the simulated head.
 
@@ -47,15 +50,17 @@
 ## 4. Games (after J1-J2 for acting; helper and host in parallel with J0)
 
 - [ ] 4.0 Same-host spike: a separate display that Sunshine captures (gamescope headless or a second X server), and a gamepad visible only to the game's container. Until it passes, same-host sessions are refused and the host is another machine.
-- [ ] 4.1 `tools/kaine-moonlight-helper/` as a separate GPL-3.0 program with its own LICENSE: pairing, the stream through moonlight-common-c, FFmpeg decode, and the socketpair message set. Tests: message framing; no disk writes (static check plus a run under a read-only filesystem).
+- [ ] 4.1 `kaine-moonlight-helper` in its own repository, as a separate GPL-3.0 program with its own LICENSE: pairing, the stream through moonlight-common-c, FFmpeg decode, and the socketpair message set. Tests: message framing; no disk writes (static check plus a run under a read-only filesystem).
 - [ ] 4.2 The launcher's checks. Tests: each refusal.
   - Tailnet Lock (`tailscale lock status`, parsed and tested against captured output);
   - the host's ports;
   - the host encryption setting;
-  - latency;
-  - the declared egress.
+  - latency, probed before the session with no entity attached;
+  - the declared egress, behind the nftables allowlist with escape probes;
+  - host confinement: curated application list, keyboard and mouse off, Steam offline with notifications off, internet blocked except the tailnet, a confined session;
+  - continuous path monitoring.
 - [ ] 4.3 Read Valve's subscriber agreement and each listed title's terms on automated play. Record the result in the curated-list docs before the first session.
-- [ ] 4.4 The `game_pad` body with its declared channels and per-title contexts, and the curated title list. Tests: no channel mapping in code (static check), contexts per title.
+- [ ] 4.4 The `game_pad` body with its declared channels (no Guide, home or share channel) and per-title contexts, and the curated title list. Tests: no channel mapping in code (static check), contexts per title, and a helper message set with no keyboard, mouse or text type.
 - [ ] 4.5 Same-host GPU arbitration: admission through NVML, the priority bands, ending before sleep. Tests: fake NVML readings for each rule.
 - [ ] 4.6 The listener preflight and the tailnet ACL template in the docs. Tests: a listener on `0.0.0.0` refused.
 - [ ] 4.7 Independent second review, and a supervised session with a game host.
