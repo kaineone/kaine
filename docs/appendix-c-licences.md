@@ -134,6 +134,16 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | Kokoro v0.19 | see upstream | Fetched at setup ([`kaine/setup/speech_models.py`](../kaine/setup/speech_models.py)) |
 | Chatterbox TTS | per upstream / not bundled | Operator-provided host service; not distributed with KAINE. Confirm with your Chatterbox installation before deployment. |
 
+## Shipped stimulus audio
+
+The developmental stimulus's pre-rendered audio ships in the package. No speech or melody is synthesized at runtime, and no recording of a person ships.
+
+| Files | Made from | Notes |
+|---|---|---|
+| `kaine/modules/audition/maternal_voice_data/*.flac` | Chatterbox TTS 0.1.6 (MIT) conditioned on CMU ARCTIC `slt` | Original texts; the CMU ARCTIC notice is in [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) |
+| `kaine/modules/audition/added_sounds_data/melody.*.flac` | Harmonic tones rendered by `tools/maintainer/render_melody.py` | "Twinkle, Twinkle, Little Star", a traditional public-domain tune |
+| `kaine/modules/audition/added_sounds_data/x*.flac` | Chatterbox TTS 0.1.6 (MIT) conditioned on CMU ARCTIC `rms` | Original texts; the CMU ARCTIC notice is in [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) |
+
 ## Vendored third-party code
 
 | Component | Location | License | Notes |

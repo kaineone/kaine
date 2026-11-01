@@ -188,7 +188,7 @@ include = ["kaine*"]
 "kaine.modules.sleep" = ["eval_probes/*.jsonl"]
 "kaine.setup.web" = ["templates/*.html", "static/*.css"]
 "kaine.modules.self_model" = ["surnames.txt"]
-"kaine.modules.audition" = ["maternal_voice_data/*.flac", "maternal_voice_data/manifest.json", "maternal_voice_data/texts.toml", "maternal_voice_data/README.md"]
+"kaine.modules.audition" = ["maternal_voice_data/*.flac", "maternal_voice_data/manifest.json", "maternal_voice_data/texts.toml", "maternal_voice_data/README.md", "added_sounds_data/*.flac", "added_sounds_data/manifest.json", "added_sounds_data/melody.toml", "added_sounds_data/texts.toml", "added_sounds_data/README.md"]
 
 # ---------------------------------------------------------------------------
 # Ruff lint/format configuration.

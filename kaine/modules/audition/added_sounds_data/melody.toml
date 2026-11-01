@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# The recurring melody of the developmental stimulus (paper §7, A.7).
+# "Twinkle, Twinkle, Little Star", the melody Partanen et al. (2013) had mothers
+# play during the last trimester (a keyboard rendering in G major, note onsets
+# 600 ms apart in their test melody; Partanen, Kujala, Tervaniemi and Huotilainen
+# 2013, PLoS ONE 8(10): e78946). The tune is traditional and in the public domain.
+# This note list is written for KAINE: G major from G4, so every fundamental lies
+# between 392 and 659 Hz, inside the stage-0 hearing band (354 to 707 Hz).
+#
+# tools/maintainer/render_melody.py renders one take per beat length below. Each
+# note is a harmonic tone (partials with amplitude 1/k) under a smooth envelope.
+
+title = "Twinkle, Twinkle, Little Star"
+key = "G major"
+partials = 8
+# Seconds per beat for each rendered variant; 0.60 is Partanen et al.'s note onset interval.
+beat_seconds = [0.50, 0.55, 0.60]
+# Each note is [MIDI number, beats]: G4 = 67, A4 = 69, B4 = 71, C5 = 72, D5 = 74, E5 = 76.
+notes = [
+  [67, 1], [67, 1], [74, 1], [74, 1], [76, 1], [76, 1], [74, 2],
+  [72, 1], [72, 1], [71, 1], [71, 1], [69, 1], [69, 1], [67, 2],
+  [74, 1], [74, 1], [72, 1], [72, 1], [71, 1], [71, 1], [69, 2],
+  [74, 1], [74, 1], [72, 1], [72, 1], [71, 1], [71, 1], [69, 2],
+  [67, 1], [67, 1], [74, 1], [74, 1], [76, 1], [76, 1], [74, 2],
+  [72, 1], [72, 1], [71, 1], [71, 1], [69, 1], [69, 1], [67, 2],
+]

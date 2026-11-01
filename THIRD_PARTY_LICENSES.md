@@ -50,6 +50,44 @@ subject to the pretty light restrictions detailed below.
 ############################################################################
 ```
 
+## Added-sound audio (developmental stimulus)
+
+The melody takes in `kaine/modules/audition/added_sounds_data/melody.*.flac` were rendered by KAINE (`tools/maintainer/render_melody.py`, harmonic tones from the note list in `melody.toml`) from "Twinkle, Twinkle, Little Star", a traditional tune in the public domain. The outside-voice takes in `kaine/modules/audition/added_sounds_data/x*.flac` were rendered by KAINE with Chatterbox TTS 0.1.6 (Resemble AI, MIT licence, https://github.com/resemble-ai/chatterbox), which embeds its Perth watermark in every output. Their texts are original to KAINE. The voice is conditioned on utterances of the CMU ARCTIC speaker `rms` (Kominek and Black 2003, http://www.festvox.org/cmu_arctic/); no CMU ARCTIC audio ships with KAINE, and the notice of that voice is kept here as its licence asks:
+
+```
+This voice is free for use for any purpose (commercial or otherwise)
+subject to the pretty light restrictions detailed below.
+
+############################################################################
+###                                                                       ##
+###                     Carnegie Mellon University                        ##
+###                         Copyright (c) 2004                            ##
+###                        All Rights Reserved.                           ##
+###                                                                       ##
+###  Permission to use, copy, modify,  and licence this software and its  ##
+###  documentation for any purpose, is hereby granted without fee,        ##
+###  subject to the following conditions:                                 ##
+###   1. The code must retain the above copyright notice, this list of    ##
+###      conditions and the following disclaimer.                         ##
+###   2. Any modifications must be clearly marked as such.                ##
+###   3. Original authors' names are not deleted.                         ##
+###                                                                       ##
+###  THE AUTHORS OF THIS WORK DISCLAIM ALL WARRANTIES WITH REGARD TO      ##
+###  THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY   ##
+###  AND FITNESS, IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY         ##
+###  SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES            ##
+###  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN   ##
+###  AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,          ##
+###  ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF       ##
+###  THIS SOFTWARE.                                                       ##
+###                                                                       ##
+############################################################################
+###                                                                       ##
+###  See http://www.festvox.org/cmu_arctic/ for more details              ##
+###                                                                       ##
+############################################################################
+```
+
 ## Front-end / Nexus console assets
 
 | Component | Files | License (SPDX) | License text | Origin |

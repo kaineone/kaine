@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from kaine.modules.audition.added_sounds import AddedSoundsParams
     from kaine.modules.audition.hearing_band import HearingBandParams
     from kaine.modules.audition.maternal_voice import MaternalVoiceParams
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
@@ -51,6 +52,10 @@ def _stimulus_source_params(feed: dict[str, Any]) -> StimulusSourceParams:
     hearing = stimulus_source.pop("hearing", None)
     if hearing is not None and not isinstance(hearing, dict):
         raise ValueError("[perception_feed.stimulus_source.hearing] must be a table")
+    # The added sounds, like the voice, are read by their own parser (_added_sounds_params).
+    added_sounds = stimulus_source.pop("added_sounds", None)
+    if added_sounds is not None and not isinstance(added_sounds, dict):
+        raise ValueError("[perception_feed.stimulus_source.added_sounds] must be a table")
     return StimulusSourceParams.from_sections(stimulus_source, video or {}, audio or {})
 
 
@@ -63,6 +68,17 @@ def _maternal_voice_params(feed: dict[str, Any]) -> "MaternalVoiceParams":
     if not isinstance(section, dict):
         raise ValueError("[perception_feed.stimulus_source.voice] must be a table")
     return MaternalVoiceParams.from_section(dict(section))
+
+
+def _added_sounds_params(feed: dict[str, Any]) -> "AddedSoundsParams":
+    from kaine.modules.audition.added_sounds import AddedSoundsParams
+
+    section = (feed.get("stimulus_source") or {}).get("added_sounds")
+    if section is None:
+        return AddedSoundsParams.from_section(None)
+    if not isinstance(section, dict):
+        raise ValueError("[perception_feed.stimulus_source.added_sounds] must be a table")
+    return AddedSoundsParams.from_section(dict(section))
 
 
 def _hearing_band_params(feed: dict[str, Any]) -> "HearingBandParams":
@@ -816,6 +832,13 @@ def _build_perception_feed_audio_factory(
         clock, lived = _shared_stimulus_source_objects(feed)
         hearing_state = _shared_hearing_stage_state(feed)
         voice_params = _maternal_voice_params(feed)
+        added_params = _added_sounds_params(feed)
+        # The soundscape level the voice and the added sounds are set against.
+        background_rms = (
+            stimulus_source_soundscape_rms(schedule, params)
+            if voice_params.enabled or added_params.enabled
+            else None
+        )
         voice = None
         if voice_params.enabled:
             try:
@@ -836,7 +859,7 @@ def _build_perception_feed_audio_factory(
                 voice_params,
                 seed=schedule.seed,
                 stimulus_params=params,
-                background_rms=stimulus_source_soundscape_rms(schedule, params),
+                background_rms=background_rms,
             )
             log.info(
                 "stimulus source: maternal voice on (%d items, %d takes, manifest %s)",
@@ -848,6 +871,42 @@ def _build_perception_feed_audio_factory(
             log.info(
                 "stimulus source: maternal voice off "
                 "([perception_feed.stimulus_source.voice].enabled = false)"
+            )
+        added = None
+        if added_params.enabled:
+            from kaine.modules.audition.added_sounds import AddedSoundsLayer, AddedSoundsRepertoire
+
+            try:
+                # The same intrauterine path as the maternal voice.
+                added_repertoire = AddedSoundsRepertoire.load(
+                    sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ if hearing.enabled else params.lowpass_hz
+                )
+            except PerceptionUnavailableError as exc:
+                log.critical(
+                    "stimulus source: the added sounds are unavailable (%s); the stimulus source audio "
+                    "does not start without them. Restore the files or set "
+                    "[perception_feed.stimulus_source.added_sounds].enabled = false.",
+                    exc,
+                )
+                raise
+            added = AddedSoundsLayer(
+                added_repertoire,
+                added_params,
+                seed=schedule.seed,
+                voice_params=voice_params,
+                voice=voice,
+                background_rms=background_rms,
+            )
+            log.info(
+                "stimulus source: added sounds on (melody p=%.3f, outside voice p=%.3f, manifest %s)",
+                added_params.melody_probability,
+                added_params.outside_voice_probability,
+                added_repertoire.manifest_sha256[:12],
+            )
+        else:
+            log.info(
+                "stimulus source: added sounds off "
+                "([perception_feed.stimulus_source.added_sounds].enabled = false)"
             )
         if hearing.enabled:
             log.info(
@@ -871,6 +930,7 @@ def _build_perception_feed_audio_factory(
                 awake=lived,
                 hearing=hearing,
                 hearing_stage=lambda: hearing_state.stage,
+                added=added,
             )
 
         return _stimulus_source_factory
@@ -1022,6 +1082,20 @@ def gather_perception_feed_descriptor(
         except Exception:
             # The repertoire is verified for real at boot; the covariate must not crash the run.
             descriptor["maternal_voice"] = {"invalid": True}
+        try:
+            from hashlib import sha256 as _sha256
+
+            from kaine.modules.audition.added_sounds import ADDED_SOUNDS_DATA_DIR
+
+            added_record = _added_sounds_params(feed).as_record()
+            added_manifest = ADDED_SOUNDS_DATA_DIR / "manifest.json"
+            added_record["manifest_sha256"] = (
+                _sha256(added_manifest.read_bytes()).hexdigest() if added_record["enabled"] else None
+            )
+            descriptor["added_sounds"] = added_record
+        except Exception:
+            # The added sounds are verified for real at boot; the covariate must not crash the run.
+            descriptor["added_sounds"] = {"invalid": True}
         descriptor["video"] = StimulusSourceSchedule(
             seed=seed,
             width=int(vision.get("capture_width", 640)),

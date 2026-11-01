@@ -1,0 +1,281 @@
+{
+ "method": "replay of the 2026-10-31 settled runs' audition errors through the real Affect module (gated hearing-stage accessor) and a fresh HearingStageState per stage (full-span rule, no minimum dwell)",
+ "config": {
+  "learning_progress_floor": 0.2,
+  "learning_progress_span_s": 5400.0,
+  "learning_progress_bin_s": 60.0,
+  "saturation_window_seconds": 600.0,
+  "max_dwell_seconds": 25200.0
+ },
+ "summary_by_stage": {
+  "0": {
+   "released_h_min": 2.83,
+   "released_h_max": 4.85,
+   "runs_released": 9,
+   "runs_not_released_within_hold": 0
+  },
+  "1": {
+   "released_h_min": 3.2,
+   "released_h_max": 4.6,
+   "runs_released": 7,
+   "runs_not_released_within_hold": 2
+  },
+  "2": {
+   "released_h_min": 2.65,
+   "released_h_max": 3.78,
+   "runs_released": 9,
+   "runs_not_released_within_hold": 0
+  },
+  "3": {
+   "released_h_min": 1.67,
+   "released_h_max": 1.7,
+   "runs_released": 9,
+   "runs_not_released_within_hold": 0
+  }
+ },
+ "runs": [
+  {
+   "file": "1-melody-fixed_18000.npz",
+   "seed": 1,
+   "arm": "melody",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    14580.0,
+    14160.0,
+    13020.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "1-melody_proxy-fixed_18000.npz",
+   "seed": 1,
+   "arm": "melody_proxy",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    13080.0,
+    11520.0,
+    12960.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "1-none-fixed_18000.npz",
+   "seed": 1,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    17460.0,
+    14340.0,
+    12960.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "2-melody-fixed_18000.npz",
+   "seed": 2,
+   "arm": "melody",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    13080.0,
+    15420.0,
+    13620.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "2-melody_proxy-fixed_18000.npz",
+   "seed": 2,
+   "arm": "melody_proxy",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    10200.0,
+    13380.0,
+    13440.0,
+    6120.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "2-none-fixed_18000.npz",
+   "seed": 2,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    13560.0,
+    16560.0,
+    13200.0,
+    6000.0,
+    7560.0
+   ]
+  },
+  {
+   "file": "3-melody-fixed_18000.npz",
+   "seed": 3,
+   "arm": "melody",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    14040.0,
+    null,
+    10140.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "3-melody_proxy-fixed_18000.npz",
+   "seed": 3,
+   "arm": "melody_proxy",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    13140.0,
+    13020.0,
+    9540.0,
+    6000.0,
+    6000.0
+   ]
+  },
+  {
+   "file": "3-none-fixed_18000.npz",
+   "seed": 3,
+   "arm": "none",
+   "schedule": "fixed:18000",
+   "hold_s": [
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0,
+    18000.0
+   ],
+   "first_full_span_reading_s": [
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0,
+    5401.0
+   ],
+   "released_after_s": [
+    13560.0,
+    null,
+    12540.0,
+    6000.0,
+    6000.0
+   ]
+  }
+ ]
+}

@@ -1,0 +1,354 @@
+{
+  "format": 1,
+  "melody": {
+    "citation": "Partanen, Kujala, Tervaniemi and Huotilainen 2013, PLoS ONE 8(10): e78946",
+    "fundamental_range_hz": [
+      392.0,
+      659.26
+    ],
+    "generator": {
+      "articulation_gap_seconds": 0.04,
+      "attack_seconds": 0.02,
+      "partials": 8,
+      "peak_ceiling_dbfs": -1.0,
+      "release_seconds": 0.06,
+      "target_rms_dbfs": -20.0,
+      "tool": "tools/maintainer/render_melody.py"
+    },
+    "key": "G major",
+    "melody_toml_sha256": "13ce8cba09a35bbd60638a1c49862d6917c833d8a70e914ce63325a12d6cf35a",
+    "takes": [
+      {
+        "beat_seconds": 0.5,
+        "file": "melody.b0.flac",
+        "frames": 192000,
+        "seconds": 24.0,
+        "sha256": "03da96606ff5dc5a1459e899138f41d5487f9a3e950bc401a371942517eee5fd",
+        "take": 0
+      },
+      {
+        "beat_seconds": 0.55,
+        "file": "melody.b1.flac",
+        "frames": 211200,
+        "seconds": 26.4,
+        "sha256": "bfdfc1b253b7704f08f1f218f6d29dfcc4f5efbc13381ae88b4ab1a63b0295d7",
+        "take": 1
+      },
+      {
+        "beat_seconds": 0.6,
+        "file": "melody.b2.flac",
+        "frames": 230400,
+        "seconds": 28.8,
+        "sha256": "dccf5952a1842a79ec8b5fc4f55f452ed38d3e24020e5102c3b4925a96103610",
+        "take": 2
+      }
+    ],
+    "title": "Twinkle, Twinkle, Little Star"
+  },
+  "outside_voice": {
+    "citation": "Querleu, Renard, Versyp, Paris-Delrue and Crepin 1988, Eur J Obstet Gynecol Reprod Biol 28(3): 191-212",
+    "generator": {
+      "base_seed": 20261031,
+      "cfg_weight": 0.5,
+      "chatterbox_tts": "0.1.6",
+      "device": "cpu",
+      "exaggeration": 0.5,
+      "model_repo": "ResembleAI/chatterbox",
+      "model_revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+      "peak_ceiling_dbfs": -1.0,
+      "target_rms_dbfs": -20.0,
+      "temperature": 0.8,
+      "tool": "tools/maintainer/generate_outside_voice.py",
+      "trim_top_db": 40.0,
+      "watermark": "Chatterbox applies its Perth implicit watermark (resemble-perth) to every output before post-processing"
+    },
+    "items": [
+      {
+        "id": "x01-kettle",
+        "index": 0,
+        "takes": [
+          {
+            "file": "x01-kettle.t0.flac",
+            "frames": 23382,
+            "rms_dbfs": -20.0,
+            "seconds": 2.923,
+            "seed": 20261031,
+            "sha256": "58f240ed7d39613917026b5c6cd5534285c215dd1f7b586f203da731ddea1572",
+            "take": 0
+          },
+          {
+            "file": "x01-kettle.t1.flac",
+            "frames": 20480,
+            "rms_dbfs": -21.76,
+            "seconds": 2.56,
+            "seed": 20261032,
+            "sha256": "630e689dd7375dce504f82aa334d91122a96273b72773bfc1664c56e479d4de2",
+            "take": 1
+          }
+        ],
+        "text_sha256": "3f302b85895477c6a058fdf9f5cddc2be28790e776fbb615629465f9ec3deedc"
+      },
+      {
+        "id": "x02-rain",
+        "index": 1,
+        "takes": [
+          {
+            "file": "x02-rain.t0.flac",
+            "frames": 23894,
+            "rms_dbfs": -20.0,
+            "seconds": 2.987,
+            "seed": 20262031,
+            "sha256": "7d50822e470787e1130a636e1184f94f7d005301a78fb9b69262735c5675d5c1",
+            "take": 0
+          },
+          {
+            "file": "x02-rain.t1.flac",
+            "frames": 22187,
+            "rms_dbfs": -20.0,
+            "seconds": 2.773,
+            "seed": 20262032,
+            "sha256": "8460b2503070ce0c253b1d4026bf3394c58cf2c17a2774d1979759ded239d2d0",
+            "take": 1
+          }
+        ],
+        "text_sha256": "e867015698f06b7cdca944058cb4c3254762c0169788adf2ad26e02903fa7a38"
+      },
+      {
+        "id": "x03-shopping",
+        "index": 2,
+        "takes": [
+          {
+            "file": "x03-shopping.t0.flac",
+            "frames": 28160,
+            "rms_dbfs": -20.0,
+            "seconds": 3.52,
+            "seed": 20263031,
+            "sha256": "09232fbf9ddedf0513a40eacc37643eca406c61429d421087ffa9b1e3b69ade9",
+            "take": 0
+          },
+          {
+            "file": "x03-shopping.t1.flac",
+            "frames": 27136,
+            "rms_dbfs": -20.0,
+            "seconds": 3.392,
+            "seed": 20263032,
+            "sha256": "540a5f73ffd2c5fac65bf5760a48300e6c0dbe763c3264473d0fafbf3fb31d19",
+            "take": 1
+          }
+        ],
+        "text_sha256": "337d8ce82c80958ce6ddd99092062908462e959f0f08266d3fb46903487e9656"
+      },
+      {
+        "id": "x04-window",
+        "index": 3,
+        "takes": [
+          {
+            "file": "x04-window.t0.flac",
+            "frames": 23552,
+            "rms_dbfs": -20.0,
+            "seconds": 2.944,
+            "seed": 20264031,
+            "sha256": "5af1f9a6687fd8801874697b3d2b6ede0b0a2a7e66dea8e274023835d154ec20",
+            "take": 0
+          },
+          {
+            "file": "x04-window.t1.flac",
+            "frames": 24576,
+            "rms_dbfs": -20.0,
+            "seconds": 3.072,
+            "seed": 20264032,
+            "sha256": "df283f093dbb7bbb4473392e80721031acca909544c4ac020a29161e0febf8a4",
+            "take": 1
+          }
+        ],
+        "text_sha256": "eeeb29916343108992ecefb135258ea4fe84cfdb8633dba2da4621877a06a1a1"
+      },
+      {
+        "id": "x05-garden",
+        "index": 4,
+        "takes": [
+          {
+            "file": "x05-garden.t0.flac",
+            "frames": 20480,
+            "rms_dbfs": -20.0,
+            "seconds": 2.56,
+            "seed": 20265031,
+            "sha256": "c96cbc13a92e3fbf3bd26d267179cf009a4e8b63d33dbdd939d12e15f0312da3",
+            "take": 0
+          },
+          {
+            "file": "x05-garden.t1.flac",
+            "frames": 19115,
+            "rms_dbfs": -20.0,
+            "seconds": 2.389,
+            "seed": 20265032,
+            "sha256": "3904d9df7dc0c6c19f6cf74c343422baa4a52e8af650a022b11fc4ff57c0c7af",
+            "take": 1
+          }
+        ],
+        "text_sha256": "bee2f07ddaec6ca40b324c60320a9541d9a106cd9261fedb22fa7655cef0441e"
+      },
+      {
+        "id": "x06-bus",
+        "index": 5,
+        "takes": [
+          {
+            "file": "x06-bus.t0.flac",
+            "frames": 23894,
+            "rms_dbfs": -20.22,
+            "seconds": 2.987,
+            "seed": 20266031,
+            "sha256": "bf412a61d570438716945696e7d6b3cf524551157e6ed366287e397573aca577",
+            "take": 0
+          },
+          {
+            "file": "x06-bus.t1.flac",
+            "frames": 24747,
+            "rms_dbfs": -20.0,
+            "seconds": 3.093,
+            "seed": 20266032,
+            "sha256": "d9c2d85e2d56f7d6bb8e1b15dd3661e5e03c3598c68fac1910d5d0b6c037c34a",
+            "take": 1
+          }
+        ],
+        "text_sha256": "888f9de38f3d71bd4b41adea1ef90132af4ceaacfcce84858e9cd437b62e2fdd"
+      },
+      {
+        "id": "x07-dinner",
+        "index": 6,
+        "takes": [
+          {
+            "file": "x07-dinner.t0.flac",
+            "frames": 27990,
+            "rms_dbfs": -20.16,
+            "seconds": 3.499,
+            "seed": 20267031,
+            "sha256": "dfe500cb10399090887930573347acf4fd50e077ce61df2f4d92ac08f597e52b",
+            "take": 0
+          },
+          {
+            "file": "x07-dinner.t1.flac",
+            "frames": 28502,
+            "rms_dbfs": -20.0,
+            "seconds": 3.563,
+            "seed": 20267032,
+            "sha256": "6b5bfdeb6939effbdfbe3f670b26d890495984b32e73430e51c28133d492a768",
+            "take": 1
+          }
+        ],
+        "text_sha256": "de6a3dae2db6aa9d9df6c0f0d8ca0b91e3c3ca518fe485d2c91656950021d96c"
+      },
+      {
+        "id": "x08-chair",
+        "index": 7,
+        "takes": [
+          {
+            "file": "x08-chair.t0.flac",
+            "frames": 30208,
+            "rms_dbfs": -21.44,
+            "seconds": 3.776,
+            "seed": 20268031,
+            "sha256": "fc2cfd1e026a51db28049064a35260b05996e10dfa3ad3decaf5d1cb0b175b7d",
+            "take": 0
+          },
+          {
+            "file": "x08-chair.t1.flac",
+            "frames": 30379,
+            "rms_dbfs": -20.0,
+            "seconds": 3.797,
+            "seed": 20268032,
+            "sha256": "07f3f88ad1fd15caf2ff38261aec958e183e11c1fbf7bc8b53974078d0b5e0bd",
+            "take": 1
+          }
+        ],
+        "text_sha256": "51b62e227323ea22578d9f1720df03ce90bc3b0b2ea4ba08598bf6b240976593"
+      },
+      {
+        "id": "x09-radio",
+        "index": 8,
+        "takes": [
+          {
+            "file": "x09-radio.t0.flac",
+            "frames": 24747,
+            "rms_dbfs": -20.0,
+            "seconds": 3.093,
+            "seed": 20269031,
+            "sha256": "fa854cf6ccfc7b19e53bfaf05a76b75e53ab7e0977e59688ca9b421f230d117c",
+            "take": 0
+          },
+          {
+            "file": "x09-radio.t1.flac",
+            "frames": 21334,
+            "rms_dbfs": -20.0,
+            "seconds": 2.667,
+            "seed": 20269032,
+            "sha256": "ad84f11f261427830e4df34524648f829e7a88001a3c08a0c297d22099b7bd1b",
+            "take": 1
+          }
+        ],
+        "text_sha256": "3a2a3c28a69d4a54a9b9114c9ac9b163c6eb1202578c4655417e58f7cd62bfaf"
+      },
+      {
+        "id": "x10-walk",
+        "index": 9,
+        "takes": [
+          {
+            "file": "x10-walk.t0.flac",
+            "frames": 24576,
+            "rms_dbfs": -20.3,
+            "seconds": 3.072,
+            "seed": 20270031,
+            "sha256": "ec8ffdfced95f5a7b1e3468f590ae976e9554b81323c6b6de182fef001807b65",
+            "take": 0
+          },
+          {
+            "file": "x10-walk.t1.flac",
+            "frames": 22870,
+            "rms_dbfs": -20.0,
+            "seconds": 2.859,
+            "seed": 20270032,
+            "sha256": "8cf518ae4c4b1e55c7094bd9b73d8c6a5d4e2629c01ffb1a5e345e76f0ff5e93",
+            "take": 1
+          }
+        ],
+        "text_sha256": "a19e8320ce89b324756feb22eb09a06d9b2642b1212d9b64ac95519eed4adb07"
+      }
+    ],
+    "reference_voice": {
+      "attribution": "CMU ARCTIC speaker rms (Kominek and Black 2003), Carnegie Mellon University, http://www.festvox.org/cmu_arctic/",
+      "files": [
+        {
+          "file": "arctic_a0001.wav",
+          "sha256": "728ae021d1f21042abe3cde8c9c100fd2ade82a5a5db56ae412b9c7d99355aa9"
+        },
+        {
+          "file": "arctic_a0003.wav",
+          "sha256": "c99fc0cd44894394e3c5f206928e5271e02162f55eca89e913a3e8baf94f15f3"
+        },
+        {
+          "file": "arctic_a0004.wav",
+          "sha256": "5b038c0b4acf5b5193e97274ac547f03ee399c2bd65cc08a29df80f263fedfa3"
+        },
+        {
+          "file": "arctic_a0005.wav",
+          "sha256": "3b6d28a4eb6b0feb56fb0f4f6eaca1e714d69119a824918c716620912ce011ea"
+        },
+        {
+          "file": "arctic_a0006.wav",
+          "sha256": "3a95b89e009f1d12d22a5cae34334298538312077e1f3feb2e32398a5838ab2d"
+        },
+        {
+          "file": "arctic_a0007.wav",
+          "sha256": "fbae396e0d4551972bc323f63d735a740414a29bf724d392a6a56be09fe78029"
+        },
+        {
+          "file": "arctic_a0008.wav",
+          "sha256": "afea5b1d2e7eaec58669972cfea04b306495ad7f7833ee419bb7f9859ed6db1b"
+        }
+      ],
+      "reference_wav_sha256": "c15114bebf1b767abec2d54b7919527e735a7c390ecb8ce3b38030e85c0190b5"
+    },
+    "texts_sha256": "3b75f7ec8c78b2d6aeb562d9d23744569626ad6d13959970b6e83b0bfc3ee06e"
+  },
+  "sample_rate": 8000
+}

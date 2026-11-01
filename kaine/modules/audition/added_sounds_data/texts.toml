@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+#
+# The outside voice of the developmental stimulus (paper §7, A.7): a man talking
+# near the mother, heard through the intrauterine path with its intonation
+# (Querleu et al. 1988). Original texts written for KAINE: everyday and neutral,
+# no names, no quoted or copyrighted material. The voice talks to the room, not to
+# the fetus. tools/maintainer/generate_outside_voice.py renders each item.
+
+[[item]]
+id = "x01-kettle"
+takes = 2
+text = "I've put the kettle on. Would you like a cup of tea as well?"
+
+[[item]]
+id = "x02-rain"
+takes = 2
+text = "It looks like rain this afternoon, so I brought the washing in."
+
+[[item]]
+id = "x03-shopping"
+takes = 2
+text = "We need bread and some apples. I can go to the shop after lunch."
+
+[[item]]
+id = "x04-window"
+takes = 2
+text = "Shall I open the window a little? It's quite warm in here."
+
+[[item]]
+id = "x05-garden"
+takes = 2
+text = "The tomatoes in the garden are finally turning red."
+
+[[item]]
+id = "x06-bus"
+takes = 2
+text = "The bus was late again this morning, but I still got there on time."
+
+[[item]]
+id = "x07-dinner"
+takes = 2
+text = "How about soup for dinner tonight? There are carrots and potatoes left."
+
+[[item]]
+id = "x08-chair"
+takes = 2
+text = "I fixed the wobbly leg on the kitchen chair. It should be fine now."
+
+[[item]]
+id = "x09-radio"
+takes = 2
+text = "They said on the radio that tomorrow will be sunny and mild."
+
+[[item]]
+id = "x10-walk"
+takes = 2
+text = "Do you feel like a short walk later, once it cools down a bit?"

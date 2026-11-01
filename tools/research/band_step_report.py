@@ -92,7 +92,12 @@ def analyse(path: str, WindowedProgress) -> dict:
         "sim_hours": sim / 3600, "wall_s": float(d["wall_s"]), "steps_s": steps, "n_reports": int(len(e)),
         "voice_slot_share": len(d["voice_slots"]) / max(1, int(sim // 30)),
         "melody_slots": int(len(d["melody_slots"])), "outside_proxy_slots": int(len(d["outside_slots"])),
+        # Runs of the shipped arm name the stimulus version they measured; the others measured none.
+        "stimulus_version": (str(d["stimulus_version"]) or None) if "stimulus_version" in d else None,
+        "d_min_s": d_min,
     }
+    if run["arm"] == "shipped":
+        run["outside_voice_slots"] = run.pop("outside_proxy_slots")
     # Fault check: the 60 s replay equals the affect module's own reading.
     rt, rv = replay(WindowedProgress, t, e, steps, bin_s, int(span_s / bin_s))
     n = min(len(rv), len(lv))

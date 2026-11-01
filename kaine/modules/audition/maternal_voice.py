@@ -69,25 +69,30 @@ def _sha256_bytes(data: bytes) -> str:
 
 
 def _decode_flac_mono_int16(
-    path: Path, expected_rate: int, expected_frames: int, av_mod: Any
+    path: Path,
+    expected_rate: int,
+    expected_frames: int,
+    av_mod: Any,
+    *,
+    label: str = "maternal voice take",
 ) -> np.ndarray:
     try:
         with av_mod.open(str(path)) as container:
             if not container.streams.audio:
                 raise PerceptionUnavailableError(
-                    f"maternal voice take has no audio stream: {path}"
+                    f"{label} has no audio stream: {path}"
                 )
             stream = container.streams.audio[0]
             rate = stream.codec_context.sample_rate
             channels = stream.codec_context.channels
             if rate != expected_rate:
                 raise PerceptionUnavailableError(
-                    f"maternal voice take sample rate mismatch in {path}: "
+                    f"{label} sample rate mismatch in {path}: "
                     f"got {rate}, expected {expected_rate}"
                 )
             if channels != 1:
                 raise PerceptionUnavailableError(
-                    f"maternal voice take must be mono: {path} has {channels} channels"
+                    f"{label} must be mono: {path} has {channels} channels"
                 )
 
             chunks: list[np.ndarray] = []
@@ -96,7 +101,7 @@ def _decode_flac_mono_int16(
                 name = frame.format.name
                 if name not in ("s16", "s16p"):
                     raise PerceptionUnavailableError(
-                        f"maternal voice take must be 16-bit int in {path}: {name}"
+                        f"{label} must be 16-bit int in {path}: {name}"
                     )
                 arr = frame.to_ndarray()
                 if arr.ndim == 2:
@@ -111,7 +116,7 @@ def _decode_flac_mono_int16(
 
             if total != expected_frames:
                 raise PerceptionUnavailableError(
-                    f"maternal voice take frame count mismatch in {path}: "
+                    f"{label} frame count mismatch in {path}: "
                     f"got {total}, expected {expected_frames}"
                 )
             return np.concatenate(chunks).astype(np.int16, copy=False)
@@ -119,7 +124,7 @@ def _decode_flac_mono_int16(
         raise
     except Exception as exc:
         raise PerceptionUnavailableError(
-            f"maternal voice take decode failed: {path}"
+            f"{label} decode failed: {path}"
         ) from exc
 
 
@@ -569,6 +574,22 @@ class MaternalVoiceLayer:
         """
         return self._target
 
+    def speaks_in(self, slot: int) -> bool:
+        """Whether ``slot`` holds an episode of maternal speech.
+
+        A pure function of the seed and the slot (the episode draw against the
+        mother's arousal at the slot's start). A slot for which it is False holds
+        no speech; the added sounds use it to keep out of speaking slots.
+        """
+        sr = self._repertoire.sample_rate
+        t0 = slot * self._slot_n
+        s = self._seed
+        arousal = maternal_state(s, t0 / sr, self._stimulus_params)[1]
+        return (
+            unit_float(keyed_u64(s, slot, SEED_SALT_VOICE | 1))
+            < self._params.episode_probability * arousal
+        )
+
     def slot_plan(self, slot: int, unlocked: int) -> tuple[Utterance, ...]:
         sr = self._repertoire.sample_rate
         t0 = slot * self._slot_n
@@ -576,13 +597,8 @@ class MaternalVoiceLayer:
         s = self._seed
         S = SEED_SALT_VOICE
         params = self._params
-        stimulus_params = self._stimulus_params
 
-        arousal = maternal_state(s, t0 / sr, stimulus_params)[1]
-        if not (
-            unit_float(keyed_u64(s, slot, S | 1))
-            < params.episode_probability * arousal
-        ):
+        if not self.speaks_in(slot):
             return ()
 
         n_un = max(1, min(unlocked, len(self._repertoire.takes)))

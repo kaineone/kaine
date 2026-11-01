@@ -87,16 +87,25 @@ Colour saturation is k/5 in hearing stage k (a design choice; newborn colour vis
 
 #### `[perception_feed.stimulus_source.hearing]`
 
-The hearing band filters the whole stimulus-source audio, the soundscape and the maternal voice alike, with a band-pass that widens in the order fetal hearing matures (Hepper and Shahidullah 1994). Each edge lies halfway, on a log scale, between the outermost tested tone heard and the next tested tone not heard. It starts at 354 to 707 Hz, around 500 Hz, the first tone fetuses respond to. It takes four steps, each released by saturation (below): 250 Hz joins (low edge 158 Hz); 100 Hz joins, and with no unheard tone below it the low edge goes (a low-pass at 707 Hz, so the heartbeat thud is heard); 1000 Hz joins (low-pass at 1,732 Hz); 3000 Hz joins and the band is open. Every stage delays the audio by the same 512 samples. With the band on, the maternal voice loads with its low-pass at 3,000 Hz instead of `lowpass_hz`; the soundscape keeps `lowpass_hz`. The band needs a stream rate above 6,000 Hz. Stage k ends when audition's learning progress, restarted at the step, stays below the affect module's `learning_progress_floor` (0.20) for `saturation_window_seconds` of awake time after at least `min_dwell_seconds` in the stage, or at `max_dwell_seconds` (paper A.7, Table A1: W_sat, d_min, d_max; provisional). A missing learning-progress reading counts as unsaturated. The stage and its dwell persist in `state/lifecycle/hearing_stage.json`, so a restart resumes where the band was; the saturation window starts fresh. The colour follows the same stage. It stays out of the parameter digest recorded at maturation.
+The hearing band filters the whole stimulus-source audio, the soundscape and the maternal voice alike, with a band-pass that widens in the order fetal hearing matures (Hepper and Shahidullah 1994). Each edge lies halfway, on a log scale, between the outermost tested tone heard and the next tested tone not heard. It starts at 354 to 707 Hz, around 500 Hz, the first tone fetuses respond to. It takes four steps, each released by saturation (below): 250 Hz joins (low edge 158 Hz); 100 Hz joins, and with no unheard tone below it the low edge goes (a low-pass at 707 Hz, so the heartbeat thud is heard); 1000 Hz joins (low-pass at 1,732 Hz); 3000 Hz joins and the band is open. Every stage delays the audio by the same 512 samples. With the band on, the maternal voice loads with its low-pass at 3,000 Hz instead of `lowpass_hz`; the soundscape keeps `lowpass_hz`. The band needs a stream rate above 6,000 Hz. Stage k ends when audition's learning progress, restarted at the step and read only over the full `[affect].learning_progress_span_s` of completed bins, stays below the affect module's `learning_progress_floor` (0.20) for `saturation_window_seconds` of awake time, or at `max_dwell_seconds` (paper A.7, Table A1: W_sat, d_max; provisional). A missing learning-progress reading, including one over less than the full span, counts as unsaturated, so no stage ends before `learning_progress_span_s + saturation_window_seconds` (6,000 s with the defaults). The stage and its dwell persist in `state/lifecycle/hearing_stage.json`, so a restart resumes where the band was; the saturation window starts fresh. The colour follows the same stage. It stays out of the parameter digest recorded at maturation.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Apply the hearing band. `false` gives the audio without the band byte for byte. |
-| `saturation_window_seconds` | float | `600` | Awake seconds audition's learning progress must stay below the floor for a stage to end by saturation (Table A1 W_sat). Must not exceed `min_dwell_seconds`. |
-| `min_dwell_seconds` | float | `5400` | Awake seconds a stage lasts at least, 1.5 h (Table A1 d_min). Must not exceed `max_dwell_seconds`. |
-| `max_dwell_seconds` | float | `25200` | Awake seconds after which a stage ends whatever the learning progress, 7 h (Table A1 d_max). |
+| `saturation_window_seconds` | float | `600` | Awake seconds audition's full-span learning progress must stay below the floor for a stage to end by saturation (Table A1 W_sat). Must not exceed `max_dwell_seconds`. |
+| `max_dwell_seconds` | float | `25200` | Awake seconds after which a stage ends whatever the learning progress, 7 h (Table A1 d_max). Boot refuses a value below `[affect].learning_progress_span_s + saturation_window_seconds`, naming the keys. |
 
-The key `maturation_seconds` is retired: it is accepted with a warning and ignored.
+The keys `maturation_seconds` and `min_dwell_seconds` are retired: they are accepted with a warning and ignored. The full learning-progress span is the minimum a stage lasts.
+
+#### `[perception_feed.stimulus_source.added_sounds]`
+
+The recurring melody and the outside voice (paper §7, A.7), pre-rendered and shipped in `kaine/modules/audition/added_sounds_data/` with a manifest of sha256 digests; a missing or altered file stops the stimulus audio. They use the maternal voice's 30 s slots (`[perception_feed.stimulus_source.voice].slot_seconds`): a slot in which the mother speaks holds neither, so a slot holds at most one of the three, and the draws depend on the seed and the slot only. The melody plays at the voice's `level_db` above the soundscape with up to `jitter_db` of seeded variation; the outside voice plays at the soundscape's RMS level. Both pass the voice's low-pass and ramp in and out over 0.5 s, before the hearing band. They stay out of the parameter digest recorded at maturation. See [the developmental phase](../06-operation/development.md).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Play the added sounds. `false` gives the stream without them byte for byte. |
+| `melody_probability` | float | `0.02` | Chance a slot without maternal speech holds the melody (Table A1 p_m), in [0, 1]. |
+| `outside_voice_probability` | float | `0.05` | Chance a slot without maternal speech or melody holds an outside-voice utterance (Table A1 p_x), in [0, 1]. |
 
 #### `[perception_feed.stimulus_source.readout]`
 

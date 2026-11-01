@@ -63,6 +63,7 @@ from kaine.modules.vision.feed import (
 if TYPE_CHECKING:  # numpy-importing; loaded lazily at render time
     import numpy as np
 
+    from kaine.modules.audition.added_sounds import AddedSoundsLayer
     from kaine.modules.audition.hearing_band import HearingBandParams
     from kaine.modules.audition.maternal_voice import MaternalVoiceLayer
     from kaine.modules.stimulus_source_signal import StimulusSourceParams
@@ -389,6 +390,11 @@ class StimulusSourceProceduralAudioStream:
     with it disabled, the output is unchanged. The awake time is read only
     for the maternal voice's unlock.
 
+    When an added-sounds layer is given (the recurring melody and the outside
+    voice, paper §7, A.7), its sounds join the mix before the hearing band, and
+    the headroom covers the louder of the voice and the added sounds. Without one
+    the output is unchanged byte for byte.
+
     Persists only ``(seed, schedule, params, clock)``; no PCM is written.
     """
 
@@ -408,6 +414,7 @@ class StimulusSourceProceduralAudioStream:
         awake: Callable[[], float] | None = None,
         hearing: "HearingBandParams | None" = None,
         hearing_stage: Callable[[], int] | None = None,
+        added: "AddedSoundsLayer | None" = None,
     ) -> None:
         self._schedule = schedule
         self._params = params
@@ -417,12 +424,18 @@ class StimulusSourceProceduralAudioStream:
         self._awake = awake
         self._hearing = hearing if (hearing is not None and hearing.enabled) else None
         self._hearing_stage = hearing_stage
+        self._added = added
         self._mix_cache: dict[int, "np.ndarray"] = {}
         self._mix_newest: int | None = None
         self._mix_lock = threading.Lock()
         if voice is not None and voice.repertoire.sample_rate != schedule.sample_rate:
             raise ValueError(
                 f"voice sample rate {voice.repertoire.sample_rate} does not match "
+                f"schedule sample rate {schedule.sample_rate}"
+            )
+        if added is not None and added.repertoire.sample_rate != schedule.sample_rate:
+            raise ValueError(
+                f"added sounds sample rate {added.repertoire.sample_rate} does not match "
                 f"schedule sample rate {schedule.sample_rate}"
             )
         self._thread: threading.Thread | None = None
@@ -493,6 +506,8 @@ class StimulusSourceProceduralAudioStream:
             samples = self._soundscape(block_index)
             if self._voice is not None:
                 samples = samples + self._voice.render(block_index * n, n, awake)
+            if self._added is not None:
+                samples = samples + self._added.render(block_index * n, n)
 
             # Keep only blocks within 8 of the newest requested index.
             newest = self._mix_newest
@@ -642,6 +657,8 @@ class StimulusSourceProceduralAudioStream:
                     )
                 )
                 samples = samples + self._voice.render(block_index * n, n, awake)
+            if self._added is not None:
+                samples = samples + self._added.render(block_index * n, n)
         else:
             from kaine.modules.audition.hearing_band import (
                 HEARING_BAND_TAPS,
@@ -676,8 +693,13 @@ class StimulusSourceProceduralAudioStream:
         # Headroom for the fixed bed. With a voice the headroom grows by the
         # voice's RMS level and a soft limiter catches the rare peaks above it.
         max_possible = base_amp_total + 4 * noise_rms + thud_amp
-        if self._voice is not None:
-            max_possible = max_possible + self._voice.headroom
+        if self._voice is not None or self._added is not None:
+            # The voice and the added sounds never share a slot, so the headroom
+            # covers the louder of them.
+            max_possible = max_possible + max(
+                self._voice.headroom if self._voice is not None else 0.0,
+                self._added.headroom if self._added is not None else 0.0,
+            )
             gain = (_INT16_MAX * 0.9) / max_possible
             samples = soft_limit(
                 samples * gain,

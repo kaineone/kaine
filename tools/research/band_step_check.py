@@ -20,7 +20,10 @@ Simplifications, all stated in the record: no workspace, so the forward model's
 broadcast context is absent (None, as before the first broadcast); arousal is
 held at the affect baseline; awake time equals stimulus time (no rests).
 
-Arms: ``none`` is the shipped stimulus. ``melody`` adds a harness rendering of
+Arms: ``shipped`` is the shipped stimulus with its added sounds as configured (the
+real ``AddedSoundsLayer`` with the shipped melody and outside-voice takes); the
+run records the shipped stimulus version (``kaine.boot.stimulus_version``).
+``none`` is the stimulus without added sounds. ``melody`` adds a harness rendering of
 the change's recurring melody (design D2: "Twinkle, Twinkle, Little Star", G4 to
 E5, harmonic tones, p_m = 0.02 per slot without speech). ``melody_proxy`` also
 adds a SYNTHETIC PROXY for the outside voice (design D3 needs Chatterbox, which
@@ -32,7 +35,7 @@ Output: one compressed .npz per run with per-report errors, per-second learning
 progress, per-minute band powers and mean embeddings, and the step times. No
 audio is written.
 
-usage: band_step_check.py --seed N --arm none|melody|melody_proxy
+usage: band_step_check.py --seed N --arm shipped|none|melody|melody_proxy
        --schedule fixed:SECONDS|rule --out PATH.npz [--repo REPO]
 """
 from __future__ import annotations
@@ -310,13 +313,31 @@ async def run(args) -> None:
     bg_rms = stimulus_source_soundscape_rms(schedule, params)
     repertoire = MaternalVoiceRepertoire.load(sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ)
     voice = MaternalVoiceLayer(repertoire, voice_params, seed=args.seed, stimulus_params=params, background_rms=bg_rms)
-    layer = voice if args.arm == "none" else AddedSoundsVoice(voice, seed=args.seed, sr=sr, background_rms=bg_rms, arm=args.arm)
+    added = None
+    stimulus_version = ""
+    if args.arm == "shipped":
+        from kaine.boot.perception_feed import _added_sounds_params
+        from kaine.boot.stimulus_version import developmental_stimulus_version
+        from kaine.modules.audition.added_sounds import AddedSoundsLayer, AddedSoundsRepertoire
+
+        added_params = _added_sounds_params(feed)
+        assert added_params.enabled
+        added = AddedSoundsLayer(
+            AddedSoundsRepertoire.load(sample_rate=sr, lowpass_hz=HEARING_TOP_TONE_HZ), added_params,
+            seed=args.seed, voice_params=voice_params, voice=voice, background_rms=bg_rms,
+        )
+        stimulus_version = developmental_stimulus_version(cfg)
+        layer = voice
+    elif args.arm == "none":
+        layer = voice
+    else:
+        layer = AddedSoundsVoice(voice, seed=args.seed, sr=sr, background_rms=bg_rms, arm=args.arm)
 
     stage_box = [0]
     clock = _Clock()
     stream = StimulusSourceProceduralAudioStream(
         schedule, params=params, clock=None, callback=lambda _b: None,  # type: ignore[arg-type]
-        voice=layer, awake=lambda: clock.t, hearing=hearing, hearing_stage=lambda: stage_box[0],
+        voice=layer, awake=lambda: clock.t, hearing=hearing, hearing_stage=lambda: stage_box[0], added=added,
     )
 
     class _RecEncoder(SpectralAcousticEncoder):
@@ -436,6 +457,14 @@ async def run(args) -> None:
             print(f"t={clock.t / 3600:.2f}h stage={stage_box[0]} wall={time.monotonic() - wall0:.0f}s", flush=True)
 
     used = int(clock.t // 60.0) + 1
+    if added is not None:
+        n_slots = int(clock.t // voice_params.slot_seconds) + 1
+        kinds = {s: added.slot_sound(s) for s in range(n_slots)}
+        melody_slots = [s for s, k in kinds.items() if k is not None and k.kind == "melody"]
+        outside_slots = [s for s, k in kinds.items() if k is not None and k.kind == "outside_voice"]
+    else:
+        melody_slots = [s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "melody"]
+        outside_slots = [s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "outside_proxy"]
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -449,8 +478,8 @@ async def run(args) -> None:
         steps=np.asarray(steps), rule_steps=np.asarray(rule_steps, dtype=np.float64).reshape(-1, 2),
         reg=reg[:used], reg_n=reg_n[:used], emb=emb[:used], emb_sq=emb_sq[:used], emb_n=emb_n[:used],
         region_edges=np.asarray(REGION_EDGES), window_s=win_blocks * block_s,
-        melody_slots=np.asarray([s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "melody"]),
-        outside_slots=np.asarray([s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "outside_proxy"]),
+        melody_slots=np.asarray(melody_slots), outside_slots=np.asarray(outside_slots),
+        stimulus_version=stimulus_version,
         voice_slots=np.asarray([s for s in range(int(clock.t // voice_params.slot_seconds)) if voice.plan_for(s, clock.t)]),
         wall_s=time.monotonic() - wall0, sim_s=clock.t,
     )
@@ -460,7 +489,7 @@ async def run(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seed", type=int, required=True)
-    ap.add_argument("--arm", choices=("none", "melody", "melody_proxy"), default="none")
+    ap.add_argument("--arm", choices=("shipped", "none", "melody", "melody_proxy"), default="shipped")
     ap.add_argument("--schedule", default="fixed:14400")
     ap.add_argument("--max-hours", type=float, default=30.0)
     ap.add_argument("--tail-s", type=float, default=7200.0)

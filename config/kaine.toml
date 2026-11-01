@@ -1188,6 +1188,26 @@ enabled = true
 saturation_window_seconds = 600.0   # awake seconds the full-span learning progress must stay below the floor (Table A1 W_sat)
 max_dwell_seconds = 25200.0         # awake seconds after which a stage ends regardless, 7 h (Table A1 d_max)
 
+# The added sounds (paper §7, A.7), provided elements of the external
+# environment like the soundscape and the maternal voice, pre-rendered offline
+# (no runtime synthesis) and shipped under kaine/modules/audition/added_sounds_data/
+# with a manifest; a missing or altered file stops the stimulus loudly. Each 30 s
+# slot of the voice's grid holds at most one of maternal speech, the melody and
+# the outside voice, decided by keyed draws on the seed and the slot only, never
+# by the entity. The recurring melody ("Twinkle, Twinkle, Little Star" in G major,
+# 392-659 Hz, inside the opening band; a melody heard in late pregnancy leaves a
+# neural trace lasting months, Partanen et al. 2013) plays at the voice's level,
+# rendered by tools/maintainer/render_melody.py. The outside voice (a synthetic
+# man talking in the room, heard with its intonation, Querleu et al. 1988; its
+# fundamental arrives with the 100 Hz step) plays at the soundscape's level,
+# rendered by tools/maintainer/generate_outside_voice.py. Both pass the voice's
+# low-pass and ramp in and out over 0.5 s. enabled = false gives the stream
+# without them byte for byte.
+[perception_feed.stimulus_source.added_sounds]
+enabled = true
+melody_probability = 0.02         # p_m, per slot without maternal speech (Table A1, provisional)
+outside_voice_probability = 0.05  # p_x, per slot without speech or melody (Table A1, provisional)
+
 [perception_feed.stimulus_source.readout]  # development readiness readout and its probe protocol
 # The probes briefly change the maternal drive a developing being perceives, so
 # they are bounded, announced on development.out (development.probe events), and

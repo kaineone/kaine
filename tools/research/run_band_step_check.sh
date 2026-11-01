@@ -3,7 +3,9 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 # Run the band-step check's runs in parallel, CPU only, inside one memory-capped scope:
 #   systemd-run --user --scope -p MemoryMax=16G nice -n 19 tools/research/run_band_step_check.sh OUTDIR [JOBS] [PARALLEL]
-# JOBS is a file of "SEED ARM SCHEDULE" lines (default: the 2026-10-31 set below).
+# JOBS is a file of "SEED ARM SCHEDULE" lines. The default is the shipped stimulus,
+# seeds 1-3, settled (5 h per stage) and under the release rule. The 2026-10-31 record
+# used arms none, melody and melody_proxy (fixed:18000) and none, melody_proxy (rule).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
@@ -16,8 +18,7 @@ mkdir -p "$OUT"
 if [ -z "$JOBS" ]; then
   JOBS="$OUT/jobs.txt"
   : > "$JOBS"
-  for arm in none melody melody_proxy; do for s in 1 2 3; do echo "$s $arm fixed:18000" >> "$JOBS"; done; done
-  for arm in none melody_proxy; do for s in 1 2 3; do echo "$s $arm rule" >> "$JOBS"; done; done
+  for s in 1 2 3; do echo "$s shipped fixed:18000" >> "$JOBS"; echo "$s shipped rule" >> "$JOBS"; done
 fi
 export CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 run_one() {
