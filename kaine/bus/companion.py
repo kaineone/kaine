@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -61,9 +62,54 @@ def parse_companion_ref(ref: str) -> Optional[tuple[str, str]]:
     if not isinstance(ref, str):
         return None
     stream, sep, entry_id = ref.rpartition(":")
-    if not sep or not stream.endswith(COMPANION_SUFFIX) or not entry_id:
+    if (
+        not sep
+        or not stream.endswith(COMPANION_SUFFIX)
+        or len(stream) == len(COMPANION_SUFFIX)
+        or not _ENTRY_ID.fullmatch(entry_id)
+    ):
         return None
     return stream, entry_id
+
+
+#: A full Redis stream entry id, ``<ms>-<seq>``: a bare millisecond would name
+#: the first entry of that millisecond, not necessarily the one written.
+_ENTRY_ID = re.compile(r"[0-9]+-[0-9]+")
+#: The key, beside the field-set values, that binds a companion entry to the
+#: main entry that names it: its main stream, source, type and timestamp.
+BINDING_KEY = "_binding"
+
+
+def binding_for(stream: str, source: str, event_type: str, timestamp: str) -> dict[str, str]:
+    return {"stream": stream, "source": source, "type": event_type, "timestamp": timestamp}
+
+
+def binding_matches(
+    values: Mapping[str, Any],
+    *,
+    companion: str,
+    source: str,
+    event_type: str,
+    timestamp: str,
+    stream: Optional[str] = None,
+) -> bool:
+    """True only when a companion entry's binding names exactly the main entry
+    that references it: the companion stream is the bound stream's own, the
+    bound source, type and timestamp are the event's, and, when the reader
+    knows the stream it read from, the bound stream is that stream."""
+    binding = values.get(BINDING_KEY) if isinstance(values, Mapping) else None
+    if not isinstance(binding, Mapping):
+        return False
+    bound_stream = binding.get("stream")
+    if not isinstance(bound_stream, str) or companion_stream(bound_stream) != companion:
+        return False
+    if stream is not None and bound_stream != stream:
+        return False
+    return (
+        binding.get("source") == source
+        and binding.get("type") == event_type
+        and binding.get("timestamp") == timestamp
+    )
 
 
 @dataclass(frozen=True)

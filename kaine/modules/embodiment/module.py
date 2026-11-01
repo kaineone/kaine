@@ -401,7 +401,7 @@ class Embodiment(BaseModule):
                 # The words travel only on the never-persisted bus: join them back.
                 join = getattr(self._bus, "join_companion", None)
                 if callable(join) and event.companion:
-                    event, _joined = await join(event)
+                    event, _joined = await join(event, stream=self._speech_stream)
                 text = (event.payload or {}).get("text")
                 if text:
                     await self._send_action("say", message=str(text), channel=0)

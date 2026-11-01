@@ -548,7 +548,7 @@ class Vocal(BaseModule):
             # The words travel only on the never-persisted bus: join them back.
             join = getattr(self._bus, "join_companion", None)
             if callable(join) and event.companion:
-                event, _joined = await join(event)
+                event, _joined = await join(event, stream=stream)
             text = event.payload.get("text") or ""
             origin = event.payload.get("origin")
             if not text:

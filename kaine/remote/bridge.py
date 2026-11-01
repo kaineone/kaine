@@ -666,7 +666,7 @@ class RemoteBridge:
                         # whose companion entry is gone is skipped.
                         join = getattr(self._bus, "join_companion", None)
                         if callable(join) and event.companion:
-                            event, _joined = await join(event)
+                            event, _joined = await join(event, stream=stream)
                         line = self._transcript_line(stream, event)
                         if line is not None:
                             self._fanout_transcript(line)

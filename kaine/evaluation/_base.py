@@ -101,14 +101,14 @@ class StreamSubscriberObserver(BaseObserver):
         self._cursors: dict[str, str] = {}
         self.words_unavailable_count = 0
 
-    async def _joined(self, event: Event) -> Optional[Event]:
+    async def _joined(self, event: Event, stream: Optional[str] = None) -> Optional[Event]:
         """The event with its companion values back, or None when its words
         were diverted and are gone."""
         if not self.join_companions:
             return event
         join = getattr(self._bus, "join_companion", None)
         if callable(join) and event.companion:
-            event, _ok = await join(event)
+            event, _ok = await join(event, stream=stream)
         from kaine.faithful.external_input import words_unavailable
 
         if words_unavailable(event.payload or {}):
@@ -165,7 +165,7 @@ class StreamSubscriberObserver(BaseObserver):
             advanced = True
             self._cursors[stream] = entry_id
             try:
-                joined = await self._joined(event)
+                joined = await self._joined(event, stream)
                 if joined is None:
                     continue
                 await self.handle(stream, entry_id, joined)

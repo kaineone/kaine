@@ -34,7 +34,7 @@ async def joined_entries(bus: Any, stream: str, *args: Any, **kwargs: Any) -> li
     """The entries of ``stream`` with each one's companion values put back."""
     out = []
     for entry_id, event in await bus.read(stream, *args, **kwargs):
-        joined, _ok = await bus.join_companion(event)
+        joined, _ok = await bus.join_companion(event, stream=stream)
         out.append((entry_id, joined))
     return out
 
@@ -68,7 +68,7 @@ async def joined_xrange(bus: Any, stream: str, **kwargs: Any) -> list[tuple[str,
         fields = dict(fields)
         decoded = _decode_entry(entry_id, fields)
         if decoded is not None and decoded[1].companion:
-            joined, ok = await bus.join_companion(decoded[1])
+            joined, ok = await bus.join_companion(decoded[1], stream=stream)
             if ok:
                 fields["payload"] = json.dumps(joined.payload, separators=(",", ":"))
         out.append((entry_id, fields))
