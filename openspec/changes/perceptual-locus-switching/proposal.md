@@ -107,7 +107,6 @@ None.
 
 - `perceptual-locus`: one source of truth with a derived locus and a locked writer path, the operator source route, the switch effector and arbiter with its gates, the welfare hold, the event fields, the self-model record, and the corrected config section of the self-switch requirement.
 - `action-selection`: the stage-M switch act and its composition with the stimulus-control act.
-- `perception-feed`: sleep restores the pre-sleep source.
 - `vision-predictive` and `audition-predictive`: forward-model contexts per source, as a declared weight group.
 - `evaluation-observers`: the `perceptual_switching` record, the allowlist fix, and the off-equals-absent checks.
 
@@ -136,7 +135,7 @@ None.
 ## Dependencies and start condition
 
 - **Depends on:**
-  - `perceptual-sources`, for the registry;
+  - `perceptual-sources`, for the registry and the single desired-state model (its task 2.9, moved there from this change);
   - `stimulus-control-act`, merged, for the composed stage-M source and the credit window it extends;
   - `effector-confinement` (branch `spec/grounding-social-safety-2026-10-31`), merged, with its amendment for a profile class that publishes one declared request to one named stream (design D2). The same amendment serves `stimulus-control-act`.
   - `fork-merge-module-weights` (#638, merged in `1fd9268f`), whose weight groups gain `forward_model_bank`.

@@ -21,7 +21,7 @@ The motivational side follows the stimulus-control act's evidence (`stimulus-con
 
 ### D1. One source of truth: the source; the locus is derived
 
-Review PLS-3, PM decision.
+Review PLS-3, PM decision. The model below is built in `perceptual-sources` (its D11 and task 2.9), because that change's registry must not be enabled without it (re-review R-PS-1). This change's arbiter and source route use it.
 
 - **What is persisted.** With the registry on, desired state holds:
   - `source`, a registered source id;

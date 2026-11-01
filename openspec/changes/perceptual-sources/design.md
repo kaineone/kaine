@@ -301,6 +301,12 @@ Decisions:
       - This fits clients that open their own sockets: the Moonlight helper's RTSP, ENet and RTP sockets, and a world client's region connections.
       - The rule set is installed once by the operator, with root, from a generated file.
   - **Boot self-test.** Escape probes run from inside each adapter's boundary, on the pattern of `effector-confinement`: a connection to an undeclared address must fail, and one to a declared endpoint must succeed. A failure is a named boot refusal.
+  - **Inside the shipped container** (re-review R-PS-3), neither mechanism is assumed to work:
+    - unprivileged user namespaces, and so bubblewrap, may be unavailable there;
+    - a uid-keyed nftables rule must be installed in the container's own network namespace, which needs `CAP_NET_ADMIN` at setup;
+    - Landlock's network rules restrict ports, not addresses.
+
+    A spike inside the image (task 5.0) decides the mechanism per deployment before any of this is built. Networked kinds stay refused until it does.
   - **The redirect scenario** is tested against the real FFmpeg path and a local HTTP server that redirects, not against a mock.
   - `kaine/egress.py` holds the declaration, generates the sandbox arguments and the nftables file, and runs the probes. The in-process `EgressGate` stays only as KAINE's own first check, for the connections KAINE opens.
 - **Typed outbound messages.** An adapter's send path accepts only the typed messages of its declared classes (`GamepadState`, `AvatarAction`, `OwnSpeech`, `ProtocolControl`), so a raw buffer cannot be handed to it. A static test checks the send signatures.
@@ -315,6 +321,22 @@ Decisions:
   - The run manifest lists each declared endpoint by label, scheme, port and outbound classes.
   - A tailnet peer or private host name is hashed, because host names can be personal. A public world host is recorded as declared.
 - **Inbound is perception.** What arrives from a network source is perceived like any input: never persisted. In-world text is data, never a command (the salvaged `inbound-world-safety` rule, `virtual-world-body` D8).
+
+### D11. The single desired-state model (moved from `perceptual-locus-switching` D1)
+
+The re-review (R-PS-1) found that this change already relied on the model: the failure default "with the off-holders it had", and the fallback through the writer path. Built without it, an enabled registry would leave today's unlocked locus writers beside a new `source` field. Sleep's `off` would then not close a camera whose source is physical. So the model is built here, before the registry can be enabled.
+
+- **What is persisted.** `source` and a set of off-holders (`sleep`, `freeze`, `operator`). No locus is persisted. The locus is computed on read: `off` while any off-holder is present, otherwise the selected source's kind-derived class.
+- **One writer path.**
+  - `perception_state.update_desired(mutator)` takes an exclusive `fcntl` lock on a sibling lock file, reads, applies the mutator, writes atomically, and releases the lock.
+  - The cycle and the dashboard both use it.
+  - With the registry on, every writer goes through it:
+    - the developmental lock, which pins the programme;
+    - sleep, which adds and removes its holder;
+    - `/locus`: `off` adds the operator holder; `physical` or `virtual` select the class's configured default, or the route answers 409;
+    - the loss fallback.
+- **Readers.** Desired readers return false for every modality while any off-holder is present.
+- **The rationale.** `perceptual-locus-switching` D1 keeps the rationale: today's five writers and their races. That change's arbiter and operator source route write through this path.
 
 ### D10. Failure defaults, the fallback, and the harness
 

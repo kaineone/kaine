@@ -85,7 +85,10 @@ So each source needs a declared identity, modalities, rate, privacy class and pr
 
 ### Modified Capabilities
 
-None. Selection among sources by the entity, and the locus contract, are `perceptual-locus-switching`. The simulated body is `virtual-world-body`.
+- `perceptual-locus`: the single desired-state model (`source` and off-holders, the derived locus, one locked writer path, today's writers moved onto it, every modality closed while off). It moved here from `perceptual-locus-switching` (re-review R-PS-1).
+- `perception-feed`: sleep holds perception off through its off-holder, without touching the source.
+
+Selection among sources by the entity is `perceptual-locus-switching`. The simulated body is `virtual-world-body`.
 
 ## Impact
 

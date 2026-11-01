@@ -21,6 +21,18 @@
 - [ ] 2.6 Fail to the programme. Tests: a corrupt file, a missing key, an unknown id and a failed sleep read each resolve to the programme, and no device opens.
 - [ ] 2.7 The epoch state machine, physical surfaces closing first, and the clip-ring and audio-window flush. Tests: release clears the epoch; an absent modality does not loop on open; no clip mixes two sources.
 - [ ] 2.8 Fallback validation: the programme only, with an ended programme going through the end-of-programme path.
+- [ ] 2.9 The single desired-state model. Moved here from `perceptual-locus-switching` task 2.1 (re-review R-PS-1): the registry must not be enabled before it exists.
+  - `source` and off-holders in desired state, and the derived locus.
+  - `update_desired` with its `fcntl` lock, and every writer moved onto it: sleep, the developmental lock (pinning the programme), `/locus` (with the operator off-holder and the class defaults), and the loss fallback.
+  - Desired readers return false for every modality while any off-holder is present.
+  - Tests:
+    - extend `tests/test_perception_state.py` and `tests/test_perception_locus.py`;
+    - physical XOR virtual by construction;
+    - no `source` field with the registry off;
+    - two processes writing concurrently lose nothing;
+    - sleep closes the webcam with the registry on;
+    - the developmental lock pins the programme;
+    - `/locus physical` with no default answers 409.
 
 ## 3. Device source (one PR)
 
@@ -49,6 +61,13 @@
 - [ ] 4.2 The declared-absent audio, and the welfare observer's `modality_absent`. Tests: no silent-sensor advisory while the simulation is selected.
 
 ## 5. Declared egress (one PR, before any networked source or body)
+
+- [ ] 5.0 Gating spike, inside the shipped container image (re-review R-PS-3). This is the analogue of `effector-confinement` task 1.1, and 5.1 does not start until it reports.
+  - Can bubblewrap create an unprivileged user namespace with `--unshare-net` there? `effector-confinement` expects unprivileged user namespaces to be unavailable inside the shipped containers.
+  - Can an nftables uid-keyed output rule be installed in the cycle container's network namespace? That needs `CAP_NET_ADMIN` at setup, and a host-installed rule does not see container uids.
+  - What can Landlock's network rules do? They restrict ports, not addresses, so alone they are not an address allowlist.
+  - The escape probes run inside the image.
+  - The result picks the boundary per adapter, or names the deployment (native, or a container with a stated capability) in which each networked kind may be enabled. Until then, networked kinds stay refused.
 
 - [ ] 5.1 `kaine/egress.py`: the declaration and the closed outbound classes.
   - The two boundaries: a bubblewrap `--unshare-net` sandbox with passed sockets, and a per-adapter user with a generated nftables allowlist that the operator installs.

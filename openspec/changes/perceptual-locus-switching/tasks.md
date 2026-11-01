@@ -15,12 +15,7 @@
 
 ## 2. Locus and act (one PR, after `perceptual-sources` 2.x)
 
-- [ ] 2.1 `source` and off-holders in desired state, the derived locus, and `update_desired` with its `fcntl` lock. Move every writer onto it: sleep, the developmental lock, the dashboard, the arbiter, the fallback. Tests:
-  - extend `tests/test_perception_state.py` and `tests/test_perception_locus.py`;
-  - physical XOR virtual by construction;
-  - no `source` field with the registry off;
-  - two processes writing concurrently lose nothing;
-  - the developmental lock pins the programme.
+- [ ] 2.1 Moved to `perceptual-sources` task 2.9: the single desired-state model (re-review R-PS-1). Here, the arbiter and the operator source route write through its `update_desired`.
 - [ ] 2.2 The arbiter with its ordered gates (selectable before available) and reason labels, inhibition read from the broadcast (inhibited until the first snapshot), the return-to-programme exemption, and the legacy intent refused. Tests: `tests/test_perceptual_switch_arbiter.py`, one case per gate, order checks and mutation checks.
 - [ ] 2.3 The `perceptual_source` effector through the confined executor, after 1.5: a signed request on `perceptual_locus.requests`, verified by the arbiter, with its own hash-chained audit. Tests: through `ActionSelection`, the signer, the bus and the effectors module; a forged request refused.
 - [ ] 2.4 The operator source route, the `/locus` defaults, and the operator off-holder. Tests: extend the dashboard perception tests (token required, 409 without a default, developmental lock wins, `screen` only with the opt-in).
@@ -39,7 +34,7 @@
   - no alert until the window holds a quarter of its length;
   - wraps and shadows rebuilt around the bound model.
 - [ ] 3.5 The self-model embodiment record. Tests: labels only.
-- [ ] 3.6 Sleep's off-holder, with restore by holder removal. Tests: extend the sleep restore tests, including a failed read resolving to the programme.
+- [ ] 3.6 Sleep's off-holder: built in `perceptual-sources` task 2.9.
 
 ## 4. Records and checks
 
