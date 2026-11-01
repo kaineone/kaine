@@ -340,6 +340,10 @@ class _Live:
         self.arousal_v: list[float] = []
         self.boredom_t: list[float] = []
         self.boredom_v: list[float] = []
+        # One row per affect.state: STATE_LOG_COLUMNS.
+        self.state_log: list[list[float]] = []
+        self.extra_modules: list = []  # vision and interoception when they run
+        self.extra_buses: list = []
 
         def tally():
             return AffectWelfareTally(negative_valence_bar=_DEFAULT_NEGATIVE_VALENCE_BAR, max_gap_s=_AFFECT_SAMPLE_GAP_CAP_S)
@@ -364,6 +368,16 @@ class _Live:
                 return 0.0
             self.resting = False
             self._audition._in_sleep = False
+            for m in self.extra_modules:
+                m._in_sleep = False
+                fm = getattr(m, "_forward_model", None)
+                if fm is not None:
+                    fm.suspended = False
+                if hasattr(m, "_fatigue"):  # interoception: sleep.sleep.completed
+                    m._fatigue.faster_decay = False
+                    m._fatigue.reset()
+                    m._fatigue_threshold_emitted = False
+                    m._regulation.reset()
             await self._affect.affective_reset()
             self.tally.sleep_completed(t)
             self.stage_tallies[self.stage].sleep_completed(t)
@@ -375,6 +389,13 @@ class _Live:
             self.resting = True
             self.rest_until = t + self.rest_s
             self._audition._in_sleep = True
+            for m in self.extra_modules:
+                m._in_sleep = True
+                fm = getattr(m, "_forward_model", None)
+                if fm is not None and hasattr(m, "_frame_buffer"):  # vision: adaptation suspended
+                    fm.suspended = True
+                if hasattr(m, "_fatigue"):  # interoception: sleep.sleep.started
+                    m._fatigue.faster_decay = True
             self.tally.sleep_started(t)
             self.stage_tallies[self.stage].sleep_started(t)
             self.rests.append((t, t + self.rest_s))
@@ -409,11 +430,20 @@ class _Live:
             if isinstance(boredom, (int, float)):
                 self.boredom_t.append(self._clock.t)
                 self.boredom_v.append(float(boredom))
+            self.state_log.append(_state_row(self._clock.t, ev.payload, self._affect))
 
     async def after_window(self, audition_events, window_s: float) -> None:  # noqa: ANN001
         pairs = self._ids("audition.out", audition_events)
         self.pending.extend(pairs)
         self.new_this_tick.extend(pairs)
+        for stream, bus in self.extra_buses:
+            new = list(bus.events)
+            bus.events.clear()
+            extra = self._ids(stream, new)
+            self.pending.extend(extra)
+            self.new_this_tick.extend(extra)
+            for _, ev in extra:
+                await self._affect._handle_peer_event(stream, ev)
         while self._clock.t >= self.next_timer:  # the affect module's own once-a-second update
             await self._affect._tick(own_update=True)
             await self._affect._maybe_publish_state()
@@ -443,8 +473,42 @@ class _Live:
             self.broadcasts += 1
             self.inhibited += int(snapshot.inhibited)
             await self._audition.on_workspace(snapshot)
+            for m in self.extra_modules:
+                await m.on_workspace(snapshot)
             await self._affect.on_workspace(snapshot)
             self._collect_affect()
+
+
+STATE_LOG_COLUMNS = (
+    "t", "valence", "boredom", "boredom_above", "social_drive_above", "restlessness_above",
+    "boredom_own_ends", "boredom_other_ends", "restlessness_own_ends", "restlessness_other_ends",
+    "boredom_reset_ends", "vision_lp", "audition_lp", "alert_fast", "alert_slow", "lp_plus",
+)
+
+
+def _state_row(t: float, payload: dict, affect) -> list[float]:  # noqa: ANN001
+    """One affect.state as numbers (NaN where absent), for the welfare indicators offline."""
+    nan = float("nan")
+
+    def num(x):  # noqa: ANN001
+        return float(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else nan
+
+    def flag(x):  # noqa: ANN001
+        return 1.0 if x is True else 0.0 if x is False else nan
+
+    above = payload.get("drive_above") or {}
+    ends = payload.get("drive_ends") or {}
+    resets = payload.get("drive_reset_ends") or {}
+    drives = payload.get("drives") or {}
+    return [
+        t, num((payload.get("state") or {}).get("valence")), num(drives.get("boredom")),
+        flag(above.get("boredom")), flag(above.get("social_drive")), flag(above.get("restlessness")),
+        num((ends.get("boredom") or {}).get("own")), num((ends.get("boredom") or {}).get("other")),
+        num((ends.get("restlessness") or {}).get("own")), num((ends.get("restlessness") or {}).get("other")),
+        num(resets.get("boredom")), num(payload.get("vision_learning_progress")),
+        num(payload.get("audition_learning_progress")), float(affect._alert_fast), float(affect._alert_slow),
+        num(payload.get("learning_progress")),
+    ]
 
 
 class _Bus:
@@ -564,6 +628,22 @@ async def run(args) -> None:
         auditory_buffer_size=audition._acoustic_forward_model.auditory_buffer_size,
         context_dim=audition._acoustic_forward_model.context_dim, seed=args.seed,
     )
+    if args.frozen_audition:
+        # A frozen forward model (it predicts from its initial weights and never
+        # adapts): its learning progress is the measure's noise alone, the control
+        # the learning-progress floor is calibrated against (paper A.4, Table A1).
+        fm = audition._acoustic_forward_model
+
+        class _Frozen(type(fm)):  # type: ignore[misc, valid-type]
+            @property
+            def suspended(self) -> bool:  # noqa: D401
+                return True
+
+            @suspended.setter
+            def suspended(self, _value: bool) -> None:
+                pass
+
+        fm.__class__ = _Frozen
     baseline_arousal = float(acfg.get("baseline_arousal", 0.3))
     fbus = _Bus()
     if args.live:
@@ -582,7 +662,53 @@ async def run(args) -> None:
             learning_progress_bin_s=float(acfg["learning_progress_bin_s"]),
         )
     live = _Live(cfg, affect, audition, clock, fbus) if args.live else None
-    lp0 = float(acfg["learning_progress_floor"])
+    vision = video = None
+    vision_frames = 0
+    if live is not None and args.vision_weights:
+        from kaine.boot.factories.vision import make_vision
+        from kaine.bus.streams import VISION_STREAM
+        from kaine.modules.context import CONTEXT_DIM
+        from kaine.modules.vision.feed import StimulusSourceProceduralSource, StimulusSourceSchedule
+        from kaine.modules.vision.forward import LatentForwardModel
+
+        vcfg = dict(cfg["vision"])
+        vcfg["device"] = args.vision_device
+        vcfg["encoder_local_dir"] = args.vision_weights
+        vbus = _Bus()
+        vision = make_vision(vbus, vcfg, entity_clock=clock)  # type: ignore[arg-type]
+        # Vision.initialize without its bus loops: the encoder and the forward model.
+        await vision._encoder.load()
+        torch.manual_seed(args.seed + 1000)
+        vision._forward_model = LatentForwardModel(
+            latent_dim=vision._encoder.latent_dim, units=vision._forward_model_units,
+            visual_buffer_size=vision._visual_buffer_size, context_dim=CONTEXT_DIM,
+        )
+        vision._ensure_feedback_wrap()
+        video = StimulusSourceProceduralSource(
+            StimulusSourceSchedule(
+                seed=args.seed, width=int(vcfg.get("capture_width", 640)), height=int(vcfg.get("capture_height", 480))
+            ),
+            params=params, clock=None, hearing_stage=lambda: stage_box[0],  # type: ignore[arg-type]
+        )
+        vision_period = 1.0 / float(vcfg.get("vision_sample_hz", 10.0))
+        live.extra_modules.append(vision)
+        live.extra_buses.append((VISION_STREAM, vbus))
+    if live is not None and args.interoception:
+        from kaine.boot.factories.interoception import make_interoception
+        from kaine.bus.streams import INTEROCEPTION_STREAM
+
+        ibus = _Bus()
+        intero = make_interoception(ibus, dict(cfg["interoception"]), entity_clock=clock)  # type: ignore[arg-type]
+        await intero._reader.initialize()
+        intero_period = float(cfg["interoception"].get("read_interval_s", 1.0))
+        intero_next = [intero_period]
+        live.extra_modules.append(intero)
+        live.extra_buses.append((INTEROCEPTION_STREAM, ibus))
+    else:
+        intero = None
+    vision_next = [0.0]
+    # Audition's own floor when it is configured (audition-learning-progress-floor), else the shared one.
+    lp0 = float(acfg.get("audition_learning_progress_floor", acfg["learning_progress_floor"]))
     rule = HearingStageState(hearing, path=None, lp_floor=lp0, learning_progress_span_s=float(acfg["learning_progress_span_s"]))
 
     def stage_event(stage: int):
@@ -630,6 +756,18 @@ async def run(args) -> None:
         pcm = b"".join(blocks)
         abus.events.clear()
         await audition._perceive_acoustic(encode_wav(pcm, sample_rate=sr, channels=1), sr, "stimulus_source")
+        if vision is not None:
+            from PIL import Image
+
+            while vision_next[0] <= clock.t:
+                frame = video.frame_at(int(vision_next[0] * video.schedule.frame_rate_hz), maturation_progress=None)
+                await vision.process_frame(Image.fromarray(np.ascontiguousarray(frame[..., ::-1])))
+                vision_frames += 1
+                vision_next[0] += vision_period
+        if intero is not None:
+            while intero_next[0] <= clock.t:
+                await intero.tick_once()
+                intero_next[0] += intero_period
         if live is not None:
             await live.after_window(list(abus.events), window_s)
         for ev in abus.events:
@@ -690,7 +828,7 @@ async def run(args) -> None:
         outside_slots = [s for s, kind in getattr(layer, "slot_kinds", {}).items() if kind == "outside_proxy"]
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    live_fields: dict = {"live": bool(live is not None)}
+    live_fields: dict = {"live": bool(live is not None), "frozen_audition": bool(args.frozen_audition)}
     if live is not None:
         import json as _json
 
@@ -708,6 +846,11 @@ async def run(args) -> None:
                 "by_stage": {str(k): t.snapshot() for k, t in live.stage_tallies.items()},
             }),
             awake_s=awake_box[0],
+            state_log=np.asarray(live.state_log, dtype=np.float64).reshape(-1, len(STATE_LOG_COLUMNS)),
+            state_log_columns=np.asarray(STATE_LOG_COLUMNS),
+            vision_frames=vision_frames, interoception=bool(intero is not None),
+            vision_device=str(args.vision_device) if vision is not None else "",
+            lp0_audition=lp0,
         )
     np.savez_compressed(
         out,
@@ -740,6 +883,10 @@ def main() -> None:
     ap.add_argument("--repo", default=str(Path(__file__).resolve().parents[2]))
     ap.add_argument("--progress", action="store_true")
     ap.add_argument("--live", action="store_true", help="arousal from the affect module, state-cycle rests and broadcast context")
+    ap.add_argument("--frozen-audition", action="store_true", help="audition's forward model never adapts (the noise control)")
+    ap.add_argument("--vision-weights", default="", help="with --live: run the real vision module on the stimulus video (InternVideo-Next weights directory)")
+    ap.add_argument("--vision-device", default="cuda:0", help="torch device for the vision encoder")
+    ap.add_argument("--interoception", action="store_true", help="with --live: run the real interoception module (host readings)")
     args = ap.parse_args()
     asyncio.run(run(args))
 

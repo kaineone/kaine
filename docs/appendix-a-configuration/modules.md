@@ -326,6 +326,7 @@ The affect module maintains a dimensional VAD (valence, arousal, dominance) stat
 | `fast_time_constant_s` | float | `10.0` | Time constant, in entity seconds, of the fast averages of each perceptual module's raw prediction error and of the perceptual alert rate. |
 | `slow_time_constant_s` | float | `100.0` | Time constant of the slow averages; the error dynamics behind valence is the relative fall from slow to fast. |
 | `learning_progress_floor` | float | `0.20` | Noise floor `lp_0` on learning progress before it builds curiosity and relieves boredom, calibrated for max pooling (paper A.4). |
+| `audition_learning_progress_floor` | float | `0.19` (unset: `learning_progress_floor`) | Audition's own floor: it floors audition's learning progress for the drives (each source over its own floor, then the largest) and is the hearing-stage release threshold. Calibrated on a learning audition model's awake full-span readings in hearing stages with nothing left to learn, under live conditions (`docs/records/validation/audition-lp-floor/`). |
 | `learning_progress_span_s` | float | `5400.0` | Span of the learning-progress windows, in entity seconds; must be an even whole number of `learning_progress_bin_s`. |
 | `learning_progress_bin_s` | float | `60.0` | Bin width for the learning-progress windows, in entity seconds. |
 | `alert_excess_margin` | float | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom. |

@@ -1,0 +1,157 @@
+{
+ "method": "95th percentile, rounded up to 0.01, of the awake full-span readings of a learning audition model in the null stage (3 or 4, nothing left to learn) with the larger one; settled live runs (arousal, developmental rests, broadcast context, awake bins), seeds 1-3, with and without the added sounds. A frozen model (never adapts) is the lower bound.",
+ "quantile": 0.95,
+ "audition_learning_progress_floor": 0.19,
+ "frozen_lower_bound": 0.03,
+ "by_stage_learning": {
+  "0": {
+   "readings": 75588,
+   "p50": 0.2126,
+   "p90": 0.2826,
+   "p95": 0.2894,
+   "p99": 0.3124
+  },
+  "1": {
+   "readings": 75582,
+   "p50": 0.207,
+   "p90": 0.2929,
+   "p95": 0.3195,
+   "p99": 0.3633
+  },
+  "2": {
+   "readings": 75576,
+   "p50": 0.1808,
+   "p90": 0.2665,
+   "p95": 0.2995,
+   "p99": 0.3355
+  },
+  "3": {
+   "readings": 75576,
+   "p50": 0.0177,
+   "p90": 0.1628,
+   "p95": 0.1899,
+   "p99": 0.2233
+  },
+  "4": {
+   "readings": 75594,
+   "p50": -0.0082,
+   "p90": 0.1557,
+   "p95": 0.1836,
+   "p99": 0.2241
+  }
+ },
+ "by_stage_frozen": {
+  "0": {
+   "readings": 37794,
+   "p50": -0.0002,
+   "p90": 0.0171,
+   "p95": 0.0243,
+   "p99": 0.0358
+  },
+  "1": {
+   "readings": 37791,
+   "p50": -0.0001,
+   "p90": 0.0103,
+   "p95": 0.0122,
+   "p99": 0.0161
+  },
+  "2": {
+   "readings": 37788,
+   "p50": -0.0003,
+   "p90": 0.0131,
+   "p95": 0.019,
+   "p99": 0.0319
+  },
+  "3": {
+   "readings": 37788,
+   "p50": -0.0004,
+   "p90": 0.0087,
+   "p95": 0.0127,
+   "p99": 0.022
+  },
+  "4": {
+   "readings": 37797,
+   "p50": -0.0001,
+   "p90": 0.0115,
+   "p95": 0.0149,
+   "p99": 0.0259
+  }
+ },
+ "share_at_or_above_floor": {
+  "stages_0_2": 0.5589,
+  "stages_3_4": 0.0449
+ },
+ "share_at_or_above_shared_floor": {
+  "stages_0_2": 0.4983,
+  "stages_3_4": 0.0329
+ },
+ "share_at_or_above_frozen_floor": {
+  "stages_0_2": 0.9648,
+  "stages_3_4": 0.4274
+ },
+ "runs": [
+  {
+   "file": "1-none-fixed_18000-live.npz",
+   "seed": 1,
+   "arm": "none",
+   "frozen_audition": false,
+   "stimulus_version": null
+  },
+  {
+   "file": "1-shipped-fixed_18000-live.npz",
+   "seed": 1,
+   "arm": "shipped",
+   "frozen_audition": false,
+   "stimulus_version": "989dc0a0db161c2b6efa0f71972302a3d90d0dc92627afc17aa4ed70c9a949c2"
+  },
+  {
+   "file": "2-none-fixed_18000-live.npz",
+   "seed": 2,
+   "arm": "none",
+   "frozen_audition": false,
+   "stimulus_version": null
+  },
+  {
+   "file": "2-shipped-fixed_18000-live.npz",
+   "seed": 2,
+   "arm": "shipped",
+   "frozen_audition": false,
+   "stimulus_version": "989dc0a0db161c2b6efa0f71972302a3d90d0dc92627afc17aa4ed70c9a949c2"
+  },
+  {
+   "file": "3-none-fixed_18000-live.npz",
+   "seed": 3,
+   "arm": "none",
+   "frozen_audition": false,
+   "stimulus_version": null
+  },
+  {
+   "file": "3-shipped-fixed_18000-live.npz",
+   "seed": 3,
+   "arm": "shipped",
+   "frozen_audition": false,
+   "stimulus_version": "989dc0a0db161c2b6efa0f71972302a3d90d0dc92627afc17aa4ed70c9a949c2"
+  },
+  {
+   "file": "1-shipped-fixed_18000-live-frozen.npz",
+   "seed": 1,
+   "arm": "shipped",
+   "frozen_audition": true,
+   "stimulus_version": "f5f2713a741986ae84940ccd9977b11937b9fef7394d3612217029207ac44b3a"
+  },
+  {
+   "file": "2-shipped-fixed_18000-live-frozen.npz",
+   "seed": 2,
+   "arm": "shipped",
+   "frozen_audition": true,
+   "stimulus_version": "f5f2713a741986ae84940ccd9977b11937b9fef7394d3612217029207ac44b3a"
+  },
+  {
+   "file": "3-shipped-fixed_18000-live-frozen.npz",
+   "seed": 3,
+   "arm": "shipped",
+   "frozen_audition": true,
+   "stimulus_version": "f5f2713a741986ae84940ccd9977b11937b9fef7394d3612217029207ac44b3a"
+  }
+ ]
+}

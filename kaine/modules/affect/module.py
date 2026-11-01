@@ -101,6 +101,7 @@ class Affect(BaseModule):
         fast_time_constant_s: float = 10.0,
         slow_time_constant_s: float = 100.0,
         learning_progress_floor: float = 0.20,
+        audition_learning_progress_floor: float | None = None,
         learning_progress_span_s: float = 5400.0,
         learning_progress_bin_s: float = 60.0,
         alert_excess_margin: float = 0.5,
@@ -142,6 +143,13 @@ class Affect(BaseModule):
             raise ValueError("fast_time_constant_s must be < slow_time_constant_s")
         if not math.isfinite(learning_progress_floor) or not (0.0 <= learning_progress_floor < 1.0):
             raise ValueError("learning_progress_floor must be finite and in [0, 1)")
+        if audition_learning_progress_floor is not None and (
+            isinstance(audition_learning_progress_floor, bool)
+            or not isinstance(audition_learning_progress_floor, (int, float))
+            or not math.isfinite(audition_learning_progress_floor)
+            or not (0.0 <= audition_learning_progress_floor < 1.0)
+        ):
+            raise ValueError("audition_learning_progress_floor must be finite and in [0, 1)")
         if not math.isfinite(learning_progress_span_s) or learning_progress_span_s <= 0.0:
             raise ValueError("learning_progress_span_s must be finite and > 0")
         if not math.isfinite(learning_progress_bin_s) or learning_progress_bin_s <= 0.0:
@@ -202,6 +210,12 @@ class Affect(BaseModule):
         self._fast_time_constant_s = float(fast_time_constant_s)
         self._slow_time_constant_s = float(slow_time_constant_s)
         self._learning_progress_floor = float(learning_progress_floor)
+        # Per-source floors lp_0 (paper A.4): audition's is calibrated on audition's own
+        # noise (a frozen forward model under live conditions); every other source uses
+        # learning_progress_floor, calibrated on vision noise.
+        self._lp_floors: dict[str, float] = {}
+        if audition_learning_progress_floor is not None:
+            self._lp_floors["audition"] = float(audition_learning_progress_floor)
         self._lp_bin_s = float(learning_progress_bin_s)
         self._lp_max_bins = int(n)
         self._alert_excess_margin = float(alert_excess_margin)
@@ -492,10 +506,20 @@ class Affect(BaseModule):
             if g_m is not None:
                 g_values.append(g_m)
         g = sum(g_values) / len(g_values) if g_values else 0.0
-        _, lp = self._learning_progress_terms(now)
-        floor = self._learning_progress_floor
-        lp_plus = max(0.0, lp - floor) / (1.0 - floor)
+        per_source, _ = self._learning_progress_terms(now)
+        # Each source's progress over its own floor, then the largest (max pooling).
+        # With one floor for every source this equals flooring the largest value.
+        lp_plus = 0.0
+        for source, value in per_source.items():
+            if value is None:
+                continue
+            floor = self.learning_progress_floor_for(source)
+            lp_plus = max(lp_plus, max(0.0, value - floor) / (1.0 - floor))
         return lp_plus, g
+
+    def learning_progress_floor_for(self, source: str) -> float:
+        """The learning-progress floor lp_0 of ``source``."""
+        return self._lp_floors.get(source, self._learning_progress_floor)
 
     def _record_wellness(self, w: float, now: float) -> None:
         """Update the fast and slow time-decayed wellness means."""

@@ -255,7 +255,12 @@ def _install_shared_stimulus_source_clock(
 
     hearing_params = _hearing_band_params(perception_feed)
     affect_section = (kaine_config or {}).get("affect") or {}
-    lp_floor = float(affect_section.get("learning_progress_floor", 0.20))
+    # The stage owner reads audition's own floor (audition-learning-progress-floor).
+    lp_floor = float(
+        affect_section.get(
+            "audition_learning_progress_floor", affect_section.get("learning_progress_floor", 0.20)
+        )
+    )
     # Saturation counts only full-span readings, so the span plus the window is
     # the earliest release; a cap below it would end every stage at the cap.
     lp_span = affect_section.get("learning_progress_span_s", _AFFECT_LP_SPAN_DEFAULT_S)

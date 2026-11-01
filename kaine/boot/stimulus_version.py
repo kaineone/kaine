@@ -68,9 +68,12 @@ def developmental_stimulus_record(kaine_config: dict[str, Any]) -> dict[str, Any
         },
         "release_rule": {
             "learning_progress_floor": float(affect.get("learning_progress_floor", 0.20)),
+            "audition_learning_progress_floor": float(
+                affect.get("audition_learning_progress_floor", affect.get("learning_progress_floor", 0.20))
+            ),
             "learning_progress_span_s": float(affect.get("learning_progress_span_s", _AFFECT_LP_SPAN_DEFAULT_S)),
             "learning_progress_bin_s": float(affect.get("learning_progress_bin_s", 60.0)),
-            "saturation": "full_span",
+            "saturation": "full_span_awake_bins",
         },
     }
 

@@ -247,6 +247,7 @@ The full `[affect]` reference is in the [modules configuration page](../appendix
 | `fast_time_constant_s` | float `> 0` | `10.0` | Fast mean of each perceptual source's error and the fast alert rate |
 | `slow_time_constant_s` | float `> fast` | `100.0` | Slow mean of each perceptual source's error and the slow alert rate |
 | `learning_progress_floor` | float `[0, 1)` | `0.20` | Noise floor subtracted from learning progress before it builds curiosity and relieves boredom (paper A.4, calibrated for max pooling) |
+| `audition_learning_progress_floor` | float `[0, 1)` | `0.19` (unset: `learning_progress_floor`) | Audition's own floor: it floors audition's learning progress for the drives (each source over its own floor, then the largest) and is the hearing-stage release threshold. Calibrated on a learning audition model's awake full-span readings in hearing stages with nothing left to learn, under live conditions (`docs/records/validation/audition-lp-floor/`). |
 | `learning_progress_span_s` | float | `5400.0` | Span of the learning-progress windows, in entity seconds; must be an even whole number of `learning_progress_bin_s` |
 | `learning_progress_bin_s` | float `> 0` | `60.0` | Bin width for the learning-progress windows, in entity seconds |
 | `alert_excess_margin` | float `>= 0` | `0.5` | Fraction by which the fast alert rate must exceed the slow one before it relieves boredom |

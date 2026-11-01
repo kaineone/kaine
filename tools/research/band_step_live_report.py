@@ -203,7 +203,8 @@ def main() -> None:
 
     cfg = tomllib.loads((Path(args.repo) / "config" / "kaine.toml").read_text())
     hearing = _hearing_band_params(cfg["perception_feed"])
-    lp0 = float(cfg["affect"]["learning_progress_floor"])
+    # Audition's own floor when configured (audition-learning-progress-floor), else the shared one.
+    lp0 = float(cfg["affect"].get("audition_learning_progress_floor", cfg["affect"]["learning_progress_floor"]))
     span = float(cfg["affect"]["learning_progress_span_s"])
     runs = [summarise(p, hearing, lp0, span) for p in sorted(glob.glob(str(Path(args.rundir) / "*-live.npz")))]
     record = {"summary": aggregate(runs, floor=span + hearing.saturation_window_seconds), "runs": runs}
