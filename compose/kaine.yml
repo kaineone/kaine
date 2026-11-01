@@ -142,8 +142,6 @@ services:
     container_name: kaine-redis-volatile
     command:
       - redis-server
-      - --requirepass
-      - ${KAINE_REDIS_VOLATILE_PASSWORD:?KAINE_REDIS_VOLATILE_PASSWORD must be set (see compose/.env.example)}
       - --appendonly
       - "no"
       - --save
@@ -154,6 +152,41 @@ services:
       - ${KAINE_REDIS_VOLATILE_MAXMEMORY:-2gb}
       - --maxmemory-policy
       - noeviction
+      # The only user: the password, every command except those that could put
+      # its contents on disk or change that (SAVE, BGSAVE, BGREWRITEAOF,
+      # SHUTDOWN with its SAVE option, CONFIG SET/REWRITE, replication, module
+      # loading, DEBUG) and except changing the ACL itself. The cycle's boot
+      # check verifies the password and these refusals (ACL DRYRUN).
+      - --user
+      - default
+      - "on"
+      - ">${KAINE_REDIS_VOLATILE_PASSWORD:?KAINE_REDIS_VOLATILE_PASSWORD must be set (see compose/.env.example)}"
+      - "~*"
+      - "&*"
+      - "+@all"
+      - "-save"
+      - "-bgsave"
+      - "-bgrewriteaof"
+      - "-shutdown"
+      - "-config|set"
+      - "-config|rewrite"
+      - "-config|resetstat"
+      - "-acl|setuser"
+      - "-acl|deluser"
+      - "-acl|load"
+      - "-acl|save"
+      - "-debug"
+      - "-module"
+      - "-replicaof"
+      - "-slaveof"
+      - "-sync"
+      - "-psync"
+      - "-failover"
+    # The image declares VOLUME /data; a tmpfs there replaces the anonymous
+    # volume Docker would otherwise create and keep, so nothing it could write
+    # survives the container.
+    tmpfs:
+      - /data
     restart: unless-stopped
     healthcheck:
       test:

@@ -183,8 +183,9 @@ class VolatileBus:
         except Exception as exc:
             return [f"the volatile bus does not answer ({type(exc).__name__})"]
         reasons: list[str] = []
+        if not await self._requires_password():
+            reasons.append("the volatile bus requires no password")
         checks = (
-            ("requirepass", lambda v: bool(v), "the volatile bus requires no password"),
             ("appendonly", lambda v: v == "no", "the volatile bus persists: appendonly is {v!r}, not 'no'"),
             ("save", lambda v: v == "", "the volatile bus persists: save is {v!r}, not empty"),
         )
@@ -198,6 +199,42 @@ class VolatileBus:
                 reasons.append(message.format(v=value))
         return reasons
 
+    async def _requires_password(self) -> bool:
+        """True when the instance refuses unauthenticated clients: a
+        ``requirepass``, or a default user with a password and no ``nopass``."""
+        try:
+            if await self._config_value("requirepass"):
+                return True
+        except Exception:
+            log.debug("CONFIG GET requirepass refused", exc_info=True)
+        try:
+            user = await self.client.execute_command("ACL", "GETUSER", "default")
+        except Exception:
+            return False
+        info = _pairs(user)
+        flags = {str(f) for f in (info.get("flags") or [])}
+        passwords = info.get("passwords") or []
+        return "nopass" not in flags and bool(passwords)
+
+    async def write_command_refusals(self) -> list[str]:
+        """Reasons a client could put the instance's contents on disk: each of
+        these commands must be refused for the default user (``ACL DRYRUN``)."""
+        reasons: list[str] = []
+        for command in PERSISTING_COMMANDS:
+            try:
+                reply = await self.client.execute_command("ACL", "DRYRUN", "default", *command)
+            except Exception as exc:
+                reasons.append(
+                    f"the volatile bus cannot show that {' '.join(command[:2])} is refused "
+                    f"(ACL DRYRUN: {type(exc).__name__})"
+                )
+                continue
+            if isinstance(reply, bytes):
+                reply = reply.decode()
+            if str(reply).upper() == "OK":
+                reasons.append(f"the volatile bus allows {' '.join(command[:2])}, which can write it to disk")
+        return reasons
+
     async def flush(self) -> None:
         """Remove every companion stream (decommission)."""
         await self.client.flushdb()
@@ -207,6 +244,31 @@ class VolatileBus:
             await self.client.aclose()
         except AttributeError:
             await self.client.close()
+
+
+#: Commands no client of the volatile instance may run: each could put its
+#: contents on disk, turn persistence on, or change the user that forbids it.
+PERSISTING_COMMANDS: tuple[tuple[str, ...], ...] = (
+    ("SAVE",),
+    ("BGSAVE",),
+    ("BGREWRITEAOF",),
+    ("SHUTDOWN", "SAVE"),
+    ("CONFIG", "SET", "appendonly", "yes"),
+    ("CONFIG", "REWRITE"),
+    ("ACL", "SETUSER", "default", "+save"),
+    ("REPLICAOF", "localhost", "6379"),
+    ("MODULE", "LOAD", "x"),
+)
+
+
+def _pairs(reply: Any) -> dict[str, Any]:
+    """An ``ACL GETUSER`` reply (a flat list or a mapping) as a mapping."""
+    if isinstance(reply, Mapping):
+        return {(k.decode() if isinstance(k, bytes) else str(k)): v for k, v in reply.items()}
+    if isinstance(reply, (list, tuple)):
+        it = iter(reply)
+        return {(k.decode() if isinstance(k, bytes) else str(k)): v for k, v in zip(it, it)}
+    return {}
 
 
 def _entry_ms(entry_id: str) -> int:
@@ -237,6 +299,8 @@ async def companion_refusals(
             f"configured ({VOLATILE_URL_ENV})"
         ]
     reasons = await volatile.persistence_refusals()
+    if not reasons:
+        reasons.extend(await volatile.write_command_refusals())
     if not reasons and registry.has_age_bounds():
         # A declared age bound must be enforceable: XTRIM MINID and TIME.
         try:
