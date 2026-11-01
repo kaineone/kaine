@@ -32,13 +32,25 @@
 - [ ] 4.1 `SimWorld`, the EGL renderer on the configured card with the PCI-bus mapping, the resource-limit check, stepping on entity time, and the hold. Tests: headless render shape, hold equality, refusal without EGL.
 - [ ] 4.2 The declared-absent audio, and the welfare observer's `modality_absent`. Tests: no silent-sensor advisory while the simulation is selected.
 
-## 5. Docs and review
+## 5. Declared egress (one PR, before any networked source or body)
 
-- [ ] 5.1 New `docs/09-modules/perceptual-sources.md`. Update `vision.md`, `audition.md`, `perceptual-locus.md` and `docs/appendix-a-configuration/perception-and-sleep.md`. Comment out a `[perceptual_sources]` block in `config/kaine.toml`.
-- [ ] 5.2 Independent second review of each PR (a new sense).
-- [ ] 5.3 `openspec validate perceptual-sources --strict`.
+- [ ] 5.1 `kaine/egress.py`: the declaration, the closed outbound classes, the `EgressGate` with resolve-then-check, refusals logged and raised as advisories. Tests: an undeclared host, a port outside the range, a redirect to another host, a direction mismatch.
+- [ ] 5.2 Typed send paths, with a static check that a send signature accepts only declared message types.
+- [ ] 5.3 The guard test's placement rule: sockets, websockets, or URL opens by PyAV or OpenCV outside declared adapter packages are refused. Exercise each rule with a throwaway probe file, as #400 did.
+- [ ] 5.4 The boot check that module-internal service URLs are not globally routable. Tests: loopback, compose, tailnet and private addresses pass; a public address refuses.
+- [ ] 5.5 Manifest records for endpoints, with private and tailnet host names hashed.
 
-## 6. Later
+## 6. Network media (later, small)
 
-- [ ] 6.1 The scalar seam's processor and the USB serial reference source (needs the CTO's OK for `pyserial`).
-- [ ] 6.2 A PipeWire camera source, if the camera must be shared with another program.
+- [ ] 6.1 The `network_media` source: a declared URL opened by PyAV in memory, with no cache or recording options. Tests: real-path decode from a local HTTP server, the egress gate on a redirect, and the persistence test.
+
+## 7. Docs and review
+
+- [ ] 7.1 New `docs/09-modules/perceptual-sources.md`. Update `vision.md`, `audition.md`, `perceptual-locus.md` and `docs/appendix-a-configuration/perception-and-sleep.md`. Comment out a `[perceptual_sources]` block in `config/kaine.toml`.
+- [ ] 7.2 Independent second review of each PR (a new sense, or a new egress).
+- [ ] 7.3 `openspec validate perceptual-sources --strict`.
+
+## 8. Later
+
+- [ ] 8.1 The scalar seam's processor and the USB serial reference source (needs the CTO's OK for `pyserial`).
+- [ ] 8.2 A PipeWire camera source, if the camera must be shared with another program.

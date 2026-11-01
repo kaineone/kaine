@@ -58,15 +58,21 @@ So each source needs a declared identity, modalities, rate, privacy class and pr
    - The simulation steps on entity time, and holds while it is not selected or while sleep or a freeze holds the clock.
    - MuJoCo has no audio. The source declares no audio modality, and the welfare observer reads that declaration rather than raising a silent-sensor advisory.
    - The paired body shares the same in-process world.
-5. **Held sources, declared now so the registry's shape fits them.**
-   - A game stream (`virtual-world-body`: a Moonlight-protocol client to a Sunshine host over the tailnet). Held until the CTO's Steam Deck joins the tailnet.
-   - Existing worlds reached through a body adapter: Second Life and OpenSimulator grids, and Paracosmic. Later.
+5. **Network sources, declared now so the registry's shape fits them.**
+   - A game stream (`virtual-world-body`: a Moonlight-protocol client to a Sunshine host over the tailnet). It does not wait for the Steam Deck. The host is this desktop under the GPU arbitration rule, or another of the CTO's machines on the tailnet (CTO, 2026-11-01).
+   - An online media stream (`network_media`): an operator-declared URL, such as a live broadcast, decoded by PyAV in memory.
+   - Existing worlds reached through a body adapter: OpenSimulator and Hypergrid grids, Second Life, and Paracosmic. Later.
 6. **Screen capture of the operator's desktop.** It is registered with privacy class `operator_desktop` and can never be selected by the entity. The existing `mode = "screen"` keeps working as the operator's explicit choice.
 7. **A scalar-sensor seam, designed now and built later.**
    - A source declares named channels (unit, range, rate).
    - The seam builds a processor instance per source, with its own forward model, prediction error and report, in the same shape as the other processors.
    - The reference plan is a USB serial board streaming newline-delimited JSON readings.
-8. **Zero persistence, extended to every new source.**
+8. **Declared egress.**
+   - The CTO clarified on 2026-11-01 that the no-cloud rule covers KAINE's modules using cloud services. It does not restrict where perceived streams come from, or where the entity's outputs go.
+   - So a source or body adapter that reaches a network declares each endpoint and the closed classes of data it may send there.
+   - Its connections are checked against that declaration at runtime, and anything undeclared is refused.
+   - Module internals stay no-cloud. The proxy guard of `local-service-clients` (#400) stays, and a boot check refuses a public address for any module-internal service URL.
+9. **Zero persistence, extended to every new source.**
    - No frame, sample or reading is written anywhere.
    - Device names, which can carry serial numbers, are recorded only as hashes.
    - The static persistence test covers the new files.
@@ -75,7 +81,7 @@ So each source needs a declared identity, modalities, rate, privacy class and pr
 
 ### New Capabilities
 
-- `perceptual-sources`: the registry and descriptor, the programme, device and MuJoCo sources, the held stream and world sources, the confinement rule for desktop capture, the scalar seam, availability, fallback, and the off switch.
+- `perceptual-sources`: the registry and descriptor, the programme, device and MuJoCo sources, the network sources (stream, online media, worlds), the declared egress, the confinement rule for desktop capture, the scalar seam, availability, fallback, and the off switch.
 
 ### Modified Capabilities
 
@@ -93,6 +99,7 @@ None. Selection among sources by the entity, and the locus contract, are `percep
   - `kaine/evaluation/observers/research_event_observer.py` (availability events in the allowlist).
   - `kaine/dashboard/perception.py` (the source list and availability, read-only).
   - `config/kaine.toml` (`[perceptual_sources]`, off).
+  - A new `kaine/egress.py` (the declaration and the runtime gate), and an extension of the guard test `tests/test_local_clients_ignore_proxies.py`.
 - **Dependencies.** None new for the programme and device sources. MuJoCo is already installed. Adding it to `pyproject.toml` as an optional extra (`sim`, `mujoco==3.16.0`, Apache-2.0) needs the CTO's OK, as every new dependency does.
 - **Docs.**
   - New `docs/09-modules/perceptual-sources.md`.
@@ -107,4 +114,4 @@ None. Selection among sources by the entity, and the locus contract, are `percep
 - **Before any entity uses a new source.**
   - An independent second review of the build.
   - The welfare net on.
-  - For the webcam, the operator's confirmation that the room may be seen. A webcam sees the operator's room.
+  - For the webcam: a webcam sees the operator's room. The CTO consented on 2026-11-01 to the entity seeing the room and choosing the webcam itself, and the run manifest records the opt-in.

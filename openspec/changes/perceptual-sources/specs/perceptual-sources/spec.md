@@ -100,7 +100,7 @@ While the selected source declares a modality absent, the welfare observer SHALL
 - **THEN** no `welfare.sensor_silent` advisory is raised for audition, and the record shows `modality_absent`
 
 ### Requirement: Held source kinds are refused until built
-A source of kind `stream`, `world` or `scalar` SHALL be refused at boot with a named reason until the change that builds it has merged and its own start conditions hold.
+A source of kind `stream`, `network_media`, `world` or `scalar` SHALL be refused at boot with a named reason until the change that builds it has merged and its own start conditions hold.
 
 #### Scenario: A stream source today
 - **WHEN** a `stream` source is configured
@@ -126,3 +126,38 @@ No source SHALL write a frame, audio sample or sensor reading to disk or to the 
 #### Scenario: A camera's serial number
 - **WHEN** the device source binds a camera whose by-id name contains its serial number
 - **THEN** no record, event or log line contains the by-id name, and the manifest carries its hash
+
+### Requirement: An operator-room source is selectable only by the operator's recorded opt-in
+A source of privacy class `operator_room` SHALL default to `entity_selectable = false`. When the operator configuration sets it true, the run manifest SHALL record the opt-in as a label with its date. The entity's choice of it SHALL still pass every switching gate.
+
+#### Scenario: The reference host's webcam
+- **WHEN** the operator configuration sets `entity_selectable = true` for the webcam source
+- **THEN** the manifest records the operator's opt-in, and an entity switch to the webcam is evaluated by the arbiter's gates
+
+### Requirement: Networked sources and bodies declare their egress
+A source or body adapter that opens a network connection SHALL declare each endpoint: a label, a scheme, a host or `tailnet:<tag>`, a port or range, a direction, and its outbound data classes from the closed set `none`, `protocol_control`, `gamepad_state`, `avatar_action` and `own_speech_text`. A networked adapter without a declaration SHALL refuse boot.
+
+#### Scenario: An undeclared world client
+- **WHEN** a world adapter that opens a connection is configured with no `egress` list
+- **THEN** boot refuses, naming the adapter
+
+### Requirement: Connections are checked against the declaration at runtime
+Each networked adapter SHALL connect only through an egress gate built from its declaration, and only to the address the gate resolved and checked. An undeclared host, port or direction SHALL be refused, logged with the endpoint label and raised as an operator advisory. Every such client SHALL pass `trust_env=False`.
+
+#### Scenario: A redirect to another host
+- **WHEN** a media stream's server redirects the client to an undeclared host
+- **THEN** the connection is refused, and the operator sees the advisory
+
+### Requirement: Only declared data classes cross an egress
+An adapter's send path SHALL accept only the typed messages of its declared outbound classes. No outbound class SHALL exist for sense data, latents, memories, internal state or operator data.
+
+#### Scenario: A frame handed to a send path
+- **WHEN** code passes a frame buffer to a world adapter's send path
+- **THEN** a static check fails the build, because no declared message type carries it
+
+### Requirement: Module internals stay off the public network
+Network-capable code for sources and bodies SHALL live only in adapter packages that declare egress or in separate helper programs, and the guard test SHALL refuse sockets, websockets, or URL opens by PyAV or OpenCV elsewhere in `kaine/modules/`, except for the existing clients of KAINE's own services. At boot, every module-internal service URL SHALL resolve to a loopback, private, container-network or tailnet address. A globally routable address SHALL refuse boot.
+
+#### Scenario: An organ URL on the internet
+- **WHEN** the language organ's URL resolves to a globally routable address
+- **THEN** boot refuses, naming the module and the URL's label

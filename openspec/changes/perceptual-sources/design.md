@@ -35,13 +35,14 @@ Non-goals:
 | Field | Values | Meaning |
 |---|---|---|
 | `id` | operator-chosen, `[a-z][a-z0-9_]*` | stable identity across runs; the contextual cue for per-source models |
-| `kind` | `programme`, `device`, `mujoco`, `stream` (held), `world` (held), `scalar` (future), `screen` | what builds the surfaces |
+| `kind` | `programme`, `device`, `mujoco`, `stream` (built in `virtual-world-body`), `network_media` (later), `world` (later), `scalar` (future), `screen` | what builds the surfaces |
 | `modalities` | `video` {width, height, rate_hz}, `audio` {sample_rate, channels, block_ms}, `scalar` {channels: name, unit, lo, hi, rate_hz} | what the source delivers; a modality not listed is declared absent |
 | `locus_class` | `physical`, `virtual` | which side of the physical XOR virtual invariant it is on |
-| `privacy_class` | `operator_room`, `operator_desktop`, `confined_world`, `curated_media`, `synthetic` | what it can see of the operator's life |
+| `privacy_class` | `operator_room`, `operator_desktop`, `confined_world`, `shared_world` (other people are present, as in an online world), `public_media`, `curated_media`, `synthetic` | what it can see of the operator's life, or of other people's |
 | `provenance` | `live`, `recorded`, `synthetic`, `simulated` | whether it is perception of now or a recording |
 | `entity_selectable` | bool | whether the entity may choose it |
 | `body` | optional adapter name | the body that acts in this source's world |
+| `egress` | optional list of declared endpoints (D9) | where the source or its body may connect, and what it may send there |
 
 Only `id`, `kind`, the declared shapes and rates, the classes and a hash of any device identity enter the run manifest and the records.
 
@@ -126,7 +127,11 @@ Decisions:
    - Under rootless containers the seat ACL of the operator's uid applies to the mapped process. Under rootful containers, root opens the node.
    - Hot-plug inside a container is limited: a device first plugged in after the container started is not visible. The design does not widen access with a device-cgroup rule for every camera. A re-plugged device in a container needs a cycle restart, and the preflight says so. Native runs tolerate hot-plug fully.
 10. **Privacy.**
-    - The descriptor's privacy class is `operator_room` and `entity_selectable` defaults to false. The operator opts in per source.
+    - The descriptor's privacy class is `operator_room`.
+    - `entity_selectable` defaults to false for that class, and the operator opts in per source.
+    - On the reference host the CTO opted in on 2026-11-01: the entity may see the room, and may choose the webcam itself. So that host's operator configuration sets `entity_selectable = true` for its webcam source.
+    - The run manifest records the opt-in as a label (`consent = "operator"` with its date).
+    - The entity's choice still passes every gate of `perceptual-locus-switching`.
     - The by-id name carries the camera's serial number, so records keep a 16-hex SHA-256 prefix of it. The by-id name itself is never recorded.
     - The zero-persistence invariant (`tests/test_zero_persistence_invariant.py`) extends to every new file.
     - The preview stays dev-gated (`KAINE_PERCEPTION_PREVIEW`).
@@ -151,13 +156,22 @@ Decisions:
    - The welfare observer reads the selected source's declared modalities. It records a declared-absent modality as `modality_absent` rather than raising a silent-sensor advisory.
    - A sound model for the simulated world (contact impulses rendered as sound) is a new sense. It needs its own design and a second review, and is not part of this change.
 
-### D6. Held and later sources
+### D6. Network sources
 
-- **`stream`.** A game streamed from a Sunshine host (this desktop, or the CTO's Steam Deck over the tailnet), received by a Moonlight-protocol client helper. Design is in `virtual-world-body`.
-  - Video and audio come in-process as raw frames and PCM over a socketpair from the helper.
+- **`stream`.** A game streamed from a Sunshine host, received by a Moonlight-protocol client helper. Design is in `virtual-world-body` D7.
+  - The host is this desktop under that change's GPU arbitration rule, or another of the CTO's machines. The CTO decided on 2026-11-01 not to wait for the Steam Deck.
+  - Video and audio come in process as raw frames and PCM, over a socketpair from the helper.
   - Privacy class `confined_world`, provenance `live`.
-  - Held: refused at boot until the conditions of `virtual-world-body` hold.
-- **`world`.** A body adapter whose world renders the camera itself, for example an OpenSimulator or Second Life viewer adapter, or Paracosmic. The source's video surface is the adapter's in-memory frame port. Later.
+  - Its egress is the tailnet peer that hosts the game (D9).
+  - It is refused at boot until the conditions of `virtual-world-body` hold.
+- **`network_media`** (later, small). An operator-declared URL stream (HLS, RTSP, an HTTP live stream), opened by PyAV and decoded in memory.
+  - Privacy class `public_media`, provenance `live` or `recorded` as the operator declares.
+  - Its egress is the declared host with outbound class `protocol_control` only.
+  - Nothing is cached to disk. PyAV is given no cache or recording options, and the persistence test covers the file.
+- **`world`** (later). A body adapter whose world renders the camera itself: an OpenSimulator or Second Life viewer adapter, or Paracosmic.
+  - The source's video surface is the adapter's in-memory frame port.
+  - Online grids are allowed (CTO, 2026-11-01) through declared egress.
+  - Privacy class `shared_world`: other people's speech and appearance are perceived, never stored or relayed. Episodic memory already keeps no heard words (#636).
 - **`screen`.** The existing desktop capture, registered with privacy class `operator_desktop`.
   - It can never be `entity_selectable`. On X11 a region capture includes any window that overlaps the region (`kaine/modules/vision/screen.py:81-146`), so it can show the operator's other windows.
   - A game is captured through `stream` or a confined display, never through this.
@@ -188,6 +202,40 @@ Decisions:
   - The research-event allowlist lists exactly these fields.
 - **Dashboard.** The perception page lists the sources, their availability and the selected one, read-only. Selection is `perceptual-locus-switching`.
 
+### D9. Declared egress
+
+- **What exists.**
+  - The `local-service-clients` capability (#400) makes every runtime HTTP client in `kaine/` and `scripts/` pass `trust_env=False`, so a proxy setting cannot carry the entity's prompts, audio or speech off the host.
+  - An AST guard (`tests/test_local_clients_ignore_proxies.py`) refuses client forms that would follow proxies. Its named allowlist holds the setup-time downloaders, which must state `trust_env=True`.
+  - The guard governs proxies, not destinations. Nothing today stops module code from opening a connection to any host.
+- **The rule (CTO, 2026-11-01).** KAINE's modules do not use cloud services. Perceived streams may come from anywhere, and the entity's outputs may go to the worlds it acts in.
+- **The declaration.** A source or body that reaches a network carries an `egress` list. Each endpoint has:
+  - a label;
+  - a scheme;
+  - a host, either a DNS name, an address, or `tailnet:<tag>` for a tailnet peer;
+  - a port or range;
+  - a direction;
+  - its outbound data classes, from a closed set: `none`, `protocol_control` (handshakes, acknowledgements, keep-alives), `gamepad_state`, `avatar_action` and `own_speech_text`.
+
+  There is no class for sense data, latents, memories, internal state or operator data, so none of these can be declared.
+- **The runtime gate.**
+  - `kaine/egress.py` builds one `EgressGate` per adapter from its declaration.
+  - The adapter's connector calls the gate before every connection, and connects only to the address the gate resolved and checked.
+  - An undeclared host, port or direction is refused, logged with the endpoint label, and raised as an operator advisory.
+  - A helper process (the Moonlight client, a .NET world client) receives its endpoints from the launcher, which checks them against the same declaration.
+- **Typed outbound messages.** An adapter's send path accepts only the typed messages of its declared classes (`GamepadState`, `AvatarAction`, `OwnSpeech`, `ProtocolControl`), so a raw buffer cannot be handed to it. A static test checks the send signatures.
+- **Placement.**
+  - Network-capable code for sources and bodies lives only in the adapter packages that declare egress (`kaine/perceptual_sources/network/`, `kaine/modules/embodiment/adapters/<name>/`), or in separate helper programs under `tools/`.
+  - The guard test gains a rule: elsewhere in `kaine/modules/`, a socket, `asyncio.open_connection`, `websockets`, `av.open` on a URL, or `cv2.VideoCapture` on a URL is refused. The existing clients of KAINE's own services are the exception.
+  - Every client, adapters included, keeps `trust_env=False`. A proxy is an undeclared host.
+- **Module internals stay no-cloud.**
+  - At boot, every module-internal service URL (the organ, speech, STT, Qdrant, the decision server) must resolve to a loopback, private, container-network or tailnet address. A globally routable address is a named boot refusal.
+  - This makes the existing rule structural.
+- **Records.**
+  - The run manifest lists each declared endpoint by label, scheme, port and outbound classes.
+  - A tailnet peer or private host name is hashed, because host names can be personal. A public world host is recorded as declared.
+- **Inbound is perception.** What arrives from a network source is perceived like any input: never persisted. In-world text is data, never a command (the salvaged `inbound-world-safety` rule, `virtual-world-body` D8).
+
 ## Risks and trade-offs
 
 - **[The webcam sees the operator's room].** Mitigations:
@@ -204,6 +252,11 @@ Decisions:
   - The welfare observer sees it.
   - The entity is never left without senses for longer than the grace.
 - **[Device names leak serial numbers].** Hashed in every record.
+- **[An adapter sends more than it should].**
+  - Declared endpoints and outbound classes.
+  - The runtime gate.
+  - Typed send paths with no class for sense data or internal state.
+  - The placement rule in the guard test.
 - **[Container hot-plug].** Named and limited, not widened.
 
 ## Migration
@@ -217,8 +270,9 @@ Rollback: the switch.
 ## Welfare and privacy
 
 - A new source is a new sense. Every PR here gets an independent second review, and the welfare net is on before any entity is given a new source.
-- The webcam and microphone see and hear the operator's room. The eyes-and-ears rule applies: no frame, sample or reading is written anywhere; records are content-free and hash device identities. The operator opts in per source, and confirms that the room may be seen.
+- The webcam and microphone see and hear the operator's room. The eyes-and-ears rule applies: no frame, sample or reading is written anywhere; records are content-free and hash device identities. The operator opts in per source. On the reference host the CTO gave that consent on 2026-11-01: the entity may see the room and choose the webcam itself.
 - The operator's desktop is never a source the entity can select.
+- In a shared online world, other people are perceived and never recorded or relayed. What the entity sends there is limited to its declared classes, and never includes sense data or internal state.
 - A source with no audio is declared, not hidden, so its silence is not misread as a broken ear. That is also why the readout records it.
 
 ## Estimate (LLM-agent terms)
