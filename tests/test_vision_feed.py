@@ -643,7 +643,8 @@ def test_playlist_video_presents_by_timestamp_not_nominal_fps(tmp_path):
         tmp_path, fps=25, frame_count=len(times), open_now=False,
         decoders=FakeVideoDecoders(len(times), times=times, duration=10.0),
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     for t, expected in ((0.0, 0), (1.27, 25), (4.99, 99), (5.0, 100), (6.0, 130), (9.99, 249)):
         clk.t = t
         ok, frame = src.read()
@@ -658,10 +659,12 @@ def test_playlist_video_registers_its_last_frame_without_a_container_duration(tm
         tmp_path, fps=30, frame_count=60, open_now=False,
         decoders=FakeVideoDecoders(60, duration=None),
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     assert src.clock.duration(0) is None
     clk.t = 0.0
-    assert src.read()[1] == ("clip.mp4", 0)
+    result = src.read()
+    assert result[1] == ("clip.mp4", 0)
     clk.t = 3.0  # past the last frame (59/30 s)
     ok, frame = src.read()
     assert ok and frame == ("clip.mp4", 59)
@@ -675,7 +678,8 @@ def test_playlist_video_opened_late_seeks_instead_of_decoding_from_zero(tmp_path
     )
     clk.t = 0.0
     src.clock.start()
-    assert src.open()
+    opened = src.open()
+    assert opened
     clk.t = 15.0
     ok, frame = src.read()
     assert ok and frame == ("clip.mp4", 450)
@@ -702,12 +706,15 @@ def test_playlist_video_decodes_forward_when_a_seek_fails(tmp_path, caplog):
     )
     clk.t = 0.0
     src.clock.start()
-    assert src.open()
+    opened = src.open()
+    assert opened
     caplog.set_level(logging.WARNING)
     clk.t = 10.0
-    assert src.read()[1] == ("clip.mp4", 300)
+    result = src.read()
+    assert result[1] == ("clip.mp4", 300)
     clk.t = 15.0
-    assert src.read()[1] == ("clip.mp4", 450)
+    result = src.read()
+    assert result[1] == ("clip.mp4", 450)
     assert caplog.text.count("seek to") == 1  # one warning, then forward decode
 
 
@@ -780,8 +787,10 @@ def test_pyav_decoder_measures_from_the_container_start():
     from kaine.modules.vision.feed import PyAvVideoDecoder
 
     decoder = PyAvVideoDecoder(_fake_av_video([1500, 1540], start_time=1_500_000), "x.webm")
-    assert decoder.next()[0] == pytest.approx(0.0)
-    assert decoder.next()[0] == pytest.approx(0.04)
+    nxt = decoder.next()
+    assert nxt[0] == pytest.approx(0.0)
+    nxt = decoder.next()
+    assert nxt[0] == pytest.approx(0.04)
 
 
 def test_pyav_decoder_skips_a_packet_that_fails_to_decode(caplog):
@@ -847,7 +856,8 @@ def test_a_timestamp_reset_does_not_decode_the_rest_of_the_item_in_one_read(tmp_
     )
     clk.t = 0.0
     src.clock.start()
-    assert src.open()
+    opened = src.open()
+    assert opened
     clk.t = 0.0
     src.read()
     clk.t = 2.5
@@ -886,10 +896,12 @@ def test_a_lone_backward_stamp_does_not_hold_the_picture(tmp_path):
     )
     clk.t = 0.0
     src.clock.start()
-    assert src.open()
+    opened = src.open()
+    assert opened
     for t in [x / 10.0 for x in range(0, 200, 5)]:  # 0 to 19.5 s, every 0.5 s
         clk.t = t
-        assert src.read()[0]
+        result = src.read()
+        assert result[0]
         assert t - 0.04 < src._shown.t <= t + 1e-9, (t, src._shown.t)
 
 
@@ -905,12 +917,14 @@ def test_clock_logs_once_when_an_item_nothing_could_open_holds_the_programme(cap
     clock.set_duration(0, 10.0)
     fake.t = 10.5
     clock.report_unplayable(1)
-    assert clock.locate() == (1, pytest.approx(0.5))
+    position = clock.locate()
+    assert position == (1, pytest.approx(0.5))
     fake.t = 14.0  # within the grace: the other surface may still measure it
     clock.locate()
     assert not [r for r in caplog.records if r.levelno == logging.ERROR]
     fake.t = 16.0
-    assert clock.locate()[0] == 1
+    position = clock.locate()
+    assert position[0] == 1
     fake.t = 99.0
     clock.locate()
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
@@ -958,13 +972,16 @@ def test_a_video_item_it_cannot_open_is_reported_to_the_clock(tmp_path, caplog):
     clock = PlaylistClock(2, clock=_FakeClock())
     clk = clock._clock
     src = PlaylistSource(parsed, playlist_clock=clock, decoder_factory=_NoB({"a.mp4": 60}))
-    assert src.open()
+    opened = src.open()
+    assert opened
     clk.t = 0.0
     src.read()
     clk.t = 2.5
-    assert src.read() == (False, None)  # on item 1, which cannot be opened
+    result = src.read()
+    assert result == (False, None)  # on item 1, which cannot be opened
     clk.t = 30.0
-    assert src.read() == (False, None)
+    result = src.read()
+    assert result == (False, None)
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
     assert errors == [
         "playlist item 1 could not be opened and no surface knows its length: "

@@ -444,9 +444,9 @@ def test_an_item_that_fails_to_decode_is_silence_and_the_programme_goes_on(
     failures = [r.getMessage() for r in caplog.records if "failed (" in r.getMessage()]
     assert failures == [
         "playlist audio item 0 failed (OSError); heard as silence for the rest "
-        "of its length, the programme goes on",
+        + "of its length, the programme goes on",
         "playlist audio item 1 failed (FileNotFoundError); heard as silence for the rest "
-        "of its length, the programme goes on",
+        + "of its length, the programme goes on",
     ]
     assert all(str(tmp_path) not in r.getMessage() and r.exc_info is None for r in caplog.records)
 

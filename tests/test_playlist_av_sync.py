@@ -183,7 +183,8 @@ def _video(manifest_path: Path, clock: PlaylistClock, factory=None) -> PlaylistS
     src = PlaylistSource(
         load_playlist_manifest(manifest_path), playlist_clock=clock, decoder_factory=factory
     )
-    assert src.open()
+    opened = src.open()
+    assert opened
     clock.start(at=0.0)  # programme time zero is clock time zero (idempotent)
     return src
 
@@ -364,7 +365,8 @@ def test_picture_and_sound_meet_at_every_marker(vfr_clip: Path, monkeypatch):
     try:
         for a, b in MARKERS:
             mid = (a + b) / 2.0
-            assert _right_white(_read_at(src, mclock, mid)), mid
+            img = _read_at(src, mclock, mid)
+            assert _right_white(img), mid
             assert _loud(pcm, mid), mid
             # Clear of the window on both sides: dark and silent.
             assert not _loud(pcm, a - 0.15) and not _loud(pcm, b + 0.15), mid
@@ -659,7 +661,8 @@ def test_a_video_item_that_cannot_be_opened_does_not_end_the_picture(tmp_path: P
         _read_at(src, mclock, 0.0)
         clock.set_duration(1, 5.0)  # known from elsewhere (the audio surface)
         mclock.t = CLIP_S + 1.0
-        assert src.read() == (False, None)
+        result = src.read()
+        assert result == (False, None)
         img = _read_at(src, mclock, CLIP_S + 5.0 + 4.17)
         assert src.current_item.item_idx == 2
         assert _right_white(img) and _left_level(img) == pytest.approx(_decile_level(4.17), abs=4)
@@ -696,7 +699,8 @@ def test_feed_logs_name_items_by_index_never_by_path_or_title(tmp_path: Path, mo
             load_playlist_manifest(_manifest(tmp_path, [(name, 25.0)])),
             playlist_clock=PlaylistClock(1, clock=_ManualClock()),
         )
-        assert src.open() is False
+        opened = src.open()
+        assert opened is False
         src.release()
     mclock = _ManualClock()
     src = _video(_manifest(tmp_path, [(f"{_TITLE}_damaged.webm", 25.0)]), PlaylistClock(1, clock=mclock))
