@@ -5,8 +5,16 @@
 
 NEVER EXPORT-ELIGIBLE
 ---------------------
-This consumer tees VERBATIM bus events — including conversation content,
-transcripts, intent params, and memory text — to ``state/research/raw_bus_archive/``.
+This consumer tees bus events — including conversation content, transcripts,
+intent params, and memory text — to ``state/research/raw_bus_archive/``,
+verbatim except for the latent fields.
+
+- Latent fields are NEVER archived: every key in
+  ``kaine.privacy_filter.LATENT_FIELDS`` (the perceptual vector fields
+  ``latent``, ``peripheral``, ``foveal``, ``temporal_context``,
+  ``feature_vector`` and every ``latent_derived`` mapping) is removed at any
+  depth before a record is written, by the latent strip in
+  ``AsyncJsonlSink._encode_line``. Everything else is kept as published.
 
 - The raw archive NEVER leaves the host.
 - The raw archive is NEVER export-eligible: it writes to ``state/research/...``,
@@ -22,9 +30,10 @@ This mirrors the ``BundleTierError`` attestation gate in
 ``kaine/research/submission.py``.
 
 The archive is encrypted at rest via the same ``AsyncJsonlSink`` +
-``StateEncryptor`` mechanism as every other sink. It captures records verbatim
-(no privacy transform) — that is the entire point, and the reason it is locked
-behind the double gate and structural path isolation.
+``StateEncryptor`` mechanism as every other sink. Apart from the latent strip
+every sink applies, it captures records verbatim (no content privacy
+transform) — that is the entire point, and the reason it is locked behind the
+double gate and structural path isolation.
 """
 
 from __future__ import annotations
@@ -77,7 +86,8 @@ class _VerbatimStreamArchiver(StreamSubscriberObserver):
         self._sink = sink
 
     async def handle(self, stream: str, entry_id: str, event: Event) -> None:
-        # Verbatim — NO privacy transform. This is the local-only raw archive.
+        # Verbatim — no content privacy transform; the sink removes the latent
+        # fields before the line is written. This is the local-only raw archive.
         await self._sink.write(
             {
                 "ts": datetime.now(timezone.utc).isoformat(),

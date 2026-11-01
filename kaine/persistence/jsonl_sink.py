@@ -6,9 +6,12 @@
 A generic, dependency-light persistence primitive: writes go through an
 asyncio.Queue and a background flush task batches them out, so the caller is
 never blocked on disk I/O. Each line is AES-256-GCM-encrypted when state
-encryption is enabled. Used by the evaluation sidecar observers and by the
-cycle's supervisor incident log; it depends only on stdlib, ``kaine.security.crypto``
-(a lazy import), and ``kaine.experiment.run_context`` (stdlib-only, for record
+encryption is enabled, and every record loses its latent fields
+(``kaine.privacy_filter.strip_latent``) before it is encoded, whichever of
+``write``, ``write_sync`` or ``enqueue`` it arrived through. Used by the
+evaluation sidecar observers and by the cycle's supervisor incident log; it
+depends only on stdlib, ``kaine.security.crypto`` and ``kaine.privacy_filter``
+(lazy imports), and ``kaine.experiment.run_context`` (stdlib-only, for record
 stamping), so importing it never pulls in the evaluation subsystem.
 """
 from __future__ import annotations
@@ -197,10 +200,17 @@ class AsyncJsonlSink:
     def _encode_line(self, entry: dict[str, Any]) -> str:
         """Serialize one record to a JSONL line, AES-256-GCM-encrypting it when
         state encryption is enabled (each line is its own envelope so append
-        and daily rotation keep working unchanged)."""
+        and daily rotation keep working unchanged).
+
+        Every path to disk passes here, so this is where the latent strip
+        runs: every key in ``LATENT_FIELDS`` is removed at any depth, with no
+        length backstop (evaluation records hold legitimate long numeric
+        tables), and numpy arrays are written as exact lists rather than by
+        their elided ``str()``."""
+        from kaine.privacy_filter import strip_latent
         from kaine.security.crypto import get_state_encryptor
 
-        line = json.dumps(entry, default=str)
+        line = json.dumps(strip_latent(entry), default=str)
         return get_state_encryptor().encrypt_text(line)
 
     async def _run(self) -> None:

@@ -5,8 +5,12 @@
 
 Each non-blank line is either a plaintext JSON object or a KAINE encryption
 envelope.  The module depends only on the standard library and lazily imports
-``kaine.security.crypto`` inside functions, so it can be used from any
-boundary layer.
+``kaine.security.crypto`` and ``kaine.privacy_filter`` inside functions, so it
+can be used from any boundary layer.
+
+No record written here holds a latent field: ``encode_record`` and
+``rewrite_encrypted`` remove every key in ``LATENT_FIELDS`` at any depth
+(``kaine.privacy_filter.strip_latent``) before encrypting.
 """
 
 from __future__ import annotations
@@ -32,9 +36,27 @@ class Line:
 
 
 def encode_record(record: dict) -> str:
+    from kaine.privacy_filter import strip_latent
     from kaine.security.crypto import get_state_encryptor
 
-    return get_state_encryptor().encrypt_text(json.dumps(record, sort_keys=True))
+    return get_state_encryptor().encrypt_text(
+        json.dumps(strip_latent(record), sort_keys=True)
+    )
+
+
+def _without_latent_line(line: str) -> str:
+    """``line`` unchanged unless it is a JSON value holding a latent field, in
+    which case it is re-encoded without those fields. A line that is not JSON
+    is kept as it is (it is only encrypted)."""
+    from kaine.privacy_filter import holds_latent_field, strip_latent
+
+    try:
+        rec = json.loads(line)
+    except ValueError:
+        return line
+    if not holds_latent_field(rec):
+        return line
+    return json.dumps(strip_latent(rec), sort_keys=True)
 
 
 def _is_envelope(line: str) -> bool:
@@ -135,8 +157,11 @@ def has_envelope_line(path: Path | str) -> bool:
 def rewrite_encrypted(path: Path | str) -> bool:
     """Rewrite every plaintext line of ``path`` as an encryption envelope.
 
-    Envelope lines are kept byte for byte, including ones this key cannot
-    decrypt, so nothing is ever dropped; blank lines are removed. The new
+    A plaintext line that holds a latent field loses it before it is
+    encrypted; every other plaintext line is encrypted byte for byte. Envelope
+    lines are kept byte for byte, including ones this key cannot decrypt, so
+    nothing is ever dropped (envelopes come from ``encode_record``, which
+    strips); blank lines are removed. The new
     content is written to a temp file in the same directory, fsynced and
     swapped in with ``os.replace``. Returns True only when the file changed,
     and False when encryption is disabled or the file is missing. The caller
@@ -176,7 +201,7 @@ def rewrite_encrypted(path: Path | str) -> bool:
             if _is_envelope(line):
                 new_lines.append(line)
             else:
-                new_lines.append(encryptor.encrypt_text(line))
+                new_lines.append(encryptor.encrypt_text(_without_latent_line(line)))
                 changed = True
 
     if not changed:
