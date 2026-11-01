@@ -403,3 +403,93 @@ def test_intent_log_scan_reads_a_directory_and_a_clean_log_exits_zero(tmp_path: 
 def test_missing_intent_log_is_an_error_without_content(tmp_path: Path, capsys):
     assert scan.main(["--intent-log", str(tmp_path / "nope.jsonl")]) == 2
     assert "FileNotFoundError" in capsys.readouterr().out
+
+
+# --- intent logs the tool cannot read are errors, never clean ---------------------
+
+_KEY_A = "a" * 32
+_KEY_B = "b" * 32
+
+
+def _encryptor(monkeypatch, key: str | None):
+    from kaine.security.crypto import CryptoConfig, StateEncryptor
+
+    if key is None:
+        return StateEncryptor(CryptoConfig())
+    monkeypatch.setenv("KAINE_SCAN_TEST_KEY", key)
+    return StateEncryptor(CryptoConfig(enabled=True, key_env_var="KAINE_SCAN_TEST_KEY"))
+
+
+def _encrypted_log(path: Path, monkeypatch, records: list[dict], *, plain: list[dict] = ()) -> None:
+    enc = _encryptor(monkeypatch, _KEY_A)
+    lines = [enc.encrypt_text(json.dumps(r)) for r in records]
+    lines += [json.dumps(r) for r in plain]
+    path.write_text("".join(line + "\n" for line in lines))
+
+
+def _scan_with(monkeypatch, key: str | None, argv: list[str]) -> int:
+    from kaine.security import crypto
+
+    encryptor = _encryptor(monkeypatch, key)
+    monkeypatch.setattr(scan, "install_state_key", lambda: crypto.set_state_encryptor(encryptor))
+    return scan.main(argv)
+
+
+_FILM_RECORD = {"record_id": "f" * 32, "prompt": f"- audition carrying item={FILM}."}
+_CLEAN_RECORD = {"record_id": "e" * 32, "prompt": "- calm."}
+
+
+@pytest.mark.parametrize("key", [None, _KEY_B], ids=["no key", "wrong key"])
+@pytest.mark.parametrize("as_json", [False, True])
+def test_encrypted_intent_log_without_its_key_is_an_error(tmp_path, monkeypatch, capsys, key, as_json):
+    log = tmp_path / "intent.jsonl"
+    _encrypted_log(log, monkeypatch, [_FILM_RECORD, _CLEAN_RECORD])
+    before = _sha([log])
+    argv = ["--intent-log", str(log)] + (["--json"] if as_json else [])
+    assert _scan_with(monkeypatch, key, argv) == 2
+    out = capsys.readouterr().out
+    assert "Some-Film" not in out
+    assert _sha([log]) == before
+    assert "2 unreadable line(s)" in out
+    if as_json:
+        report = json.loads(out)["reports"][0]
+        assert report["unreadable"] == 2
+        assert report["traces"] == 0
+        assert report["flagged"] == 0
+        assert report["error"]
+
+
+def test_encrypted_intent_log_with_its_key_is_read(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "intent.jsonl"
+    _encrypted_log(log, monkeypatch, [_FILM_RECORD, _CLEAN_RECORD])
+    assert _scan_with(monkeypatch, _KEY_A, ["--intent-log", str(log), "--json"]) == 1
+    report = json.loads(capsys.readouterr().out)["reports"][0]
+    assert report["unreadable"] == 0 and report["error"] is None
+    assert report["traces"] == 2 and report["flagged"] == 1
+
+
+def test_mixed_intent_log_reports_what_it_read_and_still_fails_closed(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "intent.jsonl"
+    # Two encrypted records nobody can read here, two plaintext records, a damaged line.
+    _encrypted_log(log, monkeypatch, [_FILM_RECORD, _CLEAN_RECORD], plain=[_FILM_RECORD, _CLEAN_RECORD])
+    with log.open("a") as fh:
+        fh.write("{not json\n")
+    assert _scan_with(monkeypatch, None, ["--intent-log", str(log), "--json"]) == 2
+    out = capsys.readouterr().out
+    assert "Some-Film" not in out and "not json" not in out
+    report = json.loads(out)["reports"][0]
+    assert report["unreadable"] == 3
+    assert report["traces"] == 2
+    assert report["flagged"] == 1
+    assert report["flagged_ids"] == ["f" * 32]
+    assert report["error"].startswith("3 unreadable line(s)")
+
+
+def test_mixed_intent_log_text_output_shows_error_and_counts(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "intent.jsonl"
+    _encrypted_log(log, monkeypatch, [_FILM_RECORD], plain=[_FILM_RECORD])
+    assert _scan_with(monkeypatch, None, ["--intent-log", str(log)]) == 2
+    out = capsys.readouterr().out
+    assert "ERROR 1 unreadable line(s)" in out
+    assert "1 traces, 1 flagged" in out
+    assert "Some-Film" not in out

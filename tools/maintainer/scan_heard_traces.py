@@ -24,8 +24,11 @@ Sources:
   ``media_item`` check applies: a record is flagged when a string anywhere in
   it holds a rendered ``item=`` or an ``'item': '...'`` repr, and it is
   reported by its ``record_id`` (or its line number) and the record field.
-  An unreadable line is skipped. A file name the organ repeated in its own
-  words cannot be told apart from its other words and is not detected.
+  An unreadable line (no state key, the wrong key, a damaged line) is
+  counted, and any unreadable line makes the source an error (exit 2): a log
+  the tool cannot read is not reported clean. A file name the organ repeated
+  in its own words cannot be told apart from its other words and is not
+  detected.
 * ``--qdrant-host HOST``: a running Qdrant store, read by scrolling payloads
   without vectors; the API key is read from the environment variable named by
   ``--qdrant-api-key-env`` (default ``QDRANT_API_KEY``).
@@ -125,12 +128,14 @@ class SourceReport:
     by_category: dict[str, int] = field(default_factory=lambda: {c: 0 for c in CATEGORIES})
     by_member_type: dict[str, int] = field(default_factory=dict)
     flagged_ids: list[str] = field(default_factory=list)
+    unreadable: int = 0
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "traces": self.traces,
+            "unreadable": self.unreadable,
             "flagged": self.flagged,
             "by_category": dict(self.by_category),
             "by_member_type": dict(sorted(self.by_member_type.items())),
@@ -340,6 +345,9 @@ def scan_intent_log(source: str, records: Iterable[tuple[str, Any]]) -> SourceRe
     file name. Reports counts, field names and record ids only."""
     report = SourceReport(source=source)
     for position, record in records:
+        if record is UNREADABLE:
+            report.unreadable += 1
+            continue
         report.traces += 1
         if not isinstance(record, dict):
             continue
@@ -358,15 +366,26 @@ def scan_intent_log(source: str, records: Iterable[tuple[str, Any]]) -> SourceRe
             report.by_category["media_item"] += 1
             label = f"intent_log:{name}"
             report.by_member_type[label] = report.by_member_type.get(label, 0) + 1
+    if report.unreadable:
+        # Fail closed: an encrypted log read without (or with the wrong) state
+        # key is not clean. Counts only; a line's content is never shown.
+        report.error = (
+            f"{report.unreadable} unreadable line(s) in {source} "
+            "(no state key, the wrong key, or a damaged line)"
+        )
     return report
 
 
 # --- readers (read-only) ------------------------------------------------------
 
+# Marks an intent-log line that could not be decrypted or parsed.
+UNREADABLE = object()
+
 
 def intent_log_records(path: Path) -> Iterator[tuple[str, Any]]:
-    """Yield ``(position, record)`` for every readable line of an intent log
-    file, or of every ``*.jsonl`` file in a directory, decrypted in memory."""
+    """Yield ``(position, record)`` for every line of an intent log file, or of
+    every ``*.jsonl`` file in a directory, decrypted in memory; a line that
+    cannot be decrypted or parsed yields ``UNREADABLE``."""
     from kaine.persistence.encrypted_jsonl import iter_records
 
     if path.is_dir():
@@ -378,6 +397,7 @@ def intent_log_records(path: Path) -> Iterator[tuple[str, Any]]:
     for file in files:
         for n, line in enumerate(iter_records(file), start=1):
             if line.unreadable:
+                yield f"{file.name}:line {n}", UNREADABLE
                 continue
             yield f"{file.name}:line {n}", line.record
 
@@ -551,7 +571,8 @@ def main(argv: list[str] | None = None) -> int:
         for r in reports:
             if r.error:
                 print(f"{r.source}: ERROR {r.error}")
-                continue
+                if not r.traces:
+                    continue
             print(f"{r.source}: {r.traces} traces, {r.flagged} flagged")
             for category in CATEGORIES:
                 if r.by_category[category]:

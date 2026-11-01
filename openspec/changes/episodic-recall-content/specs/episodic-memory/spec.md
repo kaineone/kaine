@@ -92,11 +92,15 @@ A read-only maintainer tool SHALL report, for sqlite-vec and Qdrant stores, fork
 - **THEN** the report counts it, names its id, and contains no "hello there", and the store's files are unchanged
 
 ### Requirement: Intent logs can be checked for the media file name without reading it out
-The read-only maintainer tool SHALL, given an intent log, count the records in which any string holds a rendered `item=` or an `item` value, and report them by record id (or line number) and by record field, with no record text. It SHALL change nothing it reads.
+The read-only maintainer tool SHALL, given an intent log, count the records in which any string holds a rendered `item=` or an `item` value, and report them by record id (or line number) and by record field, with no record text. It SHALL count lines it cannot decrypt or parse and report such a log as an error, never as clean. It SHALL change nothing it reads.
 
 #### Scenario: A numeric-mode record from before the fix
 - **WHEN** an intent log holds a record whose `prompt` renders `item=episode-01.mkv`
 - **THEN** the report counts it under `intent_log:prompt`, names its record id, and holds no "episode-01"
+
+#### Scenario: A log read without its key
+- **WHEN** an encrypted intent log is scanned without the state key or with the wrong key
+- **THEN** the report counts its unreadable lines, sets an error, and the tool exits 2
 
 ### Requirement: New traces store their members
 Each trace stored after this change SHALL carry `members`: for each coalition member its `source`, `type`, `accessed`, `intensity` and `fields`, the payload keys the felt renderer declares for that type, after `strip_vectors`. Traces stored before this change SHALL NOT be rewritten.
