@@ -32,6 +32,80 @@ This is a privacy change and the first PR. Alternative considered: *extend the m
 
 The heard rule knows six field names, so a type outside `EXTERNAL_INPUT_TYPES` carrying heard words under another name (an embodiment adapter mapping instant messages to its own type, with a `message` field) would pass it. The store therefore fails closed as the language module's notes do: it keeps a payload only for the types in `INTERNAL_EVENT_TYPES`, which moves beside the heard rule, and stores any other type as `source:type=<unclassified omitted>`. Alternative considered: *have the embodiment module refuse an adapter that emits text-bearing feed kinds under its own type.* Rejected as the only guard: it covers one module, and any other producer would reopen the gap. The members of decision 2 apply the same type check. A read-only scan (`tools/maintainer/scan_heard_traces.py`) reports, by count and trace id only, whether an existing store or preservation bundle holds heard text written before this rule; what to do with a preserved entity's traces is the operator's decision.
 
+### 1a. Own-content audit: the fields the store keeps beyond `INTERNAL_EVENT_TYPES`
+
+Failing closed on every undeclared pair over-redacts: planning, self-model drift, social cognition, world model, recall, vocal, effector and regulation members lose their whole payload, so the entity's memory of its own state has holes. Widening `INTERNAL_EVENT_TYPES` is not an option, because the set is part of the language module's prompt layout (`layout_digest()`, `76f99c859fe8b7bb`) and also lifts the organ's heard-speech guard. The store therefore has its own declaration, `kaine/faithful/episodic_own_content.py`: `EPISODIC_OWN_CONTENT` is `INTERNAL_EVENT_TYPES` plus the pairs audited below, and each audited pair has a field allowlist. A declared pair keeps only its allowlisted fields whose values pass their rules; every other field, including one a producer adds later, is dropped. No rule admits free text: a string must be one of a fixed set of values, a trace id, or a token of at most 64 characters from `[A-Za-z0-9_.:-]`. The heard rule still runs first. The language module does not read this module, and a test pins the digest.
+
+Classes: **SAFE** (computed by the entity's own modules from internal state, fixed phrases, numbers, code or operator-config labels); **HEARD-DERIVED** (text that can carry words from outside: chat, transcripts, screen or file text, exception messages that can quote what was being processed); **RAW-SENSORY**; **LATENT-DERIVED** (per-dimension values computed from encoder outputs, `latent-content-privacy`). No field below is latent-derived: the world model's `step_magnitudes` and `trajectory_drift`, and every prediction error, are scalar reductions over all dimensions, which that change's definition excludes.
+
+Audited pairs (producer code at `build/heard-rule-shared` 09e2c6e6):
+
+| Pair (producer) | Field | Where the value comes from | Class | Stored |
+|---|---|---|---|---|
+| `affect.regulation` (`affect/module.py`, regulation tiers) | `tier`, `bias`, `decay_s`, `intensity`, `episode_s`, `size` | tier index, config, arousal/valence computation | SAFE | yes (number) |
+| | `action` | fixed phrase per tier | SAFE | yes (fixed set) |
+| | `source` | `ThreeTierRegulation.target_source`: the coalition member source with the most negative-intensity mass | SAFE | yes (module names) |
+| | `emotion_before`, `emotion_after` | `CategoricalEmotion` values | SAFE | yes (fixed set) |
+| `effectors.action` (`effectors/module.py` `_record`, `_record_provenance_rejected`) | `effector` | the act intent's `effector`; on the blocked and provenance-rejected paths any string a forged intent carries | SAFE only as a registered name | only `notify`, `file_write`, `shell` |
+| | `success`, `blocked`, `provenance_rejected`, `alert`, `elapsed_ms` | flags, timing | SAFE | yes |
+| | `error` | `f"{type(exc).__name__}: {exc}"`: shell stderr, `notify-send` stderr, the requested command, file errors | HEARD-DERIVED | no |
+| `embodiment.efference` (`embodiment/module.py` `_drive_control`) | `channels` | the entity's emitted setpoints, keys from `CONTINUOUS_CHANNEL_RANGE`, clamped floats | SAFE | yes (fixed keys, numbers) |
+| | `forwarded` | flag | SAFE | yes |
+| `episodic_memory.recall` (`episodic_memory/module.py` `recall`) | `count`, `max_affect_intensity`, `error` | recall result | SAFE | yes |
+| | `query_length` | length of the cue; for the evaluation battery's query client (`kaine/cycle/__main__.py`) the length of a question someone else wrote, a number only | SAFE | yes |
+| | `collection` | caller's argument; the error path echoes an unknown one | SAFE as a collection kind | only `EPISODIC_MEMORY_COLLECTION_KINDS` |
+| | `error_detail` | `str(exc)` from the storage or embedder, which can quote the cue | HEARD-DERIVED | no |
+| `interoception.warmup.started`, `.completed` | `min_samples`, `min_seconds`, `samples_seen`, `lived_seconds` | config and counters | SAFE | yes |
+| `interoception.regulation.withheld` | `would_be_action`, `severity` | `regulation._ACTIONS`, `_SEVERITIES` | SAFE | yes |
+| | `prediction_error`, `sustain_elapsed_s` | forward-model L2 error over host telemetry, timer | SAFE | yes |
+| | `reason` | fixed `"warmup"` | SAFE | yes |
+| `perceptual_locus.changed` | `locus`, `by` | validated against `LOCI`; fixed `"entity"` | SAFE | yes (fixed set) |
+| `perceptual_locus.denied` | `requested` | `str()` of the switch intent's `locus`, unvalidated on the denial path | SAFE only as a locus | only `LOCI` |
+| | `reason` | fixed phrases from `evaluate_locus_switch` | SAFE | yes (fixed set) |
+| `planning.belief` (`planning/module.py`) | `statement` | generative-model state labels (code constants) or `factorN_stateM`; a plugin engine could supply others | SAFE as a known label | only the constants and the positional form |
+| | `kind`, `frequency`, `confidence` | fixed `"belief"`; posterior over symbolic states | SAFE | yes |
+| `planning.policy` | `policy` | engine action (`ACTION_SPACE`) | SAFE | only `ACTION_SPACE` |
+| | `expected_free_energy`, `horizon`, `param_info_gain` | engine numbers and flag | SAFE | yes |
+| `planning.proposal` | `proposal_id`, `action`, `kind`, `step`, `preference` | `uuid4().hex`, `ACTION_SPACE`, `_ACTION_TO_PROPOSAL_KIND`, counters | SAFE | yes (id pattern, fixed sets, numbers) |
+| `planning.error` | `error_reason` | `f"{type(exc).__name__}: {exc}"` from `engine.step(snapshot)`; the snapshot holds heard members, and an exception message can quote a payload value | HEARD-DERIVED | no |
+| | `elapsed_ms`, `num_factors`, `num_actions` | numbers | SAFE | yes |
+| `planning.timeout` | `elapsed_ms`, `num_factors`, `num_actions` | numbers | SAFE | yes |
+| `self_model.drift` (`self_model/module.py` `on_workspace`) | `score`, `recent_count`, `historical_count`, `reference_count`, `alert` | drift over coalition source names | SAFE | yes |
+| | `top_drifted_sources` | coalition source names | SAFE | yes (module names, bounded list) |
+| `sleep.association` (`sleep/phases.py`, `memory.py` co-replay) | `a`, `b`, `weight` | the store's own trace keys; link weight | SAFE | yes (id pattern, number) |
+| `sleep.ignition_audit` (`sleep/ignition_audit.py` `as_payload`) | `sleep_index` and the nine counts | counts | SAFE | yes |
+| | `*_entry_ids`, `event_types`, `saliences` | bus entry ids, member type names, numbers | SAFE | no (unbounded bookkeeping, no experience) |
+| | `audit_error` | exception type name | SAFE | no (no experience) |
+| `social_cognition.agent_model`, `.social_error` (`social_cognition/module.py`) | `agent_id`, `agent_label` | `[social_cognition].speaker_label` (config) or `media:<source_label>` | SAFE (config) | yes (token) |
+| | `source_label` | audition channel name (`live_mic`, `seeded`, `playlist`, `stimulus_source`, `screen`, `remote`, `microphone`) | SAFE | yes (token) |
+| | `familiarity`, `reliability`, `interaction_count`, `salience`, `deviation_magnitude` | scalars from emotion-category histograms; transcripts only bump a count | SAFE | yes |
+| `vocal.synthesized` (`vocal/module.py` `_publish_event`) | `text_length`, `bytes_produced`, `latency_ms`, `success` | lengths, timing, flag | SAFE | yes |
+| | `exaggeration`, `cfg_weight`, `temperature`, `speed_factor` | prosody from the affect state | SAFE | yes |
+| | `backend`, `prosody_applied`, `origin` | config (`chatterbox`, `sherpa_onnx`), code constants, intent origin (`planning`) | SAFE | yes (fixed sets) |
+| | `voice` | operator voice label or id (can name a private voice or a clip path) | SAFE source, personal | no |
+| | `output_format` | config | SAFE | no (no experience) |
+| | `error` | `f"{type(exc).__name__}: {exc}"` from synthesising the entity's speech, which can quote heard words | HEARD-DERIVED | no |
+| `world_model.world_error` | `world_error`, `salience`, `tick_index`, `backend`, `engine` | scalar error, config | SAFE | yes (numbers, fixed sets) |
+| `world_model.scenario` (`world_model/module.py` `generate_scenario`) | `seed_memory_id` | the replay cue's `memory_id` | SAFE | yes (id pattern) |
+| | `horizon`, `step_magnitudes`, `trajectory_drift`, `encoder_version`, `backend`, `engine` | rollout length, per-step mean magnitude, scalar drift, constant, config | SAFE | yes |
+
+Pairs that reach the workspace and stay undeclared:
+
+| Pair | Why |
+|---|---|
+| `audition.transcription`, `embodiment.chat` | heard by type (`<heard omitted>`) |
+| `embodiment.visual.raw` | RAW-SENSORY (`<raw-perceptual omitted>`) |
+| any other `embodiment.*` feed kind | the adapter's frame payload: world-side names and metadata the adapter defines, HEARD-DERIVED or RAW-SENSORY (`<unclassified omitted>`) |
+| `episodic_memory.replay` | legacy trace text; recorded by id only |
+| `self_model.document` | `name` (launch or chosen name), `values`, `behavioral_norms`, `situation_facts` (operator-written persona and boot facts: someone else's written text), `personality_baseline`, `capability_map`; HEARD-DERIVED as file content (`<unclassified omitted>`) |
+| `recorder.ping` | test-only module |
+
+Sources outside the module registry (supervisor, lifecycle, housekeeping, individuation, development, preservation monitor, positive control, perception feed) publish to streams the cycle does not read for the workspace, so they cannot be coalition members.
+
+The token fields (the social cognition agent and channel labels) are the one place the rule rests on provenance alone: a single heard word with no spaces would pass the pattern if a producer ever copied one. The audit found none that does, and a test pins that these are the only token fields. Field shape is checked again by the heard-trace scan: a member of an audited pair is clean only when every field is allowlisted and passes its rule, so a legacy trace that kept `error_reason` or `error_detail` text is still flagged.
+
+Found while auditing, not changed here: `vision.report` and `audition.perception`, both in `INTERNAL_EVENT_TYPES`, carry `item`, the basename of the playlist media file (an operator-chosen file name, often a film title), and the store keeps it as written. It is file metadata, not heard speech; whether it belongs in the trace is a decision for the next change to `INTERNAL_EVENT_TYPES`, which would also change the prompt layout.
+
 ### 2. Structured members, limited to what the renderer reads
 
 Each new trace's payload gains `members`, one entry per coalition member: `source`, `type`, `accessed` (score at or above the broadcast's access threshold), `intensity`, and `fields`, the payload keys that the felt template for that type reads (for example `change_score` and `habituation_score` for a vision report; `text` for the entity's own speech and thought). The felt module declares these per template as `FELT_FIELDS`, so the renderer and the store share one list. Values pass `strip_vectors`. A type with no declared fields stores none.
