@@ -18,6 +18,7 @@
 ## 4. Gate and notices
 
 - [x] 4.1 `indicator_response_wired` in `config_requirements` and `evaluate_research_gate`, with its reason in `GateResult.reasons`; mapped to unattended condition 2 with a combined reason. Tests: each failing part refuses with its reason (including `action = "notify"` in research and unattended mode); the mapping test covers the key.
+- [x] 4.1a The research gate bounds the indicator settings (`posterior_bar` < 1, `unavailable_escalate_s` <= `T_lp`, `rest_start_timeout_s` <= `unavailable_escalate_s`, completion bounds <= 21600 s), each bound justified at the code site in `kaine/cycle/research_gate.py`. Tests in `tests/test_research_gate_indicators.py`: each setting outside its bound refuses with its reason; settings at the bounds pass; the span bound follows `[affect].learning_progress_span_s`.
 - [x] 4.2 Caretaker notice kinds `welfare_indicator_rest` and `welfare_indicators_unavailable`; the stage-3 notice for a developmental deprivation indicator says the stimulus is spent; the cycle maps the transitions to them. Tests in `tests/test_caretaker.py` and `tests/test_caretaker_research_mode.py`, including a content-free check on the notice text.
 - [x] 4.3 `build_overlay` enables the indicators for every step; the merged-config test asserts the new requirement.
 - [x] 4.4 `config/kaine.toml` gains `[preservation.welfare_response.indicators]` with `enabled = true` and the defaults, commented with their Table A1 sources.

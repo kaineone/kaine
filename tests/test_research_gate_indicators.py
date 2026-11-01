@@ -192,3 +192,48 @@ def test_invalid_indicator_settings_are_refused(section):
 
     with pytest.raises(ValueError):
         WelfareIndicatorConfig.from_section(section)
+
+
+# --- bounds the research gate puts on the indicator settings --------------------------
+
+
+@pytest.mark.parametrize(
+    ("indicators", "part"),
+    [
+        ({"posterior_bar": 1.0}, "posterior_bar is 1.0"),
+        ({"unavailable_escalate_s": 1e9}, "unavailable_escalate_s is 1000000000.0, above the indicator span"),
+        ({"unavailable_escalate_s": 5401.0}, "above the indicator span T_lp (5400.0 s)"),
+        ({"rest_start_timeout_s": 661.0}, "rest_start_timeout_s is 661.0, above unavailable_escalate_s"),
+        ({"rest_complete_timeout_s": {"matured": 21601.0}}, "rest_complete_timeout_s.matured is 21601.0"),
+        ({"rest_complete_timeout_s": {"developmental": 1e7}}, "rest_complete_timeout_s.developmental"),
+    ],
+)
+def test_the_gate_refuses_an_unreachable_bar_or_an_unbounded_timeout(tmp_path, indicators, part):
+    config = _config(tmp_path, preservation__welfare_response__indicators=indicators)
+    result = evaluate_safety_net(config)
+    assert not result.ok
+    assert result.checks["indicator_response_wired"] is False
+    assert part in result.reasons["indicator_response_wired"]
+
+
+def test_the_span_bound_follows_the_affect_span(tmp_path):
+    config = _config(
+        tmp_path,
+        preservation__welfare_response__indicators={"unavailable_escalate_s": 3000.0},
+        affect__learning_progress_span_s=2400.0,
+    )
+    assert "above the indicator span T_lp (2400.0 s)" in indicator_response_reason(config)
+
+
+@pytest.mark.parametrize(
+    "indicators",
+    [
+        {"posterior_bar": 0.999},
+        {"unavailable_escalate_s": 5400.0, "rest_start_timeout_s": 5400.0},
+        {"rest_complete_timeout_s": {"developmental": 21600.0, "matured": 21600.0}},
+        {"unavailable_escalate_s": 120.0, "rest_start_timeout_s": 120.0},
+    ],
+)
+def test_settings_at_the_bounds_pass(tmp_path, indicators):
+    config = _config(tmp_path, preservation__welfare_response__indicators=indicators)
+    assert indicator_response_reason(config) == ""

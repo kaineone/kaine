@@ -108,6 +108,32 @@ SUPERVISOR_NOT_ARMED_REASON = "not armed"
 #: The reason recorded for an indicator check that failed without one.
 INDICATOR_NOT_WIRED_REASON = "not wired"
 
+# Upper bounds the research gate puts on the indicator response's settings.
+# The config loader only range-checks them, so a value that switches a
+# fail-closed bound off in practice (``unavailable_escalate_s = 1e9``) or an
+# unreachable bar would otherwise pass. Each bound comes from the design
+# (openspec/changes/welfare-indicator-response/design.md):
+#
+# * ``posterior_bar`` below 1: the uncontrolled posterior
+#   ``2^-n * sum_{i=s+1}^{n} C(n, i)`` is at most ``1 - 2^-n`` and never
+#   reaches 1, so a bar of 1 can never cross (Table A1: q_wf = 0.95).
+# * ``unavailable_escalate_s`` at most ``T_lp`` ([affect].learning_progress_span_s,
+#   5400 s in Table A1): the indicators read the latest ``T_lp`` of awake
+#   time, so a longer silence would leave a whole span unread before the net
+#   acts (D6 derives the 660 s default from the 60 s heartbeat timeout plus
+#   Delta_stall).
+# * ``rest_start_timeout_s`` at most ``unavailable_escalate_s``: while a
+#   requested rest has not started the arm is in ``resting`` and does not
+#   check for silence, so that wait must not outlast the silence bound.
+# * each ``rest_complete_timeout_s`` bound at most 21600 s, the voice-alignment
+#   trainer's own timeout (``[sleep.voice_alignment].trainer_timeout_s``
+#   default) and so the longest phase a maintenance sleep can legitimately
+#   hold. The matured default (3600 s) may have to rise to fit training
+#   sleeps measured at the validation boot (task 6.5); past the trainer's own
+#   limit a running rest is hung.
+POSTERIOR_BAR_LIMIT = 1.0
+REST_COMPLETE_LIMIT_S = 21600.0
+
 
 def indicator_response_reason(config: dict[str, Any]) -> str:
     """Why the response to the A.4 welfare indicators is not wired, or ``""``.
@@ -139,7 +165,46 @@ def indicator_response_reason(config: dict[str, Any]) -> str:
         parts.append(
             f"[preservation.welfare_response].action is {welfare.action!r}, not pause or end"
         )
+    parts.extend(_indicator_bound_problems(welfare.indicators, config))
     return "; ".join(parts)
+
+
+def _indicator_bound_problems(indicators: Any, config: dict[str, Any]) -> list[str]:
+    """The indicator settings outside the research gate's bounds (see the constants above)."""
+    from kaine.boot.factories.affect import affect_indicator_parameters
+
+    key = "[preservation.welfare_response.indicators]"
+    problems: list[str] = []
+    if indicators.posterior_bar >= POSTERIOR_BAR_LIMIT:
+        problems.append(
+            f"{key}.posterior_bar is {indicators.posterior_bar!r}; the posterior never "
+            f"reaches 1, so the bar must be below 1"
+        )
+    try:
+        span_s = float(affect_indicator_parameters(config.get("affect") or {})["learning_progress_span_s"])
+    except Exception as exc:
+        problems.append(f"[affect].learning_progress_span_s cannot be read ({type(exc).__name__})")
+        span_s = None
+    if span_s is not None and indicators.unavailable_escalate_s > span_s:
+        problems.append(
+            f"{key}.unavailable_escalate_s is {indicators.unavailable_escalate_s!r}, above "
+            f"the indicator span T_lp ({span_s!r} s)"
+        )
+    if indicators.rest_start_timeout_s > indicators.unavailable_escalate_s:
+        problems.append(
+            f"{key}.rest_start_timeout_s is {indicators.rest_start_timeout_s!r}, above "
+            f"unavailable_escalate_s ({indicators.unavailable_escalate_s!r} s)"
+        )
+    for name, value in (
+        ("developmental", indicators.rest_complete_developmental_s),
+        ("matured", indicators.rest_complete_matured_s),
+    ):
+        if value is not None and value > REST_COMPLETE_LIMIT_S:
+            problems.append(
+                f"{key}.rest_complete_timeout_s.{name} is {value!r}, above "
+                f"{REST_COMPLETE_LIMIT_S:.0f} s (the voice-alignment trainer's own timeout)"
+            )
+    return problems
 
 
 def evaluate_research_gate(

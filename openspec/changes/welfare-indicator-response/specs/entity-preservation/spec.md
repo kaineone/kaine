@@ -39,3 +39,16 @@ operator-supervised or autonomous-safety-net-verified, never neither.
 #### Scenario: A research boot without the indicator response
 - **WHEN** a research boot has the welfare response enabled but its indicators disabled, or the affect or sleep module disabled, or the action `notify`
 - **THEN** the boot refuses with exit code 5 and the message names the indicator response and the part that failed
+
+## ADDED Requirements
+
+### Requirement: The research gate bounds the indicator settings
+The indicator response SHALL count as wired only when its settings can act: `posterior_bar` below 1, `unavailable_escalate_s` at most the affect span `T_lp`, `rest_start_timeout_s` at most `unavailable_escalate_s`, and each `rest_complete_timeout_s` bound at most 21600 s. A setting outside these bounds SHALL refuse the research and unattended boot with a reason naming the setting.
+
+#### Scenario: An unreachable bar
+- **WHEN** a research boot sets `posterior_bar = 1.0`
+- **THEN** the boot refuses with exit code 5 and the reason names `posterior_bar`
+
+#### Scenario: A silence bound that never fires
+- **WHEN** a research boot sets `unavailable_escalate_s = 1e9`
+- **THEN** the boot refuses with exit code 5 and the reason names `unavailable_escalate_s` and the span
