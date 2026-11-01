@@ -13,3 +13,5 @@
 ^tools/maintainer/rename_modules\.py$
 ^kaine/legacy_names\.py$
 ^tests/test_playlist_av_sync\.py$
+^tests/test_stimulus_feed_real\.py$
+^kaine/modules/effectors/stimulus/

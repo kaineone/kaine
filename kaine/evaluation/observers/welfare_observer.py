@@ -433,8 +433,13 @@ class WelfareObserver(StreamSubscriberObserver):
         poll_interval_s: float = 0.5,
         unfrozen_clock: UnfrozenClock | None = None,
         development_probe: Callable[[], bool] | None = None,
+        supplementary_records: Callable[[], list[dict[str, Any]]] | None = None,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
+        # Content-free records another welfare component keeps (the
+        # stimulus-control record, stimulus-control-act), written to this sink on
+        # the affect summary interval and at stop. None: nothing extra is written.
+        self._supplementary_records = supplementary_records
         # True while the entity is in the developmental phase, when fatigue sets no sleep
         # (paper 3.5) and an unmaintained crossing is no gray-zone event. None: always alarm.
         self._development_probe = development_probe
@@ -617,6 +622,7 @@ class WelfareObserver(StreamSubscriberObserver):
                 self._affect_summary_at = now
                 if self._affect_tally.changed:
                     await self._write_affect_summary()
+                await self._write_supplementary_records()
         except Exception:
             log.warning("welfare_observer affect summary failed", exc_info=True)
 
@@ -867,6 +873,26 @@ class WelfareObserver(StreamSubscriberObserver):
         except Exception:
             log.warning("welfare_observer affect summary write failed", exc_info=True)
 
+    async def _write_supplementary_records(self) -> None:
+        """Write the supplementary welfare records to the JSONL sink only.
+
+        CONTENT CONTRACT: the provider returns its own content-free numbers and
+        fixed labels; each record gains only a timestamp here and is never
+        published on the bus.
+        """
+        if self._supplementary_records is None:
+            return
+        try:
+            records = list(self._supplementary_records())
+        except Exception:
+            log.warning("welfare_observer supplementary records failed", exc_info=True)
+            return
+        for record in records:
+            try:
+                await self._sink.write({"ts": datetime.now(timezone.utc).isoformat(), **record})
+            except Exception:
+                log.warning("welfare_observer supplementary record write failed", exc_info=True)
+
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1
         # CONTENT CONTRACT: numeric scalars + the gray_zone_event label only;
@@ -1080,10 +1106,11 @@ class WelfareObserver(StreamSubscriberObserver):
         await super()._cleanup()
         if self._affect_tally.changed:
             await self._write_affect_summary()
+        await self._write_supplementary_records()
 
 
 def build_welfare_producer(
-    bus, eval_cfg, development_probe=None
+    bus, eval_cfg, development_probe=None, *, supplementary_records=None
 ) -> tuple[WelfareObserver, AsyncJsonlSink]:
     """Construct the welfare gray-zone producer outside the evaluation sidecar.
 
@@ -1107,5 +1134,6 @@ def build_welfare_producer(
         negative_valence_bar=eval_cfg.welfare.negative_valence_bar,
         affect_summary_interval_s=eval_cfg.welfare.affect_summary_interval_s,
         development_probe=development_probe,
+        supplementary_records=supplementary_records,
     )
     return observer, sink

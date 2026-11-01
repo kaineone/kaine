@@ -42,6 +42,11 @@ class ShellRequest(ActionRequest):
 
 
 @dataclass(frozen=True)
+class StimulusRequest(ActionRequest):
+    action: str  # one of the stimulus effector's declared actions
+
+
+@dataclass(frozen=True)
 class ActionResult:
     success: bool
     elapsed_ms: float

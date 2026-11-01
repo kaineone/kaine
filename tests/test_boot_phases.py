@@ -48,7 +48,7 @@ EXPECTED_PHASE_ORDER = [
 EXPECTED_RETURNS = {
     "_phase_stage": {"IDENTITY_REFUSED_EXIT"},
     "_phase_preconditions": {"3", "INDIVIDUATION_REFUSED_EXIT"},
-    "_phase_run_identity": {"PLANNED_TEST_REFUSED_EXIT"},
+    "_phase_run_identity": {"PLANNED_TEST_REFUSED_EXIT", "STIMULUS_CONTROL_REFUSED_EXIT"},
     "_phase_gates": {"4", "ORGAN_GATE_REFUSED_EXIT"},
     "_phase_bus": {"WELFARE_PRODUCER_REFUSED_EXIT"},
     "_phase_stimulus_source_hold": {"0"},
@@ -127,8 +127,9 @@ def test_every_ctx_attribute_is_boot_context_field() -> None:
     ]
     # the phases, the run loop, shutdown, the failed-boot release, and the
     # utterance-outcome observer start (called from _phase_watchers), and the
-    # developmental-phase probe and its wiring
-    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 6
+    # developmental-phase probe and its wiring, and the stage-M stimulus act
+    # wrapper (called from _phase_action_selection)
+    assert len(boot_fns) == len(EXPECTED_PHASE_ORDER) + 7
     for fn in boot_fns:
         for node in ast.walk(fn):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "ctx":

@@ -808,6 +808,13 @@ class PlaylistAudioStream:
             timeout=seconds
         )
         self._skips = 0  # skips forward to the clock (content-free count)
+        self._jumps = 0  # jumps of the presented position followed (stimulus control)
+        # The shared clock's position epoch when it has one (a stimulus-control
+        # ProgrammeClock); a change makes the pacing resync to the clock.
+        self._pace_epoch: Any = None
+        # The producer moved from a channel's last item to its first (a wrap on
+        # a stimulus-control clock): its next block waits for the clock's lap.
+        self._wrap_pending = False
         self._item_failures = 0  # items that failed to open or decode
 
     @property
@@ -1088,6 +1095,9 @@ class PlaylistAudioStream:
             start_idx, start_offset = 0, 0.0
         if start_idx is None:
             start_idx, start_offset = 0, 0.0
+        epoch_of = getattr(self._clock, "position_epoch", None)
+        self._pace_epoch = epoch_of() if callable(epoch_of) else None
+        self._wrap_pending = False
         items = self._manifest.items
         idx, item_start = int(start_idx), float(start_offset)
         try:
@@ -1117,9 +1127,15 @@ class PlaylistAudioStream:
                     # resume where the clock is (the same path as a restart).
                     carry.clear()
                     self._note_skip(skip)
+                    self._wrap_pending = False
                     idx, item_start = skip.idx, max(0.0, skip.offset)
                     continue
-                idx, item_start = idx + 1, 0.0
+                following = self._following_item(idx)
+                # On a clock that wraps within a channel, the item after the
+                # channel's last is its first: ordered by the clock's lap, not
+                # by manifest index.
+                self._wrap_pending = following <= idx
+                idx, item_start = following, 0.0
             # Flush a final short block (zero-padded) so no audio is dropped.
             if carry and not self._stopped.is_set():
                 pad = block_bytes - len(carry)
@@ -1148,11 +1164,39 @@ class PlaylistAudioStream:
             b_idx, b_start = self._produce_item_idx, 0.0
         else:
             b_idx, b_start = delivered
+        located = getattr(self._clock, "locate_with_epoch", None)
         while not self._stopped.is_set():
             self._clock.wait_if_paused(stop_check=self._stopped.is_set)
             if self._stopped.is_set():
                 return
-            c_idx, c_off = self._clock.locate()
+            # A clock that can jump (stimulus control) gives its position and
+            # its position epoch from one reading; the plain clock has neither.
+            if callable(located):
+                c_idx, c_off, epoch = located()
+            else:
+                epoch = None
+                c_idx, c_off = self._clock.locate()
+            if epoch != self._pace_epoch:
+                self._pace_epoch = epoch
+                expected_wrap = (
+                    self._wrap_pending
+                    and c_idx == b_idx
+                    and -_MAX_OWED_S <= c_off - b_start <= _MAX_OWED_S
+                )
+                self._wrap_pending = False
+                if not expected_wrap:
+                    # The presented position jumped: resync at the clock (the
+                    # restart path), whichever way it moved.
+                    raise _SkipForward(c_idx, c_off, 0.0, jump=True)
+            if callable(located) and c_idx >= len(self._manifest.items):
+                # The viewing ended at its perceived length, wherever the
+                # wrapping position was: not a lag.
+                raise _SkipForward(c_idx, c_off, 0.0, jump=True)
+            if self._wrap_pending and epoch == self._pace_epoch:
+                # The clock is still on the channel's last item: this block of
+                # its first item is due when the clock's lap turns.
+                self._pace_wait(_WRAP_POLL_S)
+                continue
             if c_idx == b_idx:
                 owed = c_off - b_start
             elif c_idx > b_idx:
@@ -1164,6 +1208,15 @@ class PlaylistAudioStream:
             if owed >= -_PACE_EPSILON_S:
                 return
             self._pace_wait(min(-owed, _PACE_POLL_S))
+
+    def _following_item(self, idx: int) -> int:
+        """The item after ``idx``: the next in the manifest, or, on a clock that
+        wraps within programme channels (stimulus control), the next item of
+        ``idx``'s channel."""
+        following = getattr(self._clock, "following_item", None)
+        if callable(following):
+            return int(following(idx))
+        return idx + 1
 
     def _span(self, from_idx: int, from_off: float, to_idx: int, to_off: float) -> float:
         """Programme seconds from one item position to a later one; infinite
@@ -1193,7 +1246,16 @@ class PlaylistAudioStream:
 
     def _note_skip(self, skip: _SkipForward) -> None:
         """Log a skip forward, content-free: the first at warning, later ones
-        at debug (each is counted)."""
+        at debug (each is counted). A followed jump of the presented position
+        is not a lag, and is logged at debug."""
+        if skip.jump:
+            self._jumps += 1
+            log.debug(
+                "playlist audio followed a jump of the programme to item %d at %.3f s",
+                skip.idx,
+                skip.offset,
+            )
+            return
         self._skips += 1
         level = logging.WARNING if self._skips == 1 else logging.DEBUG
         log.log(
@@ -1216,6 +1278,10 @@ _MAX_OWED_S = 0.5
 #: Longest single pacing wait, so pause, stop and clock changes are noticed.
 _PACE_POLL_S = 0.25
 
+#: The pacing wait while a channel's wrap is pending (the clock is within a
+#: block of the lap turning).
+_WRAP_POLL_S = 0.005
+
 #: A block this close to due goes out (positions are float sums of block
 #: lengths, so "exactly due" can come out a rounding error early).
 _PACE_EPSILON_S = 1e-6
@@ -1224,11 +1290,13 @@ _PACE_EPSILON_S = 1e-6
 class _SkipForward(Exception):
     """The audio is owed more than ``_MAX_OWED_S``: resume at the clock."""
 
-    def __init__(self, idx: int, offset: float, owed: float) -> None:
+    def __init__(self, idx: int, offset: float, owed: float, *, jump: bool = False) -> None:
         super().__init__(idx, offset, owed)
         self.idx = int(idx)
         self.offset = float(offset)
         self.owed = float(owed)
+        # The presented position jumped (stimulus control), rather than lag.
+        self.jump = bool(jump)
 
 
 #: Audio more than this far off the item's timeline is re-placed: a later

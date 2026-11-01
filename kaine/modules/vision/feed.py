@@ -1273,6 +1273,9 @@ class PlaylistSource:
         self._pending: tuple[float, Any] | None = None  # next decoded frame, not yet due
         self._ended = False                            # the item's stream is exhausted
         self._seek_failed = False                      # seek raised once; decode forward
+        # The shared clock's position epoch when it has one (a stimulus-control
+        # ProgrammeClock): a change means the presented position jumped.
+        self._epoch: Any = None
 
     @property
     def manifest(self) -> PlaylistManifest:
@@ -1401,9 +1404,20 @@ class PlaylistSource:
         # First read fixes the shared playback origin (idempotent across feeds).
         self._clock.start()
         n = len(self._manifest.items)
-        target_idx, offset = self._clock.locate()
+        # A clock that can jump (stimulus control) gives its position and its
+        # position epoch from one reading; the plain clock has neither.
+        located = getattr(self._clock, "locate_with_epoch", None)
+        if callable(located):
+            target_idx, offset, epoch = located()
+        else:
+            epoch = None
+            target_idx, offset = self._clock.locate()
         if target_idx >= n:
             return False, None
+        if epoch != self._epoch:
+            if self._epoch is not None:
+                self._follow_jump(target_idx, offset)
+            self._epoch = epoch
         # Walk whole items forward to the item the shared clock is on. We only
         # ever move forward (the clock is monotonic); each open registers the new
         # item's duration, so the clock can then reveal the next boundary. An
@@ -1451,6 +1465,21 @@ class PlaylistSource:
                 continue
             break
         return self._shown
+
+    def _follow_jump(self, target_idx: int, offset: float) -> None:
+        """Follow a jump of the shared clock's presented position (a
+        stimulus-control seek, channel switch, or a wrap past a channel's end).
+
+        ``read()`` only walks forward, and a jump can land behind the open item
+        or at the start of the same item, so the item is reopened and the
+        decoder seeks to the clock's offset (its untimed base is the target).
+        The frame on screen is dropped: the new position is shown at once.
+        """
+        self._close_decoder()
+        self._item_idx = target_idx
+        self._reset_item_state()
+        if self._open_current_item():
+            self._seek(offset)
 
     def _seek(self, offset: float) -> None:
         try:
