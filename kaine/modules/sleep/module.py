@@ -76,6 +76,11 @@ WELFARE_REST_TRIGGER = "welfare_rest"
 WELFARE_REST_ORIGIN = "welfare"
 
 
+def _holds_cycle_rest(trigger: Optional[str], welfare_rest_held: bool) -> bool:
+    """True for a state-cycle rest, or a welfare rest that brings one forward."""
+    return trigger == "state_cycle" or (trigger == WELFARE_REST_TRIGGER and bool(welfare_rest_held))
+
+
 def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -903,12 +908,6 @@ class Sleep(BaseModule):
             self._requested_rest_accepted = False
             self._welfare_rest_held = False
 
-    def _holds_cycle_rest(self, trigger: Optional[str]) -> bool:
-        """True for a state-cycle rest, or a welfare rest that brings one forward."""
-        return trigger == "state_cycle" or (
-            trigger == WELFARE_REST_TRIGGER and self._welfare_rest_held
-        )
-
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""
         if self._sleep_lock.locked():
@@ -1095,7 +1094,7 @@ class Sleep(BaseModule):
             "sleep_index": self._sleep_count,
             "trigger": trigger,
         }
-        if self._holds_cycle_rest(trigger):
+        if _holds_cycle_rest(trigger, getattr(self, "_welfare_rest_held", False)):
             # A rest cut by a restart resumes for its remaining time: its clock starts
             # that far back, so the hold measures the remainder.
             resumed_spent = min(self._cycle_resume_spent_s, self._developmental_rest_s)
@@ -1299,7 +1298,7 @@ class Sleep(BaseModule):
                         exc_info=True,
                     )
 
-            if self._holds_cycle_rest(trigger):
+            if _holds_cycle_rest(trigger, getattr(self, "_welfare_rest_held", False)):
                 await self._hold_developmental_rest(rest_started)
 
             if self._housekeeper is not None:
@@ -1433,7 +1432,7 @@ class Sleep(BaseModule):
             summary["ignition_audit"] = await self._run_ignition_audit(since=previous_sleep_at)
         except Exception:
             log.warning("sleep: ignition audit step failed (continuing)", exc_info=True)
-        if self._holds_cycle_rest(trigger):
+        if _holds_cycle_rest(trigger, getattr(self, "_welfare_rest_held", False)):
             summary["rest_seconds"] = self._cycle_rest_seconds
         elif self._cycle_phase == "awake":
             # Any completed sleep restarts the active stretch, so two rests never run back to back.
@@ -1960,7 +1959,7 @@ class Sleep(BaseModule):
                 "reason": type(exc).__name__,
                 "trigger": trigger,
             }
-            if self._holds_cycle_rest(trigger):
+            if _holds_cycle_rest(trigger, getattr(self, "_welfare_rest_held", False)):
                 payload["rest_seconds"] = self._cycle_rest_seconds
                 began = self._cycle_rest_began
                 if (
