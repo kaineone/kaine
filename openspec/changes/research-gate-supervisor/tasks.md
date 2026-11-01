@@ -14,6 +14,7 @@
 
 - [x] 3.3 The welfare monitor is watched too: `_run_until_stopped` escalates through `Supervisor.escalate_welfare_monitor_lost` (module `welfare_monitor`) when the welfare response is enabled and its monitor was never built or started, its task ended, or its poll loop keeps raising (`poll_loop_failing`: three raising polls in a row and none returned for `distress_duration_s`); the caretaker gets `supervision_lost`; `status` names a lost welfare monitor. Tests in `tests/test_welfare_monitor_liveness.py` (each case, the real monitor's run loop, a monitor that ended the run itself, operator-present mode) and `tests/test_ignition_study_runner.py`.
 
+- [x] 3.5 The welfare monitor's own bus reads (and its rest-request and record publishes) are bounded at 5 s; a read that does not answer raises `WelfareBusTimeout`, fails the poll and reaches the liveness escalation. Tests in `tests/test_welfare_monitor_liveness.py`: a bus that never answers fails the poll in warm-up and after it; the real run loop on that bus escalates; every bus read in the monitor goes through the bounded helper. An unbounded read and a timeout swallowed as a plain error each make a test fail.
 - [x] 3.4 A hung welfare poll (one that never returns) is not escalated; design D3a gives the reason (no bound is clearly safe against a long preservation inside the poll).
 
 ## 4. Development run

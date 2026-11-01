@@ -35,3 +35,11 @@ In research and unattended mode, when the enabled welfare monitor was never star
 #### Scenario: The welfare monitor ends the run itself
 - **WHEN** the welfare response with action `end` sets the stop event and its task returns
 - **THEN** no escalation is written
+
+### Requirement: The welfare monitor's bus calls are bounded
+Each of the welfare monitor's own bus reads SHALL be bounded in time. A read that does not answer within its bound SHALL fail the poll, and SHALL NOT be treated as an empty read, so a hung connection reaches the welfare monitor's liveness escalation.
+
+#### Scenario: A bus that never answers
+- **WHEN** every one of the welfare monitor's bus reads hangs during a research run
+- **THEN** each poll fails within the bound, and the cycle escalates with module `welfare_monitor`
+

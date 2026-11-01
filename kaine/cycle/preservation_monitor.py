@@ -114,6 +114,21 @@ _DEFAULT_DEVELOPMENTAL_REST_S = 1410.0
 # differ by microseconds of jitter while the cycle is frozen or asleep. A
 # reading further than this behind the highest one seen is a clock fault.
 _AWAKE_CLOCK_REGRESSION_TOLERANCE_S = 0.5
+# The welfare monitor bounds its own bus calls. The shared bus client sets no
+# socket timeout, so a half-open connection could hang one of the monitor's
+# reads while the modules on other pool connections run on; bounded, the hang
+# becomes a failed poll, which the cycle's liveness check escalates. Its reads
+# never block (block_ms=0) and run on loopback Redis in milliseconds, so 5 s
+# is far above a healthy read and well inside the 30 s liveness bound.
+_WELFARE_BUS_TIMEOUT_S = 5.0
+
+
+class WelfareBusTimeout(Exception):
+    """One of the welfare monitor's own bus calls did not answer in time.
+
+    Never swallowed as an empty read: it fails the poll, so the cycle's
+    liveness check on the welfare monitor sees it.
+    """
 # Indicator stages.
 _STAGE_ARMED = "armed"
 _STAGE_RESTING = "resting"
@@ -978,6 +993,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         on_notice: Callable[[str, tuple[str, ...]], None] | None = None,
         # Real time of day, the clock event timestamps are stamped with.
         wall_time: Callable[[], float] = time.time,
+        # The bound on each of this monitor's own bus calls (see _WELFARE_BUS_TIMEOUT_S).
+        bus_timeout_s: float = _WELFARE_BUS_TIMEOUT_S,
     ) -> None:
         super().__init__(
             bus=bus,
@@ -1055,6 +1072,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._is_developing = is_developing
         self._on_notice = on_notice
         self._wall_time = wall_time
+        self._bus_timeout_s = float(bus_timeout_s)
         self._ind_eval = IndicatorEvaluator(self._indicator_params)
         self._ind_stage = _STAGE_ARMED
         self._ind_request: _RestRequest | None = None
@@ -1118,9 +1136,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             (_WELFARE_STREAM, "_welfare_cursor"),
         ):
             try:
-                entries, last_scanned = await self._bus.read_entries(
+                entries, last_scanned = await self._bus_read(self._bus.read_entries(
                     stream, last_id=getattr(self, cursor_attr), count=128, block_ms=0
-                )
+                ))
+            except WelfareBusTimeout:
+                raise
             except Exception:
                 log.warning(
                     "welfare monitor: %s read failed during warm-up",
@@ -1214,9 +1234,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             return
         # Drain interoception.out, feeding the distress tracker.
         try:
-            entries, last_scanned = await self._bus.read_entries(
+            entries, last_scanned = await self._bus_read(self._bus.read_entries(
                 _INTEROCEPTION_STREAM, last_id=self._cursor, count=128, block_ms=0
-            )
+            ))
+        except WelfareBusTimeout:
+            raise
         except Exception:
             log.warning("welfare monitor: interoception.out read failed", exc_info=True)
             entries, last_scanned = [], None
@@ -1314,11 +1336,13 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         if holders is None or "welfare" in holders:
             return
         try:
-            interoception_tail = await self._bus.last_entry_id(_INTEROCEPTION_STREAM)
-            welfare_tail = await self._bus.last_entry_id(_WELFARE_STREAM)
+            interoception_tail = await self._bus_read(self._bus.last_entry_id(_INTEROCEPTION_STREAM))
+            welfare_tail = await self._bus_read(self._bus.last_entry_id(_WELFARE_STREAM))
             if self._indicators_on:
-                affect_tail = await self._bus.last_entry_id(_AFFECT_STREAM)
-                sleep_tail = await self._bus.last_entry_id(_SLEEP_STREAM)
+                affect_tail = await self._bus_read(self._bus.last_entry_id(_AFFECT_STREAM))
+                sleep_tail = await self._bus_read(self._bus.last_entry_id(_SLEEP_STREAM))
+        except WelfareBusTimeout:
+            raise
         except Exception:
             log.warning("welfare monitor: re-arm deferred, stream tail unreadable", exc_info=True)
             return
@@ -1389,9 +1413,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         occurs while draining the batch.
         """
         try:
-            entries, last_scanned = await self._bus.read_entries(
+            entries, last_scanned = await self._bus_read(self._bus.read_entries(
                 _WELFARE_STREAM, last_id=self._welfare_cursor, count=128, block_ms=0
-            )
+            ))
+        except WelfareBusTimeout:
+            raise
         except Exception:
             log.warning("welfare monitor: welfare.out read failed", exc_info=True)
             return []
@@ -1711,6 +1737,23 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
     # imports kaine.evaluation, and the rest request goes out on this
     # monitor's own stream, which the cycle never reads as a candidate.
 
+    async def _bus_read(self, awaitable: Any) -> Any:
+        """Await one of this monitor's bus reads, bounded by ``bus_timeout_s``."""
+        try:
+            return await asyncio.wait_for(awaitable, timeout=self._bus_timeout_s)
+        except asyncio.TimeoutError as exc:
+            raise WelfareBusTimeout(
+                f"welfare monitor: a bus read did not answer within {self._bus_timeout_s} s"
+            ) from exc
+
+    async def _publish(self, type_: str, payload: dict[str, Any]) -> None:
+        """The base publish, bounded: a hung publish is logged and the poll goes on
+        (the durable incident record is written separately)."""
+        try:
+            await asyncio.wait_for(super()._publish(type_, payload), timeout=self._bus_timeout_s)
+        except asyncio.TimeoutError:
+            log.error("welfare monitor: publish of %s did not answer in time", type_)
+
     def _notify(self, kind: str, indicators: tuple[str, ...]) -> None:
         """Tell ``on_notice`` an indicator notice; a failing callback is only logged."""
         if self._on_notice is None:
@@ -1820,8 +1863,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         if self._ind_affect_cursor is not None and self._ind_sleep_cursor is not None:
             return True
         try:
-            affect_tail = await self._bus.last_entry_id(_AFFECT_STREAM)
-            sleep_tail = await self._bus.last_entry_id(_SLEEP_STREAM)
+            affect_tail = await self._bus_read(self._bus.last_entry_id(_AFFECT_STREAM))
+            sleep_tail = await self._bus_read(self._bus.last_entry_id(_SLEEP_STREAM))
+        except WelfareBusTimeout:
+            raise
         except Exception:
             log.warning("welfare monitor: indicator stream tails unreadable; retrying", exc_info=True)
             return False
@@ -1832,9 +1877,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
     async def _indicator_read(self, stream: str, cursor: str) -> tuple[list[tuple[str, Any]], str]:
         entries_out: list[tuple[str, Any]] = []
         for _ in range(_INDICATOR_MAX_BATCHES):
-            entries, last_scanned = await self._bus.read_entries(
+            entries, last_scanned = await self._bus_read(self._bus.read_entries(
                 stream, last_id=cursor, count=_INDICATOR_READ_COUNT, block_ms=0
-            )
+            ))
             for entry_id, event in entries:
                 entries_out.append((entry_id, event))
                 cursor = entry_id
@@ -1863,6 +1908,8 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             ):
                 try:
                     entries, cursor = await self._indicator_read(stream, getattr(self, attr))
+                except WelfareBusTimeout:
+                    raise
                 except Exception:
                     log.warning("welfare monitor: %s read failed", stream, exc_info=True)
                     continue
@@ -1931,8 +1978,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         try:
             self._indicator_tick_rest_clock(u_now)
             await self._indicator_ingest(u_now)
-        except Exception:
+        except Exception as exc:
             self._exposure_poll_failures += 1
+            if isinstance(exc, WelfareBusTimeout):
+                raise
             log.error("welfare monitor: indicator accrual failed during warm-up", exc_info=True)
 
     def _indicator_detail(
@@ -2004,14 +2053,18 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             return
         request_id = uuid.uuid4().hex[:16]
         try:
-            await self._bus.publish(
-                validate_event(
-                    source=self.source,
-                    type=WELFARE_REST_REQUEST_TYPE,
-                    payload={"request_id": request_id, "indicators": list(crossed)},
-                    salience=0.0,
-                    timestamp=datetime.now(timezone.utc),
-                )
+            # Bounded: a request that hangs is a request not sent.
+            await asyncio.wait_for(
+                self._bus.publish(
+                    validate_event(
+                        source=self.source,
+                        type=WELFARE_REST_REQUEST_TYPE,
+                        payload={"request_id": request_id, "indicators": list(crossed)},
+                        salience=0.0,
+                        timestamp=datetime.now(timezone.utc),
+                    )
+                ),
+                timeout=self._bus_timeout_s,
             )
         except Exception:
             log.error("welfare monitor: the welfare rest request could not be sent", exc_info=True)
@@ -2154,6 +2207,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         persistent one escalates as indicators unavailable."""
         try:
             await self._indicator_poll_inner(u_now)
+        except WelfareBusTimeout:
+            # A hung read fails the whole poll, for the liveness check.
+            self._exposure_poll_failures += 1
+            raise
         except Exception:
             self._exposure_poll_failures += 1
             log.error("welfare monitor: indicator poll failed; retrying next poll", exc_info=True)

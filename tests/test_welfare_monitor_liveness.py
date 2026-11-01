@@ -23,6 +23,7 @@ from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog
 from kaine.cycle.preservation_monitor import (
     PreservationConfig,
+    WelfareBusTimeout,
     WelfareProtectiveMonitor,
     WelfareResponseConfig,
 )
@@ -59,15 +60,34 @@ class _Clock:
         return self.t
 
 
-def _monitor(clock: _Clock, cfg: WelfareResponseConfig) -> WelfareProtectiveMonitor:
+def _monitor(clock: _Clock, cfg: WelfareResponseConfig, *, bus=None, **kwargs) -> WelfareProtectiveMonitor:
     return WelfareProtectiveMonitor(
         registry=ModuleRegistry(),
         fork_manager=None,
         config=cfg,
-        bus=None,
+        bus=bus,
         incident_log=IncidentLog(enabled=False, path="unused"),
         clock=clock,
+        **kwargs,
     )
+
+
+class _SilentBus:
+    """A bus whose reads never answer (a half-open connection); publishes return."""
+
+    def __init__(self) -> None:
+        self.reads = 0
+
+    async def read_entries(self, *args, **kwargs):
+        self.reads += 1
+        await asyncio.Event().wait()
+
+    async def last_entry_id(self, *args, **kwargs):
+        self.reads += 1
+        await asyncio.Event().wait()
+
+    async def publish(self, event=None):
+        return "0-0"
 
 
 async def _ctx_with_monitor(tmp_path, mode: str):
@@ -219,3 +239,58 @@ async def test_an_operator_present_run_does_not_escalate_a_lost_monitor(tmp_path
     assert _escalation().get("escalated") is not True
     ctx.supervisor_task.cancel()
     ctx.cycle_task.cancel()
+
+
+# --- the monitor's own bus reads are bounded ----------------------------------------
+
+
+@pytest.mark.parametrize("warmup_s", [0.0, 120.0])
+async def test_a_bus_read_that_never_answers_fails_the_poll(warmup_s):
+    """In warm-up and after it, a hung read is a failed poll, never an empty read."""
+    clock = _Clock()
+    bus = _SilentBus()
+    monitor = _monitor(
+        clock,
+        WelfareResponseConfig(enabled=True, warmup_s=warmup_s, warmup_ceiling_s=0.0),
+        bus=bus,
+        bus_timeout_s=0.05,
+    )
+    with pytest.raises(WelfareBusTimeout):
+        await asyncio.wait_for(monitor._poll_once(asyncio.Event()), timeout=5.0)
+    assert bus.reads >= 1
+
+
+async def test_a_hung_bus_read_escalates_through_the_liveness_check(tmp_path):
+    """The real monitor's run loop on a bus that never answers: every poll
+    fails within the bound, and the run loop escalates the lost monitor."""
+    ctx, clock = await _ctx_with_monitor(tmp_path, "research")
+    ctx.supervisor_task = asyncio.create_task(_never_ending())
+    ctx.welfare_monitor = _monitor(
+        clock, ctx.preservation_cfg.welfare_response, bus=_SilentBus(), bus_timeout_s=0.05
+    )
+    ctx.welfare_task = asyncio.create_task(ctx.welfare_monitor.run(ctx.stop_event))
+    for _ in range(500):
+        if ctx.welfare_monitor.poll_failures >= 3:
+            break
+        await asyncio.sleep(0.01)
+    assert ctx.welfare_monitor.poll_failures >= 3
+    assert not ctx.welfare_task.done()
+    clock.t += 31.0
+    await asyncio.wait_for(cyc._run_until_stopped(ctx), timeout=5.0)
+    _assert_escalated(ctx, tmp_path)
+    await asyncio.wait_for(ctx.welfare_task, timeout=5.0)
+    ctx.supervisor_task.cancel()
+    ctx.cycle_task.cancel()
+
+
+async def test_the_monitor_never_reads_the_bus_unbounded():
+    """Every bus read in the welfare monitor goes through its bounded helper."""
+    import inspect
+
+    import kaine.cycle.preservation_monitor as pm
+
+    source = inspect.getsource(pm.WelfareProtectiveMonitor)
+    for call in ("self._bus.read_entries(", "self._bus.last_entry_id("):
+        for line in source.splitlines():
+            if call in line:
+                assert "self._bus_read(" in line, line
