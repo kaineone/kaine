@@ -21,7 +21,7 @@ Detects and counts four welfare-relevant conditions:
 (d) Sustained interoceptive distress — the interoception module's own
     forward-model error carried by ``interoception.report`` events on
     ``interoception.out`` (read through
-    :func:`kaine.lifecycle.welfare_signal.welfare_prediction_error`, so a
+    :func:`kaine.lifecycle.welfare_signal.read_welfare_prediction_error`, so a
     workspace-feedback blend cannot move it) stays at or above
     ``interoceptive_distress_threshold`` (default 0.8) continuously for at
     least ``interoceptive_distress_duration_s`` (default 30 s).  The sustain
@@ -121,8 +121,9 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     SilenceTransition,
     SustainedThresholdTracker,
     UndefinedRunTracker,
+    WelfareSignalAccount,
     WindowedEventCounter,
-    welfare_prediction_error,
+    read_welfare_prediction_error,
 )
 
 log = logging.getLogger(__name__)
@@ -159,6 +160,8 @@ _DEFAULT_AFFECT_SUMMARY_INTERVAL_S = 300.0  # unfrozen seconds between affect_we
 # (a freeze, a stall, a restart) counts for at most this many seconds.
 _AFFECT_SAMPLE_GAP_CAP_S = 5.0
 _AFFECT_WELFARE_RECORD = "affect_welfare"
+#: The ``record`` label of the distress arm's welfare-signal defect record.
+_WELFARE_SIGNAL_RECORD = "welfare_signal"
 # Fixed drive table: the only drive names that may appear in record keys.
 _WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
 # The homeostatic deficits: their time at or above threshold is time without relief.
@@ -484,6 +487,10 @@ class WelfareObserver(StreamSubscriberObserver):
             duration_s=self._interoceptive_distress_duration_s,
         )
 
+        # --- Producer defects in the interoception reports the distress arm reads. ---
+        self._signal = WelfareSignalAccount()
+        self._signal_record_at: float | None = None
+
         # --- State for blind-sensor advisory (operator advisory, not gray-zone). ---
         self._started_wall: datetime | None = None
         self._blind_sensor_count: int = 0
@@ -612,6 +619,16 @@ class WelfareObserver(StreamSubscriberObserver):
             await self._check_silence()
         except Exception:
             log.warning("welfare_observer silence check failed", exc_info=True)
+
+        try:
+            now = self._unfrozen.now()
+            if self._signal.changed and (
+                self._signal_record_at is None
+                or now - self._signal_record_at >= self._interoceptive_distress_duration_s
+            ):
+                await self._write_signal_record(now)
+        except Exception:
+            log.warning("welfare_observer welfare-signal record failed", exc_info=True)
 
         try:
             now = self._unfrozen.now()
@@ -915,9 +932,11 @@ class WelfareObserver(StreamSubscriberObserver):
             # (d) Track interoceptive prediction-error magnitude through the
             # shared sustained-threshold tracker. The welfare reading is the
             # interoception module's own forward-model error, never the
-            # workspace-feedback blend (welfare_prediction_error). The tracker
+            # workspace-feedback blend (read_welfare_prediction_error). The tracker
             # fires once per sustained episode (rising-edge), resetting its own timer.
-            magnitude = welfare_prediction_error(event.payload, processor="interoception")
+            reading = read_welfare_prediction_error(event.payload, processor="interoception")
+            self._signal.record(reading, self._unfrozen.now())
+            magnitude = reading.value
             if magnitude is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress tracker.
@@ -1077,11 +1096,50 @@ class WelfareObserver(StreamSubscriberObserver):
             if self._interoceptive_distress.check_timeout(now):
                 await self._emit_sustained_interoceptive_distress(seconds)
 
+    async def _write_signal_record(self, now: float) -> None:
+        """Write a ``welfare_signal`` record of the distress arm's producer defects.
+
+        CONTENT CONTRACT: the fixed ``record`` label and this observer's own
+        counts; nothing is copied from a source payload. Written when a new
+        defect was read, at most once per ``interoceptive_distress_duration_s``
+        of unfrozen time, and at stop. Marked written only once the sink took it.
+        """
+        counts = self._signal.snapshot(now)
+        log.error(
+            "welfare_observer: interoception welfare-signal defects: %d unreadable "
+            "reports (%d without the key, %d not a number), %d own-error fallbacks to "
+            "the blended value, of %d reports",
+            counts["unreadable_reports"],
+            counts["unreadable_missing_key"],
+            counts["unreadable_malformed"],
+            counts["own_error_fallbacks"],
+            counts["reports"],
+        )
+        await self._sink.write(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "record": _WELFARE_SIGNAL_RECORD,
+                **counts,
+            }
+        )
+        self._signal_record_at = now
+        self._signal.mark_reported()
+
+    @property
+    def signal_defects(self) -> dict[str, int | float]:
+        """The distress arm's interoception welfare-signal defect counts."""
+        return self._signal.snapshot(self._unfrozen.now())
+
     async def _cleanup(self) -> None:
         """Write a final ``affect_welfare`` record if anything changed since the last one (records are cumulative, so an unchanged record would repeat the previous one)."""
         await super()._cleanup()
         if self._affect_tally.changed:
             await self._write_affect_summary()
+        if self._signal.changed:
+            try:
+                await self._write_signal_record(self._unfrozen.now())
+            except Exception:
+                log.warning("welfare_observer welfare-signal record failed", exc_info=True)
 
 
 def build_welfare_producer(

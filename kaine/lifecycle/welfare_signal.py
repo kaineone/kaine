@@ -24,7 +24,6 @@ defect once per processor; its return value is a pure function of the payload.
 from __future__ import annotations
 
 import logging
-import math
 from collections import deque
 from collections.abc import Mapping
 from typing import Any, NamedTuple
@@ -64,81 +63,198 @@ def _log_defect_once(processor: str, defect: str, message: str) -> None:
     log.error(message, processor)
 
 
-def welfare_prediction_error(
+#: Defect labels of a :class:`WelfareReading`. ``UNREADABLE_*`` reports carry no
+#: reading at all (the welfare net is blind to them); ``OWN_ERROR_FALLBACK``
+#: reports carry the published (blended) value in place of the own error.
+UNREADABLE_MISSING_KEY = "missing_prediction_error"
+UNREADABLE_MALFORMED = "malformed_prediction_error"
+OWN_ERROR_FALLBACK = "own_error_fallback"
+UNREADABLE_DEFECTS: frozenset[str] = frozenset({UNREADABLE_MISSING_KEY, UNREADABLE_MALFORMED})
+
+
+class WelfareReading(NamedTuple):
+    """One report's welfare reading and the producer defect behind it, if any."""
+
+    value: float | None
+    defect: str | None = None
+
+    @property
+    def unreadable(self) -> bool:
+        """The report was published but its error cannot be read at all."""
+        return self.defect in UNREADABLE_DEFECTS
+
+
+def read_welfare_prediction_error(
     payload: Mapping[str, Any] | None, *, processor: str = "interoception"
-) -> float | None:
+) -> WelfareReading:
     """The welfare reading of one processor report: its own forward-model error.
 
     Every welfare reader of a processor's prediction error (the welfare
     observer's sustained-distress tracker and gray-zone count, the autonomous
     welfare response, the welfare indicator response, the development run's
-    interoceptive recovery series) reads it through this function and never
-    reads ``prediction_error`` from the payload itself. With workspace feedback
-    on, the published ``prediction_error`` is the error of the blend of the
+    interoceptive recovery series) reads it through this function (or
+    :func:`welfare_prediction_error`, its value alone) and never reads
+    ``prediction_error`` from the payload itself. With workspace feedback on,
+    the published ``prediction_error`` is the error of the blend of the
     processor's own prediction with the workspace's top-down prediction, which
     is right for experience (intensity, access, affect) but would let the
     watched component move the signal that watches it. This function returns
-    the processor's own error whatever feeds the blend.
+    the processor's own error, so the top-down head and the blend cannot move
+    the reading. (The reading still follows every real change feedback makes to
+    what the entity perceives and does: the context the own model conditions
+    on, sleep, the host itself.)
 
     The rule:
 
-    1. ``prediction_error`` null or absent: ``None``. A null error is no sample;
-       the reader neither feeds nor resets its tracker. An absent key is a
-       producer defect (every report carries the key) and is also logged once
-       per processor; it never ends a distress episode.
-    2. The payload carries a ``workspace_feedback`` block (the blend is in use):
-       its ``own_error``, the inner forward model's error for this reading.
-    3. Otherwise ``prediction_error`` itself. Nothing blends it, so it is the
+    1. ``prediction_error`` null: no sample (``value`` None, no defect). The
+       reader neither feeds nor resets its tracker.
+    2. ``prediction_error`` absent, or the payload not a mapping: no sample with
+       defect ``UNREADABLE_MISSING_KEY``. Every report carries the key, so this
+       is a producer defect that blinds the reader; it never ends a distress
+       episode, and the reader counts it and fails loudly (the welfare response
+       raises into its poll error path).
+    3. ``prediction_error`` not a number (a string, a list, a bool): no sample
+       with defect ``UNREADABLE_MALFORMED``, handled like rule 2.
+    4. The payload carries a ``workspace_feedback`` block (the blend is in use):
+       its ``own_error``, the inner forward model's error for this reading,
+       whatever number it is. A non-finite own error is returned as is: an
+       overflowing own model is distress the blend must not hide.
+    5. Otherwise ``prediction_error`` itself. Nothing blends it, so it is the
        own-model error; with feedback off the reading is exactly the published
-       value.
+       value for every report the producer publishes.
 
-    A blended report with a defined ``prediction_error`` but no finite
-    ``own_error`` (or a ``workspace_feedback`` value that is not a mapping) is a
-    producer defect. The reading is then the published ``prediction_error``
-    (the blended value, which keeps the welfare net watching rather than
-    pausing it for as long as the defect lasts) and an error is logged once per
-    processor. A ``prediction_error`` that is not a number (or is a bool) is no
-    sample, also logged once per processor. A non-finite number is returned as
-    published; each reader keeps its own rule for it.
+    A blended report with a defined ``prediction_error`` but no numeric
+    ``own_error`` (absent, null, a string, a list, a bool, or a
+    ``workspace_feedback`` value that is not a mapping) is a producer defect.
+    The reading is then the published ``prediction_error`` with defect
+    ``OWN_ERROR_FALLBACK``: the blended value keeps the welfare net watching
+    rather than pausing it for as long as the defect lasts, and the readers
+    count every fallback where the operator sees it. A non-finite published
+    number is returned as published; each reader keeps its own rule for it.
 
-    ``processor`` names the producer for the once-per-processor error log.
+    Each defect is also logged once per processor for the life of the process;
+    ``processor`` names the producer for that log.
     """
-    if not isinstance(payload, Mapping):
-        return None
-    if "prediction_error" not in payload:
+    if not isinstance(payload, Mapping) or "prediction_error" not in payload:
         _log_defect_once(
             processor,
-            "missing_prediction_error",
+            UNREADABLE_MISSING_KEY,
             "welfare signal: a %s report carries no prediction_error key; the welfare "
-            "readers treat it as no sample",
+            "readers cannot read it and count it as an unreadable report",
         )
-        return None
+        return WelfareReading(None, UNREADABLE_MISSING_KEY)
     raw = payload["prediction_error"]
     if raw is None:
-        return None
+        return WelfareReading(None)
     published = _real(raw)
     if published is None:
         _log_defect_once(
             processor,
-            "malformed_prediction_error",
+            UNREADABLE_MALFORMED,
             "welfare signal: a %s report published a prediction_error that is not a "
-            "number; the welfare readers treat it as no sample",
+            "number; the welfare readers cannot read it and count it as an unreadable report",
         )
-        return None
+        return WelfareReading(None, UNREADABLE_MALFORMED)
     if FEEDBACK_PAYLOAD_KEY not in payload:
-        return published
+        return WelfareReading(published)
     block = payload.get(FEEDBACK_PAYLOAD_KEY)
     own = _real(block.get(OWN_ERROR_KEY)) if isinstance(block, Mapping) else None
-    if own is None or not math.isfinite(own):
+    if own is None:
         _log_defect_once(
             processor,
-            "missing_own_error",
+            OWN_ERROR_FALLBACK,
             "welfare signal: a blended %s report has a defined prediction_error but "
-            "no finite workspace_feedback.own_error; the welfare readers fall back to "
-            "the published (blended) prediction_error",
+            "no numeric workspace_feedback.own_error; the welfare readers fall back to "
+            "the published (blended) prediction_error and count the fallback",
         )
-        return published
-    return own
+        return WelfareReading(published, OWN_ERROR_FALLBACK)
+    return WelfareReading(own)
+
+
+def welfare_prediction_error(
+    payload: Mapping[str, Any] | None, *, processor: str = "interoception"
+) -> float | None:
+    """The value of :func:`read_welfare_prediction_error` alone.
+
+    For a caller that needs no defect accounting; every welfare decision reader
+    uses :func:`read_welfare_prediction_error` and counts the defects.
+    """
+    return read_welfare_prediction_error(payload, processor=processor).value
+
+
+class WelfareSignalAccount:
+    """One reader's count of the reports it read and the producer defects among them.
+
+    ``record`` takes each :class:`WelfareReading` with the reader's clock. An
+    unreadable report starts or extends a run of unreadable reports; a report
+    with a value (or a null error) ends the run. ``unreadable_run_s`` is the
+    run's span on the caller's clock. ``changed`` is set by every defect and
+    cleared by :meth:`mark_reported`, so a reader writes its record only when
+    something new happened. Pure: no I/O, no clock of its own.
+    """
+
+    def __init__(self) -> None:
+        self.reports = 0
+        self.unreadable_missing_key = 0
+        self.unreadable_malformed = 0
+        self.own_error_fallbacks = 0
+        self.unreadable_run = 0
+        self._run_since: float | None = None
+        self._run_last: float | None = None
+        self.changed = False
+
+    @property
+    def unreadable(self) -> int:
+        return self.unreadable_missing_key + self.unreadable_malformed
+
+    def record(self, reading: WelfareReading, now: float) -> None:
+        self.reports += 1
+        if reading.defect == UNREADABLE_MISSING_KEY:
+            self.unreadable_missing_key += 1
+        elif reading.defect == UNREADABLE_MALFORMED:
+            self.unreadable_malformed += 1
+        elif reading.defect == OWN_ERROR_FALLBACK:
+            self.own_error_fallbacks += 1
+        if reading.unreadable:
+            if self._run_since is None:
+                self._run_since = float(now)
+            self._run_last = float(now)
+            self.unreadable_run += 1
+        else:
+            self._run_since = None
+            self._run_last = None
+            self.unreadable_run = 0
+        if reading.defect is not None:
+            self.changed = True
+
+    def unreadable_run_s(self, now: float) -> float:
+        if self._run_since is None:
+            return 0.0
+        return float(now) - self._run_since
+
+    def mark_reported(self) -> None:
+        self.changed = False
+
+    def snapshot(self, now: float) -> dict[str, int | float]:
+        """The counts as a content-free record (numbers only)."""
+        return {
+            "reports": self.reports,
+            "unreadable_reports": self.unreadable,
+            "unreadable_missing_key": self.unreadable_missing_key,
+            "unreadable_malformed": self.unreadable_malformed,
+            "own_error_fallbacks": self.own_error_fallbacks,
+            "unreadable_run": self.unreadable_run,
+            "unreadable_run_s": self.unreadable_run_s(now),
+        }
+
+
+class WelfareSignalUnreadable(RuntimeError):
+    """Raised by a welfare decision reader whose poll met unreadable reports.
+
+    The welfare response raises it at the end of its poll, after acting on
+    every readable sample, so the poll counts as failed: the run loop logs it,
+    and a liveness check over failed polls escalates a run of them.
+    """
 
 
 class SustainedThresholdTracker:
@@ -466,8 +582,16 @@ class UndefinedRunTracker:
 
 __all__ = [
     "FEEDBACK_PAYLOAD_KEY",
+    "OWN_ERROR_FALLBACK",
     "OWN_ERROR_KEY",
+    "UNREADABLE_DEFECTS",
+    "UNREADABLE_MALFORMED",
+    "UNREADABLE_MISSING_KEY",
     "WELFARE_SIGNAL_UNBLENDED",
+    "WelfareReading",
+    "WelfareSignalAccount",
+    "WelfareSignalUnreadable",
+    "read_welfare_prediction_error",
     "welfare_prediction_error",
     "SustainedThresholdTracker",
     "WindowedEventCounter",

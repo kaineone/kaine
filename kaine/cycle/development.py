@@ -49,7 +49,7 @@ import scipy.signal
 
 from kaine.bus.schema import Event
 from kaine.bus.streams import DEVELOPMENT_SOURCE
-from kaine.lifecycle.welfare_signal import welfare_prediction_error
+from kaine.lifecycle.welfare_signal import WelfareSignalAccount, read_welfare_prediction_error
 from kaine.modules.perception_prng import keyed_u64, unit_float
 from kaine.storage import resolve
 
@@ -575,6 +575,7 @@ class DevelopmentOwner:
 
         interoception_maxlen = int((self._config.recovery_cap_seconds + 120.0) * 2.0)
         self._interoception_series: deque[tuple[float, float]] = deque(maxlen=max(interoception_maxlen, 16))
+        self._interoception_signal = WelfareSignalAccount()
 
         self._settle_until: float = (
             self._started_at + self._config.readout_period_seconds
@@ -1386,11 +1387,11 @@ class DevelopmentOwner:
                 # The recovery series feeds the maturation gate's readiness, a
                 # welfare decision: it reads the interoception module's own
                 # forward-model error, never the workspace-feedback blend.
-                err = (
-                    welfare_prediction_error(event.payload, processor="interoception")
-                    if isinstance(event.payload, dict)
-                    else None
-                )
+                # A report whose error cannot be read is skipped as a sample
+                # but counted into the readout, so the gate's evidence says so.
+                reading = read_welfare_prediction_error(event.payload, processor="interoception")
+                self._interoception_signal.record(reading, now)
+                err = reading.value
                 if err is not None and math.isfinite(err):
                     self._interoception_series.append((now, err))
             if last_scanned is not None:
@@ -1515,4 +1516,12 @@ class DevelopmentOwner:
             result["self_rhythm_freq_withdrawn"] = self._self_rhythm_freq_withdrawn
         if self._frequency_pull is not None:
             result["frequency_pull"] = self._frequency_pull
+        # Producer defects in the interoception reports behind the recovery
+        # series; present only once one has been read.
+        if self._interoception_signal.unreadable:
+            result["interoception_unreadable_reports"] = self._interoception_signal.unreadable
+        if self._interoception_signal.own_error_fallbacks:
+            result["interoception_own_error_fallbacks"] = (
+                self._interoception_signal.own_error_fallbacks
+            )
         return result
