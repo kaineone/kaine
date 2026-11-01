@@ -9,20 +9,19 @@ injected-object pattern); only an action name crosses, and the controller turns
 it into a pause holder, a seek, a gain in decibels or a channel index. No frame
 or sample is written anywhere.
 
-The feeds stay as they are and are wrapped:
+The feeds follow the clock themselves: both read its ``position_epoch()``,
+and when it changes the video source reopens the item and seeks its decoder to
+the clock's offset, and the audio producer resyncs at the clock as on a
+restart. The audio callback passes through
+:meth:`StimulusController.wrap_audio_callback`, which applies the programme gain
+before the audition module reads the samples.
 
-- :class:`SeekAwareVideoSource` reopens the video decoder at the clock's
-  presented item whenever the presented position jumps;
-- :class:`ControlledAudioStream` serialises the audio stream's start, stop and
-  producer restart, and the controller restarts the producer at the clock's
-  position after a jump;
-- the audio callback passes through :meth:`StimulusController.wrap_audio_callback`,
-  which applies the programme gain before the audition module reads the samples
-  and keeps any block from before a jump silent until the producer has moved.
-
-A poll thread releases an entity pause after ``P_max`` of entity time, restarts
-the audio producer after a jump and accounts awake time, the paused share, the
-gain and the items visited for the welfare record.
+A poll thread releases an entity pause after ``P_max`` of entity time and
+accounts awake time, the paused share, the gain and the items visited for the
+welfare record. When the entity's pauses hold the programme for more than half
+of the last awake hour it logs an operator advisory, once until the share falls
+back, and counts it in the record. The advisory blocks nothing: each pause
+releases itself and commands are at least ``Delta_sc`` apart.
 """
 from __future__ import annotations
 
@@ -53,6 +52,12 @@ ENTITY_HOLDER = "entity"
 # net or the operator. Time under them is not awake time.
 NOT_AWAKE_HOLDERS = frozenset({"sleep", "freeze"})
 _GAIN_EPS = 1e-9
+#: The paused-share advisory: the trailing window of awake time, the share of
+#: it held by the entity's pauses past which the operator is told, and the
+#: bucket the window is kept in.
+ADVISORY_WINDOW_S = 3600.0
+ADVISORY_SHARE = 0.5
+_ADVISORY_BUCKET_S = 10.0
 
 
 def apply_gain(pcm: bytes, gain_db: float) -> bytes:
@@ -109,9 +114,12 @@ class StimulusController:
         # The gain returns to zero at the start of every viewing; a boot is a viewing.
         self._gain_db = 0.0
         self._entity_paused_at: float | None = None
-        self._audio_streams: list[ControlledAudioStream] = []
-        self._audio_epoch = clock.position_epoch()
         self._awake_s = 0.0
+        # Paused seconds per bucket of awake time, oldest first, for the
+        # trailing-hour paused share; the last bucket is the one filling.
+        self._paused_buckets: list[float] = [0.0]
+        self._bucket_awake = 0.0
+        self._advisory_active = False
         self._last_account = now()
         self._last_visit: tuple[int, int] | None = None
         self._stop = threading.Event()
@@ -239,25 +247,10 @@ class StimulusController:
 
     # -- feeds --------------------------------------------------------------
 
-    def wrap_video(self, source: Any) -> "SeekAwareVideoSource":
-        return SeekAwareVideoSource(source, self._clock)
-
-    def wrap_audio(self, stream: Any) -> "ControlledAudioStream":
-        controlled = ControlledAudioStream(stream)
-        with self._lock:
-            self._audio_streams = [s for s in self._audio_streams if not s.closed]
-            self._audio_streams.append(controlled)
-        return controlled
-
-    def audio_is_stale(self) -> bool:
-        """True while the presented position has jumped and the producer has not moved yet."""
-        return self._clock.position_epoch() != self._audio_epoch
-
     def wrap_audio_callback(self, callback: Callable[[bytes], None]) -> Callable[[bytes], None]:
+        """The audio callback with the programme gain applied (0 dB: unchanged)."""
+
         def _on_pcm(pcm: bytes) -> None:
-            if self.audio_is_stale():
-                callback(b"\x00" * len(pcm))
-                return
             callback(apply_gain(pcm, self._gain_db))
 
         return _on_pcm
@@ -266,16 +259,17 @@ class StimulusController:
 
     def poll_once(self) -> None:
         now = self._now()
+        advisory: float | None = None
         with self._lock:
             dt = max(0.0, now - self._last_account)
             self._last_account = now
             holders = self._clock.holders
             if not (holders & NOT_AWAKE_HOLDERS):
                 self._awake_s += dt
+                paused = ENTITY_HOLDER in holders
                 if self._tally is not None:
-                    self._tally.account(
-                        dt, entity_paused=ENTITY_HOLDER in holders, gain_db=self._gain_db
-                    )
+                    self._tally.account(dt, entity_paused=paused, gain_db=self._gain_db)
+                advisory = self._advance_paused_window(dt, paused)
             if (
                 ENTITY_HOLDER in holders
                 and self._entity_paused_at is not None
@@ -285,16 +279,49 @@ class StimulusController:
                 self._clock.resume(ENTITY_HOLDER)
                 if self._tally is not None:
                     self._tally.auto_released()
-            streams = list(self._audio_streams)
-        epoch = self._clock.position_epoch()
-        if epoch != self._audio_epoch:
-            moved = True
-            for stream in streams:
-                if not stream.reposition():
-                    moved = False
-            if moved:
-                self._audio_epoch = epoch
+        if advisory is not None:
+            # An operator advisory, not a block: numbers only.
+            log.warning(
+                "stimulus control advisory: the entity's pauses held the programme "
+                "for %.0f%% of the last awake hour (more than %.0f%%); nothing is "
+                "blocked, each pause releases itself after %.0f s",
+                100.0 * advisory,
+                100.0 * ADVISORY_SHARE,
+                self._config.pause_max_s,
+            )
         self._note_visit()
+
+    def paused_share_last_awake_hour(self) -> float:
+        """The share of the trailing awake hour held by the entity's pauses."""
+        with self._lock:
+            return sum(self._paused_buckets) / ADVISORY_WINDOW_S
+
+    def _advance_paused_window(self, dt: float, paused: bool) -> float | None:
+        """Account ``dt`` awake seconds; return the share when an advisory is due."""
+        remaining = dt
+        keep = int(ADVISORY_WINDOW_S / _ADVISORY_BUCKET_S)
+        while remaining > 0.0:
+            step = min(_ADVISORY_BUCKET_S - self._bucket_awake, remaining)
+            if paused:
+                self._paused_buckets[-1] += step
+            self._bucket_awake += step
+            remaining -= step
+            if self._bucket_awake >= _ADVISORY_BUCKET_S - 1e-9:
+                self._paused_buckets.append(0.0)
+                self._bucket_awake = 0.0
+                if len(self._paused_buckets) > keep:
+                    del self._paused_buckets[: len(self._paused_buckets) - keep]
+        share = sum(self._paused_buckets) / ADVISORY_WINDOW_S
+        if self._tally is not None:
+            self._tally.paused_share(share)
+        if share > ADVISORY_SHARE and not self._advisory_active:
+            self._advisory_active = True
+            if self._tally is not None:
+                self._tally.paused_advisory()
+            return share
+        if share <= ADVISORY_SHARE:
+            self._advisory_active = False
+        return None
 
     def _note_visit(self) -> None:
         if self._tally is None:
@@ -314,101 +341,11 @@ class StimulusController:
                 self._tally.visit(channel, items[idx].order)
 
 
-class SeekAwareVideoSource:
-    """A ``_VideoSource`` over a ``PlaylistSource`` that follows the clock's jumps."""
-
-    def __init__(self, inner: Any, clock: ProgrammeClock) -> None:
-        self._inner = inner
-        self._clock = clock
-        self._epoch: tuple[int, int] | None = None
-
-    @property
-    def manifest(self) -> Any:
-        return self._inner.manifest
-
-    @property
-    def clock(self) -> Any:
-        return self._inner.clock
-
-    @property
-    def current_item(self) -> Any:
-        return self._inner.current_item
-
-    def first_frame(self) -> Any:
-        return self._inner.first_frame()
-
-    def open(self) -> bool:
-        self._epoch = None
-        return bool(self._inner.open())
-
-    def read(self) -> tuple[bool, Any]:
-        epoch = self._clock.position_epoch()
-        if epoch != self._epoch:
-            first = self._epoch is None
-            self._epoch = epoch
-            if self._clock.started:
-                idx, _offset = self._clock.locate()
-                if idx < self._clock.item_count and (
-                    not first or idx != self._inner.open_item_index
-                ):
-                    self._inner.reopen_item(idx)
-        return self._inner.read()
-
-    def release(self) -> None:
-        self._inner.release()
-
-
-class ControlledAudioStream:
-    """An ``_AudioStream`` whose start, stop and producer restart never interleave."""
-
-    def __init__(self, inner: Any) -> None:
-        self._inner = inner
-        self._lock = threading.Lock()
-        self.closed = False
-
-    @property
-    def manifest(self) -> Any:
-        return self._inner.manifest
-
-    @property
-    def clock(self) -> Any:
-        return self._inner.clock
-
-    @property
-    def current_item(self) -> Any:
-        return self._inner.current_item
-
-    @property
-    def delivered_position(self) -> Any:
-        return self._inner.delivered_position
-
-    def start(self) -> None:
-        with self._lock:
-            self.closed = False
-            self._inner.start()
-
-    def stop(self) -> None:
-        with self._lock:
-            self._inner.stop()
-
-    def close(self) -> None:
-        with self._lock:
-            self.closed = True
-            self._inner.close()
-
-    def reposition(self) -> bool:
-        """Restart a running producer at the clock's position; True when moved or idle."""
-        with self._lock:
-            if self.closed:
-                return True
-            return self._inner.restart_producer() is not False
-
-
 __all__ = [
+    "ADVISORY_SHARE",
+    "ADVISORY_WINDOW_S",
     "ENTITY_HOLDER",
     "NOT_AWAKE_HOLDERS",
-    "ControlledAudioStream",
-    "SeekAwareVideoSource",
     "StimulusController",
     "StimulusState",
     "apply_gain",

@@ -96,8 +96,8 @@ It declares `pause`, `resume`, `next`, `previous`, `louder`, `quieter`, and `cha
 
 An accepted command goes in process to the stimulus controller, which the boot registry also hands to both playlist feeds:
 
-- `pause` adds the `entity` holder to the shared playlist clock and `resume` removes it; the controller releases it after `pause_max_s` (120 s of entity time). It combines with the `sleep`, `freeze` and `transition` holders as they combine with each other.
-- `next` and `previous` move to the start of the adjacent item of the current channel and wrap at both ends. The shared clock is then a `ProgrammeClock`: elapsed time is still perceived programme time, and the presented position is read through an anchor a seek moves. The viewing ends when perceived time reaches channel 0's length, so skipping never ends it, and the end-of-programme preservation runs once as before. The video wrapper reopens its decoder and the controller restarts the audio producer when the presented position jumps; audio from before a jump is silent until the producer has moved.
+- `pause` adds the `entity` holder to the shared playlist clock and `resume` removes it; the controller releases it after `pause_max_s` (120 s of entity time). It combines with the `sleep`, `freeze` and `transition` holders as they combine with each other. When the entity's pauses hold the programme for more than half of the last awake hour, the controller logs an operator advisory (numbers only), once until the share falls back; it blocks nothing.
+- `next` and `previous` move to the start of the adjacent item of the current channel and wrap at both ends. The shared clock is then a `ProgrammeClock`: elapsed time is still perceived programme time, and the presented position is read through an anchor a seek moves. The viewing ends when perceived time reaches channel 0's length, so skipping never ends it, and the end-of-programme preservation runs once as before. When the presented position jumps, the video source reopens the item and seeks its decoder to the clock's offset, and the audio producer resyncs at the clock as on a restart, so no block from before the jump is heard and the sound stays paced against the clock. Every item's container duration is registered before playback; an item that reports none stops the boot.
 - `louder` and `quieter` set the gain the controller applies to the audio callback before the audition module reads the samples, with a smooth knee above 0.9 of full scale. The gain is 0 at each boot.
 - `channel:<k>` moves to the start of channel `k`; `next` and `previous` then wrap within it.
 
@@ -140,7 +140,7 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 | `kaine/modules/effectors/whitelist.py` | `CommandWhitelist`, `WhitelistEntry` |
 | `kaine/modules/effectors/audit_log.py` | `ActionAuditLog` |
 | `kaine/modules/effectors/AUDIT.md` | Reviewer notes on the module |
-| `kaine/modules/effectors/stimulus/` | The held stimulus effector: `config.py` (`[stimulus_control]`), `programme.py` (`ProgrammeClock`, channels, the duration probe), `controller.py` (the control port and the feed wrappers), `records.py` (the welfare record and readout), `runtime.py` (the per-boot object), `effector.py` (`StimulusEffector`) |
+| `kaine/modules/effectors/stimulus/` | The held stimulus effector: `config.py` (`[stimulus_control]`), `programme.py` (`ProgrammeClock`, channels, the duration probe), `controller.py` (the control port, the gain stage, the pause release and the paused-share advisory), `records.py` (the welfare record and readout), `runtime.py` (the per-boot object), `effector.py` (`StimulusEffector`) |
 | `kaine/workspace/stimulus_policy.py` | The stage-M stimulus act source |
 | `kaine/security/intent_signing.py` | Signing and verification of act intents |
 
@@ -154,7 +154,7 @@ The offline suite's enforcement red team (`kaine/evaluation/redteam/`) drives th
 | `tests/test_effectors_module.py` | Intent loop, routing, unknown effectors |
 | `tests/test_effector_stimulus.py` | Stimulus bounds and refusals through the effectors module, the whitelist, the seek cap over awake time, channels |
 | `tests/test_stimulus_programme_clock.py` | Seek wrapping, the perceived-time end, channels, identity with the plain clock without a seek |
-| `tests/test_stimulus_feed_real.py` | Real synthetic media through the OpenCV and PyAV feeds: seeks, wraps, gain, the entity pause, the end, the boot factories and registry |
+| `tests/test_stimulus_feed_real.py` | Real synthetic media through the PyAV feeds: seeks, wraps, channels, pacing after a jump, gain, the entity pause and its advisory, the end, the boot factories and registry |
 | `tests/test_stimulus_stage_m.py` | The stage-M trigger, the uniform seeded draw, and the act through signing, the bus and the effectors module |
 | `tests/test_stimulus_disabled_identity.py` | Off equals absent against a golden from the build before the component |
 | `tests/test_stimulus_off_in_mediation_arms.py`, `tests/test_welfare_stimulus_records.py`, `tests/test_affect_stimulus_credit.py`, `tests/test_stimulus_habituation.py` | The mediation-arm refusal and config validation; the record and readout; the credit window; habituation of skip-driven novelty |

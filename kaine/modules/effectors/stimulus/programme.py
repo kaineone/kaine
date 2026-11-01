@@ -45,6 +45,7 @@ from kaine.modules.vision.feed import (
     PlaylistClock,
     PlaylistItem,
     PlaylistManifest,
+    container_duration_s,
     load_playlist_manifest,
 )
 
@@ -108,35 +109,17 @@ def load_programme(primary_manifest: str, channels: Sequence[str] = ()) -> Progr
     )
 
 
-def _probe_cv2(path: str, fps: float) -> float | None:
-    try:
-        import cv2  # type: ignore[import-untyped]
-    except ImportError:
-        return None
-    cap = cv2.VideoCapture(path)
-    try:
-        if not cap.isOpened():
-            return None
-        frames = float(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    finally:
-        cap.release()
-    if frames > 0 and fps > 0:
-        return frames / float(fps)
-    return None
-
-
-def _probe_av(path: str) -> float | None:
+def _probe_container(path: str) -> float | None:
+    """The container duration, the length both playlist surfaces register."""
     try:
         import av  # type: ignore[import-untyped]
     except ImportError:
         return None
     container = av.open(path)
     try:
-        if container.duration:
-            return float(container.duration) / 1_000_000.0
+        return container_duration_s(container)
     finally:
         container.close()
-    return None
 
 
 def probe_durations(
@@ -148,18 +131,16 @@ def probe_durations(
     """Register every item's duration on ``clock`` before playback.
 
     Wrapping and the perceived-time end need the whole programme's length up
-    front. The default probe uses the video source's own rule (frame count over
-    the manifest's fps), so the first-writer-wins registration matches what the
-    video source would register, and PyAV's container duration when OpenCV is
-    absent (as the audio source would). Any item that cannot be measured raises
-    :class:`StimulusControlError`.
+    front. The default probe reads the container duration, the value both
+    playlist surfaces register (first writer wins), so the registration is the
+    one they would make. An item that cannot be measured (no PyAV, unreadable,
+    or a container that reports no duration) raises
+    :class:`StimulusControlError`; the message names the item by index and
+    manifest order only, never by path.
     """
 
     def _default(item: PlaylistItem) -> float | None:
-        seconds = _probe_cv2(item.path, item.fps)
-        if seconds is None:
-            seconds = _probe_av(item.path)
-        return seconds
+        return _probe_container(item.path)
 
     measure = probe or _default
     root = Path(manifest.manifest_path).parent
@@ -173,7 +154,7 @@ def probe_durations(
         except Exception as exc:
             raise StimulusControlError(
                 f"stimulus control cannot measure programme item {idx}: {type(exc).__name__}"
-            ) from exc
+            ) from None  # the cause's text can carry a path
         if seconds is None or not math.isfinite(seconds) or seconds <= 0.0:
             raise StimulusControlError(
                 f"stimulus control cannot measure programme item {idx} (order={item.order})"
@@ -244,18 +225,6 @@ class ProgrammeClock(PlaylistClock):
             acc += self._durations[idx] or 0.0
         return acc
 
-    def _walk_locked(self, elapsed: float) -> tuple[int, float]:
-        # The plain clock's walk, for a programme whose durations are not all known.
-        acc = 0.0
-        for idx in range(self._n):
-            d = self._durations[idx]
-            if d is None:
-                return idx, max(0.0, elapsed - acc)
-            if elapsed < acc + d:
-                return idx, elapsed - acc
-            acc += d
-        return self._n, 0.0
-
     def _presented_locked(self, perceived: float) -> tuple[int, int, float] | None:
         """``(lap, item index, offset)`` on the current channel; None if unmeasured."""
         length = self._channel_length_locked(self._channel)
@@ -284,10 +253,20 @@ class ProgrammeClock(PlaylistClock):
             if self._ended_locked(perceived):
                 return self._n, 0.0
             pos = self._presented_locked(perceived)
-            if pos is None:
-                return self._walk_locked(perceived)
-            _, idx, offset = pos
-            return idx, offset
+            if pos is not None:
+                _, idx, offset = pos
+                return idx, offset
+        # A length is not known yet: the plain clock's walk, with its log of a
+        # programme held on an item no surface could open.
+        return super().locate(perceived)
+
+    def following_item(self, idx: int) -> int:
+        """The item after ``idx`` within its channel, wrapping to the channel's
+        first; the audio producer reads it at an item's end."""
+        for first, count in self._segments:
+            if first <= idx < first + count:
+                return first + (idx - first + 1) % count
+        return idx + 1
 
     def ended(self) -> bool:
         """True once perceived programme time reaches the viewing length."""
@@ -303,14 +282,10 @@ class ProgrammeClock(PlaylistClock):
     def current_position(self) -> tuple[int, int, int]:
         """``(channel, item index, local index in the channel)`` presented now."""
         with self._lock:
-            perceived = self._elapsed_locked()
-            pos = self._presented_locked(perceived)
-            first, _ = self._segments[self._channel]
-            if pos is None:
-                idx, _ = self._walk_locked(perceived)
-            else:
-                idx = pos[1]
-            return self._channel, idx, idx - first
+            channel = self._channel
+            first, _ = self._segments[channel]
+        idx, _offset = self.locate()
+        return channel, idx, idx - first
 
     def _anchor_locked(self, channel: int, local_idx: int) -> None:
         self._channel = channel

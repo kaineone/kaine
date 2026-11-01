@@ -1273,6 +1273,9 @@ class PlaylistSource:
         self._pending: tuple[float, Any] | None = None  # next decoded frame, not yet due
         self._ended = False                            # the item's stream is exhausted
         self._seek_failed = False                      # seek raised once; decode forward
+        # The shared clock's position epoch when it has one (a stimulus-control
+        # ProgrammeClock): a change means the presented position jumped.
+        self._epoch: Any = None
 
     @property
     def manifest(self) -> PlaylistManifest:
@@ -1306,35 +1309,6 @@ class PlaylistSource:
         mismatch or missing file (shared loop in ``PlaylistManifest``)."""
         self._manifest.verify_against(self._root)
         self._verified = True
-
-    # --- stimulus control (stimulus-control-act) ---------------------------
-    # A seekable shared clock can move the presented item backwards or back to
-    # the start of the same item; ``read()`` only walks forward, so the
-    # stimulus-control wrapper reopens the decoder through these two members.
-
-    @property
-    def open_item_index(self) -> int:
-        """Index of the item whose decoder is open (or would open next)."""
-        return self._item_idx
-
-    def reopen_item(self, idx: int) -> bool:
-        """Close the open decoder and open item ``idx`` at its first frame.
-
-        ``read()`` then follows the shared clock within that item as usual.
-        Requires a verified source (``open()`` first); False when it cannot.
-        """
-        if not self._verified or self._cv2 is None:
-            return False
-        if not 0 <= int(idx) < len(self._manifest.items):
-            return False
-        if self._cap is not None:
-            try:
-                self._cap.release()
-            except Exception:
-                log.debug("playlist VideoCapture.release raised", exc_info=True)
-            self._cap = None
-        self._item_idx = int(idx)
-        return self._open_current_item()
 
     def open(self) -> bool:
         # Verify BEFORE opening any decoder — a changed file must stop the run
@@ -1430,9 +1404,15 @@ class PlaylistSource:
         # First read fixes the shared playback origin (idempotent across feeds).
         self._clock.start()
         n = len(self._manifest.items)
+        epoch_of = getattr(self._clock, "position_epoch", None)
+        epoch = epoch_of() if callable(epoch_of) else None
         target_idx, offset = self._clock.locate()
         if target_idx >= n:
             return False, None
+        if epoch != self._epoch:
+            if self._epoch is not None:
+                self._follow_jump(target_idx, offset)
+            self._epoch = epoch
         # Walk whole items forward to the item the shared clock is on. We only
         # ever move forward (the clock is monotonic); each open registers the new
         # item's duration, so the clock can then reveal the next boundary. An
@@ -1480,6 +1460,21 @@ class PlaylistSource:
                 continue
             break
         return self._shown
+
+    def _follow_jump(self, target_idx: int, offset: float) -> None:
+        """Follow a jump of the shared clock's presented position (a
+        stimulus-control seek, channel switch, or a wrap past a channel's end).
+
+        ``read()`` only walks forward, and a jump can land behind the open item
+        or at the start of the same item, so the item is reopened and the
+        decoder seeks to the clock's offset (its untimed base is the target).
+        The frame on screen is dropped: the new position is shown at once.
+        """
+        self._close_decoder()
+        self._item_idx = target_idx
+        self._reset_item_state()
+        if self._open_current_item():
+            self._seek(offset)
 
     def _seek(self, offset: float) -> None:
         try:

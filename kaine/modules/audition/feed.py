@@ -808,6 +808,10 @@ class PlaylistAudioStream:
             timeout=seconds
         )
         self._skips = 0  # skips forward to the clock (content-free count)
+        self._jumps = 0  # jumps of the presented position followed (stimulus control)
+        # The shared clock's position epoch when it has one (a stimulus-control
+        # ProgrammeClock); a change makes the pacing resync to the clock.
+        self._pace_epoch: Any = None
         self._item_failures = 0  # items that failed to open or decode
 
     @property
@@ -879,33 +883,6 @@ class PlaylistAudioStream:
         semantics with the video source). A mismatch voids reproducibility, so
         the run must not proceed on unverified media."""
         self._manifest.verify_against(self._root)
-
-    def restart_producer(self) -> bool | None:
-        """Restart a started producer so it resumes at the shared clock's position.
-
-        For a seekable shared clock (stimulus-control-act): the producer resyncs
-        to the clock only when it starts, so after a jump the stimulus-control
-        wrapper restarts it. The media was verified when the stream started and
-        is not hashed again. Returns None when the stream is not started (it
-        resyncs when it starts), True once restarted, and False when the old
-        producer did not stop in time (the caller retries). Callers serialise
-        this with ``start()`` and ``stop()``.
-        """
-        thread = self._thread
-        if thread is None:
-            return None
-        self._stopped.set()
-        if thread is not threading.current_thread():
-            thread.join(timeout=2.0)
-        if thread.is_alive():
-            log.warning("playlist audio producer did not stop for a restart; retrying")
-            return False
-        self._stopped.clear()
-        self._thread = threading.Thread(
-            target=self._produce, name="playlist-audio-producer", daemon=True
-        )
-        self._thread.start()
-        return True
 
     # --- _AudioStream protocol ---------------------------------------------
 
@@ -1115,6 +1092,8 @@ class PlaylistAudioStream:
             start_idx, start_offset = 0, 0.0
         if start_idx is None:
             start_idx, start_offset = 0, 0.0
+        epoch_of = getattr(self._clock, "position_epoch", None)
+        self._pace_epoch = epoch_of() if callable(epoch_of) else None
         items = self._manifest.items
         idx, item_start = int(start_idx), float(start_offset)
         try:
@@ -1146,7 +1125,7 @@ class PlaylistAudioStream:
                     self._note_skip(skip)
                     idx, item_start = skip.idx, max(0.0, skip.offset)
                     continue
-                idx, item_start = idx + 1, 0.0
+                idx, item_start = self._following_item(idx), 0.0
             # Flush a final short block (zero-padded) so no audio is dropped.
             if carry and not self._stopped.is_set():
                 pad = block_bytes - len(carry)
@@ -1175,11 +1154,20 @@ class PlaylistAudioStream:
             b_idx, b_start = self._produce_item_idx, 0.0
         else:
             b_idx, b_start = delivered
+        epoch_of = getattr(self._clock, "position_epoch", None)
         while not self._stopped.is_set():
             self._clock.wait_if_paused(stop_check=self._stopped.is_set)
             if self._stopped.is_set():
                 return
+            # Read the epoch before the position: a jump between the two is
+            # caught on the next pass.
+            epoch = epoch_of() if callable(epoch_of) else None
             c_idx, c_off = self._clock.locate()
+            if epoch != self._pace_epoch:
+                self._pace_epoch = epoch
+                # The presented position jumped: resync at the clock (the
+                # restart path), whichever way it moved.
+                raise _SkipForward(c_idx, c_off, 0.0, jump=True)
             if c_idx == b_idx:
                 owed = c_off - b_start
             elif c_idx > b_idx:
@@ -1191,6 +1179,15 @@ class PlaylistAudioStream:
             if owed >= -_PACE_EPSILON_S:
                 return
             self._pace_wait(min(-owed, _PACE_POLL_S))
+
+    def _following_item(self, idx: int) -> int:
+        """The item after ``idx``: the next in the manifest, or, on a clock that
+        wraps within programme channels (stimulus control), the next item of
+        ``idx``'s channel."""
+        following = getattr(self._clock, "following_item", None)
+        if callable(following):
+            return int(following(idx))
+        return idx + 1
 
     def _span(self, from_idx: int, from_off: float, to_idx: int, to_off: float) -> float:
         """Programme seconds from one item position to a later one; infinite
@@ -1220,7 +1217,16 @@ class PlaylistAudioStream:
 
     def _note_skip(self, skip: _SkipForward) -> None:
         """Log a skip forward, content-free: the first at warning, later ones
-        at debug (each is counted)."""
+        at debug (each is counted). A followed jump of the presented position
+        is not a lag, and is logged at debug."""
+        if skip.jump:
+            self._jumps += 1
+            log.debug(
+                "playlist audio followed a jump of the programme to item %d at %.3f s",
+                skip.idx,
+                skip.offset,
+            )
+            return
         self._skips += 1
         level = logging.WARNING if self._skips == 1 else logging.DEBUG
         log.log(
@@ -1251,11 +1257,13 @@ _PACE_EPSILON_S = 1e-6
 class _SkipForward(Exception):
     """The audio is owed more than ``_MAX_OWED_S``: resume at the clock."""
 
-    def __init__(self, idx: int, offset: float, owed: float) -> None:
+    def __init__(self, idx: int, offset: float, owed: float, *, jump: bool = False) -> None:
         super().__init__(idx, offset, owed)
         self.idx = int(idx)
         self.offset = float(offset)
         self.owed = float(owed)
+        # The presented position jumped (stimulus control), rather than lag.
+        self.jump = bool(jump)
 
 
 #: Audio more than this far off the item's timeline is re-placed: a later

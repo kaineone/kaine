@@ -612,15 +612,12 @@ def _build_perception_feed_video_factory(
     # built one (womb-to-world-transition); the same instance serves audio.
     transition = feed.get("_stimulus_source_world_transition")
     # Stimulus control (stimulus-control-act) when boot built it: the combined
-    # programme manifest and the controller whose wrapper follows the clock's jumps.
-    controller = feed.get("_stimulus_controller")
-    if controller is not None:
+    # programme manifest. The source follows the shared clock's jumps itself.
+    if feed.get("_stimulus_controller") is not None:
         manifest = feed.get("_programme_manifest") or manifest
 
     def _playlist_factory(device, *, width, height):  # noqa: ANN001
         source = PlaylistSource(manifest, playlist_clock=shared_clock)
-        if controller is not None:
-            source = controller.wrap_video(source)
         if transition is None:
             return source
         from kaine.modules.perception_transition import TransitionVideoSource
@@ -892,14 +889,15 @@ def _build_perception_feed_audio_factory(
     # built one (womb-to-world-transition); the same instance serves video.
     transition = feed.get("_stimulus_source_world_transition")
     # Stimulus control (stimulus-control-act) when boot built it: the combined
-    # programme manifest, the gain stage on the callback and the controlled stream.
+    # programme manifest and the gain stage on the callback. The producer follows
+    # the shared clock's jumps itself.
     controller = feed.get("_stimulus_controller")
     if controller is not None:
         manifest = feed.get("_programme_manifest") or manifest
 
     def _playlist_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
         def _make(cb):  # noqa: ANN001, ANN202
-            stream = PlaylistAudioStream(
+            return PlaylistAudioStream(
                 manifest,
                 callback=cb if controller is None else controller.wrap_audio_callback(cb),
                 sample_rate=int(sample_rate),
@@ -907,7 +905,6 @@ def _build_perception_feed_audio_factory(
                 frames_per_block=int(frames_per_block),
                 playlist_clock=shared_clock,
             )
-            return stream if controller is None else controller.wrap_audio(stream)
 
         if transition is None:
             return _make(callback)

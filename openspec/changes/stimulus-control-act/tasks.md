@@ -11,7 +11,7 @@
 
 - [x] 2.1 `stimulus` effector with its declared actions and bounds, its request type registered only when it is built. Tests: `tests/test_effector_stimulus.py` (bounds, refusals audited, whitelist required, seek cap over awake time, channels).
 - [x] 2.2 In-process control port in place of desired-state fields (design D3); the audit request is the action name only. Tests: `tests/test_effector_stimulus.py`.
-- [x] 2.3 Feed support: seekable programme clock with the perceived-time end, `entity` holder with `P_max`, gain with a soft knee, channels, the video and audio wrappers, duration probe. Tests: `tests/test_stimulus_programme_clock.py`, `tests/test_stimulus_feed_real.py` (real media written with PyAV, the real OpenCV and PyAV decode paths, the boot's feed factories and registry).
+- [x] 2.3 Feed support: seekable programme clock with the perceived-time end, `entity` holder with `P_max`, gain with a soft knee, channels, the feeds following a jump through the decoder seek and the audio resync, the container-duration probe. Tests: `tests/test_stimulus_programme_clock.py`, `tests/test_stimulus_feed_real.py` (real media written with PyAV, the real OpenCV and PyAV decode paths, the boot's feed factories and registry).
 
 ## 3. Cognition
 
@@ -22,7 +22,7 @@
 ## 4. Records and checks
 
 - [x] 4.1 Welfare record and readout, manifest field. Tests: `tests/test_welfare_stimulus_records.py`.
-- [x] 4.2 Off equals absent: a seeded entity-free harness digest equal to the golden captured on origin/main cb41895b. Test: `tests/test_stimulus_disabled_identity.py`.
+- [x] 4.2 Off equals absent: a seeded entity-free harness digest equal to the golden captured on origin/main d7fabdc0. Test: `tests/test_stimulus_disabled_identity.py`.
 - [x] 4.3 Offline check of D6 on the affect module's trackers. Test: `tests/test_stimulus_habituation.py`; record: `docs/records/shakedowns/2026-10-31-stimulus-control-habituation.md`.
 - [x] 4.4 Docs: `docs/09-modules/effectors.md`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/perception-and-sleep.md`, `docs/17-research-data/README.md`.
 - [ ] 4.5 Independent second review (welfare-high-risk).
@@ -33,7 +33,7 @@
 
 - [ ] 5.1 Registry entry in `config/development_run/components.toml`: class action, readout `stimulus_control`, experience-changing with its second-review record, reversible.
 - [ ] 5.2 Per-pass viewings: with `programme_end = "continue"`, reset the gain and close a `stimulus_control` record at each pass end, and end each pass at its programme's perceived length.
-- [ ] 5.3 Operator decision on an hourly cap on the paused share (design, Risks).
+- [x] 5.3 Operator decision on the paused share (2026-11-01): no hard cap; an operator advisory, logged and recorded, past half of an awake hour. Test: `tests/test_stimulus_feed_real.py`.
 
 ## 6. Stage L (after dependencies)
 

@@ -26,14 +26,14 @@ With stimulus control enabled, the viewing SHALL end when perceived programme ti
 - **THEN** the end-of-programme preservation is requested once, when perceived programme time reaches the programme's total length
 
 ### Requirement: Picture and sound follow a jump
-When an accepted seek or channel switch moves the presented item, the video source SHALL reopen at the presented item, the audio producer SHALL restart at the shared clock's position, and audio produced before the jump SHALL be silent until the producer has moved.
+When the shared clock's presented position jumps (a seek, a channel switch, or a wrap past a channel's end), the video source SHALL reopen the presented item and seek its decoder to the clock's offset, and the audio producer SHALL resync at the clock as on a restart, emit no block from before the jump, and stay paced against the clock.
 
 #### Scenario: A seek
 - **WHEN** the entity's `next` is accepted during the first item
-- **THEN** the next frame read and the next PCM heard come from the second item
+- **THEN** the next frame read and the next PCM heard come from the second item, and the delivered audio position is on the clock's item and offset
 
 ### Requirement: Every item is measured before playback
-With stimulus control enabled, boot SHALL register every programme item's duration on the shared clock before playback, by the video source's own rule, and SHALL stop with a stimulus-control error when an item cannot be measured.
+With stimulus control enabled, boot SHALL register every programme item's container duration on the shared clock before playback, and SHALL stop with a stimulus-control error naming the item by index and order, never by path, when an item cannot be measured.
 
 #### Scenario: An item that cannot be measured
 - **WHEN** stimulus control is enabled and an item's duration cannot be measured

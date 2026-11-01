@@ -6,7 +6,8 @@
 One tally per boot (a viewing). The effector counts accepted and refused
 commands by action, the controller accounts awake time, the time the
 ``entity`` pause holder held the programme, the time spent at each gain and the
-programme items visited, and the affect module samples boredom, alert excess
+programme items visited, the trailing-awake-hour paused share and its operator
+advisories, and the affect module samples boredom, alert excess
 and learning progress with a flag for whether the sample falls within the
 credit window after the entity's own realized stimulus act.
 
@@ -88,6 +89,9 @@ class StimulusTally:
         self._boredom_last: float | None = None
         self._acts_observed = 0
         self._acts_boredom_fell = 0
+        self._paused_share = 0.0
+        self._paused_share_max = 0.0
+        self._paused_advisories = 0
         self._changed = False
 
     # -- writers ------------------------------------------------------------
@@ -119,6 +123,18 @@ class StimulusTally:
                 self._entity_paused_s += dt
             key = round(float(gain_db), 3)
             self._gain_s[key] = self._gain_s.get(key, 0.0) + dt
+            self._changed = True
+
+    def paused_share(self, share: float) -> None:
+        """The share of the trailing awake hour held by the entity's pauses."""
+        with self._lock:
+            self._paused_share = float(share)
+            self._paused_share_max = max(self._paused_share_max, float(share))
+
+    def paused_advisory(self) -> None:
+        """The paused share passed the advisory bar (an operator advisory)."""
+        with self._lock:
+            self._paused_advisories += 1
             self._changed = True
 
     def visit(self, channel: int, order: int) -> None:
@@ -189,6 +205,9 @@ class StimulusTally:
                 if gain_total > 0
                 else None
             ),
+            "paused_share_last_awake_hour": self._paused_share,
+            "paused_share_last_awake_hour_max": self._paused_share_max,
+            "paused_share_advisories": self._paused_advisories,
             "items_visited": [[c, o] for c, o in self._visits],
             "items_visited_dropped": self._visits_dropped,
             "readout": {

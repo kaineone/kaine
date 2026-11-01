@@ -155,7 +155,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | boolean | `false` | Build the stimulus effector, the seekable programme clock, the feed wrappers, the affect credit window and the stage-M act. |
+| `enabled` | boolean | `false` | Build the stimulus effector, the seekable programme clock, the gain stage, the affect credit window and the stage-M act. |
 | `stage` | string | `"minimal"` | The only stage built: after maturation, a broadcast led by the entity's own boredom or restlessness drive event yields one act, its action drawn uniformly from those the programme can take now. |
 | `min_interval_s` | float | `30.0` | Entity seconds between two accepted commands (`Delta_sc`). |
 | `seeks_per_awake_hour` | integer | `20` | `next` and `previous` allowed in any awake hour (`n_seek`); sleep and freezes are not awake time. |

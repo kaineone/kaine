@@ -3,8 +3,8 @@
 
 """Stimulus control through the real playlist feed (stimulus-control-act).
 
-Real media (synthetic clips written with PyAV), the real OpenCV video decode,
-the real PyAV audio producer, and the boot's own feed factories. Each clip has
+Real media (synthetic clips written with PyAV), the real PyAV video decoder
+and audio producer of the playlist feeds, and the boot's own feed factories. Each clip has
 its own colour and tone, so a decoded frame or PCM block names its item.
 """
 from __future__ import annotations
@@ -15,7 +15,6 @@ import time
 import pytest
 
 pytest.importorskip("av")
-pytest.importorskip("cv2")
 
 from kaine.boot.perception_feed import (  # noqa: E402
     _build_perception_feed_audio_factory,
@@ -32,7 +31,7 @@ from kaine.modules.vision.feed import PlaylistClock, PlaylistSource  # noqa: E40
 from tests.stimulus_media import dominant_bgr, rms, tone_of, write_manifest  # noqa: E402
 
 RED, GREEN, BLUE = (255, 0, 0), (0, 255, 0), (0, 0, 255)
-TONES = {300.0: "red", 500.0: "green", 800.0: "blue"}
+TONES = {300.0: "red", 500.0: "green", 800.0: "blue", 1200.0: "yellow"}
 
 
 def _programme(tmp_path, seconds=2.0):
@@ -72,15 +71,16 @@ def test_probe_registers_every_items_real_duration(tmp_path):
     runtime = _runtime()
     clock = runtime.install_programme(str(_programme(tmp_path)), start=False)
     assert isinstance(clock, ProgrammeClock)
-    assert [clock.duration(i) for i in range(3)] == [pytest.approx(2.0)] * 3
-    assert clock.viewing_length == pytest.approx(6.0)
+    # The container duration, the length both surfaces register.
+    assert [clock.duration(i) for i in range(3)] == [pytest.approx(2.0, abs=0.05)] * 3
+    assert clock.viewing_length == pytest.approx(6.0, abs=0.15)
 
 
 def test_video_follows_next_previous_and_wraps(tmp_path):
     runtime = _runtime()
     clock = runtime.install_programme(str(_programme(tmp_path)), start=False)
     controller = runtime.controller
-    source = controller.wrap_video(PlaylistSource(runtime.programme.manifest, playlist_clock=clock))
+    source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
     assert source.open()
     try:
         ok, frame = source.read()
@@ -103,20 +103,34 @@ def test_video_reopens_the_same_item_at_its_start(tmp_path):
     clock = runtime.install_programme(
         str(write_manifest(tmp_path / "one", [("a.mkv", RED, 300.0, 3.0)])), start=False
     )
-    source = runtime.controller.wrap_video(PlaylistSource(runtime.programme.manifest, playlist_clock=clock))
+    source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
     assert source.open()
     try:
         source.read()
-        time.sleep(0.35)
+        time.sleep(0.45)
         source.read()
-        before = source._inner._last_media_frame
-        assert before >= 3
+        before = source._shown.t
+        assert before >= 0.3
         runtime.controller.apply("next")  # the only item: back to its start
         ok, _frame = source.read()
         assert ok
-        assert source._inner._last_media_frame < before
+        # The decoder sought to the clock's offset (its base is the target).
+        assert source._shown.t < before
+        assert abs(source._shown.t - clock.locate()[1]) <= 0.15
     finally:
         source.release()
+
+
+def _assert_paced(stream, clock, tolerance=0.15):
+    """The delivered audio is on the clock's item and within ``tolerance`` of it."""
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        delivered = stream.delivered_position
+        c_idx, c_off = clock.locate()
+        if delivered is not None and delivered[0] == c_idx and abs(delivered[1] - c_off) <= tolerance:
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"audio not paced to the clock: {stream.delivered_position} vs {clock.locate()}")
 
 
 def _collect(captured, n, timeout=4.0):
@@ -132,15 +146,13 @@ def test_audio_follows_a_seek_and_the_gain(tmp_path):
     clock = runtime.install_programme(str(_programme(tmp_path, seconds=3.0)))
     controller = runtime.controller
     captured: list[bytes] = []
-    stream = controller.wrap_audio(
-        PlaylistAudioStream(
-            runtime.programme.manifest,
-            callback=controller.wrap_audio_callback(captured.append),
-            sample_rate=16000,
-            channels=1,
-            frames_per_block=480,
-            playlist_clock=clock,
-        )
+    stream = PlaylistAudioStream(
+        runtime.programme.manifest,
+        callback=controller.wrap_audio_callback(captured.append),
+        sample_rate=16000,
+        channels=1,
+        frames_per_block=480,
+        playlist_clock=clock,
     )
     stream.start()
     try:
@@ -148,11 +160,16 @@ def test_audio_follows_a_seek_and_the_gain(tmp_path):
         assert {_tone(b) for b in blocks[1:]} == {"red"}
         level = sum(rms(b) for b in blocks[1:]) / len(blocks[1:])
 
+        n_before = len(captured)
         controller.apply("next")
         time.sleep(0.3)
         blocks = _collect(captured, 6)
         heard = [_tone(b) for b in blocks]
         assert heard and set(heard) <= {"green"}, heard
+        # At most the block already in flight is from before the jump.
+        after_jump = [_tone(b) for b in captured[n_before + 1:]]
+        assert "red" not in after_jump, after_jump
+        _assert_paced(stream, clock)
 
         for _ in range(3):
             controller.apply("louder")
@@ -166,6 +183,8 @@ def test_audio_follows_a_seek_and_the_gain(tmp_path):
         time.sleep(0.3)
         heard = [_tone(b) for b in _collect(captured, 6)]
         assert heard and set(heard) <= {"red"}, heard
+        _assert_paced(stream, clock)
+        assert stream._jumps == 2 and stream._skips == 0
     finally:
         stream.stop()
         runtime.close()
@@ -176,13 +195,11 @@ def test_entity_pause_holds_the_programme_and_releases_itself(tmp_path):
     clock = runtime.install_programme(str(_programme(tmp_path, seconds=3.0)))
     controller = runtime.controller
     captured: list[bytes] = []
-    stream = controller.wrap_audio(
-        PlaylistAudioStream(
-            runtime.programme.manifest,
-            callback=controller.wrap_audio_callback(captured.append),
-            frames_per_block=480,
-            playlist_clock=clock,
-        )
+    stream = PlaylistAudioStream(
+        runtime.programme.manifest,
+        callback=controller.wrap_audio_callback(captured.append),
+        frames_per_block=480,
+        playlist_clock=clock,
     )
     stream.start()
     try:
@@ -270,10 +287,6 @@ def test_skipping_never_ends_the_viewing_and_the_end_is_requested_once(tmp_path)
 
 def test_boot_factories_wrap_both_surfaces_and_the_registry_wires_the_effector(tmp_path, monkeypatch):
     from kaine.boot.registry import SIMPLE_FACTORIES, build_registry
-    from kaine.modules.effectors.stimulus.controller import (
-        ControlledAudioStream,
-        SeekAwareVideoSource,
-    )
 
     manifest = _programme(tmp_path)
     captured: dict[str, dict] = {}
@@ -333,9 +346,9 @@ def test_boot_factories_wrap_both_surfaces_and_the_registry_wires_the_effector(t
             "playlist", captured["audition"]["perception_feed"],
             sample_rate=16000, channels=1, frames_per_block=480,
         )(device=None, sample_rate=16000, channels=1, frames_per_block=480, callback=lambda b: None)
-        assert isinstance(video, SeekAwareVideoSource)
-        assert isinstance(audio, ControlledAudioStream)
+        assert type(video) is PlaylistSource and type(audio) is PlaylistAudioStream
         assert video.clock is pclock and audio.clock is pclock
+        assert video.manifest is section["_programme_manifest"]
     finally:
         runtime.close()
         asyncio.run(bus.close())
@@ -424,25 +437,106 @@ def test_the_registry_does_not_swallow_a_failed_install(tmp_path, monkeypatch):
         )
 
 
-def test_audio_from_before_a_jump_is_silent_until_the_producer_moves(tmp_path):
-    import numpy as np
+def test_audio_follows_a_channel_switch_and_wraps_inside_it(tmp_path):
+    second = write_manifest(
+        tmp_path / "second", [("d.mkv", (255, 255, 0), 1200.0, 1.0)], name="second.toml"
+    )
+    runtime = _runtime(channels=[str(second)])
+    clock = runtime.install_programme(str(_programme(tmp_path, seconds=3.0)))
+    controller = runtime.controller
+    captured: list[bytes] = []
+    stream = PlaylistAudioStream(
+        runtime.programme.manifest,
+        callback=controller.wrap_audio_callback(captured.append),
+        frames_per_block=480,
+        playlist_clock=clock,
+    )
+    stream.start()
+    try:
+        _collect(captured, 4)
+        controller.apply("channel:1")
+        assert clock.locate()[0] == 3
+        time.sleep(0.3)
+        heard = [_tone(b) for b in _collect(captured, 6)]
+        assert heard and set(heard) <= {"yellow"}, heard
+        _assert_paced(stream, clock)
+        # The one-second channel wraps inside itself: still channel 1 after it,
+        # and its sound goes on (twenty blocks is 0.6 s of audio).
+        time.sleep(1.2)
+        assert clock.locate()[0] == 3
+        later = _collect(captured, 20, timeout=2.0)
+        assert len(later) == 20 and {_tone(b) for b in later[1:]} <= {"yellow", "silence"}
+        time.sleep(1.0)
+        again = _collect(captured, 20, timeout=2.0)
+        assert len(again) == 20 and "yellow" in {_tone(b) for b in again}
+        _assert_paced(stream, clock, tolerance=0.2)
+    finally:
+        stream.stop()
+        runtime.close()
 
-    mono, runtime = _fake_time_runtime()
+
+def test_the_paused_share_advisory_is_logged_and_recorded_but_blocks_nothing(tmp_path, caplog):
+    import logging
+
+    mono, runtime = _fake_time_runtime(pause_max_s=120.0, min_interval_s=30.0)
     clock = runtime.install_programme(
-        str(_programme(tmp_path)), probe=lambda item: 2.0, start=False, monotonic=mono
+        str(_programme(tmp_path)), probe=lambda item: 100000.0, start=False, monotonic=mono
     )
     clock.start()
-    heard: list[bytes] = []
-    callback = runtime.controller.wrap_audio_callback(heard.append)
-    block = (np.ones(480) * 5000).astype("<i2").tobytes()
-    callback(block)
-    runtime.controller.apply("next")
-    callback(block)  # the producer has not been restarted yet
-    runtime.controller.poll_once()  # no running stream: nothing to restart
-    callback(block)
-    assert heard[0] == block
-    assert heard[1] == b"\x00" * len(block)
-    assert heard[2] == block
+    controller = runtime.controller
+    from kaine.modules.effectors.effectors import StimulusRequest
+
+    effector = runtime.effector()
+    import asyncio
+
+    with caplog.at_level(logging.WARNING, logger="kaine.modules.effectors.stimulus.controller"):
+        # Pause for 120 s, resume at the next interval, for most of an hour: 120 of each 150 s.
+        t = 0.0
+        while t < 3600.0:
+            mono.t = t
+            controller.poll_once()
+            assert asyncio.run(effector.act(StimulusRequest(action="pause"))).success
+            for k in range(1, 121):
+                mono.t = t + k
+                controller.poll_once()
+            mono.t = t + 150.0
+            controller.poll_once()
+            t += 150.0
+    advisories = [r for r in caplog.records if "advisory" in r.getMessage()]
+    assert len(advisories) == 1, [r.getMessage() for r in advisories]
+    assert "/" not in advisories[0].getMessage()
+    record = runtime.tally.record()
+    assert record["paused_share_advisories"] == 1
+    assert record["paused_share_last_awake_hour"] == pytest.approx(0.8, abs=0.02)
+    assert record["paused_share_last_awake_hour_max"] >= 0.5
+    # Nothing is blocked: a pause is still accepted after the advisory.
+    mono.t = t
+    controller.poll_once()
+    assert asyncio.run(effector.act(StimulusRequest(action="pause"))).success
+
+
+def test_the_advisory_rearms_once_the_share_falls_back(tmp_path):
+    mono, runtime = _fake_time_runtime(pause_max_s=4000.0)
+    clock = runtime.install_programme(
+        str(_programme(tmp_path)), probe=lambda item: 100000.0, start=False, monotonic=mono
+    )
+    clock.start()
+    controller = runtime.controller
+    controller.apply("pause")
+    for k in range(1, 2000):  # 1999 s held: past half an awake hour
+        mono.t = float(k)
+        controller.poll_once()
+    assert runtime.tally.record()["paused_share_advisories"] == 1
+    controller.apply("resume")
+    for k in range(2000, 2000 + 3700):  # an awake hour unpaused: the share falls to 0
+        mono.t = float(k)
+        controller.poll_once()
+    assert controller.paused_share_last_awake_hour() == pytest.approx(0.0, abs=1e-9)
+    controller.apply("pause")
+    for k in range(5700, 5700 + 1900):
+        mono.t = float(k)
+        controller.poll_once()
+    assert runtime.tally.record()["paused_share_advisories"] == 2
 
 
 def test_zero_gain_passes_the_samples_through_unchanged():
@@ -452,3 +546,133 @@ def test_zero_gain_passes_the_samples_through_unchanged():
     assert apply_gain(pcm, 0.0) is pcm
     louder = apply_gain(b"\x00\x10" * 8, 6.0)
     assert louder != b"\x00\x10" * 8
+
+
+def test_no_path_reaches_the_logs(tmp_path, caplog):
+    """Jumps, a failed install and the seek path log indices only, never a path."""
+    import logging
+
+    from kaine.modules.effectors.stimulus.config import StimulusControlError
+
+    with caplog.at_level(logging.DEBUG):
+        runtime = _runtime()
+        clock = runtime.install_programme(str(_programme(tmp_path)), start=False)
+        source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
+        assert source.open()
+        try:
+            source.read()
+            for action in ("next", "previous", "previous"):
+                runtime.controller.apply(action)
+                source.read()
+        finally:
+            source.release()
+        with pytest.raises(StimulusControlError) as raised:
+            _runtime(channels=[str(tmp_path / "missing.toml")]).install_programme(
+                str(_programme(tmp_path / "again")), start=False
+            )
+        assert str(tmp_path) not in str(raised.value)
+        assert raised.value.__cause__ is None and raised.value.__suppress_context__
+        with pytest.raises(StimulusControlError) as unmeasured:
+            _runtime().install_programme(
+                str(_programme(tmp_path / "third")), probe=lambda item: None, start=False
+            )
+        assert str(tmp_path) not in str(unmeasured.value)
+    for record in caplog.records:
+        text = record.getMessage()
+        if record.exc_info:
+            text += logging.Formatter().formatException(record.exc_info)
+        assert str(tmp_path) not in text, text
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not __import__("os").environ.get("KAINE_PROGRAMME_MEDIA"),
+    reason="set KAINE_PROGRAMME_MEDIA to a directory holding programme.toml and its films",
+)
+def test_programme_films_under_stimulus_control(capsys):
+    """The programme films: the probe registers each container duration, a
+    seek shows the frame at or before the clock (through the decoder's seek),
+    and the sound follows a jump paced against the clock."""
+    import os
+    from pathlib import Path as _Path
+
+    from kaine.modules.vision.feed import container_duration_s
+
+    manifest_path = _Path(os.environ["KAINE_PROGRAMME_MEDIA"]) / "programme.toml"
+    mono = _Mono()
+    runtime = StimulusControlRuntime(
+        StimulusControlConfig.from_section({"enabled": True}), now=mono, seed=1
+    )
+    clock = runtime.install_programme(str(manifest_path), start=False, monotonic=mono)
+    import av
+
+    for i, item in enumerate(runtime.programme.manifest.items):
+        container = av.open(item.path)
+        assert clock.duration(i) == container_duration_s(container)
+        container.close()
+    source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
+    assert source.open()
+    leads = []
+    try:
+        clock.start(at=0.0)
+        mono.t = 30.0
+        source.read()
+        for action in ("next", "next", "next", "next", "previous"):
+            runtime.controller.apply(action)
+            mono.t += 600.0  # ten minutes into the item: the source seeks
+            ok, _frame = source.read()
+            assert ok
+            idx, offset = clock.locate()
+            leads.append((action, idx, source._shown.t - offset))
+    finally:
+        source.release()
+    for _action, _idx, lead in leads:
+        assert -0.1 <= lead <= 0.0, leads
+    # Sound: real time, a jump forward then back, paced to the clock.
+    rt = _runtime()
+    rclock = rt.install_programme(str(manifest_path))
+    heard: list[bytes] = []
+    stream = PlaylistAudioStream(
+        rt.programme.manifest,
+        callback=rt.controller.wrap_audio_callback(heard.append),
+        frames_per_block=480,
+        playlist_clock=rclock,
+    )
+    stream.start()
+    try:
+        _collect(heard, 10, timeout=10.0)
+        rt.controller.apply("next")
+        _assert_paced(stream, rclock, tolerance=0.2)
+        rt.controller.apply("previous")
+        _assert_paced(stream, rclock, tolerance=0.2)
+        assert stream._jumps == 2 and stream._skips == 0
+    finally:
+        stream.stop()
+        rt.close()
+    with capsys.disabled():
+        print("\nstimulus control over the films, frame minus clock after each seek: "
+              + ", ".join(f"{a}->item {i}: {lead * 1000:+.0f} ms" for a, i, lead in leads))
+
+
+def test_a_jump_goes_through_the_decoders_seek(tmp_path):
+    """After a jump the reopened item's decoder seeks to the clock's offset."""
+    from tests._playlist_fakes import FakeVideoDecoders
+
+    mono, runtime = _fake_time_runtime()
+    clock = runtime.install_programme(
+        str(_programme(tmp_path)), probe=lambda item: 2.0, start=False, monotonic=mono
+    )
+    decoders = FakeVideoDecoders(20)
+    source = PlaylistSource(
+        runtime.programme.manifest, playlist_clock=clock, decoder_factory=decoders
+    )
+    assert source.open()
+    clock.start(at=0.0)
+    mono.t = 0.5
+    source.read()
+    runtime.controller.apply("next")
+    mono.t = 1.2  # 0.7 s into the next item, within the decoder's seek-behind span
+    ok, frame = source.read()
+    assert ok
+    assert decoders.opened[-1].seeks == [pytest.approx(0.7)]
+    assert frame == (decoders.opened[-1].path, 7)

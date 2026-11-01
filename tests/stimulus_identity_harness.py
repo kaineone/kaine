@@ -13,7 +13,7 @@ effectors stream and a signed act intent naming ``stimulus``, which a build
 without the component ignores.
 
 It imports only names that exist in the build before stimulus control, so the
-same file computes the golden digest on that build (see
+same file computes the golden digest on that build (origin/main d7fabdc0) (see
 ``tests/test_stimulus_disabled_identity.py``).
 """
 from __future__ import annotations
@@ -30,38 +30,41 @@ from typing import Any
 _SECRET = b"stimulus-identity-harness-secret-32"
 
 
-class _FakeCap:
+class _FakeDecoder:
+    """One item's video at 10 fps: frame ``i`` at ``i / 10`` s, tagged
+    ``(basename, i)``; seek lands on the frame at or before the target."""
+
     def __init__(self, path: str, frame_count: int) -> None:
         self._path = path
         self._n = frame_count
         self._i = 0
+        self.duration = frame_count / 10.0
+        self.frame_interval = 0.1
 
-    def isOpened(self) -> bool:  # noqa: N802
-        return True
-
-    def get(self, prop) -> float:  # noqa: ANN001
-        return float(self._n)
-
-    def read(self):
+    def next(self):
         if self._i >= self._n:
-            return False, None
-        frame = (self._path, self._i)
+            return None
+        i = self._i
         self._i += 1
-        return True, frame
+        return i / 10.0, (self._path, i)
 
-    def release(self) -> None:
+    def seek(self, seconds: float) -> None:
+        self._i = max(0, min(self._n - 1, int(seconds * 10.0)))
+
+    @staticmethod
+    def image(frame):
+        return frame
+
+    def close(self) -> None:
         return None
 
 
-class _FakeCv2:
-    CAP_PROP_FRAME_COUNT = 7
+def _fake_decoders(frame_counts: dict[str, int]):
+    def _factory(path, item):  # noqa: ANN001, ANN202
+        base = os.path.basename(str(path))
+        return _FakeDecoder(base, frame_counts[base])
 
-    def __init__(self, frame_counts: dict[str, int]) -> None:
-        self._frame_counts = frame_counts
-
-    def VideoCapture(self, path: str):  # noqa: N802
-        base = os.path.basename(path)
-        return _FakeCap(base, self._frame_counts[base])
+    return _factory
 
 
 class _Sink:
@@ -121,7 +124,7 @@ def _video_trace(tmp_path: Path) -> list[Any]:
     t = [0.0]
     clock = PlaylistClock(len(manifest.items), clock=lambda: t[0])
     source = PlaylistSource(
-        manifest, playlist_clock=clock, cv2_module=_FakeCv2({"a.mp4": 20, "b.mp4": 20})
+        manifest, playlist_clock=clock, decoder_factory=_fake_decoders({"a.mp4": 20, "b.mp4": 20})
     )
     assert source.open()
     trace: list[Any] = []
@@ -133,6 +136,77 @@ def _video_trace(tmp_path: Path) -> list[Any]:
             clock.resume("sleep")
         ok, frame = source.read()
         trace.append([ok, list(frame) if ok else None, clock.locate()[0]])
+    return trace
+
+
+def _write_wav(path: Path, *, tone_hz: float, seconds: float, rate: int = 16000) -> None:
+    import av  # type: ignore[import-untyped]
+    import numpy as np
+
+    container = av.open(str(path), mode="w")
+    stream = container.add_stream("pcm_s16le", rate=rate)
+    stream.layout = "mono"
+    t = np.arange(int(rate * seconds))
+    samples = (0.25 * np.sin(2 * np.pi * tone_hz * t / rate) * 32767).astype(np.int16)
+    for k in range(0, len(samples), 1600):
+        frame = av.AudioFrame.from_ndarray(
+            samples[k:k + 1600].reshape(1, -1), format="s16", layout="mono"
+        )
+        frame.rate = rate
+        frame.pts = k
+        for packet in stream.encode(frame):
+            container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+    container.close()
+
+
+def _audio_trace(tmp_path: Path) -> list[Any]:
+    """The real playlist audio producer over two real WAV items, paced by a
+    manual shared clock that its waits advance, with one stall that makes it
+    skip forward and one pause."""
+    import hashlib as _h
+
+    from kaine.modules.audition.feed import PlaylistAudioStream
+    from kaine.modules.vision.feed import PlaylistClock, load_playlist_manifest
+
+    root = tmp_path / "sound"
+    root.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for name, tone in (("a.wav", 300.0), ("b.wav", 500.0)):
+        _write_wav(root / name, tone_hz=tone, seconds=1.5)
+        digest = _h.sha256((root / name).read_bytes()).hexdigest()
+        lines.append(f'[[item]]\npath = "{name}"\nsha256 = "{digest}"\nfps = 10\n')
+    (root / "programme.toml").write_text("\n".join(lines), encoding="utf-8")
+    manifest = load_playlist_manifest(root / "programme.toml")
+    t = [0.0]
+    clock = PlaylistClock(len(manifest.items), clock=lambda: t[0])
+    trace: list[Any] = []
+    holder: list[Any] = []
+
+    def _on_pcm(pcm: bytes) -> None:
+        n = len(trace)
+        trace.append([_h.sha256(pcm).hexdigest()[:16], list(holder[0]._delivered), t[0]])
+        if n == 20:
+            t[0] += 0.9  # a stall: the producer skips forward to the clock
+        if n == 40:
+            clock.pause("sleep")
+            t[0] += 5.0
+            clock.resume("sleep")
+
+    stream = PlaylistAudioStream(
+        manifest, callback=_on_pcm, sample_rate=16000, channels=1,
+        frames_per_block=480, playlist_clock=clock,
+    )
+    holder.append(stream)
+
+    def _advance(seconds: float) -> bool:
+        t[0] += seconds
+        return False
+
+    stream._pace_wait = _advance
+    stream._produce()
+    trace.append(["skips", stream._skips, "failures", stream._item_failures])
     return trace
 
 
@@ -279,6 +353,7 @@ async def run(tmp_path: Path, *, affect_setup: Any = None) -> dict[str, Any]:
             "audit": audit,
             "welfare_rows": sink.rows,
             "video": _video_trace(tmp_path),
+            "audio": _audio_trace(tmp_path),
         }
     )
 

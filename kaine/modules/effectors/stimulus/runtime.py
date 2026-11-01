@@ -82,9 +82,10 @@ class StimulusControlRuntime:
         try:
             programme = load_programme(manifest_path, self.config.channels)
         except Exception as exc:
+            # The exception type only: its text can carry a path, so a title.
             raise StimulusControlError(
-                f"stimulus control cannot load the programme channels: {type(exc).__name__}: {exc}"
-            ) from exc
+                f"stimulus control cannot load the programme channels ({type(exc).__name__})"
+            ) from None  # the cause's text can carry a path
         clock = ProgrammeClock(
             len(programme.manifest.items), segments=programme.segments, clock=monotonic
         )

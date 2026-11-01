@@ -182,6 +182,7 @@ async def test_the_welfare_observer_writes_the_record_content_free(tmp_path):
         "ts", "record", "stage", "commands", "refused", "auto_releases", "awake_s",
         "acts_per_awake_hour", "entity_paused_share", "gain_seconds", "gain_mean_db",
         "items_visited", "items_visited_dropped", "readout", "after_own_act", "otherwise",
+        "paused_share_last_awake_hour", "paused_share_last_awake_hour_max", "paused_share_advisories",
         "acts_observed", "acts_with_boredom_fall", "seconds", "boredom_above_share",
         "mean_alert_excess", "mean_learning_progress", RECORD, "minimal",
     }

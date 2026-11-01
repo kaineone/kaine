@@ -4,13 +4,14 @@
 """Off equals absent: with stimulus control off the build behaves as one without it.
 
 ``GOLDEN`` is the digest of ``tests/stimulus_identity_harness.py`` run on the
-build before stimulus control existed (origin/main cb41895b): extract that
+build before stimulus control existed (origin/main d7fabdc0, after the playlist A/V sync): extract that
 commit's ``kaine`` package to a directory, then from that directory run
 ``python -c "import sys, runpy; sys.path.insert(0, '.');
 runpy.run_path('<worktree>/tests/stimulus_identity_harness.py', run_name='__main__')"``.
 
 The harness drives the affect module, the action layer, the effectors module,
-the welfare observer's records and the playlist video source with a script that
+the welfare observer's records, the playlist video source and the real playlist
+audio producer (paced by a manual shared clock, with a stall and a pause) with a script that
 includes realized stimulus actions and a signed act intent naming the stimulus
 effector. With the component off, every output is bit-identical.
 """
@@ -20,7 +21,7 @@ import pytest
 
 from tests import stimulus_identity_harness as harness
 
-GOLDEN = "dc0db1d7e4f51d83aec57901c6bd8f162fd63bcd6cb9920b776483415ba957f7"
+GOLDEN = "8806003e8f337aae5d18cfb0cec1f53363fe75f368a7e27d304c889ad1a7fd49"
 
 
 async def test_off_is_bit_identical_to_the_build_without_it(tmp_path):

@@ -21,9 +21,16 @@ The `stimulus_control` record SHALL hold no sensory content, title, path or text
 - **WHEN** stimulus control is disabled
 - **THEN** no `stimulus_control` record is written and the run manifest has no stimulus-control field
 
+### Requirement: An operator advisory on the paused share
+When the entity's pauses hold the programme for more than half of the trailing awake hour, stimulus control SHALL log an operator advisory with numbers only, once until the share falls back to half or less, and the `stimulus_control` record SHALL give the trailing share, its maximum and the count of advisories. The advisory SHALL block no command.
+
+#### Scenario: Pausing most of an hour
+- **WHEN** the entity pauses at every command interval for an awake hour
+- **THEN** one advisory is logged, the record counts it, and the next pause is still accepted
+
 ### Requirement: Stimulus control off is bit-identical to absent
 With stimulus control off, a seeded entity-free harness over the affect module, the action layer, the effectors module, the welfare records and the playlist video source, driven by a script that includes realized stimulus actions and a signed act intent naming the stimulus effector, SHALL produce the digest of the build before the component, and SHALL produce a different digest with the credit window on.
 
 #### Scenario: The disabled build
 - **WHEN** the harness runs on a build with stimulus control off
-- **THEN** its digest equals the golden captured on origin/main cb41895b
+- **THEN** its digest equals the golden captured on origin/main d7fabdc0
