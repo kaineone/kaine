@@ -48,7 +48,7 @@ All keys are under `[social_cognition]` and `[social_cognition.qdrant]`. The ful
 |---|---|---|---|
 | `backend` | string | `"qdrant"` | `"qdrant"` or `"inmemory"` (the constructor default is `"inmemory"`; the shipped file sets `"qdrant"`) |
 | `collection` | string | `"social_cognition_agents"` | Qdrant collection for agent profiles |
-| `speaker_label` | string | `"operator"` | Agent id for the operator-facing channels |
+| `speaker_label` | string | `"operator"` | Agent id for the operator-facing channels. It is stored as written as `agent_id` and `agent_label` in the entity's episodic traces and travels with preservation bundles, so use a role label, not a person's name |
 | `operator_sources` | list of strings | `["live_mic", "microphone", "remote"]` | Channels attributed to the operator agent; any other channel becomes `media:<channel>`. The action selection module also uses this key to decide which audition sources are user utterances. The sequence module uses a fixed constant and ignores the key. |
 | `deviation_threshold` | float | `0.5` | Deviation above which `social_cognition.social_error` is published; must lie in (0, 1] |
 | `baseline_salience` | float | `0.15` | Lowest intensity of the social cognition module's events |
