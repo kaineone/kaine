@@ -64,6 +64,23 @@ HOUSEKEEPING_STREAM = "housekeeping.out"
 #: The housekeeping floor's bus source. Derived from the stream so the two always agree.
 HOUSEKEEPING_SOURCE = HOUSEKEEPING_STREAM.removesuffix(".out")
 
+#: The sleep audit's operator-speech readout (operator-speech-as-perception):
+#: content-free counts for the operator and the research record. Not a module
+#: stream, so the cycle never reads it as a candidate and no module consumes it;
+#: nothing published there enters the entity.
+SLEEP_READOUT_STREAM = "sleep_readout.out"
+#: The readout's bus source. Derived from the stream so the two always agree.
+SLEEP_READOUT_SOURCE = SLEEP_READOUT_STREAM.removesuffix(".out")
+#: The readout's event type and its numeric fields (besides ``sleep_index``).
+OPERATOR_SPEECH_READOUT_TYPE = "sleep_readout.operator_speech"
+OPERATOR_SPEECH_READOUT_FIELDS: tuple[str, ...] = (
+    "operator_speech_heard",
+    "operator_speech_accessed",
+    "spoke_after_operator_speech",
+    "spoke_otherwise",
+    "operator_speech_access_share",
+)
+
 #: The perception feed's own bus source and stream (stimulus-source-to-world
 #: transition outcomes). It is distinct from the perceptual locus module's stream,
 #: so each has its own cap and the rename never folds one onto the other.
@@ -112,6 +129,7 @@ KNOWN_STREAMS: frozenset[str] = MODULE_STREAMS | frozenset(
         LANGUAGE_INTERNAL_STREAM,
         DEVELOPMENT_STREAM,
         HOUSEKEEPING_STREAM,
+        SLEEP_READOUT_STREAM,
         PERCEPTION_FEED_STREAM,
         INDIVIDUATION_STREAM,
         LIFECYCLE_STREAM,
@@ -132,6 +150,10 @@ __all__ = [
     "DEVELOPMENT_SOURCE",
     "HOUSEKEEPING_STREAM",
     "HOUSEKEEPING_SOURCE",
+    "SLEEP_READOUT_SOURCE",
+    "OPERATOR_SPEECH_READOUT_TYPE",
+    "OPERATOR_SPEECH_READOUT_FIELDS",
+    "SLEEP_READOUT_STREAM",
     "PERCEPTION_FEED_SOURCE",
     "PERCEPTION_FEED_STREAM",
     "SLEEP_STREAM",

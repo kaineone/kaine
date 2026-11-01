@@ -52,7 +52,7 @@ def test_diagnostics_streams_are_real_streams():
     streams = diagnostics_streams()
     canonical_streams = {module_stream(name) for name in CANONICAL_MODULE_NAMES}
     for stream in streams:
-        assert stream == "workspace.broadcast" or stream in canonical_streams
+        assert stream in ("workspace.broadcast", "sleep_readout.out") or stream in canonical_streams
     assert "cycle.out" in streams
     assert "cycle.tick" not in streams
 

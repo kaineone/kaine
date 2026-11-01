@@ -414,6 +414,12 @@ def make_sleep(
             kwargs["playlist_clock"] = _pclock
     # The cycle wires the development probe after the modules exist; until then the backstop waits.
     kwargs["await_development_probe"] = True
+    # The ignition audit's operator-speech readout reads audition.out only with
+    # speech-to-text on (operator-speech-as-perception); off, the audit is unchanged.
+    if kaine_config is not None:
+        _audition = kaine_config.get("audition") or {}
+        if isinstance(_audition, dict) and bool(_audition.get("transcription_enabled", False)):
+            kwargs["transcription_enabled"] = True
     return Sleep(bus, **kwargs)
 
 

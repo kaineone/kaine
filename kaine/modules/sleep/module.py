@@ -10,6 +10,7 @@ import logging
 import math
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
@@ -18,11 +19,14 @@ from kaine.bus.streams import (
     ACTION_SELECTION_FEEDBACK_STREAM,
     ACTION_SELECTION_STREAM,
     AFFECT_STREAM,
+    AUDITION_STREAM,
     EFFECTORS_STREAM,
     INTEROCEPTION_STREAM,
     LANGUAGE_EXTERNAL_STREAM,
     LANGUAGE_INTERNAL_STREAM,
+    OPERATOR_SPEECH_READOUT_TYPE,
     PLANNING_STREAM,
+    SLEEP_READOUT_SOURCE,
     SLEEP_STREAM,
     VOCAL_STREAM,
     WORKSPACE_STREAM,
@@ -161,8 +165,14 @@ class Sleep(BaseModule):
         # housekeeping report sets the pressure that scales awake fatigue
         # build-up at nu_act (1 + P^hk). None leaves fatigue unchanged.
         housekeeping_pressure: Optional[Any] = None,
+        # [audition].transcription_enabled: the ignition audit reads audition.out
+        # for the operator-speech readout only when speech-to-text is on, so with
+        # it off the audit's cursors, state and record are unchanged
+        # (operator-speech-as-perception).
+        transcription_enabled: bool = False,
     ) -> None:
         super().__init__(bus)
+        self._transcription_enabled = bool(transcription_enabled)
         self._organ_gguf_path = organ_gguf_path
         self._housekeeper = housekeeper
         self._housekeeping_pressure = housekeeping_pressure
@@ -297,6 +307,8 @@ class Sleep(BaseModule):
                 SLEEP_STREAM,
             )
         }
+        if self._transcription_enabled:
+            self._audit_cursors[AUDITION_STREAM] = "0"
         self._broadcast_cursor: str = "0"
 
     @property
@@ -1366,9 +1378,14 @@ class Sleep(BaseModule):
         Realizations are linked to their intents through the intent log's
         record_id to intent_entry_id join.
         """
+        from kaine.faithful.external_input import spoken_counts
         from kaine.modules.sleep.corpus import intent_record_links
-        from kaine.modules.sleep.ignition_audit import classify_realizations
+        from kaine.modules.sleep.ignition_audit import (
+            classify_realizations,
+            operator_speech_readout,
+        )
 
+        readout: Optional[dict[str, Any]] = None
         try:
             since_ms: Optional[float] = None
             if since is not None:
@@ -1385,6 +1402,26 @@ class Sleep(BaseModule):
             intents: list[dict[str, Any]] = []
             realizations: list[dict[str, Any]] = []
             proposal_outcomes: list[dict[str, Any]] = []
+            # The readout's inputs: transcription labels and counts from the
+            # main-bus copy (never the words: no companion is joined) and the
+            # external utterances with their entry ids.
+            heard_records: list[dict[str, Any]] = []
+            spoken_records: list[dict[str, Any]] = []
+            if self._transcription_enabled:
+                for entry_id, event in await self._drain_audit_stream(AUDITION_STREAM):
+                    if not _in_window(entry_id) or event.type != "audition.transcription":
+                        continue
+                    ev_payload = getattr(event, "payload", None) or {}
+                    heard_records.append(
+                        {
+                            "entry_id": entry_id,
+                            "type": event.type,
+                            "payload": {
+                                "source_label": ev_payload.get("source_label"),
+                                "text_chars": spoken_counts(ev_payload)[0],
+                            },
+                        }
+                    )
             for stream in (
                 ACTION_SELECTION_STREAM,
                 ACTION_SELECTION_FEEDBACK_STREAM,
@@ -1403,6 +1440,12 @@ class Sleep(BaseModule):
                         "type": event.type,
                         "payload": dict(getattr(event, "payload", None) or {}),
                     }
+                    if (
+                        self._transcription_enabled
+                        and stream == LANGUAGE_EXTERNAL_STREAM
+                        and event.type == "external_speech"
+                    ):
+                        spoken_records.append({"entry_id": entry_id, "type": event.type})
                     if event.type.startswith("intent."):
                         intents.append(record)
                     elif event.type == "action_selection.proposal_outcome":
@@ -1413,6 +1456,9 @@ class Sleep(BaseModule):
                     else:
                         realizations.append(record)
             broadcasts: list[dict[str, Any]] = []
+            # (entry_id, snapshot) for the operator-speech readout, which needs
+            # each broadcast's wall-clock id; collected only with speech-to-text on.
+            readout_broadcasts: list[tuple[str, dict[str, Any]]] = []
             cursor = self._broadcast_cursor
             while True:
                 entries, last_scanned = await self._bus.read_workspace_entries(cursor, count=64)
@@ -1423,6 +1469,8 @@ class Sleep(BaseModule):
                 for entry_id, snap in entries:
                     if _in_window(entry_id):
                         broadcasts.append(snap)
+                        if self._transcription_enabled:
+                            readout_broadcasts.append((entry_id, snap))
             self._broadcast_cursor = cursor
             try:
                 corpus_dir = self._voice_config.intent_log_path.parent / "intent_log"
@@ -1451,6 +1499,10 @@ class Sleep(BaseModule):
                 record_links=record_links,
             )
             payload = report.as_payload()
+            if self._transcription_enabled:
+                readout = operator_speech_readout(
+                    heard_records, readout_broadcasts, spoken_records
+                )
         except Exception as exc:
             log.warning("sleep: ignition audit failed (continuing)", exc_info=True)
             payload = {
@@ -1480,7 +1532,35 @@ class Sleep(BaseModule):
                 "sleep: ignition-audit publish failed (continuing)",
                 exc_info=True,
             )
+        if readout is not None:
+            await self._publish_operator_speech_readout(readout)
         return payload
+
+    async def _publish_operator_speech_readout(self, readout: dict[str, Any]) -> None:
+        """Publish the operator-speech readout on ``sleep_readout.out``.
+
+        Observation only (operator-speech-as-perception, design decision 7): the
+        readout goes to its own stream, which the cycle never reads as a
+        candidate and no module consumes, never to ``sleep.out`` (a workspace
+        candidate stream) and never into the audit record or the
+        ``sleep.sleep.completed`` summary. So nothing reads "the operator spoke
+        and the entity did not" into the entity. Bypasses ``self.publish`` so
+        the sleep module's oscillator is not driven by it. Counts only.
+        """
+        from kaine.bus.schema import validate_event
+
+        try:
+            await self._bus.publish(
+                validate_event(
+                    source=SLEEP_READOUT_SOURCE,
+                    type=OPERATOR_SPEECH_READOUT_TYPE,
+                    payload={"sleep_index": self._sleep_count, **readout},
+                    salience=0.0,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+        except Exception:
+            log.warning("sleep: operator-speech readout publish failed (continuing)", exc_info=True)
 
     async def _run_voice_alignment(self) -> tuple[TrainingResult, PhaseResult]:
         start_ms = time.monotonic() * 1000.0

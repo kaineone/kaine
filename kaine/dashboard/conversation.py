@@ -17,7 +17,14 @@ from fastapi.templating import Jinja2Templates
 
 from kaine import legacy_aliases
 from kaine.bus import Event
-from kaine.bus.streams import LANGUAGE_EXTERNAL_STREAM, SELF_MODEL_STREAM, SLEEP_STREAM
+from kaine.bus.streams import (
+    LANGUAGE_EXTERNAL_STREAM,
+    OPERATOR_SPEECH_READOUT_FIELDS,
+    OPERATOR_SPEECH_READOUT_TYPE,
+    SELF_MODEL_STREAM,
+    SLEEP_READOUT_STREAM,
+    SLEEP_STREAM,
+)
 from kaine.dashboard.diagnostics import asset_url, build_diagnostics_context
 from kaine.dashboard.health import HealthProber
 from kaine.lifecycle.manager import ForkManager
@@ -130,6 +137,8 @@ class ConversationState:
         self.entity_name: str = "KAINE"
         self.sleeping: bool = False
         self.sleep: dict[str, Any] | None = None
+        # The last sleep's operator-speech readout (sleep_readout.out), counts only.
+        self.operator_speech: dict[str, Any] | None = None
         self._sleep_start_seen: bool = False
         self._sleep_start_trigger: str | None = None
         self._name_paths: tuple[Path, Path] | None = None
@@ -194,6 +203,17 @@ class ConversationState:
         elif event.type == "sleep.sleep.completed":
             self.update_from_sleep(event.type)
             self._on_sleep_completed(event)
+        elif event.type == OPERATOR_SPEECH_READOUT_TYPE:
+            self._on_operator_speech_readout(event)
+
+    def _on_operator_speech_readout(self, event: Event) -> None:
+        """Keep the five readout numbers and the sleep index; nothing else."""
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        readout: dict[str, Any] = {}
+        for key in OPERATOR_SPEECH_READOUT_FIELDS:
+            value = _finite(payload.get(key))
+            readout[key] = value
+        self.operator_speech = readout
 
     def _on_sleep_started(self, event: Event) -> None:
         payload = event.payload if isinstance(event.payload, dict) else {}
@@ -249,10 +269,12 @@ class ConversationState:
         return {
             "sleeping": self.sleeping,
             "sleep": dict(self.sleep) if self.sleep else None,
+            "operator_speech": dict(self.operator_speech) if self.operator_speech else None,
         }
 
     async def backfill(self, bus: Any, *, scan: int = 2000) -> None:
         """Read recent self-model, sleep and affect events and apply the newest matches."""
+        await self._backfill_operator_speech(bus, scan)
         try:
             entries = await bus.recent(SELF_MODEL_STREAM, count=scan)
         except Exception:
@@ -287,6 +309,17 @@ class ConversationState:
                     if start_idx is not None:
                         self.observe(entries[start_idx][1])
                     self.observe(newest_event)
+
+    async def _backfill_operator_speech(self, bus: Any, scan: int) -> None:
+        try:
+            entries = await bus.recent(SLEEP_READOUT_STREAM, count=scan)
+        except Exception:
+            log.debug("conversation backfill failed for %s", SLEEP_READOUT_STREAM, exc_info=True)
+            return
+        for _entry_id, event in entries:
+            if event.type == OPERATOR_SPEECH_READOUT_TYPE:
+                self.observe(event)
+                return
 
     def update_from_self_model(self, payload: dict[str, Any]) -> None:
         name = payload.get("entity_name") or payload.get("name")

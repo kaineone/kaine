@@ -55,6 +55,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kaine.bus.schema import Event, stream_entry_key
+from kaine.bus.streams import OPERATOR_SPEECH_READOUT_FIELDS, OPERATOR_SPEECH_READOUT_TYPE
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver, WorkspaceSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
 from kaine.evaluation.stream_registry import curated_module_streams
@@ -342,6 +343,9 @@ _TAXONOMY: dict[str, frozenset[str]] = {
             "realization_failed_count",
         }
     ),
+    # operator-speech-as-perception: the sleep audit's operator-speech readout,
+    # content-free counts on sleep_readout.out (never read by the entity).
+    OPERATOR_SPEECH_READOUT_TYPE: frozenset({"sleep_index", *OPERATOR_SPEECH_READOUT_FIELDS}),
     "sleep.fork": frozenset({"snapshot_id", "parent_ids", "strategy"}),
     "sleep.merge": frozenset({"snapshot_id", "parent_ids", "strategy"}),
     # --- Self / social ---

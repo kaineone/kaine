@@ -20,18 +20,20 @@ Documented exclusions:
 - dashboard diagnostics additionally excludes the low-signal operational streams
   (``action_selection.out``, ``embodiment.out``, ``perceptual_locus.out``, ``welfare.out``,
   ``preservation.out``, ``individuation.out``) and adds the non-module
-  ``workspace.broadcast`` stream. It tails ``cycle.out``, which carries the
+  ``workspace.broadcast`` and ``sleep_readout.out`` streams. It tails ``cycle.out``, which carries the
   cycle's ``cycle.tick``, ``cycle.rates`` and ``cycle.time_scale`` events.
 
 The positive control of the information-gain measure publishes on
 ``positive_control.out``, which both logs record and the cycle never reads as
-a candidate stream.
+a candidate stream. The sleep audit's operator-speech readout publishes on
+``sleep_readout.out`` (content-free counts): both logs record it, the dashboard
+diagnostics tail it, and the cycle never reads it.
 """
 
 from __future__ import annotations
 
 from kaine.bus.schema import module_stream
-from kaine.bus.streams import PERCEPTION_FEED_STREAM
+from kaine.bus.streams import PERCEPTION_FEED_STREAM, SLEEP_READOUT_STREAM
 
 #: Every cognitive module that publishes a stream. Order is stable.
 CANONICAL_MODULE_NAMES: tuple[str, ...] = (
@@ -80,6 +82,7 @@ _DIAGNOSTICS_EXCLUSIONS: frozenset[str] = frozenset(
 _ADDITIONAL_PRODUCED_STREAMS: tuple[str, ...] = (
     "action_selection_feedback.out",
     "positive_control.out",
+    SLEEP_READOUT_STREAM,
 )
 
 
@@ -110,4 +113,4 @@ def diagnostics_streams() -> tuple[str, ...]:
     """The dashboard diagnostics streams: filtered module streams plus non-module
     extras (``workspace.broadcast``)."""
     module_part = tuple(s for s in canonical_module_streams() if s not in _DIAGNOSTICS_EXCLUSIONS)
-    return module_part + ("workspace.broadcast",)
+    return module_part + ("workspace.broadcast", SLEEP_READOUT_STREAM)

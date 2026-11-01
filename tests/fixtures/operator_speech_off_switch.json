@@ -1,0 +1,3398 @@
+{
+ "audit": {
+  "drive_triggered": 0,
+  "drive_triggered_entry_ids": [],
+  "event_types": [
+   "external_speech",
+   "external_speech"
+  ],
+  "input_triggered": 0,
+  "input_triggered_entry_ids": [],
+  "planning_initiated": 0,
+  "planning_initiated_entry_ids": [],
+  "planning_proposals_declined": 0,
+  "planning_proposals_forwarded": 0,
+  "planning_proposals_realized": 0,
+  "realization_failed_count": 0,
+  "realized_total": 2,
+  "saliences": [],
+  "self_initiated": 2,
+  "self_initiated_entry_ids": [],
+  "sleep_index": 0,
+  "unrealizable_planning_intents": 0
+ },
+ "audit_cursor_keys_before": [
+  "action_selection.out",
+  "action_selection_feedback.out",
+  "effectors.out",
+  "language.external",
+  "language.internal",
+  "planning.out",
+  "sleep.out",
+  "vocal.out"
+ ],
+ "audit_cursors_after": {
+  "action_selection.out": 1,
+  "action_selection_feedback.out": "0",
+  "effectors.out": "0",
+  "language.external": 1,
+  "language.internal": "0",
+  "planning.out": "0",
+  "sleep.out": "0",
+  "vocal.out": "0"
+ },
+ "broadcast_cursor_after": 23,
+ "bus": {
+  "action_selection.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "about": "Something in my feelings stands out noticeably.",
+     "about_kind": "event",
+     "about_values": {
+      "source": "affect",
+      "surprise": 0.6,
+      "type": "affect.drive"
+     },
+     "entry_id": "affect.out:1000-5",
+     "kind": "speak"
+    },
+    "salience": "0.5",
+    "source": "action_selection",
+    "type": "intent.speak"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "about": "Something in my feelings stands out strongly.",
+     "about_kind": "event",
+     "about_values": {
+      "source": "affect",
+      "surprise": 0.75,
+      "type": "affect.drive"
+     },
+     "entry_id": "affect.out:1003-5",
+     "kind": "think"
+    },
+    "salience": "0.5",
+    "source": "action_selection",
+    "type": "intent.think"
+   }
+  ],
+  "affect.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.6",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "social_drive",
+     "value": 0.9
+    },
+    "salience": "0.75",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.65",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.7",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "social_drive",
+     "value": 0.9
+    },
+    "salience": "0.75",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.6",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "social_drive",
+     "value": 0.9
+    },
+    "salience": "0.75",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.65",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "curiosity",
+     "value": 0.8
+    },
+    "salience": "0.7",
+    "source": "affect",
+    "type": "affect.drive"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive": "social_drive",
+     "value": 0.9
+    },
+    "salience": "0.75",
+    "source": "affect",
+    "type": "affect.drive"
+   }
+  ],
+  "audition.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0,
+     "prediction_error": 0.2,
+     "source_label": "playlist"
+    },
+    "salience": "0.3",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 120.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1,
+     "prediction_error": 0.25,
+     "source_label": "playlist"
+    },
+    "salience": "0.37",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 121.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2,
+     "prediction_error": 0.30000000000000004,
+     "source_label": "playlist"
+    },
+    "salience": "0.44",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 122.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004,
+     "prediction_error": 0.35000000000000003,
+     "source_label": "playlist"
+    },
+    "salience": "0.51",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 123.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4,
+     "prediction_error": 0.4,
+     "source_label": "playlist"
+    },
+    "salience": "0.5800000000000001",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 124.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0,
+     "prediction_error": 0.45,
+     "source_label": "playlist"
+    },
+    "salience": "0.65",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 125.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1,
+     "prediction_error": 0.5,
+     "source_label": "playlist"
+    },
+    "salience": "0.3",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 126.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2,
+     "prediction_error": 0.2,
+     "source_label": "playlist"
+    },
+    "salience": "0.37",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 127.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004,
+     "prediction_error": 0.25,
+     "source_label": "playlist"
+    },
+    "salience": "0.44",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 128.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4,
+     "prediction_error": 0.30000000000000004,
+     "source_label": "playlist"
+    },
+    "salience": "0.51",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 129.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0,
+     "prediction_error": 0.35000000000000003,
+     "source_label": "playlist"
+    },
+    "salience": "0.5800000000000001",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 130.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1,
+     "prediction_error": 0.4,
+     "source_label": "playlist"
+    },
+    "salience": "0.65",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 131.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2,
+     "prediction_error": 0.45,
+     "source_label": "playlist"
+    },
+    "salience": "0.3",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 132.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004,
+     "prediction_error": 0.5,
+     "source_label": "playlist"
+    },
+    "salience": "0.37",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 133.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4,
+     "prediction_error": 0.2,
+     "source_label": "playlist"
+    },
+    "salience": "0.44",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 134.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0,
+     "prediction_error": 0.25,
+     "source_label": "playlist"
+    },
+    "salience": "0.51",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 135.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1,
+     "prediction_error": 0.30000000000000004,
+     "source_label": "playlist"
+    },
+    "salience": "0.5800000000000001",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 136.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2,
+     "prediction_error": 0.35000000000000003,
+     "source_label": "playlist"
+    },
+    "salience": "0.65",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 137.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004,
+     "prediction_error": 0.4,
+     "source_label": "playlist"
+    },
+    "salience": "0.3",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 138.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4,
+     "prediction_error": 0.45,
+     "source_label": "playlist"
+    },
+    "salience": "0.37",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 139.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0,
+     "prediction_error": 0.5,
+     "source_label": "playlist"
+    },
+    "salience": "0.44",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 140.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1,
+     "prediction_error": 0.2,
+     "source_label": "playlist"
+    },
+    "salience": "0.51",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 141.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2,
+     "prediction_error": 0.25,
+     "source_label": "playlist"
+    },
+    "salience": "0.5800000000000001",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 142.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004,
+     "prediction_error": 0.30000000000000004,
+     "source_label": "playlist"
+    },
+    "salience": "0.65",
+    "source": "audition",
+    "type": "audition.perception"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "pitch_hz": 143.0,
+     "source_label": "playlist"
+    },
+    "salience": "0.2",
+    "source": "audition",
+    "type": "audition.prosody"
+   }
+  ],
+  "interoception.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.5
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.51
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.52
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.53
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.54
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.55
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.56
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.5700000000000001
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.58
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.59
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.6
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.61
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.62
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.63
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.64
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.65
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.66
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.67
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.6799999999999999
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.69
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.7
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.71
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.72
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "wellness": 0.73
+    },
+    "salience": "0.3",
+    "source": "interoception",
+    "type": "interoception.report"
+   }
+  ],
+  "language.external": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "mode": "external",
+     "record_id": "R0"
+    },
+    "salience": "0.4",
+    "source": "language",
+    "type": "external_speech"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "mode": "external",
+     "record_id": "R1"
+    },
+    "salience": "0.4",
+    "source": "language",
+    "type": "external_speech"
+   }
+  ],
+  "sequence.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.0
+    },
+    "salience": "0.2",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.1
+    },
+    "salience": "0.30000000000000004",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.2
+    },
+    "salience": "0.4",
+    "source": "sequence",
+    "type": "sequence.error"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "error": 0.30000000000000004
+    },
+    "salience": "0.5",
+    "source": "sequence",
+    "type": "sequence.error"
+   }
+  ],
+  "sleep.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "drive_triggered": 0,
+     "drive_triggered_entry_ids": [],
+     "event_types": [
+      "external_speech",
+      "external_speech"
+     ],
+     "input_triggered": 0,
+     "input_triggered_entry_ids": [],
+     "planning_initiated": 0,
+     "planning_initiated_entry_ids": [],
+     "planning_proposals_declined": 0,
+     "planning_proposals_forwarded": 0,
+     "planning_proposals_realized": 0,
+     "realization_failed_count": 0,
+     "realized_total": 2,
+     "saliences": [],
+     "self_initiated": 2,
+     "self_initiated_entry_ids": [],
+     "sleep_index": 0,
+     "unrealizable_planning_intents": 0
+    },
+    "salience": "0.5",
+    "source": "sleep",
+    "type": "sleep.ignition_audit"
+   }
+  ],
+  "vision.out": [
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0
+    },
+    "salience": "0.25",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.05
+    },
+    "salience": "0.33999999999999997",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1
+    },
+    "salience": "0.43",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.15000000000000002
+    },
+    "salience": "0.52",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2
+    },
+    "salience": "0.61",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.25
+    },
+    "salience": "0.7",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004
+    },
+    "salience": "0.79",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.35000000000000003
+    },
+    "salience": "0.88",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4
+    },
+    "salience": "0.25",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0
+    },
+    "salience": "0.33999999999999997",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.05
+    },
+    "salience": "0.43",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1
+    },
+    "salience": "0.52",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.15000000000000002
+    },
+    "salience": "0.61",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2
+    },
+    "salience": "0.7",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.25
+    },
+    "salience": "0.79",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.30000000000000004
+    },
+    "salience": "0.88",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.35000000000000003
+    },
+    "salience": "0.25",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.4
+    },
+    "salience": "0.33999999999999997",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.0
+    },
+    "salience": "0.43",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.05
+    },
+    "salience": "0.52",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.1
+    },
+    "salience": "0.61",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.15000000000000002
+    },
+    "salience": "0.7",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.2
+    },
+    "salience": "0.79",
+    "source": "vision",
+    "type": "vision.percept"
+   },
+   {
+    "causal_parent": "",
+    "payload": {
+     "change": 0.25
+    },
+    "salience": "0.88",
+    "source": "vision",
+    "type": "vision.percept"
+   }
+  ],
+  "workspace.broadcast": [
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 0.0,
+     "salience_scores": {
+      "affect.out:1000-5": 0.6,
+      "audition.out:1000-0": 0.3,
+      "audition.out:1000-1": 0.2,
+      "interoception.out:1000-3": 0.3,
+      "sequence.out:1000-4": 0.2,
+      "vision.out:1000-2": 0.25
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1000-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.6,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1000-0",
+       "payload": {
+        "change": 0.0,
+        "prediction_error": 0.2,
+        "source_label": "playlist"
+       },
+       "salience": 0.3,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1000-3",
+       "payload": {
+        "wellness": 0.5
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1000-2",
+       "payload": {
+        "change": 0.0
+       },
+       "salience": 0.25,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1000-1",
+       "payload": {
+        "pitch_hz": 120.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 0,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 2.0,
+     "salience_scores": {
+      "audition.out:1001-0": 0.37,
+      "audition.out:1001-1": 0.2,
+      "interoception.out:1001-3": 0.3,
+      "sequence.out:1001-4": 0.30000000000000004,
+      "vision.out:1001-2": 0.33999999999999997
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1001-0",
+       "payload": {
+        "change": 0.1,
+        "prediction_error": 0.25,
+        "source_label": "playlist"
+       },
+       "salience": 0.37,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1001-2",
+       "payload": {
+        "change": 0.05
+       },
+       "salience": 0.33999999999999997,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1001-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1001-3",
+       "payload": {
+        "wellness": 0.51
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1001-1",
+       "payload": {
+        "pitch_hz": 121.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 1,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 4.0,
+     "salience_scores": {
+      "audition.out:1002-0": 0.44,
+      "audition.out:1002-1": 0.2,
+      "interoception.out:1002-3": 0.3,
+      "sequence.out:1002-4": 0.4,
+      "vision.out:1002-2": 0.43
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1002-0",
+       "payload": {
+        "change": 0.2,
+        "prediction_error": 0.30000000000000004,
+        "source_label": "playlist"
+       },
+       "salience": 0.44,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1002-2",
+       "payload": {
+        "change": 0.1
+       },
+       "salience": 0.43,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1002-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1002-3",
+       "payload": {
+        "wellness": 0.52
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1002-1",
+       "payload": {
+        "pitch_hz": 122.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 2,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 6.0,
+     "salience_scores": {
+      "affect.out:1003-5": 0.75,
+      "audition.out:1003-0": 0.51,
+      "audition.out:1003-1": 0.2,
+      "interoception.out:1003-3": 0.3,
+      "sequence.out:1003-4": 0.5,
+      "vision.out:1003-2": 0.52
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1003-5",
+       "payload": {
+        "drive": "social_drive",
+        "value": 0.9
+       },
+       "salience": 0.75,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1003-2",
+       "payload": {
+        "change": 0.15000000000000002
+       },
+       "salience": 0.52,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1003-0",
+       "payload": {
+        "change": 0.30000000000000004,
+        "prediction_error": 0.35000000000000003,
+        "source_label": "playlist"
+       },
+       "salience": 0.51,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1003-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1003-3",
+       "payload": {
+        "wellness": 0.53
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      }
+     ],
+     "tick_index": 3,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 8.0,
+     "salience_scores": {
+      "affect.out:1004-5": 0.6296875000000001,
+      "audition.out:1004-0": 0.5800000000000001,
+      "audition.out:1004-1": 0.2,
+      "interoception.out:1004-3": 0.3,
+      "sequence.out:1004-4": 0.19375,
+      "vision.out:1004-2": 0.61
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1004-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.65,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1004-2",
+       "payload": {
+        "change": 0.2
+       },
+       "salience": 0.61,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1004-0",
+       "payload": {
+        "change": 0.4,
+        "prediction_error": 0.4,
+        "source_label": "playlist"
+       },
+       "salience": 0.5800000000000001,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1004-3",
+       "payload": {
+        "wellness": 0.54
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1004-1",
+       "payload": {
+        "pitch_hz": 124.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 4,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 10.0,
+     "salience_scores": {
+      "audition.out:1005-0": 0.65,
+      "audition.out:1005-1": 0.2,
+      "interoception.out:1005-3": 0.3,
+      "sequence.out:1005-4": 0.290625,
+      "vision.out:1005-2": 0.7
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1005-2",
+       "payload": {
+        "change": 0.25
+       },
+       "salience": 0.7,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1005-0",
+       "payload": {
+        "change": 0.0,
+        "prediction_error": 0.45,
+        "source_label": "playlist"
+       },
+       "salience": 0.65,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1005-3",
+       "payload": {
+        "wellness": 0.55
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1005-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1005-1",
+       "payload": {
+        "pitch_hz": 125.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 5,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 12.0,
+     "salience_scores": {
+      "audition.out:1006-0": 0.3,
+      "audition.out:1006-1": 0.2,
+      "interoception.out:1006-3": 0.3,
+      "sequence.out:1006-4": 0.3875,
+      "vision.out:1006-2": 0.79
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1006-2",
+       "payload": {
+        "change": 0.30000000000000004
+       },
+       "salience": 0.79,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1006-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1006-0",
+       "payload": {
+        "change": 0.1,
+        "prediction_error": 0.5,
+        "source_label": "playlist"
+       },
+       "salience": 0.3,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1006-3",
+       "payload": {
+        "wellness": 0.56
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1006-1",
+       "payload": {
+        "pitch_hz": 126.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 6,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 14.0,
+     "salience_scores": {
+      "audition.out:1007-0": 0.37,
+      "audition.out:1007-1": 0.2,
+      "interoception.out:1007-3": 0.3,
+      "sequence.out:1007-4": 0.484375,
+      "vision.out:1007-2": 0.88
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1007-2",
+       "payload": {
+        "change": 0.35000000000000003
+       },
+       "salience": 0.88,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1007-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1007-0",
+       "payload": {
+        "change": 0.2,
+        "prediction_error": 0.2,
+        "source_label": "playlist"
+       },
+       "salience": 0.37,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1007-3",
+       "payload": {
+        "wellness": 0.5700000000000001
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1007-1",
+       "payload": {
+        "pitch_hz": 127.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 7,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 16.0,
+     "salience_scores": {
+      "affect.out:1008-5": 0.678125,
+      "audition.out:1008-0": 0.44,
+      "audition.out:1008-1": 0.2,
+      "interoception.out:1008-3": 0.3,
+      "sequence.out:1008-4": 0.19375,
+      "vision.out:1008-2": 0.25
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1008-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.7,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1008-0",
+       "payload": {
+        "change": 0.30000000000000004,
+        "prediction_error": 0.25,
+        "source_label": "playlist"
+       },
+       "salience": 0.44,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1008-3",
+       "payload": {
+        "wellness": 0.58
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1008-2",
+       "payload": {
+        "change": 0.4
+       },
+       "salience": 0.25,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1008-1",
+       "payload": {
+        "pitch_hz": 128.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 8,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 18.0,
+     "salience_scores": {
+      "affect.out:1009-5": 0.75,
+      "audition.out:1009-0": 0.51,
+      "audition.out:1009-1": 0.2,
+      "interoception.out:1009-3": 0.3,
+      "sequence.out:1009-4": 0.290625,
+      "vision.out:1009-2": 0.33999999999999997
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1009-5",
+       "payload": {
+        "drive": "social_drive",
+        "value": 0.9
+       },
+       "salience": 0.75,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1009-0",
+       "payload": {
+        "change": 0.4,
+        "prediction_error": 0.30000000000000004,
+        "source_label": "playlist"
+       },
+       "salience": 0.51,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1009-2",
+       "payload": {
+        "change": 0.0
+       },
+       "salience": 0.33999999999999997,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1009-3",
+       "payload": {
+        "wellness": 0.59
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1009-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      }
+     ],
+     "tick_index": 9,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 20.0,
+     "salience_scores": {
+      "audition.out:1010-0": 0.5800000000000001,
+      "audition.out:1010-1": 0.2,
+      "interoception.out:1010-3": 0.3,
+      "sequence.out:1010-4": 0.3875,
+      "vision.out:1010-2": 0.43
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1010-0",
+       "payload": {
+        "change": 0.0,
+        "prediction_error": 0.35000000000000003,
+        "source_label": "playlist"
+       },
+       "salience": 0.5800000000000001,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1010-2",
+       "payload": {
+        "change": 0.05
+       },
+       "salience": 0.43,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1010-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1010-3",
+       "payload": {
+        "wellness": 0.6
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1010-1",
+       "payload": {
+        "pitch_hz": 130.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 10,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 22.0,
+     "salience_scores": {
+      "audition.out:1011-0": 0.65,
+      "audition.out:1011-1": 0.2,
+      "interoception.out:1011-3": 0.3,
+      "sequence.out:1011-4": 0.484375,
+      "vision.out:1011-2": 0.52
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1011-0",
+       "payload": {
+        "change": 0.1,
+        "prediction_error": 0.4,
+        "source_label": "playlist"
+       },
+       "salience": 0.65,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1011-2",
+       "payload": {
+        "change": 0.1
+       },
+       "salience": 0.52,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1011-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1011-3",
+       "payload": {
+        "wellness": 0.61
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1011-1",
+       "payload": {
+        "pitch_hz": 131.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 11,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 24.0,
+     "salience_scores": {
+      "affect.out:1012-5": 0.5812499999999999,
+      "audition.out:1012-0": 0.3,
+      "audition.out:1012-1": 0.2,
+      "interoception.out:1012-3": 0.3,
+      "sequence.out:1012-4": 0.19375,
+      "vision.out:1012-2": 0.61
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1012-2",
+       "payload": {
+        "change": 0.15000000000000002
+       },
+       "salience": 0.61,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1012-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.6,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1012-0",
+       "payload": {
+        "change": 0.2,
+        "prediction_error": 0.45,
+        "source_label": "playlist"
+       },
+       "salience": 0.3,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1012-3",
+       "payload": {
+        "wellness": 0.62
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1012-1",
+       "payload": {
+        "pitch_hz": 132.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 12,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 26.0,
+     "salience_scores": {
+      "audition.out:1013-0": 0.37,
+      "audition.out:1013-1": 0.2,
+      "interoception.out:1013-3": 0.3,
+      "sequence.out:1013-4": 0.290625,
+      "vision.out:1013-2": 0.7
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1013-2",
+       "payload": {
+        "change": 0.2
+       },
+       "salience": 0.7,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1013-0",
+       "payload": {
+        "change": 0.30000000000000004,
+        "prediction_error": 0.5,
+        "source_label": "playlist"
+       },
+       "salience": 0.37,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1013-3",
+       "payload": {
+        "wellness": 0.63
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1013-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1013-1",
+       "payload": {
+        "pitch_hz": 133.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 13,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 28.0,
+     "salience_scores": {
+      "audition.out:1014-0": 0.44,
+      "audition.out:1014-1": 0.2,
+      "interoception.out:1014-3": 0.3,
+      "sequence.out:1014-4": 0.3875,
+      "vision.out:1014-2": 0.79
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1014-2",
+       "payload": {
+        "change": 0.25
+       },
+       "salience": 0.79,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1014-0",
+       "payload": {
+        "change": 0.4,
+        "prediction_error": 0.2,
+        "source_label": "playlist"
+       },
+       "salience": 0.44,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1014-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1014-3",
+       "payload": {
+        "wellness": 0.64
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1014-1",
+       "payload": {
+        "pitch_hz": 134.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 14,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 30.0,
+     "salience_scores": {
+      "affect.out:1015-5": 0.7265625,
+      "audition.out:1015-0": 0.51,
+      "audition.out:1015-1": 0.2,
+      "interoception.out:1015-3": 0.3,
+      "sequence.out:1015-4": 0.484375,
+      "vision.out:1015-2": 0.88
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1015-2",
+       "payload": {
+        "change": 0.30000000000000004
+       },
+       "salience": 0.88,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1015-5",
+       "payload": {
+        "drive": "social_drive",
+        "value": 0.9
+       },
+       "salience": 0.75,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1015-0",
+       "payload": {
+        "change": 0.0,
+        "prediction_error": 0.25,
+        "source_label": "playlist"
+       },
+       "salience": 0.51,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1015-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1015-3",
+       "payload": {
+        "wellness": 0.65
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      }
+     ],
+     "tick_index": 15,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 32.0,
+     "salience_scores": {
+      "affect.out:1016-5": 0.6296875000000001,
+      "audition.out:1016-0": 0.5800000000000001,
+      "audition.out:1016-1": 0.2,
+      "interoception.out:1016-3": 0.3,
+      "sequence.out:1016-4": 0.19375,
+      "vision.out:1016-2": 0.25
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1016-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.65,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1016-0",
+       "payload": {
+        "change": 0.1,
+        "prediction_error": 0.30000000000000004,
+        "source_label": "playlist"
+       },
+       "salience": 0.5800000000000001,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1016-3",
+       "payload": {
+        "wellness": 0.66
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1016-2",
+       "payload": {
+        "change": 0.35000000000000003
+       },
+       "salience": 0.25,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1016-1",
+       "payload": {
+        "pitch_hz": 136.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 16,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 34.0,
+     "salience_scores": {
+      "audition.out:1017-0": 0.65,
+      "audition.out:1017-1": 0.2,
+      "interoception.out:1017-3": 0.3,
+      "sequence.out:1017-4": 0.290625,
+      "vision.out:1017-2": 0.33999999999999997
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1017-0",
+       "payload": {
+        "change": 0.2,
+        "prediction_error": 0.35000000000000003,
+        "source_label": "playlist"
+       },
+       "salience": 0.65,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1017-2",
+       "payload": {
+        "change": 0.4
+       },
+       "salience": 0.33999999999999997,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1017-3",
+       "payload": {
+        "wellness": 0.67
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1017-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1017-1",
+       "payload": {
+        "pitch_hz": 137.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 17,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 36.0,
+     "salience_scores": {
+      "audition.out:1018-0": 0.3,
+      "audition.out:1018-1": 0.2,
+      "interoception.out:1018-3": 0.3,
+      "sequence.out:1018-4": 0.3875,
+      "vision.out:1018-2": 0.43
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1018-2",
+       "payload": {
+        "change": 0.0
+       },
+       "salience": 0.43,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1018-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1018-0",
+       "payload": {
+        "change": 0.30000000000000004,
+        "prediction_error": 0.4,
+        "source_label": "playlist"
+       },
+       "salience": 0.3,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1018-3",
+       "payload": {
+        "wellness": 0.6799999999999999
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1018-1",
+       "payload": {
+        "pitch_hz": 138.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 18,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 38.0,
+     "salience_scores": {
+      "audition.out:1019-0": 0.37,
+      "audition.out:1019-1": 0.2,
+      "interoception.out:1019-3": 0.3,
+      "sequence.out:1019-4": 0.484375,
+      "vision.out:1019-2": 0.52
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1019-2",
+       "payload": {
+        "change": 0.05
+       },
+       "salience": 0.52,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1019-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1019-0",
+       "payload": {
+        "change": 0.4,
+        "prediction_error": 0.45,
+        "source_label": "playlist"
+       },
+       "salience": 0.37,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1019-3",
+       "payload": {
+        "wellness": 0.69
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1019-1",
+       "payload": {
+        "pitch_hz": 139.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 19,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 40.0,
+     "salience_scores": {
+      "affect.out:1020-5": 0.678125,
+      "audition.out:1020-0": 0.44,
+      "audition.out:1020-1": 0.2,
+      "interoception.out:1020-3": 0.3,
+      "sequence.out:1020-4": 0.19375,
+      "vision.out:1020-2": 0.61
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1020-5",
+       "payload": {
+        "drive": "curiosity",
+        "value": 0.8
+       },
+       "salience": 0.7,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1020-2",
+       "payload": {
+        "change": 0.1
+       },
+       "salience": 0.61,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1020-0",
+       "payload": {
+        "change": 0.0,
+        "prediction_error": 0.5,
+        "source_label": "playlist"
+       },
+       "salience": 0.44,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1020-3",
+       "payload": {
+        "wellness": 0.7
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1020-1",
+       "payload": {
+        "pitch_hz": 140.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 20,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 42.0,
+     "salience_scores": {
+      "affect.out:1021-5": 0.75,
+      "audition.out:1021-0": 0.51,
+      "audition.out:1021-1": 0.2,
+      "interoception.out:1021-3": 0.3,
+      "sequence.out:1021-4": 0.290625,
+      "vision.out:1021-2": 0.7
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "affect.out:1021-5",
+       "payload": {
+        "drive": "social_drive",
+        "value": 0.9
+       },
+       "salience": 0.75,
+       "source": "affect",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "affect.drive"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1021-2",
+       "payload": {
+        "change": 0.15000000000000002
+       },
+       "salience": 0.7,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1021-0",
+       "payload": {
+        "change": 0.1,
+        "prediction_error": 0.2,
+        "source_label": "playlist"
+       },
+       "salience": 0.51,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1021-3",
+       "payload": {
+        "wellness": 0.71
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1021-4",
+       "payload": {
+        "error": 0.1
+       },
+       "salience": 0.30000000000000004,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      }
+     ],
+     "tick_index": 21,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 44.0,
+     "salience_scores": {
+      "audition.out:1022-0": 0.5800000000000001,
+      "audition.out:1022-1": 0.2,
+      "interoception.out:1022-3": 0.3,
+      "sequence.out:1022-4": 0.3875,
+      "vision.out:1022-2": 0.79
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1022-2",
+       "payload": {
+        "change": 0.2
+       },
+       "salience": 0.79,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1022-0",
+       "payload": {
+        "change": 0.2,
+        "prediction_error": 0.25,
+        "source_label": "playlist"
+       },
+       "salience": 0.5800000000000001,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1022-4",
+       "payload": {
+        "error": 0.2
+       },
+       "salience": 0.4,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1022-3",
+       "payload": {
+        "wellness": 0.72
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1022-1",
+       "payload": {
+        "pitch_hz": 142.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 22,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   },
+   {
+    "snapshot": {
+     "inhibited": false,
+     "is_experiential": true,
+     "metadata": {
+      "access_threshold": 0.35,
+      "arm": "competitive",
+      "coalition_capacity": 5
+     },
+     "published_at": 46.0,
+     "salience_scores": {
+      "audition.out:1023-0": 0.65,
+      "audition.out:1023-1": 0.2,
+      "interoception.out:1023-3": 0.3,
+      "sequence.out:1023-4": 0.484375,
+      "vision.out:1023-2": 0.88
+     },
+     "selected": [
+      {
+       "causal_parent": null,
+       "entry_id": "vision.out:1023-2",
+       "payload": {
+        "change": 0.25
+       },
+       "salience": 0.88,
+       "source": "vision",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "vision.percept"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1023-0",
+       "payload": {
+        "change": 0.30000000000000004,
+        "prediction_error": 0.30000000000000004,
+        "source_label": "playlist"
+       },
+       "salience": 0.65,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.perception"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "sequence.out:1023-4",
+       "payload": {
+        "error": 0.30000000000000004
+       },
+       "salience": 0.5,
+       "source": "sequence",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "sequence.error"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "interoception.out:1023-3",
+       "payload": {
+        "wellness": 0.73
+       },
+       "salience": 0.3,
+       "source": "interoception",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "interoception.report"
+      },
+      {
+       "causal_parent": null,
+       "entry_id": "audition.out:1023-1",
+       "payload": {
+        "pitch_hz": 143.0,
+        "source_label": "playlist"
+       },
+       "salience": 0.2,
+       "source": "audition",
+       "timestamp": "2026-01-01T00:00:00+00:00",
+       "type": "audition.prosody"
+      }
+     ],
+     "tick_index": 23,
+     "time_scale": 1.0
+    },
+    "source": "workspace"
+   }
+  ]
+ },
+ "sleep_state": {
+  "effective_due_at": 3600.0,
+  "last_sleep_at": null,
+  "original_due_at": 3600.0,
+  "schedule": {
+   "effective_due_in": 3600.0,
+   "original_due_in": 3600.0
+  },
+  "sleep_index": 0,
+  "state_cycle": {
+   "awake_s": 0.0,
+   "phase": "awake",
+   "rest_spent_s": 0.0
+  }
+ }
+}

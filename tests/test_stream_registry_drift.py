@@ -69,6 +69,7 @@ def test_effective_memberships_are_golden():
             "action_selection.out",
             "action_selection_feedback.out",
             "positive_control.out",
+            "sleep_readout.out",
             "interoception.out",
             "sequence.out",
             "vision.out",
@@ -113,6 +114,7 @@ def test_effective_memberships_are_golden():
             "effectors.out",
             "supervisor.out",
             "workspace.broadcast",
+            "sleep_readout.out",
         }
     )
 

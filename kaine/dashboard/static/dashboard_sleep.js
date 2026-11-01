@@ -100,8 +100,32 @@
     setHidden("sleep-aborted", !sleep.aborted);
   }
 
+  function countText(v) {
+    return isNumber(v) ? String(Math.round(v)) : "n/a";
+  }
+
+  function renderOperatorSpeech(data) {
+    var op = data && data.operator_speech;
+    if (!op) {
+      setHidden("sleep-operator-speech", true);
+      return;
+    }
+    setHidden("sleep-operator-speech", false);
+    setText("sleep-op-heard", countText(op.operator_speech_heard));
+    setText("sleep-op-accessed", countText(op.operator_speech_accessed));
+    setText(
+      "sleep-op-share",
+      isNumber(op.operator_speech_access_share)
+        ? Math.round(op.operator_speech_access_share * 100) + " %"
+        : "n/a"
+    );
+    setText("sleep-op-spoke-after", countText(op.spoke_after_operator_speech));
+    setText("sleep-op-spoke-otherwise", countText(op.spoke_otherwise));
+  }
+
   function render(data) {
     renderSleep(data || {});
+    renderOperatorSpeech(data || {});
   }
 
   function refresh() {

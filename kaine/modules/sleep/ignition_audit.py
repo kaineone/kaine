@@ -33,13 +33,24 @@ Taxonomy:
   ``planning_proposals_declined`` and ``planning_proposals_forwarded`` counts;
   forwarded rests are counted separately because the sleep module decides them, and
   an accepted one shows up as a requested sleep.
+
+The operator-speech readout (change ``operator-speech-as-perception``,
+:func:`operator_speech_readout`) is a separate pure function over the waking
+window's main-bus transcription counts, broadcasts and realizations: operator
+speech heard, how often it won access, how often the entity spoke within
+:data:`OPERATOR_SPEECH_WINDOW_S` of entity time after it, and how often it
+spoke otherwise. It is content-free (counts only) and observation only: the
+sleep module publishes it on ``sleep_readout.out``, a stream the cycle never
+reads and no module consumes, never on ``sleep.out`` and never in the audit
+record, so nothing of it enters the entity.
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
-from kaine.bus.streams import PLANNING_STREAM
-from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES
+from kaine.bus.schema import OPERATOR_SOURCES, entry_id_sort_key, stream_entry_key
+from kaine.bus.streams import AUDITION_STREAM, OPERATOR_SPEECH_READOUT_FIELDS, PLANNING_STREAM
+from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, spoken_counts
 
 # EXTERNAL_INPUT_TYPES (other-initiated coalition member types) is the shared
 # definition from kaine.faithful.external_input, also used by heard-speech
@@ -321,3 +332,141 @@ def classify_realizations(
         else:
             report.self_initiated += 1
     return report
+
+
+# --- operator-speech readout (operator-speech-as-perception) ----------------
+
+#: The window, in entity seconds, after accessed operator speech within which a
+#: realized external utterance counts as "spoke after operator speech". A
+#: readout constant: nothing in the entity reads it.
+OPERATOR_SPEECH_WINDOW_S = 30.0
+TRANSCRIPTION_TYPE = "audition.transcription"
+EXTERNAL_SPEECH_TYPE = "external_speech"
+
+
+def _is_operator_speech(type_: Any, payload: Mapping[str, Any], operator_sources) -> bool:
+    """A non-empty operator-channel transcription, from labels and counts only."""
+    if type_ != TRANSCRIPTION_TYPE or not isinstance(payload, Mapping):
+        return False
+    if payload.get("source_label") not in operator_sources:
+        return False
+    chars, _words = spoken_counts(payload)
+    return chars > 0
+
+
+def _wall_ms(entry_id: Any) -> Optional[float]:
+    """The wall-clock millisecond of a bus entry id, or None when it is not one."""
+    rank, ms, _seq, _rest = entry_id_sort_key(str(entry_id))
+    return float(ms) if rank == 0 else None
+
+
+def operator_speech_readout(
+    transcriptions: List[Dict[str, Any]],
+    broadcasts: List[tuple],
+    realizations: List[Dict[str, Any]],
+    *,
+    operator_sources=OPERATOR_SOURCES,
+    window_s: float = OPERATOR_SPEECH_WINDOW_S,
+) -> Optional[Dict[str, Any]]:
+    """Content-free counts of operator speech heard, accessed and followed by speech.
+
+    ``transcriptions`` are ``audition.out`` records ``{"entry_id", "type",
+    "payload"}`` whose payload holds only labels and counts (the main-bus
+    copy: ``source_label``, ``text_chars``); ``broadcasts`` are
+    ``(entry_id, snapshot)`` pairs of ``workspace.broadcast`` in stream order;
+    ``realizations`` are ``{"entry_id", "type", "payload"}`` records from
+    ``language.external``.
+
+    - ``operator_speech_heard``: non-empty operator-channel transcriptions in the window.
+    - ``operator_speech_accessed``: how many of those won access (were a member
+      of at least one broadcast coalition). Each utterance counts once however
+      many broadcasts it won.
+    - ``spoke_after_operator_speech``: accessed utterances followed by a
+      realized ``external_speech`` within ``window_s`` entity seconds of the
+      utterance's first access and before the next accessed utterance's.
+    - ``spoke_otherwise``: realized ``external_speech`` in no such window.
+    - ``operator_speech_access_share``: accessed / heard.
+
+    Entity time comes from each broadcast's ``published_at`` (entity seconds)
+    and ``time_scale``; an utterance's access time is the ``published_at`` of
+    the first broadcast it won, and a realization's entity time is
+    extrapolated from the latest broadcast at or before it on the wall clock
+    (the earliest one after it when there is none before). Returns ``None``
+    when no operator speech was heard, so the caller publishes nothing.
+    """
+    heard_keys: list[str] = []
+    for rec in transcriptions:
+        if _is_operator_speech(rec.get("type"), rec.get("payload") or {}, operator_sources):
+            heard_keys.append(stream_entry_key(AUDITION_STREAM, str(rec.get("entry_id"))))
+    if not heard_keys:
+        return None
+    heard_set = set(heard_keys)
+
+    # (wall_ms, entity_s, scale) per broadcast, and each heard utterance's first access.
+    timeline: list[tuple[float, float, float]] = []
+    first_access: Dict[str, float] = {}
+    for entry_id, snap in broadcasts:
+        if not isinstance(snap, Mapping):
+            continue
+        published_at = snap.get("published_at")
+        if isinstance(published_at, bool) or not isinstance(published_at, (int, float)):
+            continue
+        entity_s = float(published_at)
+        scale = snap.get("time_scale")
+        scale = float(scale) if isinstance(scale, (int, float)) and not isinstance(scale, bool) and scale > 0 else 1.0
+        wall = _wall_ms(entry_id)
+        if wall is not None:
+            timeline.append((wall, entity_s, scale))
+        for member in snap.get("selected") or snap.get("coalition") or []:
+            if not isinstance(member, Mapping):
+                continue
+            key = member.get("entry_id")
+            if key in heard_set and key not in first_access and _is_operator_speech(
+                member.get("type"), member.get("payload") or {}, operator_sources
+            ):
+                first_access[key] = entity_s
+    timeline.sort()
+
+    def _entity_time(wall: float) -> Optional[float]:
+        if not timeline:
+            return None
+        before = [t for t in timeline if t[0] <= wall]
+        ref = before[-1] if before else timeline[0]
+        return ref[1] + (wall - ref[0]) / 1000.0 * ref[2]
+
+    speech_times: list[float] = []
+    for rec in realizations:
+        if rec.get("type") != EXTERNAL_SPEECH_TYPE:
+            continue
+        wall = _wall_ms(rec.get("entry_id"))
+        t = _entity_time(wall) if wall is not None else None
+        if t is not None:
+            speech_times.append(t)
+        else:
+            # Unplaceable in entity time: it can only count as "otherwise".
+            speech_times.append(float("nan"))
+
+    access_times = sorted(first_access.values())
+    spoke_after = 0
+    attributed: set[int] = set()
+    for i, start in enumerate(access_times):
+        end = start + float(window_s)
+        if i + 1 < len(access_times):
+            end = min(end, access_times[i + 1])
+        hit = False
+        for j, t in enumerate(speech_times):
+            if t == t and start <= t < end:  # t == t is False for nan
+                attributed.add(j)
+                hit = True
+        if hit:
+            spoke_after += 1
+    heard = len(heard_keys)
+    accessed = len(first_access)
+    values = (
+        heard,
+        accessed,
+        spoke_after,
+        len(speech_times) - len(attributed),
+        accessed / heard,
+    )
+    return dict(zip(OPERATOR_SPEECH_READOUT_FIELDS, values))
