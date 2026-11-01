@@ -130,11 +130,29 @@ The `PrivacyFilter` implementation is in `kaine/privacy_filter.py` (re-exported 
 
 Scrubbed fields (removed from diagnostics events) are `text`, `body`, `content`, `internal_speech`, `belief_text`, `memory_text`, `affect_reason`, `transcription`, `user_input`, `faithful_rendering`, `description`, `statement`, `values`, `behavioral_norms` and `situation_facts`.
 
-Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `foveal`, `temporal_context`, and `feature_vector` are dropped unconditionally. Any list or tuple of 16 or more numbers is dropped as well; booleans are not treated as numbers. The exempt keys `saliences` and `step_magnitudes` are left intact, and vectors inside lists are removed individually. This rule applies even when `dev_content_override = true`.
+Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector` and `latent_derived` are dropped unconditionally, at any length. Any list or tuple of 16 or more numbers is dropped as well; booleans are not treated as numbers. The exempt keys `saliences` and `step_magnitudes` are left intact, and vectors inside lists are removed individually. This rule applies even when `dev_content_override = true`.
 
 `filter()` scrubs every surface; there is no unfiltered diagnostics stream. The conversation route serves only the same filtered diagnostics context; no separate unfiltered transcript stream exists.
 
 `dev_content_override = true` lets content fields through to the diagnostics surface, but vectors are still removed. It also shows a "dev mode" banner on every page load so operators cannot forget they are in this mode. The shipped default is `false`. Do not set `dev_content_override = true` on a shared machine or in production.
+
+## Latent-derived values
+
+A value is latent-derived when it is computed from a perceptual latent (an encoder output: the vision module's `latent`, `peripheral` and `foveal`, the audition module's acoustic embedding) or from another latent-derived value, and it keeps per-dimension information: a vector in an encoder's latent space or in a learned space computed from one, or a per-dimension statistic of such vectors over any window. A content code, a decoded prediction (even an 8-number one), a residual vector and the mean of the last few clip latents are latent-derived. Scalar reductions over all dimensions (a norm, a distance, a mean squared error, a ratio, an information gain), counts, source names and tick indices are not. Learned parameters are not values under this rule; they are the entity's identity and follow the identity rules.
+
+Latent-derived content may live in working state and in learned weights. It is never logged and never written to a record. A latent-derived value travels only inside a mapping under the reserved key `latent_derived`, at any depth of a payload; perceptual latents keep their own names. `kaine/privacy_filter.py` defines the tag (`LATENT_DERIVED_KEY`), the set of latent fields (`LATENT_FIELDS`: the vector fields above, `latent_derived` included), `strip_latent()` and the rule's version (`LATENT_RULE_VERSION = 1`). `strip_latent()` removes every latent field at any depth, regardless of length, walks mappings, lists, tuples and numpy arrays, and turns an array under any other key into exact numbers.
+
+The strip points:
+
+| Surface | What removes the latent fields |
+|---|---|
+| Every `AsyncJsonlSink` record: the curated research log, the ignition, incident and dashboard records, the workspace trajectory (which copies broadcast metadata), the raw bus archive and every evaluation observer | `strip_latent()` in the sink's line encoder, so `write`, `write_sync` and `enqueue` are all covered |
+| Every `kaine/persistence/encrypted_jsonl.py` record: the intent log and the sleep corpus files it rotates into | `strip_latent()` in `encode_record` and in `rewrite_encrypted` |
+| The organ's renderings (its prompt, the intent log's `numeric_rendering`) | `strip_latent()` on each payload inside `FaithfulRenderer.render_event`, `redact_heard_speech` and `fallback_template`, before any template or fallback, in both the felt and the numeric mode |
+| The workspace broadcast | Each selected member's `latent_derived` mapping is removed; a member without one is embedded unchanged |
+| The dashboard stream and record, the episodic store's text | The diagnostics filter and `strip_vectors` (the tag is a vector field) |
+
+The perceptual latents themselves still ride the bus in vision reports and broadcast members, which nothing on the bus reads; every record writer above removes them.
 
 ## Two-layer gates
 

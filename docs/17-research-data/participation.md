@@ -13,7 +13,7 @@ The default research bundle is numeric metrics only. It contains:
 | welfare and gray-zone event counts (numeric) | Self-model (`state/self_model/self_model.json`), including identity history. |
 | Fatigue accumulator series (numeric) | Conversation content (any turn text). |
 | Prediction-error series (numeric) | Replay logs (they contain verbatim memory text when `replay_redact_content = false`). |
-| planning policy logs (numeric) | Raw bus archive (`state/research/raw_bus_archive/`): verbatim events, including conversation content. |
+| planning policy logs (numeric) | Raw bus archive (`state/research/raw_bus_archive/`): verbatim events except for the latent fields, including conversation content. |
 | Voice-alignment divergence (numeric) | External-utterance log and dashboard record, which are local only and never exported. |
 | Curated research event log (`data/evaluation/research_events/`): privacy-filtered numeric and categorical records | Individuation evidence (`state/individuation/`). Whether its content-free reports should be exported is an open operator decision; today they are not. |
 | Per-run manifest files (`runs/`) | |
@@ -62,6 +62,7 @@ To answer session-spanning research questions, there is an opt-in durable event 
 
 `[research_event_log.raw_archive]` ships disabled. When enabled, a `RawBusArchiveConsumer` tees verbatim events from every `<module>.out` stream to `state/research/raw_bus_archive/` for deep local analysis. This data includes conversation content and transcripts, so it is locked down:
 
+- It never holds a latent field: the sink removes the perceptual latents (`latent`, `peripheral`, `foveal`, `temporal_context`, `feature_vector`) and every `latent_derived` mapping at any depth before a record is written (see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)). Everything else is archived as published.
 - It writes outside `data/evaluation/`, so the metrics bundle builder can never include it.
 - It is encrypted at rest through the same `AsyncJsonlSink` + `StateEncryptor` mechanism.
 - It requires `enabled = true` plus both `entity_privacy_attested = true` and `bystander_consent_attested = true`. If either attestation is false, `RawBusArchiveConsumer.start()` raises `RawArchiveAttestationError`, logs an error, and nothing starts.
