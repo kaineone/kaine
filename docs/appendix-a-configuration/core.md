@@ -98,10 +98,20 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
-| `"vision.out"` | integer | `12000` | About 20 minutes at ten entries per second. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
+| `"vision.out"` | integer | `12000` | About 20 minutes at ten entries per second. The perceptual latents never enter this stream (see `[privacy]`), so an entry holds the report's scalar fields and fovea. |
 | `"audition.out"` | integer | `12000` | About 20 minutes at ten entries per second. |
 
-The memory these caps imply must fit in Redis `maxmemory`, set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Containers](../07-deployment/containers.md)). The pre-boot `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, it multiplies the cap by a per-entry size, doubles the result for AOF-rewrite headroom, and compares it with `maxmemory`. The per-entry size is sampled from the running bus when possible, otherwise taken from the measured table in `kaine/bus/config.py`, otherwise estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
+The memory these caps imply must fit in Redis `maxmemory`, set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Containers](../07-deployment/containers.md)). The pre-boot `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, it multiplies the cap by a per-entry size, doubles the result for AOF-rewrite headroom, and compares it with `maxmemory`. The per-entry size is sampled from the running bus when possible, otherwise taken from the measured table in `kaine/bus/config.py`, otherwise estimated at 2 KB (`vision.out` is estimated until a live bus samples it, because its entries no longer carry the latents the table measured). Caps are approximate: Redis trims a stream per macro-node, so a stream can hold slightly more than its cap. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
+
+### Privacy
+
+Section `[privacy]`. Values that may never reach disk through the bus (the perceptual latents and every `latent_derived` mapping; see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)) are removed from every payload the main bus persists. When an enabled module declares that a consumer needs them, they travel on the companion stream `<stream>.companion` of the never-persisted instance `kaine-redis-volatile`, and the main entry names its companion entry. No shipped module declares one.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `companion_stream_maxlen` | integer | `12000` | The cap of every companion stream and the bound on any cap set for one under `[bus.per_stream_maxlen]` (`"<stream>.companion"`). 12000 entries is about 20 minutes at the 10 Hz maximum access rate. Caps are approximate. Any other key in `[privacy]` is refused. |
+
+When any enabled module declares a companion stream, the cycle refuses to start (exit code 15) unless the never-persisted instance answers, requires a password, reports `appendonly no` and an empty `save`, and every declared companion stream is capped within this bound. The pre-boot reports the same check as the "Volatile bus" row, and the "Volatile bus budget" row compares the companion streams' caps times their per-entry sizes with the instance's `maxmemory` (`KAINE_REDIS_VOLATILE_MAXMEMORY`).
 
 ## Pre-boot checks
 

@@ -74,7 +74,7 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 | `state/language/intent_expression.jsonl` | Intent and expression pairs (high sensitivity) | App-layer AES-256-GCM per line from migration onward; see below |
 | `state/sleep/adapters/` | Voice-alignment LoRA adapters | OS-layer |
 | `state/vocal/` | Retained TTS clips if the sink is enabled | OS-layer |
-| `kaine-redis-data` volume | Bus AOF | OS-layer; bus is loopback |
+| `kaine-redis-data` volume | Bus AOF | OS-layer; bus is loopback. Holds no latent field: those never enter a persisted stream |
 
 ### Cryptographic details
 
@@ -149,12 +149,17 @@ The strip points:
 | Every `AsyncJsonlSink` record: the curated research log, the ignition, incident and dashboard records, the workspace trajectory (which copies broadcast metadata), the raw bus archive and every evaluation observer | `strip_latent()` in the sink's line encoder, so `write`, `write_sync` and `enqueue` are all covered |
 | Every `kaine/persistence/encrypted_jsonl.py` record: the intent log and the sleep corpus files it rotates into | `strip_latent()` in `encode_record` and in `rewrite_encrypted` |
 | The organ's renderings (its prompt, the intent log's `numeric_rendering`) | `strip_latent()` on each payload inside `FaithfulRenderer.render_event`, `redact_heard_speech` and `fallback_template`, before any template or fallback, in both the felt and the numeric mode |
-| The workspace broadcast | Each selected member's `latent_derived` mapping is removed; a member without one is embedded unchanged |
+| The workspace broadcast | The cycle removes each selected member's `latent_derived` mapping (a member without one is embedded unchanged); the bus removes every latent field from the members and the metadata it persists |
+| The main bus | Every publish removes every latent field; a declared consumer's values travel on the never-persisted instance (below) |
 | The dashboard stream and record, the episodic store's text | The diagnostics filter and `strip_vectors` (the tag is a vector field) |
 | Module-state captures: fork snapshots, preservation bundles, the rolling resume checkpoint | `strip_module_states` (`kaine/lifecycle/latent_strip.py`): a latent field is removed, the module named under `latent_stripped` in the capture's metadata and an error logged; the capture is never refused. Learned parameters stay, and the vision and audition buffer summaries are three content-free scalars |
 | A snapshot's record of a module whose `serialize()` raised | The exception type and at most 200 characters of its message, in the record and in the log |
 
-The perceptual latents themselves still ride the bus in vision reports and broadcast members, which nothing on the bus reads; every record writer above removes them.
+### The bus
+
+The main bus writes every entry to Redis's append-only file, which is a record on disk, so no latent field ever enters a persisted stream. Every main-bus publish (`kaine/bus/client.py`) removes every key in `LATENT_FIELDS` at any depth, the vision report's `latent`, `peripheral` and `foveal` included; the broadcast removes them from its members and its metadata. A value a declared consumer needs travels instead on the companion stream `<stream>.companion` of a second instance, `kaine-redis-volatile` (`kaine/bus/companion.py`, `kaine/bus/volatile.py`), which runs with no append-only file and no snapshots, has no volume and no host port, and exists only in memory. The companion entry is written first and the main entry's envelope names it in the field `companion`, so a consumer that sees the main entry finds its companion already written. A consumer that finds no companion entry (the instance restarted, the entry was trimmed, or the write failed) treats the value as absent. A failed companion write is logged and the main entry is published without the value: a value is lost, never moved onto the persisted stream. A broadcast member carries its own entry's companion reference, so no second copy is written. With no declared consumer, as shipped, the values are dropped. Decommission flushes the never-persisted instance with the entity's streams.
+
+When any enabled module declares a companion stream, the cycle refuses to start unless the instance answers, requires its password, reports `appendonly no` and an empty `save`, and every declared companion stream is capped within `[privacy].companion_stream_maxlen`.
 
 A component that produces latent-derived values refuses to start, naming every failed condition, unless `kaine.privacy_filter.LATENT_RULE_VERSION` is present and at least the version it was reviewed against, state encryption is in effect with a key that round-trips, and `[preservation].require_encryption` is explicitly `true` (`kaine/security/latent_producer.py`). A module declares itself a producer with `produces_latent_derived = True`; the boot then runs the check and refuses with a configuration error. No shipped module declares it.
 

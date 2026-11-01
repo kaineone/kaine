@@ -11,6 +11,7 @@ With no profile selected, the configuration loader applies the `first_configurat
 | Service | Role | Host endpoint | GPU |
 |---|---|---|---|
 | `kaine-redis` | event bus (Redis Streams) | `127.0.0.1:6479` (`KAINE_REDIS_HOST_PORT`) | none |
+| `kaine-redis-volatile` | the never-persisted bus: companion streams only (no append-only file, no snapshots, no volume) | none: compose network only | none |
 | `kaine-qdrant` | vector store | `127.0.0.1:6533` (`KAINE_QDRANT_HOST_PORT`) | none |
 | `kaine-model-server` | OpenAI-compatible language organ (llama.cpp `llama-server`) | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 (`KAINE_ORGAN_GPU`) |
 | `kaine-speaches` | speech-to-text (faster-distil-Whisper) | `127.0.0.1:8000` (`KAINE_SPEACHES_HOST_PORT`) | none, CPU only |
@@ -21,7 +22,7 @@ With no profile selected, the configuration loader applies the `first_configurat
 | `kaine-trainer` | voice-alignment trainer service (`--profile training`) | none | `KAINE_TRAINER_GPU`, defaulting to the organ's card |
 | `kaine-provision` | one-shot model download (`--profile setup`) | none | none |
 
-Every published port is bound to `127.0.0.1`. Inside the Compose network, services reach the organ at `http://kaine-model-server:8080/v1` and the bus at `kaine-redis:6379`. Set `KAINE_MODEL_SERVER_HOST_PORT` in `compose/.env` when another program on the host, such as a system Ollama, already holds port 11434.
+Every published port is bound to `127.0.0.1`. Inside the Compose network, services reach the organ at `http://kaine-model-server:8080/v1`, the bus at `kaine-redis:6379` and the never-persisted bus at `kaine-redis-volatile:6379` (`KAINE_REDIS_VOLATILE_URL`, set for the cycle and the study runner). The never-persisted bus has no host port. It needs `KAINE_REDIS_VOLATILE_PASSWORD` in `compose/.env` (a different password from the main bus); its memory ceiling is `KAINE_REDIS_VOLATILE_MAXMEMORY` (default `2gb`), and it runs `noeviction` like the main bus. Set `KAINE_MODEL_SERVER_HOST_PORT` in `compose/.env` when another program on the host, such as a system Ollama, already holds port 11434.
 
 `kaine-chatterbox` defaults to the image `kaine-chatterbox:local`, which has no upstream source. A plain `docker compose -f compose/kaine.yml up` fails until you build that image or set `KAINE_CHATTERBOX_IMAGE` to one that exists.
 
