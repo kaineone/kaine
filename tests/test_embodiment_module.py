@@ -27,6 +27,7 @@ from kaine.modules.embodiment import (
     FeedFrame,
     StubAdapter,
 )
+from tests._companion import attach_spoken_test_volatile, joined_entries
 
 
 class FakeAdapter:
@@ -91,14 +92,16 @@ async def bus():
     from kaine.bus.client import AsyncBus
 
     client = fakeredis.FakeRedis(decode_responses=True)
-    yield AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    _bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(_bus)
+    yield _bus
     await client.aclose()
 
 
 async def _wait_event(bus, stream: str, etype: str, timeout: float = 3.0):
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
-        for _id, ev in await bus.read(stream, last_id="0", count=50, block_ms=100):
+        for _id, ev in await joined_entries(bus, stream, last_id="0", count=50, block_ms=100):
             if ev.type == etype:
                 return ev
         await asyncio.sleep(0.05)
@@ -182,6 +185,10 @@ async def test_intent_and_speech_reach_the_body(bus, monkeypatch):
     adapter = FakeAdapter()
     m = Embodiment(bus, adapter=adapter, enabled=True, mirror_speech=True,
                speech_stream="linguatest.out", locus_reader=lambda: "virtual")
+    # The test's speech stream carries words: they travel on its companion.
+    from kaine.bus.companion import CompanionDeclaration
+
+    bus.declare_companions([CompanionDeclaration("test", "linguatest.out", "spoken_text")])
     await m.initialize()
     try:
         # intent.avatar.say → symbolic action on the body

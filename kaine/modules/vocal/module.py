@@ -42,6 +42,7 @@ from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, AUDITION_STREAM, LANGUAGE_EXTERNAL_STREAM
 from kaine.entity_clock import EntityClock
+from kaine.faithful.external_input import words_unavailable
 from kaine.modules.affect.state import DimensionalState
 from kaine.modules.base import BaseModule
 from kaine.modules.vocal.client import (
@@ -544,9 +545,28 @@ class Vocal(BaseModule):
             except Exception:
                 log.warning("failed to parse audition.prosody payload", exc_info=True)
         elif stream == self._language_stream:
+            # The words travel only on the never-persisted bus: join them back.
+            join = getattr(self._bus, "join_companion", None)
+            if callable(join) and event.companion:
+                event, _joined = await join(event)
             text = event.payload.get("text") or ""
             origin = event.payload.get("origin")
             if not text:
+                if words_unavailable(event.payload):
+                    # Something was said, but its words are gone (the instance
+                    # restarted or the entry was trimmed): nothing is played and
+                    # the failed realization is published, content-free.
+                    await self._publish_event(
+                        "",
+                        self._params_for(self._current_state),
+                        SynthesisResult(
+                            audio=b"", content_type="", latency_ms=0.0,
+                            output_format=self._output_format, bytes_produced=0,
+                        ),
+                        success=False,
+                        error="words unavailable",
+                        origin=origin,
+                    )
                 return
             try:
                 await self.synthesize_text(text, origin=origin)

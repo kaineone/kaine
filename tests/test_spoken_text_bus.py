@@ -288,3 +288,130 @@ async def test_boot_refused_without_volatile_instance_when_language_on(bus):
     assert {d.stream for d in config_declarations({"modules": {"language": True}})} == {
         "language.external", "language.internal", "language.out"}
 
+
+# ---------------------------------------------------------------------------
+# Consumers (PR 2): each joins the words it needs, or treats them as absent
+# ---------------------------------------------------------------------------
+
+
+async def _published_utterance(bus):
+    await bus.publish_on("language.external", _utterance())
+    ((_eid, event),) = await bus.read("language.external")
+    return event
+
+
+def _vocal(bus, tmp_path):
+    from kaine.modules.vocal import FakePlayer, FakeTTSClient, Vocal
+
+    tts = FakeTTSClient(canned_audio=b"WAV-FAKE")
+    return Vocal(bus, tts_client=tts, sink_path=tmp_path / "vocal", predefined_voice_id="v.wav",
+                 player=FakePlayer()), tts
+
+
+@pytest.mark.asyncio
+async def test_vocal_synthesizes_the_joined_words(bus, tmp_path):
+    _spoken_declared(bus)
+    vocal, tts = _vocal(bus, tmp_path)
+    event = await _published_utterance(bus)
+    assert "text" not in event.payload
+    await vocal._handle(vocal._language_stream, event)
+    assert [r.text for r in tts.requests] == [OWN]
+
+
+@pytest.mark.asyncio
+async def test_vocal_missing_words_publishes_a_failed_realization(bus, tmp_path):
+    volatile = _spoken_declared(bus)
+    vocal, tts = _vocal(bus, tmp_path)
+    event = await _published_utterance(bus)
+    await volatile.flush()
+    await vocal._handle(vocal._language_stream, event)
+    assert tts.requests == []
+    ((_eid, synth),) = await bus.read("vocal.out")
+    assert synth.type == "vocal.synthesized"
+    assert synth.payload["success"] is False and synth.payload["error"] == "words unavailable"
+    assert synth.payload["text_length"] == 0
+
+
+@pytest.mark.asyncio
+async def test_bridge_transcript_joins_and_skips_missing(bus):
+    from kaine.remote.bridge import RemoteBridge
+
+    volatile = _spoken_declared(bus)
+    await bus.publish(_transcription())
+    ((_eid, heard),) = await bus.read("audition.out")
+    joined, ok = await bus.join_companion(heard)
+    assert ok
+    line = RemoteBridge._transcript_line("audition.out", joined)
+    assert json.loads(line)["text"] == HEARD
+    await volatile.flush()
+    gone, ok = await bus.join_companion(heard)
+    assert not ok and RemoteBridge._transcript_line("audition.out", gone) is None
+
+
+@pytest.mark.asyncio
+async def test_observers_join_and_count_missing(bus, tmp_path):
+    from kaine.evaluation.observers.external_utterance_log import ExternalUtteranceLog
+
+    class Sink:
+        def __init__(self):
+            self.rows = []
+
+        async def write(self, row):
+            self.rows.append(row)
+
+    volatile = _spoken_declared(bus)
+    sink = Sink()
+    obs = ExternalUtteranceLog(bus, sink, config=None)
+    await bus.publish_on("language.external", _utterance())
+    await obs._poll_stream("language.external")
+    assert [r["text"] for r in sink.rows] == [OWN]
+    await bus.publish_on("language.external", _utterance())
+    await volatile.flush()
+    await obs._poll_stream("language.external")
+    assert len(sink.rows) == 1 and obs.words_unavailable_count == 1
+    from kaine.evaluation.ab_divergence import ABDivergenceObserver
+    from kaine.evaluation.affect_correlation import AffectCorrelationRecorder
+
+    assert ABDivergenceObserver.join_companions and AffectCorrelationRecorder.join_companions
+    from kaine.evaluation._base import StreamSubscriberObserver
+
+    assert StreamSubscriberObserver.join_companions is False
+
+
+def test_episodic_store_keeps_joined_own_speech_and_marks_missing():
+    from kaine.cycle.types import WorkspaceSnapshot
+    from kaine.modules.episodic_memory.module import WORDS_UNAVAILABLE_MARKER, _serialize_snapshot
+
+    own = _utterance()
+    main, _d = split_spoken_text(own)
+    gone = own.model_copy(update={"payload": main})
+    text = _serialize_snapshot(WorkspaceSnapshot(tick_index=1, selected_events=[("1", own), ("2", gone)]))
+    assert OWN in text
+    assert f"language:external_speech={WORDS_UNAVAILABLE_MARKER}" in text
+    heard_gone = _transcription().model_copy(update={"payload": split_spoken_text(_transcription())[0]})
+    text = _serialize_snapshot(WorkspaceSnapshot(tick_index=1, selected_events=[("3", heard_gone)]))
+    assert text == "active | audition:audition.transcription=<heard omitted>"
+
+
+def test_count_readers_use_the_main_bus_counts():
+    from types import SimpleNamespace
+
+    from kaine.modules.sequence.module import Sequence
+
+    main, _d = split_spoken_text(_transcription())
+    stub = SimpleNamespace(_interaction_event_types=("audition.transcription",))
+    assert Sequence._is_interaction(stub, _ev("audition", "audition.transcription", main))
+    empty, _d = split_spoken_text(_transcription(text="   "))
+    assert not Sequence._is_interaction(stub, _ev("audition", "audition.transcription", empty))
+
+
+@pytest.mark.asyncio
+async def test_language_decodes_broadcasts_with_the_heard_words(bus):
+    """The language module's snapshot cache and workspace loop use the shared
+    decoder, which joins members' companions because it declares the flag."""
+    import inspect
+
+    from kaine.modules.language.module import Language
+
+    assert Language.reads_spoken_text is True
+    assert "_decode_broadcast" in inspect.getsource(Language._snapshot_cache_loop)

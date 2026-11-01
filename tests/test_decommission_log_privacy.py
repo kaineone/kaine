@@ -21,6 +21,7 @@ from kaine.modules.language import (
     Language,
 )
 from kaine.modules.vocal import FakePlayer, FakeTTSClient, Vocal
+from tests._companion import attach_spoken_test_volatile, joined_xrange
 
 
 @pytest.fixture
@@ -28,6 +29,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -99,7 +101,7 @@ async def test_seeded_utterance_never_reaches_state_logs(bus, tmp_path):
         )
 
         entries = await _wait_until(
-            lambda: bus.client.xrange(EXTERNAL_STREAM), timeout=2.0
+            lambda: joined_xrange(bus, EXTERNAL_STREAM), timeout=2.0
         )
         assert entries, "language did not emit the reply to the external stream"
 

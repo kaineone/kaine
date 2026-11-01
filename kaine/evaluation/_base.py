@@ -14,7 +14,7 @@ import asyncio
 import contextlib
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
+from typing import Any, AsyncIterator, Optional, Protocol, runtime_checkable
 
 from kaine.bus.schema import Event
 
@@ -88,12 +88,33 @@ class StreamSubscriberObserver(BaseObserver):
     """
 
     streams: tuple[str, ...] = ()
+    #: True for an observer that needs the words of the events it follows:
+    #: each event's companion entry (``kaine.bus.companion``) is joined before
+    #: ``handle``. An event whose words are gone is skipped and counted in
+    #: ``words_unavailable_count``; it never reaches ``handle``.
+    join_companions: bool = False
 
     def __init__(self, bus: BusReader, *, poll_interval_s: float = 0.5) -> None:
         super().__init__()
         self._bus = bus
         self._poll_interval_s = float(poll_interval_s)
         self._cursors: dict[str, str] = {}
+        self.words_unavailable_count = 0
+
+    async def _joined(self, event: Event) -> Optional[Event]:
+        """The event with its companion values back, or None when its words
+        were diverted and are gone."""
+        if not self.join_companions:
+            return event
+        join = getattr(self._bus, "join_companion", None)
+        if callable(join) and event.companion:
+            event, _ok = await join(event)
+        from kaine.faithful.external_input import words_unavailable
+
+        if words_unavailable(event.payload or {}):
+            self.words_unavailable_count += 1
+            return None
+        return event
 
     async def _run(self) -> None:
         try:
@@ -144,7 +165,10 @@ class StreamSubscriberObserver(BaseObserver):
             advanced = True
             self._cursors[stream] = entry_id
             try:
-                await self.handle(stream, entry_id, event)
+                joined = await self._joined(event)
+                if joined is None:
+                    continue
+                await self.handle(stream, entry_id, joined)
             except Exception:
                 log.warning(
                     "observer %s handler raised on %s / %s",

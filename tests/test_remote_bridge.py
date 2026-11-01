@@ -321,6 +321,53 @@ async def test_transcript_forwards_entity_and_heard_lines(bus):
         await bridge.stop()
 
 
+@pytest.mark.asyncio
+async def test_transcript_joins_words_from_the_never_persisted_bus(bus):
+    """Through the real publish path the words are only on the companion
+    stream; the transcript feed joins them back, and skips a line whose
+    companion entry is gone."""
+    from kaine.bus.schema import validate_event
+    from tests._companion import attach_spoken_test_volatile
+
+    volatile = attach_spoken_test_volatile(bus)
+    bridge = RemoteBridge(_config(), bus=bus)
+    url = await _started(bridge)
+
+    def _ev(source, type_, payload):
+        return validate_event(source=source, type=type_, payload=payload, salience=0.5,
+                              timestamp=datetime.now(timezone.utc))
+
+    try:
+        async with websockets.connect(f"{url}/transcript") as ws:
+            await _wait_for(lambda: len(bridge._transcript_queues) >= 1)
+            await bus.publish_on("language.external", _ev("language", "external_speech", {"text": "hello operator"}))
+            await bus.publish(_ev("audition", "audition.transcription", {"text": "hello kaine", "source_label": "remote"}))
+            lines = [json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0)) for _ in range(2)]
+            by_role = {line["role"]: line for line in lines}
+            assert by_role["entity"]["text"] == "hello operator"
+            assert by_role["heard"]["text"] == "hello kaine"
+            for stream in ("language.external", "audition.out"):
+                raw = json.dumps(await bus.client.xrange(stream))
+                assert "hello operator" not in raw and "hello kaine" not in raw
+            # A line whose words are gone is skipped; the next one still arrives.
+            await volatile.flush()
+            original_add = volatile.add
+
+            async def drop_first(stream, values, **kw):
+                volatile.add = original_add
+                await original_add(stream, values, **kw)
+                await volatile.flush()
+                return "1-0"
+
+            volatile.add = drop_first
+            await bus.publish_on("language.external", _ev("language", "external_speech", {"text": "lost words"}))
+            await bus.publish_on("language.external", _ev("language", "external_speech", {"text": "next words"}))
+            line = json.loads(await asyncio.wait_for(ws.recv(), timeout=3.0))
+            assert line["text"] == "next words"
+    finally:
+        await bridge.stop()
+
+
 # ---------------------------------------------------------------------------
 # Affect (/affect — read-only mood-ring feed from affect.out)
 # ---------------------------------------------------------------------------

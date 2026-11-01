@@ -14,7 +14,7 @@ from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.faithful.episodic_own_content import EPISODIC_OWN_CONTENT, own_content_payload
-from kaine.faithful.external_input import is_heard_event
+from kaine.faithful.external_input import is_heard_event, words_unavailable
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -54,11 +54,6 @@ class EpisodicMemory(BaseModule):
         from kaine.bus.companion import CompanionDeclaration
 
         return [CompanionDeclaration(cls.name, "episodic_memory.out", "spoken_text")]
-    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
-    preservation_state_key: ClassVar[str | None] = "memory_state"
-
-    def holds_external_resources(self) -> bool:
-        return True
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
     preservation_state_key: ClassVar[str | None] = "memory_state"
 
@@ -606,6 +601,11 @@ HEARD_OMITTED_MARKER = "<heard omitted>"
 # closed and keeps only its source and type.
 UNCLASSIFIED_OMITTED_MARKER = "<unclassified omitted>"
 
+# Stored in place of the entity's own speech when its words never reached this
+# module: they travel only on the never-persisted bus, and the member's companion
+# entry was gone (``heard-text-volatile-bus``).
+WORDS_UNAVAILABLE_MARKER = "<words unavailable>"
+
 
 def _affect_intensity(affect: dict[str, Any] | None) -> float:
     """Cached affect intensity, parsed as a float in [0, 1] when possible."""
@@ -677,6 +677,11 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             continue
         if is_heard_event(event):
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
+            continue
+        if event.source == "language" and words_unavailable(event.payload):
+            # The entity's own words did not come back from the never-persisted
+            # bus; the trace records that it spoke, not a count of its words.
+            pieces.append(f"{event.source}:{event.type}={WORDS_UNAVAILABLE_MARKER}")
             continue
         if (event.source, event.type) not in EPISODIC_OWN_CONTENT:
             pieces.append(f"{event.source}:{event.type}={UNCLASSIFIED_OMITTED_MARKER}")

@@ -662,6 +662,11 @@ class RemoteBridge:
                         progressed = True
                         cursors[stream] = last_scanned
                     for _, event in entries:
+                        # Words travel only on the never-persisted bus; a line
+                        # whose companion entry is gone is skipped.
+                        join = getattr(self._bus, "join_companion", None)
+                        if callable(join) and event.companion:
+                            event, _joined = await join(event)
                         line = self._transcript_line(stream, event)
                         if line is not None:
                             self._fanout_transcript(line)

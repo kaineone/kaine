@@ -113,6 +113,9 @@ def pearson(xs: list[float], ys: list[float]) -> float:
 
 
 class AffectCorrelationRecorder(StreamSubscriberObserver):
+    # It needs the utterance's words, which travel only on the never-persisted bus.
+    join_companions = True
+
     name = "affect_correlation"
     streams = (LANGUAGE_EXTERNAL_STREAM,)
 

@@ -242,6 +242,9 @@ class AssemblerConditionedClient:
 
 
 class ABDivergenceObserver(StreamSubscriberObserver):
+    # It needs the utterance's words, which travel only on the never-persisted bus.
+    join_companions = True
+
     name = "ab_divergence"
     streams = (LANGUAGE_EXTERNAL_STREAM,)
 

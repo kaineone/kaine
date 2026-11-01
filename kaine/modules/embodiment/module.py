@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional
 from kaine import legacy_aliases, perception_state
 from kaine.bus.client import tail_id
 from kaine.bus.streams import LANGUAGE_EXTERNAL_STREAM
+from kaine.faithful.external_input import words_unavailable
 from kaine.modules.base import BaseModule
 from kaine.modules.embodiment.adapter import EmbodimentAdapter, FeedFrame
 from kaine.modules.embodiment.channels import CONTINUOUS_CHANNEL_RANGE
@@ -82,7 +83,6 @@ class Embodiment(BaseModule):
         from kaine.bus.companion import CompanionDeclaration
 
         return [CompanionDeclaration(cls.name, "embodiment.out", "spoken_text")]
-    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
 
     def __init__(
@@ -398,9 +398,15 @@ class Embodiment(BaseModule):
                 continue
             self._speech_cursor = last_scanned
             for _id, event in entries:
+                # The words travel only on the never-persisted bus: join them back.
+                join = getattr(self._bus, "join_companion", None)
+                if callable(join) and event.companion:
+                    event, _joined = await join(event)
                 text = (event.payload or {}).get("text")
                 if text:
                     await self._send_action("say", message=str(text), channel=0)
+                elif words_unavailable(event.payload or {}):
+                    log.warning("embodiment: an utterance's words are unavailable; nothing is said")
 
     def serialize(self) -> dict[str, Any]:
         return {"intent_cursor": self._intent_cursor, "speech_cursor": self._speech_cursor}

@@ -35,6 +35,10 @@ log = logging.getLogger(__name__)
 class ExternalUtteranceLog(StreamSubscriberObserver):
     """Local-only recorder for the entity's external speech stream."""
 
+    # It needs the utterance's words, which travel only on the never-persisted bus.
+    join_companions = True
+
+
     streams = (LANGUAGE_EXTERNAL_STREAM,)
     name = "external_utterance_log"
 
