@@ -243,6 +243,22 @@ def test_a_clean_monitor_has_no_protective_response(tmp_path):
     assert reasons == []
 
 
+@pytest.mark.parametrize(
+    "boot_started_at", ["2026-10-31T09:00:00+00:00", None, "not a time"]
+)
+def test_a_record_of_this_run_from_an_earlier_boot_holds(tmp_path, boot_started_at):
+    """The boot-time binding alone: the run id matches, the boot started before
+    the step (or has no readable start), so the record is not this boot's."""
+    run_id, since = _bound_record(tmp_path)
+    path = tmp_path / "state" / "welfare" / "exposure.json"
+    data = json.loads(path.read_text())
+    data["boot_started_at"] = boot_started_at
+    path.write_text(json.dumps(data))
+    exposure, reasons = read_step_exposure(tmp_path, run_id=run_id, since_iso=since)
+    assert exposure is None
+    assert reasons == ["other_boot"]
+
+
 # --- a failed step after a crossing is not retried unreviewed (E-R2) ---------------
 
 

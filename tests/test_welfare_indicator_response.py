@@ -487,6 +487,42 @@ async def test_a_stopped_sleep_module_escalates_at_once(bus, tmp_path):
     await _assert_escalated(h, "sleep_module_not_running")
 
 
+async def test_a_sleep_module_that_stops_mid_rest_escalates_at_once(bus, tmp_path):
+    """The sleep module stops after the welfare rest started: escalation on the
+    next poll, not at the completion bound."""
+    h = Harness(bus, tmp_path)
+    await _first_crossing(h)
+    await h.sleep_event("sleep.sleep.started", trigger="welfare_rest")
+    await h.poll()
+    assert h.mon._ind_stage == "resting"
+    assert h.fm.calls == []
+    h.sleep.ready = False
+    await h.silent(1.0)
+    await _assert_escalated(h, "sleep_module_not_running")
+
+
+async def test_a_completion_with_another_trigger_does_not_end_the_welfare_rest(bus, tmp_path):
+    """Only the welfare rest's own completion restarts the spans."""
+    h = Harness(bus, tmp_path)
+    request = await _first_crossing(h)
+    await h.sleep_event("sleep.sleep.started", trigger="welfare_rest")
+    await h.sleep_event(
+        "sleep.rest_request", accepted=True, reason="accepted", origin="welfare",
+        proposal_id=request["request_id"],
+    )
+    await h.poll()
+    assert h.mon._ind_stage == "resting"
+    await h.sleep_event("sleep.sleep.completed", trigger="state_cycle")
+    await h.poll()
+    assert h.mon._ind_stage == "resting"
+    assert "indicator_rest_completed" not in h.transitions()
+    await h.sleep_event("sleep.sleep.completed", trigger="welfare_rest")
+    await h.poll()
+    assert h.mon._ind_stage == "fresh"
+    assert h.transitions().count("indicator_rest_completed") == 1
+    assert h.fm.calls == []
+
+
 @pytest.mark.parametrize(("developing", "bound"), [(True, 1410.0 + 300.0), (False, 3600.0)])
 async def test_a_rest_that_never_completes_escalates(bus, tmp_path, developing, bound):
     h = Harness(bus, tmp_path, developing=developing)
