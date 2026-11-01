@@ -205,6 +205,17 @@ refractory_s = 10.0
 # (design value).
 head_learning_rate = 0.001
 
+[action_selection]
+# The action layer is the self-initiated report rule: the entity speaks or
+# thinks from the precision-weighted score of its own accessed coalition, with
+# a speak bar above the access threshold and refractory and novelty guards.
+# Heard speech is perception: a transcription that wins access is a coalition
+# member like any other, and no rule answers it or forbids answering it.
+# Accepted values: "self_initiated_report" (the default when absent) and
+# "drive_biased" (drive crossings to intents). Any other value, or the retired
+# drive_initiative key, refuses the boot.
+policy = "self_initiated_report"
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and

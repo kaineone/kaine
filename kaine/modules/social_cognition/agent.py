@@ -9,7 +9,11 @@ transcript text, no raw audio features.
 
 `familiarity()` is in [0, 1] and increases monotonically with both
 interaction count and model coverage (how many emotion categories have
-been observed at least once).
+been observed at least once). It starts at 0 for every agent, the operator
+included: familiarity with a voice is learned from experience, never given
+(DeCasper and Fifer 1980, https://doi.org/10.1126/science.7375928;
+Kisilevsky et al. 2003, https://doi.org/10.1111/1467-9280.02435; see
+``SocialCognition._agent_for``).
 """
 from __future__ import annotations
 

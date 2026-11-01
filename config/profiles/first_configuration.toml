@@ -84,11 +84,13 @@ general_audition = true
 salience_goal_factor = "interest"
 
 [action_selection]
-# Self-initiated voice: speech comes from the entity's OWN precision-weighted
-# surprise (a report threshold above the access threshold, novelty- and
-# refractory-gated), never from a user utterance. No chatbot trigger.
+# Self-initiated voice: speech comes from the precision-weighted score of the
+# entity's own accessed coalition (a report threshold above the access
+# threshold, novelty- and refractory-gated). Heard speech is perception: with
+# speech-to-text on, a transcription that wins access is a member like any
+# other, and no rule answers it or forbids answering it. Speech-to-text stays
+# off here ([audition].transcription_enabled = false).
 policy = "self_initiated_report"
-drive_initiative = false
 # Novelty-signature expiry: the coarse (source, type) signature otherwise
 # suppresses same-signature reports forever — on a stable stimulus (one film
 # playing for ~90 min) the top coalition rarely changes signature, and external

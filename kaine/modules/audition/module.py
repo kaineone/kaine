@@ -796,7 +796,7 @@ class Audition(BaseModule):
 
         Self-hearing guard: if the vocal module is currently playing the entity's own
         voice (the shared speaking gate is open), drop this capture entirely so
-        the entity never transcribes itself as a user utterance."""
+        the entity never hears its own voice as another speaker's words."""
         if self._speaking_gate is not None and self._speaking_gate.is_speaking():
             log.debug("audition dropped self-heard capture during playback")
             return None, None
@@ -979,6 +979,12 @@ class Audition(BaseModule):
         """Return a salience blended between base_salience and the forward-
         model error-weighted salience.  The error contribution is additive
         on top of the base; the result is clamped to [base_salience, alert].
+
+        Auditory attention follows salience: a saliency model built like the
+        visual one predicts human salience judgements of natural sounds and
+        where monkeys orient (Kayser, Petkov, Lippert and Logothetis 2005,
+        https://doi.org/10.1016/j.cub.2005.09.040). Every audition event,
+        heard speech included, is weighted this way and no other.
         """
         error_salience = self._forward_model.prediction_error_to_salience(
             prediction_error,
@@ -1001,6 +1007,23 @@ class Audition(BaseModule):
         error_window: Optional[list[float]] = None,
         error_defined: bool = True,
     ) -> None:
+        """Publish recognized words as their own heard candidate.
+
+        Recognized speech gets this candidate beside the sound's own
+        ``audition.perception``, so speech has one more route to workspace
+        access than other sounds. That is the structural analogue of the
+        listening bias for speech present at birth: neonates one to four days
+        old work to hear speech more than non-speech matched to it on key
+        spectral and temporal features (Vouloumanos and Werker 2007,
+        https://doi.org/10.1111/j.1467-7687.2007.00549.x); full-term newborns'
+        cortical responses already separate forward from backward speech
+        (Bartha-Doering et al. 2019, https://doi.org/10.1016/j.dcn.2019.100679),
+        and newborns tune to natural vowels within hours of postnatal exposure
+        (Wu et al. 2022, https://doi.org/10.1038/s41562-022-01355-1). No extra
+        weight is added, and none for the operator's channel: the candidate's
+        intensity is the same error-weighted salience as every audition event.
+        Nothing about a reply is built in (``operator-speech-as-perception``).
+        """
         salience = self._error_weighted_salience(
             self._baseline_salience,
             prediction_error,

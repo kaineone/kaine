@@ -15,8 +15,6 @@ from kaine.workspace.action_selection import (
     REST,
     SPEAK,
     THINK,
-    USER_COMMUNICATION_SOURCE,
-    USER_COMMUNICATION_TYPE,
     ActionSelection,
     DefaultActionSelectionPolicy,
     Intent,
@@ -50,16 +48,20 @@ def _own_internal_speech() -> tuple[str, Event]:
     return ("i1", _event("language", "internal_speech", {"text": "monologue"}))
 
 
-def _user_comm(text: str = "Hello", salience: float = 0.5) -> tuple[str, Event]:
+def _heard(text: str = "Hello", salience: float = 0.5, source_label: str = "live_mic") -> tuple[str, Event]:
     return (
         "u1",
         _event(
-            USER_COMMUNICATION_SOURCE,
-            USER_COMMUNICATION_TYPE,
-            {"text": text, "source_label": "operator"},
+            "audition",
+            "audition.transcription",
+            {"text": text, "source_label": source_label},
             salience=salience,
         ),
     )
+
+
+def _social_drive(value: float = 0.9) -> tuple[str, Event]:
+    return ("d1", _event("affect", "affect.drive", {"drive": "social_drive", "value": value}))
 
 
 def _proposal(
@@ -313,13 +315,13 @@ def test_language_ignores_rest_intent():
     assert fake.calls == []
 
 
-def test_default_policy_speak_dropped_while_source_speak_guard_armed():
+def test_inner_speak_dropped_while_source_speak_guard_armed():
     # Regression (N1): a realized planning module's speak must arm the WRAPPED policy's
     # guard, not a source-side guard that drops already-decided inner intents.
-    # The inner guard clears by its own 48 s timeout; a user reply after that
-    # is answered and no replies are permanently lost.
+    # The inner guard clears by its own 48 s timeout; an inner speak after that
+    # is realized and none is permanently lost.
     clock = _Clock()
-    inner = DefaultActionSelectionPolicy(clock=clock, operator_sources=["operator"])
+    inner = DriveBiasedActionSelectionPolicy(clock=clock)
     source = PlanningProposalSource(inner, clock=clock, speak_refractory_s=8.0)
     v = ActionSelection(policy=source)
 
@@ -336,31 +338,56 @@ def test_default_policy_speak_dropped_while_source_speak_guard_armed():
     assert intents1[0].kind == SPEAK
     assert intents1[0].origin == "planning"
 
-    # t=40: a user utterance would normally make the default policy speak, but
+    # t=40: a social-drive crossing would make the drive policy speak, but
     # the inner policy's own guard is still armed from the planning module's speak at t=0.
     # With the old bug the inner intent was dropped *after* arming that guard,
     # leaving a ghost guard until t=88.
     clock.advance(40.0)
-    snap2 = _snapshot([_user_comm()])
+    snap2 = _snapshot([_social_drive()])
     assert v.select(snap2) == []
 
-    # t=49: the inner guard has timed out at t=48; the user reply is answered.
+    # t=49: the inner guard has timed out at t=48; the inner speak is realized.
     clock.advance(9.0)
-    snap3 = _snapshot([_user_comm()])
+    snap3 = _snapshot([_social_drive()])
     intents3 = v.select(snap3)
     assert len(intents3) == 1
     assert intents3[0].kind == SPEAK
     assert intents3[0].origin is None
 
     # After the original planning module's guard times out, the system is responsive through
-    # t=88. We clear the guard between replies by simulating own output.
+    # t=88. We clear the guard between speaks by simulating own output.
     for t in [48.0, 60.0, 88.0]:
         clock.t = t
         v.select(_snapshot([_own_speech()]))
-        snap = _snapshot([_user_comm(f"hello-{t}")])
+        snap = _snapshot([_social_drive()])
         intents = v.select(snap)
-        assert len(intents) == 1, f"user reply lost at t={t}"
+        assert len(intents) == 1, f"inner speak lost at t={t}"
         assert intents[0].kind == SPEAK
+
+
+def test_planning_heard_summary_holds_no_words():
+    # operator-speech-as-perception: a proposal realized about a heard member
+    # names it like any event (felt or numeric), never with the heard words.
+    words = "please come and look at this"
+    for about_style, expected in (("numeric", "audition:audition.transcription"), ("felt", None)):
+        for label in ("live_mic", "playlist"):
+            v = ActionSelection(
+                policy=PlanningProposalSource(lambda s: [], about_style=about_style)
+            )
+            snap = _snapshot(
+                [_heard(words, salience=0.9, source_label=label), _proposal("p1", "think", salience=0.4)]
+            )
+            intents = v.select(snap)
+            assert len(intents) == 1
+            intent = intents[0]
+            assert intent.origin == "planning"
+            assert intent.about_kind == "event"
+            for word in words.split():
+                if len(word) > 3:
+                    assert word not in intent.about
+            if expected is not None:
+                assert intent.about == expected
+            assert "heard" not in str(intent.to_event_payload().get("about_kind"))
 
 
 def test_report_policy_think_dropped_while_source_think_guard_armed():

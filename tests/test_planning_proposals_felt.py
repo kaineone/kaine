@@ -36,8 +36,15 @@ def test_drive_event_at_moderate_value_is_moderate_phrase():
     assert about == "I feel bored."
 
 
-def test_transcription_summarized_as_heard():
-    ev = _event("audition", "audition.transcription", {"text": "hello"})
-    about, kind = _summarize_event_with_kind(None, ev)
-    assert kind == "heard"
-    assert about == "hello"
+def test_transcription_summarized_as_an_event():
+    # operator-speech-as-perception: no intent carries heard words.
+    ev = _event("audition", "audition.transcription", {"text": "hello", "source_label": "live_mic"})
+    for style, expected in (
+        ("numeric", "audition:audition.transcription"),
+        ("felt", "Something in what I hear draws my attention."),
+    ):
+        source = PlanningProposalSource(lambda s: [], about_style=style)
+        about, kind = source._summarize_event_with_kind(ev)
+        assert kind == "event"
+        assert about == expected
+        assert "hello" not in about

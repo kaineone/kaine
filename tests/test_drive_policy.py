@@ -7,9 +7,8 @@ Validates the `drives-to-behavior` change with fakes only (no live boot):
 WorkspaceSnapshot objects are built directly, mirroring tests/test_action_selection.py.
 Covers: social_drive → speak; curiosity/boredom/restlessness → think;
 inhibited → none (via ActionSelection.select, proving the gate still holds);
-user utterance outranks social-drive speak; in-flight guards prevent stacking
-and clear on the entity's own output; drive_initiative-off parity with the
-default policy.
+heard speech gets no precedence and forms no intent (operator-speech-as-perception);
+in-flight guards prevent stacking and clear on the entity's own output.
 """
 from __future__ import annotations
 
@@ -156,33 +155,36 @@ def test_inhibited_gate_does_not_arm_guards():
     assert len(intents) == 1 and intents[0].kind == SPEAK
 
 
-# --- 3.4 user utterance outranks social-drive speak ------------------------
+# --- heard speech gets no precedence (operator-speech-as-perception) -------
 
 
-def test_user_utterance_outranks_social_drive_speak():
+def test_drive_policy_no_heard_precedence():
+    # A heard operator utterance and a social-drive crossing: the single speak
+    # is the drive-initiated one, about the felt drive, never the heard words.
+    for heard in (
+        _transcription("hello kaine"),
+        ("u1", _event("audition", "audition.transcription", {"text": "hello kaine", "source_label": "live_mic"})),
+    ):
+        policy = DriveBiasedActionSelectionPolicy()
+        intents = policy(_snapshot([heard, _drive("social_drive")]))
+        speaks = [i for i in intents if i.kind == SPEAK]
+        assert len(speaks) == 1
+        assert speaks[0].entry_id == "d-social_drive"
+        assert speaks[0].about_kind == "felt"
+        assert "hello" not in speaks[0].about and "kaine" not in speaks[0].about
+
+
+def test_drive_policy_never_answers_heard_speech_alone():
     policy = DriveBiasedActionSelectionPolicy()
-    intents = policy(_snapshot([_drive("social_drive"), _transcription("hello kaine")]))
-    speaks = [i for i in intents if i.kind == SPEAK]
-    assert len(speaks) == 1
-    # The single speak answers the user, not the social drive.
-    assert speaks[0].about == "hello kaine"
-    assert speaks[0].entry_id == "u1"
+    assert policy(_snapshot([_transcription("how are you?")])) == []
+    assert policy.speak_in_flight is False
 
 
-def test_user_and_think_drive_coexist_one_speak():
-    # User utterance (speak) + curiosity (think) → one speak (user) + one think.
+def test_heard_speech_and_think_drive_give_only_the_think():
     policy = DriveBiasedActionSelectionPolicy()
     intents = policy(_snapshot([_transcription("hi"), _drive("curiosity")]))
-    kinds = sorted(i.kind for i in intents)
-    assert kinds == [SPEAK, THINK]
-    speak = next(i for i in intents if i.kind == SPEAK)
-    assert speak.about == "hi"
-
-
-def test_only_one_speak_when_user_and_social_drive_present():
-    policy = DriveBiasedActionSelectionPolicy()
-    intents = policy(_snapshot([_drive("social_drive"), _transcription("hey")]))
-    assert sum(1 for i in intents if i.kind == SPEAK) == 1
+    assert [i.kind for i in intents] == [THINK]
+    assert intents[0].about_kind == "felt"
 
 
 # --- 3.5 in-flight guards: prevent stacking; clear on own output -----------
@@ -279,32 +281,10 @@ def test_non_drive_affect_event_ignored():
     assert policy(_snapshot([other])) == []
 
 
-# --- 3.6 drive_initiative disabled → identical to default policy -----------
+# --- the inert default policy -----------------------------------------------
 
 
-def test_disabled_drive_initiative_matches_default_on_drives():
-    # When the operator disables drive initiative, the plain default policy is
-    # used; drive crossings produce nothing (no user utterance present).
+def test_default_policy_acts_on_no_drive_and_no_heard_speech():
     default = DefaultActionSelectionPolicy()
     assert default(_snapshot([_drive("social_drive"), _drive("curiosity")])) == []
-
-
-def test_disabled_drive_initiative_matches_default_on_user_utterance():
-    # Both policies answer a user utterance identically.
-    default = DefaultActionSelectionPolicy()
-    biased = DriveBiasedActionSelectionPolicy()
-    snap = _snapshot([_transcription("how are you?")])
-    d_intents = default(snap)
-    b_intents = biased(_snapshot([_transcription("how are you?")]))
-    assert len(d_intents) == 1 and len(b_intents) == 1
-    assert d_intents[0].kind == b_intents[0].kind == SPEAK
-    assert d_intents[0].about == b_intents[0].about == "how are you?"
-
-
-def test_user_response_intent_is_marked_heard():
-    policy = DriveBiasedActionSelectionPolicy()
-    intents = policy(_snapshot([_transcription("hello there")]))
-    speak = [i for i in intents if i.kind == SPEAK][0]
-    assert speak.about == "hello there"
-    assert speak.about_kind == "heard"
-    assert speak.to_event_payload()["about_kind"] == "heard"
+    assert default(_snapshot([_transcription("how are you?")])) == []

@@ -43,7 +43,10 @@ def test_vision_is_foveated_and_feed_runs_out_of_box():
 def test_voice_is_self_initiated_no_chatbot():
     cfg = _cfg()
     assert cfg["action_selection"]["policy"] == "self_initiated_report"
-    assert cfg["action_selection"]["drive_initiative"] is False
+    # The retired key would refuse the boot (operator-speech-as-perception).
+    assert "drive_initiative" not in cfg["action_selection"]
+    # Speech-to-text stays off in the first configuration.
+    assert cfg["audition"]["transcription_enabled"] is False
 
 
 def test_language_organ_samples_in_general_use():

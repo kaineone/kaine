@@ -50,22 +50,20 @@ def test_inhibited_snapshot_produces_no_intents():
     assert v.select(snap) == []
 
 
-def test_non_inhibited_disposed_content_produces_one_speak_intent():
+def test_default_policy_never_answers_heard_speech():
+    # operator-speech-as-perception: heard speech is perception. The default
+    # policy is the inert library default: an accessed operator utterance with
+    # words, from any channel or none, forms no intent.
     v = ActionSelection()
-    snap = _snapshot([_transcription("how are you?")])
-    intents = v.select(snap)
-    assert len(intents) == 1
-    intent = intents[0]
-    assert intent.kind == SPEAK
-    assert intent.about == "how are you?"
-    assert intent.entry_id == "e1"
-
-
-def test_speak_intent_carries_referent_text():
-    v = ActionSelection()
-    snap = _snapshot([_transcription("  spaced out  ")])
-    intents = v.select(snap)
-    assert intents[0].about == "spaced out"
+    for payload in (
+        {"text": "how are you?"},
+        {"text": "how are you?", "source_label": "live_mic"},
+        {"text": "how are you?", "source_label": "remote"},
+        {"text_chars": 12, "text_words": 3, "source_label": "microphone"},
+    ):
+        snap = _snapshot([("e1", _event("audition", "audition.transcription", payload, salience=1.0))])
+        assert v.select(snap) == []
+        assert v.policy.speak_in_flight is False
 
 
 def test_no_disposed_content_produces_no_intent():
@@ -75,37 +73,22 @@ def test_no_disposed_content_produces_no_intent():
     assert v.select(snap) == []
 
 
-def test_empty_transcription_produces_no_intent():
-    v = ActionSelection()
-    snap = _snapshot([_transcription("   ")])
-    assert v.select(snap) == []
-
-
 def test_own_external_speech_does_not_trigger_response():
     v = ActionSelection()
     snap = _snapshot([_own_speech()])
     assert v.select(snap) == []
 
 
-def test_one_speak_intent_in_flight_suppresses_second():
-    v = ActionSelection()
-    snap1 = _snapshot([_transcription("first utterance")])
-    assert len(v.select(snap1)) == 1
-    # A new user utterance arrives while the first intent is still in flight.
-    snap2 = _snapshot([_transcription("second utterance")])
-    assert v.select(snap2) == []
-
-
-def test_in_flight_guard_clears_when_own_speech_becomes_conscious():
-    v = ActionSelection()
-    snap1 = _snapshot([_transcription("first utterance")])
-    assert len(v.select(snap1)) == 1
-    # The realization (own external speech) becomes conscious — guard clears.
-    snap2 = _snapshot([_own_speech()])
-    assert v.select(snap2) == []  # own speech alone: no new intent, guard cleared
-    # Now a fresh user utterance can produce a new intent again.
-    snap3 = _snapshot([_transcription("a later question")])
-    assert len(v.select(snap3)) == 1
+def test_default_policy_guard_armed_externally_clears_on_own_speech():
+    # The default policy keeps its guard for a wrapper that arms it (a
+    # realized planning proposal) and clears it when the own speech is accessed.
+    policy = DefaultActionSelectionPolicy()
+    policy.note_external_intent(SPEAK)
+    assert policy.speak_in_flight is True
+    assert policy(_snapshot([_transcription("a question")])) == []
+    assert policy.speak_in_flight is True
+    assert policy(_snapshot([_own_speech()])) == []
+    assert policy.speak_in_flight is False
 
 
 def test_injectable_policy_used():
@@ -159,7 +142,9 @@ def test_intent_event_payload_shape():
 def test_default_policy_speak_in_flight_property():
     policy = DefaultActionSelectionPolicy()
     assert policy.speak_in_flight is False
-    policy(_snapshot([_transcription("hi")]))
+    assert policy(_snapshot([_transcription("hi")])) == []
+    assert policy.speak_in_flight is False
+    policy.note_external_intent(SPEAK)
     assert policy.speak_in_flight is True
     policy.mark_realized()
     assert policy.speak_in_flight is False
@@ -220,7 +205,11 @@ def test_non_act_intent_is_not_signed():
     from kaine.security.intent_signing import IntentSigner
 
     signer = IntentSigner(b"2" * 32, "run-2")
-    v = ActionSelection(signer=signer)  # default policy → a speak intent
+
+    def speak_policy(snapshot: WorkspaceSnapshot) -> list[Intent]:
+        return [Intent(kind=SPEAK, about="vision (surprise=0.700)", about_kind="event")]
+
+    v = ActionSelection(policy=speak_policy, signer=signer)
     intents = v.select(_snapshot([_transcription("hello there")]))
     assert intents and intents[0].kind == SPEAK
     assert intents[0].sig is None

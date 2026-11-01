@@ -117,7 +117,12 @@ from kaine.workspace import (
     RuleBasedSalience,
     Workspace,
 )
-from kaine.workspace.action_selection import ActionSelection
+from kaine.workspace.action_selection import (
+    DRIVE_POLICY_NAME,
+    REPORT_POLICY_NAME,
+    ActionSelection,
+    action_selection_policy_name,
+)
 from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
 
 if TYPE_CHECKING:
@@ -1715,7 +1720,15 @@ async def _phase_stage(ctx: BootContext) -> int | None:
 
 
 async def _phase_preconditions(ctx: BootContext) -> int | None:
-    """Check the evaluation, individuation and research-event-log configs before anything opens."""
+    """Check the action-selection, evaluation, individuation and research-event-log configs before anything opens."""
+    # The action-selection policy is named, never guessed: an unknown name or
+    # the retired drive_initiative key refuses the boot before anything opens
+    # (operator-speech-as-perception).
+    try:
+        action_selection_policy_name(ctx.kaine_config.get("action_selection"))
+    except ValueError as exc:
+        sys.stderr.write(f"Refusing to boot KAINE cycle: {exc}\n")
+        return 1
 
     # Developmental locus pinning happens once the bus exists and a stimulus source is proven
     # ready (below): a configuration value alone never pins the entity to a
@@ -2307,30 +2320,19 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
 
 async def _phase_action_selection(ctx: BootContext) -> int | None:
     """Select and build the action selection policy."""
-    # Executive action selection. By default the drive-biased policy is
-    # injected (`drives-to-behavior`): it subsumes the conservative default
-    # user-response behavior (one disposition-gated speak intent, no
-    # self-response, one-in-flight guard) AND turns drive threshold-crossings
-    # that reached the non-inhibited coalition into intents (social_drive →
-    # speak initiative; curiosity/boredom/restlessness → internal think).
-    # Inhibition still gates everything (the action selection module checks `inhibited` first).
-    # An operator can disable drive initiative — falling back to the plain
-    # default policy — via `[action_selection].drive_initiative = false`.
+    # Executive action selection. `[action_selection].policy` names the policy:
+    # absent or "self_initiated_report" selects the report rule (the entity
+    # speaks or thinks from the precision-weighted score of its own accessed
+    # coalition), "drive_biased" the drive policy (drive crossings to intents).
+    # Any other value, or the retired drive_initiative key, refuses the boot
+    # (checked first in _phase_preconditions; the call here raises for a caller
+    # that runs this phase alone). No policy answers heard speech by rule:
+    # operator speech is an auditory candidate like any heard sound, and
+    # whether the entity speaks is its own action selection
+    # (operator-speech-as-perception). Inhibition still gates everything (the
+    # action selection module checks `inhibited` first).
     action_selection_cfg = ctx.kaine_config.get("action_selection") or {}
-    policy_name = str(action_selection_cfg.get("policy", "")).strip().lower()
-    drive_initiative = bool(action_selection_cfg.get("drive_initiative", True))
-    # Operator-channel set is shared between social cognition attribution and the action selection module
-    # user-utterance detection. A single [social_cognition].operator_sources key
-    # configures both.
-    social_cognition_cfg = ctx.kaine_config.get("social_cognition") or {}
-    _operator_sources_raw = social_cognition_cfg.get("operator_sources")
-    operator_sources = None
-    if _operator_sources_raw is not None:
-        if not isinstance(_operator_sources_raw, list) or not all(
-            isinstance(x, str) for x in _operator_sources_raw
-        ):
-            raise ValueError("[social_cognition].operator_sources must be a list of strings")
-        operator_sources = list(_operator_sources_raw)
+    policy_name = action_selection_policy_name(ctx.kaine_config.get("action_selection"))
     # Sign act intents with the per-boot secret so the effectors module can verify their
     # provenance. run_id ties the signature to this run; the signer mints a
     # monotonic seq per intent so a captured signed intent cannot be replayed.
@@ -2371,9 +2373,10 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
             ),
         )
 
-    if policy_name == "self_initiated_report":
-        # Self-initiated report gate: the entity speaks only from its own
-        # precision-weighted surprise (no user-utterance / chatbot trigger).
+    if policy_name == REPORT_POLICY_NAME:
+        # Self-initiated report gate: the entity speaks only from the
+        # precision-weighted score of its own accessed coalition. A heard
+        # transcription is a member like any other; no reply rule exists.
         # Refractory timing reads the shared subjective clock.
         from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 
@@ -2403,26 +2406,14 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
                 )
             ),
             signer=intent_signer,
-            operator_sources=operator_sources,
         )
-    elif drive_initiative:
+    elif policy_name == DRIVE_POLICY_NAME:
         ctx.action_selection = ActionSelection(
-            policy=_wrap_policy(
-                DriveBiasedActionSelectionPolicy(operator_sources=operator_sources)
-            ),
+            policy=_wrap_policy(DriveBiasedActionSelectionPolicy()),
             signer=intent_signer,
-            operator_sources=operator_sources,
         )
-    else:
-        from kaine.workspace.action_selection import DefaultActionSelectionPolicy
-
-        ctx.action_selection = ActionSelection(
-            policy=_wrap_policy(
-                DefaultActionSelectionPolicy(operator_sources=operator_sources)
-            ),
-            signer=intent_signer,
-            operator_sources=operator_sources,
-        )
+    else:  # pragma: no cover - action_selection_policy_name accepts only the two names
+        raise ValueError(f"unhandled action-selection policy {policy_name!r}")
 
 
 def _sleep_is_sleeping(registry: Any) -> bool:

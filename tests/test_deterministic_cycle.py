@@ -41,6 +41,7 @@ from kaine.workspace import (
     Workspace,
 )
 from kaine.workspace.action_selection import ActionSelection
+from kaine.workspace.report_policy import SelfInitiatedReportPolicy
 from tests._fakes import FakeClock
 
 SEED = 1234
@@ -140,8 +141,8 @@ def _make_event(source: str, etype: str, salience: float, text: str) -> Event:
 def _scripted_streams() -> dict[str, list[tuple[str, Event]]]:
     """A fixed, reproducible set of module streams with FIXED entry ids.
 
-    Includes a user-communication event (audition.transcription) so the default
-    the action selection module's policy emits a speak intent, plus competing events from other
+    Includes a heard event (audition.transcription) that leads the coalition, so
+    the report policy emits a speak intent about it, plus competing events from other
     sources at varying salience, including an equal-salience pair to exercise
     the canonical tie-break.
     """
@@ -175,7 +176,14 @@ def _build_cycle(bus: ScriptedBus, *, deterministic: bool, clock=None) -> Cognit
         bus=bus,
         workspace=workspace,
         registry=StreamRegistry(sorted(_scripted_streams().keys())),
-        action_selection=ActionSelection(),
+        action_selection=ActionSelection(
+            policy=SelfInitiatedReportPolicy(
+                report_threshold=0.5,
+                think_threshold=0.4,
+                clock=FakeClock(),
+                guard_clock=FakeClock(),
+            )
+        ),
         clock=clock if clock is not None else FakeClock(),
         sleep=FakeClock().sleep,
         deterministic=deterministic,

@@ -4,19 +4,19 @@
 """Drive-biased executive action selection.
 
 The keystone ``executive-action-intent`` change gave KAINE an inhibition-gated
-action layer (:mod:`kaine.workspace.action_selection`) whose default policy only
-*responds* to a user utterance. The affect module already publishes ``affect.drive``
-threshold-crossing events for its four drives (curiosity, boredom,
-social_drive, restlessness) — but until now nothing consumed them. The entity
-had motivations that could not move it.
+action layer (:mod:`kaine.workspace.action_selection`). The affect module publishes
+``affect.drive`` threshold-crossing events for its four drives (curiosity,
+boredom, social_drive, restlessness).
 
-This module closes that loop. :class:`DriveBiasedActionSelectionPolicy`
-subsumes the default user-communication handling and, additionally, turns a
-drive crossing that reached the (non-inhibited) accessed coalition into an
-intent - the paper's framing that executive inhibition is what "prevents the
-system from acting on every impulse" (§37): a drive crossing is an impulse,
-and only one that was *selected* into the coalition and *not inhibited* can
-move the entity.
+:class:`DriveBiasedActionSelectionPolicy` turns a drive crossing that reached the
+(non-inhibited) accessed coalition into an intent - the paper's framing that
+executive inhibition is what "prevents the system from acting on every
+impulse" (§37): a drive crossing is an impulse, and only one that was
+*selected* into the coalition and *not inhibited* can move the entity. Heard
+speech gets no precedence and no rule of its own: a heard member is perception
+like any other (``operator-speech-as-perception``). The policy is selected only
+when ``[action_selection].policy = "drive_biased"``; the shipped action layer is
+the self-initiated report rule.
 
 Mapping (conservative v1):
   - ``social_drive``   → ``speak``  (communicative initiative; external).
@@ -29,8 +29,7 @@ Mapping (conservative v1):
 Guards (all inherited from the executive design, never bypassing it):
   - the action selection module checks inhibition first; this policy is only called when the
     snapshot is NOT inhibited.
-  - At most ONE ``speak`` intent per call. A present user utterance OUTRANKS a
-    social-drive initiative (the single speak answers the user).
+  - At most ONE ``speak`` intent per call.
   - Separate one-in-flight guards for ``speak`` and ``think`` prevent storms;
     each is released when the organ publishes the entity's matching own output
     (``external_speech`` / ``internal_speech``), accessed or not (paper A.6
@@ -43,7 +42,7 @@ drive→kind mapping without touching the action selection module's plumbing.
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional
 
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful.templates import felt_drive_phrase
@@ -71,21 +70,20 @@ DRIVE_INTENT_KINDS: dict[str, str] = {
 
 
 class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
-    """Default user-response behavior PLUS drive-initiated intents.
+    """Drive-initiated intents, with no heard-speech precedence.
 
-    Subclasses :class:`DefaultActionSelectionPolicy` to reuse its
-    user-communication detection and ``speak``-in-flight guard, and adds a
-    parallel ``think``-in-flight guard for drive-initiated internal speech.
+    Subclasses :class:`DefaultActionSelectionPolicy` to reuse its own-speech
+    test and ``speak``-in-flight guard, and adds a parallel ``think``-in-flight
+    guard for drive-initiated internal speech.
     """
 
     def __init__(
         self,
         clock: Callable[[], float] | None = None,
-        operator_sources: Iterable[str] | None = None,
     ) -> None:
         # The parent policy owns the injected clock (used by both guard
         # timeouts); pass it through rather than shadowing its _clock.
-        super().__init__(clock=clock, operator_sources=operator_sources)
+        super().__init__(clock=clock)
         self._think_in_flight = False
 
     @property
@@ -182,12 +180,10 @@ class DriveBiasedActionSelectionPolicy(DefaultActionSelectionPolicy):
         intents: list[Intent] = []
 
         # --- speak (at most one per call) ---------------------------------
-        # A present user utterance OUTRANKS a social-drive initiative.
+        # Only a social-drive crossing initiates speech here; a heard member
+        # gets no precedence (operator-speech-as-perception).
         if not self._speak_in_flight:
-            speak_intent = self._user_response_intent(snapshot)
-            if speak_intent is None:
-                # No user to answer; consider a social-drive initiative.
-                speak_intent = self._social_drive_speak(snapshot)
+            speak_intent = self._social_drive_speak(snapshot)
             if speak_intent is not None:
                 self._speak_in_flight = True
                 # Stamp at ARM time: a stale or zero-initialized armed_at

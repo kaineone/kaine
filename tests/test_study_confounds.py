@@ -20,7 +20,6 @@ from kaine.modules.social_cognition.module import SocialCognition
 from kaine.modules.social_cognition.store import InMemoryAgentStore
 from kaine.modules.vocal import FakePlayer, FakeTTSClient, Vocal
 from kaine.workspace.action_selection import (
-    SPEAK,
     DefaultActionSelectionPolicy,
 )
 from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
@@ -254,48 +253,17 @@ async def test_social_cognition_custom_operator_sources(bus):
 
 
 # ---------------------------------------------------------------------------
-# 1.3 Action selection answers only operator-channel speech
+# 1.3 Action selection answers no channel's speech by rule
+# (operator-speech-as-perception: heard speech is perception)
 # ---------------------------------------------------------------------------
 
 
-def test_action_selection_answers_operator_channel():
-    policy = DefaultActionSelectionPolicy(clock=FakeClock())
-    event = _transcription_event(source_label="live_mic")
-    intents = policy(_snapshot(("e1", event)))
-    assert len(intents) == 1
-    assert intents[0].kind == SPEAK
-    assert intents[0].about == "hello world"
-
-
-def test_action_selection_ignores_playlist_channel():
-    policy = DefaultActionSelectionPolicy(clock=FakeClock())
-    event = _transcription_event(source_label="playlist")
-    intents = policy(_snapshot(("e1", event)))
-    assert intents == []
-
-
-def test_action_selection_answers_missing_source_label():
-    policy = DefaultActionSelectionPolicy(clock=FakeClock())
-    event = _transcription_event(source_label=_MISSING)
-    intents = policy(_snapshot(("e1", event)))
-    assert len(intents) == 1
-    assert intents[0].kind == SPEAK
-
-
-def test_action_selection_respects_custom_operator_sources():
-    policy = DefaultActionSelectionPolicy(
-        clock=FakeClock(), operator_sources=["remote"]
-    )
-    assert len(policy(_snapshot(("a", _transcription_event(source_label="remote"))))) == 1
-    assert policy(_snapshot(("b", _transcription_event(source_label="live_mic")))) == []
-
-
-def test_drive_biased_policy_forwards_operator_sources():
-    policy = DriveBiasedActionSelectionPolicy(
-        clock=FakeClock(), operator_sources=["remote"]
-    )
-    assert len(policy(_snapshot(("a", _transcription_event(source_label="remote"))))) == 1
-    assert policy(_snapshot(("b", _transcription_event(source_label="playlist")))) == []
+@pytest.mark.parametrize("label", ["live_mic", "microphone", "remote", "playlist", _MISSING])
+@pytest.mark.parametrize("policy_cls", [DefaultActionSelectionPolicy, DriveBiasedActionSelectionPolicy])
+def test_action_selection_answers_no_channel(policy_cls, label):
+    policy = policy_cls(clock=FakeClock())
+    event = _transcription_event(source_label=label)
+    assert policy(_snapshot(("e1", event))) == []
 
 
 # ---------------------------------------------------------------------------

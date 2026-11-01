@@ -340,13 +340,14 @@ def test_c3_guard_timeout_clears_speak_in_flight_without_event():
     """A speak guard armed longer than the refractory-scaled timeout is
     cleared on the next call with NO realization event in the coalition —
     a failed realization cannot permanently mute the entity. The guard and
-    its timeout live on DefaultActionSelectionPolicy."""
-    clock = FakeClock(0.0)
-    policy = vt.DefaultActionSelectionPolicy(clock=clock)
+    its timeout live on DefaultActionSelectionPolicy and its drive subclass;
+    a social-drive crossing arms it (no policy answers heard speech)."""
+    from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
 
-    evt_a = _Evt(
-        vt.USER_COMMUNICATION_SOURCE, vt.USER_COMMUNICATION_TYPE, {"text": "hello"}
-    )
+    clock = FakeClock(0.0)
+    policy = DriveBiasedActionSelectionPolicy(clock=clock)
+
+    evt_a = _Evt("affect", "affect.drive", {"drive": "social_drive", "value": 0.9})
     intents = policy(_Snap([("e1", evt_a)], {"e1": 0.9}))
     assert [i.kind for i in intents] == [SPEAK]
     assert policy.speak_in_flight is True
@@ -361,14 +362,26 @@ def test_c3_guard_timeout_clears_speak_in_flight_without_event():
     assert policy.speak_in_flight is True
 
     # Past the timeout: the guard is cleared WITHOUT any event, and a fresh
-    # user utterance produces a new speak intent.
+    # crossing produces a new speak intent.
     clock.advance(timeout * 0.6)  # total > timeout
-    evt_c = _Evt(
-        vt.USER_COMMUNICATION_SOURCE, vt.USER_COMMUNICATION_TYPE, {"text": "again"}
-    )
+    evt_c = _Evt("affect", "affect.drive", {"drive": "social_drive", "value": 0.95})
     intents = policy(_Snap([("e3", evt_c)], {"e3": 0.95}))
     assert [i.kind for i in intents] == [SPEAK]
     assert policy.speak_in_flight is True  # re-armed for the new utterance
+
+
+def test_c3_default_policy_guard_timeout_clears_external_arm():
+    """The inert default policy keeps the timeout for a guard armed from
+    outside (a realized planning proposal)."""
+    clock = FakeClock(0.0)
+    policy = vt.DefaultActionSelectionPolicy(clock=clock)
+    policy.note_external_intent(SPEAK)
+    clock.advance(policy._GUARD_TIMEOUT_S * 0.5)
+    assert policy(_Snap([], {})) == []
+    assert policy.speak_in_flight is True
+    clock.advance(policy._GUARD_TIMEOUT_S * 0.6)
+    assert policy(_Snap([], {})) == []
+    assert policy.speak_in_flight is False
 
 
 def test_c3_guard_timeout_clears_think_in_flight_without_event():
@@ -408,30 +421,26 @@ def test_c3_action_selection_in_flight_guard_and_realization():
     """The action-selection policy arms one speak at a time and clears on
     the entity's own conscious external speech (the ordinary realization
     path)."""
+    from kaine.workspace.drive_policy import DriveBiasedActionSelectionPolicy
+
     clock = FakeClock(0.0)
-    policy = vt.DefaultActionSelectionPolicy(clock=clock)
-    user_evt = _Evt(
-        vt.USER_COMMUNICATION_SOURCE, vt.USER_COMMUNICATION_TYPE, {"text": "hi"}
-    )
-    snap = _Snap([("e1", user_evt)], {"e1": 0.5})
-    intents = policy(snap)
+    policy = DriveBiasedActionSelectionPolicy(clock=clock)
+
+    def crossing():
+        return _Evt("affect", "affect.drive", {"drive": "social_drive", "value": 0.9})
+
+    intents = policy(_Snap([("e1", crossing())], {"e1": 0.5}))
     assert [i.kind for i in intents] == [vt.SPEAK]
     assert policy.speak_in_flight is True
 
-    # While in flight, a second user utterance does not stack a speak.
-    user_evt2 = _Evt(
-        vt.USER_COMMUNICATION_SOURCE, vt.USER_COMMUNICATION_TYPE, {"text": "yo"}
-    )
-    assert policy(_Snap([("e2", user_evt2)], {"e2": 0.5})) == []
+    # While in flight, a second crossing does not stack a speak.
+    assert policy(_Snap([("e2", crossing())], {"e2": 0.5})) == []
 
     # The entity's own external speech realizes the intent and clears it.
     own = _Evt(vt.OWN_EXTERNAL_SPEECH_SOURCE, OWN_EXT_TYPE, {"text": "..."})
     policy(_Snap([("e3", own)], {"e3": 0.5}))
     assert policy.speak_in_flight is False
-    user_evt3 = _Evt(
-        vt.USER_COMMUNICATION_SOURCE, vt.USER_COMMUNICATION_TYPE, {"text": "??"}
-    )
-    assert [i.kind for i in policy(_Snap([("e4", user_evt3)], {"e4": 0.5}))] == [
+    assert [i.kind for i in policy(_Snap([("e4", crossing())], {"e4": 0.5}))] == [
         vt.SPEAK
     ]
 

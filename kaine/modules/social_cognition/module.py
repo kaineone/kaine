@@ -183,6 +183,21 @@ class SocialCognition(BaseModule):
         Operator channels (or events with no channel) update the configured
         speaker label. Every other channel gets its own ``media:<channel>``
         agent so film voices cannot shape the operator model.
+
+        Preferences for particular voices are learned, so no voice gets an
+        innate weight here: newborns work to hear their mother's voice over
+        another woman's (DeCasper and Fifer 1980,
+        https://doi.org/10.1126/science.7375928), fetal heart rate already
+        responds differently to the mother's voice than to a stranger's, which
+        the authors read as the effect of prenatal experience (Kisilevsky et
+        al. 2003, https://doi.org/10.1111/1467-9280.02435), and voice-sensitive
+        responses in temporal cortex appear between four and seven months
+        (Grossmann et al. 2010, https://doi.org/10.1016/j.neuron.2010.03.001;
+        in adults, Belin et al. 2000, https://doi.org/10.1038/35002078). The
+        entity's familiarity with a speaker is what this module learns per
+        agent (:meth:`AgentModel.familiarity`). Channel attribution is a
+        stand-in for learned voice identity until diarization exists; it
+        decides which model an observation updates, never a reply.
         """
         source_label = event.payload.get("source_label")
         if source_label is None or source_label in self._operator_sources:

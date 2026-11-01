@@ -3,20 +3,41 @@
 
 """Self-initiated report action selection (the "report or stay silent" decision).
 
-The default policy answers a *user utterance*; the drive-biased policy adds
-*drive*-initiated intents. Both need something external (a transcript) or the affect module
-to move the entity. The first configuration has neither — no chatbot input
-path, the affect module gated off - so nothing would make the entity speak.
+The entity reports **its own state**: the precision-weighted scores of its
+accessed coalition decide whether it speaks, thinks or stays silent. It treats
+"worth saying" as a higher bar than "access" - a report threshold ABOVE the
+workspace publication (access) threshold - driven by the coalition's top
+selected member's precision-weighted prediction error expressed as salience.
+Workspace access at 3-10 Hz is far broader than report; only a rare,
+high-surprise, novel coalition crosses into external speech. Drives, affect and
+social cognition enter through that score: the goal factor
+(``[workspace].salience_goal_factor``: relevance to the dominant drive, or
+interest) weights each event, the affect module's level and arousal contrast
+scale every score, and social-cognition events compete as members.
 
-This policy closes that without any input trigger: the entity reports **its own
-state**. It treats "worth saying" as a higher bar than "access" - a report
-threshold ABOVE the workspace publication (access) threshold - driven by the
-coalition's own precision-weighted surprise (the top selected member's precision-
-weighted prediction error expressed as salience). Workspace access at 3-10 Hz is far
-broader than report; only a rare, high-surprise, novel coalition crosses into
-external speech.
+Heard speech is a coalition member like any other (``operator-speech-as-perception``).
+A transcription that wins access may lead to a report when it is the top member
+and the bars and guards allow, exactly as a sound, an image or a drive crossing
+can; below the bars it leads to nothing. The policy never tests a member's
+source, type or channel, except to leave the language module's own output aside,
+and the intent names its cause in felt or numeric words, never with the heard
+words (the language module quotes those to the organ, attributed, from the
+coalition). There is no reply rule, in either direction. Replying is shaped by
+social contingency, not given: contingent responses to infants' babbling made it
+more mature and non-contingent ones did not (Goldstein, King and West 2003,
+https://doi.org/10.1073/pnas.1332441100); contingent parental feedback sets the
+pace of vocal development in infant marmosets (Takahashi et al. 2015,
+https://doi.org/10.1126/science.aab1058); nine-month-olds learned phonetic
+contrasts from live speakers and not from recordings (Kuhl, Tsao and Liu 2003,
+https://doi.org/10.1073/pnas.1532872100); infants answer their mothers'
+vocalizations quickly from three months and slow down from nine as language
+develops (Hilbrink, Gattis and Levinson 2015,
+https://doi.org/10.3389/fpsyg.2015.01492), which shows early responsiveness but
+not whether it is innate. None of these is a rule that obliges a reply, so none
+is built in.
 
-Guards (reusing the executive design, never bypassing it):
+Guards (reusing the executive design, never bypassing it), generic over every
+source alike:
   - the action selection module checks inhibition first; this policy is only called on a NON-inhibited
     snapshot (it also returns nothing defensively if handed an inhibited one).
   - A report always describes the CURRENT coalition. With the one-in-flight guard,
@@ -24,11 +45,13 @@ Guards (reusing the executive design, never bypassing it):
     DROPPED, not queued — when the guard clears, only the then-current state is
     eligible. The entity speaks about now, or not at all.
   - Novelty: the same content signature (top source/type) is not re-reported back
-    to back; a refractory interval prevents chatter even when eligible.
+    to back; a refractory interval prevents chatter even when eligible. The
+    signature is the same for every transcription, so it also limits how often
+    heard speech can lead to speech (one transcription-led spoken report per
+    ``sig_expiry_s``); the sleep audit's operator-speech readout measures that.
   - Two channels: internal ``think`` at a lower threshold (the saved, observed
     monologue) and external ``speak`` at the report threshold (rare).
-  - Never reports the entity's own output (source ``language``), and never reads a
-    user-utterance / transcription event — report is self-initiated.
+  - Never reports the entity's own output (source ``language``).
 
 Injectable exactly like the other policies (selected via ``[action_selection].policy``).
 """

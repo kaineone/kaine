@@ -21,18 +21,18 @@ The core safeguard lives here and is checked first: when ``snapshot.inhibited``
 is true, ``select`` returns ``[]`` — no intent, so no effector acts, for every
 effector at once.
 
-The decision policy is injectable (:class:`ActionSelectionPolicy`) so later
-changes (`drives-to-behavior`, `spontaneous-recall`) can supply a richer policy
-that biases the decision with motivational state / recalled context without
-touching the cycle wiring or the intent transport.
+The decision policy is injectable (:class:`ActionSelectionPolicy`). The cycle
+selects it by name (:func:`action_selection_policy_name`): the self-initiated
+report rule (``kaine.workspace.report_policy``) by default, or the drive-biased
+policy when named. No policy answers heard speech by rule
+(``operator-speech-as-perception``).
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Any, Iterable, Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
-from kaine.bus.schema import OPERATOR_SOURCES
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.security.intent_signing import IntentSigner
 
@@ -64,10 +64,47 @@ INTENT_TYPES: dict[str, str] = {
 # Event type used for the planning module's proposal outcomes on action_selection_feedback.out.
 PROPOSAL_OUTCOME_TYPE = "action_selection.proposal_outcome"
 
-# The source/type of a user-communication event the default policy is disposed
-# to answer (a transcribed utterance heard by the ears).
-USER_COMMUNICATION_SOURCE = "audition"
-USER_COMMUNICATION_TYPE = "audition.transcription"
+# The `[action_selection].policy` values the cycle accepts. Absent means the
+# report rule. Any other value refuses the boot, so a typo can never select a
+# policy nobody named.
+REPORT_POLICY_NAME = "self_initiated_report"
+DRIVE_POLICY_NAME = "drive_biased"
+ACCEPTED_POLICY_NAMES: tuple[str, ...] = (REPORT_POLICY_NAME, DRIVE_POLICY_NAME)
+# Retired `[action_selection]` keys: a configuration that sets one is refused.
+RETIRED_ACTION_SELECTION_KEYS: tuple[str, ...] = ("drive_initiative",)
+
+
+def action_selection_policy_name(section: Any) -> str:
+    """The policy ``[action_selection]`` names, or ``ValueError`` naming the accepted ones.
+
+    ``section`` is the ``[action_selection]`` table (``None`` or absent means
+    empty). An absent ``policy`` selects the self-initiated report rule. A set
+    ``drive_initiative`` (any value) is refused because the key is retired: the
+    policy is named by ``policy`` alone. The message never echoes the value.
+    """
+    accepted = " and ".join(repr(name) for name in ACCEPTED_POLICY_NAMES)
+    if section is None:
+        section = {}
+    if not isinstance(section, dict):
+        raise ValueError(
+            f"[action_selection] expected a table, got {type(section).__name__}"
+        )
+    for key in RETIRED_ACTION_SELECTION_KEYS:
+        if key in section:
+            raise ValueError(
+                f"[action_selection].{key} is retired; name the action-selection "
+                f"policy with [action_selection].policy ({accepted})"
+            )
+    if "policy" not in section:
+        return REPORT_POLICY_NAME
+    value = section["policy"]
+    if isinstance(value, str) and value in ACCEPTED_POLICY_NAMES:
+        return value
+    raise ValueError(
+        "[action_selection].policy is not an action-selection policy; "
+        f"the accepted values are {accepted} (absent means {REPORT_POLICY_NAME!r})"
+    )
+
 
 # The entity's own speech — never something to "respond" to. Both external
 # (TTS-bound) and internal (private monologue) speech carry source "language";
@@ -75,11 +112,6 @@ USER_COMMUNICATION_TYPE = "audition.transcription"
 OWN_EXTERNAL_SPEECH_SOURCE = "language"
 OWN_EXTERNAL_SPEECH_TYPE = "external_speech"
 OWN_INTERNAL_SPEECH_TYPE = "internal_speech"
-
-# Channels whose voices are treated as the operator. Audio from any other
-# channel is modelled as "media:<channel>" and is not answered as a user
-# utterance. The list is shared with the social cognition module's attribution.
-DEFAULT_OPERATOR_SOURCES = OPERATOR_SOURCES
 
 
 @dataclass(frozen=True)
@@ -106,6 +138,9 @@ class Intent:
     carry it; the language module honors it by cancelling the in-flight generation and
     starting this one. Default ``False`` — the flag is emitted on the wire only
     when set, so non-language consumers (the effectors module) simply never see an unknown field.
+
+    ``about`` is the entity's own description of the cause and never another
+    speaker's words; no shipped policy emits ``about_kind`` ``"heard"``.
 
     ``about_kind`` classifies the ``about`` field for the language module's redaction logic:
     ``"heard"`` for heard speech, ``"felt"`` for a drive's felt-state phrase only,
@@ -180,24 +215,24 @@ class ActionSelectionPolicy(Protocol):
 
 
 class DefaultActionSelectionPolicy:
-    """Minimal but real v1 policy.
+    """The inert library default: it keeps the guards and forms no intent.
 
-    Given a non-inhibited coalition, emit a single ``speak`` intent when the
-    coalition contains a user-communication event (a non-empty transcribed
-    utterance) the entity is communicatively disposed to answer.
+    ``ActionSelection()`` without a policy gets this one, so a test or a tool
+    that builds an action layer without choosing a policy gets one that never
+    acts. It is not a reply rule: no policy forms an intent because a coalition
+    member is heard speech, and none tests a member's source, type or audio
+    channel to decide whether to speak (``operator-speech-as-perception``).
+    Heard speech is perception; whether the entity speaks is decided by the
+    configured policy over the coalition's scores (the self-initiated report
+    rule by default).
 
-    Safeguards (per the action-selection spec):
-    - Never forms a ``speak`` intent about the entity's OWN prior external
-      speech (no self-response feedback loop).
-    - One-in-flight guard: does not emit a new ``speak`` intent while a prior one
-      is still being realized. The guard is armed when a ``speak`` intent is
-      emitted and persists across subsequent decision ticks; it is released by
+    The guards it keeps are shared with :class:`DriveBiasedActionSelectionPolicy`:
+    - the entity's own speech (source ``language``) is never something to act on;
+    - the one-in-flight ``speak`` guard is armed by :meth:`note_external_intent`
+      (a planning proposal realized through a wrapper) and released by
       :meth:`mark_realized` when the organ publishes the entity's own external
       speech (paper A.6 step 1), when that output appears in a later coalition,
       or after the guard timeout.
-
-    Injectable so `drives-to-behavior` can supply a drive-biased policy without
-    touching the action selection module's plumbing.
     """
 
     # C3: refractory-scaled guard timeout (6x the report speak refractory of
@@ -209,7 +244,6 @@ class DefaultActionSelectionPolicy:
         self,
         *,
         clock: Optional[Any] = None,
-        operator_sources: Iterable[str] | None = None,
     ) -> None:
         import time
 
@@ -218,9 +252,6 @@ class DefaultActionSelectionPolicy:
         # wall clock: the speak guard times real audio playback; a lost
         # "done speaking" must unstick after real seconds.
         self._clock = clock or time.monotonic
-        self._operator_sources = set(
-            operator_sources if operator_sources is not None else DEFAULT_OPERATOR_SOURCES
-        )
 
     @property
     def speak_in_flight(self) -> bool:
@@ -247,44 +278,6 @@ class DefaultActionSelectionPolicy:
         """True for the entity's own (external or internal) speech output."""
         return event.source == OWN_EXTERNAL_SPEECH_SOURCE
 
-    def _user_utterance(self, event: Any) -> Optional[str]:
-        """Return the non-empty user-utterance text on this event, else None.
-
-        Recognizes a transcribed utterance heard by the ears (source
-        ``audition``, type ``audition.transcription``) with non-empty text, but
-        only when the audio came from an operator channel (or carries no
-        channel for backward compatibility). Shared with
-        :class:`DriveBiasedActionSelectionPolicy`.
-        """
-        if (
-            event.source != USER_COMMUNICATION_SOURCE
-            or event.type != USER_COMMUNICATION_TYPE
-        ):
-            return None
-        source_label = event.payload.get("source_label")
-        if source_label is not None and source_label not in self._operator_sources:
-            return None
-        text = str(event.payload.get("text") or "").strip()
-        if text:
-            return text
-        return None
-
-    def _user_response_intent(self, snapshot: WorkspaceSnapshot) -> Optional[Intent]:
-        """The single ``speak`` intent answering a present user utterance, if any.
-
-        Skips the entity's own speech (no self-response loop). Does NOT touch
-        the in-flight guard — callers decide whether to arm it.
-        """
-        for entry_id, event in snapshot.selected_events:
-            if self._is_own_speech(event):
-                continue
-            text = self._user_utterance(event)
-            if text is not None:
-                return Intent(
-                    kind=SPEAK, about=text, entry_id=entry_id or None, about_kind="heard"
-                )
-        return None
-
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
         # Only the entity's own EXTERNAL speech clears the speak guard; inner
         # monologue (internal_speech) is on a different channel and must not
@@ -307,14 +300,7 @@ class DefaultActionSelectionPolicy:
         ):
             self._speak_in_flight = False
             self._speak_armed_at = float("-inf")
-        if self._speak_in_flight:
-            # A prior speak intent is still being realized; do not stack.
-            return []
-        intent = self._user_response_intent(snapshot)
-        if intent is not None:
-            self._speak_in_flight = True
-            self._speak_armed_at = self._clock()
-            return [intent]
+        # The default policy forms no intent of its own (see the class docstring).
         return []
 
 
@@ -343,12 +329,9 @@ class ActionSelection:
         policy: Optional[ActionSelectionPolicy] = None,
         *,
         signer: Optional[IntentSigner] = None,
-        operator_sources: Iterable[str] | None = None,
     ) -> None:
         self._policy: ActionSelectionPolicy = (
-            policy
-            if policy is not None
-            else DefaultActionSelectionPolicy(operator_sources=operator_sources)
+            policy if policy is not None else DefaultActionSelectionPolicy()
         )
         self._signer = signer
 

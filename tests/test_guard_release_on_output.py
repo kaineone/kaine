@@ -270,6 +270,8 @@ def test_drive_policy_think_and_speak_released_by_own_output():
 
 
 def test_default_policy_speak_released_by_own_output():
+    # The inert default policy never arms its guard itself (no policy answers
+    # heard speech); a wrapper arms it, and the organ's output releases it.
     p = DefaultActionSelectionPolicy(clock=_Clock())
     v = ActionSelection(policy=p)
 
@@ -277,19 +279,15 @@ def test_default_policy_speak_released_by_own_output():
         "t1",
         _event("audition", "audition.transcription", {"text": "hello"}, salience=0.6),
     )
-    assert [i.kind for i in v.select(_snapshot([t1]))] == [SPEAK]
+    assert v.select(_snapshot([t1])) == []
+    p.note_external_intent(SPEAK)
+    assert p.speak_in_flight is True
 
     v.observe_own_output(_event("language", "internal_speech", {"text": "a thought"}))
     assert p.speak_in_flight is True
 
     v.observe_own_output(_event("language", "external_speech", {"text": "I said this"}))
     assert p.speak_in_flight is False
-
-    t2 = (
-        "t2",
-        _event("audition", "audition.transcription", {"text": "again"}, salience=0.6),
-    )
-    assert [i.kind for i in v.select(_snapshot([t2]))] == [SPEAK]
 
 
 def test_planning_wrapper_local_think_guard_released():

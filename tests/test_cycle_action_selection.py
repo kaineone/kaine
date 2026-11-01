@@ -32,6 +32,7 @@ class _ScriptedWorkspace:
             selected_events=list(self._selected),
             inhibited=self._inhibited,
             is_experiential=bool(context.get("is_experiential")),
+            salience_scores={entry_id: ev.salience for entry_id, ev in self._selected},
         )
 
 
@@ -39,7 +40,7 @@ def _transcription_event() -> tuple[str, Event]:
     return ("e1", Event(
         source="audition",
         type="audition.transcription",
-        payload={"text": "hello kaine"},
+        payload={"text": "hello kaine", "source_label": "live_mic"},
         salience=0.6,
         timestamp=datetime.now(timezone.utc),
     ))
@@ -73,7 +74,8 @@ async def test_inhibited_snapshot_publishes_no_intent():
 
 
 @pytest.mark.asyncio
-async def test_non_inhibited_disposed_snapshot_publishes_speak_intent():
+async def test_accessed_operator_utterance_publishes_no_intent_under_default_policy():
+    # operator-speech-as-perception: the inert default policy never answers.
     bus = await _make_bus()
     try:
         cycle = CognitiveCycle(
@@ -87,13 +89,42 @@ async def test_non_inhibited_disposed_snapshot_publishes_speak_intent():
             sleep=FakeClock().sleep,
         )
         await cycle.tick()
+        assert await bus.read(ACTION_SELECTION_STREAM, last_id="0") == []
+    finally:
+        await bus.close()
+
+
+def _report_policy() -> SelfInitiatedReportPolicy:
+    return SelfInitiatedReportPolicy(report_threshold=0.55, think_threshold=0.45, clock=FakeClock())
+
+
+@pytest.mark.asyncio
+async def test_report_policy_may_speak_from_accessed_transcription():
+    # A heard utterance that leads the coalition and clears the bar may lead
+    # to speech like any member; the published intent names the event in
+    # numeric words and carries none of the heard words.
+    bus = await _make_bus()
+    try:
+        cycle = CognitiveCycle(
+            bus=bus,
+            workspace=_ScriptedWorkspace(
+                selected=[_transcription_event()], inhibited=False
+            ),
+            registry=FakeRegistry([]),
+            action_selection=ActionSelection(policy=_report_policy()),
+            clock=FakeClock(),
+            sleep=FakeClock().sleep,
+        )
+        await cycle.tick()
         entries = await bus.read(ACTION_SELECTION_STREAM, last_id="0")
         assert len(entries) == 1
         _, event = entries[0]
         assert event.source == "action_selection"
         assert event.type == "intent.speak"
         assert event.payload["kind"] == "speak"
-        assert event.payload["about"] == "hello kaine"
+        assert event.payload["about"] == "audition (surprise=0.600)"
+        assert event.payload["about_kind"] == "event"
+        assert "hello" not in str(event.payload) and "kaine" not in str(event.payload)
     finally:
         await bus.close()
 
@@ -109,7 +140,7 @@ async def test_action_selection_not_run_on_non_experiential_tick():
                 selected=[_transcription_event()], inhibited=False
             ),
             registry=FakeRegistry([]),
-            action_selection=ActionSelection(),
+            action_selection=ActionSelection(policy=_report_policy()),
             processing_rate_hz=10.0,
             experiential_rate_hz=2.0,
             clock=FakeClock(),
@@ -119,7 +150,7 @@ async def test_action_selection_not_run_on_non_experiential_tick():
         for _ in range(10):
             if (await cycle.tick()).is_experiential:
                 experiential += 1
-        # Default policy's one-in-flight guard means at most one intent even
+        # The report policy's one-in-flight guard means at most one intent even
         # across multiple experiential ticks (no realization observed). Key
         # assertion: intents only ever come from experiential ticks, never more
         # than the number of experiential broadcasts.

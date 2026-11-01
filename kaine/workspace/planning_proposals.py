@@ -27,8 +27,6 @@ from kaine.workspace.action_selection import (
     REST,
     SPEAK,
     THINK,
-    USER_COMMUNICATION_SOURCE,
-    USER_COMMUNICATION_TYPE,
     ActionSelectionPolicy,
     Intent,
 )
@@ -269,14 +267,13 @@ class PlanningProposalSource:
                 self._last_at[intent.kind] = now
 
     def _summarize_event_with_kind(self, event: object) -> tuple[str, str]:
-        """Mirror the summary style used by the drive policy, plus the kind."""
-        if (
-            event.source == USER_COMMUNICATION_SOURCE
-            and event.type == USER_COMMUNICATION_TYPE
-        ):
-            text = str(event.payload.get("text") or "").strip()
-            if text:
-                return text, "heard"
+        """Mirror the summary style used by the drive policy, plus the kind.
+
+        A heard event is summarized like any other event, by its source in felt
+        or numeric words: no intent carries another speaker's words
+        (``operator-speech-as-perception``). The words reach the organ only as
+        quoted, attributed members of the accessed coalition.
+        """
         if (
             event.source == AFFECT_DRIVE_SOURCE
             and event.type == AFFECT_DRIVE_TYPE

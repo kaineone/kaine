@@ -617,7 +617,7 @@ class Language(BaseModule):
         about_kind: Optional[str] = None,
         about_values: Optional[dict[str, Any]] = None,
     ) -> str:
-        # `about` is the triggering input (a user utterance for external speech);
+        # `about` is the intent's own description of its cause; no shipped policy puts heard words in it;
         # the LLM prompt is assembled from it plus workspace access.
         return await self._produce(
             about=about,
