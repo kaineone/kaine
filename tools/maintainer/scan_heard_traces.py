@@ -341,6 +341,22 @@ def qdrant_traces(host: str, port: int, api_key: str | None, prefixes: tuple[str
         client.close()
 
 
+CURRENT_COLLECTION_PREFIX = "episodic_memory_"
+
+
+def default_collection_prefixes() -> tuple[str, ...]:
+    """The current episodic collection prefix and every pre-rename form of it,
+    read from the rename table rather than spelled here."""
+    from kaine import legacy_names
+
+    old = sorted(
+        key
+        for key, value in legacy_names.PERSISTED_EXACT.items()
+        if value == CURRENT_COLLECTION_PREFIX
+    )
+    return (CURRENT_COLLECTION_PREFIX, *old)
+
+
 def _scan(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
     try:
         return scan_traces(source, traces)
@@ -363,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         "--collection-prefix",
         action="append",
         default=None,
-        help="Qdrant collection prefixes to scan (default: episodic_memory_ and mnemos_)",
+        help="Qdrant collection prefixes to scan (default: the current prefix and its pre-rename form)",
     )
     parser.add_argument("--json", action="store_true", help="print one JSON object")
     args = parser.parse_args(argv)
@@ -381,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     for bundle in args.bundle:
         reports.append(_scan(f"bundle:{bundle}", bundle_traces(bundle)))
     if args.qdrant_host:
-        prefixes = tuple(args.collection_prefix or ("episodic_memory_", "mnemos_"))
+        prefixes = tuple(args.collection_prefix or default_collection_prefixes())
         api_key = os.environ.get(args.qdrant_api_key_env) or None
         reports.append(
             _scan(

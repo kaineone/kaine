@@ -86,10 +86,28 @@ def test_classify_trace(text, expected):
     assert scan.classify_trace(text) == expected
 
 
+def _old_module_key(new_key: str) -> str:
+    """The pre-rename module name, read from the rename table (never spelled here)."""
+    from kaine import legacy_names
+
+    (old,) = [k for k, e in legacy_names.MODULES.items() if e["new_key"] == new_key]
+    return old
+
+
 def test_legacy_module_names_are_mapped():
     # The language module's own speech under the pre-rename module name is own speech.
-    text = "active | lingua:external_speech={'text': 'my own words'}"
+    text = f"active | {_old_module_key('language')}:external_speech={{'text': 'my own words'}}"
     assert scan.classify_trace(text) == []
+
+
+def test_default_collection_prefixes_come_from_the_rename_table():
+    from kaine import legacy_names
+
+    prefixes = scan.default_collection_prefixes()
+    assert prefixes[0] == "episodic_memory_"
+    assert len(prefixes) >= 2
+    for old in prefixes[1:]:
+        assert legacy_names.PERSISTED_EXACT[old] == "episodic_memory_"
 
 
 # --- the readers report no content and change nothing -----------------------------
