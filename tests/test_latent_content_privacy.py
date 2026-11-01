@@ -2051,3 +2051,26 @@ async def test_one_unwritable_record_does_not_drop_the_batch(tmp_path, caplog):
     assert [r for r in _sink_rows(tmp_path, "probe")] == [{"a": 1}, {"b": 2}]
     assert sink.dropped_count == 1
     assert any("unwritable object" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_revive_import_applies_the_store_rule_to_persisted_points(monkeypatch):
+    _enable_encryption(monkeypatch)
+    source = await _core(at_rest=True)
+    await source.store("a persisted trace", payload={"latent_derived": {"identity_bound": dict(_BOUND)}},
+                       collection="episodic")
+    state = await source.export_state()
+    points = [p for pts in state["persisted"].values() for p in pts]
+    assert points and points[0]["payload"]["latent_derived"] == {"identity_bound": _BOUND}
+    for p in points:
+        p["payload"]["latent"] = list(LATENT)
+        p["payload"]["latent_derived"]["identity_bound"]["foveal"] = list(LATENT)
+    plain = await _core(at_rest=False)
+    await plain.import_state(state)
+    revived = [p for pts in (await plain.export_state())["persisted"].values() for p in pts]
+    assert revived and all("latent_derived" not in p["payload"] and "latent" not in p["payload"] for p in revived)
+    allowed = await _core(at_rest=True)
+    await allowed.import_state(state)
+    revived = [p for pts in (await allowed.export_state())["persisted"].values() for p in pts]
+    assert revived[0]["payload"]["latent_derived"] == {"identity_bound": _BOUND}
+    assert "latent" not in revived[0]["payload"]
