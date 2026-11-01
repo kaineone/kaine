@@ -18,11 +18,127 @@ package. The welfare observer re-imports the same tracker for back-compat.
 The primitives here are pure (no I/O, no bus, no clock of their own — the caller
 passes ``now``), so they are deterministic over the logged state: a given
 sequence of (magnitude, timestamp) inputs always produces the same crossings.
+The one exception is :func:`welfare_prediction_error`, which logs a producer
+defect once per processor; its return value is a pure function of the payload.
 """
 from __future__ import annotations
 
+import logging
+import math
 from collections import deque
-from typing import NamedTuple
+from collections.abc import Mapping
+from typing import Any, NamedTuple
+
+log = logging.getLogger(__name__)
+
+#: Boot-visible marker: every welfare reader on this tree reads a processor's
+#: prediction error through :func:`welfare_prediction_error`, so a top-down
+#: blend or a content-code decoder cannot move the welfare signal. A change that
+#: makes a processor read the workspace's content checks for it.
+WELFARE_SIGNAL_UNBLENDED = 1
+
+#: The report key under which a processor publishes its workspace-feedback block,
+#: including the inner forward model's own error. Kept literal here because this
+#: shared home may not import ``kaine.workspace``; a test pins it to
+#: ``kaine.workspace.feedback.FEEDBACK_KEY``.
+FEEDBACK_PAYLOAD_KEY = "workspace_feedback"
+OWN_ERROR_KEY = "own_error"
+
+# (processor, defect) pairs already logged, so each defect is logged once per
+# processor for the life of the process.
+_logged_defects: set[tuple[str, str]] = set()
+
+
+def _real(value: Any) -> float | None:
+    """``value`` as a float when it is an int or float (never a bool), else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _log_defect_once(processor: str, defect: str, message: str) -> None:
+    key = (processor, defect)
+    if key in _logged_defects:
+        return
+    _logged_defects.add(key)
+    log.error(message, processor)
+
+
+def welfare_prediction_error(
+    payload: Mapping[str, Any] | None, *, processor: str = "interoception"
+) -> float | None:
+    """The welfare reading of one processor report: its own forward-model error.
+
+    Every welfare reader of a processor's prediction error (the welfare
+    observer's sustained-distress tracker and gray-zone count, the autonomous
+    welfare response, the welfare indicator response, the development run's
+    interoceptive recovery series) reads it through this function and never
+    reads ``prediction_error`` from the payload itself. With workspace feedback
+    on, the published ``prediction_error`` is the error of the blend of the
+    processor's own prediction with the workspace's top-down prediction, which
+    is right for experience (intensity, access, affect) but would let the
+    watched component move the signal that watches it. This function returns
+    the processor's own error whatever feeds the blend.
+
+    The rule:
+
+    1. ``prediction_error`` null or absent: ``None``. A null error is no sample;
+       the reader neither feeds nor resets its tracker. An absent key is a
+       producer defect (every report carries the key) and is also logged once
+       per processor; it never ends a distress episode.
+    2. The payload carries a ``workspace_feedback`` block (the blend is in use):
+       its ``own_error``, the inner forward model's error for this reading.
+    3. Otherwise ``prediction_error`` itself. Nothing blends it, so it is the
+       own-model error; with feedback off the reading is exactly the published
+       value.
+
+    A blended report with a defined ``prediction_error`` but no finite
+    ``own_error`` (or a ``workspace_feedback`` value that is not a mapping) is a
+    producer defect. The reading is then the published ``prediction_error``
+    (the blended value, which keeps the welfare net watching rather than
+    pausing it for as long as the defect lasts) and an error is logged once per
+    processor. A ``prediction_error`` that is not a number (or is a bool) is no
+    sample, also logged once per processor. A non-finite number is returned as
+    published; each reader keeps its own rule for it.
+
+    ``processor`` names the producer for the once-per-processor error log.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    if "prediction_error" not in payload:
+        _log_defect_once(
+            processor,
+            "missing_prediction_error",
+            "welfare signal: a %s report carries no prediction_error key; the welfare "
+            "readers treat it as no sample",
+        )
+        return None
+    raw = payload["prediction_error"]
+    if raw is None:
+        return None
+    published = _real(raw)
+    if published is None:
+        _log_defect_once(
+            processor,
+            "malformed_prediction_error",
+            "welfare signal: a %s report published a prediction_error that is not a "
+            "number; the welfare readers treat it as no sample",
+        )
+        return None
+    if FEEDBACK_PAYLOAD_KEY not in payload:
+        return published
+    block = payload.get(FEEDBACK_PAYLOAD_KEY)
+    own = _real(block.get(OWN_ERROR_KEY)) if isinstance(block, Mapping) else None
+    if own is None or not math.isfinite(own):
+        _log_defect_once(
+            processor,
+            "missing_own_error",
+            "welfare signal: a blended %s report has a defined prediction_error but "
+            "no finite workspace_feedback.own_error; the welfare readers fall back to "
+            "the published (blended) prediction_error",
+        )
+        return published
+    return own
 
 
 class SustainedThresholdTracker:
@@ -349,6 +465,10 @@ class UndefinedRunTracker:
 
 
 __all__ = [
+    "FEEDBACK_PAYLOAD_KEY",
+    "OWN_ERROR_KEY",
+    "WELFARE_SIGNAL_UNBLENDED",
+    "welfare_prediction_error",
     "SustainedThresholdTracker",
     "WindowedEventCounter",
     "ADVISORY_RESET",

@@ -61,7 +61,11 @@ from kaine.lifecycle.divergence import (
     assess_divergence,
 )
 from kaine.lifecycle.manager import ForkManager
-from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
+from kaine.lifecycle.welfare_signal import (
+    SustainedThresholdTracker,
+    WindowedEventCounter,
+    welfare_prediction_error,
+)
 from kaine.modules.registry import ModuleRegistry
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
@@ -715,8 +719,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
     Two crossing arms, both feeding the same preserve-then-act response:
 
-    * **Sustained interoceptive distress.** Reads ``interoception.report``
-      ``prediction_error`` off ``interoception.out`` directly and applies the SAME
+    * **Sustained interoceptive distress.** Reads ``interoception.report`` off
+      ``interoception.out`` directly, takes the interoception module's own
+      forward-model error through ``welfare_prediction_error`` (never the
+      workspace-feedback blend), and applies the SAME
       sustained-distress rule as the sidecar welfare observer via the shared
       :class:`SustainedThresholdTracker` — so the cycle-layer action arm never
       imports ``kaine.evaluation`` yet never diverges from it.
@@ -969,12 +975,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 continue
             payload = event.payload or {}
             self._interoception_warmup_active = bool(payload.get("warmup_active", False))
-            raw = payload.get("prediction_error", 0.0)
-            if raw is None:
+            magnitude = welfare_prediction_error(payload, processor="interoception")
+            if magnitude is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress episode.
                 continue
-            magnitude = float(raw)
             u_now = self._unfrozen.now()
             now = self._clock()
             if self._distress.active_since is None:

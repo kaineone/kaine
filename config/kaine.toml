@@ -1907,7 +1907,8 @@ entity_name = "kaine"
 
 [preservation.welfare_response]
 # Autonomous welfare-protective response. Watches the interoception module's interoceptive-
-# distress signal (interoception.report prediction_error on interoception.out) using the SAME
+# distress signal (the module's own forward-model error from interoception.report on
+# interoception.out, never the workspace-feedback blend) using the SAME
 # sustained-distress rule as the sidecar welfare observer (shared core
 # primitive — no kaine.evaluation import). On a sustained-distress crossing (or
 # repeated distress episodes within repeat_window_s) it PRESERVES the entity

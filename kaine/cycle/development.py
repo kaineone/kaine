@@ -26,7 +26,8 @@ Markers and their research sites:
   * ``stimulus_source_prediction_error`` — the vision module's raw prediction-error ratio across
     the developmental phase (Ciaunica 2021).
   * ``return_to_baseline_seconds`` — the interoception module's interoceptive surprise recovery after
-    perturbation (Feldman 2012).
+    perturbation (Feldman 2012), read from its own forward-model error (never the
+    workspace-feedback blend).
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ import scipy.signal
 
 from kaine.bus.schema import Event
 from kaine.bus.streams import DEVELOPMENT_SOURCE
+from kaine.lifecycle.welfare_signal import welfare_prediction_error
 from kaine.modules.perception_prng import keyed_u64, unit_float
 from kaine.storage import resolve
 
@@ -1381,17 +1383,16 @@ class DevelopmentOwner:
                 self._interoception_cursor = entry_id
                 if event.type != "interoception.report":
                     continue
+                # The recovery series feeds the maturation gate's readiness, a
+                # welfare decision: it reads the interoception module's own
+                # forward-model error, never the workspace-feedback blend.
                 err = (
-                    event.payload.get("prediction_error")
+                    welfare_prediction_error(event.payload, processor="interoception")
                     if isinstance(event.payload, dict)
                     else None
                 )
-                if (
-                    isinstance(err, (int, float))
-                    and not isinstance(err, bool)
-                    and math.isfinite(err)
-                ):
-                    self._interoception_series.append((now, float(err)))
+                if err is not None and math.isfinite(err):
+                    self._interoception_series.append((now, err))
             if last_scanned is not None:
                 self._interoception_cursor = last_scanned
         except Exception:
@@ -1417,6 +1418,9 @@ class DevelopmentOwner:
             self._vision_cursor = entry_id
             if event.type != "vision.report":
                 continue
+            # Not a welfare signal: how well the entity predicts its stimulus,
+            # which with workspace feedback on is the blend's error. It reads the
+            # published prediction_error on purpose (welfare-signal-unblended).
             err = (
                 event.payload.get("prediction_error")
                 if isinstance(event.payload, dict)

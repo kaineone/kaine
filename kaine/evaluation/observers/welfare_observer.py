@@ -18,13 +18,16 @@ Detects and counts four welfare-relevant conditions:
     the consolidation window exceeds ``replay_rate_threshold`` events per
     ``consolidation_window_s`` seconds (defaults 10 events / 5 s).
 
-(d) Sustained interoceptive distress — the ``prediction_error`` magnitude
-    carried by ``interoception.report`` events on ``interoception.out`` stays at or above
+(d) Sustained interoceptive distress — the interoception module's own
+    forward-model error carried by ``interoception.report`` events on
+    ``interoception.out`` (read through
+    :func:`kaine.lifecycle.welfare_signal.welfare_prediction_error`, so a
+    workspace-feedback blend cannot move it) stays at or above
     ``interoceptive_distress_threshold`` (default 0.8) continuously for at
     least ``interoceptive_distress_duration_s`` (default 30 s).  The sustain
     timer resets whenever the magnitude drops below the threshold, so a single
     sustained episode produces a single event rather than one per tick.
-    ``prediction_error`` is already a scalar float published by the interoception module's
+    The error is already a scalar float published by the interoception module's
     forward model — no reduction is required.
 
 Each of the four gray-zone conditions surfaces as an in-memory count exposed as a property for
@@ -119,6 +122,7 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     SustainedThresholdTracker,
     UndefinedRunTracker,
     WindowedEventCounter,
+    welfare_prediction_error,
 )
 
 log = logging.getLogger(__name__)
@@ -909,17 +913,15 @@ class WelfareObserver(StreamSubscriberObserver):
             log.debug("welfare_observer: interoception.fatigue crossing recorded at %s", entry_id)
         elif event.type == "interoception.report":
             # (d) Track interoceptive prediction-error magnitude through the
-            # shared sustained-threshold tracker. ``prediction_error`` is a
-            # scalar float published by the interoception module's SubstrateForwardModel on every
-            # tick — no reduction needed. The tracker fires once per sustained
-            # episode (rising-edge), resetting its own timer.
-            payload = event.payload or {}
-            raw = payload.get("prediction_error", 0.0)
-            if raw is None:
+            # shared sustained-threshold tracker. The welfare reading is the
+            # interoception module's own forward-model error, never the
+            # workspace-feedback blend (welfare_prediction_error). The tracker
+            # fires once per sustained episode (rising-edge), resetting its own timer.
+            magnitude = welfare_prediction_error(event.payload, processor="interoception")
+            if magnitude is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress tracker.
                 return
-            magnitude = float(raw)
             now = self._unfrozen.now()
             wall_now = self._unfrozen.wall()
             # Feed the shared tracker (records onset / resets on drop). The fire
