@@ -148,3 +148,68 @@ def test_an_unreadable_count_stays_unknown_without_the_key(
         {"line": "development", "step": 0, "supervisor_restarts": None}
     ]
     assert "| development | 0 | unknown |" in md_path.read_text()
+
+
+def _exposure(*, rests: int = 0, boredom_max: float = 0.3, restarts: int = 0) -> dict[str, Any]:
+    names = (
+        "boredom_deprived", "social_drive_deprived", "restlessness_deprived",
+        "negative_valence", "boredom_uncontrolled", "restlessness_uncontrolled",
+    )
+    indicators = {
+        n: {"max_value": 0.1, "crossings": 0, "rests_requested": 0, "freezes_placed": 0}
+        for n in names
+    }
+    indicators["boredom_deprived"].update(
+        max_value=boredom_max, crossings=rests, rests_requested=rests
+    )
+    return {
+        "schema": 1,
+        "run_id": "r",
+        "boot_started_at": "2026-10-31T10:00:01+00:00",
+        "monitor": {
+            "awake_seconds": 7200.0, "rests_requested": rests, "freezes_placed": 0,
+            "indicators": indicators,
+        },
+        "producer_restarts": restarts,
+        "covered_awake_seconds": 7100.0,
+        "affect_summary_interval_s": 300.0,
+    }
+
+
+def test_the_analysis_prints_a_per_step_exposure_table(tmp_path: Path):
+    study_dir = _make_study_dir(tmp_path)
+    _write_steps(
+        study_dir,
+        [
+            _step("development", 0, ended_at="e0",
+                  welfare_exposure=_exposure(rests=1, boredom_max=0.71),
+                  welfare_hold={"reasons": ["indicator_crossing"]}),
+            _step("branch", 0, ended_at="e1", welfare_exposure=_exposure()),
+            _step("repeat", 0, ended_at="e2", welfare_hold={"reasons": ["missing"]}),
+            _step("branch", 1, ended_at="e3"),
+        ],
+    )
+    (study_dir / "welfare_acks.jsonl").write_text(
+        json.dumps({"line": "development", "step": 0, "decision": "continue", "step_ended_at": "e0"})
+        + "\n"
+    )
+    json_path, md_path = run_analysis(study_dir)
+    rows = json.loads(json_path.read_text())["welfare_exposure"]
+    assert [(r["line"], r["step"]) for r in rows] == [("development", 0), ("branch", 0), ("repeat", 0)]
+    assert rows[0]["awake_hours"] == pytest.approx(2.0)
+    assert rows[0]["rests_requested"] == 1 and rows[0]["crossings"] == 1
+    assert rows[0]["max_values"]["boredom_deprived"] == pytest.approx(0.71)
+    assert rows[0]["decision"] == "continue"
+    assert rows[2]["hold"] == ["missing"] and rows[2]["awake_hours"] is None
+    md = md_path.read_text()
+    assert "## Welfare exposure" in md
+    assert "| development | 0 | 2.0000 |" in md
+    assert "indicator_crossing (continue)" in md
+    assert "| repeat | 0 |" in md and "| missing |" in md
+
+
+def test_no_exposure_records_says_so(tmp_path: Path):
+    study_dir = _make_study_dir(tmp_path)
+    _write_steps(study_dir, [_step("development", 0)])
+    _, md_path = run_analysis(study_dir)
+    assert "No step has a welfare exposure record." in md_path.read_text()

@@ -21,6 +21,7 @@ from kaine.research.ignition_study.runner import (
     StudyHalted,
     StudyLocked,
     StudyRunner,
+    StudyWelfareHold,
 )
 
 BASE_MODULES = ["interoception", "sequence", "vision", "audition", "language", "affect", "sleep"]
@@ -178,6 +179,49 @@ STANDIN_SCRIPT = textwrap.dedent(
             sys.exit(7)
 
         run_id = secrets.token_hex(8)
+        # The real cycle removes a stale exposure record at boot and writes this
+        # boot's record at shutdown (welfare-exposure-report).
+        exposure_path = cwd / "state" / "welfare" / "exposure.json"
+        exposure_mode = os.environ.get("IGNITION_STANDIN_EXPOSURE", "valid")
+        if not os.environ.get("IGNITION_STANDIN_KEEP_EXPOSURE"):
+            exposure_path.unlink(missing_ok=True)
+        boot_started_at = utc_iso()
+
+        def write_exposure():
+            if exposure_mode == "missing":
+                return
+            exposure_path.parent.mkdir(parents=True, exist_ok=True)
+            if exposure_mode == "unreadable":
+                exposure_path.write_bytes(bytes([0]) + b"ciphertext")
+                return
+            names = ["boredom_deprived", "social_drive_deprived", "restlessness_deprived",
+                     "negative_valence", "boredom_uncontrolled", "restlessness_uncontrolled"]
+            indicators = {n: {"max_value": 0.2, "crossings": 0, "rests_requested": 0,
+                              "freezes_placed": 0} for n in names}
+            rests = 0
+            if exposure_mode == "crossing":
+                indicators["boredom_deprived"].update(max_value=0.7, crossings=1, rests_requested=1)
+                rests = 1
+            record = {
+                "schema": 1,
+                "run_id": "someone-else" if exposure_mode == "other_run" else run_id,
+                "boot_started_at": boot_started_at,
+                "written_at": utc_iso(),
+                "monitor": {"awake_seconds": 600.0, "rests_requested": rests,
+                            "freezes_placed": 0, "responses": {}, "indicators": indicators},
+                "shares": {"awake_seconds": 600.0, "negative_valence_share": 0.1,
+                           "curiosity_interest_share": 0.2,
+                           "deficits": {d: {"deprivation_share": 0.2, "uncontrolled_share": None,
+                                            "open_crossings": 0, "sleep_reset_ends": 0}
+                                        for d in ("boredom", "social_drive", "restlessness")}},
+                "producer_restarts": 1 if exposure_mode == "restart" else 0,
+                "covered_awake_seconds": 420.0 if exposure_mode == "restart" else 600.0,
+                "affect_summary_interval_s": 300.0,
+            }
+            write_json(exposure_path, record)
+
+        import atexit
+        atexit.register(write_exposure)
         runtime = {
             "pid": os.getpid(),
             "run_id": run_id,
@@ -274,7 +318,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             return
 
         if active_scenario == "missing_preservation":
-            time.sleep(0.1)
+            time.sleep(0.3)
             (state_dir / "runtime.json").unlink(missing_ok=True)
             return
 
@@ -289,7 +333,7 @@ STANDIN_SCRIPT = textwrap.dedent(
                 "finished_at": utc_iso(),
             }
             write_json(state_dir / "preserve_result.json", res)
-            time.sleep(0.1)
+            time.sleep(0.3)
             (state_dir / "runtime.json").unlink(missing_ok=True)
             return
 
@@ -316,7 +360,7 @@ STANDIN_SCRIPT = textwrap.dedent(
             "finished_at": utc_iso(),
         }
         write_json(state_dir / "preserve_result.json", res)
-        time.sleep(0.1)
+        time.sleep(0.3)
         (state_dir / "runtime.json").unlink(missing_ok=True)
 
     def control(args):
@@ -397,6 +441,8 @@ def known_modules(monkeypatch):
         "IGNITION_STANDIN_REFERENCE_DELAY",
         "IGNITION_STANDIN_SUPERVISOR",
         "IGNITION_STANDIN_KEEP_ESCALATION",
+        "IGNITION_STANDIN_EXPOSURE",
+        "IGNITION_STANDIN_KEEP_EXPOSURE",
     ):
         monkeypatch.delenv(name, raising=False)
     return names
@@ -468,6 +514,8 @@ def _run(runner: StudyRunner, retry: bool = False):
         return "complete"
     except StudyHalted as exc:
         return exc.record
+    except StudyWelfareHold as exc:
+        return {"held": exc.record}
     except StudyComplete:
         return "complete"
 
@@ -1888,6 +1936,12 @@ def test_resume_adopts_an_unrecorded_maturation_preservation(tmp_path: Path, kno
     )
 
     flush_log: list[str] = []
+    # An adopted step's boot was never seen by this runner, so its exposure
+    # record cannot be bound to it: the run holds for a person first.
+    held = _run(_runner(study_dir, script, flush_log=flush_log))
+    assert held["held"]["adopted"] is True
+    assert held["held"]["welfare_hold"]["reasons"] == ["missing"]
+    StudyRunner(study_dir).acknowledge_welfare("development", 0, "continue")
     assert _run(_runner(study_dir, script, flush_log=flush_log)) == "complete"
     steps = _load_steps(study_dir)
     assert steps[0]["line"] == "development" and steps[0]["outcome"] == "complete"

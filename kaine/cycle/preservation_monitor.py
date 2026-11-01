@@ -65,6 +65,7 @@ from kaine.lifecycle.divergence import (
 from kaine.lifecycle.manager import ForkManager
 from kaine.lifecycle.welfare_indicators import (
     DEPRIVATION_INDICATORS,
+    INDICATOR_NAMES,
     REST_FAILED_REASON,
     REST_FAILURES,
     UNAVAILABLE_REASON,
@@ -1022,6 +1023,16 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         # times the entity time scale).
         self._ind_rest_u = 0.0
         self._ind_rest_u_last: float | None = None
+        # The boot's welfare exposure (welfare-exposure-report): per indicator
+        # the largest value, the crossings, the rests requested and the freezes
+        # placed, over the whole boot (this monitor is never restarted).
+        self._exposure: dict[str, dict[str, Any]] = {
+            name: {"max_value": None, "crossings": 0, "rests_requested": 0, "freezes_placed": 0}
+            for name in INDICATOR_NAMES
+        }
+        self._exposure_rests = 0
+        self._exposure_freezes = 0
+        self._exposure_responses: dict[str, int] = {}
 
     def _in_warmup(self, u_now: float, wall_now: float) -> bool:
         """True while still inside the cold-start warm-up window.
@@ -1577,6 +1588,16 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         self._pause_placed = (
             action_taken in ("pause", "pause_fallback") and freeze_error is None
         )
+        # Exposure: every protective response, by its reason label, and the
+        # freezes it placed (or is retrying).
+        self._exposure_responses[crossing_reason] = (
+            self._exposure_responses.get(crossing_reason, 0) + 1
+        )
+        if action_taken in ("pause", "pause_fallback"):
+            self._exposure_freezes += 1
+            for name in indicators:
+                if name in self._exposure:
+                    self._exposure[name]["freezes_placed"] += 1
 
         if freeze_error is not None:
             transition = "protective_action_freeze_failed"
@@ -1896,6 +1917,9 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             request_id=request_id, indicators=tuple(crossed), requested_u=u_now
         )
         self._ind_stage = _STAGE_RESTING
+        self._exposure_rests += 1
+        for name in crossed:
+            self._exposure[name]["rests_requested"] += 1
         await self._indicator_record(
             "indicator_rest_requested", ev, crossed, request_id=request_id
         )
@@ -2039,6 +2063,30 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             return
         self._ind_error_since_u = None
 
+    def _note_exposure(self, ev: Evaluation) -> None:
+        for reading in ev.readings:
+            entry = self._exposure[reading.name]
+            if ev.evaluable and reading.value is not None and math.isfinite(reading.value):
+                if entry["max_value"] is None or reading.value > entry["max_value"]:
+                    entry["max_value"] = float(reading.value)
+        for name in ev.crossed:
+            self._exposure[name]["crossings"] += 1
+
+    def exposure_summary(self) -> dict[str, Any] | None:
+        """The boot's indicator exposure for the exposure record, or None when the arm is off.
+
+        Content-free: numbers keyed by the fixed indicator and reason tables.
+        """
+        if not self._indicators_on:
+            return None
+        return {
+            "awake_seconds": float(self._ind_eval.awake_seconds),
+            "rests_requested": int(self._exposure_rests),
+            "freezes_placed": int(self._exposure_freezes),
+            "responses": dict(self._exposure_responses),
+            "indicators": {name: dict(entry) for name, entry in self._exposure.items()},
+        }
+
     async def _indicator_poll_inner(self, u_now: float) -> None:
         self._indicator_tick_rest_clock(u_now)
         signals = await self._indicator_ingest(u_now)
@@ -2048,9 +2096,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 return
             if not ended:
                 ev = self._ind_eval.evaluate()
+                self._note_exposure(ev)
                 await self._indicator_check_rest_bounds(ev, u_now)
                 return
         ev = self._ind_eval.evaluate()
+        self._note_exposure(ev)
         if await self._indicator_availability(ev):
             return
         if self._ind_stage == _STAGE_ARMED:

@@ -172,6 +172,17 @@ Every advisory is written to the rollup as well, and no payload carries anything
 
 A sensor fault is a fault of the entity's input, not distress of the entity, so these advisories are not gray-zone events. The welfare-protective monitor reads only `welfare.gray_zone` from `welfare.out` and takes no action on them. The curated research log records all four types, and the dashboard entity-care panel lists the processors that are blind or silent now.
 
+### The welfare exposure record
+
+At shutdown a research-mode cycle writes `state/welfare/exposure.json`: one content-free record per boot, written atomically as plain JSON with mode 0600, so the study runner reads it without the state key while the file stays limited to the operator account. Every boot deletes an existing record before its gates run. A failed write is logged at error level and does not change the exit code; the study runner holds when the record is missing. The fields:
+
+- `schema` (1), `run_id` and `boot_started_at` (the run identity's start time), which bind the record to its boot, and `written_at`;
+- `monitor`, from the welfare monitor, which is never restarted, so it covers the whole boot: `awake_seconds` (the awake time it counted), `rests_requested`, `freezes_placed`, `responses` (protective responses by reason label) and, per A.4 indicator, `max_value` (the largest value once the span held the minimum span), `crossings`, `rests_requested` and `freezes_placed`; null when the welfare response did not run;
+- `shares`, from the welfare producer's tally, the published `affect_welfare` measures: `awake_seconds`, `negative_valence_share`, `curiosity_interest_share` and, per deficit, `deprivation_share`, `uncontrolled_share`, `open_crossings` and `sleep_reset_ends`;
+- `producer_restarts` and `covered_awake_seconds` (the awake seconds the tally covers), which state the shares' coverage beside the monitor's own awake seconds, and `affect_summary_interval_s`, the tolerance the runner allows between the two.
+
+Every value is a number, a boolean, null, the run id, a timestamp or a label from the fixed indicator, reason and drive tables.
+
 ### `PlanningPolicyObserver`
 
 - **Stream:** `planning.out` (event type `planning.policy`)

@@ -3340,12 +3340,13 @@ _BOOT_PHASES = (
 
 async def _run_until_stopped(ctx: BootContext) -> None:
     """Supervise the running cycle until a stop is requested or the cycle ends."""
-    _welfare_supervision: dict = {}
+    # The producer's restarts are kept on the context for the exposure record.
+    ctx.welfare_supervision = {}
     # Periodically update runtime.json so the dashboard has fresh metrics
     # even before any tick happens.
     while not ctx.stop_event.is_set() and not ctx.cycle_task.done():
         await _supervise_welfare_producer(
-            ctx.welfare_producer, _welfare_supervision, time.monotonic()
+            ctx.welfare_producer, ctx.welfare_supervision, time.monotonic()
         )
         if _supervision_loss_escalates(ctx.supervision_mode):
             if ctx.supervisor_task is None:
@@ -3525,6 +3526,15 @@ async def _shutdown(ctx: BootContext) -> None:
         except Exception:
             log.warning("stimulus control close failed", exc_info=True)
     await _stop_welfare_producer(ctx.welfare_producer)
+    if ctx.supervision_mode == "research":
+        # After the producer's final affect_welfare record, before the modules stop.
+        _write_exposure_record(
+            run_ctx=ctx.run_ctx,
+            welfare_monitor=ctx.welfare_monitor,
+            welfare_producer=ctx.welfare_producer,
+            welfare_supervision=ctx.welfare_supervision,
+            eval_cfg=ctx.eval_cfg,
+        )
     try:
         il = ctx.ignition_log
     except NameError:
@@ -3682,6 +3692,95 @@ def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
         config.get("caretaker"), prerequisites_ok=prerequisites_ok, conditions=checks
     )
     return evaluate_unattended_gate(net, built={7: seven, 8: eight})
+
+
+#: The boot's content-free welfare exposure record (welfare-exposure-report).
+EXPOSURE_PATH = Path("state/welfare/exposure.json")
+EXPOSURE_SCHEMA = 1
+
+
+def _remove_stale_exposure_record() -> None:
+    """Delete any exposure record before the gates, so an earlier boot's (or a
+    restored bundle's) record can never stand for this one."""
+    path = resolve(EXPOSURE_PATH)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        log.error(
+            "could not remove a stale welfare exposure record; the study runner's "
+            "run binding still refuses it",
+            exc_info=True,
+        )
+
+
+def _exposure_shares(welfare_producer: Any) -> dict[str, Any] | None:
+    """The producer tally's shares, content-free, or None without a producer."""
+    if welfare_producer is None:
+        return None
+    observer, _sink = welfare_producer
+    tally = getattr(observer, "_affect_tally", None)
+    if tally is None:
+        return None
+    current = tally.current()
+    deficits = {}
+    for drive in ("boredom", "social_drive", "restlessness"):
+        deficits[drive] = {
+            "deprivation_share": current.get(f"{drive}_deprivation_share"),
+            "uncontrolled_share": current.get(f"{drive}_uncontrolled_share"),
+            "open_crossings": current.get(f"{drive}_open_crossings"),
+            "sleep_reset_ends": current.get(f"{drive}_sleep_reset_ends"),
+        }
+    return {
+        "awake_seconds": current.get("awake_seconds"),
+        "negative_valence_share": current.get("negative_valence_share"),
+        "curiosity_interest_share": current.get("curiosity_interest_share"),
+        "deficits": deficits,
+    }
+
+
+def _exposure_record(
+    *,
+    run_ctx: Any,
+    welfare_monitor: Any,
+    welfare_producer: Any,
+    welfare_supervision: Any,
+    eval_cfg: Any,
+) -> dict[str, Any]:
+    """Build the content-free exposure record: numbers, booleans, the run id,
+    timestamps and labels from the fixed indicator, reason and drive tables."""
+    monitor = welfare_monitor.exposure_summary() if welfare_monitor is not None else None
+    shares = _exposure_shares(welfare_producer)
+    restarts = None
+    if isinstance(welfare_supervision, dict) and welfare_producer is not None:
+        restarts = int(welfare_supervision.get("restarts", 0))
+    interval = None
+    welfare_cfg = getattr(eval_cfg, "welfare", None)
+    if welfare_cfg is not None:
+        interval = float(welfare_cfg.affect_summary_interval_s)
+    return {
+        "schema": EXPOSURE_SCHEMA,
+        "run_id": getattr(run_ctx, "run_id", None),
+        "boot_started_at": getattr(run_ctx, "started_at", None),
+        "written_at": datetime.now(timezone.utc).isoformat(),
+        "monitor": monitor,
+        "shares": shares,
+        "producer_restarts": restarts,
+        "covered_awake_seconds": shares.get("awake_seconds") if shares is not None else None,
+        "affect_summary_interval_s": interval,
+    }
+
+
+def _write_exposure_record(**kwargs: Any) -> None:
+    """Write the exposure record as plain JSON, atomically, mode 0600.
+
+    A failed write is logged at error level and does not change the exit
+    code; the study runner holds the next step when the record is missing.
+    """
+    try:
+        record = _exposure_record(**kwargs)
+        write_json_atomic(resolve(EXPOSURE_PATH), record)
+    except Exception:
+        log.error("could not write the welfare exposure record", exc_info=True)
 
 
 def _record_unattended_gate(
@@ -3857,6 +3956,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
+
+    # A stale exposure record never stands for this boot, whatever happens next.
+    _remove_stale_exposure_record()
 
     # Exactly one mode per boot. Conflicting selectors refuse before any gate.
     try:

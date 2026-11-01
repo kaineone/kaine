@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -73,6 +74,25 @@ MATURATION_REFERENCE_FILE = ".study_maturation_reference.json"
 #: for the scheduler's blocked retry (300 s) and a restart of an attempt cut by a sleep.
 MATURATION_REFERENCE_WAIT_SECONDS = 7200.0
 
+#: The cycle's welfare exposure record, relative to a step's working directory.
+EXPOSURE_FILE = "state/welfare/exposure.json"
+
+#: The operator's answers to welfare holds, in the study directory.
+WELFARE_ACKS_FILE = "welfare_acks.jsonl"
+
+#: The decisions ``ack-welfare`` accepts.
+WELFARE_DECISIONS = ("continue", "stop")
+
+#: Why the runner holds after a step (content-free labels).
+HOLD_REASONS = (
+    "missing",
+    "unreadable",
+    "other_run",
+    "other_boot",
+    "incomplete_coverage",
+    "indicator_crossing",
+)
+
 #: ``maturation_reference`` values in a development step record.
 REFERENCE_COMPLETE = "complete"
 REFERENCE_MISSING = "missing"
@@ -92,6 +112,17 @@ class StudyHalted(Exception):
 
 class StudyCritical(Exception):
     """Raised when a timeout preservation fails and the operator must decide."""
+
+
+class StudyWelfareHold(Exception):
+    """Raised when a completed step's welfare exposure holds the run for review.
+
+    The next step does not start until the operator answers with
+    ``ack-welfare``.
+    """
+
+    def __init__(self, record: dict[str, Any]) -> None:
+        self.record = record
 
 
 class StudyLocked(Exception):
@@ -247,6 +278,25 @@ class StudyRunner:
         ):
             self.last_failed = None
 
+        # The operator's answers to welfare holds.
+        self.welfare_acks: list[dict[str, Any]] = []
+        acks_path = self.study_dir / WELFARE_ACKS_FILE
+        if acks_path.exists():
+            for raw in acks_path.read_text().splitlines():
+                if not raw.strip():
+                    continue
+                try:
+                    ack = json.loads(raw)
+                except json.JSONDecodeError:
+                    log.warning("Ignoring malformed %s line", WELFARE_ACKS_FILE)
+                    continue
+                if isinstance(ack, dict) and ack.get("decision") in WELFARE_DECISIONS:
+                    self.welfare_acks.append(ack)
+        self.stopped_lines: set[str] = set()
+        for ack in self.welfare_acks:
+            if ack.get("decision") == "stop":
+                self.stopped_lines |= _lines_ended_by(ack.get("line"), ack.get("step"))
+
     def _step_sequence(self) -> list[tuple[str, int]]:
         k = len(self.plan["order"])
         seq: list[tuple[str, int]] = [("development", 0), ("branch", 0), ("repeat", 0)]
@@ -275,9 +325,16 @@ class StudyRunner:
         if self.last_failed:
             raise StudyHalted(self.last_failed)
 
+        held = self.pending_welfare_hold()
+        if held is not None:
+            raise StudyWelfareHold(held)
+
         seed = self.line_bundles.get(("development", 0))
         for line, k in sequence:
             if (line, k) in self.completed_steps:
+                continue
+            if line in self.stopped_lines:
+                # The operator ended this line after a welfare hold.
                 continue
 
             if line == "development":
@@ -568,7 +625,78 @@ class StudyRunner:
             "adopted": True,
         }
 
+    def _apply_exposure(self, record: dict[str, Any]) -> None:
+        """Copy the step's bound exposure record into ``record``, or mark the hold.
+
+        The record is accepted only when its ``run_id`` is the step's and its
+        ``boot_started_at`` is not before the step's start. The run holds when
+        the record is missing, unreadable, bound to another run or boot,
+        incomplete in coverage, or shows any indicator crossing.
+        """
+        line_dir = self._line_dir(record["line"], record["step"])
+        exposure, reasons = read_step_exposure(
+            line_dir, run_id=record.get("run_id"), since_iso=record.get("started_at")
+        )
+        if exposure is not None:
+            record["welfare_exposure"] = exposure
+        if reasons:
+            record["welfare_hold"] = {"reasons": reasons}
+
+    def pending_welfare_hold(self) -> dict[str, Any] | None:
+        """The latest completed step record whose welfare hold is unanswered."""
+        for rec in reversed(self.steps):
+            if rec.get("outcome") != "complete":
+                continue
+            if not isinstance(rec.get("welfare_hold"), dict):
+                continue
+            if self._welfare_ack_for(rec) is not None:
+                continue
+            return rec
+        return None
+
+    def _welfare_ack_for(self, rec: dict[str, Any]) -> dict[str, Any] | None:
+        for ack in self.welfare_acks:
+            if (
+                ack.get("line") == rec.get("line")
+                and ack.get("step") == rec.get("step")
+                and ack.get("step_ended_at") == rec.get("ended_at")
+            ):
+                return ack
+        return None
+
+    def acknowledge_welfare(self, line: str, k: int, decision: str) -> dict[str, Any]:
+        """Record the operator's answer to a welfare hold; never touches a step's state.
+
+        ``continue`` releases the hold; ``stop`` ends the step's line (and any
+        line that continues its entity) and leaves every preservation in place.
+        """
+        if decision not in WELFARE_DECISIONS:
+            raise StudyError(f"decision must be one of {', '.join(WELFARE_DECISIONS)}")
+        held = self.pending_welfare_hold()
+        if held is None or held.get("line") != line or held.get("step") != k:
+            pending = (
+                f"{held['line']}/{held['step']}" if held is not None else "none"
+            )
+            raise StudyError(
+                f"no welfare hold is pending for {line}/{k} (pending: {pending})"
+            )
+        ack = {
+            "line": line,
+            "step": k,
+            "decision": decision,
+            "acknowledged_at": _utc_iso(),
+            "step_ended_at": held.get("ended_at"),
+            "reasons": list((held.get("welfare_hold") or {}).get("reasons") or []),
+        }
+        with open(self.study_dir / WELFARE_ACKS_FILE, "a") as f:
+            f.write(json.dumps(ack) + "\n")
+        self.welfare_acks.append(ack)
+        if decision == "stop":
+            self.stopped_lines |= _lines_ended_by(line, k)
+        return ack
+
     def _finish_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        self._apply_exposure(record)
         self._append_step(record)
         line, k, outcome = record["line"], record["step"], record["outcome"]
         if outcome == "complete":
@@ -1350,9 +1478,24 @@ class StudyRunner:
                 f"welfare safety net since {live.get('since')} ({live.get('reason')}); "
                 f"it waits for a person."
             )
+        held = self.pending_welfare_hold()
+        if held is not None and not failed:
+            reasons = ", ".join((held.get("welfare_hold") or {}).get("reasons") or [])
+            lines.append(
+                f"Welfare hold: {held['line']} step {held['step']} ({reasons}); the next "
+                f"step does not start until a person answers: python -m "
+                f"kaine.research.ignition_study ack-welfare --study-dir {self.study_dir} "
+                f"--step {held['line']}/{held['step']} --decision continue|stop"
+            )
+        if self.stopped_lines:
+            lines.append(
+                "Stopped after a welfare review: " + ", ".join(sorted(self.stopped_lines))
+            )
         try:
             nxt = self._next_step()
             lines.append(f"Next: {nxt['line']} step {nxt['k']}")
+        except StudyWelfareHold:
+            lines.append("Next: held for welfare review")
         except StudyComplete:
             lines.append("Next: none")
         except StudyHalted:
@@ -1508,6 +1651,93 @@ def _cycle_process_alive(pid: int) -> bool:
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _lines_ended_by(line: Any, step: Any) -> set[str]:
+    """The lines a ``stop`` on (line, step) ends: the line, and any line that
+    continues its entity (every line starts from the developmental seed; the
+    accumulate line continues branch 0)."""
+    if line == "development":
+        return {"development", "branch", "repeat", "accumulate"}
+    ended = {str(line)}
+    if line == "branch" and step == 0:
+        ended.add("accumulate")
+    return ended
+
+
+def _is_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def read_step_exposure(
+    line_dir: Path, *, run_id: str | None, since_iso: str | None
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read and check a step's exposure record.
+
+    Returns ``(record or None, hold reasons)``. The record is returned only
+    when it is bound to this step's run and boot; the reasons name every
+    cause to hold (fail closed: a missing, unreadable or unbound record holds).
+    """
+    path = Path(line_dir) / EXPOSURE_FILE
+    if not path.exists():
+        return None, ["missing"]
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None, ["unreadable"]
+    if not isinstance(data, dict) or data.get("schema") != 1:
+        return None, ["unreadable"]
+    if not isinstance(run_id, str) or not run_id or data.get("run_id") != run_id:
+        return None, ["other_run"]
+    booted = _parse_iso(data.get("boot_started_at"))
+    if booted is None or not _not_before(booted, since_iso) or _parse_iso(since_iso) is None:
+        return None, ["other_boot"]
+    reasons: list[str] = []
+    monitor = data.get("monitor")
+    covered = data.get("covered_awake_seconds")
+    restarts = data.get("producer_restarts")
+    interval = data.get("affect_summary_interval_s")
+    if not isinstance(monitor, dict) or not _is_number(monitor.get("awake_seconds")):
+        reasons.append("incomplete_coverage")
+    elif (
+        not _is_count(restarts)
+        or restarts > 0
+        or not _is_number(covered)
+        or not _is_number(interval)
+        or float(covered) < float(monitor["awake_seconds"]) - float(interval)
+    ):
+        reasons.append("incomplete_coverage")
+    if isinstance(monitor, dict):
+        crossed = False
+        for key in ("rests_requested", "freezes_placed"):
+            value = monitor.get(key)
+            # A count that is not a count cannot show that nothing crossed.
+            if not _is_count(value) or value > 0:
+                crossed = True
+        indicators = monitor.get("indicators")
+        if not isinstance(indicators, dict) or not indicators:
+            if "incomplete_coverage" not in reasons:
+                reasons.append("incomplete_coverage")
+        else:
+            for entry in indicators.values():
+                if not isinstance(entry, dict):
+                    crossed = True
+                    continue
+                for key in ("crossings", "rests_requested", "freezes_placed"):
+                    value = entry.get(key)
+                    if not _is_count(value) or value > 0:
+                        crossed = True
+        if crossed:
+            reasons.append("indicator_crossing")
+    return data, reasons
 
 
 #: A step's escalation record, relative to its working directory.

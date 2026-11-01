@@ -356,6 +356,10 @@ class AffectWelfareTally:
     def snapshot(self) -> dict[str, float | int | None]:
         """Return a content-free snapshot and clear the ``changed`` flag."""
         self._changed = False
+        return self.current()
+
+    def current(self) -> dict[str, float | int | None]:
+        """Return the same content-free snapshot without touching the ``changed`` flag."""
         result: dict[str, float | int | None] = {
             "awake_seconds": self._awake_seconds,
             "negative_valence_bar": self._negative_valence_bar,

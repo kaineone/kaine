@@ -696,6 +696,39 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
     for entry in comparisons["familiarity_and_history"]:
         _emit(f"Accumulate {entry['k']} − branch {entry['k']}", entry)
 
+    lines.append("## Welfare exposure")
+    lines.append("")
+    rows = report.get("welfare_exposure") or []
+    if not rows:
+        lines.append("No step has a welfare exposure record.")
+    else:
+        lines.append(
+            "Each boot's welfare exposure from its content-free exposure record: awake hours "
+            "the welfare monitor counted and the share tally covered, producer restarts, the "
+            "net's rests and freezes, the largest value of each deprivation indicator and the "
+            "indicator crossings. A held step waited for a person's answer."
+        )
+        lines.append("")
+        lines.append(
+            "| Line | Step | Awake h | Covered h | Restarts | Rests | Freezes | "
+            "Boredom | Social | Restless | Neg. valence | Crossings | Hold |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for row in rows:
+            maxima = row.get("max_values") or {}
+            hold = ", ".join(row.get("hold") or []) or "none"
+            if row.get("hold") and row.get("decision"):
+                hold += f" ({row['decision']})"
+            lines.append(
+                f"| {row['line']} | {row['step']} | {_fmt(row.get('awake_hours'))} | "
+                f"{_fmt(row.get('covered_hours'))} | {_fmt(row.get('producer_restarts'))} | "
+                f"{_fmt(row.get('rests_requested'))} | {_fmt(row.get('freezes_placed'))} | "
+                f"{_fmt(maxima.get('boredom_deprived'))} | {_fmt(maxima.get('social_drive_deprived'))} | "
+                f"{_fmt(maxima.get('restlessness_deprived'))} | {_fmt(maxima.get('negative_valence'))} | "
+                f"{_fmt(row.get('crossings'))} | {hold} |"
+            )
+    lines.append("")
+
     lines.append("## Supervisor restarts")
     lines.append("")
     restart_rows = report.get("supervisor_restarts") or []
@@ -724,6 +757,71 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
         lines.append(f"- {lim}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _attach_welfare_decisions(study_dir: Path, steps: list[dict[str, Any]]) -> None:
+    """Mark each held step with the operator's recorded answer (continue or stop)."""
+    path = study_dir / "welfare_acks.jsonl"
+    if not path.exists():
+        return
+    answers: dict[tuple[Any, Any, Any], str] = {}
+    for raw in path.read_text().splitlines():
+        try:
+            ack = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(ack, dict) and ack.get("decision") in ("continue", "stop"):
+            answers[(ack.get("line"), ack.get("step"), ack.get("step_ended_at"))] = ack["decision"]
+    for step in steps:
+        decision = answers.get((step.get("line"), step.get("step"), step.get("ended_at")))
+        if decision is not None:
+            step["_welfare_decision"] = decision
+
+
+def _welfare_exposure_rows(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One content-free row per step with an exposure record or a welfare hold."""
+    rows: list[dict[str, Any]] = []
+    for step in steps:
+        exposure = step.get("welfare_exposure")
+        hold = step.get("welfare_hold")
+        if not isinstance(exposure, dict) and not isinstance(hold, dict):
+            continue
+        monitor = (exposure or {}).get("monitor") if isinstance(exposure, dict) else None
+        monitor = monitor if isinstance(monitor, dict) else {}
+        indicators = monitor.get("indicators") if isinstance(monitor.get("indicators"), dict) else {}
+
+        def _hours(value: Any) -> float | None:
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value) / 3600.0
+            return None
+
+        rows.append(
+            {
+                "line": step.get("line"),
+                "step": step.get("step"),
+                "outcome": step.get("outcome"),
+                "awake_hours": _hours(monitor.get("awake_seconds")),
+                "covered_hours": _hours((exposure or {}).get("covered_awake_seconds")),
+                "producer_restarts": (exposure or {}).get("producer_restarts"),
+                "rests_requested": monitor.get("rests_requested"),
+                "freezes_placed": monitor.get("freezes_placed"),
+                "crossings": sum(
+                    int(e.get("crossings", 0))
+                    for e in indicators.values()
+                    if isinstance(e, dict) and isinstance(e.get("crossings"), int)
+                )
+                if indicators
+                else None,
+                "max_values": {
+                    name: e.get("max_value")
+                    for name, e in indicators.items()
+                    if isinstance(e, dict)
+                },
+                "hold": list((hold or {}).get("reasons") or []),
+                "decision": step.get("_welfare_decision"),
+            }
+        )
+    return rows
 
 
 def _step_dir(study_dir: Path, line: Any, step: Any) -> Path:
@@ -773,6 +871,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
     plan = load_plan(study_dir)
     plan_hash = hashlib.sha256((study_dir / "study.json").read_bytes()).hexdigest()
     steps = _load_steps(study_dir)
+    _attach_welfare_decisions(study_dir, steps)
 
     faculty_modules = list(plan.get("base_modules", [])) + list(plan.get("order", []))
     module_count = len(plan.get("order", []))
@@ -805,6 +904,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
 
     comparisons = _build_comparisons(viewings, module_count)
     restart_steps = _supervisor_restart_steps(study_dir, steps)
+    exposure_rows = _welfare_exposure_rows(steps)
 
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -816,6 +916,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         "per_viewing": [_viewing_to_dict(v) for v in viewings],
         "comparisons": comparisons,
         "supervisor_restarts": restart_steps,
+        "welfare_exposure": exposure_rows,
         "limits": LIMITS,
     }
 

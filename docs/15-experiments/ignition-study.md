@@ -110,6 +110,18 @@ Each study child builds the caretaker from `[caretaker]` in the operator configu
 
 Every poll the runner reads the child's `state/cycle/control.json`. When the welfare safety net holds a freeze, the runner logs it at critical level, keeps `.study_welfare_freeze.json` in the step directory while the freeze is held, and shows it in `status`. The entity was preserved before it was frozen. The runner never lifts the freeze and does not end the step early: a person answers it by overriding the welfare freeze by name (see [Operation](../06-operation/README.md)). A step that ends while the welfare freeze is still held is recorded as `failed:welfare`, with the freeze's start and reason under `welfare_freeze` and `held_at_end` true, in place of the `failed:timeout` it would otherwise get. A freeze noticed on the running child and lifted before the step ends is recorded under `welfare_freeze` with `held_at_end` false and does not change the outcome.
 
+### Welfare exposure and the review hold
+
+Every research boot writes a content-free welfare exposure record, `state/welfare/exposure.json`, when it shuts down (see [Research data](../17-research-data/README.md#the-welfare-exposure-record)), and deletes any earlier one when it boots. After each step the runner reads the step's record and copies it into the step record as `welfare_exposure` only when its `run_id` is the step's run id and its `boot_started_at` is not before the step's start, so a record left by an earlier attempt, or carried by a restored state tree, never stands for this boot.
+
+The runner then holds before the next step, with the step recorded as complete and a `welfare_hold` naming the reasons, when the record is `missing`, `unreadable`, bound to another run (`other_run`) or boot (`other_boot`), `incomplete_coverage` (the welfare producer restarted, or its tally covered less awake time than the welfare monitor counted by more than one affect summary interval), or shows an `indicator_crossing` (any indicator crossing, rest requested or freeze placed). Under CAL Article 4.7 every crossing is flagged for human review; the hold makes that review happen before the entity is booted again, which also covers the indicator spans restarting at every boot. A step adopted from a preservation the runner did not see is held too, because its record cannot be bound. `run` then exits 4, and `status` shows the hold and the command to answer it:
+
+```bash
+python -m kaine.research.ignition_study ack-welfare --study-dir studies/<study-id> --step development/0 --decision continue
+```
+
+`continue` releases the hold, and the next `run` starts the next step. `stop` ends the step's line, and any line that continues its entity (every line starts from the developmental seed, and the accumulate line continues branch 0), and leaves every preservation in place. The answer, its time and the step are appended to `welfare_acks.jsonl` in the study directory, with no name; it never edits an entity's state. `analyse` prints a per-step exposure table with the answers.
+
 ### Supervisor escalations and restarts
 
 After a step's cycle exits, the runner reads the step's `state/cycle/escalation.json`. When the supervisor escalated during the step (it ran out of restarts for a module, or lost supervision itself), the step is recorded as `failed:supervisor` in place of `failed:exit:70`, with the escalation's module, attempt count, snapshot id and time under `supervisor_escalation` (the free-text message is left out), and the study halts for the operator. The cycle clears the file at every boot and the runner only accepts an escalation dated inside the step, so a retried step never inherits the previous attempt's escalation; an escalation file that cannot be read counts as an escalation. A welfare freeze still held at the end names the outcome `failed:welfare` instead, because a person has to answer it first.
@@ -130,6 +142,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id> --ret
 | 1 | The run was halted. |
 | 2 | The run is locked or in an error state. |
 | 3 | A critical failure occurred, such as a failed timeout or disk-low preservation. |
+| 4 | The run is held for a welfare review; answer it with `ack-welfare`. |
 
 ### Module-specific behaviour
 

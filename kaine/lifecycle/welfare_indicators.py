@@ -369,6 +369,11 @@ class IndicatorEvaluator:
                 q.popleft()
 
     @property
+    def awake_seconds(self) -> float:
+        """Every awake second this evaluator has accrued (span restarts do not reset it)."""
+        return self._pos
+
+    @property
     def span_awake_s(self) -> float:
         """Awake seconds the current span holds (at most ``T_lp``)."""
         return max(0.0, self._pos - self._window_start())
