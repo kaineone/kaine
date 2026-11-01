@@ -646,3 +646,366 @@ def test_broadcast_bit_identical_without_latent_derived():
     assert json.dumps(payload) == json.dumps(reference)
     for member, (_eid, ev) in zip(payload["selected"], events):
         assert member["payload"] is ev.payload
+
+
+# ---------------------------------------------------------------------------
+# Module-state captures (PR 2)
+# ---------------------------------------------------------------------------
+
+
+class _StateModule:
+    def __init__(self, name: str, state: dict) -> None:
+        self.name = name
+        self._state = state
+
+    def serialize(self) -> dict:
+        import copy
+
+        return copy.deepcopy(self._state)
+
+    def deserialize(self, state: dict) -> None:
+        self._state = dict(state)
+
+
+class _Registry:
+    def __init__(self, *modules) -> None:
+        self._modules = list(modules)
+
+    def all_modules(self):
+        return list(self._modules)
+
+
+_WEIGHTS = {"layers": [{"weight": [[0.11, -0.22], [0.33, 0.44]], "bias": [0.05, -0.06]}]}
+
+
+def _leaky_state() -> dict:
+    return {
+        "count": 3,
+        "forward_model": _WEIGHTS,
+        "latent_derived": {"code": list(CODE)},
+        "history": [{"tick": 1, "latent": list(LATENT)}],
+    }
+
+
+def _stripped_leaky() -> dict:
+    return {"count": 3, "forward_model": _WEIGHTS, "history": [{"tick": 1}]}
+
+
+def _assert_no_latent_text(text: str) -> None:
+    assert "latent_derived" not in text
+    assert '"latent"' not in text
+    assert _latent_numbers_in(text) == []
+
+
+def _latent_errors(caplog) -> list[str]:
+    return [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "kaine.lifecycle.latent_strip" and r.levelname == "ERROR"
+    ]
+
+
+def test_strip_module_states_is_copy_on_write():
+    from kaine.lifecycle.latent_strip import strip_module_states
+
+    clean = {"forward_model": _WEIGHTS, "n": 1}
+    states, meta = strip_module_states({"vision": clean}, capture="test")
+    assert states["vision"] is clean
+    assert meta == {}
+
+
+def test_strip_module_states_never_raises(caplog):
+    from kaine.lifecycle.latent_strip import LATENT_SCAN_FAILED_KEY, strip_module_states
+
+    deep: dict = {}
+    node = deep
+    for _ in range(5000):
+        node["n"] = {}
+        node = node["n"]
+    with caplog.at_level("ERROR", logger="kaine.lifecycle.latent_strip"):
+        states, meta = strip_module_states({"deep": deep, "leaky": _leaky_state()}, capture="test")
+    assert states["deep"] is deep
+    assert states["leaky"] == _stripped_leaky()
+    assert meta == {"latent_stripped": ["leaky"], LATENT_SCAN_FAILED_KEY: ["deep"]}
+
+
+def test_fork_snapshot_strips_and_records_latent(tmp_path, caplog):
+    from kaine.lifecycle.manager import ForkManager
+    from kaine.lifecycle.snapshot import snapshot_dir
+
+    registry = _Registry(
+        _StateModule("vision", {"forward_model": _WEIGHTS}),
+        _StateModule("leaky", _leaky_state()),
+    )
+    mgr = ForkManager(tmp_path / "forks")
+    with caplog.at_level("ERROR", logger="kaine.lifecycle.latent_strip"):
+        snap = mgr.snapshot(registry, label="t")
+    assert snap.modules["leaky"] == _stripped_leaky()
+    assert snap.modules["vision"] == {"forward_model": _WEIGHTS}
+    assert snap.metadata["latent_stripped"] == ["leaky"]
+    assert mgr.load(snap.id).metadata["latent_stripped"] == ["leaky"]
+    _assert_no_latent_text((snapshot_dir(tmp_path / "forks", snap.id) / "snapshot.json").read_text())
+    (message,) = _latent_errors(caplog)
+    assert "leaky" in message and "fork snapshot" in message
+    assert _latent_numbers_in(message) == []
+
+
+@pytest.mark.asyncio
+async def test_preservation_strips_and_is_never_refused(tmp_path, caplog):
+    from kaine.lifecycle.preservation import preserve_live
+    from kaine.lifecycle.snapshot import load_snapshot
+
+    registry = _Registry(
+        _StateModule("vision", {"forward_model": _WEIGHTS}),
+        _StateModule("leaky", _leaky_state()),
+    )
+    with caplog.at_level("ERROR", logger="kaine.lifecycle.latent_strip"):
+        result = await preserve_live(
+            registry,
+            fork_root=tmp_path / "forks",
+            out_root=tmp_path / "backups",
+            entity_name="probe",
+            reason="test",
+            stage_path=tmp_path / "stage.json",
+            individuation_root=tmp_path / "individuation",
+        )
+    assert result.ok
+    snap = load_snapshot(tmp_path / "forks", result.snapshot_id)
+    assert snap.modules["leaky"] == _stripped_leaky()
+    assert snap.modules["vision"] == {"forward_model": _WEIGHTS}
+    assert snap.metadata["latent_stripped"] == ["leaky"]
+    for path in list((tmp_path / "forks").rglob("*")) + list((tmp_path / "backups").rglob("*")):
+        if path.is_file():
+            data = path.read_bytes()
+            if path.suffix == ".tar":
+                import tarfile
+
+                with tarfile.open(path) as tar:
+                    for member in tar.getmembers():
+                        fh = tar.extractfile(member)
+                        if fh is not None:
+                            _assert_no_latent_text(fh.read().decode("utf-8", "replace"))
+            else:
+                _assert_no_latent_text(data.decode("utf-8", "replace"))
+    assert any("preservation" in m and "leaky" in m for m in _latent_errors(caplog))
+
+
+@pytest.mark.asyncio
+async def test_resume_checkpoint_strips_latent(tmp_path, monkeypatch, caplog):
+    from kaine.lifecycle.identity import mint_identity
+    from kaine.lifecycle.resume_checkpoint import checkpoint_file, read_checkpoint, save_checkpoint
+
+    _enable_encryption(monkeypatch)
+    registry = _Registry(
+        _StateModule("vision", {"forward_model": _WEIGHTS}),
+        _StateModule("leaky", _leaky_state()),
+    )
+    d = tmp_path / "ckpt"
+    with caplog.at_level("ERROR", logger="kaine.lifecycle.latent_strip"):
+        assert await save_checkpoint(registry, mint_identity(), reason="periodic", directory=d)
+    snap = read_checkpoint(d)
+    assert snap.modules["leaky"] == _stripped_leaky()
+    assert snap.modules["vision"] == {"forward_model": _WEIGHTS}
+    assert snap.metadata["latent_stripped"] == ["leaky"]
+    from kaine.security.crypto import get_state_encryptor
+
+    plaintext = get_state_encryptor().maybe_decrypt(checkpoint_file(d).read_bytes()).decode("utf-8")
+    _assert_no_latent_text(plaintext)
+    assert any("resume checkpoint" in m and "leaky" in m for m in _latent_errors(caplog))
+
+
+class _VisionEncoder:
+    model_id = "fake/encoder-latent-test"
+    latent_dim = 4
+    clip_len = 1
+
+    async def load(self) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+
+    async def encode(self, image):  # noqa: ARG002
+        return [0.4, 0.1, -0.3, 0.2]
+
+    async def encode_clip(self, frames):
+        return await self.encode(frames[-1])
+
+
+def test_snapshot_keeps_forward_model_weights(tmp_path, caplog):
+    from types import SimpleNamespace
+
+    from kaine.lifecycle.manager import ForkManager
+    from kaine.modules.vision import Vision
+    from kaine.modules.vision.forward import LatentForwardModel
+
+    vision = Vision(SimpleNamespace(), encoder=_VisionEncoder(), forward_prediction=True)
+    fm = LatentForwardModel(latent_dim=4, units=16, seed=7, lr=0.05)
+    for i in range(6):
+        fm.step([0.4, 0.1 * i, -0.3, 0.2])
+    vision._forward_model = fm
+    expected = vision.serialize()
+    with caplog.at_level("ERROR", logger="kaine.lifecycle.latent_strip"):
+        snap = ForkManager(tmp_path / "forks").snapshot(_Registry(vision))
+    assert snap.modules["vision"] == expected
+    assert snap.modules["vision"]["forward_model"] == fm.state_dict()
+    assert any(layer.get("weight") for layer in snap.modules["vision"]["forward_model"]["layers"])
+    assert set(snap.modules["vision"]["buffer_summary"]) == {"n_frames", "mean_norm", "mean_variance"}
+    assert "latent_stripped" not in snap.metadata
+    assert _latent_errors(caplog) == []
+
+
+def test_serialize_error_record_keeps_type_and_200_characters(tmp_path, caplog):
+    from kaine.lifecycle.manager import ForkManager
+
+    long_message = "0.123457, " * 500  # 5000 characters, latent-looking numbers
+
+    class Boom:
+        name = "boom"
+
+        def serialize(self):
+            raise ValueError(long_message)
+
+        def deserialize(self, _state):
+            pass
+
+    with caplog.at_level("WARNING", logger="kaine.lifecycle.manager"):
+        snap = ForkManager(tmp_path / "forks").snapshot(_Registry(Boom()))
+    record = snap.modules["boom"]["_serialize_error"]
+    assert record == "ValueError: " + long_message[:200]
+    assert len(record) <= len("ValueError: ") + 200
+    for rec in caplog.records:
+        assert len(rec.getMessage()) < 400
+
+
+# ---------------------------------------------------------------------------
+# The encryption boot check for latent producers (PR 2)
+# ---------------------------------------------------------------------------
+
+
+def test_latent_producer_passes_with_everything_in_place(monkeypatch):
+    from kaine.security.latent_producer import check_latent_producer
+
+    _enable_encryption(monkeypatch)
+    check_latent_producer("probe", require_encryption=True)
+
+
+def test_latent_producer_refused_without_encryption():
+    from kaine.security.latent_producer import LatentProducerRefused, check_latent_producer
+
+    with pytest.raises(LatentProducerRefused) as info:
+        check_latent_producer("probe", require_encryption=True)
+    assert len(info.value.reasons) == 1
+    assert "state encryption is not in effect" in info.value.reasons[0]
+
+
+@pytest.mark.parametrize("value", [False, None, "true", 1])
+def test_latent_producer_refused_without_require_encryption(monkeypatch, value):
+    from kaine.security.latent_producer import LatentProducerRefused, check_latent_producer
+
+    _enable_encryption(monkeypatch)
+    with pytest.raises(LatentProducerRefused) as info:
+        check_latent_producer("probe", require_encryption=value)
+    assert len(info.value.reasons) == 1
+    assert "require_encryption" in str(info.value)
+
+
+@pytest.mark.parametrize("version", [None, 0, True])
+def test_latent_producer_refused_without_the_latent_rule(monkeypatch, version):
+    import kaine.privacy_filter as pf
+    from kaine.security.latent_producer import LatentProducerRefused, check_latent_producer
+
+    _enable_encryption(monkeypatch)
+    if version is None:
+        monkeypatch.delattr(pf, "LATENT_RULE_VERSION")
+    else:
+        monkeypatch.setattr(pf, "LATENT_RULE_VERSION", version)
+    with pytest.raises(LatentProducerRefused) as info:
+        check_latent_producer("probe", require_encryption=True)
+    assert len(info.value.reasons) == 1
+    assert "latent rule" in str(info.value)
+
+
+def test_latent_producer_refused_when_the_key_does_not_round_trip():
+    from kaine.security.latent_producer import LatentProducerRefused, check_latent_producer
+
+    class _Broken:
+        enabled = True
+
+        def encrypt(self, data: bytes) -> bytes:
+            return data
+
+        def decrypt(self, data: bytes) -> bytes:
+            raise ValueError("bad key")
+
+    with pytest.raises(LatentProducerRefused) as info:
+        check_latent_producer("probe", require_encryption=True, encryptor=_Broken())
+    assert "round-trip" in str(info.value) and "ValueError" in str(info.value)
+
+
+def test_latent_producer_names_every_failed_condition(monkeypatch):
+    import kaine.privacy_filter as pf
+    from kaine.security.latent_producer import LatentProducerRefused, check_latent_producer
+
+    monkeypatch.delattr(pf, "LATENT_RULE_VERSION")
+    with pytest.raises(LatentProducerRefused) as info:
+        check_latent_producer("probe", require_encryption=False)
+    assert len(info.value.reasons) == 3
+
+
+class _Producer:
+    name = "producer"
+    produces_latent_derived = True
+
+
+class _Plain:
+    name = "plain"
+
+
+def test_boot_refuses_a_declared_latent_producer(monkeypatch, caplog):
+    from kaine.boot.errors import ConfigurationError
+    from kaine.boot.registry import _check_latent_producers
+
+    config = {"preservation": {"require_encryption": True}}
+    # No producer: no check, whatever the encryption posture.
+    _check_latent_producers(_Registry(_Plain()), {})
+    with caplog.at_level("ERROR", logger="kaine.boot.registry"):
+        with pytest.raises(ConfigurationError, match="state encryption"):
+            _check_latent_producers(_Registry(_Plain(), _Producer()), config)
+    assert any("producer" in r.getMessage() for r in caplog.records if r.levelname == "ERROR")
+    _enable_encryption(monkeypatch)
+    with pytest.raises(ConfigurationError, match="require_encryption"):
+        _check_latent_producers(_Registry(_Producer()), {})
+    _check_latent_producers(_Registry(_Producer()), config)
+
+
+def test_shipped_modules_declare_no_latent_producer():
+    from kaine.modules.base import BaseModule
+
+    assert BaseModule.produces_latent_derived is False
+
+    def subclasses(cls):
+        for sub in cls.__subclasses__():
+            yield sub
+            yield from subclasses(sub)
+
+    import kaine.modules  # noqa: F401  (imports every shipped module)
+
+    assert [c.__name__ for c in subclasses(BaseModule) if c.produces_latent_derived] == []
+
+
+@pytest.mark.asyncio
+async def test_build_registry_runs_the_latent_producer_check(monkeypatch):
+    import kaine.boot.registry as boot_registry
+    from kaine.boot import build_registry
+    from tests.systems._harness import SubsystemHarness
+
+    seen = []
+    monkeypatch.setattr(
+        boot_registry, "_check_latent_producers", lambda registry, config: seen.append(registry)
+    )
+    async with SubsystemHarness() as h:
+        registry = build_registry(
+            h.bus, {"modules": {}, "security": {"state_encryption": {"enabled": False}}}
+        )
+    assert seen == [registry]
