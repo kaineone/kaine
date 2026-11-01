@@ -611,9 +611,16 @@ def _build_perception_feed_video_factory(
     # A matured entity's viewing opens with the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves audio.
     transition = feed.get("_stimulus_source_world_transition")
+    # Stimulus control (stimulus-control-act) when boot built it: the combined
+    # programme manifest and the controller whose wrapper follows the clock's jumps.
+    controller = feed.get("_stimulus_controller")
+    if controller is not None:
+        manifest = feed.get("_programme_manifest") or manifest
 
     def _playlist_factory(device, *, width, height):  # noqa: ANN001
         source = PlaylistSource(manifest, playlist_clock=shared_clock)
+        if controller is not None:
+            source = controller.wrap_video(source)
         if transition is None:
             return source
         from kaine.modules.perception_transition import TransitionVideoSource
@@ -884,17 +891,23 @@ def _build_perception_feed_audio_factory(
     # The programme's sound fades in after the stimulus-source-to-world crossfade when boot
     # built one (womb-to-world-transition); the same instance serves video.
     transition = feed.get("_stimulus_source_world_transition")
+    # Stimulus control (stimulus-control-act) when boot built it: the combined
+    # programme manifest, the gain stage on the callback and the controlled stream.
+    controller = feed.get("_stimulus_controller")
+    if controller is not None:
+        manifest = feed.get("_programme_manifest") or manifest
 
     def _playlist_factory(*, device, sample_rate, channels, frames_per_block, callback):  # noqa: ANN001
         def _make(cb):  # noqa: ANN001, ANN202
-            return PlaylistAudioStream(
+            stream = PlaylistAudioStream(
                 manifest,
-                callback=cb,
+                callback=cb if controller is None else controller.wrap_audio_callback(cb),
                 sample_rate=int(sample_rate),
                 channels=int(channels),
                 frames_per_block=int(frames_per_block),
                 playlist_clock=shared_clock,
             )
+            return stream if controller is None else controller.wrap_audio(stream)
 
         if transition is None:
             return _make(callback)
@@ -909,6 +922,36 @@ def _build_perception_feed_audio_factory(
         )
 
     return _playlist_factory
+
+
+def _stimulus_control_descriptor(config: dict[str, Any]) -> dict[str, Any] | None:
+    """The stimulus-control manifest record, or None while it is off.
+
+    Off adds nothing, so a run without stimulus control has the manifest it had
+    before the component existed. On, the record gives the switch, the stage,
+    every bound and each further channel's manifest digests. Best-effort like
+    the rest of the descriptor: an invalid section is refused for real at boot.
+    """
+    from kaine.modules.effectors.stimulus.config import StimulusControlConfig
+
+    try:
+        sc = StimulusControlConfig.from_section(config.get("stimulus_control"))
+    except Exception:
+        return {"invalid": True}
+    if not sc.enabled:
+        return None
+    record: dict[str, Any] = sc.descriptor()
+    if sc.channels:
+        from kaine.modules.vision.feed import load_playlist_manifest
+
+        digests: list[dict[str, Any]] = []
+        for path in sc.channels:
+            try:
+                digests.append(load_playlist_manifest(path).as_descriptor())
+            except Exception:
+                digests.append({"manifest_unavailable": True})
+        record["further_channels"] = digests
+    return record
 
 
 def gather_perception_feed_descriptor(
@@ -1046,6 +1089,9 @@ def gather_perception_feed_descriptor(
             # must not crash the run.
             descriptor["transition_planned"] = False
             descriptor["transition_invalid"] = True
+        _stimulus = _stimulus_control_descriptor(config)
+        if _stimulus is not None:
+            descriptor["stimulus_control"] = _stimulus
     elif mode == "screen":
         # Content-free provenance: the capture target kind and, for a named
         # window, a hash of the title (never the title itself). No pixels, no

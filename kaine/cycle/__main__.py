@@ -194,6 +194,33 @@ STAGE_REFUSED_EXIT = 13
 # was changed by a refusal.
 RENAME_REFUSED_EXIT = 14
 
+# Exit code when [stimulus_control] is invalid or enabled in a workspace-mediation
+# arm, which shares one programme across arms (stimulus-control-act).
+STIMULUS_CONTROL_REFUSED_EXIT = 15
+
+
+def _stimulus_control_runtime(
+    kaine_config: dict[str, Any], study: str | None, seed: int
+) -> tuple[str | None, Any | None]:
+    """Parse [stimulus_control]: ``(refusal, runtime)``; the runtime is None while it is off."""
+    from kaine.modules.effectors.stimulus.config import (
+        StimulusControlConfig,
+        refuse_in_mediation_arm,
+    )
+    from kaine.modules.effectors.stimulus.runtime import StimulusControlRuntime
+
+    try:
+        config = StimulusControlConfig.from_section(kaine_config.get("stimulus_control"))
+    except ValueError as exc:
+        return f"invalid [stimulus_control]: {exc}", None
+    reason = refuse_in_mediation_arm(study, config)
+    if reason is not None:
+        return reason, None
+    if not config.enabled:
+        return None, None
+    # The entity clock is set when the registry builds it, before any use.
+    return None, StimulusControlRuntime(config, now=time.monotonic, seed=seed)
+
 
 def _individuation_refusal(kaine_config: dict[str, Any]) -> tuple[Any | None, str | None]:
     """Parse [individuation] and check its prerequisites.
@@ -593,7 +620,7 @@ def _wire_development(ctx: BootContext) -> None:
 
 
 async def _start_welfare_producer(
-    bus, eval_cfg, preservation_cfg, development_probe=None
+    bus, eval_cfg, preservation_cfg, development_probe=None, supplementary_records=None
 ) -> tuple[Any, Any] | None:
     """Start the welfare-net gray-zone producer when the welfare response is on.
 
@@ -607,7 +634,9 @@ async def _start_welfare_producer(
     observer = None
     sink = None
     try:
-        observer, sink = build_welfare_producer(bus, eval_cfg, development_probe)
+        observer, sink = build_welfare_producer(
+            bus, eval_cfg, development_probe, supplementary_records=supplementary_records
+        )
         await sink.start()
         await observer.start()
     except Exception as exc:
@@ -1617,7 +1646,9 @@ def _start_programme_end_watcher(
         return None
 
     try:
-        manifest = load_playlist_manifest(manifest_path)
+        manifest = (kaine_config.get("perception_feed") or {}).get(
+            "_programme_manifest"
+        ) or load_playlist_manifest(manifest_path)
     except Exception as exc:
         log.warning(
             "could not load playlist manifest for programme-end watcher: %s", exc
@@ -1779,6 +1810,16 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         sys.stderr.write(f"Refusing to boot KAINE cycle: {planned_test_reason}\n")
         return PLANNED_TEST_REFUSED_EXIT
 
+    # Stimulus control (stimulus-control-act) is a held component: off builds
+    # nothing. On, its welfare tally exists from here so the welfare producer
+    # can write its record; the programme and controller come with the registry.
+    stimulus_reason, ctx.stimulus_control = _stimulus_control_runtime(
+        ctx.kaine_config, resolve_study_name(), seed
+    )
+    if stimulus_reason is not None:
+        sys.stderr.write(f"Refusing to boot KAINE cycle: {stimulus_reason}\n")
+        return STIMULUS_CONTROL_REFUSED_EXIT
+
     set_global_seed(seed)
     from kaine.boot import gather_perception_feed_descriptor
     from kaine.plugins import load_plugins
@@ -1928,7 +1969,15 @@ async def _phase_bus(ctx: BootContext) -> int | None:
 
     try:
         ctx.welfare_producer = await _start_welfare_producer(
-            ctx.bus, ctx.eval_cfg, ctx.preservation_cfg, _development_probe(ctx)
+            ctx.bus,
+            ctx.eval_cfg,
+            ctx.preservation_cfg,
+            _development_probe(ctx),
+            supplementary_records=(
+                ctx.stimulus_control.tally.take_records
+                if ctx.stimulus_control is not None
+                else None
+            ),
         )
     except RuntimeError:
         log.error(
@@ -2066,6 +2115,7 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         intent_secret=ctx.intent_secret,
         plugins=ctx.plugins,
         boot_stage=ctx.stage_state,
+        stimulus_control=ctx.stimulus_control,
         identity_name=ctx.identity.name if ctx.identity is not None else None,
         identity_name_pending=(
             ctx.revive is not None
@@ -2311,6 +2361,9 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
     planning_enabled = bool(modules_cfg.get("planning", True))
 
     def _wrap_policy(policy):
+        return _with_stimulus_act(ctx, _wrap_planning(policy))
+
+    def _wrap_planning(policy):
         if not planning_enabled:
             return policy
         from kaine.workspace.planning_proposals import PlanningProposalSource
@@ -2385,6 +2438,46 @@ async def _phase_action_selection(ctx: BootContext) -> int | None:
             signer=intent_signer,
             operator_sources=operator_sources,
         )
+
+
+def _with_stimulus_act(ctx: BootContext, policy: Any) -> Any:
+    """Wrap ``policy`` with the stage-M stimulus act source when it can act.
+
+    Only with stimulus control on, a playlist programme under its control, and
+    the stimulus effector named in the operator's effector whitelist (the second
+    layer of the opt-in); otherwise the policy is returned unchanged.
+    """
+    runtime = ctx.stimulus_control
+    if runtime is None:
+        return policy
+    if runtime.controller is None:
+        log.warning(
+            "stimulus control is enabled but no playlist programme is under its "
+            "control (the feed is not a playlist); it is inactive this boot"
+        )
+        return policy
+    effectors = ctx.registry.get("effectors") if "effectors" in ctx.registry else None
+    if effectors is None or "stimulus" not in getattr(effectors, "enabled_effectors", ()):
+        log.warning(
+            "stimulus control is enabled but the effectors module is off or its "
+            "whitelist does not name the stimulus effector; no stimulus act is derived"
+        )
+        return policy
+    from kaine.workspace.stimulus_policy import StimulusActSource
+
+    clock = (
+        ctx.registry.entity_clock.now
+        if getattr(ctx.registry, "entity_clock", None) is not None
+        else runtime.now
+    )
+    return StimulusActSource(
+        policy,
+        allowed_actions=runtime.allowed_actions,
+        min_interval_s=runtime.config.min_interval_s,
+        clock=clock,
+        seed=runtime.seed,
+        developing=_development_probe(ctx),
+    )
 
 
 def _sleep_is_sleeping(registry: Any) -> bool:
@@ -2540,7 +2633,9 @@ async def _phase_ignition_log(ctx: BootContext) -> int | None:
             manifest_path = perception_cfg.get("playlist_manifest")
 
             if clock is not None and manifest_path:
-                manifest = load_playlist_manifest(str(manifest_path))
+                manifest = perception_cfg.get("_programme_manifest") or load_playlist_manifest(
+                    str(manifest_path)
+                )
                 position_provider = playlist_position_provider(clock, manifest)
             else:
                 def position_provider() -> tuple[Any, ...] | None:
@@ -3326,6 +3421,13 @@ async def _shutdown(ctx: BootContext) -> None:
             await ctx.sidecar.stop()
         except Exception:
             log.warning("evaluation sidecar stop failed", exc_info=True)
+    if ctx.stimulus_control is not None:
+        # Stop the controller's accounting so the welfare producer's final
+        # record is the viewing's total.
+        try:
+            ctx.stimulus_control.close()
+        except Exception:
+            log.warning("stimulus control close failed", exc_info=True)
     await _stop_welfare_producer(ctx.welfare_producer)
     try:
         il = ctx.ignition_log

@@ -12,6 +12,7 @@ from kaine.modules.effectors.effectors import (
     NotifyRequest,
     ShellEffector,
     ShellRequest,
+    StimulusRequest,
 )
 from kaine.modules.effectors.module import Effectors
 from kaine.modules.effectors.whitelist import CommandWhitelist, WhitelistEntry
@@ -29,5 +30,6 @@ __all__ = [
     "Effectors",
     "ShellEffector",
     "ShellRequest",
+    "StimulusRequest",
     "WhitelistEntry",
 ]

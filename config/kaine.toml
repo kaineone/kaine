@@ -1259,6 +1259,28 @@ recovery_cap_seconds = 300
 #                               # the current sink's .monitor when unset
 # ffmpeg_path = "ffmpeg"        # override if ffmpeg is not on PATH
 
+[stimulus_control]
+# The entity's act on its own programme (a playlist feed): pause and resume it,
+# move to the next or previous item, make the sound louder or quieter, and choose
+# among programme channels. Held: off builds nothing. On, it also needs the
+# operator's effector whitelist to name it ([effectors].enabled_effectors =
+# ["stimulus"]) and the effectors module enabled; the welfare net governs as on
+# every run. Stage "minimal": after maturation, a broadcast led by the entity's
+# own boredom or restlessness drive event yields one act, its action drawn
+# uniformly from those the programme can take now. Skipping wraps and never ends
+# a viewing: the viewing ends when perceived programme time reaches channel 0's
+# length. Never enable it inside a running study; the workspace-mediation arms
+# refuse it. Readout and record: "stimulus_control" lines in the welfare log.
+enabled = false
+stage = "minimal"
+min_interval_s = 30.0           # Delta_sc: entity seconds between accepted commands
+seeks_per_awake_hour = 20       # n_seek: next/previous in any awake hour
+pause_max_s = 120.0             # P_max: an entity pause releases itself after this
+gain_step_db = 2.0              # G_step
+gain_max_db = 6.0               # G_max: gain within +/- this of the programme level (<= 6)
+channels = []                   # further programme channels (manifest paths); channel 0 is
+                                # [perception_feed].playlist_manifest
+
 [vocal]
 chatterbox_url = "http://127.0.0.1:8883"
 # backend selects the speech synthesiser: "chatterbox" (default; the Chatterbox

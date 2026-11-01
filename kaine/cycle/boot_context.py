@@ -35,6 +35,7 @@ class BootContext:
     experiment_cfg: Any = None  # set by _phase_run_identity
     plugins: Any = None  # set by _phase_run_identity
     run_ctx: Any = None  # set by _phase_run_identity
+    stimulus_control: Any = None  # set by _phase_run_identity; None while [stimulus_control] is off
     bus: Any = None  # set by _phase_bus
     preservation_cfg: Any = None  # set by _phase_bus
     welfare_producer: Any = None  # set by _phase_bus

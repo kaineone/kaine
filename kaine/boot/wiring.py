@@ -409,6 +409,31 @@ def _wire_affect_drive_relevance(registry: ModuleRegistry) -> None:
     log.info("wired affect goal significance to the drive-to-source table")
 
 
+def _wire_stimulus_control(registry: ModuleRegistry) -> None:
+    """Register the stimulus effector and turn on the affect credit window.
+
+    Only when boot built a stimulus-control runtime with a programme under its
+    control (stimulus-control-act); otherwise a no-op, so a build with stimulus
+    control off is wired exactly as before. The effector instance (and so its
+    command interval and seek window) is kept across a supervisor rebuild of the
+    effectors module. Re-run by ``rewire_module``.
+    """
+    runtime = getattr(registry, "stimulus_control", None)
+    if runtime is None or runtime.controller is None:
+        return
+    effector = runtime.effector()
+    if "effectors" in registry and effector is not None:
+        from kaine.modules.effectors.effectors import StimulusRequest
+
+        registry.get("effectors").register_effector(effector, StimulusRequest)
+        log.info("wired the stimulus effector into the effectors module")
+    if "affect" in registry:
+        setter = getattr(registry.get("affect"), "set_stimulus_credit", None)
+        if callable(setter):
+            setter(runtime.observe_affect)
+            log.info("wired the affect stimulus credit window")
+
+
 def _wire_affect_development(
     registry: ModuleRegistry,
     probe: Optional[Callable[[], bool]] = None,

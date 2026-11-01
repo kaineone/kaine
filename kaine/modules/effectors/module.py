@@ -110,6 +110,9 @@ class Effectors(BaseModule):
         # sandbox) are the second. No effector — notify included — bypasses it.
         self._enabled_effectors: frozenset[str] = frozenset(enabled_effectors or ())
         self._effectors: dict[str, Effector] = {}
+        # Request types per effector name; a registered effector may add its own
+        # (the held stimulus effector does, only when it is built).
+        self._request_types: dict[str, type[ActionRequest]] = dict(_REQUEST_TYPES)
         self._effectors["file_write"] = FileWriteEffector(
             sandbox_path=resolve(sandbox_path), max_bytes=max_file_bytes
         )
@@ -136,8 +139,13 @@ class Effectors(BaseModule):
         """The operator-enabled effector whitelist (empty = nothing permitted)."""
         return self._enabled_effectors
 
-    def register_effector(self, effector: Effector) -> None:
+    def register_effector(
+        self, effector: Effector, request_type: Optional[type[ActionRequest]] = None
+    ) -> None:
+        """Add an effector; ``request_type`` makes act intents naming it reachable."""
         self._effectors[effector.name] = effector
+        if request_type is not None:
+            self._request_types[effector.name] = request_type
 
     async def initialize(self) -> None:
         # Seek to the latest intent entry so we only realize intents formed
@@ -192,7 +200,7 @@ class Effectors(BaseModule):
         if not effector_name:
             log.warning("dropping act intent with no effector named")
             return
-        request_type = _REQUEST_TYPES.get(effector_name)
+        request_type = self._request_types.get(effector_name)
         if request_type is None:
             log.warning("dropping act intent for unknown effector %r", effector_name)
             return

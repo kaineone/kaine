@@ -1307,6 +1307,35 @@ class PlaylistSource:
         self._manifest.verify_against(self._root)
         self._verified = True
 
+    # --- stimulus control (stimulus-control-act) ---------------------------
+    # A seekable shared clock can move the presented item backwards or back to
+    # the start of the same item; ``read()`` only walks forward, so the
+    # stimulus-control wrapper reopens the decoder through these two members.
+
+    @property
+    def open_item_index(self) -> int:
+        """Index of the item whose decoder is open (or would open next)."""
+        return self._item_idx
+
+    def reopen_item(self, idx: int) -> bool:
+        """Close the open decoder and open item ``idx`` at its first frame.
+
+        ``read()`` then follows the shared clock within that item as usual.
+        Requires a verified source (``open()`` first); False when it cannot.
+        """
+        if not self._verified or self._cv2 is None:
+            return False
+        if not 0 <= int(idx) < len(self._manifest.items):
+            return False
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                log.debug("playlist VideoCapture.release raised", exc_info=True)
+            self._cap = None
+        self._item_idx = int(idx)
+        return self._open_current_item()
+
     def open(self) -> bool:
         # Verify BEFORE opening any decoder — a changed file must stop the run
         # before a single frame is read.

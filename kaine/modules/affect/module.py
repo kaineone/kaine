@@ -15,6 +15,7 @@ from kaine.bus.streams import (
     ACTION_SELECTION_STREAM,
     AUDITION_STREAM,
     DEVELOPMENT_STREAM,
+    EFFECTORS_STREAM,
     EPISODIC_MEMORY_STREAM,
     INTEROCEPTION_STREAM,
     SEQUENCE_STREAM,
@@ -316,6 +317,14 @@ class Affect(BaseModule):
         # habituation factor read before the alert's own increment.
         self._perception_arousal_gain = 0.15
         self._perception_arousal_cap = 4.0
+        # Stimulus-control credit window (stimulus-control-act, held). None while
+        # stimulus control is off: no stream is read and the credit rule is the
+        # one above. When set, novelty or learning progress within the response
+        # window after the entity's own realized stimulus act is its own response.
+        self._stimulus_credit: Optional[Callable[..., None]] = None
+        self._stimulus_credit_on = False
+        self._stimulus_act_at: Optional[float] = None
+        self._effectors_stream = EFFECTORS_STREAM
 
     @property
     def state(self) -> DimensionalState:
@@ -582,6 +591,24 @@ class Affect(BaseModule):
         a_0 = self._baseline.arousal
         return a_0 + self._drive_arousal_gain * (1.0 - a_0) * v_star
 
+    def set_stimulus_credit(self, observer: Optional[Callable[..., None]] = None) -> None:
+        """Turn on the stimulus-control credit window (stimulus-control-act).
+
+        Boredom relief by alert excess or learning progress arriving within
+        ``goal_response_window_s`` (Delta_resp, paper A.4) of the entity's own
+        realized stimulus act is credited as its own response, the treatment the
+        answer to the stir gets. ``observer`` receives one readout sample per
+        update. Injected at boot only when stimulus control is enabled.
+        """
+        self._stimulus_credit_on = True
+        self._stimulus_credit = observer
+
+    def _in_stimulus_window(self, now: float) -> bool:
+        return (
+            self._stimulus_act_at is not None
+            and 0.0 <= now - self._stimulus_act_at <= self._goal_response_window_s
+        )
+
     def set_drive_relevance(
         self,
         drive_sources: Mapping[str, frozenset[str]],
@@ -609,6 +636,8 @@ class Affect(BaseModule):
         peer_streams.append(self._audition_emotion_stream)
         if self._coupling.enabled:
             peer_streams.append(self._social_cognition_agent_model_stream)
+        if self._stimulus_credit_on:
+            peer_streams.append(self._effectors_stream)
         for stream in peer_streams:
             self._cursors[stream] = await tail_id(self._bus, stream)
         await super().initialize()
@@ -936,7 +965,30 @@ class Affect(BaseModule):
         # heterostatic interest: lp+ builds it below and nothing relieves it.
         # Boredom is also relieved, as own, by engaging intents (_handle_peer_event).
         b_relief = max(lp, nb)
-        self._drives.relieve_rate("boredom", b_relief, dt, own=lp > 0.0 and lp >= nb)
+        own_relief = lp > 0.0 and lp >= nb
+        # Without the entity's own response, boredom would build at 1 - exc.
+        boredom_no_response = max(0.0, 1.0 - nb)
+        in_stimulus_window = self._stimulus_credit_on and self._in_stimulus_window(now)
+        if in_stimulus_window and b_relief > 0.0:
+            # Novelty or progress after the entity's own stimulus act is its own
+            # response (stimulus-control-act, design D5): both relief channels
+            # count, so without the response boredom would build unrelieved.
+            own_relief = True
+            boredom_no_response = 1.0
+        self._drives.relieve_rate("boredom", b_relief, dt, own=own_relief)
+        if self._stimulus_credit is not None:
+            boredom = self._drives.boredom
+            try:
+                self._stimulus_credit(
+                    dt,
+                    in_window=in_stimulus_window,
+                    boredom=float(boredom.value),
+                    boredom_above=bool(boredom.value >= boredom.threshold),
+                    alert_excess=float(nb),
+                    learning_progress=float(lp),
+                )
+            except Exception:
+                log.warning("stimulus-control readout sample failed", exc_info=True)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
@@ -945,7 +997,7 @@ class Affect(BaseModule):
             activity_signal=max(0.0, 1.0 - b_relief),
             social_signal=social_signal,
             action_signal=max(0.0, 1.0 - self._intent_rate),
-            boredom_no_response_signal=max(0.0, 1.0 - nb),
+            boredom_no_response_signal=boredom_no_response,
         )
         crossing_ids: dict[str, str] = {}
         for crossing in crossings:
@@ -1377,6 +1429,14 @@ class Affect(BaseModule):
                 ]
                 if self._coupling.enabled:
                     peer_streams.append(self._social_cognition_agent_model_stream)
+                if self._stimulus_credit_on:
+                    if self._effectors_stream not in self._cursors:
+                        # Turned on after initialize: start from the tail, never
+                        # from history, so an old act opens no window.
+                        self._cursors[self._effectors_stream] = await tail_id(
+                            self._bus, self._effectors_stream
+                        )
+                    peer_streams.append(self._effectors_stream)
                 for stream in peer_streams:
                     try:
                         entries, last_scanned = await self._bus.read_entries(
@@ -1417,6 +1477,17 @@ class Affect(BaseModule):
         if stream == self._development_stream:
             if event.type == self._hearing_stage_type:
                 self._on_hearing_stage(event.payload or {})
+            return
+        if stream == self._effectors_stream:
+            # The entity's own realized stimulus act opens the credit window.
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            if (
+                self._stimulus_credit_on
+                and event.type == "effectors.action"
+                and payload.get("effector") == "stimulus"
+                and payload.get("success") is True
+            ):
+                self._stimulus_act_at = self._clock()
             return
 
         # Perception→arousal coupling: ALL perceptual reports update the

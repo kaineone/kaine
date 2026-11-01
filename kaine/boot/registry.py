@@ -42,10 +42,12 @@ from kaine.boot.wiring import (
     _wire_oscillators,
     _wire_self_hearing_gate,
     _wire_self_model_capabilities,
+    _wire_stimulus_control,
 )
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.effectors.stimulus.config import StimulusControlError
 from kaine.modules.registry import ModuleRegistry
 
 log = logging.getLogger(__name__)
@@ -110,6 +112,7 @@ def build_registry(
     boot_stage: Any | None = None,
     identity_name: Optional[str] = None,
     identity_name_pending: bool = False,
+    stimulus_control: Any = None,
 ) -> ModuleRegistry:
     """Construct every enabled module from kaine.toml and register it.
 
@@ -149,6 +152,11 @@ def build_registry(
         time_scale = float((kaine_config.get("cycle") or {}).get("time_scale", 1.0))
         entity_clock = EntityClock(scale=time_scale)
     registry.entity_clock = entity_clock
+    # Stimulus control (stimulus-control-act): None while [stimulus_control] is
+    # off, and then nothing below differs from a build without it.
+    registry.stimulus_control = stimulus_control
+    if stimulus_control is not None:
+        stimulus_control.set_clock(entity_clock.now)
     # Loaded module plugins (kaine.plugins); the supervisor's restart path and the
     # oscillator wiring read them back from the registry.
     registry.plugins = plugins
@@ -191,7 +199,19 @@ def build_registry(
             _manifest_path = str(perception_feed.get("playlist_manifest", "")).strip()
             if _manifest_path:
                 _pl_manifest = load_playlist_manifest(_manifest_path)
-                _pl_clock = PlaylistClock(len(_pl_manifest.items))
+                if stimulus_control is not None:
+                    # The seekable programme clock and its controller; both
+                    # feeds read the combined programme manifest through it.
+                    _pl_clock = stimulus_control.install_programme(_manifest_path)
+                    _stimulus_stash = {
+                        "_programme_manifest": stimulus_control.programme.manifest,
+                        "_stimulus_controller": stimulus_control.controller,
+                    }
+                    perception_feed.update(_stimulus_stash)
+                    if kaine_config is not None:
+                        kaine_config.setdefault("perception_feed", {}).update(_stimulus_stash)
+                else:
+                    _pl_clock = PlaylistClock(len(_pl_manifest.items))
                 perception_feed["_shared_playlist_clock"] = _pl_clock
                 # Also stash the clock in the config section itself so the
                 # the sleep module factory (which reads kaine_config, not this local
@@ -202,6 +222,10 @@ def build_registry(
                 if kaine_config is not None:
                     kaine_config.setdefault("perception_feed", {})
                     kaine_config["perception_feed"]["_shared_playlist_clock"] = _pl_clock
+        except StimulusControlError:
+            # Enabled stimulus control that cannot be built stops the boot: the
+            # entity is never offered an act its programme cannot take.
+            raise
         except Exception:
             log.warning(
                 "could not build the shared playlist clock; feeds fall back to "
@@ -299,6 +323,7 @@ def build_registry(
     _wire_language_organ_adapter(registry, kaine_config)
     _wire_self_model_capabilities(registry)
     _wire_affect_drive_relevance(registry)
+    _wire_stimulus_control(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
     return registry
@@ -397,3 +422,4 @@ def rewire_module(registry: ModuleRegistry, name: str, kaine_config: dict[str, A
     _wire_self_model_capabilities(registry)
     _wire_affect_drive_relevance(registry)
     _wire_affect_development(registry)
+    _wire_stimulus_control(registry)

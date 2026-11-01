@@ -880,6 +880,33 @@ class PlaylistAudioStream:
         the run must not proceed on unverified media."""
         self._manifest.verify_against(self._root)
 
+    def restart_producer(self) -> bool | None:
+        """Restart a started producer so it resumes at the shared clock's position.
+
+        For a seekable shared clock (stimulus-control-act): the producer resyncs
+        to the clock only when it starts, so after a jump the stimulus-control
+        wrapper restarts it. The media was verified when the stream started and
+        is not hashed again. Returns None when the stream is not started (it
+        resyncs when it starts), True once restarted, and False when the old
+        producer did not stop in time (the caller retries). Callers serialise
+        this with ``start()`` and ``stop()``.
+        """
+        thread = self._thread
+        if thread is None:
+            return None
+        self._stopped.set()
+        if thread is not threading.current_thread():
+            thread.join(timeout=2.0)
+        if thread.is_alive():
+            log.warning("playlist audio producer did not stop for a restart; retrying")
+            return False
+        self._stopped.clear()
+        self._thread = threading.Thread(
+            target=self._produce, name="playlist-audio-producer", daemon=True
+        )
+        self._thread.start()
+        return True
+
     # --- _AudioStream protocol ---------------------------------------------
 
     def start(self) -> None:
